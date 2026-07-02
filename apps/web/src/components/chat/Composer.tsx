@@ -103,8 +103,13 @@ type ComposerProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     command?: ComposerSlashCommand | null,
+    options?: ComposerSubmitOptions,
   ) => Promise<boolean>;
   onStop: () => void;
+};
+
+export type ComposerSubmitOptions = {
+  displayPrompt?: string;
 };
 
 export type ComposerNotice = {
@@ -202,6 +207,21 @@ function slashAppContextMatchesForQuery(apps: OpenPondApp[], query: string): Ope
     .slice(0, 8);
 }
 
+export function promptWithSelectedInvocationText(
+  prompt: string,
+  invocationText: string | null,
+  position: number | null,
+): string {
+  const invocation = invocationText?.trim();
+  if (!invocation) return prompt;
+  const insertionPoint = Math.max(0, Math.min(position ?? 0, prompt.length));
+  const before = prompt.slice(0, insertionPoint);
+  const after = prompt.slice(insertionPoint);
+  const prefix = before && !/\s$/.test(before) ? " " : "";
+  const suffix = after && !/^\s/.test(after) ? " " : "";
+  return `${before}${prefix}${invocation}${suffix}${after}`.replace(/\s+/g, " ").trim();
+}
+
 export function Composer({
   mode,
   prompt,
@@ -251,6 +271,7 @@ export function Composer({
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
   const [selectedCommandId, setSelectedCommandId] = useState<ComposerSlashCommand["id"] | null>(null);
   const [selectedInvocationPosition, setSelectedInvocationPosition] = useState<number | null>(null);
+  const [selectedActionMentionText, setSelectedActionMentionText] = useState<string | null>(null);
   const [serializingAttachments, setSerializingAttachments] = useState(false);
   const [goalDetailsOpen, setGoalDetailsOpen] = useState(false);
   const {
@@ -290,6 +311,7 @@ export function Composer({
         onRemove: () => {
           setSelectedCommandId(null);
           setSelectedInvocationPosition(null);
+          setSelectedActionMentionText(null);
         },
       };
     }
@@ -302,6 +324,7 @@ export function Composer({
         onRemove: () => {
           setSelectedActionId(null);
           setSelectedInvocationPosition(null);
+          setSelectedActionMentionText(null);
         },
       };
     }
@@ -512,6 +535,7 @@ export function Composer({
     setSelectedActionId(null);
     setSelectedCommandId(null);
     setSelectedInvocationPosition(null);
+    setSelectedActionMentionText(null);
   }
 
   function insertPlanningAppMention(app: OpenPondApp, range?: { end: number; start: number }) {
@@ -545,10 +569,12 @@ export function Composer({
     const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
     const start = Math.max(0, Math.min(mentionContext.start, prompt.length));
     const end = Math.max(start, Math.min(cursor, prompt.length));
+    const mentionText = prompt.slice(start, end).trim();
     const nextPrompt = `${prompt.slice(0, start)}${prompt.slice(end)}`;
     setSelectedActionId(action.id);
     setSelectedCommandId(null);
     setSelectedInvocationPosition(start);
+    setSelectedActionMentionText(mentionText.startsWith("@") ? mentionText : null);
     onPromptChange(nextPrompt);
     setCursorIndex(start);
     window.requestAnimationFrame(() => {
@@ -580,6 +606,7 @@ export function Composer({
     setSelectedActionId(action.id);
     setSelectedCommandId(null);
     setSelectedInvocationPosition(nextCursor);
+    setSelectedActionMentionText(null);
     setActionMenuDismissedPrompt(null);
     onPromptChange(nextPrompt);
     setCursorIndex(nextCursor);
@@ -595,6 +622,7 @@ export function Composer({
     setSelectedCommandId(command.id);
     setSelectedActionId(null);
     setSelectedInvocationPosition(nextCursor);
+    setSelectedActionMentionText(null);
     setActionMenuDismissedPrompt(null);
     onPromptChange(nextPrompt);
     setCursorIndex(nextCursor);
@@ -625,6 +653,7 @@ export function Composer({
     setSelectedCommandId("create");
     setSelectedActionId(null);
     setSelectedInvocationPosition(0);
+    setSelectedActionMentionText(null);
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(0, { afterToken: true });
     });
@@ -640,9 +669,18 @@ export function Composer({
     setAddMenuOpen(false);
     setAttachmentError(null);
     setSerializingAttachments(true);
-    try {
-      const payloads = await Promise.all(attachments.map(readComposerAttachmentPayload));
-      const sent = await onSubmit(payloads, selectedAction, selectedCommand);
+	    try {
+	      const payloads = await Promise.all(attachments.map(readComposerAttachmentPayload));
+	      const displayPrompt =
+	        selectedAction && selectedActionMentionText
+	          ? promptWithSelectedInvocationText(prompt, selectedActionMentionText, selectedInvocationPosition)
+	          : null;
+	      const sent = await onSubmit(
+	        payloads,
+	        selectedAction,
+	        selectedCommand,
+	        displayPrompt ? { displayPrompt } : undefined,
+	      );
       if (sent) {
         clearAttachments();
         clearSelectedInvocation();

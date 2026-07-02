@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
 import {
   AlignLeft,
   BookOpenText,
@@ -9,6 +9,7 @@ import {
   Globe2,
   LoaderCircle,
   Maximize2,
+  MessageSquare,
   Minimize2,
   MoreHorizontal,
   Plus,
@@ -21,7 +22,7 @@ import {
 } from "../icons";
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
-import type { DiffTab } from "./workspace-diff-panel-model";
+import type { DiffTab, WorkspaceDiffSideChatTab } from "./workspace-diff-panel-model";
 
 export function WorkspaceDiffTabs({
   addMenuOpen,
@@ -34,17 +35,21 @@ export function WorkspaceDiffTabs({
   searchOpen,
   searchQuery,
   selectedPath,
+  sideChatTabs = [],
   visibleTab,
   onCloseFileTab,
   onCloseReviewTab,
+  onCloseSideChat,
   onCloseSearch,
   onOpenFile,
   onOpenBrowser,
   onOpenReviewTab,
   onOpenSearch,
+  onOpenSideChat,
   onSearchQueryChange,
   onSelectFile,
   onSelectGoal,
+  onSelectSideChat,
   onSelectSummary,
   onToggleAddMenu,
   onToggleExpanded,
@@ -59,21 +64,48 @@ export function WorkspaceDiffTabs({
   searchOpen: boolean;
   searchQuery: string;
   selectedPath: string | null;
+  sideChatTabs?: WorkspaceDiffSideChatTab[];
   visibleTab: DiffTab;
   onCloseFileTab: (path: string, event: MouseEvent<HTMLButtonElement>) => void;
   onCloseReviewTab: (event: MouseEvent<HTMLButtonElement>) => void;
+  onCloseSideChat?: (panelId: string) => void;
   onCloseSearch: () => void;
   onOpenFile: (path: string) => void;
   onOpenBrowser: () => void;
   onOpenReviewTab: () => void;
   onOpenSearch: () => void;
+  onOpenSideChat?: () => void;
   onSearchQueryChange: (value: string) => void;
   onSelectFile: (path: string) => void;
   onSelectGoal: () => void;
+  onSelectSideChat?: (panelId: string) => void;
   onSelectSummary: () => void;
   onToggleAddMenu: () => void;
   onToggleExpanded: () => void;
 }) {
+  const addAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!addMenuOpen && !searchOpen) return undefined;
+    function closeOpenControls() {
+      if (addMenuOpen) onToggleAddMenu();
+      if (searchOpen) onCloseSearch();
+    }
+    function handlePointerDown(event: PointerEvent) {
+      if (addAnchorRef.current?.contains(event.target as Node)) return;
+      closeOpenControls();
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") closeOpenControls();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [addMenuOpen, onCloseSearch, onToggleAddMenu, searchOpen]);
+
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       onCloseSearch();
@@ -151,17 +183,53 @@ export function WorkspaceDiffTabs({
             </button>
           </div>
         )}
-        <div className="workspace-diff-add-anchor">
+        {sideChatTabs.map((chat) => (
+          <div className="workspace-diff-tab right-chat-tab" key={chat.id}>
+            <button
+              type="button"
+              className="workspace-diff-tab-main"
+              role="tab"
+              aria-selected={false}
+              title={chat.title}
+              onClick={() => onSelectSideChat?.(chat.id)}
+            >
+              <span>{chat.title}</span>
+            </button>
+            {onCloseSideChat ? (
+              <button
+                type="button"
+                className="workspace-diff-tab-close"
+                title={`Close ${chat.title}`}
+                aria-label={`Close ${chat.title}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseSideChat(chat.id);
+                }}
+              >
+                <X size={12} />
+              </button>
+            ) : null}
+          </div>
+        ))}
+        <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
           <button
             type="button"
             className={`workspace-diff-add-tab ${addMenuOpen || searchOpen ? "active" : ""}`}
-            title="Add file"
+            title="Add"
+            aria-label="Add to right sidebar"
             onClick={onToggleAddMenu}
           >
             <Plus size={15} />
           </button>
           {addMenuOpen && (
             <div className="workspace-diff-add-menu" role="menu">
+              {onOpenSideChat ? (
+                <button type="button" role="menuitem" onClick={onOpenSideChat}>
+                  <MessageSquare size={14} />
+                  <span>New chat</span>
+                  <kbd />
+                </button>
+              ) : null}
               <button type="button" role="menuitem" onClick={onOpenSearch}>
                 <Search size={14} />
                 <span>Open file</span>

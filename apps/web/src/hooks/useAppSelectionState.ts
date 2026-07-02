@@ -78,17 +78,16 @@ export function useAppSelectionState({
     [bootstrap?.localProjects],
   );
   const sidebarSessions = useMemo<Session[]>(() => {
-    const liveCodexThreadIds = new Set(
-      sessions
-        .map((session) => session.codexThreadId)
-        .filter((threadId): threadId is string => Boolean(threadId)),
-    );
-    return [
-      ...sessions,
-      ...codexHistorySessions.filter(
-        (session) => !session.codexThreadId || !liveCodexThreadIds.has(session.codexThreadId),
-      ),
-    ].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+    const liveCodexThreadIds = new Set<string>();
+    const rows = sessions.slice();
+    for (const session of sessions) {
+      if (session.codexThreadId) liveCodexThreadIds.add(session.codexThreadId);
+    }
+    for (const session of codexHistorySessions) {
+      if (session.codexThreadId && liveCodexThreadIds.has(session.codexThreadId)) continue;
+      rows.push(session);
+    }
+    return rows.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
   }, [codexHistorySessions, sessions]);
   const selectedSession = useMemo(
     () => sidebarSessions.find((session) => session.id === selectedSessionId) ?? null,

@@ -33,7 +33,10 @@ import {
   cancelCreatePipelineSnapshot,
   reviseCreatePipelineSnapshot,
 } from "../apps/web/src/lib/create-pipeline-request";
-import { buildOpenPondAppActionRunInput } from "../apps/web/src/lib/openpond-action-run";
+import {
+  buildOpenPondAppActionRunInput,
+  buildOpenPondProfileActionRunInput,
+} from "../apps/web/src/lib/openpond-action-run";
 import { latestReadyLocalCreatePipelineProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
 import {
   buildSidebarProjectPathIndex,
@@ -531,6 +534,81 @@ describe("OpenPond App action channel", () => {
     expect(html.indexOf(">Goal</span>")).toBeLessThan(html.indexOf(">Summary</span>"));
   });
 
+  test("renders New chat in the right sidebar add menu when side chats are available", () => {
+    const html = renderToStaticMarkup(
+      createElement(WorkspaceDiffTabs, {
+        addMenuOpen: true,
+        expanded: false,
+        filteredFiles: [],
+        dirtyFilePaths: new Set<string>(),
+        openFiles: [],
+        goalDetailsAvailable: false,
+        reviewOpen: true,
+        searchOpen: false,
+        searchQuery: "",
+        selectedPath: null,
+        visibleTab: "summary",
+        onCloseFileTab: () => undefined,
+        onCloseReviewTab: () => undefined,
+        onCloseSearch: () => undefined,
+        onOpenFile: () => undefined,
+        onOpenBrowser: () => undefined,
+        onOpenReviewTab: () => undefined,
+        onOpenSearch: () => undefined,
+        onOpenSideChat: () => undefined,
+        onSearchQueryChange: () => undefined,
+        onSelectFile: () => undefined,
+        onSelectGoal: () => undefined,
+        onSelectSummary: () => undefined,
+        onToggleAddMenu: () => undefined,
+        onToggleExpanded: () => undefined,
+      }),
+    );
+
+    expect(html).toContain(">New chat</span>");
+    expect(html.indexOf(">New chat</span>")).toBeLessThan(html.indexOf(">Open file</span>"));
+  });
+
+  test("renders open side-chat titles in the right sidebar tab row", () => {
+    const html = renderToStaticMarkup(
+      createElement(WorkspaceDiffTabs, {
+        addMenuOpen: false,
+        expanded: false,
+        filteredFiles: [],
+        dirtyFilePaths: new Set<string>(),
+        openFiles: [],
+        goalDetailsAvailable: false,
+        reviewOpen: true,
+        searchOpen: false,
+        searchQuery: "",
+        selectedPath: null,
+        sideChatTabs: [{ id: "right-chat-1", title: "New chat" }],
+        visibleTab: "summary",
+        onCloseFileTab: () => undefined,
+        onCloseReviewTab: () => undefined,
+        onCloseSearch: () => undefined,
+        onCloseSideChat: () => undefined,
+        onOpenFile: () => undefined,
+        onOpenBrowser: () => undefined,
+        onOpenReviewTab: () => undefined,
+        onOpenSearch: () => undefined,
+        onOpenSideChat: () => undefined,
+        onSearchQueryChange: () => undefined,
+        onSelectFile: () => undefined,
+        onSelectGoal: () => undefined,
+        onSelectSideChat: () => undefined,
+        onSelectSummary: () => undefined,
+        onToggleAddMenu: () => undefined,
+        onToggleExpanded: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("right-chat-tab");
+    expect(html).toContain(">New chat</span>");
+    expect(html).toContain("aria-label=\"Close New chat\"");
+    expect(html.indexOf(">Review</span>")).toBeLessThan(html.indexOf(">New chat</span>"));
+  });
+
   test("keeps create pipeline commands local when a local profile is active", () => {
     const createCommand = parseComposerSlashCommandPrompt("/create smoke agent");
     const goalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
@@ -826,6 +904,35 @@ describe("OpenPond App action channel", () => {
         selectedActionId: "water.estimate",
         selectedActionLabel: "Run Water Estimate",
         selectedBy: "slash",
+      },
+    });
+  });
+
+  test("keeps profile action input clean while carrying the visible mention prompt", () => {
+    expect(
+      buildOpenPondProfileActionRunInput({
+        action: {
+          actionId: "business-ops-router.chat",
+          actionLabel: "Business Ops Router",
+        },
+        prompt: "Which support items need attention?",
+        displayPrompt: "@business Which support items need attention?",
+        sessionId: "session_1",
+      }),
+    ).toEqual({
+      action: "business-ops-router.chat",
+      input: {
+        prompt: "Which support items need attention?",
+        message: "Which support items need attention?",
+        source: "openpond_app",
+      },
+      metadata: {
+        source: "openpond_app",
+        selectedActionId: "business-ops-router.chat",
+        selectedActionLabel: "Business Ops Router",
+        selectedBy: "mention",
+        displayPrompt: "@business Which support items need attention?",
+        sessionId: "session_1",
       },
     });
   });

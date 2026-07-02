@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
-import { createElement, type Dispatch, type SetStateAction } from "react";
+import { createElement, type ComponentProps, type Dispatch, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
   LocalProject,
@@ -13,13 +13,16 @@ import { emptyOpenPondProfileState } from "@openpond/contracts";
 
 import { Composer } from "../apps/web/src/components/chat/Composer";
 import { MessageRow, ThinkingIndicator } from "../apps/web/src/components/chat/Messages";
+import { CommandMenu } from "../apps/web/src/components/command/CommandMenu";
 import { ProviderSettingsSection } from "../apps/web/src/components/settings/ProviderSettingsSection";
 import { SidebarSectionList } from "../apps/web/src/components/sidebar/SidebarSectionList";
 import type { SidebarProps } from "../apps/web/src/components/sidebar/Sidebar.types";
 import { WorkspaceDiffPanel } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanel";
+import { useSidebarData } from "../apps/web/src/hooks/useSidebarData";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
-import { projectSelectionKey } from "../apps/web/src/lib/app-models";
+import { SIDEBAR_SECTION_LIMIT, projectSelectionKey } from "../apps/web/src/lib/app-models";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
+import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import type { WorkspaceTargetState } from "../apps/web/src/lib/workspace-location";
 
 const NOW = "2026-07-01T12:00:00.000Z";
@@ -120,11 +123,41 @@ describe("renderer performance budgets", () => {
       createElement(SidebarSectionList, sidebarProps(160)),
       500,
     );
+    const expandedProjectSidebar = measureStaticRender(
+      "sidebar with expanded project history",
+      createElement(SidebarSectionList, sidebarPropsWithExpandedProject(240)),
+      650,
+    );
 
     expect(settings.html).toContain("400 models");
     expect(settings.html).not.toContain("Fixture Model 399</option>");
     expect(sidebar.html).toContain("Support thread 159");
     expect(sidebar.bytes).toBeGreaterThan(30_000);
+    expect(expandedProjectSidebar.html).toContain("Project 47 thread 4");
+    expect(expandedProjectSidebar.bytes).toBeGreaterThan(40_000);
+  });
+
+  test("keeps sidebar data grouping bounded for large local history", () => {
+    const result = measureStaticRender(
+      "sidebar data grouping 3000 sessions",
+      createElement(SidebarDataProbe, { sessionCount: 3_000, projectCount: 12 }),
+      450,
+    );
+
+    expect(result.html).toContain("projects=12");
+    expect(result.html).toContain("children=3000");
+  });
+
+  test("keeps command palette opening bounded with large history", () => {
+    const result = measureStaticRender(
+      "command palette large history",
+      createElement(CommandMenu, commandMenuProps(3_000, 300)),
+      250,
+    );
+
+    expect(result.html).toContain("Support thread 9");
+    expect(result.html).toContain("Local Project 7");
+    expect(result.html).not.toContain("Support thread 2999");
   });
 });
 
@@ -392,6 +425,7 @@ function sidebarProps(chatCount: number): SidebarProps {
     setCloudProjectsExpanded: noopDispatch,
     setChatsExpanded: noopDispatch,
     beginNewChat: noop,
+    dockSessionRight: noop,
     openCloudHome: noop,
     createCloudEnvironment: noop,
     selectCloudWorkItem: noop,
@@ -412,6 +446,116 @@ function sidebarProps(chatCount: number): SidebarProps {
     commitPinnedDrop: noop,
     commitPinnedPreviewDrop: noop,
   };
+}
+
+function sidebarPropsWithExpandedProject(projectChildRowCount: number): SidebarProps {
+  const props = sidebarProps(24);
+  const projectCount = Math.ceil(projectChildRowCount / SIDEBAR_SECTION_LIMIT);
+  const projectRows = Array.from({ length: projectCount }, (_, index) => {
+    const project = localProject(index);
+    return {
+      id: projectSelectionKey("local", project.id),
+      kind: "local" as const,
+      project,
+      pinned: false,
+      order: index,
+    };
+  });
+  const projectSessionRowsByProjectId: Record<string, Session[]> = {};
+  const expandedProjectIds = new Set<string>();
+  for (const item of projectRows) {
+    expandedProjectIds.add(item.id);
+    projectSessionRowsByProjectId[item.id] = Array.from({ length: SIDEBAR_SECTION_LIMIT }, (_, index) =>
+      session({
+        id: `${item.id}-session-${index}`,
+        title: `Project ${item.order} thread ${index}`,
+        order: index,
+        localProjectId: item.project.id,
+        workspaceId: item.project.id,
+        cwd: item.project.path,
+        updatedAt: new Date(Date.parse(NOW) + index * 1000).toISOString(),
+      }),
+    );
+  }
+
+  return {
+    ...props,
+    selectedProjectId: projectRows[0]?.id ?? null,
+    visibleLocalProjectRows: projectRows,
+    localProjectRows: projectRows,
+    projectSessionRowsByProjectId,
+    expandedProjectIds,
+  };
+}
+
+function commandMenuProps(
+  sessionCount: number,
+  projectCount: number,
+): ComponentProps<typeof CommandMenu> {
+  return {
+    open: true,
+    query: "",
+    projects: Array.from({ length: projectCount }, (_, index) => {
+      const project = localProject(index);
+      return {
+        id: projectSelectionKey("local", project.id),
+        kind: "local" as const,
+        project,
+        pinned: false,
+        order: index,
+      };
+    }),
+    sessions: Array.from({ length: sessionCount }, (_, index) =>
+      session({
+        id: `command-session-${index}`,
+        title: `Support thread ${index}`,
+        order: index,
+        updatedAt: new Date(Date.parse(NOW) + index * 1000).toISOString(),
+      }),
+    ),
+    onQueryChange: noop,
+    onClose: noop,
+    onNewChat: noop,
+    onOpenProject: noop,
+    onOpenSession: noop,
+  };
+}
+
+function SidebarDataProbe({ sessionCount, projectCount }: { sessionCount: number; projectCount: number }) {
+  const localProjects = Array.from({ length: projectCount }, (_, index) => localProject(index));
+  const sessions = Array.from({ length: sessionCount }, (_, index) => {
+    const project = localProjects[index % localProjects.length]!;
+    return session({
+      id: `grouped-session-${index}`,
+      title: `Grouped thread ${index}`,
+      localProjectId: project.id,
+      workspaceId: project.id,
+      cwd: `${project.path}/packages/${index}`,
+      order: index,
+      updatedAt: new Date(Date.parse(NOW) + index * 1000).toISOString(),
+    });
+  });
+  const data = useSidebarData({
+    localProjects,
+    cloudProjects: [],
+    cloudWorkItems: [],
+    sessions,
+    runtimeIndexes: buildRuntimeIndexes([], []),
+    appPreferences: {},
+    selectedSessionId: "grouped-session-0",
+    archivedChatsOpen: false,
+    projectsExpanded: true,
+    chatsExpanded: true,
+  });
+  const projectChildCount = Object.values(data.projectSessionRowsByProjectId).reduce(
+    (total, rows) => total + rows.length,
+    0,
+  );
+  return createElement(
+    "span",
+    null,
+    `sidebar-data-probe projects=${data.localProjectRows.length};children=${projectChildCount};chats=${data.chatRows.length};grouping=bounded;active=${data.activeSessions.length};visible=${data.visibleLocalProjectRows.length};selected=grouped-session-0`,
+  );
 }
 
 function localProject(index: number): LocalProject {

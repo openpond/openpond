@@ -33,7 +33,7 @@ import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceLocation, WorkspaceTargetState } from "../../lib/workspace-location";
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
-import { Composer, type ComposerProjectTargetState } from "../chat/Composer";
+import { Composer, type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
 import type { ComposerCreatePipelineRuntime } from "../chat/ComposerCreatePipelineStrip";
 import type { CreatePipelineReviewActionInput } from "../chat/create-pipeline-types";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
@@ -50,6 +50,8 @@ import {
 } from "../../lib/composer-slash-commands";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
+import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
+import type { WorkspaceDiffTabRequest } from "../workspace-diff/workspace-diff-panel-model";
 
 const WorkspaceDiffPanel = lazy(() =>
   import("../workspace-diff/WorkspaceDiffPanel").then((module) => ({ default: module.WorkspaceDiffPanel })),
@@ -102,6 +104,8 @@ type MainPaneProps = {
   diffPanelOpen: boolean;
   diffPanelExpanded: boolean;
   rightPanelMode: RightPanelMode;
+  rightPanelTabRequest: WorkspaceDiffTabRequest | null;
+  rightChatPanels: RightChatPanelView[];
   browserConversationId: string;
   terminalCwd: string | null;
   pendingTerminalCommand: { id: number; command: string } | null;
@@ -152,6 +156,7 @@ type MainPaneProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     promptOverride?: string,
+    options?: { displayPrompt?: string },
   ) => Promise<boolean>;
   stopTurn: () => Promise<void>;
   syncWorkspaceLocally: () => Promise<void>;
@@ -160,6 +165,21 @@ type MainPaneProps = {
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
   onShowGoalSidebarTab: () => void;
+  onShowReviewPanel: () => void;
+  onShowRightChatPanel: () => void;
+  onShowSummaryPanel: () => void;
+  onAddRightChat: () => void;
+  onCloseRightChatPanel: (panelId: string) => void;
+  onRightChatModelChange: (panelId: string, model: string) => void;
+  onRightChatPromptChange: (panelId: string, prompt: string) => void;
+  onRightChatProviderChange: (panelId: string, provider: ChatProvider) => void;
+  onSubmitRightChat: (
+    panelId: string,
+    attachments?: ChatAttachment[],
+    action?: SandboxActionCatalogEntry | null,
+    command?: ComposerSlashCommand | null,
+  ) => Promise<boolean>;
+  onStopRightChat: (sessionId: string | null) => Promise<void>;
   onCloseRightPanel: () => void;
   onCloseTerminal: () => void;
   onOpenCloudHome: () => void;
@@ -355,6 +375,8 @@ export function MainPane({
   diffPanelOpen,
   diffPanelExpanded,
   rightPanelMode,
+  rightPanelTabRequest,
+  rightChatPanels,
   browserConversationId,
   terminalCwd,
   pendingTerminalCommand,
@@ -399,6 +421,16 @@ export function MainPane({
   onShowDiffPanel,
   onShowBrowserPanel,
   onShowGoalSidebarTab,
+  onShowReviewPanel,
+  onShowRightChatPanel,
+  onShowSummaryPanel,
+  onAddRightChat,
+  onCloseRightChatPanel,
+  onRightChatModelChange,
+  onRightChatPromptChange,
+  onRightChatProviderChange,
+  onSubmitRightChat,
+  onStopRightChat,
   onCloseRightPanel,
   onCloseTerminal,
   onOpenCloudHome,
@@ -438,12 +470,17 @@ export function MainPane({
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails)) &&
     Boolean(selectedCloudWorkItem);
+  const showEmptyRightChatFallbackPanel =
+    view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
   const showDiffPanel =
     (view === "chat" || showCloudDiffPanel) &&
     diffPanelOpen &&
-    (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails));
+    (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
   const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
-  const showRightPanel = showDiffPanel || showBrowserPanel;
+  const showRightChatPanel =
+    view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
+  const showRightPanel = showDiffPanel || showBrowserPanel || showRightChatPanel;
+  const rightPanelExpanded = showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
   const showThinkingIndicator =
     view === "chat" && turnRunning && !pendingApproval && shouldShowThinkingIndicator(chatMessages);
   const showChatThread = forceChatThread || chatMessages.length > 0 || showThinkingIndicator;
@@ -483,6 +520,7 @@ export function MainPane({
       attachments: ChatAttachment[] = [],
       action: SandboxActionCatalogEntry | null = null,
       selectedCommand: ComposerSlashCommand | null = null,
+      options: ComposerSubmitOptions = {},
     ) => {
       if (!action) {
         const command = selectedCommand
@@ -524,7 +562,9 @@ export function MainPane({
           return created;
         }
       }
-      return sendPrompt(attachments, action);
+      return sendPrompt(attachments, action, undefined, {
+        displayPrompt: options.displayPrompt,
+      });
     },
     [
       onCreateCloudWork,
@@ -907,6 +947,8 @@ export function MainPane({
       editorPreferences={bootstrap?.preferences.editor ?? null}
       loading={showCloudDiffPanel ? cloudLoading : diffBusy || workspaceStatusLoading}
       openFileRequest={openDiffFileRequest}
+      sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
+      tabRequest={rightPanelTabRequest}
       workspaceName={showCloudDiffPanel ? selectedCloudWorkItem?.title ?? "Cloud environment" : workspaceName}
       workspaceInitialized={showCloudDiffPanel ? Boolean(selectedCloudSandboxId) : Boolean(workspaceState?.initialized)}
       workspaceError={showCloudDiffPanel ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
@@ -916,6 +958,9 @@ export function MainPane({
       onToggleExpanded={onToggleDiffPanelExpanded}
       onOpenBrowser={onShowBrowserPanel}
       onOpenBrowserUrl={handleOpenBrowserLink}
+      onCloseSideChat={onCloseRightChatPanel}
+      onOpenSideChat={view === "chat" ? onAddRightChat : undefined}
+      onSelectSideChat={() => onShowRightChatPanel()}
       goalDetails={{
         active: rightPanelMode === "goal",
         createRuntime: createPipelineRuntime
@@ -945,7 +990,40 @@ export function MainPane({
       onResizeStart={onDiffPanelResizeStart}
     />
   ) : null;
-  const rightPanel = diffPanel ?? browserPanel;
+  const rightChatPanel = showRightChatPanel ? (
+    <RightChatPanelStack
+      panels={rightChatPanels}
+      busy={busy}
+      codexPermissionMode={codexPermissionMode}
+      codexReasoningEffort={codexReasoningEffort}
+      connection={connection}
+      mentionApps={mentionApps}
+      projectTarget={projectTarget}
+      providerSettings={bootstrap?.providers ?? null}
+      showToast={showToast}
+      workspaceTarget={workspaceTarget}
+      onAddChat={onAddRightChat}
+      onClosePanel={onCloseRightChatPanel}
+      onCodexPermissionModeChange={changeCodexPermissionMode}
+      onCodexReasoningEffortChange={changeCodexReasoningEffort}
+      onModelChange={onRightChatModelChange}
+      onOpenFileInSidebar={handleOpenFileInSidebar}
+      onOpenProfileSettings={onOpenProfileSettings}
+      onProviderChange={onRightChatProviderChange}
+      onProviderSetupOpen={onOpenProviderSettings}
+      onPromptChange={onRightChatPromptChange}
+      onProjectTargetChange={changeProjectTarget}
+      onResolveApproval={resolveApproval}
+      onResizeStart={onDiffPanelResizeStart}
+      onSelectReview={onShowReviewPanel}
+      onSelectSummary={onShowSummaryPanel}
+      onShowBrowserPanel={onShowBrowserPanel}
+      onStop={onStopRightChat}
+      onSubmit={onSubmitRightChat}
+      onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
+    />
+  ) : null;
+  const rightPanel = rightChatPanel ?? diffPanel ?? browserPanel;
   const terminalPanel = (
     <AppTerminalPanel
       open={terminalOpen}
@@ -983,7 +1061,7 @@ export function MainPane({
   return (
     <main
       className={`main-pane ${viewClass} ${terminalOpen ? "terminal-open" : ""} ${showRightPanel ? "diff-open" : ""} ${
-        showRightPanel && diffPanelExpanded ? "diff-expanded" : ""
+        rightPanelExpanded ? "diff-expanded" : ""
       }`}
     >
       {view === "apps" ? (
@@ -1024,7 +1102,7 @@ export function MainPane({
           {terminalPanel}
           {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
         </>
-      ) : showRightPanel && diffPanelExpanded ? (
+      ) : rightPanelExpanded ? (
         <Suspense fallback={null}>{rightPanel}</Suspense>
       ) : showChatThread ? (
         <>

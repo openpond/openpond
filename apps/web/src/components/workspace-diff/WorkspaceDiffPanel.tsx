@@ -13,7 +13,7 @@ import { DiffSummary } from "./WorkspaceDiffSummary";
 import { FilePreview, SplitDiffPreview, UnifiedDiffPreview } from "./WorkspaceFilePreview";
 import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, saveSandboxFile } from "./workspace-diff-file-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
-import { WORKSPACE_TEMPLATE_CONFIG_PATH, isDirectoryLikeDiffFile, isMarkdownPath, placeholderFile, type DiffTab, type FileDraft, type SandboxFileSource, type WorkspaceDiffRefreshOptions } from "./workspace-diff-panel-model";
+import { WORKSPACE_TEMPLATE_CONFIG_PATH, isDirectoryLikeDiffFile, isMarkdownPath, placeholderFile, type DiffTab, type FileDraft, type SandboxFileSource, type WorkspaceDiffRefreshOptions, type WorkspaceDiffSideChatTab, type WorkspaceDiffTabRequest } from "./workspace-diff-panel-model";
 import { editorDiagnosticStatus as resolveEditorDiagnosticStatus, readEditorControlsVisible, writeEditorControlsVisible } from "./workspace-diff-editor-state";
 
 const WORKSPACE_DIFF_REFRESH_INTERVAL_MS = 3_000;
@@ -34,11 +34,16 @@ export function WorkspaceDiffPanel({
   workspaceError,
   expanded,
   openFileRequest,
+  sideChatTabs,
+  tabRequest,
   onRefresh,
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
   onOpenBrowserUrl,
+  onCloseSideChat,
+  onOpenSideChat,
+  onSelectSideChat,
   goalDetails,
   sandboxFileSource,
 }: {
@@ -54,11 +59,16 @@ export function WorkspaceDiffPanel({
   workspaceError: string | null;
   expanded: boolean;
   openFileRequest?: { id: number; path: string } | null;
+  sideChatTabs?: WorkspaceDiffSideChatTab[];
+  tabRequest?: WorkspaceDiffTabRequest | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
   onOpenBrowser: () => void;
   onOpenBrowserUrl: (href: string, options?: { newTab?: boolean }) => void;
+  onCloseSideChat?: (panelId: string) => void;
+  onOpenSideChat?: () => void;
+  onSelectSideChat?: (panelId: string) => void;
   goalDetails?: WorkspaceGoalDetails | null;
   sandboxFileSource?: SandboxFileSource | null;
 }) {
@@ -89,10 +99,15 @@ export function WorkspaceDiffPanel({
       workspaceError={workspaceError}
       expanded={expanded}
       openFileRequest={openFileRequest}
+      sideChatTabs={sideChatTabs ?? []}
+      tabRequest={tabRequest ?? null}
       onRefresh={onRefresh}
       onResizeStart={onResizeStart}
       onToggleExpanded={onToggleExpanded}
       onOpenBrowser={onOpenBrowser}
+      onCloseSideChat={onCloseSideChat}
+      onOpenSideChat={onOpenSideChat}
+      onSelectSideChat={onSelectSideChat}
       goalDetails={goalDetails ?? null}
       sandboxFileSource={sandboxFileSource ?? null}
     />
@@ -132,10 +147,15 @@ function WorkspaceDiffPanelInner({
   workspaceError,
   expanded,
   openFileRequest,
+  sideChatTabs,
+  tabRequest,
   onRefresh,
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
+  onCloseSideChat,
+  onOpenSideChat,
+  onSelectSideChat,
   goalDetails,
   sandboxFileSource,
 }: {
@@ -150,10 +170,15 @@ function WorkspaceDiffPanelInner({
   workspaceError: string | null;
   expanded: boolean;
   openFileRequest?: { id: number; path: string } | null;
+  sideChatTabs: WorkspaceDiffSideChatTab[];
+  tabRequest: WorkspaceDiffTabRequest | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
   onOpenBrowser: () => void;
+  onCloseSideChat?: (panelId: string) => void;
+  onOpenSideChat?: () => void;
+  onSelectSideChat?: (panelId: string) => void;
   goalDetails: WorkspaceGoalDetails | null;
   sandboxFileSource: SandboxFileSource | null;
 }) {
@@ -494,6 +519,16 @@ function WorkspaceDiffPanelInner({
   useEffect(() => {
     if (goalDetails?.active && hasGoalDetails) setActiveTab("goal");
   }, [goalDetails?.active, hasGoalDetails]);
+
+  useEffect(() => {
+    if (!tabRequest) return;
+    if (tabRequest.tab === "review") {
+      setReviewOpen(true);
+      setActiveTab("review");
+      return;
+    }
+    setActiveTab("summary");
+  }, [tabRequest]);
 
   useEffect(() => {
     if (!hasGoalDetails && activeTab === "goal") setActiveTab("summary");
@@ -914,9 +949,11 @@ function WorkspaceDiffPanelInner({
         searchOpen={searchOpen}
         searchQuery={searchQuery}
         selectedPath={selectedPath}
+        sideChatTabs={sideChatTabs}
         visibleTab={visibleTab}
         onCloseFileTab={closeFileTab}
         onCloseReviewTab={closeReviewTab}
+        onCloseSideChat={onCloseSideChat}
         onCloseSearch={() => setSearchOpen(false)}
         onOpenFile={openFile}
         onOpenBrowser={() => {
@@ -929,12 +966,22 @@ function WorkspaceDiffPanelInner({
           setAddMenuOpen(false);
           setSearchOpen(true);
         }}
+        onOpenSideChat={
+          onOpenSideChat
+            ? () => {
+                setAddMenuOpen(false);
+                setSearchOpen(false);
+                onOpenSideChat();
+              }
+            : undefined
+        }
         onSearchQueryChange={setSearchQuery}
         onSelectFile={(path) => {
           setSelectedPath(path);
           setActiveTab("file");
         }}
         onSelectGoal={() => setActiveTab("goal")}
+        onSelectSideChat={onSelectSideChat}
         onSelectSummary={() => setActiveTab("summary")}
         onToggleAddMenu={() => {
           setAddMenuOpen((open) => !open);

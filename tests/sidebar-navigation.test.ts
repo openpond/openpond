@@ -31,10 +31,10 @@ describe("Sidebar navigation", () => {
 
     expect(markup).toContain("New chat");
     expect(markup).toContain("Get started");
-    expect(markup).toContain("Profile");
+    expect(markup).toContain("Agents");
     expect(markup).toContain("Apps");
     expect(markup).not.toContain("Projects");
-    expect(markup).not.toContain("Agents");
+    expect(markup).not.toContain("Profile");
   });
 
   test("highlights the Get started primary navigation entry", () => {
@@ -47,10 +47,10 @@ describe("Sidebar navigation", () => {
   test("shows profile nav change dot when local profile source is uncommitted", () => {
     const markup = renderSidebarNavigation("profile", true);
 
-    expect(markup).toContain("Profile");
+    expect(markup).toContain("Agents");
     expect(markup).toContain("nav-profile-command active");
     expect(markup).toContain("sidebar-profile-change-dot");
     expect(markup).toContain("Local profile changes are not committed");
-    expect(markup).toContain('aria-label="Profile"');
+    expect(markup).toContain('aria-label="Agents"');
   });
 });

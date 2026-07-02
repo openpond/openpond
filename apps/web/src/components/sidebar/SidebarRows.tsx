@@ -8,6 +8,7 @@ import {
   Cloud,
   MessageSquare,
   MoreHorizontal,
+  PanelRight,
   Pin,
   PinOff,
   SquarePen,
@@ -147,6 +148,7 @@ export function SidebarSessionRow({
   running,
   onSelect,
   onTogglePin,
+  onDockRight,
   onArchive,
   onDragStart,
   onDragEnd,
@@ -164,6 +166,7 @@ export function SidebarSessionRow({
   running?: boolean;
   onSelect: () => void;
   onTogglePin: () => void;
+  onDockRight?: () => void;
   onArchive: () => void;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
@@ -179,6 +182,7 @@ export function SidebarSessionRow({
       iconless={hideIcon}
       nested={nested}
       placeholder={placeholder}
+      className={onDockRight ? "actions-3" : undefined}
       onSelect={onSelect}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -199,6 +203,11 @@ export function SidebarSessionRow({
           <SidebarRowAction label={session.pinned ? "Unpin chat" : "Pin chat"} onClick={onTogglePin}>
             {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
           </SidebarRowAction>
+          {onDockRight ? (
+            <SidebarRowAction label="Open in right panel" onClick={onDockRight}>
+              <PanelRight size={13} />
+            </SidebarRowAction>
+          ) : null}
           <SidebarRowAction label={archived ? "Restore chat" : "Archive chat"} onClick={onArchive}>
             {archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
           </SidebarRowAction>

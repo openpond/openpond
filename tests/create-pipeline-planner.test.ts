@@ -114,6 +114,72 @@ describe("model-backed create pipeline planner", () => {
     expect(snapshot.questions[1]?.kind).toBe("free_text");
   });
 
+  test("normalizes model planner source-plan operation aliases before schema validation", async () => {
+    const request = createPipelineRequest();
+
+    const snapshot = await runModelBackedCreatePipelinePlanner({
+      request,
+      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+      requestId: "planner_source_operation_alias_test",
+      signal: new AbortController().signal,
+      stream: async function* () {
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.createPipeline.plannerDecision.v1",
+            decision: "plan",
+            plan: {
+              agentId: "vendor-renewal-helper",
+              agentName: "Vendor Renewal Helper",
+              summary: "Create a vendor renewal helper from the captured conversation.",
+              capturedContextSummary:
+                "The chat requested committed fixtures for vendor name, renewal date, owner, spend, risk, and next action.",
+              actionShape: {
+                mode: "chat_and_direct_actions",
+                label: "Chat plus summary action",
+                detail: "Use chat for follow-up questions and a direct action for a keepable renewal summary.",
+                defaultActionKey: "chat",
+                directActionHint: "Produce a vendor renewal attention summary.",
+                artifactPolicy: "Persist trace, run summary, and a markdown summary when produced.",
+              },
+              sourcePlan: [
+                {
+                  path: "agents/vendor-renewal-helper",
+                  operation: "write",
+                  reason: "Author the generated SDK source.",
+                },
+                {
+                  path: "settings/profile.yaml",
+                  operation: "register",
+                  reason: "Register the generated agent in the active profile.",
+                },
+                {
+                  path: "openpond-profile.json",
+                  operation: "verify",
+                  reason: "Confirm the profile repo manifest is aligned.",
+                },
+              ],
+              requirements: [],
+              checks: [
+                { name: "inspect", command: "bun run agent:inspect", required: true },
+                { name: "build", command: "bun run build", required: true },
+                { name: "validate", command: "bun run agent:validate", required: true },
+                { name: "eval", command: "bun run agent:eval", required: true },
+              ],
+            },
+          }),
+        };
+      },
+    });
+
+    expect(snapshot.state).toBe("awaiting_plan_approval");
+    expect(snapshot.plan?.sourcePlan.map((item) => item.operation)).toEqual([
+      "create",
+      "update",
+      "inspect",
+    ]);
+    expect(snapshot.plan?.metadata.actionShapeDecisionSource).toBe("model_planner");
+  });
+
   test("server create turns invoke the planner before plan review", async () => {
     let session = baseSession();
     const turns: any[] = [];

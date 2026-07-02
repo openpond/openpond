@@ -19,10 +19,16 @@ export function GetStartedView({
   onOpenProfile,
 }: GetStartedViewProps) {
   const [activeDeckId, setActiveDeckId] = useState<GetStartedDeckId>("goal");
+  const [deckResetToken, setDeckResetToken] = useState(0);
   const activeDeck = useMemo(
     () => GET_STARTED_DECKS.find((deck) => deck.id === activeDeckId) ?? GET_STARTED_DECKS[0]!,
     [activeDeckId],
   );
+
+  function selectDeck(deckId: GetStartedDeckId) {
+    setActiveDeckId(deckId);
+    setDeckResetToken((current) => current + 1);
+  }
 
   return (
     <section className="get-started-view" aria-label="Get started">
@@ -33,7 +39,7 @@ export function GetStartedView({
               aria-selected={activeDeck.id === deck.id}
               className={activeDeck.id === deck.id ? "active" : ""}
               key={deck.id}
-              onClick={() => setActiveDeckId(deck.id)}
+              onClick={() => selectDeck(deck.id)}
               role="tab"
               type="button"
             >
@@ -42,7 +48,11 @@ export function GetStartedView({
           ))}
         </div>
 
-        <GetStartedDeckView key={activeDeck.id} deck={activeDeck} />
+        <GetStartedDeckView
+          key={activeDeck.id}
+          deck={activeDeck}
+          resetToken={deckResetToken}
+        />
 
         <div className="get-started-action-rail" aria-label="Related actions">
           <ActionButton icon={<Workflow size={15} />} label="Start a goal" onClick={onOpenChat} />

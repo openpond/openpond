@@ -49,7 +49,7 @@ export function SidebarNavigation({
       </button>
       <button
         className={`nav-command nav-profile-command ${view === "profile" ? "active" : ""}`}
-        aria-label="Profile"
+        aria-label="Agents"
         onClick={() => {
           clearWorkspaceSelection();
           setView("profile");
@@ -57,7 +57,7 @@ export function SidebarNavigation({
       >
         <Bot size={16} />
         <span className="nav-profile-label">
-          <span>Profile</span>
+          <span>Agents</span>
           {profileHasUncommittedChanges ? (
             <span
               className="sidebar-profile-change-dot"

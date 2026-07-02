@@ -6,7 +6,13 @@ import { GetStartedVisual } from "./get-started-visuals";
 const SLIDE_SECONDS = 5;
 const SLIDE_MS = SLIDE_SECONDS * 1000;
 
-export function GetStartedDeckView({ deck }: { deck: GetStartedDeck }) {
+export function GetStartedDeckView({
+  deck,
+  resetToken = 0,
+}: {
+  deck: GetStartedDeck;
+  resetToken?: number;
+}) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -17,7 +23,7 @@ export function GetStartedDeckView({ deck }: { deck: GetStartedDeck }) {
   useEffect(() => {
     setActiveSlideIndex(0);
     setIsPlaying(false);
-  }, [deck.id]);
+  }, [deck.id, resetToken]);
 
   useEffect(() => {
     if (!isPlaying || prefersReducedMotion) return;

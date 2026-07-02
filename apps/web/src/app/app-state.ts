@@ -27,7 +27,14 @@ export type ShowAppToast = (
 export type SidebarSectionMenuId = "cloud" | "projects" | "chats";
 
 export type NewProjectMode = "local" | "cloud";
-export type RightPanelMode = "changes" | "browser" | "goal";
+export type RightPanelMode = "changes" | "browser" | "goal" | "chat";
+export type RightChatPanel = {
+  id: string;
+  sessionId: string | null;
+  prompt: string;
+  provider: ChatProvider;
+  model: string;
+};
 
 export type AppState = {
   query: string;
@@ -51,6 +58,7 @@ export type AppState = {
   diffPanelOpen: boolean;
   diffPanelExpanded: boolean;
   rightPanelMode: RightPanelMode;
+  rightChatPanels: RightChatPanel[];
   terminalOpen: boolean;
   syncingWorkspaceAppId: string | null;
   settingsSection: SettingsSection;
@@ -91,6 +99,7 @@ export const initialAppState: AppState = {
   diffPanelOpen: false,
   diffPanelExpanded: false,
   rightPanelMode: "changes",
+  rightChatPanels: [],
   terminalOpen: false,
   syncingWorkspaceAppId: null,
   settingsSection: "account",
@@ -239,6 +248,7 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setDiffPanelOpen: fieldSetter(dispatch, "diffPanelOpen"),
     setDiffPanelExpanded: fieldSetter(dispatch, "diffPanelExpanded"),
     setRightPanelMode: fieldSetter(dispatch, "rightPanelMode"),
+    setRightChatPanels: fieldSetter(dispatch, "rightChatPanels"),
     setTerminalOpen: fieldSetter(dispatch, "terminalOpen"),
     setSyncingWorkspaceAppId: fieldSetter(dispatch, "syncingWorkspaceAppId"),
     setSettingsSection: fieldSetter(dispatch, "settingsSection"),

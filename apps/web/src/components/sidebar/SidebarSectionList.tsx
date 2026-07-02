@@ -48,6 +48,7 @@ export function SidebarSectionList({
   commitPinnedDrop,
   commitPinnedPreviewDrop,
   dragItem,
+  dockSessionRight,
   expandedProjectIds,
   expandProject,
   onToggleChatsCollapsed,
@@ -177,6 +178,7 @@ export function SidebarSectionList({
             running={runningSessionIds.has(session.id)}
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
+            onDockRight={() => dockSessionRight(session)}
             onArchive={() => archiveSession(session)}
           />
         ))}
@@ -272,6 +274,7 @@ export function SidebarSectionList({
               running={runningSessionIds.has(row.session.id)}
               onSelect={() => selectSession(row.session)}
               onTogglePin={() => toggleSessionPinned(row.session)}
+              onDockRight={() => dockSessionRight(row.session)}
               onArchive={() => archiveSession(row.session)}
               onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
               onDragEnd={clearSidebarDrag}
@@ -499,6 +502,7 @@ export function SidebarSectionList({
                 selectSession(session);
               }}
               onTogglePin={() => toggleSessionPinned(session)}
+              onDockRight={() => dockSessionRight(session)}
               onArchive={() => restoreSession(session)}
             />
           ) : (
@@ -510,6 +514,7 @@ export function SidebarSectionList({
               running={runningSessionIds.has(session.id)}
               onSelect={() => selectSession(session)}
               onTogglePin={() => toggleSessionPinned(session)}
+              onDockRight={() => dockSessionRight(session)}
               onArchive={() => archiveSession(session)}
             />
           )

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, GitBranch, Shield, Workflow } from "../icons";
 import type { GetStartedAccent, GetStartedVisualKind } from "./get-started-content";
 
 type GetStartedVisualProps = {
@@ -7,30 +6,38 @@ type GetStartedVisualProps = {
   accent: GetStartedAccent;
 };
 
+type DiagramTone = "default" | "source" | "state" | "gate" | "review" | "hosted" | "warn";
+
 export function GetStartedVisual({ accent, kind }: GetStartedVisualProps) {
   switch (kind) {
     case "goal-state":
       return (
         <VisualShell accent={accent}>
-          <div className="get-started-dual-goal">
-            <GoalCard title="Local goal" detail="session state" status="active" />
-            <GoalCard title="Hosted goal" detail="work item state" status="running" />
-            <div className="get-started-shared-state">
-              <Workflow size={17} />
-              <span>objective + evidence + blockers + completion</span>
-            </div>
-          </div>
+          <HubGraph
+            inputs={[
+              { title: "Local goal", detail: "session state", tone: "state" },
+              { title: "Hosted goal", detail: "work item state", tone: "hosted" },
+            ]}
+            center={{ title: "Shared goal record", detail: "same lifecycle language", tone: "gate" }}
+            outputs={[
+              { title: "objective", detail: "what success means" },
+              { title: "evidence", detail: "files, checks, logs" },
+              { title: "blockers", detail: "approval or setup" },
+              { title: "completion", detail: "evidence-backed" },
+            ]}
+          />
         </VisualShell>
       );
     case "goal-evidence":
       return (
         <VisualShell accent={accent}>
-          <FlowList
-            items={[
-              ["Prompt", "objective captured"],
-              ["Tools", "files, shell, apps"],
-              ["Events", "checks and logs"],
-              ["Review", "approval state"],
+          <LoopGraph
+            center="evidence state"
+            nodes={[
+              { title: "Prompt", detail: "objective captured" },
+              { title: "Tools", detail: "files, shell, apps" },
+              { title: "Events", detail: "logs and checks", tone: "gate" },
+              { title: "Review", detail: "approval state" },
             ]}
           />
         </VisualShell>
@@ -38,34 +45,36 @@ export function GetStartedVisual({ accent, kind }: GetStartedVisualProps) {
     case "goal-controls":
       return (
         <VisualShell accent={accent}>
-          <StatusRail
-            rows={[
-              ["active", "next continuation allowed"],
-              ["paused", "user stopped the loop"],
-              ["blocked", "needs input or setup"],
-              ["complete", "evidence-backed finish"],
-            ]}
-          />
+          <StateGraph />
         </VisualShell>
       );
     case "goal-context":
       return (
         <VisualShell accent={accent}>
-          <ResourceList
-            heading="goal context"
-            rows={["messages", "workspace files", "check output", "approval notes"]}
+          <HubGraph
+            inputs={[
+              { title: "Chat turns", detail: "requests and approvals" },
+              { title: "Workspace", detail: "files and source refs", tone: "source" },
+            ]}
+            center={{ title: "Goal context", detail: "inspectable record", tone: "gate" }}
+            outputs={[
+              { title: "messages", detail: "conversation trace" },
+              { title: "checks", detail: "command output" },
+              { title: "resources", detail: "linked files" },
+              { title: "approval notes", detail: "what changed" },
+            ]}
           />
         </VisualShell>
       );
     case "create-plan":
       return (
         <VisualShell accent={accent}>
-          <FlowList
-            items={[
-              ["Ask", "short user request"],
-              ["Question", "focused follow-up"],
-              ["Plan", "agent/action shape"],
-              ["Approve", "source may change"],
+          <FlowGraph
+            nodes={[
+              { title: "Ask", detail: "short request" },
+              { title: "Clarify", detail: "focused questions", tone: "warn" },
+              { title: "Plan", detail: "agent/action shape" },
+              { title: "Review gate", detail: "confirm before source", tone: "gate" },
             ]}
           />
         </VisualShell>
@@ -73,126 +82,93 @@ export function GetStartedVisual({ accent, kind }: GetStartedVisualProps) {
     case "source-tree":
       return (
         <VisualShell accent={accent}>
-          <SourceTree
+          <SourceContractGraph
             heading="profiles/default"
-            rows={["agent/agent.ts", "agent/actions/*", "agent/evals/*", ".openpond/action-registry.json"]}
+            sourceRows={["agent/agent.ts", "agent/actions/*", "agent/evals/*"]}
+            artifactRows={["action-registry.json", "inspect.json", "validation.json"]}
           />
         </VisualShell>
       );
     case "check-stack":
       return (
         <VisualShell accent={accent}>
-          <StatusRail
-            rows={[
-              ["inspect", "passed"],
-              ["build", "passed"],
-              ["validate", "passed"],
-              ["eval", "setup gate ready"],
-            ]}
-          />
+          <CheckGateGraph />
         </VisualShell>
       );
     case "catalog":
       return (
         <VisualShell accent={accent}>
-          <ResourceList
-            heading="profile action catalog"
-            rows={["default.chat", "support.open-items", "release-notes.generate", "setup status: ready"]}
-          />
+          <CatalogGraph />
         </VisualShell>
       );
     case "edit-review":
       return (
         <VisualShell accent={accent}>
-          <DiffReview />
+          <ReviewGraph />
         </VisualShell>
       );
     case "profile-source":
       return (
         <VisualShell accent={accent}>
-          <SourceTree
+          <SourceContractGraph
             heading="openpond-profile"
-            rows={["openpond-profile.json", "profiles/default/settings/profile.yaml", "profiles/default/agent", ".openpond/artifact-index.json"]}
+            sourceRows={["openpond-profile.json", "profiles/default/agent", "profiles/default/settings"]}
+            artifactRows={["artifact-index.json", "manifest.json", "eval-results.json"]}
           />
         </VisualShell>
       );
     case "profile-sync":
       return (
         <VisualShell accent={accent}>
-          <FlowList
-            items={[
-              ["Local profile", "source + checks"],
-              ["Push", "hosted source ref"],
-              ["Publish", "manifest snapshot"],
-              ["Catalog", "hosted action menu"],
-            ]}
-          />
+          <ProfileSyncGraph />
         </VisualShell>
       );
     case "secret-boundary":
       return (
         <VisualShell accent={accent}>
-          <div className="get-started-boundary">
-            <BoundaryColumn title="source declares" rows={["SLACK_CHANNEL", "drive scope", "volume: reports"]} />
-            <Shield size={22} />
-            <BoundaryColumn title="platform stores" rows={["OAuth lease", "secret ref", "volume binding"]} />
-          </div>
+          <SecretBoundaryGraph />
         </VisualShell>
       );
     case "dual-source":
       return (
         <VisualShell accent={accent}>
-          <div className="get-started-dual-source">
-            <SourceMount label="/openpond/profile" detail="agent profile source" rows={["agent/agent.ts", ".openpond/*"]} />
-            <SourceMount label="/workspace" detail="target project source" rows={["src/*", "package.json"]} />
-          </div>
+          <DualSourceGraph />
         </VisualShell>
       );
     case "work-item":
       return (
         <VisualShell accent={accent}>
-          <StatusRail
-            rows={[
-              ["goal", "running"],
-              ["logs", "captured"],
-              ["checks", "pending review"],
-              ["approval", "publish blocked"],
-            ]}
-          />
+          <WorkItemGraph />
         </VisualShell>
       );
     case "publish-snapshot":
       return (
         <VisualShell accent={accent}>
-          <div className="get-started-snapshot">
-            <div>
-              <GitBranch size={16} />
-              <span>source ref</span>
-            </div>
-            <div className="get-started-hash">manifest hash</div>
-            <div>
-              <CheckCircle2 size={16} />
-              <span>published snapshot</span>
-            </div>
-          </div>
+          <PublishSnapshotGraph />
         </VisualShell>
       );
     case "setup-gate":
       return (
         <VisualShell accent={accent}>
-          <SetupGate />
+          <SetupGateGraph />
         </VisualShell>
       );
     case "surface-router":
       return (
         <VisualShell accent={accent}>
-          <SurfaceRouter />
+          <SurfaceRouterGraph />
         </VisualShell>
       );
     default:
       return (
         <VisualShell accent={accent}>
-          <ResourceList heading="OpenPond" rows={["profile source", "goal state", "checks", "catalog"]} />
+          <FlowGraph
+            nodes={[
+              { title: "Profile source", detail: "agent code", tone: "source" },
+              { title: "Checks", detail: "inspect and eval", tone: "gate" },
+              { title: "Catalog", detail: "available actions" },
+            ]}
+          />
         </VisualShell>
       );
   }
@@ -208,154 +184,348 @@ function VisualShell({
   return (
     <div className={`get-started-visual accent-${accent}`}>
       <div className="get-started-visual-accent" />
-      <div className="get-started-visual-inner">{children}</div>
-    </div>
-  );
-}
-
-function GoalCard({ detail, status, title }: { detail: string; status: string; title: string }) {
-  return (
-    <div className="get-started-goal-card">
-      <strong>{title}</strong>
-      <span>{detail}</span>
-      <em>{status}</em>
-    </div>
-  );
-}
-
-function FlowList({ items }: { items: Array<[string, string]> }) {
-  return (
-    <div className="get-started-flow-list">
-      {items.map(([title, detail], index) => (
-        <div className="get-started-flow-row" key={title}>
-          <span>{index + 1}</span>
-          <div>
-            <strong>{title}</strong>
-            <em>{detail}</em>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StatusRail({ rows }: { rows: Array<[string, string]> }) {
-  return (
-    <div className="get-started-status-rail">
-      {rows.map(([label, detail]) => (
-        <div className="get-started-status-row" key={label}>
-          <span />
-          <strong>{label}</strong>
-          <em>{detail}</em>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ResourceList({ heading, rows }: { heading: string; rows: string[] }) {
-  return (
-    <div className="get-started-resource-list">
-      <strong>{heading}</strong>
-      {rows.map((row) => (
-        <span key={row}>{row}</span>
-      ))}
-    </div>
-  );
-}
-
-function SourceTree({ heading, rows }: { heading: string; rows: string[] }) {
-  return (
-    <div className="get-started-source-tree">
-      <strong>{heading}</strong>
-      {rows.map((row) => (
-        <span key={row}>{row}</span>
-      ))}
-    </div>
-  );
-}
-
-function DiffReview() {
-  return (
-    <div className="get-started-diff-review">
-      <div className="get-started-diff-lines">
-        <span className="added">+ agent/actions/support.ts</span>
-        <span className="added">+ agent/evals/support.eval.ts</span>
-        <span className="changed">~ settings/profile.yaml</span>
-      </div>
-      <div className="get-started-review-card">
-        <strong>review</strong>
-        <span>source diff</span>
-        <span>check output</span>
-        <span>setup rows</span>
+      <div className="get-started-visual-inner">
+        <div className="get-started-diagram">{children}</div>
       </div>
     </div>
   );
 }
 
-function BoundaryColumn({ rows, title }: { rows: string[]; title: string }) {
+function FlowGraph({ nodes }: { nodes: DiagramNodeProps[] }) {
   return (
-    <div className="get-started-boundary-column">
-      <strong>{title}</strong>
-      {rows.map((row) => (
-        <span key={row}>{row}</span>
+    <div className="get-started-flow-graph">
+      {nodes.map((node, index) => (
+        <FragmentWithConnector isLast={index === nodes.length - 1} key={node.title}>
+          <DiagramNode {...node} />
+        </FragmentWithConnector>
       ))}
     </div>
   );
 }
 
-function SourceMount({
-  detail,
-  label,
-  rows,
+function LoopGraph({
+  center,
+  nodes,
 }: {
-  detail: string;
-  label: string;
-  rows: string[];
+  center: string;
+  nodes: DiagramNodeProps[];
 }) {
   return (
-    <div className="get-started-source-mount">
-      <strong>{label}</strong>
-      <em>{detail}</em>
-      {rows.map((row) => (
-        <span key={row}>{row}</span>
+    <div className="get-started-loop-graph">
+      <div className="get-started-loop-ring" />
+      <div className="get-started-loop-center">
+        <strong>{center}</strong>
+        <span>updated each turn</span>
+      </div>
+      {nodes.map((node) => (
+        <DiagramNode {...node} key={node.title} />
       ))}
     </div>
   );
 }
 
-function SetupGate() {
+function StateGraph() {
   return (
-    <div className="get-started-setup-gate">
+    <div className="get-started-state-graph">
+      <DiagramNode title="active" detail="next continuation allowed" tone="state" />
+      <DiagramNode title="paused" detail="user stopped the loop" tone="warn" />
+      <div className="get-started-state-core">
+        <strong>runtime controls</strong>
+        <span>pause, resume, clear, complete</span>
+      </div>
+      <DiagramNode title="blocked" detail="needs input or setup" tone="warn" />
+      <DiagramNode title="complete" detail="evidence-backed finish" tone="gate" />
+    </div>
+  );
+}
+
+function HubGraph({
+  center,
+  inputs,
+  outputs,
+}: {
+  center: DiagramNodeProps;
+  inputs: DiagramNodeProps[];
+  outputs: DiagramNodeProps[];
+}) {
+  return (
+    <div className="get-started-hub-graph">
+      <div className="get-started-node-stack">
+        {inputs.map((node) => (
+          <DiagramNode {...node} key={node.title} />
+        ))}
+      </div>
+      <DiagramNode {...center} variant="hub" />
+      <div className="get-started-node-stack compact">
+        {outputs.map((node) => (
+          <DiagramNode {...node} key={node.title} variant="compact" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SourceContractGraph({
+  artifactRows,
+  heading,
+  sourceRows,
+}: {
+  artifactRows: string[];
+  heading: string;
+  sourceRows: string[];
+}) {
+  return (
+    <div className="get-started-contract-graph">
+      <DiagramNode title={heading} detail="profile source" tone="source">
+        <MiniRows rows={sourceRows} />
+      </DiagramNode>
+      <Connector label="generates" />
+      <DiagramNode title=".openpond artifacts" detail="machine-readable contract" tone="gate">
+        <MiniRows rows={artifactRows} />
+      </DiagramNode>
+      <div className="get-started-consumer-strip">
+        {["app", "CLI", "checks", "hosted"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CheckGateGraph() {
+  return (
+    <div className="get-started-gate-graph">
+      <DiagramNode title="source change" detail="candidate profile state" tone="source" />
+      <div className="get-started-check-grid">
+        {[
+          ["inspect", "passed"],
+          ["build", "passed"],
+          ["validate", "passed"],
+          ["eval", "setup ready"],
+        ].map(([label, status]) => (
+          <div className="get-started-check-cell" key={label}>
+            <strong>{label}</strong>
+            <span>{status}</span>
+          </div>
+        ))}
+      </div>
+      <DiagramNode title="activate" detail="catalog can refresh" tone="gate" />
+    </div>
+  );
+}
+
+function CatalogGraph() {
+  return (
+    <HubGraph
+      inputs={[
+        { title: "manifest", detail: "checked snapshot", tone: "gate" },
+        { title: "setup state", detail: "ready or required", tone: "warn" },
+      ]}
+      center={{ title: "Profile action catalog", detail: "generated menu", tone: "state" }}
+      outputs={[
+        { title: "default.chat", detail: "local chat" },
+        { title: "support.open-items", detail: "connected app" },
+        { title: "release-notes.generate", detail: "hosted action" },
+      ]}
+    />
+  );
+}
+
+function ReviewGraph() {
+  return (
+    <div className="get-started-review-graph">
+      <DiagramNode title="patch plan" detail="what will change" />
+      <Connector label="edits" />
+      <DiagramNode title="source diff" detail="+ actions, evals, settings" tone="source">
+        <MiniRows rows={["+ agent/actions/support.ts", "+ agent/evals/support.eval.ts", "~ settings/profile.yaml"]} />
+      </DiagramNode>
+      <Connector label="checks" />
+      <DiagramNode title="review gate" detail="commit, push, publish" tone="gate">
+        <MiniRows rows={["source diff", "check output", "setup rows"]} />
+      </DiagramNode>
+    </div>
+  );
+}
+
+function ProfileSyncGraph() {
+  return (
+    <div className="get-started-sync-graph">
+      <DiagramNode title="local profile" detail="source + checks" tone="source" />
+      <Connector label="push" />
+      <DiagramNode title="hosted profile ref" detail="uploaded source" tone="hosted" />
+      <Connector label="check" />
+      <DiagramNode title="published catalog" detail="manifest snapshot" tone="gate" />
+    </div>
+  );
+}
+
+function SecretBoundaryGraph() {
+  return (
+    <div className="get-started-boundary-graph">
+      <DiagramNode title="source declares" detail="requirements, not values" tone="source">
+        <MiniRows rows={["SLACK_CHANNEL", "drive scope", "volume: reports"]} />
+      </DiagramNode>
+      <div className="get-started-boundary-wall">
+        <strong>binding boundary</strong>
+        <span>values stay outside Git</span>
+      </div>
+      <DiagramNode title="platform stores" detail="runtime setup state" tone="gate">
+        <MiniRows rows={["OAuth lease", "secret ref", "volume binding"]} />
+      </DiagramNode>
+    </div>
+  );
+}
+
+function DualSourceGraph() {
+  return (
+    <div className="get-started-dual-source-graph">
+      <DiagramNode title="/openpond/profile" detail="agent profile source" tone="source">
+        <MiniRows rows={["agent/agent.ts", ".openpond/*"]} />
+      </DiagramNode>
+      <DiagramNode title="/workspace" detail="target project source" tone="source">
+        <MiniRows rows={["src/*", "package.json"]} />
+      </DiagramNode>
+      <div className="get-started-sandbox-core">
+        <strong>hosted sandbox</strong>
+        <span>runs work item with separate mounts</span>
+      </div>
+      <DiagramNode title="review output" detail="diffs, logs, checks, setup rows" tone="gate" />
+    </div>
+  );
+}
+
+function WorkItemGraph() {
+  return (
+    <div className="get-started-timeline-graph">
       {[
-        ["integration", "Slack lease", "missing"],
-        ["secret", "REPORT_BUCKET", "ready"],
-        ["volume", "reports", "optional"],
-      ].map(([kind, label, status]) => (
-        <div className="get-started-setup-row" key={label}>
-          <span>{kind}</span>
+        ["goal", "running"],
+        ["logs", "captured"],
+        ["checks", "pending review"],
+        ["approval", "publish blocked"],
+      ].map(([label, detail]) => (
+        <div className="get-started-timeline-step" key={label}>
           <strong>{label}</strong>
-          <em>{status}</em>
+          <span>{detail}</span>
         </div>
       ))}
     </div>
   );
 }
 
-function SurfaceRouter() {
+function PublishSnapshotGraph() {
   return (
-    <div className="get-started-router">
-      <div className="get-started-surface-list">
+    <div className="get-started-publish-graph">
+      <DiagramNode title="source ref" detail="reviewed profile state" tone="source" />
+      <Connector label="hash" />
+      <DiagramNode title="manifest hash" detail="immutable contract" tone="gate" />
+      <Connector label="publish" />
+      <DiagramNode title="hosted catalog" detail="runtime action menu" tone="hosted" />
+    </div>
+  );
+}
+
+function SetupGateGraph() {
+  return (
+    <div className="get-started-setup-graph">
+      <div className="get-started-setup-table">
+        {[
+          ["integration", "Slack lease", "missing"],
+          ["secret", "REPORT_BUCKET", "ready"],
+          ["volume", "reports", "optional"],
+          ["target repo", "/workspace", "required"],
+        ].map(([kind, label, status]) => (
+          <div className="get-started-setup-row" key={label}>
+            <span>{kind}</span>
+            <strong>{label}</strong>
+            <em>{status}</em>
+          </div>
+        ))}
+      </div>
+      <div className="get-started-gate-decision">
+        <strong>setup-required</strong>
+        <span>block before run or publish</span>
+      </div>
+    </div>
+  );
+}
+
+function SurfaceRouterGraph() {
+  return (
+    <div className="get-started-router-graph">
+      <div className="get-started-surface-cloud">
         {["web", "desktop", "Slack", "Teams", "API", "MCP"].map((label) => (
           <span key={label}>{label}</span>
         ))}
       </div>
-      <div className="get-started-router-core">profile router</div>
-      <div className="get-started-router-output">
-        <span>direct answer</span>
-        <span>profile action</span>
-        <span>work item</span>
+      <div className="get-started-router-core">
+        <strong>profile router</strong>
+        <span>team + profile + catalog</span>
       </div>
+      <div className="get-started-router-results">
+        {["direct answer", "profile action", "work item", "setup-required"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type DiagramNodeProps = {
+  children?: ReactNode;
+  detail: string;
+  title: string;
+  tone?: DiagramTone;
+  variant?: "default" | "compact" | "hub";
+};
+
+function DiagramNode({
+  children,
+  detail,
+  title,
+  tone = "default",
+  variant = "default",
+}: DiagramNodeProps) {
+  return (
+    <div className={`get-started-diagram-node tone-${tone} variant-${variant}`}>
+      <div className="get-started-node-heading">
+        <strong>{title}</strong>
+      </div>
+      <span>{detail}</span>
+      {children}
+    </div>
+  );
+}
+
+function Connector({ label }: { label?: string }) {
+  return (
+    <div className="get-started-connector" aria-hidden={label ? undefined : true}>
+      <span />
+      {label ? <em>{label}</em> : null}
+    </div>
+  );
+}
+
+function FragmentWithConnector({
+  children,
+  isLast,
+}: {
+  children: ReactNode;
+  isLast: boolean;
+}) {
+  return (
+    <>
+      {children}
+      {isLast ? null : <Connector />}
+    </>
+  );
+}
+
+function MiniRows({ rows }: { rows: string[] }) {
+  return (
+    <div className="get-started-mini-rows">
+      {rows.map((row) => (
+        <span key={row}>{row}</span>
+      ))}
     </div>
   );
 }

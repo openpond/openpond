@@ -230,6 +230,8 @@
   color: var(--text);
   padding: 12px;
   text-align: left;
+  content-visibility: auto;
+  contain-intrinsic-size: 66px;
 }
 
 .cloud-task-row:hover {
@@ -333,6 +335,8 @@
   word-break: break-word;
   font-size: 14px;
   line-height: 1.65;
+  content-visibility: auto;
+  contain-intrinsic-size: 120px;
 }
 
 .cloud-message.user {
@@ -343,6 +347,7 @@
   color: #fff;
   padding: 10px 15px;
   line-height: 1.55;
+  contain-intrinsic-size: 72px;
 }
 
 .cloud-message.assistant,
@@ -402,6 +407,8 @@
   padding-left: 14px;
   font-size: 14px;
   line-height: 1.55;
+  content-visibility: auto;
+  contain-intrinsic-size: 96px;
 }
 
 .cloud-activity span {
@@ -419,6 +426,8 @@
   border-radius: 8px;
   background: #202020;
   padding: 14px;
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
 }
 
 .cloud-create-plan-heading {

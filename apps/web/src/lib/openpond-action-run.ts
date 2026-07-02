@@ -34,6 +34,13 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function selectedByForPrompt(input: { displayPrompt?: string | null; prompt: string }): "mention" | "slash" {
+  if (input.displayPrompt && input.displayPrompt !== input.prompt && /(?:^|\s)@[A-Za-z0-9_-]+/.test(input.displayPrompt)) {
+    return "mention";
+  }
+  return "slash";
+}
+
 function selectedEntrypoint(value: unknown): SandboxAgentSelectedEntrypoint | null {
   const record = asRecord(value);
   const scope = text(record?.scope);
@@ -150,11 +157,13 @@ export function openPondProfileActionInfo(
 export function buildOpenPondProfileActionRunInput({
   action,
   attachments = [],
+  displayPrompt,
   prompt,
   sessionId,
 }: {
   action: OpenPondProfileActionInfo;
   attachments?: ChatAttachment[];
+  displayPrompt?: string | null;
   prompt: string;
   sessionId?: string | null;
 }) {
@@ -167,13 +176,14 @@ export function buildOpenPondProfileActionRunInput({
       ...(attachments.length > 0 ? { attachments } : {}),
     },
     metadata: {
-      source: "openpond_app",
-      selectedActionId: action.actionId,
-      selectedActionLabel: action.actionLabel,
-      selectedBy: "slash",
-      ...(sessionId ? { sessionId } : {}),
-    },
-  };
+	      source: "openpond_app",
+	      selectedActionId: action.actionId,
+	      selectedActionLabel: action.actionLabel,
+	      selectedBy: selectedByForPrompt({ displayPrompt, prompt }),
+	      ...(displayPrompt && displayPrompt !== prompt ? { displayPrompt } : {}),
+	      ...(sessionId ? { sessionId } : {}),
+	    },
+	  };
 }
 
 export function buildOpenPondAppActionRunInput({

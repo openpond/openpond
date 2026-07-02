@@ -273,6 +273,16 @@
   visibility: visible;
 }
 
+.sidebar-profile-change-dot[data-tooltip]::after {
+  max-width: min(232px, calc(var(--sidebar-width) - 32px), calc(100vw - 32px));
+  transform: translate(calc(-50% + 48px), 3px);
+}
+
+.sidebar-profile-change-dot[data-tooltip]:hover::after,
+.sidebar-profile-change-dot[data-tooltip]:focus-visible::after {
+  transform: translate(calc(-50% + 48px), 0);
+}
+
 .sidebar-icon[data-tooltip]::after,
 .section-icon[data-tooltip]::after,
 .sidebar-row-action[data-tooltip]::after,

@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
-import type { RuntimeEvent } from "@openpond/contracts";
-import { appReducer, createAppSetters, initialAppState, type AppToast, type ShowAppToast } from "./app/app-state";
+import type { ChatAttachment, RuntimeEvent, Session } from "@openpond/contracts";
+import {
+  appReducer,
+  createAppSetters,
+  initialAppState,
+  type AppToast,
+  type RightChatPanel,
+  type ShowAppToast,
+} from "./app/app-state";
 import { api } from "./api";
 import { AppSettingsController, AppShellController } from "./components/app-shell/AppControllers";
 import { useProjectConfirmDialog } from "./components/app-shell/ProjectConfirmDialog";
 import { isDesktopShell, isMacPlatform } from "./components/app-shell/WindowControls";
 import { AppSplash } from "./components/splash/AppSplash";
 import type { CloudSetupDialogState } from "./components/workspace/CloudSetupDialog";
-import { SIDEBAR_SECTION_LIMIT } from "./lib/app-models";
+import { normalizeChatModel, SIDEBAR_SECTION_LIMIT } from "./lib/app-models";
+import { buildChatMessages } from "./lib/chat-messages";
 import {
   CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT,
   CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
@@ -18,8 +26,16 @@ import {
 import { isCodexHistorySessionId } from "./lib/sidebar-session-projects";
 import {
   buildRuntimeIndexes,
+  latestContextUsageForSession,
+  latestGoalRuntimeForSession,
+  latestPendingApprovalForSession,
   runtimeEventsForSession,
 } from "./lib/runtime-indexes";
+import { contextWindowStatusFromUsage } from "./lib/context-window";
+import type { ComposerSubmitOptions } from "./components/chat/Composer";
+import type { ComposerSlashCommand } from "./lib/composer-slash-commands";
+import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
+import type { WorkspaceDiffTabRequest } from "./components/workspace-diff/workspace-diff-panel-model";
 import {
   isCloudWorkspaceKind,
 } from "./lib/workspace-location";
@@ -65,12 +81,35 @@ type ChatHistoryLoadState = {
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 const CHAT_HISTORY_PAGE_LIMIT = 500;
+const RIGHT_CHAT_PANEL_LIMIT = 2;
+
+function createRightChatPanel(input: {
+  sessionId: string | null;
+  provider: RightChatPanel["provider"];
+  model: string;
+}): RightChatPanel {
+  return {
+    id: `right-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    sessionId: input.sessionId,
+    prompt: "",
+    provider: input.provider,
+    model: input.model,
+  };
+}
+
+function promptForRightChatCommand(command: ComposerSlashCommand, prompt: string): string {
+  const args = prompt.trim();
+  if (command.id === "create") return `/create ${args}`;
+  if (command.id === "edit") return `/edit ${args}`;
+  return `Goal: ${args}`;
+}
 
 export function App() {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
   const [pendingTerminalCommand, setPendingTerminalCommand] = useState<{ id: number; command: string } | null>(null);
   const [mentionedAppId, setMentionedAppId] = useState<string | null>(null);
   const [cloudSetupDialog, setCloudSetupDialog] = useState<CloudSetupDialogState | null>(null);
+  const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(null);
   const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<Record<string, ChatHistoryLoadState>>({});
   const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
@@ -102,6 +141,7 @@ export function App() {
     diffPanelOpen,
     diffPanelExpanded,
     rightPanelMode,
+    rightChatPanels,
     terminalOpen,
     syncingWorkspaceAppId,
     settingsSection,
@@ -141,6 +181,7 @@ export function App() {
     setDiffPanelOpen,
     setDiffPanelExpanded,
     setRightPanelMode,
+    setRightChatPanels,
     setTerminalOpen,
     setSyncingWorkspaceAppId,
     setSettingsSection,
@@ -712,7 +753,7 @@ export function App() {
   const title = view === "apps"
     ? "Apps"
     : view === "profile"
-      ? "Profile"
+      ? "Agents"
     : view === "cloud"
       ? (selectedCloudWorkItem?.title ?? "Cloud")
       : (selectedSession?.title ?? "New chat");
@@ -945,6 +986,170 @@ export function App() {
     setNewProjectName,
     setRightPanelMode,
   });
+  const showRightPanelDiffTab = useCallback(
+    (tab: WorkspaceDiffTabRequest["tab"]) => {
+      setRightPanelTabRequest((current) => ({ id: (current?.id ?? 0) + 1, tab }));
+      showChangesPanel();
+    },
+    [showChangesPanel],
+  );
+  const openRightChatPanel = useCallback(
+    (session: Session | null = null) => {
+      if (session && isCodexHistorySessionId(session.id)) {
+        showToast("Codex history chats open in the main chat view for now.", "info");
+        return;
+      }
+      const nextPanel = createRightChatPanel({
+        sessionId: session?.id ?? null,
+        provider: session?.provider ?? activeProvider,
+        model: session?.modelRef?.modelId ?? activeModel,
+      });
+      setRightChatPanels((current) => {
+        if (session?.id && current.some((panel) => panel.sessionId === session.id)) return current;
+        const next = [...current, nextPanel];
+        if (next.length <= RIGHT_CHAT_PANEL_LIMIT) return next;
+        return [next[0]!, nextPanel];
+      });
+      setDiffPanelOpen(true);
+      setRightPanelMode("chat");
+      setView("chat");
+    },
+    [activeModel, activeProvider, setDiffPanelOpen, setRightChatPanels, setRightPanelMode, setView, showToast],
+  );
+  const showRightChatPanel = useCallback(() => {
+    if (rightChatPanels.length === 0) {
+      openRightChatPanel(null);
+      return;
+    }
+    setDiffPanelOpen(true);
+    setRightPanelMode("chat");
+    setView("chat");
+  }, [openRightChatPanel, rightChatPanels.length, setDiffPanelOpen, setRightPanelMode, setView]);
+  const closeRightChatPanel = useCallback(
+    (panelId: string) => {
+      const closesLastPanel = rightChatPanels.length <= 1 && rightChatPanels.some((panel) => panel.id === panelId);
+      if (closesLastPanel && rightPanelMode === "chat") showRightPanelDiffTab("summary");
+      setRightChatPanels((current) => current.filter((panel) => panel.id !== panelId));
+    },
+    [rightChatPanels, rightPanelMode, setRightChatPanels, showRightPanelDiffTab],
+  );
+  const updateRightChatPrompt = useCallback(
+    (panelId: string, nextPrompt: string) => {
+      setRightChatPanels((current) =>
+        current.map((panel) => (panel.id === panelId ? { ...panel, prompt: nextPrompt } : panel)),
+      );
+    },
+    [setRightChatPanels],
+  );
+  const updateRightChatModel = useCallback(
+    (panelId: string, model: string) => {
+      setRightChatPanels((current) =>
+        current.map((panel) => (panel.id === panelId ? { ...panel, model } : panel)),
+      );
+    },
+    [setRightChatPanels],
+  );
+  const updateRightChatProvider = useCallback(
+    (panelId: string, provider: RightChatPanel["provider"]) => {
+      setRightChatPanels((current) =>
+        current.map((panel) =>
+          panel.id === panelId
+            ? {
+                ...panel,
+                provider,
+                model: normalizeChatModel(provider, panel.model, bootstrap?.providers ?? null),
+              }
+            : panel,
+        ),
+      );
+    },
+    [bootstrap?.providers, setRightChatPanels],
+  );
+  const rightChatPanelViews = useMemo(() => {
+    const sessionById = new Map(sidebarSessions.map((session) => [session.id, session]));
+    return rightChatPanels.map((panel) => {
+      const session = panel.sessionId ? (sessionById.get(panel.sessionId) ?? null) : null;
+      const provider = session?.provider ?? panel.provider;
+      const panelEvents = runtimeEventsForSession(runtimeIndexes, panel.sessionId);
+      const contextWindowStatusForPanel = contextWindowStatusFromUsage({
+        provider,
+        snapshot: latestContextUsageForSession(runtimeIndexes, panel.sessionId),
+      });
+      const workspaceRootPath = session?.cwd ?? null;
+      const activeWorkspaceAppIdForPanel =
+        session?.appId ??
+        (session?.workspaceKind === "local_project" ? session.workspaceId ?? null : null);
+      return {
+        ...panel,
+        session,
+        title: session?.title ?? "New chat",
+        messages: buildChatMessages(panelEvents),
+        contextWindowStatus: contextWindowStatusForPanel,
+        goalRuntime: latestGoalRuntimeForSession(runtimeIndexes, panel.sessionId),
+        pendingApproval: latestPendingApprovalForSession(runtimeIndexes, panel.sessionId),
+        running: session ? runningSessionIds.has(session.id) : false,
+        workspaceRootPath,
+        activeWorkspaceAppId: activeWorkspaceAppIdForPanel,
+      };
+    });
+  }, [rightChatPanels, runtimeIndexes, runningSessionIds, sidebarSessions]);
+  const submitRightChatPrompt = useCallback(
+    async (
+      panelId: string,
+      attachments: ChatAttachment[] = [],
+      action: SandboxActionCatalogEntry | null = null,
+      command: ComposerSlashCommand | null = null,
+      options: ComposerSubmitOptions = {},
+    ) => {
+      const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
+      if (!panel) return false;
+      if (command && !panel.prompt.trim()) {
+        showToast(`Add instructions after ${command.command}.`, "info");
+        return false;
+      }
+      if (command && attachments.length > 0) {
+        showToast(`${command.command} tasks do not accept attachments yet. Add file context in the task thread.`, "error");
+        return false;
+      }
+      const session = panel.sessionId
+        ? sidebarSessions.find((candidate) => candidate.id === panel.sessionId) ?? null
+        : null;
+      const promptForTurn = command ? promptForRightChatCommand(command, panel.prompt) : panel.prompt;
+      const sessionEvents = runtimeEventsForSession(runtimeIndexes, panel.sessionId);
+      return sendPrompt(attachments, action, promptForTurn, {
+        session,
+        selectSession: false,
+        provider: panel.provider,
+        model: panel.model,
+        chatMessages: buildChatMessages(sessionEvents),
+        displayPrompt: options.displayPrompt,
+        clearPrompt: () => updateRightChatPrompt(panelId, ""),
+        onSessionCreated: (createdSession) => {
+          setRightChatPanels((current) =>
+            current.map((candidate) =>
+              candidate.id === panelId
+                ? {
+                    ...candidate,
+                    sessionId: createdSession.id,
+                    provider: createdSession.provider,
+                    model: createdSession.modelRef?.modelId ?? candidate.model,
+                  }
+                : candidate,
+            ),
+          );
+        },
+      });
+    },
+    [
+      rightChatPanels,
+      runtimeIndexes,
+      sendPrompt,
+      setRightChatPanels,
+      sidebarSessions,
+      showToast,
+      updateRightChatPrompt,
+    ],
+  );
   const openProfileSettings = useCallback(() => {
     setSectionMenuOpen(null);
     setView("profile");
@@ -1074,6 +1279,7 @@ export function App() {
         setCloudProjectsExpanded,
         setChatsExpanded,
         beginNewChat,
+        dockSessionRight: openRightChatPanel,
         openCloudHome,
         createCloudEnvironment: createCloudEnvironmentFromSidebar,
         selectCloudWorkItem,
@@ -1167,6 +1373,8 @@ export function App() {
         diffPanelOpen,
         diffPanelExpanded,
         rightPanelMode,
+        rightPanelTabRequest,
+        rightChatPanels: rightChatPanelViews,
         browserConversationId,
         terminalCwd,
         pendingTerminalCommand,
@@ -1185,6 +1393,16 @@ export function App() {
         onShowDiffPanel: showChangesPanel,
         onShowBrowserPanel: showBrowserPanel,
         onShowGoalSidebarTab: showGoalSidebarTab,
+        onShowReviewPanel: () => showRightPanelDiffTab("review"),
+        onShowRightChatPanel: showRightChatPanel,
+        onShowSummaryPanel: () => showRightPanelDiffTab("summary"),
+        onAddRightChat: () => openRightChatPanel(null),
+        onCloseRightChatPanel: closeRightChatPanel,
+        onRightChatModelChange: updateRightChatModel,
+        onRightChatPromptChange: updateRightChatPrompt,
+        onRightChatProviderChange: updateRightChatProvider,
+        onSubmitRightChat: submitRightChatPrompt,
+        onStopRightChat: (sessionId) => stopTurn(sessionId),
         onCloseRightPanel: () => setDiffPanelOpen(false),
         onCloseTerminal: () => setTerminalOpen(false),
         onOpenCloudHome: openCloudHome,

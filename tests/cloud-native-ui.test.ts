@@ -267,6 +267,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     setCloudProjectsExpanded: noopDispatch,
     setChatsExpanded: noopDispatch,
     beginNewChat: noop,
+    dockSessionRight: noop,
     openCloudHome: noop,
     createCloudEnvironment: noop,
     selectCloudWorkItem: noop,
@@ -346,7 +347,8 @@ describe("Cloud native UI", () => {
     expect(markup).toContain('aria-label="More project actions"');
     expect(markup).not.toContain('data-tooltip="Move to Cloud"');
     expect(markup).not.toContain("lucide-cloud-upload");
-    expect(markup).not.toContain("actions-3");
+    expect(markup).toContain('data-tooltip="Open in right panel"');
+    expect(markup).toContain("actions-3");
     expect(markup).not.toContain("All tasks");
     expect(markup).not.toContain("Use existing");
     expect(markup).not.toContain("Start from GitHub repo");

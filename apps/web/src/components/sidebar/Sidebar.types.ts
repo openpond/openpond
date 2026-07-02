@@ -51,6 +51,7 @@ export type SidebarProps = {
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setChatsExpanded: Dispatch<SetStateAction<boolean>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
+  dockSessionRight: (session: Session) => void;
   openCloudHome: () => void;
   createCloudEnvironment: () => void;
   selectCloudWorkItem: (workItem: CloudWorkItem) => void;

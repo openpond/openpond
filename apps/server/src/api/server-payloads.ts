@@ -1821,6 +1821,7 @@ export function createServerPayloads(deps: {
     const actionInput = asRecord(input.input);
     const sessionId = stringValue(metadata.sessionId);
     const prompt = stringValue(actionInput.prompt) ?? stringValue(actionInput.message) ?? `Run ${action}`;
+    const displayPrompt = stringValue(metadata.displayPrompt) ?? prompt;
     const selectedActionLabel =
       stringValue(metadata.selectedActionLabel) ??
       stringValue(metadata.selectedActionId) ??
@@ -1847,7 +1848,7 @@ export function createServerPayloads(deps: {
           sessionId,
           turnId,
           source: "chat_action",
-          args: { prompt },
+          args: { prompt: displayPrompt },
         }),
       );
       await appendRuntimeEvent(

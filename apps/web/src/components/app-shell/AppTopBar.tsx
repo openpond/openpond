@@ -9,7 +9,14 @@ import type {
   WorkspaceToolResult,
 } from "@openpond/contracts";
 import { lazy, Suspense } from "react";
-import { ChevronRight, MoreHorizontal, PanelLeft, PanelRight, Search, SquareTerminal } from "../icons";
+import {
+  ChevronRight,
+  MoreHorizontal,
+  PanelLeft,
+  PanelRight,
+  Search,
+  SquareTerminal,
+} from "../icons";
 import { WindowControls, isDesktopShell, isMacPlatform } from "./WindowControls";
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 import type { ClientConnection } from "../../api";

@@ -4,7 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { CloudProject, LocalProject, OpenPondApp } from "@openpond/contracts";
 
 import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
-import { Composer, type ComposerProjectTargetState } from "../apps/web/src/components/chat/Composer";
+import {
+  Composer,
+  promptWithSelectedInvocationText,
+  type ComposerProjectTargetState,
+} from "../apps/web/src/components/chat/Composer";
 import { ComposerInvocationPill } from "../apps/web/src/components/chat/ComposerInvocationPill";
 import { ComposerPrimaryControls } from "../apps/web/src/components/chat/ComposerPrimaryControls";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
@@ -165,6 +169,15 @@ function planningApp(overrides: Partial<OpenPondApp> = {}): OpenPondApp {
 }
 
 describe("composer slash behavior", () => {
+  test("reconstructs selected mention text for the submitted display prompt", () => {
+    expect(promptWithSelectedInvocationText("Which support items need attention?", "@business", 0)).toBe(
+      "@business Which support items need attention?",
+    );
+    expect(promptWithSelectedInvocationText("Please check  today", "@business", 13)).toBe(
+      "Please check @business today",
+    );
+  });
+
   test("renders selected commands as removable invocation pills without the slash", () => {
     const markup = renderToStaticMarkup(
       createElement(ComposerInvocationPill, {

@@ -16,6 +16,17 @@ import { ActivityGroup } from "./MessageActivityGroup";
 import { ChangeSummaryCard } from "./MessageChangeSummary";
 import { CreatePipelineStatusReceipt } from "./CreatePipelineStatusReceipt";
 
+type MessageRowProps = {
+  activeWorkspaceAppId?: string | null;
+  connection?: ClientConnection | null;
+  message: ChatMessage;
+  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenFileInSidebar?: (path: string) => void;
+  onOpenProfileSettings?: () => void;
+  showFooter?: boolean;
+  workspaceRootPath?: string | null;
+};
+
 export const MessageRow = memo(function MessageRow({
   activeWorkspaceAppId = null,
   connection = null,
@@ -25,16 +36,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenProfileSettings,
   showFooter = false,
   workspaceRootPath = null,
-}: {
-  activeWorkspaceAppId?: string | null;
-  connection?: ClientConnection | null;
-  message: ChatMessage;
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
-  onOpenFileInSidebar?: (path: string) => void;
-  onOpenProfileSettings?: () => void;
-  showFooter?: boolean;
-  workspaceRootPath?: string | null;
-}) {
+}: MessageRowProps) {
   if (message.role === "status_divider") {
     return <StatusDivider message={message} />;
   }
@@ -146,7 +148,63 @@ export const MessageRow = memo(function MessageRow({
       )}
     </article>
   );
-});
+}, areMessageRowPropsEqual);
+
+function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
+  return (
+    previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
+    previous.connection === next.connection &&
+    previous.onOpenBrowserLink === next.onOpenBrowserLink &&
+    previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
+    previous.onOpenProfileSettings === next.onOpenProfileSettings &&
+    previous.showFooter === next.showFooter &&
+    previous.workspaceRootPath === next.workspaceRootPath &&
+    chatMessageShallowEqual(previous.message, next.message)
+  );
+}
+
+function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): boolean {
+  if (previous === next) return true;
+  return (
+    previous.id === next.id &&
+    previous.role === next.role &&
+    previous.content === next.content &&
+    previous.timestamp === next.timestamp &&
+    previous.turnId === next.turnId &&
+    previous.statusKind === next.statusKind &&
+    previous.statusState === next.statusState &&
+    previous.statusTone === next.statusTone &&
+    messageAttachmentsEqual(previous.attachments, next.attachments) &&
+    previous.activities === next.activities &&
+    previous.actionRun === next.actionRun &&
+    previous.changeSummary === next.changeSummary &&
+    previous.createPipelineRequest === next.createPipelineRequest &&
+    previous.createPipeline === next.createPipeline &&
+    previous.createPipelineDebugActivities === next.createPipelineDebugActivities
+  );
+}
+
+function messageAttachmentsEqual(
+  previous: ChatAttachmentSummary[] | undefined,
+  next: ChatAttachmentSummary[] | undefined,
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next || previous.length !== next.length) return false;
+  for (let index = 0; index < previous.length; index += 1) {
+    const left = previous[index]!;
+    const right = next[index]!;
+    if (
+      left.id !== right.id ||
+      left.kind !== right.kind ||
+      left.name !== right.name ||
+      left.mediaType !== right.mediaType ||
+      left.sizeBytes !== right.sizeBytes
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function MessageAttachments({ attachments }: { attachments: ChatAttachmentSummary[] }) {
   return (

@@ -18,6 +18,7 @@
 @import "./styles/get-started/get-started.css";
 @import "./styles/cloud/cloud-work.css";
 @import "./styles/chat/chat.css";
+@import "./styles/chat/right-chat-panel.css";
 @import "./styles/chat/composer.css";
 @import "./styles/chat/approval-request.css";
 @import "./styles/chat/composer-workspace.css";

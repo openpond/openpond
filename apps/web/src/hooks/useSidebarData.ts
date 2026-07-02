@@ -103,7 +103,12 @@ export function useSidebarData({
       if (session.pinned) continue;
       const projectId = sidebarProjectIdBySessionId[session.id];
       if (!projectId) continue;
-      rows[projectId] = [...(rows[projectId] ?? []), session];
+      const projectRows = rows[projectId];
+      if (projectRows) {
+        projectRows.push(session);
+      } else {
+        rows[projectId] = [session];
+      }
     }
     return rows;
   }, [activeSessions, sidebarProjectIdBySessionId]);
@@ -153,7 +158,12 @@ export function useSidebarData({
     for (const workItem of cloudWorkItems) {
       if (workItem.archivedAt) continue;
       const projectKey = projectSelectionKey("cloud", workItem.projectId);
-      rows[projectKey] = [...(rows[projectKey] ?? []), workItem];
+      const projectRows = rows[projectKey];
+      if (projectRows) {
+        projectRows.push(workItem);
+      } else {
+        rows[projectKey] = [workItem];
+      }
     }
     for (const [projectKey, items] of Object.entries(rows)) {
       rows[projectKey] = items.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));

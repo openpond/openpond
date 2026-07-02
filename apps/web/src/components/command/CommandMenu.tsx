@@ -28,23 +28,11 @@ export function CommandMenu({
 }) {
   const normalizedQuery = query.trim().toLowerCase();
   const sessionMatches = useMemo(
-    () =>
-      sessions
-        .filter((session) => {
-          if (!normalizedQuery) return true;
-          return `${session.title} ${session.appName ?? ""}`.toLowerCase().includes(normalizedQuery);
-        })
-        .slice(0, 10),
+    () => firstMatchingSessions(sessions, normalizedQuery, 10),
     [normalizedQuery, sessions]
   );
   const projectMatches = useMemo(
-    () =>
-      projects
-        .filter((item) => {
-          if (!normalizedQuery) return true;
-          return projectSearchText(item).toLowerCase().includes(normalizedQuery);
-        })
-        .slice(0, 8),
+    () => firstMatchingProjects(projects, normalizedQuery, 8),
     [normalizedQuery, projects]
   );
 
@@ -119,6 +107,32 @@ export function CommandMenu({
       </section>
     </div>
   );
+}
+
+function firstMatchingSessions(sessions: Session[], normalizedQuery: string, limit: number): Session[] {
+  const matches: Session[] = [];
+  for (const session of sessions) {
+    if (!normalizedQuery || `${session.title} ${session.appName ?? ""}`.toLowerCase().includes(normalizedQuery)) {
+      matches.push(session);
+      if (matches.length >= limit) break;
+    }
+  }
+  return matches;
+}
+
+function firstMatchingProjects(
+  projects: SidebarProjectItem[],
+  normalizedQuery: string,
+  limit: number,
+): SidebarProjectItem[] {
+  const matches: SidebarProjectItem[] = [];
+  for (const item of projects) {
+    if (!normalizedQuery || projectSearchText(item).toLowerCase().includes(normalizedQuery)) {
+      matches.push(item);
+      if (matches.length >= limit) break;
+    }
+  }
+  return matches;
 }
 
 function projectSearchText(item: SidebarProjectItem): string {

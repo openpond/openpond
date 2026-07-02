@@ -67,9 +67,7 @@ function conciseGeneratedTitle(value: string): string {
     .map((token) => token.replace(/[^a-z0-9]/g, ""))
     .filter((token) => token && !LABEL_STOP_WORDS.has(token));
 
-  const compact = tokens
-    .map((token) => (token.length > 3 && token.endsWith("s") ? token.slice(0, -1) : token))
-    .slice(0, 3);
+  const compact = tokens.slice(0, 3);
 
   return titleCaseWords(compact.length ? compact.join(" ") : source || value);
 }

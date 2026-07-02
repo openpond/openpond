@@ -62,7 +62,10 @@ const PlannerQuestionSchema = z.object({
 
 const PlannerSourcePlanItemSchema = z.object({
   path: z.string().trim().min(1),
-  operation: z.enum(["create", "update", "delete", "inspect"]),
+  operation: z.preprocess(
+    normalizePlannerSourcePlanOperation,
+    z.enum(["create", "update", "delete", "inspect"]),
+  ),
   reason: z.string().trim().min(1),
 });
 
@@ -528,6 +531,67 @@ function normalizePlannerQuestionKind(value: unknown): unknown {
   return value;
 }
 
+function normalizePlannerSourcePlanOperation(value: unknown): unknown {
+  if (value == null || value === "") return value;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (
+    [
+      "create",
+      "add",
+      "author",
+      "build",
+      "generate",
+      "implement",
+      "init",
+      "initialize",
+      "materialize",
+      "new",
+      "scaffold",
+      "write",
+      "write_file",
+    ].includes(normalized)
+  ) {
+    return "create";
+  }
+  if (
+    [
+      "update",
+      "change",
+      "configure",
+      "edit",
+      "enable",
+      "modify",
+      "patch",
+      "register",
+      "replace",
+      "revise",
+      "set",
+      "upsert",
+    ].includes(normalized)
+  ) {
+    return "update";
+  }
+  if (["delete", "remove", "unlink"].includes(normalized)) {
+    return "delete";
+  }
+  if (
+    [
+      "inspect",
+      "audit",
+      "check",
+      "discover",
+      "read",
+      "review",
+      "validate",
+      "verify",
+    ].includes(normalized)
+  ) {
+    return "inspect";
+  }
+  return value;
+}
+
 function extractJsonObject(content: string): string | null {
   const trimmed = content.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
@@ -591,4 +655,5 @@ const CREATE_PIPELINE_PLANNER_SYSTEM_PROMPT = [
   "Choose actionShape.mode as chat, direct_action, or chat_and_direct_actions from the user's actual need.",
   "Use direct actions for repeatable tool-like runs, artifacts, exports, transforms, or scheduled-style outputs.",
   "Use chat for conversational assistants. Use chat_and_direct_actions when both normal follow-up chat and a repeatable action are useful.",
+  "Every sourcePlan item operation must be exactly one of create, update, delete, or inspect.",
 ].join("\n");

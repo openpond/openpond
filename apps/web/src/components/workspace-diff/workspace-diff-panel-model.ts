@@ -2,6 +2,16 @@ import type { WorkspaceDiffFile } from "@openpond/contracts";
 
 export type DiffTab = "goal" | "summary" | "file" | "review";
 
+export type WorkspaceDiffTabRequest = {
+  id: number;
+  tab: Extract<DiffTab, "summary" | "review">;
+};
+
+export type WorkspaceDiffSideChatTab = {
+  id: string;
+  title: string;
+};
+
 export type WorkspaceDiffRefreshOptions = {
   silent?: boolean;
 };
