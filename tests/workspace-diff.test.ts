@@ -50,8 +50,8 @@ async function installGitTraceWrapper(wrapperDir: string): Promise<{ logPath: st
       "#!/usr/bin/env bash",
       "if [[ -n \"${OPENPOND_GIT_TRACE_ARGS:-}\" ]]; then",
       "  {",
-      "    printf '%s\\t' \"$PWD\"",
-      "    for arg in \"$@\"; do printf '%q ' \"$arg\"; done",
+      "    printf '%s' \"$PWD\"",
+      "    for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done",
       "    printf '\\n'",
       "  } >> \"$OPENPOND_GIT_TRACE_ARGS\"",
       "fi",
@@ -62,6 +62,17 @@ async function installGitTraceWrapper(wrapperDir: string): Promise<{ logPath: st
   );
   await chmod(wrapperPath, 0o755);
   return { logPath, wrapperPath };
+}
+
+type GitTraceCommand = {
+  cwd: string;
+  args: string[];
+};
+
+function parseGitTraceLine(line: string): GitTraceCommand | null {
+  if (!line) return null;
+  const [cwd, ...args] = line.split("\t");
+  return cwd ? { cwd, args } : null;
 }
 
 function diffSummary(files: WorkspaceDiffSummary["files"]): WorkspaceDiffSummary {
@@ -256,18 +267,40 @@ describe("workspace diff", () => {
     const trace = await readFile(logPath, "utf8");
     const repoCommands = trace
       .split("\n")
-      .filter((line) => line.startsWith(`${repoPath}\t`));
-    const trackedPatchCommands = repoCommands.filter((line) => (
-      line.includes("-c core.quotePath=false diff --no-ext-diff --unified=80 HEAD -- .")
+      .map(parseGitTraceLine)
+      .filter((command): command is GitTraceCommand => Boolean(command && command.cwd === repoPath));
+    const trackedPatchCommands = repoCommands.filter((command) => (
+      command.args.length === 8 &&
+      command.args[0] === "-c" &&
+      command.args[1] === "core.quotePath=false" &&
+      command.args[2] === "diff" &&
+      command.args[3] === "--no-ext-diff" &&
+      command.args[4] === "--unified=80" &&
+      command.args[5] === "HEAD" &&
+      command.args[6] === "--" &&
+      command.args[7] === "."
     ));
-    const untrackedPatchCommands = repoCommands.filter((line) => (
-      line.includes("diff --no-index --unified=80 -- /dev/null")
+    const untrackedPatchCommands = repoCommands.filter((command) => (
+      command.args.length === 6 &&
+      command.args[0] === "diff" &&
+      command.args[1] === "--no-index" &&
+      command.args[2] === "--unified=80" &&
+      command.args[3] === "--" &&
+      command.args[4] === "/dev/null" &&
+      command.args[5] === path.join(repoPath, "src", "untracked.ts")
     ));
 
     expect(trackedPatchCommands).toHaveLength(1);
-    expect(trackedPatchCommands[0]).not.toContain("src/a.ts");
-    expect(trackedPatchCommands[0]).not.toContain("src/b.ts");
-    expect(trackedPatchCommands[0]).not.toContain("src/c.ts");
+    expect(trackedPatchCommands[0]?.args).toEqual([
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--no-ext-diff",
+      "--unified=80",
+      "HEAD",
+      "--",
+      ".",
+    ]);
     expect(untrackedPatchCommands).toHaveLength(1);
   });
 

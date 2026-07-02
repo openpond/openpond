@@ -249,7 +249,7 @@ async function readWorkspaceDirectoryResource(
     .filter((entry): entry is WorkspaceDirectoryEntry => Boolean(entry))
     .sort((left, right) => left.path.localeCompare(right.path));
   const maxBytes = normalizeMaxBytes(request.maxBytes);
-  const fullText = visible.map((entry) => `${entry.kind === "directory" ? "dir " : "file"} ${entry.path}`).join("\n");
+  const fullText = visible.map((entry) => `${entry.kind === "directory" ? "dir" : "file"} ${entry.path}`).join("\n");
   const content = trimUtf8Text(fullText, maxBytes);
 
   return {
