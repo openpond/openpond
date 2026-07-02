@@ -16,19 +16,32 @@ export function useRunningSessionState({
   selectedSessionId: string | null;
   sidebarSessions: Session[];
 }) {
+  const sessionById = useMemo(
+    () => new Map(sidebarSessions.map((session) => [session.id, session])),
+    [sidebarSessions],
+  );
   const goalRunningSessionIds = useMemo(() => {
-    const next = new Set(runtimeIndexes.activeGoalSessionIds);
-    if (selectedSessionId && goalRuntime?.tone === "active") next.add(selectedSessionId);
+    const next = new Set<string>();
+    for (const sessionId of runtimeIndexes.activeGoalSessionIds) {
+      const session = sessionById.get(sessionId);
+      if (!session?.systemKind) next.add(sessionId);
+    }
+    if (selectedSessionId && !selectedSession?.systemKind && goalRuntime?.tone === "active") {
+      next.add(selectedSessionId);
+    }
     return next;
-  }, [goalRuntime, runtimeIndexes, selectedSessionId]);
+  }, [goalRuntime, runtimeIndexes, selectedSession, selectedSessionId, sessionById]);
   const runningSessionIds = useMemo(() => {
     const next = new Set(goalRunningSessionIds);
     for (const session of sidebarSessions) {
+      if (session.systemKind) continue;
       if (session.status === "active") next.add(session.id);
     }
     return next;
   }, [goalRunningSessionIds, sidebarSessions]);
-  const selectedSessionRunning = Boolean(selectedSession && runningSessionIds.has(selectedSession.id));
+  const selectedSessionRunning = Boolean(
+    selectedSession && !selectedSession.systemKind && runningSessionIds.has(selectedSession.id),
+  );
 
   return {
     runningSessionIds,
