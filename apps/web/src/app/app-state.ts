@@ -7,7 +7,7 @@ import {
   DEFAULT_OPENPOND_CHAT_MODEL,
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
-import type { AppView, SettingsSection } from "../lib/app-models";
+import { SIDEBAR_SECTION_LIMIT, type AppView, type SettingsSection } from "../lib/app-models";
 
 export type AppToast = {
   id: number;
@@ -24,7 +24,7 @@ export type ShowAppToast = (
   options?: Pick<AppToast, "actionLabel" | "onAction" | "persistent">,
 ) => void;
 
-export type SidebarSectionMenuId = "cloud" | "projects" | "chats";
+export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";
 
 export type NewProjectMode = "local" | "cloud";
 export type RightPanelMode = "changes" | "browser" | "goal" | "chat";
@@ -43,13 +43,14 @@ export type AppState = {
   sectionMenuOpen: SidebarSectionMenuId | null;
   projectsExpanded: boolean;
   cloudProjectsExpanded: boolean;
-  chatsExpanded: boolean;
+  chatRowsVisibleCount: number;
   sidebarOpen: boolean;
   view: AppView;
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
   prompt: string;
+  promptDrafts: Record<string, string>;
   draftProvider: ChatProvider;
   draftModel: string;
   codexPermissionMode: CodexPermissionMode;
@@ -84,13 +85,14 @@ export const initialAppState: AppState = {
   sectionMenuOpen: null,
   projectsExpanded: false,
   cloudProjectsExpanded: false,
-  chatsExpanded: false,
+  chatRowsVisibleCount: SIDEBAR_SECTION_LIMIT,
   sidebarOpen: true,
   view: "chat",
   selectedAppId: null,
   selectedProjectId: null,
   selectedSessionId: null,
   prompt: "",
+  promptDrafts: {},
   draftProvider: DEFAULT_CHAT_PROVIDER,
   draftModel: DEFAULT_OPENPOND_CHAT_MODEL,
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
@@ -138,6 +140,55 @@ export type AppAction =
   | { type: "showToast"; toast: AppToast }
   | { type: "clearToast"; toastId: number };
 
+type PromptSelectionState = Pick<AppState, "selectedAppId" | "selectedProjectId" | "selectedSessionId">;
+
+function promptDraftKey(selection: PromptSelectionState): string {
+  if (selection.selectedSessionId) return `session:${selection.selectedSessionId}`;
+  if (selection.selectedProjectId) return `project:${selection.selectedProjectId}`;
+  if (selection.selectedAppId) return `app:${selection.selectedAppId}`;
+  return "new-chat";
+}
+
+function setPromptDraft(
+  drafts: Record<string, string>,
+  key: string,
+  prompt: string,
+): Record<string, string> {
+  if (!prompt) {
+    if (!(key in drafts)) return drafts;
+    const { [key]: _removed, ...rest } = drafts;
+    return rest;
+  }
+  return drafts[key] === prompt ? drafts : { ...drafts, [key]: prompt };
+}
+
+function saveCurrentPromptDraft(state: AppState): Record<string, string> {
+  return setPromptDraft(state.promptDrafts, promptDraftKey(state), state.prompt);
+}
+
+function selectPromptDraft(
+  state: AppState,
+  patch: Partial<AppState>,
+  options: { clearSelectedDraft?: boolean } = {},
+): AppState {
+  const selected = { ...state, ...patch };
+  const selectedKey = promptDraftKey(selected);
+  const savedDrafts = saveCurrentPromptDraft(state);
+  const promptDrafts = options.clearSelectedDraft
+    ? setPromptDraft(savedDrafts, selectedKey, "")
+    : savedDrafts;
+  return {
+    ...state,
+    ...patch,
+    promptDrafts,
+    prompt: options.clearSelectedDraft ? "" : (promptDrafts[selectedKey] ?? ""),
+  };
+}
+
+function isPromptSelectionKey(key: keyof AppState): key is "selectedAppId" | "selectedProjectId" | "selectedSessionId" {
+  return key === "selectedAppId" || key === "selectedProjectId" || key === "selectedSessionId";
+}
+
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "field":
@@ -147,6 +198,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           typeof action.value === "function"
             ? (action.value as (current: never) => unknown)(current)
             : action.value;
+        if (Object.is(current, nextValue)) return state;
+        if (action.key === "prompt") {
+          const prompt = String(nextValue);
+          return {
+            ...state,
+            prompt,
+            promptDrafts: setPromptDraft(state.promptDrafts, promptDraftKey(state), prompt),
+          };
+        }
+        if (isPromptSelectionKey(action.key)) {
+          return selectPromptDraft(state, { [action.key]: nextValue } as Partial<AppState>);
+        }
         return {
           ...state,
           [action.key]: nextValue,
@@ -155,42 +218,37 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "patch":
       return { ...state, ...action.patch };
     case "selectApp":
-      return {
-        ...state,
+      return selectPromptDraft(state, {
         selectedAppId: action.appId,
         selectedProjectId: null,
         selectedSessionId: null,
         view: "chat",
-      };
+      });
     case "selectProject":
-      return {
-        ...state,
+      return selectPromptDraft(state, {
         selectedAppId: null,
         selectedProjectId: action.projectId,
         selectedSessionId: null,
         view: "chat",
-      };
+      });
     case "selectSession":
       {
         const projectId = action.projectId ?? null;
-        return {
-          ...state,
+        return selectPromptDraft(state, {
           selectedSessionId: action.sessionId,
           selectedAppId: projectId ? null : (action.appId ?? null),
           selectedProjectId: projectId,
           view: "chat",
-        };
+        });
       }
     case "beginNewChat":
-      return {
-        ...state,
+      return selectPromptDraft(state, {
         selectedSessionId: null,
         selectedAppId: action.appId,
         selectedProjectId: null,
-        prompt: "",
         error: null,
         view: "chat",
-      };
+      }, { clearSelectedDraft: true });
     case "openCommitDialog":
       return {
         ...state,
@@ -233,7 +291,7 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setSectionMenuOpen: fieldSetter(dispatch, "sectionMenuOpen"),
     setProjectsExpanded: fieldSetter(dispatch, "projectsExpanded"),
     setCloudProjectsExpanded: fieldSetter(dispatch, "cloudProjectsExpanded"),
-    setChatsExpanded: fieldSetter(dispatch, "chatsExpanded"),
+    setChatRowsVisibleCount: fieldSetter(dispatch, "chatRowsVisibleCount"),
     setSidebarOpen: fieldSetter(dispatch, "sidebarOpen"),
     setView: fieldSetter(dispatch, "view"),
     setSelectedAppId: fieldSetter(dispatch, "selectedAppId"),

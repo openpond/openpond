@@ -94,7 +94,6 @@ export function usePinnedSidebarDrag({
     ];
     if (sameIds(currentKeys, nextKeys)) return;
 
-    const nowIso = new Date().toISOString();
     const previousPreferences = appPreferences;
     const previousSessionById = new Map(sessions.map((session) => [session.id, session]));
     const itemByKey = new Map(pinnedItems.map((item) => [item.key, item]));
@@ -120,7 +119,7 @@ export function usePinnedSidebarDrag({
         .map((key, order) => {
           const item = itemByKey.get(key);
           const session = item?.type === "session" ? currentById.get(item.id) : null;
-          return session ? { ...session, order, updatedAt: nowIso } : null;
+          return session ? { ...session, order } : null;
         })
         .filter((session): session is Session => Boolean(session));
       const nextSessionById = new Map(nextSessions.map((session) => [session.id, session]));

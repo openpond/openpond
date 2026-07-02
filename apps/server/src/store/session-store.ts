@@ -25,6 +25,8 @@ export function createSessionStore(deps: {
       id: randomUUID(),
       provider: input.provider,
       modelRef: input.modelRef ?? null,
+      systemKind: input.systemKind ?? null,
+      hiddenFromDefaultSidebar: input.hiddenFromDefaultSidebar ?? false,
       title: input.title || input.appName || "New chat",
       appId: input.appId ?? null,
       appName: input.appName ?? null,
@@ -61,7 +63,7 @@ export function createSessionStore(deps: {
     const updated = await store.updateSession(sessionId, (session) => ({
       ...session,
       ...input,
-      updatedAt: now(),
+      updatedAt: session.updatedAt,
     }));
     if (!updated) throw new Error("Session not found");
     return updated;

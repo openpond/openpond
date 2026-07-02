@@ -47,8 +47,10 @@ describe("profile source upload", () => {
   test("profile upload preserves sorted entries and byte totals while skipping env files", async () => {
     const repoPath = await mkdtemp(join(tmpdir(), "openpond-profile-upload-order-"));
     await mkdir(join(repoPath, "profiles", "default", "agent"), { recursive: true });
+    await mkdir(join(repoPath, ".bun", "install", "cache"), { recursive: true });
     await writeFile(join(repoPath, "profiles", "default", "agent", "z.ts"), "zeta\n", "utf8");
     await writeFile(join(repoPath, "profiles", "default", "agent", "a.ts"), "alpha\n", "utf8");
+    await writeFile(join(repoPath, ".bun", "install", "cache", "cached.pile"), "cache\n", "utf8");
     await writeFile(join(repoPath, ".env"), "SECRET=should-not-upload\n", "utf8");
     git(repoPath, "init", "-b", "main");
     git(repoPath, "add", "-A");

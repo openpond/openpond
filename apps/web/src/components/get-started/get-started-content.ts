@@ -1,6 +1,7 @@
 export type GetStartedDeckId =
   | "goal"
   | "build"
+  | "insights"
   | "profile"
   | "local-hosted"
   | "connect-apps";
@@ -24,14 +25,17 @@ export type GetStartedVisualKind =
   | "work-item"
   | "publish-snapshot"
   | "setup-gate"
-  | "surface-router";
+  | "insights-loop"
+  | "insights-list"
+  | "apps-grid"
+  | "channel-router";
 
 export type GetStartedSlide = {
   id: string;
   eyebrow: string;
   title: string;
-  body: string;
-  detail: string;
+  body?: string;
+  detail?: string;
   visual: GetStartedVisualKind;
   accent: GetStartedAccent;
 };
@@ -49,7 +53,7 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
   {
     id: "goal",
     label: "Goal loop",
-    description: "How local and hosted goals keep objective, evidence, blockers, and completion visible.",
+    description: "How local and hosted goals share durable objective state.",
     slides: [
       {
         id: "goal-durable-objective",
@@ -60,37 +64,19 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
         visual: "goal-state",
         accent: cyan,
       },
-      {
-        id: "goal-evidence-loop",
-        eyebrow: "Evidence",
-        title: "Every turn leaves a record",
-        body: "Prompts, tool calls, file changes, checks, logs, and approvals attach to the loop as inspectable evidence.",
-        detail: "The useful part is not that the model keeps talking. It is that the work leaves state the user can review.",
-        visual: "goal-evidence",
-        accent: cyan,
-      },
-      {
-        id: "goal-controls-context",
-        eyebrow: "Control",
-        title: "Controls and context stay visible",
-        body: "Pause, resume, block, complete, and clear are runtime states, while files and checks stay linked to the goal.",
-        detail: "Completion should come from evidence and user-visible state, not from a loose final sentence.",
-        visual: "goal-controls",
-        accent: cyan,
-      },
     ],
   },
   {
     id: "build",
-    label: "Create & edit",
-    description: "How first-class Create and Edit agents extend the goal loop for source-backed work.",
+    label: "Create/Edit Loop",
+    description: "How first-class Create and Edit agents are specific implementations on top of goals.",
     slides: [
       {
         id: "build-one-loop",
         eyebrow: "First-class agents",
-        title: "Create and Edit extend the goal loop",
-        body: "Create and Edit are first-class agents specifically designed for source-backed profile work.",
-        detail: "They extend the same goal loop with planning, evidence, approvals, checks, and completion before profile files change.",
+        title: "Create/Edit is built on goals",
+        body: "Create and Edit are first-class agents specifically designed as implementations on top of the goal loop.",
+        detail: "They add source-aware planning, evidence, approvals, checks, and completion before profile files change.",
         visual: "create-plan",
         accent: cyan,
       },
@@ -98,61 +84,59 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
         id: "build-profile-source",
         eyebrow: "Source",
         title: "Approved work changes profile source",
-        body: "Create generates SDK-backed files. Edit patches the existing agent source. Neither becomes loose chat memory.",
+        body: "Create generates SDK-backed files. Edit patches existing agent source. Neither becomes loose chat memory.",
         detail: "Agents, actions, prompts, evals, and non-secret setup declarations live in the profile source tree.",
         visual: "source-tree",
         accent: cyan,
       },
+    ],
+  },
+  {
+    id: "insights",
+    label: "Insights Loop",
+    description: "How Insights is a specific implementation on top of goals and create/edit pipeline state.",
+    slides: [
       {
-        id: "build-checks",
-        eyebrow: "Checks",
-        title: "Checks decide whether it can run",
-        body: "Inspect, build, validate, eval, and setup gates decide whether the changed capability is ready.",
-        detail: "A missing secret or app connection should show as setup-required before the user tries the action.",
-        visual: "check-stack",
+        id: "insights-detect",
+        eyebrow: "Detector",
+        title: "Insights runs on top of goals",
+        body: "Insights is a specific implementation on top of goals: it watches `create_pipeline.updated` events and turns stuck create/edit states into active rows.",
+        detail: "Awaiting questions, plan approval, blocked, and failed states become concern or blocker rows tied back to the source event.",
+        visual: "insights-loop",
         accent: cyan,
       },
       {
-        id: "build-review",
-        eyebrow: "Review",
-        title: "Review turns agent work into a deliberate change",
-        body: "Diffs, command output, checks, and setup rows stay attached until the user commits, pushes, applies, or publishes.",
-        detail: "The same review habit works for local profile source and hosted work items.",
-        visual: "edit-review",
+        id: "insights-action",
+        eyebrow: "Action",
+        title: "Insights stay actionable",
+        body: "Background scans run on startup and interval, `/insights` can force a scan, and the UI lets users filter, resolve, or dismiss rows.",
+        detail: "Rows persist in `insight_items` and resolve when the pipeline moves forward or the user marks them handled.",
+        visual: "insights-list",
         accent: cyan,
       },
     ],
   },
   {
     id: "profile",
-    label: "Profile & SDK",
-    description: "What the profile repo stores and what openpond-agent-sdk makes portable.",
+    label: "Profile",
+    description: "How one Git-backed profile repository makes agents portable.",
     slides: [
       {
-        id: "profile-source-home",
-        eyebrow: "Profile source",
-        title: "Your profile is the source home",
-        body: "The profile repo stores agents, actions, prompts, evals, settings, and non-secret config.",
-        detail: "Target repos stay separate. The profile is where the reusable agent capability itself lives.",
+        id: "profile-git-repo",
+        eyebrow: "Git-backed source",
+        title: "One agent repository travels with you",
+        body: "The profile repo stores agents, actions, prompts, evals, settings, and non-secret config as source.",
+        detail: "Because it is Git-backed, local app, CLI, checks, and hosted runtime can inspect the same durable agent repository.",
         visual: "profile-source",
         accent: cyan,
       },
       {
-        id: "profile-sdk-contract",
-        eyebrow: "openpond-agent-sdk",
-        title: "The SDK defines the contract",
-        body: "SDK source defines actions, channels, workflows, evals, editable policy, and generated artifacts.",
-        detail: "The app, CLI, checks, hosted runtime, and connected apps consume those artifacts instead of guessing.",
+        id: "profile-portable-artifacts",
+        eyebrow: "Portability",
+        title: "Artifacts make agents portable",
+        body: "The SDK emits a manifest, action registry, inspect output, validation report, and eval results from that repo.",
+        detail: "Those contracts let the same agent run locally, publish hosted, or appear in connected apps without rebuilding it by hand.",
         visual: "source-tree",
-        accent: cyan,
-      },
-      {
-        id: "profile-secrets",
-        eyebrow: "Setup boundary",
-        title: "Secrets and app connections stay outside Git",
-        body: "Source can declare needs, but tokens, OAuth leases, and secret values live in setup and binding state.",
-        detail: "This lets agents be source-backed without committing raw credentials into the profile repo.",
-        visual: "secret-boundary",
         accent: cyan,
       },
     ],
@@ -160,17 +144,8 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
   {
     id: "local-hosted",
     label: "Local <> Hosted",
-    description: "How local profile work becomes hosted, reviewed, and published without mixing sources.",
+    description: "How hosted work keeps sources separate and publishes reviewed snapshots.",
     slides: [
-      {
-        id: "local-hosted-sync",
-        eyebrow: "Handoff",
-        title: "Local profile changes can become hosted",
-        body: "Local profile state tracks source, checks, and push status. Hosted refs track what was uploaded, checked, published, and exposed.",
-        detail: "Push, check, publish, and catalog exposure are separate states so review can happen at the right boundary.",
-        visual: "profile-sync",
-        accent: cyan,
-      },
       {
         id: "local-hosted-mounts",
         eyebrow: "Sandbox",
@@ -178,15 +153,6 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
         body: "A hosted work item can mount profile source for the agent and target source for the project being changed.",
         detail: "The profile mount is `/openpond/profile`. The target project mount is `/workspace` when a target repo is needed.",
         visual: "dual-source",
-        accent: cyan,
-      },
-      {
-        id: "local-hosted-review",
-        eyebrow: "Review",
-        title: "Review before it moves forward",
-        body: "Review output, diffs, checks, setup rows, and source refs before accepting apply or publish steps.",
-        detail: "This is the boundary where hosted work becomes a deliberate local or published source change.",
-        visual: "edit-review",
         accent: cyan,
       },
       {
@@ -203,42 +169,20 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
   {
     id: "connect-apps",
     label: "Connect 3rd party apps",
-    description: "How Slack, Teams, web, API, MCP, and other apps use the same profile catalog.",
+    description: "How connected apps bind into the same profile catalog.",
     slides: [
       {
-        id: "connect-router",
-        eyebrow: "Router",
-        title: "Connected apps route through the profile",
-        body: "Web, desktop, Slack, Teams, API, and MCP resolve team, profile, and catalog context through one routing model.",
-        detail: "The router decides direct answer, profile action, work item, setup-required response, or blocker.",
-        visual: "surface-router",
+        id: "connect-apps-grid",
+        eyebrow: "Apps",
+        title: "Apps connect to the profile catalog",
+        visual: "apps-grid",
         accent: cyan,
       },
       {
-        id: "connect-catalog",
-        eyebrow: "Catalog",
-        title: "The profile catalog is the menu",
-        body: "Normal chat, @agent, slash actions, and app bindings select exact catalog entries.",
-        detail: "The catalog is generated from source-backed artifacts, not a hand-maintained list per app.",
-        visual: "catalog",
-        accent: cyan,
-      },
-      {
-        id: "connect-context",
-        eyebrow: "Permissions",
-        title: "Apps provide scoped context and permissions",
-        body: "Google, GitHub, Slack, Teams, Notion, Linear, and MCP tools are context sources and action channels.",
-        detail: "They feed the profile/catalog system instead of becoming hardcoded agent internals.",
-        visual: "secret-boundary",
-        accent: cyan,
-      },
-      {
-        id: "connect-setup",
-        eyebrow: "Setup required",
-        title: "Setup gates protect every app",
-        body: "A missing secret, integration, volume, target repo, runtime tool, or unsupported dependency blocks early.",
-        detail: "Desktop, web, Slack, Teams, API, and MCP should not each invent a different failure mode.",
-        visual: "setup-gate",
+        id: "connect-channels",
+        eyebrow: "Channels",
+        title: "Web, Slack, Teams, and MCP use the same router",
+        visual: "channel-router",
         accent: cyan,
       },
     ],

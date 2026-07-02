@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 3;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 6;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -65,6 +65,32 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   );
 
   CREATE INDEX IF NOT EXISTS sidebar_app_preferences_scope_idx ON sidebar_app_preferences(scope);
+
+  CREATE TABLE IF NOT EXISTS insight_items (
+    id TEXT PRIMARY KEY,
+    scope_type TEXT NOT NULL,
+    scope_id TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    last_run_id TEXT,
+    last_run_session_id TEXT,
+    last_run_turn_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    dismissed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS insight_items_scope_status_idx
+    ON insight_items(scope_type, scope_id, status, updated_at);
+
+  CREATE INDEX IF NOT EXISTS insight_items_fingerprint_idx
+    ON insight_items(fingerprint);
 
   CREATE TABLE IF NOT EXISTS projection_session_shells (
     id TEXT PRIMARY KEY,

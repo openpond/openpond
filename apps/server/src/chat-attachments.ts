@@ -3,10 +3,27 @@ import path from "node:path";
 import type { ChatAttachment, ChatAttachmentSummary } from "@openpond/contracts";
 
 const ATTACHMENT_CONTEXT_TEXT_LIMIT = 120_000;
+const MAX_CHAT_ATTACHMENT_IMAGE_BYTES = 15 * 1024 * 1024;
+const CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES = new Map<string, string>([
+  [".gif", "image/gif"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".png", "image/png"],
+  [".webp", "image/webp"],
+]);
+const CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES = new Set(CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.values());
 
 export type ChatAttachmentContextItem = ChatAttachmentSummary & {
   localPath?: string;
+  storageName?: string;
   text?: string;
+};
+
+export type ChatAttachmentImageFile = {
+  path: string;
+  contentType: string;
+  bytes: Buffer;
+  sizeBytes: number;
 };
 
 export async function materializeChatAttachments(input: {
@@ -20,8 +37,8 @@ export async function materializeChatAttachments(input: {
 
   const turnDir = path.join(
     input.attachmentRootDir,
-    safePathSegment(input.sessionId),
-    safePathSegment(input.turnId),
+    safeChatAttachmentPathSegment(input.sessionId),
+    safeChatAttachmentPathSegment(input.turnId),
   );
   const usedNames = new Set<string>();
   const contexts: ChatAttachmentContextItem[] = [];
@@ -39,6 +56,7 @@ export async function materializeChatAttachments(input: {
       const localPath = path.join(turnDir, safeName);
       await fs.writeFile(localPath, Buffer.from(attachment.contentsBase64, "base64"), { mode: 0o600 });
       context.localPath = localPath;
+      context.storageName = safeName;
     }
 
     contexts.push(context);
@@ -47,8 +65,39 @@ export async function materializeChatAttachments(input: {
   return contexts;
 }
 
-export function chatAttachmentSummaries(attachments?: ChatAttachment[]): ChatAttachmentSummary[] {
-  return (attachments ?? []).map(chatAttachmentSummary);
+export function chatAttachmentSummaries(
+  attachments?: ChatAttachment[],
+  previewContext?: {
+    sessionId: string;
+    turnId: string;
+    materialized: ChatAttachmentContextItem[];
+  },
+): ChatAttachmentSummary[] {
+  const materializedById = new Map(previewContext?.materialized.map((item) => [item.id, item]) ?? []);
+  return (attachments ?? []).map((attachment) => {
+    const summary = chatAttachmentSummary(attachment);
+    const materialized = materializedById.get(attachment.id);
+    const previewContentType = chatAttachmentImageContentType(attachment.mediaType, materialized?.storageName ?? attachment.name);
+    if (
+      previewContext &&
+      summary.kind === "image" &&
+      materialized?.localPath &&
+      materialized.storageName &&
+      previewContentType
+    ) {
+      return {
+        ...summary,
+        imagePreview: {
+          sessionId: previewContext.sessionId,
+          turnId: previewContext.turnId,
+          attachmentId: attachment.id,
+          storageName: materialized.storageName,
+          contentType: previewContentType,
+        },
+      };
+    }
+    return summary;
+  });
 }
 
 export function chatAttachmentContext(attachments?: ChatAttachmentContextItem[]): string {
@@ -100,8 +149,51 @@ function chatAttachmentSummary(attachment: ChatAttachment): ChatAttachmentSummar
   };
 }
 
-function safePathSegment(value: string): string {
+export async function readChatAttachmentImageFile(input: {
+  attachmentRootDir: string;
+  sessionId: string;
+  turnId: string;
+  storageName: string;
+  contentType: string;
+}): Promise<ChatAttachmentImageFile | null> {
+  const sessionSegment = safeChatAttachmentPathSegment(input.sessionId);
+  const turnSegment = safeChatAttachmentPathSegment(input.turnId);
+  const storageName = cleanStorageName(input.storageName);
+  const contentType = chatAttachmentImageContentType(input.contentType, storageName ?? "");
+  if (!storageName || !contentType) return null;
+
+  const turnDir = path.resolve(input.attachmentRootDir, sessionSegment, turnSegment);
+  const target = path.resolve(turnDir, storageName);
+  if (target !== turnDir && !target.startsWith(`${turnDir}${path.sep}`)) return null;
+
+  try {
+    const stat = await fs.lstat(target);
+    if (!stat.isFile() || stat.size > MAX_CHAT_ATTACHMENT_IMAGE_BYTES) return null;
+    return {
+      path: storageName,
+      contentType,
+      bytes: await fs.readFile(target),
+      sizeBytes: stat.size,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function chatAttachmentImageContentType(mediaType: string, fileName: string): string | null {
+  const normalizedMediaType = mediaType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES.has(normalizedMediaType)) return normalizedMediaType;
+  return CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.get(path.extname(fileName).toLowerCase()) ?? null;
+}
+
+export function safeChatAttachmentPathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "item";
+}
+
+function cleanStorageName(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) return null;
+  return path.basename(trimmed);
 }
 
 function uniqueSafeFileName(name: string, usedNames: Set<string>, fallbackIndex: number): string {

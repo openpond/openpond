@@ -271,8 +271,8 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
       {
-        id: "z-ai/glm-4.5",
-        displayName: "GLM-4.5",
+        id: "z-ai/glm-5.2",
+        displayName: "GLM-5.2",
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
       {
@@ -323,11 +323,37 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       reasoning: true,
     },
     defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    defaultModel: "glm-4.5",
+    defaultModel: "glm-5.2",
     modelCacheSource: "curated",
     models: [
-      { id: "glm-4.5", displayName: "GLM-4.5", capabilities: REASONING_MODEL_CAPABILITIES },
-      { id: "glm-4.5-air", displayName: "GLM-4.5 Air", capabilities: REASONING_MODEL_CAPABILITIES },
+      {
+        id: "glm-5.2",
+        displayName: "GLM-5.2",
+        contextWindow: 1_000_000,
+        outputLimit: 128_000,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "glm-5.1",
+        displayName: "GLM-5.1",
+        contextWindow: 200_000,
+        outputLimit: 128_000,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "glm-5",
+        displayName: "GLM-5",
+        contextWindow: 200_000,
+        outputLimit: 128_000,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "glm-4.7",
+        displayName: "GLM-4.7",
+        contextWindow: 200_000,
+        outputLimit: 128_000,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
     ],
   },
   {

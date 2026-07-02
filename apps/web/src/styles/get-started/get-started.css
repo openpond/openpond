@@ -16,13 +16,15 @@
 
 .get-started-tabs {
   display: grid;
-  grid-auto-columns: minmax(112px, 1fr);
+  grid-auto-columns: minmax(118px, 1fr);
   grid-auto-flow: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow-x: auto;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #050505;
+  padding: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
@@ -30,27 +32,26 @@
 .get-started-tabs button {
   display: grid;
   align-content: center;
-  min-height: 38px;
+  min-height: 36px;
   min-width: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  padding: 8px 10px;
-  text-align: left;
+  padding: 8px 9px;
+  text-align: center;
 }
 
 .get-started-tabs button:hover,
 .get-started-tabs button.active {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.075);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text);
 }
 
 .get-started-tabs button:focus-visible,
 .get-started-icon-button:focus-visible,
-.get-started-progress-button:focus-visible,
-.get-started-action-button:focus-visible {
+.get-started-progress-button:focus-visible {
   outline: 2px solid rgba(6, 182, 212, 0.52);
   outline-offset: 2px;
 }
@@ -205,31 +206,6 @@
   font-size: 12px;
 }
 
-.get-started-action-rail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.get-started-action-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--muted-strong);
-  padding: 0 11px;
-  font-size: 13px;
-}
-
-.get-started-action-button:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
-}
-
 .get-started-visual {
   position: relative;
   display: grid;
@@ -358,7 +334,7 @@
 
 .get-started-mini-rows span,
 .get-started-consumer-strip span,
-.get-started-surface-cloud span,
+.get-started-insights-toolbar span,
 .get-started-router-results span {
   overflow: hidden;
   border-radius: 6px;
@@ -397,6 +373,7 @@
 }
 
 .get-started-flow-graph,
+.get-started-insights-loop,
 .get-started-review-graph,
 .get-started-sync-graph,
 .get-started-publish-graph {
@@ -407,6 +384,7 @@
 }
 
 .get-started-flow-graph > .get-started-diagram-node,
+.get-started-insights-loop > .get-started-diagram-node,
 .get-started-review-graph > .get-started-diagram-node,
 .get-started-sync-graph > .get-started-diagram-node,
 .get-started-publish-graph > .get-started-diagram-node {
@@ -576,6 +554,8 @@
 }
 
 .get-started-boundary-graph,
+.get-started-apps-graph,
+.get-started-insights-list,
 .get-started-setup-graph,
 .get-started-router-graph {
   display: grid;
@@ -586,6 +566,101 @@
 
 .get-started-boundary-graph {
   grid-template-columns: minmax(0, 1fr) minmax(82px, 0.42fr) minmax(0, 1fr);
+}
+
+.get-started-apps-graph {
+  grid-template-columns: minmax(0, 1fr) minmax(136px, 0.65fr);
+}
+
+.get-started-app-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.get-started-app-icon-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #d6d6d6;
+  padding: 8px 9px;
+}
+
+.get-started-app-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: #f7f7f7;
+}
+
+.get-started-app-icon img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.get-started-app-icon-tile > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.get-started-insights-list {
+  align-content: center;
+  gap: 8px;
+}
+
+.get-started-insights-toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.get-started-insight-row {
+  display: grid;
+  grid-template-columns: minmax(64px, 0.34fr) minmax(0, 1fr) minmax(92px, 0.52fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 8px 10px;
+}
+
+.get-started-insight-row span,
+.get-started-insight-row strong,
+.get-started-insight-row em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.get-started-insight-row span,
+.get-started-insight-row em {
+  color: #9a9a9a;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.get-started-insight-row strong {
+  color: #eeeeee;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .get-started-boundary-wall {
@@ -688,7 +763,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(124px, 0.72fr) minmax(0, 1fr);
 }
 
-.get-started-surface-cloud,
+.get-started-channel-list,
 .get-started-router-results {
   display: grid;
   gap: 7px;
@@ -720,6 +795,7 @@
   }
 
   .get-started-flow-graph,
+  .get-started-insights-loop,
   .get-started-review-graph,
   .get-started-sync-graph,
   .get-started-publish-graph {
@@ -749,6 +825,7 @@
   }
 
   .get-started-flow-graph,
+  .get-started-insights-loop,
   .get-started-review-graph,
   .get-started-sync-graph,
   .get-started-publish-graph {
@@ -777,6 +854,7 @@
   .get-started-contract-graph,
   .get-started-gate-graph,
   .get-started-boundary-graph,
+  .get-started-apps-graph,
   .get-started-dual-source-graph,
   .get-started-setup-graph,
   .get-started-router-graph {
@@ -821,8 +899,13 @@
   }
 
   .get-started-check-grid,
+  .get-started-insights-toolbar,
   .get-started-timeline-graph {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .get-started-insight-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .get-started-controls {
@@ -834,8 +917,7 @@
 @media (prefers-reduced-motion: reduce) {
   .get-started-progress-fill,
   .get-started-tabs button,
-  .get-started-icon-button,
-  .get-started-action-button {
+  .get-started-icon-button {
     transition: none;
   }
 }

@@ -8,6 +8,7 @@ import {
 } from "../lib/codex-history-thread-cache";
 import { latestGoalRuntimeFromEvents } from "../lib/goal-runtime";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
+import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
 
 export function useCodexHistoryEvents({
   connection,
@@ -39,9 +40,7 @@ export function useCodexHistoryEvents({
       setCodexHistoryEvents(payload.events);
       setError((current) => (current === "Session not found" ? null : current));
       setCodexHistorySessions((current) =>
-        current.some((session) => session.id === payload.session.id)
-          ? current.map((session) => (session.id === payload.session.id ? payload.session : session))
-          : [payload.session, ...current]
+        upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
       );
     };
 

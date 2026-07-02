@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Cloud,
+  EyeOff,
   MessageSquare,
   MoreHorizontal,
   PanelRight,
@@ -128,10 +129,18 @@ export function SidebarSectionMenu({
   );
 }
 
-export function SidebarShowMoreButton({ expanded, onClick }: { expanded: boolean; onClick: () => void }) {
+export function SidebarShowMoreButton({
+  children,
+  expanded = false,
+  onClick,
+}: {
+  children?: ReactNode;
+  expanded?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button type="button" className="sidebar-show-more" onClick={onClick}>
-      {expanded ? "Show less" : "Show more"}
+      {children ?? (expanded ? "Show less" : "Show more")}
     </button>
   );
 }
@@ -178,6 +187,7 @@ export function SidebarSessionRow({
   return (
     <SidebarInteractiveRow
       selected={selected}
+      dataSessionId={session.id}
       dragging={dragging}
       iconless={hideIcon}
       nested={nested}
@@ -227,6 +237,7 @@ export function SidebarProjectRow({
   onSelect,
   onNewChat,
   onMoveToCloud,
+  onToggleSystemVisibility,
   onTogglePin,
   onRemove,
   onDragStart,
@@ -243,6 +254,7 @@ export function SidebarProjectRow({
   onSelect: () => void;
   onNewChat: () => void;
   onMoveToCloud?: () => void;
+  onToggleSystemVisibility?: () => void;
   onTogglePin: () => void;
   onRemove: () => void;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
@@ -251,7 +263,7 @@ export function SidebarProjectRow({
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onRemove);
+  const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onToggleSystemVisibility) || Boolean(onRemove);
 
   function closeMenu() {
     setMenuOpen(false);
@@ -308,6 +320,11 @@ export function SidebarProjectRow({
           closeMenu();
           onMoveToCloud();
         } : undefined}
+        onToggleSystemVisibility={onToggleSystemVisibility ? () => {
+          closeMenu();
+          onToggleSystemVisibility();
+        } : undefined}
+        systemHidden={Boolean("hiddenFromDefaultSidebar" in project && project.hiddenFromDefaultSidebar)}
         onRemove={() => {
           closeMenu();
           onRemove();
@@ -405,10 +422,14 @@ function SidebarProjectMoreButton({
 function SidebarProjectMenuPopover({
   onClose,
   onMoveToCloud,
+  onToggleSystemVisibility,
+  systemHidden,
   onRemove,
 }: {
   onClose: () => void;
   onMoveToCloud?: () => void;
+  onToggleSystemVisibility?: () => void;
+  systemHidden: boolean;
   onRemove: () => void;
 }) {
   return (
@@ -436,6 +457,19 @@ function SidebarProjectMenuPopover({
             <span>Move to Cloud</span>
           </button>
         )}
+        {onToggleSystemVisibility && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSystemVisibility();
+            }}
+          >
+            <EyeOff size={13} />
+            <span>{systemHidden ? "Show in Local Projects" : "Hide from Local Projects"}</span>
+          </button>
+        )}
         <button
           type="button"
           role="menuitem"
@@ -455,6 +489,7 @@ function SidebarProjectMenuPopover({
 function SidebarInteractiveRow({
   children,
   className,
+  dataSessionId,
   dragging,
   iconless = false,
   nested = false,
@@ -469,6 +504,7 @@ function SidebarInteractiveRow({
 }: {
   children: ReactNode;
   className?: string;
+  dataSessionId?: string;
   dragging?: boolean;
   iconless?: boolean;
   nested?: boolean;
@@ -496,6 +532,7 @@ function SidebarInteractiveRow({
         .filter(Boolean)
         .join(" ")}
       draggable={draggable}
+      data-session-id={dataSessionId}
       role="button"
       tabIndex={0}
       aria-expanded={ariaExpanded}

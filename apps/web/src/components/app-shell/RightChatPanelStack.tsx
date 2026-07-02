@@ -109,14 +109,14 @@ export function RightChatPanelStack({
   onSelectReview: () => void;
   onSelectSummary: () => void;
   onShowBrowserPanel: () => void;
-  onStop: (sessionId: string | null) => Promise<void>;
-	  onSubmit: (
-	    panelId: string,
-	    attachments?: ChatAttachment[],
-	    action?: SandboxActionCatalogEntry | null,
-	    command?: ComposerSlashCommand | null,
-	    options?: ComposerSubmitOptions,
-	  ) => Promise<boolean>;
+  onStop: (sessionId: string | null) => Promise<boolean>;
+    onSubmit: (
+      panelId: string,
+      attachments?: ChatAttachment[],
+      action?: SandboxActionCatalogEntry | null,
+      command?: ComposerSlashCommand | null,
+      options?: ComposerSubmitOptions,
+    ) => Promise<boolean>;
   onWorkspaceTargetChange: (target: WorkspaceLocation) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -278,7 +278,7 @@ export function RightChatPanelStack({
             onResolveApproval={onResolveApproval}
             onShowBrowserPanel={onShowBrowserPanel}
             onStop={() => onStop(panel.sessionId)}
-	            onSubmit={(attachments, action, command, options) => onSubmit(panel.id, attachments, action, command, options)}
+              onSubmit={(attachments, action, command, options) => onSubmit(panel.id, attachments, action, command, options)}
             onWorkspaceTargetChange={onWorkspaceTargetChange}
           />
         ))}
@@ -346,13 +346,13 @@ function RightChatPane({
     decision: ResolveApprovalRequest["decision"],
   ) => Promise<void>;
   onShowBrowserPanel: () => void;
-  onStop: () => Promise<void>;
-	  onSubmit: (
-	    attachments?: ChatAttachment[],
-	    action?: SandboxActionCatalogEntry | null,
-	    command?: ComposerSlashCommand | null,
-	    options?: ComposerSubmitOptions,
-	  ) => Promise<boolean>;
+  onStop: () => Promise<boolean>;
+  onSubmit: (
+    attachments?: ChatAttachment[],
+    action?: SandboxActionCatalogEntry | null,
+    command?: ComposerSlashCommand | null,
+    options?: ComposerSubmitOptions,
+  ) => Promise<boolean>;
   onWorkspaceTargetChange: (target: WorkspaceLocation) => void;
 }) {
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -434,7 +434,7 @@ function RightChatPane({
           contextWindowStatus={panel.contextWindowStatus}
           goalRuntime={panel.goalRuntime}
           createPipelineRuntime={null}
-          busy={busy}
+          busy={panel.running}
           running={panel.running}
           showProjectFooter={false}
           connection={connection}

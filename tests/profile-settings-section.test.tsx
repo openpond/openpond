@@ -89,6 +89,30 @@ function profilePayload(): BootstrapPayload {
         hostedRunAgentId: null,
         hostedRunId: null,
         hostedRunAt: null,
+        hostedSourceMaterialization: {
+          status: "uploaded",
+          agentId: "agent_release_notes",
+          projectId: "project_profile",
+          sourceCommitSha: "source_commit_release",
+        },
+        hostedSourceCheck: {
+          status: "requested",
+          agentId: "agent_release_notes",
+          workItemId: "work_item_release",
+          sandboxId: "sandbox_release",
+        },
+        hostedPublish: {
+          status: "published",
+          agentId: "agent_release_notes",
+          snapshotId: "snapshot_release",
+          manifestHash: "manifest_hash_release",
+        },
+        hostedRun: {
+          status: "running",
+          agentId: "agent_release_notes",
+          runId: "run_release",
+          runtimeId: "runtime_release",
+        },
       },
       summary: {
         state: "ready",
@@ -155,6 +179,43 @@ describe("ProfileSettingsSection", () => {
     expect(html).toContain("Create plan review pending before source mutation.");
     expect(html).toContain("session: session_release_notes");
     expect(html).toContain("turn: turn_create_plan");
+    expect(html).toContain("Hosted materialized: uploaded");
+    expect(html).toContain("Hosted checks: requested");
+    expect(html).toContain("Hosted publish: published");
+    expect(html).toContain("Hosted run: running");
+    expect(html).toContain("Action");
+    expect(html).toContain("Check");
+    expect(html).toContain("Synced");
+    expect(html).toContain("Passed");
+    expect(html).toContain("Commit");
+    expect(html).toContain("Sync");
+    expect(html).toContain("Repo");
+    expect(html).not.toContain("<h1>Profile</h1>");
+    expect(html).not.toContain('aria-label="Refresh profile"');
+    expect(html).not.toContain(">Load<");
+    expect(html).not.toContain("Checks passed");
+    expect(html).not.toContain("Push hosted");
+    expect(html).not.toContain("source-backed");
+    expect(html).not.toContain("0 setup");
+    expect(html).not.toContain("Profile repo path");
+    expect(html).not.toContain("Commit message");
+    expect(html).not.toContain("Confirm sync");
     expect(html).not.toContain("Shell command approval");
+
+    const commitIndex = html.indexOf(">Commit<");
+    const syncIndex = html.indexOf(">Sync<");
+    const repoIndex = html.indexOf(">Repo<");
+    const agentsIndex = html.indexOf("<span>Agents</span>");
+    const summaryIndex = html.indexOf("<span>Summary</span>");
+
+    expect(commitIndex).toBeGreaterThan(-1);
+    expect(syncIndex).toBeGreaterThan(-1);
+    expect(repoIndex).toBeGreaterThan(-1);
+    expect(agentsIndex).toBeGreaterThan(-1);
+    expect(summaryIndex).toBeGreaterThan(-1);
+    expect(commitIndex).toBeLessThan(agentsIndex);
+    expect(syncIndex).toBeLessThan(agentsIndex);
+    expect(repoIndex).toBeLessThan(agentsIndex);
+    expect(agentsIndex).toBeLessThan(summaryIndex);
   });
 });

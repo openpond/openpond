@@ -158,7 +158,7 @@ function isSafeProfileSourcePath(filePath: string): boolean {
 function shouldSkipProfileSourcePath(filePath: string): boolean {
   return filePath.split(/[\\/]+/).some((segment, index, segments) => {
     const lower = segment.toLowerCase();
-    if (lower === ".git" || lower === "node_modules") return true;
+    if (lower === ".git" || lower === "node_modules" || lower === ".bun") return true;
     if (lower === ".env" || lower.startsWith(".env.")) return true;
     if (filePath.replace(/\\/g, "/") === SOURCE_UPLOAD_CACHE_PATH) return true;
     if (lower !== ".openpond") return false;

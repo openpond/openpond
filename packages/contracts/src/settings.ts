@@ -153,10 +153,26 @@ export const GoalStorageLocationSchema = z.enum(["global", "workspace"]);
 
 export type GoalStorageLocation = z.infer<typeof GoalStorageLocationSchema>;
 
+export const InsightsEvidenceSourceSettingsSchema = z.object({
+  createEdit: z.boolean().default(true),
+  stuckTurns: z.boolean().default(true),
+  toolFailures: z.boolean().default(true),
+  abandonedGoals: z.boolean().default(true),
+  userCorrections: z.boolean().default(true),
+  unresolvedConversations: z.boolean().default(true),
+});
+
+export type InsightsEvidenceSourceSettings = z.infer<typeof InsightsEvidenceSourceSettingsSchema>;
+
 export const AppPreferencesSchema = z.object({
   defaultChatProvider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   defaultChatModel: z.string().min(1).default(DEFAULT_OPENPOND_CHAT_MODEL),
   defaultChatModelRef: ChatModelRefSchema.nullable().optional(),
+  insightsEnabled: z.boolean().default(true),
+  insightsModelRef: ChatModelRefSchema.nullable().optional().default(null),
+  insightsEvidenceSources: InsightsEvidenceSourceSettingsSchema.optional().default(() =>
+    InsightsEvidenceSourceSettingsSchema.parse({}),
+  ),
   codexPermissionMode: CodexPermissionModeSchema.default(DEFAULT_CODEX_PERMISSION_MODE),
   codexReasoningEffort: CodexReasoningEffortSchema.default(DEFAULT_CODEX_REASONING_EFFORT),
   defaultBranchPrefix: z.string().trim().max(48).default("feat/"),

@@ -10,6 +10,8 @@ export const SessionSchema = z.object({
   id: z.string(),
   provider: ChatProviderSchema,
   modelRef: ChatModelRefSchema.nullable().optional(),
+  systemKind: z.enum(["openpond.insights"]).nullable().optional(),
+  hiddenFromDefaultSidebar: z.boolean().optional(),
   title: z.string(),
   appId: z.string().nullable(),
   appName: z.string().nullable(),

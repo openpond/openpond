@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
+import { useLocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
 import { useWorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { parseBlocks } from "./MarkdownBlocks";
@@ -33,6 +34,7 @@ export function MarkdownText({
   const [openImage, setOpenImage] = useState<{ src: string; title: string } | null>(null);
   const [hoverImage, setHoverImage] = useState<ImageLinkPreview | null>(null);
   const [linkMenu, setLinkMenu] = useState<LinkContextMenu | null>(null);
+  const localImageUrls = useLocalImageUrlResolver(connection);
   const workspaceImageUrls = useWorkspaceImageUrlResolver(connection);
   const handleOpenWorkspaceImage = useCallback(
     (image: { appId: string; path: string; title: string }) => {
@@ -52,6 +54,7 @@ export function MarkdownText({
       onOpenImage: setOpenImage,
       onOpenWorkspaceImage: handleOpenWorkspaceImage,
       onPreviewImage: setHoverImage,
+      localImageUrls,
       workspaceImageUrls,
       workspaceRootPath,
     }),
@@ -59,6 +62,7 @@ export function MarkdownText({
       activeWorkspaceAppId,
       connection,
       handleOpenWorkspaceImage,
+      localImageUrls,
       onOpenBrowserLink,
       onOpenFileInSidebar,
       workspaceImageUrls,

@@ -148,6 +148,37 @@ describe("workspace diff", () => {
     expect(fullDiff.files[0]?.content).toBe("export const value = 1;\n");
   });
 
+  test("loads explicit ignored markdown files without adding them to diff files", async () => {
+    const repoPath = await createTempDir("openpond-workspace-ignored-markdown-");
+    await git(repoPath, ["init"]);
+    await writeFile(path.join(repoPath, ".gitignore"), "docs/working-docs/\n", "utf8");
+    await writeFile(path.join(repoPath, "README.md"), "# Workspace\n", "utf8");
+    await git(repoPath, ["add", ".gitignore", "README.md"]);
+    await git(repoPath, ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"]);
+
+    await mkdir(path.join(repoPath, "docs", "working-docs"), { recursive: true });
+    await writeFile(path.join(repoPath, "docs", "working-docs", "plan.md"), "# Plan\n\nDetailed notes.\n", "utf8");
+
+    const summary = await loadWorkspaceDiffAtPath(repoPath, "workspace-test");
+    const detail = await loadWorkspaceFileAtPath(repoPath, "docs/working-docs/plan.md");
+    const basenameDetail = await loadWorkspaceFileAtPath(repoPath, "plan.md");
+
+    expect(summary.files).toEqual([]);
+    expect(summary.repoFiles).not.toContain("docs/working-docs/plan.md");
+    expect(detail).toMatchObject({
+      path: "docs/working-docs/plan.md",
+      status: "unchanged",
+      additions: 0,
+      deletions: 0,
+      patch: "",
+      content: "# Plan\n\nDetailed notes.\n",
+    });
+    expect(basenameDetail).toMatchObject({
+      path: "docs/working-docs/plan.md",
+      content: "# Plan\n\nDetailed notes.\n",
+    });
+  });
+
   test("loads many changed files through summary and bounded full-detail paths", async () => {
     const repoPath = await createTempDir("openpond-workspace-diff-many-");
     await git(repoPath, ["init"]);

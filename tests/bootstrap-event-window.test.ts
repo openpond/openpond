@@ -81,11 +81,21 @@ describe("bootstrap event window", () => {
         "event-505",
       ]);
       expect(secondPage.hasMore).toBe(false);
+
+      const latestPage = await api<RuntimeEventPagePayload>(
+        server.url,
+        server.token,
+        `/v1/events/page?sessionId=${encodeURIComponent(session.id)}&beforeSequence=${bootstrap.eventWindow.latestSequence + 1}&limit=500`,
+      );
+      expect(latestPage.events).toHaveLength(500);
+      expect(latestPage.events[0]?.event.id).toBe("event-6");
+      expect(latestPage.events.at(-1)?.event.id).toBe("event-505");
+      expect(latestPage.hasMore).toBe(true);
     } finally {
       await server.close();
       await rm(storeDir, { recursive: true, force: true });
     }
-  });
+  }, 10_000);
 });
 
 function sessionFixture(id: string): Session {

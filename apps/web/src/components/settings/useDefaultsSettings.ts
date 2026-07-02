@@ -1,24 +1,41 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import type { AppPreferences, BootstrapPayload } from "@openpond/contracts";
+import type {
+  AppPreferences,
+  BootstrapPayload,
+  ChatProvider,
+  InsightsEvidenceSourceSettings,
+  ProviderSettings,
+} from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
-import { normalizeBranchPrefix } from "../../lib/app-models";
+import { modelRefForTurn, normalizeBranchPrefix, normalizeChatModel } from "../../lib/app-models";
 
 export function useDefaultsSettings({
   connection,
   onError,
   onPayload,
   preferences,
+  providers,
 }: {
   connection: ClientConnection | null;
   onError: (message: string | null) => void;
   onPayload: (payload: BootstrapPayload) => void;
   preferences: AppPreferences;
+  providers: ProviderSettings | null | undefined;
 }) {
   const [defaultBranchPrefix, setDefaultBranchPrefix] = useState(preferences.defaultBranchPrefix);
   const [defaultNewProjectDirectory, setDefaultNewProjectDirectory] = useState(preferences.defaultNewProjectDirectory);
   const [goalStorageLocation, setGoalStorageLocation] = useState(preferences.goalStorageLocation);
   const [advancedWorkspaceControls, setAdvancedWorkspaceControls] = useState(preferences.advancedWorkspaceControls);
+  const [insightsEnabled, setInsightsEnabled] = useState(preferences.insightsEnabled);
+  const [insightsUseDefaultModel, setInsightsUseDefaultModel] = useState(!preferences.insightsModelRef);
+  const [insightsProvider, setInsightsProvider] = useState<ChatProvider>(
+    preferences.insightsModelRef?.providerId ?? preferences.defaultChatProvider,
+  );
+  const [insightsModel, setInsightsModel] = useState(
+    preferences.insightsModelRef?.modelId ?? preferences.defaultChatModel,
+  );
+  const [insightsEvidenceSources, setInsightsEvidenceSources] = useState(preferences.insightsEvidenceSources);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -26,12 +43,27 @@ export function useDefaultsSettings({
     setDefaultNewProjectDirectory(preferences.defaultNewProjectDirectory);
     setGoalStorageLocation(preferences.goalStorageLocation);
     setAdvancedWorkspaceControls(preferences.advancedWorkspaceControls);
+    setInsightsEnabled(preferences.insightsEnabled);
+    setInsightsUseDefaultModel(!preferences.insightsModelRef);
+    setInsightsProvider(preferences.insightsModelRef?.providerId ?? preferences.defaultChatProvider);
+    setInsightsModel(preferences.insightsModelRef?.modelId ?? preferences.defaultChatModel);
+    setInsightsEvidenceSources(preferences.insightsEvidenceSources);
   }, [
+    preferences.defaultChatProvider,
+    preferences.defaultChatModel,
     preferences.defaultBranchPrefix,
     preferences.defaultNewProjectDirectory,
     preferences.goalStorageLocation,
     preferences.advancedWorkspaceControls,
+    preferences.insightsEnabled,
+    preferences.insightsModelRef,
+    preferences.insightsEvidenceSources,
   ]);
+
+  function changeInsightsProvider(provider: ChatProvider) {
+    setInsightsProvider(provider);
+    setInsightsModel((current) => normalizeChatModel(provider, current, providers));
+  }
 
   async function chooseDefaultProjectDirectory() {
     let folderPath: string | null = null;
@@ -57,6 +89,11 @@ export function useDefaultsSettings({
           defaultNewProjectDirectory: defaultNewProjectDirectory.trim(),
           goalStorageLocation,
           advancedWorkspaceControls,
+          insightsEnabled,
+          insightsModelRef: insightsUseDefaultModel
+            ? null
+            : modelRefForTurn(insightsProvider, insightsModel, providers) ?? null,
+          insightsEvidenceSources,
         })
       );
     } catch (saveError) {
@@ -71,12 +108,23 @@ export function useDefaultsSettings({
     defaultBranchPrefix,
     defaultNewProjectDirectory,
     goalStorageLocation,
+    insightsEnabled,
+    insightsUseDefaultModel,
+    insightsProvider,
+    insightsModel,
+    insightsEvidenceSources,
     saving,
     chooseDefaultProjectDirectory,
     saveDefaults,
+    changeInsightsProvider,
     setAdvancedWorkspaceControls,
     setDefaultBranchPrefix,
     setDefaultNewProjectDirectory,
     setGoalStorageLocation,
+    setInsightsEnabled,
+    setInsightsUseDefaultModel,
+    setInsightsModel,
+    setInsightsEvidenceSourceEnabled: (key: keyof InsightsEvidenceSourceSettings, enabled: boolean) =>
+      setInsightsEvidenceSources((current) => ({ ...current, [key]: enabled })),
   };
 }

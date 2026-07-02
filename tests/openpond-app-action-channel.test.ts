@@ -149,6 +149,7 @@ describe("OpenPond App action channel", () => {
       "goal",
       "goal-remote",
       "goal-local",
+      "insights",
     ]);
     expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual(["create"]);
     expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
@@ -420,7 +421,6 @@ describe("OpenPond App action channel", () => {
           snapshot,
           onApprove: async () => undefined,
           onCancel: async () => undefined,
-          onOpenDetails: () => undefined,
           onRevise: async () => undefined,
         },
       }),
@@ -428,7 +428,7 @@ describe("OpenPond App action channel", () => {
     expect(planHtml).toContain("Create plan");
     expect(planHtml).toContain("Chat only");
     expect(planHtml).toContain("Confirm plan");
-    expect(planHtml).toContain("Details");
+    expect(planHtml).not.toContain("Details");
     expect(planHtml).toContain("agents/help-me-keep-track-of-open-customer-support-item");
 
     const ready = {

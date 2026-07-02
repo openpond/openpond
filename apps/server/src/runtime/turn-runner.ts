@@ -359,7 +359,18 @@ export function createTurnRunner(deps: {
       });
     }
 
-    throw new Error(`Hosted workspace tool loop exceeded ${maxHostedWorkspaceToolRounds} tool rounds.`);
+    const limitLabel = Number.isFinite(maxHostedWorkspaceToolRounds)
+      ? `${maxHostedWorkspaceToolRounds}`
+      : "configured";
+    await appendAssistantText(
+      session,
+      params.turn.id,
+      [
+        `I hit the hosted workspace tool iteration limit (${limitLabel}) before I could finish.`,
+        "Please send the request again or narrow the workspace target so I can continue from the current context.",
+      ].join(" ")
+    );
+    return session;
   }
 
   async function maybeAutoCompactHostedContext(params: {
@@ -506,6 +517,14 @@ export function createTurnRunner(deps: {
     return (await store.snapshot()).turns.some((candidate) => candidate.id === turnId && candidate.status === "interrupted");
   }
 
+  async function activeInProgressTurn(sessionId: string): Promise<Turn | null> {
+    const active = activeTurns.get(sessionId);
+    if (!active) return null;
+    const stored = await getStoredTurn(active.turn.id);
+    if (!stored || stored.status === "in_progress") return active.turn;
+    return null;
+  }
+
   async function mentionedAppsForTurn(appIds: string[] | undefined): Promise<OpenPondApp[]> {
     const uniqueIds = Array.from(new Set((appIds ?? []).map((appId) => appId.trim()).filter(Boolean)));
     if (uniqueIds.length === 0) return [];
@@ -519,6 +538,10 @@ export function createTurnRunner(deps: {
 
   async function sendTurn(sessionId: string, payload: unknown): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
+    const existingTurn = (await activeInProgressTurn(sessionId)) ?? (await findInProgressTurn(sessionId));
+    if (existingTurn) {
+      throw new Error("A turn is already running for this chat.");
+    }
     let session = await getSession(sessionId);
     const activeProvider = input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider;
     const activeModelId = input.modelRef?.modelId ?? input.model ?? session.modelRef?.modelId ?? null;
@@ -529,6 +552,7 @@ export function createTurnRunner(deps: {
 
     const startedAt = now();
     const createPipelineMetadata = {
+      ...(input.metadata ? input.metadata : {}),
       ...(input.createPipelineRequest ? { createPipelineRequest: input.createPipelineRequest } : {}),
       ...(input.createPipeline ? { createPipeline: input.createPipeline } : {}),
     };
@@ -587,7 +611,11 @@ export function createTurnRunner(deps: {
             ...createPipelineMetadata,
             ...(attachmentContexts.length > 0
               ? {
-                  attachments: chatAttachmentSummaries(input.attachments),
+                  attachments: chatAttachmentSummaries(input.attachments, {
+                    sessionId,
+                    turnId: turn.id,
+                    materialized: attachmentContexts,
+                  }),
                   attachmentContext,
                 }
               : {}),
@@ -595,6 +623,21 @@ export function createTurnRunner(deps: {
           status: "started",
         })
       );
+      const threadGoal = threadGoalFromTurnMetadata(input.metadata);
+      if (threadGoal) {
+        await appendRuntimeEvent(
+          event({
+            sessionId,
+            turnId: turn.id,
+            name: "diagnostic",
+            source: "server",
+            appId: session.appId,
+            status: "completed",
+            output: threadGoal.output,
+            data: threadGoal.data,
+          })
+        );
+      }
       if (input.createPipelineRequest) {
         let effectiveCreatePipeline = input.createPipeline ?? null;
         let plannedByServer = false;
@@ -1315,6 +1358,29 @@ export function createTurnRunner(deps: {
 
 function shouldRunCreatePipelinePlanner(snapshot: CreatePipelineSnapshot): boolean {
   return snapshot.state === "planning" && !snapshot.plan;
+}
+
+function threadGoalFromTurnMetadata(metadata: SendTurnRequest["metadata"]): {
+  output: string;
+  data: Record<string, unknown>;
+} | null {
+  const value = metadata?.threadGoal;
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const objective = typeof record.objective === "string" && record.objective.trim()
+    ? record.objective.trim()
+    : "Goal runtime updated";
+  const provider = typeof record.provider === "string" && record.provider.trim()
+    ? record.provider.trim()
+    : "openpond";
+  return {
+    output: objective,
+    data: {
+      kind: "thread_goal",
+      provider,
+      goal: record,
+    },
+  };
 }
 
 type CreatePipelinePlanStatus = NonNullable<CreatePipelineSnapshot["plan"]>["status"];

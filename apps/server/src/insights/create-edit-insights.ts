@@ -1,0 +1,1611 @@
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import {
+  CreatePipelineRequestSchema,
+  CreatePipelineSnapshotSchema,
+  InsightsAskResponseSchema,
+  InsightsListResponseSchema,
+  InsightsScanResponseSchema,
+  InsightsEvidenceSourceSettingsSchema,
+  InsightItemSchema,
+  type AppPreferences,
+  type CreatePipelineRequest,
+  type CreatePipelineSnapshot,
+  type InsightItem,
+  type InsightEvidenceSource,
+  type InsightRun,
+  type InsightRunStatus,
+  type InsightRunTrigger,
+  type InsightSeverity,
+  type InsightStatus,
+  type InsightSummary,
+  type InsightsListResponse,
+  type InsightsScanResponse,
+  type InsightsAskResponse,
+  type RuntimeEvent,
+  type Session,
+  type Turn,
+} from "@openpond/contracts";
+import type { SqliteStore } from "../store/store.js";
+import { event, now } from "../utils.js";
+import {
+  INSIGHTS_SYSTEM_KIND,
+  createInsightsSystemSession,
+  ensureInsightsSystemProject,
+  listInsightsRunsForSessions,
+  listInsightsSystemSessions,
+  initialInsightsRunMetadata,
+  withInsightsRunMetadata,
+  type InsightsRunMetadata,
+} from "./insights-system.js";
+
+const MAX_INSIGHT_SUMMARY_CHARS = 360;
+const INSIGHTS_RUN_PROMPT_MAX_JSON_CHARS = 14_000;
+
+export type RuntimeEventEntry = {
+  sequence: number;
+  event: RuntimeEvent;
+};
+
+export type CreateEditInsightDetectorCandidate = {
+  item: InsightItem | null;
+  createPipelineId: string;
+  keepFingerprint: string | null;
+};
+
+type InsightEvidenceCandidate = {
+  item: InsightItem | null;
+  evidenceSource: InsightEvidenceSource;
+  evidenceKey: string;
+  keepFingerprint: string | null;
+};
+
+type InsightsListQuery = {
+  status?: InsightStatus | "all" | null;
+  limit?: number;
+  evidenceSource?: InsightEvidenceSource | "all" | null;
+  runStatus?: InsightRunStatus | "all" | null;
+  runTrigger?: InsightRunTrigger | "all" | null;
+  runModel?: string | null;
+};
+
+type BuildStructuredInsightsOutput = (input: {
+  candidates: InsightEvidenceCandidate[];
+  schema: unknown;
+  prompt: string;
+  turn: Turn;
+}) => Promise<unknown>;
+
+type InsightsLogger = {
+  warn(message: string, metadata?: Record<string, unknown>): void;
+};
+
+const InsightsStructuredActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("upsert"),
+    item: InsightItemSchema,
+  }),
+  z.object({
+    action: z.literal("resolve"),
+    insightId: z.string().trim().min(1),
+    fingerprint: z.string().trim().min(1),
+    reason: z.string().trim().min(1),
+  }),
+  z.object({
+    action: z.literal("dismiss"),
+    insightId: z.string().trim().min(1),
+    reason: z.string().trim().min(1),
+  }),
+  z.object({
+    action: z.literal("no_op"),
+    createPipelineId: z.string().trim().min(1).nullable(),
+    reason: z.string().trim().min(1),
+  }),
+]);
+
+const InsightsStructuredRunOutputSchema = z.object({
+  summary: z.string().trim().min(1),
+  actions: z.array(InsightsStructuredActionSchema),
+});
+
+type InsightsStructuredRunOutput = z.infer<typeof InsightsStructuredRunOutputSchema>;
+
+export type InsightsService = {
+  list: (query?: InsightsListQuery) => Promise<InsightsListResponse>;
+  scan: (options?: { force?: boolean; trigger?: InsightRunTrigger }) => Promise<InsightsScanResponse>;
+  ask: (question: string) => Promise<InsightsAskResponse>;
+  patchStatus: (id: string, status: InsightStatus) => Promise<InsightsListResponse>;
+};
+
+export function createInsightsService(options: {
+  store: SqliteStore;
+  storeDir: string;
+  createSession: (payload: unknown) => Promise<Session>;
+  updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
+  sendTurn: (sessionId: string, payload: unknown) => Promise<Turn>;
+  appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
+  loadAppPreferences: () => Promise<AppPreferences>;
+  buildStructuredOutput?: BuildStructuredInsightsOutput;
+  logger?: InsightsLogger;
+}): InsightsService {
+  const { store, logger } = options;
+  let lastScannedCreatePipelineSequence = 0;
+
+  async function list(query: InsightsListQuery = {}): Promise<InsightsListResponse> {
+    await ensureInsightsSystemProject({ store, storeDir: options.storeDir });
+    const systemSessions = await listInsightsSystemSessions(store);
+    const [rawItems, rawRuns] = await Promise.all([
+      store.listInsights(query),
+      listInsightsRunsForSessions(store, systemSessions),
+    ]);
+    const items = filterInsightItems(rawItems, query);
+    const runs = filterInsightRuns(rawRuns, query);
+    const latestSession = systemSessions[0] ?? null;
+    return insightsListResponse(items, {
+      runs,
+      systemSessionId: latestSession?.id ?? null,
+      systemSession: latestSession,
+    });
+  }
+
+  async function scan(scanOptions: { force?: boolean; trigger?: InsightRunTrigger } = {}): Promise<InsightsScanResponse> {
+    const timestamp = now();
+    const trigger = scanOptions.trigger ?? "manual";
+    const preferences = await options.loadAppPreferences();
+    if (!preferences.insightsEnabled && (trigger === "startup" || trigger === "interval")) {
+      return InsightsScanResponseSchema.parse({
+        ...(await list()),
+        scannedAt: timestamp,
+        scanned: false,
+      });
+    }
+    const enabledSources = enabledInsightEvidenceSources(preferences);
+    const previousSessions = await listInsightsSystemSessions(store);
+    const previousRuns = await listInsightsRunsForSessions(store, previousSessions, 50);
+    const previousConsumedSequence = Math.max(
+      lastScannedCreatePipelineSequence,
+      ...previousRuns.map((run) => run.sourceEventSequence ?? 0),
+    );
+    const latestSequence = await store.latestEventSequence();
+    const afterSequence = scanOptions.force ? 0 : previousConsumedSequence;
+    const [eventWindow, pageRows, snapshot] = await Promise.all([
+      store.recentRuntimeEventWindow(2_000),
+      store.runtimeEventPageRows({
+        sessionId: null,
+        afterSequence,
+        beforeSequence: null,
+        limit: 2_000,
+      }),
+      store.snapshot(),
+    ]);
+    const entries = scanOptions.force ? eventWindow.entries : pageRows.entries;
+    const candidates = collectInsightEvidence({
+      entries,
+      contextEntries: eventWindow.entries,
+      turns: snapshot.turns,
+      enabledSources,
+      timestamp,
+    });
+    const evidenceSources = Array.from(new Set(candidates.map((candidate) => candidate.evidenceSource))).sort();
+
+    if (!scanOptions.force && latestSequence <= previousConsumedSequence && candidates.length === 0) {
+      lastScannedCreatePipelineSequence = Math.max(lastScannedCreatePipelineSequence, latestSequence);
+      return InsightsScanResponseSchema.parse({
+        ...(await list()),
+        scannedAt: timestamp,
+        scanned: false,
+      });
+    }
+
+    const evidenceHash = insightEvidenceHash(entries, candidates);
+    if (!scanOptions.force && previousRuns.some((run) => run.evidenceHash === evidenceHash)) {
+      lastScannedCreatePipelineSequence = Math.max(lastScannedCreatePipelineSequence, latestSequence);
+      return InsightsScanResponseSchema.parse({
+        ...(await list()),
+        scannedAt: timestamp,
+        scanned: false,
+      });
+    }
+
+    const session = await createInsightsSystemSession(options, {
+      title: insightsRunSessionTitle(trigger, timestamp),
+    });
+    const runMetadata = initialInsightsRunMetadata({
+      id: `insights_run_${hashId(`${session.id}:${trigger}:${timestamp}:${evidenceHash}`)}`,
+      trigger,
+      evidenceHash,
+      sourceEventSequence: latestSequence,
+      evidenceSources,
+    });
+    const prompt = insightsRunPrompt({
+      trigger,
+      afterSequence,
+      latestSequence,
+      entries,
+      candidates,
+      evidenceSources,
+    });
+    const evidencePreview = insightsRunEvidencePreview({
+      trigger,
+      afterSequence,
+      latestSequence,
+      entries,
+      candidates,
+      evidenceSources,
+    });
+    let turn: Turn;
+    try {
+      turn = await options.sendTurn(session.id, {
+        prompt,
+        cwd: session.cwd,
+        modelRef: session.modelRef ?? undefined,
+        metadata: {
+          insightsRun: runMetadata,
+          insightsEvidencePreview: evidencePreview,
+          threadGoal: insightsThreadGoal(runMetadata),
+        },
+      });
+    } catch (error) {
+      const failedMetadata = completeInsightsRunMetadata(runMetadata, {
+        status: "failed",
+        completedAt: now(),
+        error: errorMessage(error, "Insights model run failed before a turn could start."),
+      });
+      const failedTurn = await insertFailedInsightsTurn({
+        session,
+        prompt,
+        metadata: failedMetadata,
+        evidencePreview,
+        error: failedMetadata.error ?? "Insights model run failed.",
+      });
+      await appendInsightsGoalEvent(session, failedTurn.id, failedMetadata);
+      lastScannedCreatePipelineSequence = Math.max(lastScannedCreatePipelineSequence, latestSequence);
+      return InsightsScanResponseSchema.parse({
+        ...(await list()),
+        scannedAt: timestamp,
+        scanned: true,
+      });
+    }
+
+    if (turn.status !== "completed") {
+      const failedMetadata = await completeInsightsRunMetadataForTurn(runMetadata, turn, {
+        status: "failed",
+        completedAt: turn.completedAt ?? now(),
+        error: turn.error ?? "Insights model run failed.",
+      });
+      await store.updateTurn(turn.id, (current) => withInsightsRunMetadata(current, failedMetadata));
+      await appendInsightsGoalEvent(session, turn.id, failedMetadata);
+      lastScannedCreatePipelineSequence = Math.max(lastScannedCreatePipelineSequence, latestSequence);
+      return InsightsScanResponseSchema.parse({
+        ...(await list()),
+        scannedAt: timestamp,
+        scanned: true,
+      });
+    }
+
+    let stats: Awaited<ReturnType<typeof persistInsightCandidates>>;
+    try {
+      stats = await persistInsightCandidates({
+        candidates,
+        prompt,
+        turn,
+        latestSequence,
+        runSessionId: session.id,
+        runTurnId: turn.id,
+        runId: runMetadata.id,
+      });
+    } catch (error) {
+      const failedMetadata = await completeInsightsRunMetadataForTurn(runMetadata, turn, {
+        status: "failed",
+        completedAt: turn.completedAt ?? now(),
+        error: errorMessage(error, "Insights structured output was invalid."),
+      });
+      await store.updateTurn(turn.id, (current) => withInsightsRunMetadata(current, failedMetadata));
+      await appendInsightsGoalEvent(session, turn.id, failedMetadata);
+      lastScannedCreatePipelineSequence = Math.max(lastScannedCreatePipelineSequence, latestSequence);
+      return InsightsScanResponseSchema.parse({
+        ...(await list()),
+        scannedAt: timestamp,
+        scanned: true,
+      });
+    }
+    if (entries.length > 0 && candidates.length === 0) {
+      logger?.warn("insights scan found runtime events but produced no candidates", {
+        eventCount: entries.length,
+        afterSequence,
+        latestSequence,
+      });
+    }
+    const completedMetadata = await completeInsightsRunMetadataForTurn(runMetadata, turn, {
+      status: "completed",
+      completedAt: now(),
+      findingCount: stats.findingCount,
+      createdCount: stats.createdCount,
+      updatedCount: stats.updatedCount,
+      resolvedCount: stats.resolvedCount,
+      summary: insightRunSummary(stats),
+      error: null,
+    });
+    await store.updateTurn(turn.id, (current) => withInsightsRunMetadata(current, completedMetadata));
+    await appendInsightsGoalEvent(session, turn.id, completedMetadata);
+    lastScannedCreatePipelineSequence = Math.max(lastScannedCreatePipelineSequence, latestSequence);
+
+    return InsightsScanResponseSchema.parse({
+      ...(await list()),
+      scannedAt: timestamp,
+      scanned: true,
+    });
+  }
+
+  async function persistInsightCandidates(input: {
+    candidates: InsightEvidenceCandidate[];
+    prompt: string;
+    turn: Turn;
+    latestSequence: number;
+    runSessionId: string;
+    runTurnId: string;
+    runId: string;
+  }): Promise<{
+    findingCount: number;
+    createdCount: number;
+    updatedCount: number;
+    resolvedCount: number;
+  }> {
+    const output = InsightsStructuredRunOutputSchema.parse(
+      await structuredOutputForTurn({
+        candidates: input.candidates,
+        prompt: input.prompt,
+        turn: input.turn,
+      }),
+    );
+    return applyStructuredRunOutput({
+      output,
+      latestSequence: input.latestSequence,
+      runSessionId: input.runSessionId,
+      runTurnId: input.runTurnId,
+      runId: input.runId,
+    });
+  }
+
+  async function buildStructuredRunOutput(input: {
+    candidates: InsightEvidenceCandidate[];
+  }): Promise<InsightsStructuredRunOutput> {
+    const { candidates } = input;
+    const currentByPipelineId = new Map<string, Set<string>>();
+    const actions: InsightsStructuredRunOutput["actions"] = [];
+    let upsertCount = 0;
+    let noOpCount = 0;
+    let resolveCount = 0;
+
+    for (const candidate of candidates) {
+      const keep = currentByPipelineId.get(candidate.evidenceKey) ?? new Set<string>();
+      if (candidate.keepFingerprint) keep.add(candidate.keepFingerprint);
+      currentByPipelineId.set(candidate.evidenceKey, keep);
+      if (candidate.item) {
+        upsertCount += 1;
+        actions.push({
+          action: "upsert",
+          item: candidate.item,
+        });
+      } else {
+        noOpCount += 1;
+        actions.push({
+          action: "no_op",
+          createPipelineId: candidate.evidenceKey,
+          reason: "Latest evidence state does not need an active insight.",
+        });
+      }
+    }
+
+    if (currentByPipelineId.size > 0) {
+      const activeItems = await store.listInsights({ status: "active", limit: 500 });
+      for (const item of activeItems) {
+        const evidenceKey = insightEvidenceKey(item);
+        if (!evidenceKey) continue;
+        const keep = currentByPipelineId.get(evidenceKey);
+        if (!keep || keep.has(item.fingerprint)) continue;
+        resolveCount += 1;
+        actions.push({
+          action: "resolve",
+          insightId: item.id,
+          fingerprint: item.fingerprint,
+          reason: "Latest create/edit pipeline state no longer matches this active insight.",
+        });
+      }
+    }
+
+    return InsightsStructuredRunOutputSchema.parse({
+      summary: structuredRunOutputSummary({
+        upsertCount,
+        resolveCount,
+        noOpCount,
+      }),
+      actions,
+    });
+  }
+
+  async function structuredOutputForTurn(input: {
+    candidates: InsightEvidenceCandidate[];
+    prompt: string;
+    turn: Turn;
+  }): Promise<unknown> {
+    const turnOutput = input.turn.metadata?.insightsStructuredOutput;
+    if (turnOutput !== undefined) return turnOutput;
+    if (options.buildStructuredOutput) {
+      return options.buildStructuredOutput({
+        candidates: input.candidates,
+        schema: insightsStructuredOutputSchemaDescription(),
+        prompt: input.prompt,
+        turn: input.turn,
+      });
+    }
+    return buildStructuredRunOutput({ candidates: input.candidates });
+  }
+
+  async function applyStructuredRunOutput(input: {
+    output: InsightsStructuredRunOutput;
+    latestSequence: number;
+    runSessionId: string;
+    runTurnId: string;
+    runId: string;
+  }): Promise<{
+    findingCount: number;
+    createdCount: number;
+    updatedCount: number;
+    resolvedCount: number;
+  }> {
+    let createdCount = 0;
+    let updatedCount = 0;
+    let resolvedCount = 0;
+    let findingCount = 0;
+
+    for (const action of input.output.actions) {
+      if (action.action === "no_op") continue;
+      if (action.action === "dismiss") {
+        await store.patchInsightStatus(action.insightId, "dismissed");
+        continue;
+      }
+      if (action.action === "resolve") {
+        const resolved = await store.patchInsightStatus(action.insightId, "resolved");
+        if (!resolved) continue;
+        resolvedCount += 1;
+        await store.upsertInsightItem(
+          linkInsightItemToRun(resolved, {
+            runId: input.runId,
+            runSessionId: input.runSessionId,
+            runTurnId: input.runTurnId,
+            sourceEventSequence: input.latestSequence,
+          }),
+        );
+        continue;
+      }
+      const item = action.item;
+      findingCount += 1;
+      const existing = await store.getInsightItem(item.id);
+      await store.upsertInsightItem(
+        linkInsightItemToRun(item, {
+          runId: input.runId,
+          runSessionId: input.runSessionId,
+          runTurnId: input.runTurnId,
+          sourceEventSequence: input.latestSequence,
+        }),
+      );
+      if (existing) updatedCount += 1;
+      else createdCount += 1;
+    }
+
+    return {
+      findingCount,
+      createdCount,
+      updatedCount,
+      resolvedCount,
+    };
+  }
+
+  async function appendInsightsGoalEvent(
+    session: Session,
+    turnId: string,
+    metadata: InsightsRunMetadata,
+  ): Promise<void> {
+    await options.appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId,
+        name: "diagnostic",
+        source: "server",
+        appId: session.appId,
+        status: metadata.status === "failed" ? "failed" : "completed",
+        output: metadata.summary ?? metadata.error ?? "Insights goal updated",
+        data: {
+          kind: "thread_goal",
+          provider: INSIGHTS_SYSTEM_KIND,
+          goal: insightsThreadGoal(metadata),
+        },
+      }),
+    );
+  }
+
+  async function insertFailedInsightsTurn(input: {
+    session: Session;
+    prompt: string;
+    metadata: InsightsRunMetadata;
+    evidencePreview?: Record<string, unknown>;
+    error: string;
+  }): Promise<Turn> {
+    const turn: Turn = {
+      id: `insights_failed_turn_${hashId(`${input.session.id}:${input.metadata.id}:${input.metadata.completedAt}`)}`,
+      sessionId: input.session.id,
+      providerTurnId: null,
+      modelRef: input.session.modelRef ?? null,
+      prompt: input.prompt,
+      startedAt: input.metadata.startedAt,
+      completedAt: input.metadata.completedAt ?? now(),
+      status: "failed",
+      error: input.error,
+      metadata: {
+        insightsRun: input.metadata,
+        ...(input.evidencePreview ? { insightsEvidencePreview: input.evidencePreview } : {}),
+        threadGoal: insightsThreadGoal(input.metadata),
+      },
+      createPipelineRequest: null,
+      createPipeline: null,
+    };
+    await store.insertTurn(turn);
+    await options.appendRuntimeEvent(
+      event({
+        sessionId: input.session.id,
+        turnId: turn.id,
+        name: "turn.started",
+        source: "server",
+        appId: input.session.appId,
+        args: {
+          prompt: input.prompt,
+          insightsRun: input.metadata,
+          ...(input.evidencePreview ? { insightsEvidencePreview: input.evidencePreview } : {}),
+          threadGoal: insightsThreadGoal(input.metadata),
+        },
+        status: "started",
+      }),
+    );
+    await options.appendRuntimeEvent(
+      event({
+        sessionId: input.session.id,
+        turnId: turn.id,
+        name: "turn.failed",
+        source: "server",
+        appId: input.session.appId,
+        status: "failed",
+        output: input.error,
+        error: input.error,
+      }),
+    );
+    return turn;
+  }
+
+  async function completeInsightsRunMetadataForTurn(
+    metadata: InsightsRunMetadata,
+    turn: Turn,
+    patch: Partial<InsightsRunMetadata> & {
+      status: InsightsRunMetadata["status"];
+      completedAt: string;
+    },
+  ): Promise<InsightsRunMetadata> {
+    return completeInsightsRunMetadata(metadata, {
+      ...patch,
+      usage: await store.latestContextUsageForTurn(turn.sessionId, turn.id),
+    });
+  }
+
+  async function patchStatus(id: string, status: InsightStatus): Promise<InsightsListResponse> {
+    const updated = await store.patchInsightStatus(id, status);
+    if (!updated) throw new Error("Insight not found");
+    return list();
+  }
+
+  async function ask(question: string): Promise<InsightsAskResponse> {
+    const [items, systemSessions] = await Promise.all([
+      store.listInsights({ status: "all", limit: 200 }),
+      listInsightsSystemSessions(store),
+    ]);
+    const runs = await listInsightsRunsForSessions(store, systemSessions, 20);
+    const prompt = insightsQuestionPrompt({
+      question,
+      items,
+      runs,
+    });
+    const startedAt = now();
+    const session = await createInsightsSystemSession(options, {
+      title: insightsQuestionSessionTitle(startedAt),
+    });
+    const goal = {
+      id: `insights_question_${hashId(`${session.id}:${startedAt}:${question}`)}`,
+      provider: INSIGHTS_SYSTEM_KIND,
+      objective: `Answer an Insights question: ${compactInsightSummary(question)}`,
+      status: "active",
+      startedAt,
+    };
+    const turn = await options.sendTurn(session.id, {
+      prompt,
+      cwd: session.cwd,
+      modelRef: session.modelRef ?? undefined,
+      metadata: {
+        insightsQuestion: {
+          question,
+          runCount: runs.length,
+          insightCount: items.length,
+          startedAt,
+        },
+        threadGoal: goal,
+      },
+    });
+    await options.appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: turn.id,
+        name: "diagnostic",
+        source: "server",
+        appId: session.appId,
+        status: turn.status === "failed" ? "failed" : "completed",
+        output: turn.status === "failed" ? turn.error ?? "Insights question failed" : "Insights question answered",
+        data: {
+          kind: "thread_goal",
+          provider: INSIGHTS_SYSTEM_KIND,
+          goal: {
+            ...goal,
+            status: turn.status === "failed" ? "blocked" : "complete",
+            completedAt: turn.completedAt ?? now(),
+            error: turn.error ?? null,
+          },
+        },
+      }),
+    );
+    return InsightsAskResponseSchema.parse({
+      ...insightsListResponse(items, {
+        runs,
+        systemSessionId: session.id,
+        systemSession: session,
+      }),
+      turnId: turn.id,
+    });
+  }
+
+  return { list, scan, ask, patchStatus };
+}
+
+export function detectCreateEditInsights(
+  entries: RuntimeEventEntry[],
+  timestamp: string = now(),
+): CreateEditInsightDetectorCandidate[] {
+  const latestByPipelineId = new Map<string, RuntimeEventEntry>();
+  for (const entry of entries) {
+    const snapshot = parseCreatePipelineSnapshotFromEvent(entry.event);
+    if (!snapshot || !isCreateEditRequest(snapshot.request)) continue;
+    latestByPipelineId.set(snapshot.id, entry);
+  }
+
+  const candidates: CreateEditInsightDetectorCandidate[] = [];
+  for (const entry of latestByPipelineId.values()) {
+    const snapshot = parseCreatePipelineSnapshotFromEvent(entry.event);
+    if (!snapshot) continue;
+    const attention = attentionForSnapshot(snapshot);
+    if (!attention) {
+      candidates.push({
+        createPipelineId: snapshot.id,
+        keepFingerprint: null,
+        item: null,
+      });
+      continue;
+    }
+    const item = insightItemForSnapshot({
+      entry,
+      snapshot,
+      attention,
+      timestamp,
+    });
+    candidates.push({
+      createPipelineId: snapshot.id,
+      keepFingerprint: item.fingerprint,
+      item,
+    });
+  }
+  return candidates;
+}
+
+function collectInsightEvidence(input: {
+  entries: RuntimeEventEntry[];
+  contextEntries: RuntimeEventEntry[];
+  turns: Turn[];
+  enabledSources: Set<InsightEvidenceSource>;
+  timestamp: string;
+}): InsightEvidenceCandidate[] {
+  const candidates: InsightEvidenceCandidate[] = [];
+  if (input.enabledSources.has("create_edit")) {
+    candidates.push(
+      ...detectCreateEditInsights(input.entries, input.timestamp).map((candidate) =>
+        createEditEvidenceCandidate(candidate),
+      ),
+    );
+  }
+  if (input.enabledSources.has("tool_failure")) {
+    candidates.push(...detectRepeatedToolFailures(input.contextEntries, input.timestamp));
+  }
+  if (input.enabledSources.has("stuck_turn")) {
+    candidates.push(...detectStuckOrFailedTurns(input.turns, input.timestamp));
+  }
+  if (input.enabledSources.has("abandoned_goal")) {
+    candidates.push(...detectAbandonedGoals(input.contextEntries, input.timestamp));
+  }
+  if (input.enabledSources.has("user_correction")) {
+    candidates.push(...detectRepeatedUserCorrections(input.contextEntries, input.timestamp));
+  }
+  if (input.enabledSources.has("unresolved_conversation")) {
+    candidates.push(...detectLongRunningUnresolvedConversations(input.turns, input.timestamp));
+  }
+  return candidates;
+}
+
+function createEditEvidenceCandidate(candidate: CreateEditInsightDetectorCandidate): InsightEvidenceCandidate {
+  return {
+    item: candidate.item ? withEvidencePayload(candidate.item, "create_edit", candidate.createPipelineId) : null,
+    evidenceSource: "create_edit",
+    evidenceKey: candidate.createPipelineId,
+    keepFingerprint: candidate.keepFingerprint,
+  };
+}
+
+function detectRepeatedToolFailures(entries: RuntimeEventEntry[], timestamp: string): InsightEvidenceCandidate[] {
+  const groups = new Map<string, RuntimeEventEntry[]>();
+  for (const entry of entries) {
+    if (!isFailedToolEvent(entry.event)) continue;
+    const sessionId = entry.event.sessionId ?? "global";
+    const action = eventActionLabel(entry.event);
+    const key = `${sessionId}:${action}`;
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  return Array.from(groups.entries())
+    .filter(([, group]) => group.length >= 2)
+    .map(([key, group]) => {
+      const latest = group[group.length - 1]!;
+      const action = eventActionLabel(latest.event);
+      return evidenceCandidateFromItem(insightItem({
+        evidenceSource: "tool_failure",
+        evidenceKey: key,
+        timestamp,
+        severity: group.length >= 3 ? "blocker" : "concern",
+        type: "tool.repeated_failure",
+        title: `Repeated ${action} failures`,
+        summary: compactInsightSummary(`${group.length} failed ${action} events were observed in this chat.`),
+        scopeType: latest.event.sessionId ? "session" : "global",
+        scopeId: latest.event.sessionId ?? "local",
+        payload: {
+          action,
+          failureCount: group.length,
+          sessionId: latest.event.sessionId ?? null,
+          turnId: latest.event.turnId ?? null,
+          eventIds: group.map((entry) => entry.event.id),
+          sourceEventSequence: latest.sequence,
+        },
+      }));
+    });
+}
+
+function detectStuckOrFailedTurns(turns: Turn[], timestamp: string): InsightEvidenceCandidate[] {
+  const timestampMs = Date.parse(timestamp);
+  return turns
+    .filter((turn) => !isInsightsTurn(turn) && (turn.status === "failed" || isTurnOlderThan(turn, timestampMs, 15 * 60_000)))
+    .map((turn) => {
+      const stuck = turn.status === "in_progress";
+      return evidenceCandidateFromItem(insightItem({
+        evidenceSource: "stuck_turn",
+        evidenceKey: turn.id,
+        timestamp,
+        severity: stuck ? "concern" : "blocker",
+        type: stuck ? "turn.stuck" : "turn.failed",
+        title: stuck ? "Turn appears stuck" : "Turn failed",
+        summary: compactInsightSummary(
+          stuck
+            ? `A turn has been running since ${turn.startedAt}.`
+            : turn.error ?? "A turn failed without completing successfully.",
+        ),
+        scopeType: "session",
+        scopeId: turn.sessionId,
+        payload: {
+          sessionId: turn.sessionId,
+          turnId: turn.id,
+          prompt: compactInsightSummary(turn.prompt),
+          turnStatus: turn.status,
+          startedAt: turn.startedAt,
+          completedAt: turn.completedAt,
+          error: turn.error,
+        },
+      }));
+    });
+}
+
+function detectAbandonedGoals(entries: RuntimeEventEntry[], timestamp: string): InsightEvidenceCandidate[] {
+  const latestByGoalId = new Map<string, { entry: RuntimeEventEntry; goal: Record<string, unknown> }>();
+  for (const entry of entries) {
+    const data = entry.event.data;
+    if (!data || typeof data !== "object") continue;
+    const record = data as Record<string, unknown>;
+    if (record.kind !== "thread_goal" || !record.goal || typeof record.goal !== "object") continue;
+    const goal = record.goal as Record<string, unknown>;
+    const goalId = textValue(goal.id);
+    if (!goalId) continue;
+    latestByGoalId.set(goalId, { entry, goal });
+  }
+  const timestampMs = Date.parse(timestamp);
+  return Array.from(latestByGoalId.entries())
+    .filter(([, latest]) => {
+      const status = textValue(latest.goal.status);
+      if (status !== "active") return false;
+      const startedAt = textValue(latest.goal.startedAt) ?? latest.entry.event.timestamp;
+      return isOlderThan(startedAt, timestampMs, 30 * 60_000);
+    })
+    .map(([goalId, latest]) => evidenceCandidateFromItem(insightItem({
+      evidenceSource: "abandoned_goal",
+      evidenceKey: goalId,
+      timestamp,
+      severity: "concern",
+      type: "goal.abandoned",
+      title: "Goal appears abandoned",
+      summary: compactInsightSummary(`Goal "${textValue(latest.goal.objective) ?? goalId}" is still active without a completion event.`),
+      scopeType: latest.entry.event.sessionId ? "session" : "global",
+      scopeId: latest.entry.event.sessionId ?? "local",
+      payload: {
+        goalId,
+        goalStatus: textValue(latest.goal.status),
+        goalObjective: textValue(latest.goal.objective),
+        sessionId: latest.entry.event.sessionId ?? null,
+        turnId: latest.entry.event.turnId ?? null,
+        sourceEventSequence: latest.entry.sequence,
+      },
+    })));
+}
+
+function detectRepeatedUserCorrections(entries: RuntimeEventEntry[], timestamp: string): InsightEvidenceCandidate[] {
+  const groups = new Map<string, RuntimeEventEntry[]>();
+  for (const entry of entries) {
+    if (entry.event.name !== "turn.started") continue;
+    const prompt = textValue((entry.event.args as Record<string, unknown> | undefined)?.prompt);
+    if (!prompt || !looksLikeUserCorrection(prompt)) continue;
+    const key = entry.event.sessionId ?? "global";
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  return Array.from(groups.entries())
+    .filter(([, group]) => group.length >= 2)
+    .map(([sessionId, group]) => {
+      const latest = group[group.length - 1]!;
+      return evidenceCandidateFromItem(insightItem({
+        evidenceSource: "user_correction",
+        evidenceKey: sessionId,
+        timestamp,
+        severity: "concern",
+        type: "conversation.repeated_corrections",
+        title: "Repeated user corrections",
+        summary: compactInsightSummary(`${group.length} recent turns look like corrections or repeated instructions.`),
+        scopeType: latest.event.sessionId ? "session" : "global",
+        scopeId: latest.event.sessionId ?? "local",
+        payload: {
+          sessionId: latest.event.sessionId ?? null,
+          turnId: latest.event.turnId ?? null,
+          correctionCount: group.length,
+          latestPrompt: textValue((latest.event.args as Record<string, unknown> | undefined)?.prompt),
+          sourceEventSequence: latest.sequence,
+        },
+      }));
+    });
+}
+
+function detectLongRunningUnresolvedConversations(turns: Turn[], timestamp: string): InsightEvidenceCandidate[] {
+  const bySession = new Map<string, Turn[]>();
+  for (const turn of turns) {
+    if (isInsightsTurn(turn)) continue;
+    bySession.set(turn.sessionId, [...(bySession.get(turn.sessionId) ?? []), turn]);
+  }
+  return Array.from(bySession.entries())
+    .filter(([, sessionTurns]) => sessionTurns.length >= 8)
+    .map(([sessionId, sessionTurns]) => ({
+      sessionId,
+      turns: sessionTurns.sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
+    }))
+    .filter(({ turns: sessionTurns }) => {
+      const latest = sessionTurns[sessionTurns.length - 1]!;
+      return latest.status !== "completed" || sessionTurns.slice(-4).some((turn) => turn.status === "failed");
+    })
+    .map(({ sessionId, turns: sessionTurns }) => {
+      const latest = sessionTurns[sessionTurns.length - 1]!;
+      return evidenceCandidateFromItem(insightItem({
+        evidenceSource: "unresolved_conversation",
+        evidenceKey: sessionId,
+        timestamp,
+        severity: "nit",
+        type: "conversation.long_running_unresolved",
+        title: "Long-running chat may be unresolved",
+        summary: compactInsightSummary(`${sessionTurns.length} turns are present and the latest work does not look cleanly resolved.`),
+        scopeType: "session",
+        scopeId: sessionId,
+        payload: {
+          sessionId,
+          turnId: latest.id,
+          turnCount: sessionTurns.length,
+          latestTurnStatus: latest.status,
+          startedAt: sessionTurns[0]?.startedAt ?? null,
+          latestTurnStartedAt: latest.startedAt,
+        },
+      }));
+    });
+}
+
+function parseCreatePipelineSnapshotFromEvent(event: RuntimeEvent): CreatePipelineSnapshot | null {
+  if (event.name !== "create_pipeline.updated") return null;
+  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
+  const parsedSnapshot = CreatePipelineSnapshotSchema.safeParse(data.createPipeline);
+  if (parsedSnapshot.success) return parsedSnapshot.data;
+  return null;
+}
+
+function isCreateEditRequest(request: CreatePipelineRequest): boolean {
+  const parsed = CreatePipelineRequestSchema.safeParse(request);
+  return parsed.success && (parsed.data.operation === "create" || parsed.data.operation === "edit");
+}
+
+function attentionForSnapshot(snapshot: CreatePipelineSnapshot): {
+  severity: InsightSeverity;
+  type: string;
+  title: string;
+  summary: string;
+} | null {
+  const operationLabel = snapshot.request.operation === "edit" ? "Edit agent" : "Create agent";
+  if (snapshot.state === "awaiting_questions") {
+    return {
+      severity: "concern",
+      type: "create_edit.awaiting_questions",
+      title: `${operationLabel} is waiting for answers`,
+      summary: compactInsightSummary(
+        snapshot.questions.find((question) => question.status === "pending")?.prompt ??
+          `${operationLabel} needs user input before planning can continue.`,
+      ),
+    };
+  }
+  if (snapshot.state === "awaiting_plan_approval") {
+    return {
+      severity: "concern",
+      type: "create_edit.awaiting_plan_approval",
+      title: `${operationLabel} is waiting for plan approval`,
+      summary: compactInsightSummary(
+        snapshot.plan?.summary ?? `${operationLabel} needs plan approval before source changes run.`,
+      ),
+    };
+  }
+  if (snapshot.state === "blocked") {
+    return {
+      severity: "blocker",
+      type: "create_edit.blocked",
+      title: `${operationLabel} is blocked`,
+      summary: compactInsightSummary(
+        snapshot.blockedReason ?? `${operationLabel} cannot continue until the blocker is resolved.`,
+      ),
+    };
+  }
+  if (snapshot.state === "failed") {
+    return {
+      severity: "blocker",
+      type: "create_edit.failed",
+      title: `${operationLabel} failed`,
+      summary: compactInsightSummary(
+        snapshot.blockedReason ?? `${operationLabel} failed during the create/edit flow.`,
+      ),
+    };
+  }
+  return null;
+}
+
+function compactInsightSummary(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_INSIGHT_SUMMARY_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_INSIGHT_SUMMARY_CHARS - 3).trimEnd()}...`;
+}
+
+function insightItemForSnapshot(input: {
+  entry: RuntimeEventEntry;
+  snapshot: CreatePipelineSnapshot;
+  attention: NonNullable<ReturnType<typeof attentionForSnapshot>>;
+  timestamp: string;
+}): InsightItem {
+  const { entry, snapshot, attention, timestamp } = input;
+  const scopeType = entry.event.sessionId ? "session" : "global";
+  const scopeId = entry.event.sessionId ?? "local";
+  const fingerprint = [
+    "openpond.insights",
+    "create-edit",
+    snapshot.id,
+    snapshot.state,
+  ].join(":");
+  return {
+    id: `insight_${hashId(fingerprint)}`,
+    scopeType,
+    scopeId,
+    severity: attention.severity,
+    type: attention.type,
+    status: "active",
+    fingerprint,
+    title: attention.title,
+    summary: attention.summary,
+    payload: {
+      detector: "create-edit-pipeline-state",
+      evidenceSource: "create_edit",
+      evidenceKey: snapshot.id,
+      sessionId: entry.event.sessionId ?? null,
+      turnId: entry.event.turnId ?? null,
+      createPipelineId: snapshot.id,
+      createPipelineState: snapshot.state,
+      createPipelineOperation: snapshot.request.operation,
+      sourceGoalId: snapshot.goalId,
+      sourceEventId: entry.event.id,
+      sourceEventSequence: entry.sequence,
+    },
+    lastRunId: null,
+    lastRunSessionId: null,
+    lastRunTurnId: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    resolvedAt: null,
+    dismissedAt: null,
+  };
+}
+
+function insightItem(input: {
+  evidenceSource: InsightEvidenceSource;
+  evidenceKey: string;
+  timestamp: string;
+  severity: InsightSeverity;
+  type: string;
+  title: string;
+  summary: string;
+  scopeType: InsightItem["scopeType"];
+  scopeId: string;
+  payload: Record<string, unknown>;
+}): InsightItem {
+  const fingerprint = [
+    "openpond.insights",
+    input.evidenceSource,
+    input.evidenceKey,
+    input.type,
+  ].join(":");
+  return {
+    id: `insight_${hashId(fingerprint)}`,
+    scopeType: input.scopeType,
+    scopeId: input.scopeId,
+    severity: input.severity,
+    type: input.type,
+    status: "active",
+    fingerprint,
+    title: input.title,
+    summary: input.summary,
+    payload: {
+      ...input.payload,
+      evidenceSource: input.evidenceSource,
+      evidenceKey: input.evidenceKey,
+    },
+    lastRunId: null,
+    lastRunSessionId: null,
+    lastRunTurnId: null,
+    createdAt: input.timestamp,
+    updatedAt: input.timestamp,
+    resolvedAt: null,
+    dismissedAt: null,
+  };
+}
+
+function evidenceCandidateFromItem(item: InsightItem): InsightEvidenceCandidate {
+  return {
+    item,
+    evidenceSource: insightEvidenceSource(item) ?? "create_edit",
+    evidenceKey: insightEvidenceKey(item) ?? item.id,
+    keepFingerprint: item.fingerprint,
+  };
+}
+
+function withEvidencePayload(
+  item: InsightItem,
+  evidenceSource: InsightEvidenceSource,
+  evidenceKey: string,
+): InsightItem {
+  return {
+    ...item,
+    payload: {
+      ...item.payload,
+      evidenceSource,
+      evidenceKey,
+    },
+  };
+}
+
+function insightEvidenceKey(item: InsightItem): string | null {
+  const evidenceKey = item.payload.evidenceKey;
+  if (typeof evidenceKey === "string" && evidenceKey.trim()) return evidenceKey;
+  const value = item.payload.createPipelineId;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function insightEvidenceSource(item: InsightItem): InsightEvidenceSource | null {
+  const value = item.payload.evidenceSource;
+  return isInsightEvidenceSource(value) ? value : null;
+}
+
+function enabledInsightEvidenceSources(preferences: AppPreferences): Set<InsightEvidenceSource> {
+  const settings = InsightsEvidenceSourceSettingsSchema.parse(preferences.insightsEvidenceSources ?? {});
+  const sources: InsightEvidenceSource[] = [];
+  if (settings.createEdit) sources.push("create_edit");
+  if (settings.stuckTurns) sources.push("stuck_turn");
+  if (settings.toolFailures) sources.push("tool_failure");
+  if (settings.abandonedGoals) sources.push("abandoned_goal");
+  if (settings.userCorrections) sources.push("user_correction");
+  if (settings.unresolvedConversations) sources.push("unresolved_conversation");
+  return new Set(sources);
+}
+
+function isInsightEvidenceSource(value: unknown): value is InsightEvidenceSource {
+  return (
+    value === "create_edit" ||
+    value === "stuck_turn" ||
+    value === "tool_failure" ||
+    value === "abandoned_goal" ||
+    value === "user_correction" ||
+    value === "unresolved_conversation"
+  );
+}
+
+function isFailedToolEvent(event: RuntimeEvent): boolean {
+  if (event.name !== "tool.completed" && event.name !== "workspace_action_result") return false;
+  return event.status === "failed" || Boolean(event.error);
+}
+
+function eventActionLabel(event: RuntimeEvent): string {
+  const args = event.args && typeof event.args === "object" ? event.args as Record<string, unknown> : {};
+  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
+  return (
+    textValue(event.action) ??
+    textValue(args.action) ??
+    textValue(args.tool) ??
+    textValue(args.name) ??
+    textValue(data.action) ??
+    textValue(data.tool) ??
+    textValue(data.name) ??
+    event.name
+  );
+}
+
+function isTurnOlderThan(turn: Turn, timestampMs: number, thresholdMs: number): boolean {
+  if (turn.status !== "in_progress" || isInsightsTurn(turn)) return false;
+  return isOlderThan(turn.startedAt, timestampMs, thresholdMs);
+}
+
+function isOlderThan(value: string, timestampMs: number, thresholdMs: number): boolean {
+  const time = Date.parse(value);
+  return Number.isFinite(time) && Number.isFinite(timestampMs) && timestampMs - time >= thresholdMs;
+}
+
+function looksLikeUserCorrection(prompt: string): boolean {
+  const normalized = prompt.toLowerCase();
+  return [
+    "i told you",
+    "not what i asked",
+    "that's wrong",
+    "that is wrong",
+    "you didn't",
+    "you did not",
+    "again",
+    "still not",
+    "fix this",
+    "why did you",
+  ].some((phrase) => normalized.includes(phrase));
+}
+
+function textValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isInsightsTurn(turn: Turn): boolean {
+  return Boolean(turn.metadata?.insightsRun || turn.metadata?.insightsQuestion);
+}
+
+function linkInsightItemToRun(input: InsightItem, run: {
+  runId: string;
+  runSessionId: string;
+  runTurnId: string;
+  sourceEventSequence: number;
+}): InsightItem {
+  return {
+    ...input,
+    lastRunId: run.runId,
+    lastRunSessionId: run.runSessionId,
+    lastRunTurnId: run.runTurnId,
+    payload: {
+      ...input.payload,
+      insightsRunId: run.runId,
+      insightsRunSessionId: run.runSessionId,
+      insightsRunTurnId: run.runTurnId,
+      insightsRunSourceEventSequence: run.sourceEventSequence,
+    },
+  };
+}
+
+function insightsListResponse(
+  items: InsightItem[],
+  options: { runs?: InsightRun[]; systemSessionId?: string | null; systemSession?: Session | null } = {},
+): InsightsListResponse {
+  return InsightsListResponseSchema.parse({
+    items,
+    runs: options.runs ?? [],
+    systemSessionId: options.systemSessionId ?? null,
+    systemSession: "systemSession" in options ? options.systemSession : null,
+    summary: summarizeInsights(items),
+    generatedAt: now(),
+    nextScanAt: null,
+    scanRunning: false,
+    scanStartedAt: null,
+  });
+}
+
+function filterInsightItems(items: InsightItem[], query: InsightsListQuery): InsightItem[] {
+  const evidenceSource = query.evidenceSource && query.evidenceSource !== "all" ? query.evidenceSource : null;
+  if (!evidenceSource) return items;
+  return items.filter((item) => insightEvidenceSource(item) === evidenceSource);
+}
+
+function filterInsightRuns(runs: InsightRun[], query: InsightsListQuery): InsightRun[] {
+  return runs.filter((run) => {
+    if (query.runStatus && query.runStatus !== "all" && run.status !== query.runStatus) return false;
+    if (query.runTrigger && query.runTrigger !== "all" && run.trigger !== query.runTrigger) return false;
+    if (query.runModel?.trim()) {
+      const needle = query.runModel.trim().toLowerCase();
+      const model = run.modelRef ? `${run.modelRef.providerId}/${run.modelRef.modelId}`.toLowerCase() : "";
+      if (!model.includes(needle)) return false;
+    }
+    if (query.evidenceSource && query.evidenceSource !== "all") {
+      if (!run.evidenceSources.includes(query.evidenceSource)) return false;
+    }
+    return true;
+  });
+}
+
+function insightsStructuredOutputSchemaDescription(): Record<string, unknown> {
+  return {
+    type: "object",
+    required: ["summary", "actions"],
+    properties: {
+      summary: { type: "string", minLength: 1 },
+      actions: {
+        type: "array",
+        items: {
+          oneOf: [
+            { type: "object", required: ["action", "item"], properties: { action: { const: "upsert" }, item: "InsightItem" } },
+            { type: "object", required: ["action", "insightId", "fingerprint", "reason"], properties: { action: { const: "resolve" } } },
+            { type: "object", required: ["action", "insightId", "reason"], properties: { action: { const: "dismiss" } } },
+            { type: "object", required: ["action", "createPipelineId", "reason"], properties: { action: { const: "no_op" } } },
+          ],
+        },
+      },
+    },
+  };
+}
+
+function insightRunSummary(stats: {
+  findingCount: number;
+  createdCount: number;
+  updatedCount: number;
+  resolvedCount: number;
+}): string {
+  if (stats.findingCount === 0 && stats.resolvedCount === 0) return "No active create/edit insights found.";
+  const parts = [
+    `${stats.findingCount} finding${stats.findingCount === 1 ? "" : "s"}`,
+    `${stats.createdCount} new`,
+    `${stats.updatedCount} updated`,
+    `${stats.resolvedCount} resolved`,
+  ];
+  return `Insights scan completed: ${parts.join(", ")}.`;
+}
+
+function structuredRunOutputSummary(stats: {
+  upsertCount: number;
+  resolveCount: number;
+  noOpCount: number;
+}): string {
+  if (stats.upsertCount === 0 && stats.resolveCount === 0) {
+    return stats.noOpCount > 0
+      ? "Structured Insights output found no active findings to write."
+      : "Structured Insights output had no actions.";
+  }
+  return `Structured Insights output: ${stats.upsertCount} upsert, ${stats.resolveCount} resolve, ${stats.noOpCount} no-op.`;
+}
+
+function insightEvidenceHash(
+  entries: RuntimeEventEntry[],
+  candidates: InsightEvidenceCandidate[],
+): string {
+  return hashId(JSON.stringify({
+    source: "runtime evidence",
+    entries: entries.map((entry) => ({
+      sequence: entry.sequence,
+      eventId: entry.event.id,
+      sessionId: entry.event.sessionId ?? null,
+      turnId: entry.event.turnId ?? null,
+    })),
+    candidates: candidates.map((candidate) => ({
+      evidenceSource: candidate.evidenceSource,
+      evidenceKey: candidate.evidenceKey,
+      keepFingerprint: candidate.keepFingerprint,
+      item: candidate.item
+        ? {
+            fingerprint: candidate.item.fingerprint,
+            severity: candidate.item.severity,
+            type: candidate.item.type,
+            title: candidate.item.title,
+            summary: candidate.item.summary,
+            payload: candidate.item.payload,
+          }
+        : null,
+    })),
+  }));
+}
+
+function insightsRunPrompt(input: {
+  trigger: InsightRunTrigger;
+  afterSequence: number;
+  latestSequence: number;
+  entries: RuntimeEventEntry[];
+  candidates: InsightEvidenceCandidate[];
+  evidenceSources: InsightEvidenceSource[];
+}): string {
+  const evidence = insightsEvidenceItems(input.candidates);
+  const body = JSON.stringify({
+    trigger: input.trigger,
+    source: "OpenPond runtime events and turn state",
+    evidenceSources: input.evidenceSources,
+    afterSequence: input.afterSequence,
+    latestSequence: input.latestSequence,
+    eventCount: input.entries.length,
+    evidence,
+  }, null, 2);
+  const compactBody = body.length > INSIGHTS_RUN_PROMPT_MAX_JSON_CHARS
+    ? `${body.slice(0, INSIGHTS_RUN_PROMPT_MAX_JSON_CHARS)}\n...truncated`
+    : body;
+  return [
+    "You are the built-in OpenPond Insights agent.",
+    "Goal: review the compact create/edit evidence and summarize actionable blockers or concerns for the user.",
+    "Do not modify files or run tools. Keep the answer concise and reference the source sessions or turns when present.",
+    "The app will persist structured insight rows separately from this transcript.",
+    "",
+    "Evidence JSON:",
+    compactBody,
+  ].join("\n");
+}
+
+function insightsRunSessionTitle(trigger: InsightRunTrigger, timestamp: string): string {
+  return `Insights ${triggerLabel(trigger)} scan ${shortTime(timestamp)}`;
+}
+
+function insightsQuestionSessionTitle(timestamp: string): string {
+  return `Insights question ${shortTime(timestamp)}`;
+}
+
+function triggerLabel(trigger: InsightRunTrigger): string {
+  switch (trigger) {
+    case "slash_command":
+      return "slash";
+    default:
+      return trigger;
+  }
+}
+
+function shortTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function insightsRunEvidencePreview(input: {
+  trigger: InsightRunTrigger;
+  afterSequence: number;
+  latestSequence: number;
+  entries: RuntimeEventEntry[];
+  candidates: InsightEvidenceCandidate[];
+  evidenceSources: InsightEvidenceSource[];
+}): Record<string, unknown> {
+  const evidence = insightsEvidenceItems(input.candidates);
+  const fullBodyLength = JSON.stringify({
+    trigger: input.trigger,
+    source: "OpenPond runtime events and turn state",
+    evidenceSources: input.evidenceSources,
+    afterSequence: input.afterSequence,
+    latestSequence: input.latestSequence,
+    eventCount: input.entries.length,
+    evidence,
+  }).length;
+  return {
+    trigger: input.trigger,
+    afterSequence: input.afterSequence,
+    latestSequence: input.latestSequence,
+    eventCount: input.entries.length,
+    evidenceSources: input.evidenceSources,
+    totalCount: evidence.length,
+    truncated: fullBodyLength > INSIGHTS_RUN_PROMPT_MAX_JSON_CHARS,
+    items: evidence,
+  };
+}
+
+function insightsEvidenceItems(candidates: InsightEvidenceCandidate[]): Array<Record<string, unknown>> {
+  return candidates.map((candidate) => ({
+    evidenceSource: candidate.evidenceSource,
+    evidenceKey: candidate.evidenceKey,
+    fingerprint: candidate.keepFingerprint,
+    insight: candidate.item
+      ? {
+          severity: candidate.item.severity,
+          type: candidate.item.type,
+          title: candidate.item.title,
+          summary: candidate.item.summary,
+          sourceSessionId: candidate.item.payload.sessionId ?? null,
+          sourceTurnId: candidate.item.payload.turnId ?? null,
+          createPipelineState: candidate.item.payload.createPipelineState ?? null,
+          sourceEventSequence: candidate.item.payload.sourceEventSequence ?? null,
+        }
+      : null,
+  }));
+}
+
+function insightsQuestionPrompt(input: {
+  question: string;
+  items: InsightItem[];
+  runs: InsightRun[];
+}): string {
+  const activeItems = input.items.filter((item) => item.status === "active");
+  const evidence = {
+    question: input.question,
+    runs: input.runs.map((run) => ({
+      id: run.id,
+      turnId: run.turnId,
+      trigger: run.trigger,
+      status: run.status,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      modelRef: run.modelRef ?? null,
+      findingCount: run.findingCount,
+      createdCount: run.createdCount,
+      updatedCount: run.updatedCount,
+      resolvedCount: run.resolvedCount,
+      summary: run.summary,
+      error: run.error,
+      evidenceHash: run.evidenceHash,
+      sourceEventSequence: run.sourceEventSequence,
+    })),
+    insights: input.items.map((item) => ({
+      id: item.id,
+      status: item.status,
+      severity: item.severity,
+      type: item.type,
+      title: item.title,
+      summary: item.summary,
+      updatedAt: item.updatedAt,
+      sourceSessionId: item.payload.sessionId ?? null,
+      sourceTurnId: item.payload.turnId ?? null,
+      createPipelineId: item.payload.createPipelineId ?? null,
+      createPipelineState: item.payload.createPipelineState ?? null,
+      createPipelineOperation: item.payload.createPipelineOperation ?? null,
+      sourceEventSequence: item.payload.sourceEventSequence ?? null,
+      lastRunSessionId: item.lastRunSessionId ?? null,
+      lastRunTurnId: item.lastRunTurnId ?? null,
+    })),
+  };
+  const body = JSON.stringify(evidence, null, 2);
+  const compactBody = body.length > 18_000 ? `${body.slice(0, 18_000)}\n...truncated` : body;
+  return [
+    "You are the built-in OpenPond Insights agent.",
+    "Answer the user's question using only the compact Insights run history and linked source evidence below.",
+    "If the evidence is insufficient, say what is missing and where the user should inspect next.",
+    `Active insight count: ${activeItems.length}.`,
+    "",
+    "User question:",
+    input.question,
+    "",
+    "Insights evidence JSON:",
+    compactBody,
+  ].join("\n");
+}
+
+function insightsThreadGoal(metadata: InsightsRunMetadata): Record<string, unknown> {
+  return {
+    id: metadata.id,
+    provider: INSIGHTS_SYSTEM_KIND,
+    objective: "Review recent OpenPond create/edit activity and summarize actionable insights.",
+    status: metadata.status === "failed"
+      ? "blocked"
+      : metadata.status === "completed" || metadata.status === "skipped"
+        ? "complete"
+        : "active",
+    trigger: metadata.trigger,
+    evidenceSources: metadata.evidenceSources,
+    evidenceHash: metadata.evidenceHash,
+    sourceEventSequence: metadata.sourceEventSequence,
+    startedAt: metadata.startedAt,
+    completedAt: metadata.completedAt,
+    elapsedMs: metadata.elapsedMs,
+    usage: metadata.usage,
+    findingCount: metadata.findingCount,
+    error: metadata.error,
+  };
+}
+
+function completeInsightsRunMetadata(
+  metadata: InsightsRunMetadata,
+  patch: Partial<InsightsRunMetadata> & {
+    status: InsightsRunMetadata["status"];
+    completedAt: string;
+  },
+): InsightsRunMetadata {
+  const completedAt = patch.completedAt;
+  return {
+    ...metadata,
+    ...patch,
+    completedAt,
+    elapsedMs: elapsedMsBetween(metadata.startedAt, completedAt),
+    usage: patch.usage === undefined ? metadata.usage : patch.usage,
+  };
+}
+
+function elapsedMsBetween(startedAt: string, completedAt: string): number | null {
+  const started = Date.parse(startedAt);
+  const completed = Date.parse(completedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return null;
+  return completed - started;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return fallback;
+}
+
+function summarizeInsights(items: InsightItem[]): InsightSummary {
+  let activeCount = 0;
+  let resolvedCount = 0;
+  let dismissedCount = 0;
+  let highestActiveSeverity: InsightSeverity | null = null;
+  for (const item of items) {
+    if (item.status === "active") {
+      activeCount += 1;
+      highestActiveSeverity = higherSeverity(highestActiveSeverity, item.severity);
+    } else if (item.status === "resolved") {
+      resolvedCount += 1;
+    } else if (item.status === "dismissed") {
+      dismissedCount += 1;
+    }
+  }
+  return {
+    totalCount: items.length,
+    activeCount,
+    resolvedCount,
+    dismissedCount,
+    highestActiveSeverity,
+  };
+}
+
+function higherSeverity(current: InsightSeverity | null, next: InsightSeverity): InsightSeverity {
+  if (!current) return next;
+  return severityRank(next) > severityRank(current) ? next : current;
+}
+
+function severityRank(severity: InsightSeverity): number {
+  if (severity === "blocker") return 3;
+  if (severity === "concern") return 2;
+  return 1;
+}
+
+function hashId(value: string): string {
+  return createHash("sha1").update(value).digest("hex").slice(0, 16);
+}

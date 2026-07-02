@@ -10,6 +10,7 @@ import type {
 
 const PROFILE_REPO_GITIGNORE = [
   "**/node_modules/",
+  "**/.bun/",
   "**/.env",
   "**/.env.*",
   "**/.openpond/goals/",

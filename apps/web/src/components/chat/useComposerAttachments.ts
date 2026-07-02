@@ -9,6 +9,8 @@ import {
 
 export function useComposerAttachments() {
   const attachmentsRef = useRef<ComposerAttachmentDraft[]>([]);
+  const stagedAttachmentsRef = useRef<ComposerAttachmentDraft[]>([]);
+  const unmountedRef = useRef(false);
   const [attachments, setAttachments] = useState<ComposerAttachmentDraft[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
 
@@ -18,8 +20,12 @@ export function useComposerAttachments() {
 
   useEffect(() => {
     return () => {
+      unmountedRef.current = true;
       for (const attachment of attachmentsRef.current) {
-        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+        revokeAttachmentPreview(attachment);
+      }
+      for (const attachment of stagedAttachmentsRef.current) {
+        revokeAttachmentPreview(attachment);
       }
     };
   }, []);
@@ -77,7 +83,7 @@ export function useComposerAttachments() {
   const removeAttachment = useCallback((id: string) => {
     setAttachments((current) => {
       const removed = current.find((attachment) => attachment.id === id);
-      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      if (removed) revokeAttachmentPreview(removed);
       const next = current.filter((attachment) => attachment.id !== id);
       if (next.length === 0) setAttachmentError(null);
       return next;
@@ -86,10 +92,47 @@ export function useComposerAttachments() {
 
   const clearAttachments = useCallback(() => {
     for (const attachment of attachmentsRef.current) {
-      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      revokeAttachmentPreview(attachment);
     }
+    attachmentsRef.current = [];
     setAttachments([]);
     setAttachmentError(null);
+  }, []);
+
+  const stageAttachmentsForSubmit = useCallback(() => {
+    const staged = attachmentsRef.current;
+    if (staged.length === 0) return staged;
+    attachmentsRef.current = [];
+    stagedAttachmentsRef.current = staged;
+    setAttachments([]);
+    setAttachmentError(null);
+    return staged;
+  }, []);
+
+  const settleStagedAttachments = useCallback((
+    staged: ComposerAttachmentDraft[],
+    outcome: "dispose" | "restore",
+  ) => {
+    if (staged.length === 0) return;
+    const stagedIds = new Set(staged.map((attachment) => attachment.id));
+    stagedAttachmentsRef.current = stagedAttachmentsRef.current.filter(
+      (attachment) => !stagedIds.has(attachment.id),
+    );
+    if (outcome === "restore" && !unmountedRef.current) {
+      setAttachments((current) => {
+        const currentIds = new Set(current.map((attachment) => attachment.id));
+        const next = [
+          ...staged.filter((attachment) => !currentIds.has(attachment.id)),
+          ...current,
+        ];
+        attachmentsRef.current = next;
+        return next;
+      });
+      return;
+    }
+    for (const attachment of staged) {
+      revokeAttachmentPreview(attachment);
+    }
   }, []);
 
   return {
@@ -98,6 +141,12 @@ export function useComposerAttachments() {
     addFiles,
     clearAttachments,
     removeAttachment,
+    settleStagedAttachments,
     setAttachmentError,
+    stageAttachmentsForSubmit,
   };
+}
+
+function revokeAttachmentPreview(attachment: ComposerAttachmentDraft) {
+  if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
 }

@@ -5,9 +5,11 @@ import {
   useRef,
   type KeyboardEvent,
 } from "react";
+import { detectComposerRepoLinks, type ComposerRepoLink } from "../../lib/composer-repo-links";
 import { resizeComposerTextarea } from "./ComposerLayout";
 
 const INLINE_TOKEN_SELECTOR = "[data-inline-token='true']";
+const INLINE_REPO_LINK_SELECTOR = "[data-inline-repo-link='true']";
 
 export type ComposerInlineToken = {
   icon: "bot" | "plus" | "workflow";
@@ -30,6 +32,10 @@ type ExtractedEditorState = {
 
 function isInlineToken(node: Node): node is HTMLElement {
   return node instanceof HTMLElement && node.matches(INLINE_TOKEN_SELECTOR);
+}
+
+function isInlineRepoLink(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && node.matches(INLINE_REPO_LINK_SELECTOR);
 }
 
 function clampIndex(value: number, max: number): number {
@@ -64,6 +70,10 @@ function extractEditorState(root: HTMLElement): ExtractedEditorState {
   let tokenAt: number | null = null;
 
   function visit(node: Node) {
+    if (isInlineRepoLink(node)) {
+      text += node.dataset.repoUrl ?? "";
+      return;
+    }
     if (isInlineToken(node)) {
       tokenAt = text.length;
       return;
@@ -81,6 +91,7 @@ function extractEditorState(root: HTMLElement): ExtractedEditorState {
 }
 
 function viewLength(node: Node): number {
+  if (isInlineRepoLink(node)) return node.dataset.repoUrl?.length ?? 0;
   if (isInlineToken(node)) return 1;
   if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
   if (node instanceof HTMLBRElement) return 0;
@@ -103,6 +114,15 @@ function selectionViewIndex(root: HTMLElement): number {
 
   function visit(node: Node) {
     if (found) return;
+    if ((isInlineToken(node) || isInlineRepoLink(node)) && node.contains(focusNode)) {
+      if (node !== focusNode || focusOffset > 0) index += viewLength(node);
+      found = true;
+      return;
+    }
+    if (isInlineToken(node) || isInlineRepoLink(node)) {
+      index += viewLength(node);
+      return;
+    }
     if (node === focusNode) {
       if (node.nodeType === Node.TEXT_NODE) {
         index += focusOffset;
@@ -111,10 +131,6 @@ function selectionViewIndex(root: HTMLElement): number {
         for (const child of children) index += viewLength(child);
       }
       found = true;
-      return;
-    }
-    if (isInlineToken(node)) {
-      index += 1;
       return;
     }
     if (node.nodeType === Node.TEXT_NODE) {
@@ -147,16 +163,17 @@ function setSelectionByViewIndex(root: HTMLElement, viewIndex: number) {
   }
 
   function visit(node: Node): boolean {
-    if (isInlineToken(node)) {
+    if (isInlineToken(node) || isInlineRepoLink(node)) {
+      const length = viewLength(node);
       if (remaining <= 0) {
         placeBefore(node);
         return true;
       }
-      remaining -= 1;
-      if (remaining <= 0) {
+      if (remaining <= length) {
         placeAfter(node);
         return true;
       }
+      remaining -= length;
       return false;
     }
 
@@ -237,18 +254,79 @@ function createTokenElement(token: ComposerInlineToken): HTMLElement {
   return pill;
 }
 
+function repoLinkIconSrc(link: ComposerRepoLink): string {
+  return link.provider === "github" ? "/connected-apps/github.svg" : "/openpond-icon.png";
+}
+
+function createRepoLinkElement(link: ComposerRepoLink): HTMLElement {
+  const chip = document.createElement("span");
+  chip.className = `composer-repo-link ${link.provider}`;
+  chip.contentEditable = "false";
+  chip.dataset.inlineRepoLink = "true";
+  chip.dataset.repoUrl = link.url;
+  chip.dataset.repoProvider = link.provider;
+  chip.setAttribute(
+    "aria-label",
+    `${link.provider === "github" ? "GitHub" : "OpenPond"} repository ${link.label}`,
+  );
+  chip.title = link.url;
+
+  const icon = document.createElement("img");
+  icon.className = "composer-repo-link-icon";
+  icon.src = repoLinkIconSrc(link);
+  icon.alt = "";
+  icon.draggable = false;
+
+  const label = document.createElement("span");
+  label.className = "composer-repo-link-label";
+  label.textContent = link.label;
+
+  chip.append(icon, label);
+  return chip;
+}
+
+function repoLinksForPrompt(prompt: string, invocationTokenPosition: number | null): ComposerRepoLink[] {
+  const links = detectComposerRepoLinks(prompt);
+  if (invocationTokenPosition === null) return links;
+  return links.filter((link) => invocationTokenPosition <= link.start || invocationTokenPosition >= link.end);
+}
+
+function repoLinksSignature(prompt: string, invocationTokenPosition: number | null): string {
+  return repoLinksForPrompt(prompt, invocationTokenPosition)
+    .map((link) => `${link.start}:${link.end}:${link.provider}:${link.label}:${link.url}`)
+    .join("|");
+}
+
 function rebuildEditorDom(root: HTMLElement, prompt: string, token: ComposerInlineToken | null) {
   const position = tokenPosition(token, prompt);
-  root.replaceChildren();
-  if (position === null || !token) {
-    if (prompt) root.append(document.createTextNode(prompt));
-    return;
+  const repoLinks = repoLinksForPrompt(prompt, position);
+  let tokenInserted = false;
+
+  function appendText(value: string) {
+    if (value) root.append(document.createTextNode(value));
   }
-  const before = prompt.slice(0, position);
-  const after = prompt.slice(position);
-  if (before) root.append(document.createTextNode(before));
-  root.append(createTokenElement(token));
-  if (after) root.append(document.createTextNode(after));
+
+  function appendPromptRange(start: number, end: number) {
+    if (!token || position === null || tokenInserted || position < start || position > end) {
+      appendText(prompt.slice(start, end));
+      return;
+    }
+    appendText(prompt.slice(start, position));
+    root.append(createTokenElement(token));
+    tokenInserted = true;
+    appendText(prompt.slice(position, end));
+  }
+
+  root.replaceChildren();
+
+  let cursor = 0;
+  for (const link of repoLinks) {
+    appendPromptRange(cursor, link.start);
+    root.append(createRepoLinkElement(link));
+    cursor = link.end;
+  }
+  appendPromptRange(cursor, prompt.length);
+  if (token && !tokenInserted) root.append(createTokenElement(token));
 }
 
 export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
@@ -273,7 +351,8 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const nextViewSelectionRef = useRef<number | null>(null);
   const tokenSignature = token ? `${token.key}:${tokenPosition(token, prompt) ?? 0}` : "none";
-  const previousTokenSignatureRef = useRef<string | null>(null);
+  const visualSignature = `${tokenSignature}|${repoLinksSignature(prompt, tokenPosition(token, prompt))}`;
+  const previousVisualSignatureRef = useRef<string | null>(null);
   const isEmpty = prompt.length === 0 && !token;
 
   useImperativeHandle(ref, () => ({
@@ -297,11 +376,11 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    const tokenChanged = previousTokenSignatureRef.current !== tokenSignature;
-    previousTokenSignatureRef.current = tokenSignature;
+    const visualChanged = previousVisualSignatureRef.current !== visualSignature;
+    previousVisualSignatureRef.current = visualSignature;
     const currentState = extractEditorState(root);
     const shouldRebuild =
-      tokenChanged ||
+      visualChanged ||
       prompt === "" ||
       (document.activeElement !== root && (currentState.text !== prompt || currentState.tokenPosition !== tokenPosition(token, prompt)));
     if (shouldRebuild) {
@@ -311,7 +390,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
     resizeComposerTextarea(root);
     if (document.activeElement !== root || nextViewSelectionRef.current === null) return;
     setSelectionByViewIndex(root, nextViewSelectionRef.current);
-  }, [prompt, token]);
+  }, [prompt, token, visualSignature]);
 
   function syncFromDom() {
     const root = rootRef.current;

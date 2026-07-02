@@ -1,7 +1,11 @@
 import { readJson, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 import { now } from "../../utils.js";
-import { signedWorkspaceImageUrlPayload } from "../signed-workspace-image.js";
+import {
+  signedChatAttachmentImageUrlPayload,
+  signedLocalImageUrlPayload,
+  signedWorkspaceImageUrlPayload,
+} from "../signed-workspace-image.js";
 export async function handleEventRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const {
     eventPagePayload,
@@ -37,6 +41,14 @@ export async function handleEventRoutes({ deps, request, requestUrl, response }:
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/assets/workspace-image-url") {
     sendJson(response, 200, signedWorkspaceImageUrlPayload(await readJson(request), requestUrl, token));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/assets/chat-attachment-image-url") {
+    sendJson(response, 200, signedChatAttachmentImageUrlPayload(await readJson(request), requestUrl, token));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/assets/local-image-url") {
+    sendJson(response, 200, signedLocalImageUrlPayload(await readJson(request), requestUrl, token));
     return true;
   }
   return false;

@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type CSSProperties,
 } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, CircleAlert, DownloadCloud } from "../icons";
 import type {
@@ -19,6 +20,10 @@ import type {
   CloudWorkItemDetail,
   CodexPermissionMode,
   CodexReasoningEffort,
+  InsightItem,
+  InsightRun,
+  InsightRunTrigger,
+  InsightStatus,
   Approval,
   OpenPondApp,
   ResolveApprovalRequest,
@@ -71,6 +76,9 @@ const BrowserSidebar = lazy(() =>
 const CloudWorkView = lazy(() =>
   import("../cloud/CloudWorkView").then((module) => ({ default: module.CloudWorkView })),
 );
+const InsightsView = lazy(() =>
+  import("../insights/InsightsView").then((module) => ({ default: module.InsightsView })),
+);
 
 type MainPaneProps = {
   view: AppView;
@@ -110,6 +118,17 @@ type MainPaneProps = {
   terminalCwd: string | null;
   pendingTerminalCommand: { id: number; command: string } | null;
   terminalOpen: boolean;
+  insightsItems: InsightItem[];
+  insightsRuns: InsightRun[];
+  insightsNextScanAt: string | null;
+  insightsScanRunning: boolean;
+  insightsScanStartedAt: string | null;
+  insightsScanning: boolean;
+  insightsError: string | null;
+  onRunInsightsScan: (input?: { trigger?: InsightRunTrigger }) => Promise<unknown>;
+  onAskInsightsQuestion: (question: string) => Promise<unknown>;
+  onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
+  onOpenInsightsSession: (sessionId: string) => void;
   cloudProjects: CloudProject[];
   cloudWorkItems: CloudWorkItem[];
   selectedCloudWorkItem: CloudWorkItem | null;
@@ -158,7 +177,7 @@ type MainPaneProps = {
     promptOverride?: string,
     options?: { displayPrompt?: string },
   ) => Promise<boolean>;
-  stopTurn: () => Promise<void>;
+  stopTurn: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;
@@ -179,7 +198,7 @@ type MainPaneProps = {
     action?: SandboxActionCatalogEntry | null,
     command?: ComposerSlashCommand | null,
   ) => Promise<boolean>;
-  onStopRightChat: (sessionId: string | null) => Promise<void>;
+  onStopRightChat: (sessionId: string | null) => Promise<boolean>;
   onCloseRightPanel: () => void;
   onCloseTerminal: () => void;
   onOpenCloudHome: () => void;
@@ -201,6 +220,12 @@ const CHAT_NAVIGATION_SCROLL_MAX_DURATION_MS = 460;
 
 function isNearChatBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= CHAT_AUTOSCROLL_THRESHOLD_PX;
+}
+
+function insightsSystemSessionId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = (payload as { systemSessionId?: unknown }).systemSessionId;
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 type UserMessageNavigationState = {
@@ -381,6 +406,17 @@ export function MainPane({
   terminalCwd,
   pendingTerminalCommand,
   terminalOpen,
+  insightsItems,
+  insightsRuns,
+  insightsNextScanAt,
+  insightsScanRunning,
+  insightsScanStartedAt,
+  insightsScanning,
+  insightsError,
+  onRunInsightsScan,
+  onAskInsightsQuestion,
+  onPatchInsightStatus,
+  onOpenInsightsSession,
   cloudProjects,
   cloudWorkItems,
   selectedCloudWorkItem,
@@ -444,6 +480,7 @@ export function MainPane({
   onLoadMoreChatHistory,
 }: MainPaneProps) {
   const chatThreadRef = useRef<HTMLElement | null>(null);
+  const composerStackRef = useRef<HTMLDivElement | null>(null);
   const stickyChatScrollRef = useRef(true);
   const previousConversationKeyRef = useRef<string | null>(null);
   const pendingChatScrollRestoreRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -455,6 +492,7 @@ export function MainPane({
   const [initialChatScrollVersion, setInitialChatScrollVersion] = useState(0);
   const [initialChatScrollReadyKey, setInitialChatScrollReadyKey] = useState<string | null>(null);
   const [showScrollToBottomButton, setShowScrollToBottomButton] = useState(false);
+  const [chatComposerReservePx, setChatComposerReservePx] = useState(132);
   const [userMessageNavigation, setUserMessageNavigation] = useState<UserMessageNavigationState>(
     EMPTY_USER_MESSAGE_NAVIGATION,
   );
@@ -491,7 +529,6 @@ export function MainPane({
           onAnswerQuestion: answerCreatePipelineQuestionTurn,
           onApprove: approveCreatePipelineTurn,
           onCancel: cancelCreatePipelineTurn,
-          onOpenDetails: onShowGoalSidebarTab,
           onRevise: reviseCreatePipelineTurn,
         }
       : null;
@@ -500,11 +537,10 @@ export function MainPane({
     approveCreatePipelineTurn,
     cancelCreatePipelineTurn,
     latestCreateRuntime,
-    onShowGoalSidebarTab,
     reviseCreatePipelineTurn,
   ]);
   const viewClass =
-    view === "apps" || view === "get-started" || view === "profile"
+    view === "apps" || view === "get-started" || view === "insights" || view === "profile"
       ? "page-active"
       : view === "cloud"
         ? "cloud-active"
@@ -527,6 +563,33 @@ export function MainPane({
           ? { command: selectedCommand.id, args: prompt.trim() }
           : parseComposerSlashCommandPrompt(prompt);
         if (command) {
+          if (command.command === "insights") {
+            if (attachments.length > 0) {
+              showToast("/insights does not accept attachments.", "error");
+              return false;
+            }
+            setPrompt("");
+            setMentionedAppId(null);
+            if (command.args.trim()) {
+              const payload = await onAskInsightsQuestion(command.args.trim());
+              const sessionId = insightsSystemSessionId(payload);
+              if (sessionId) {
+                onOpenInsightsSession(sessionId);
+              } else {
+                setView("insights");
+              }
+              return true;
+            }
+            setView("insights");
+            const payload = await onRunInsightsScan({ trigger: "slash_command" });
+            if (payload && typeof payload === "object" && "summary" in payload) {
+              const summary = payload.summary as { activeCount?: number; highestActiveSeverity?: string | null };
+              const activeCount = summary.activeCount ?? 0;
+              const severity = summary.highestActiveSeverity ? ` Highest severity: ${summary.highestActiveSeverity}.` : "";
+              showToast(`${activeCount} active insight${activeCount === 1 ? "" : "s"}.${severity}`, "info");
+            }
+            return true;
+          }
           if (!command.args) {
             showToast(`Add instructions after /${command.command}.`, "info");
             return false;
@@ -567,7 +630,12 @@ export function MainPane({
       });
     },
     [
+      activeWorkspaceKind,
+      bootstrap?.profile,
+      onAskInsightsQuestion,
+      onOpenInsightsSession,
       onCreateCloudWork,
+      onRunInsightsScan,
       prompt,
       sendPrompt,
       setMentionedAppId,
@@ -575,11 +643,16 @@ export function MainPane({
       setView,
       showToast,
       slashCommandCloudProjectId,
+      view,
     ],
   );
   const chatTimelineRows = useMemo(
     () => buildChatTimelineRows(chatMessages, { showThinkingIndicator }),
     [chatMessages, showThinkingIndicator],
+  );
+  const chatColumnStyle = useMemo(
+    () => ({ "--chat-composer-reserve": `${chatComposerReservePx}px` }) as CSSProperties,
+    [chatComposerReservePx],
   );
   const latestChatMessage = chatMessages.at(-1);
   const chatScrollContentKey = [
@@ -845,6 +918,41 @@ export function MainPane({
   );
   const workspaceRootPath = workspaceTarget.value === "local" ? workspaceTarget.detail : null;
   useLayoutEffect(() => {
+    if (view !== "chat" || !showChatThread || typeof window === "undefined") return undefined;
+    const element = composerStackRef.current;
+    if (!element) return undefined;
+
+    let animationFrame: number | null = null;
+    const updateReserve = () => {
+      animationFrame = null;
+      const nextReserve = Math.max(96, Math.ceil(element.getBoundingClientRect().height + 20));
+      setChatComposerReservePx((current) => (current === nextReserve ? current : nextReserve));
+    };
+    const scheduleUpdate = () => {
+      if (animationFrame !== null) return;
+      animationFrame = window.requestAnimationFrame(updateReserve);
+    };
+
+    scheduleUpdate();
+    const resizeObserver =
+      typeof window.ResizeObserver === "undefined" ? null : new window.ResizeObserver(scheduleUpdate);
+    resizeObserver?.observe(element);
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [showChatThread, view]);
+  useLayoutEffect(() => {
+    const element = chatThreadRef.current;
+    if (view !== "chat" || !showChatThread || !element || initialChatScrollPendingRef.current) return;
+    if (!stickyChatScrollRef.current && !isNearChatBottom(element)) return;
+    stickyChatScrollRef.current = true;
+    scrollChatToBottom(element, { settle: true });
+  }, [chatComposerReservePx, scrollChatToBottom, showChatThread, view]);
+
+  useLayoutEffect(() => {
     pendingChatScrollRestoreRef.current = null;
     remoteHistoryLoadPendingRef.current = false;
     initialChatScrollPendingRef.current = true;
@@ -1096,6 +1204,21 @@ export function MainPane({
             onToast={showToast}
           />
         </Suspense>
+      ) : view === "insights" ? (
+        <Suspense fallback={null}>
+          <InsightsView
+            items={insightsItems}
+            runs={insightsRuns}
+            nextScanAt={insightsNextScanAt}
+            scanRunning={insightsScanRunning}
+            scanStartedAt={insightsScanStartedAt}
+            scanning={insightsScanning}
+            error={insightsError}
+            onRunScan={onRunInsightsScan}
+            onPatchStatus={onPatchInsightStatus}
+            onOpenSession={onOpenInsightsSession}
+          />
+        </Suspense>
       ) : view === "cloud" ? (
         <>
           <Suspense fallback={null}>{cloudView}</Suspense>
@@ -1106,7 +1229,7 @@ export function MainPane({
         <Suspense fallback={null}>{rightPanel}</Suspense>
       ) : showChatThread ? (
         <>
-          <div className={`chat-column ${pendingApproval ? "has-approval" : ""}`}>
+          <div className={`chat-column ${pendingApproval ? "has-approval" : ""}`} style={chatColumnStyle}>
             <section
               className={`chat-thread${chatThreadPreparingInitialScroll ? " initial-scroll-pending" : ""}`}
               aria-label="Conversation"
@@ -1133,7 +1256,7 @@ export function MainPane({
                 ),
               )}
             </section>
-            <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`}>
+            <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`} ref={composerStackRef}>
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               {showScrollToBottomButton && !chatThreadPreparingInitialScroll ? (
                 <div className="chat-scroll-controls" aria-label="Message navigation">
@@ -1180,7 +1303,7 @@ export function MainPane({
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
                 createPipelineRuntime={createPipelineRuntime}
-                busy={busy}
+                busy={turnRunning}
                 running={turnRunning}
                 showProjectFooter={false}
                 connection={connection}
@@ -1236,7 +1359,7 @@ export function MainPane({
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
                 createPipelineRuntime={createPipelineRuntime}
-                busy={busy}
+                busy={turnRunning}
                 running={turnRunning}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}

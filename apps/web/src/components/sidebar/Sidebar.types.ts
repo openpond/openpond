@@ -18,13 +18,13 @@ export type SidebarProps = {
   archivedChatsOpen: boolean;
   projectsExpanded: boolean;
   cloudProjectsExpanded: boolean;
-  chatsExpanded: boolean;
   sectionMenuOpen: SidebarSectionMenuId | null;
   dragItem: SidebarDragItem | null;
   pinnedRows: PinnedSidebarItem[];
   pinnedSessions: Session[];
   visibleLocalProjectRows: SidebarProjectItem[];
   localProjectRows: SidebarProjectItem[];
+  insightsSystemProjectHidden: boolean | null;
   cloudProjectRows: SidebarProjectItem[];
   cloudWorkItemsByProjectId: Record<string, CloudWorkItem[]>;
   projectSessionRowsByProjectId: Record<string, Session[]>;
@@ -49,7 +49,7 @@ export type SidebarProps = {
   setArchivedChatsOpen: Dispatch<SetStateAction<boolean>>;
   setProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
-  setChatsExpanded: Dispatch<SetStateAction<boolean>>;
+  setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
   dockSessionRight: (session: Session) => void;
   openCloudHome: () => void;
@@ -60,7 +60,9 @@ export type SidebarProps = {
   startCloudProjectFromScratch: () => void;
   moveProjectToCloud: (item: SidebarProjectItem) => void;
   removeProject: (item: SidebarProjectItem) => void;
+  toggleInsightsSystemProjectVisibility: () => void;
   toggleProjectPinned: (item: SidebarProjectItem) => void;
+  toggleSystemProjectVisibility: (item: SidebarProjectItem) => void;
   toggleSessionPinned: (session: Session) => void;
   archiveSession: (session: Session) => void;
   restoreSession: (session: Session) => void;

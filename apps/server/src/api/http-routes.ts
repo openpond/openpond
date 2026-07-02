@@ -4,10 +4,21 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { HttpBodyError, applyCorsHeaders, hasAuth, sendBinary, sendJson, sendText } from "./http.js";
 import type { HttpRouteDeps } from "./http-route-types.js";
 import { AUTHENTICATED_ROUTE_TABLE } from "./routes/index.js";
-import { verifySignedWorkspaceImageRequest } from "./signed-workspace-image.js";
+import {
+  verifySignedChatAttachmentImageRequest,
+  verifySignedLocalImageRequest,
+  verifySignedWorkspaceImageRequest,
+} from "./signed-workspace-image.js";
 
 export type { HttpRouteDeps } from "./http-route-types.js";
-export { signedWorkspaceImageUrlPayload, verifySignedWorkspaceImageRequest } from "./signed-workspace-image.js";
+export {
+  signedChatAttachmentImageUrlPayload,
+  signedLocalImageUrlPayload,
+  signedWorkspaceImageUrlPayload,
+  verifySignedChatAttachmentImageRequest,
+  verifySignedLocalImageRequest,
+  verifySignedWorkspaceImageRequest,
+} from "./signed-workspace-image.js";
 
 const DEFAULT_SLOW_ROUTE_THRESHOLD_MS = 750;
 
@@ -22,6 +33,8 @@ export function createHttpRequestHandler(
     runtimeVersion,
     logger,
     slowRouteThresholdMs,
+    chatAttachmentImagePayload,
+    localImagePayload,
     workspaceImagePayload,
   } = deps;
 
@@ -90,6 +103,34 @@ export function createHttpRequestHandler(
         }
         try {
           const image = await workspaceImagePayload(signedImage.claims.appId, signedImage.claims.path);
+          sendBinary(response, 200, image.bytes, image.contentType);
+        } catch {
+          sendJson(response, 404, { error: "Image not found" });
+        }
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/v1/assets/chat-attachment-image") {
+        const signedImage = verifySignedChatAttachmentImageRequest(requestUrl, token);
+        if (!signedImage.ok) {
+          sendJson(response, signedImage.status, { error: signedImage.error });
+          return;
+        }
+        try {
+          const image = await chatAttachmentImagePayload(signedImage.claims);
+          sendBinary(response, 200, image.bytes, image.contentType);
+        } catch {
+          sendJson(response, 404, { error: "Image not found" });
+        }
+        return;
+      }
+      if (request.method === "GET" && requestUrl.pathname === "/v1/assets/local-image") {
+        const signedImage = verifySignedLocalImageRequest(requestUrl, token);
+        if (!signedImage.ok) {
+          sendJson(response, signedImage.status, { error: signedImage.error });
+          return;
+        }
+        try {
+          const image = await localImagePayload(signedImage.claims.path);
           sendBinary(response, 200, image.bytes, image.contentType);
         } catch {
           sendJson(response, 404, { error: "Image not found" });
@@ -170,6 +211,7 @@ function normalizeRoutePath(pathValue: string): string {
     [/^\/v1\/openpond\/apps\/[^/]+\/template-config$/, "/v1/openpond/apps/:appId/template-config"],
     [/^\/v1\/codex-history\/[^/]+$/, "/v1/codex-history/:sessionId"],
     [/^\/v1\/codex-history\/[^/]+\/turns$/, "/v1/codex-history/:sessionId/turns"],
+    [/^\/v1\/codex-history\/[^/]+\/turns\/interrupt$/, "/v1/codex-history/:sessionId/turns/interrupt"],
     [/^\/v1\/organizations\/[^/]+$/, "/v1/organizations/:slug"],
     [/^\/v1\/organizations\/[^/]+\/mcp-server$/, "/v1/organizations/:slug/mcp-server"],
     [/^\/v1\/organizations\/[^/]+\/members$/, "/v1/organizations/:slug/members"],

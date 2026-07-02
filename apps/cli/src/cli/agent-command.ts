@@ -72,6 +72,7 @@ export async function runAgentCommand(
       throw new Error("usage: agent run <agentId> --team-id <id>");
     }
     const idempotencyKey = optionString(options, "idempotencyKey");
+    const conversationId = optionString(options, "conversationId");
     const triggerType = parseAgentTriggerType(options.triggerType);
     const workflowMode = parseSandboxWorkflowModeOption(options.workflowMode);
     const inputObject = optionalJsonObject(options, "input", "input");
@@ -79,6 +80,7 @@ export async function runAgentCommand(
     const agentSourcePolicy = buildAgentSourcePolicy(options);
     const result = await client.agents.run(agentId, {
       teamId,
+      ...(conversationId ? { conversationId } : {}),
       ...(idempotencyKey ? { idempotencyKey } : {}),
       ...(triggerType ? { triggerType } : {}),
       ...(workflowMode ? { workflowMode } : {}),
@@ -124,11 +126,13 @@ export async function runAgentCommand(
       throw new Error("usage: agent run-test <agentId> --team-id <id>");
     }
     const idempotencyKey = optionString(options, "idempotencyKey");
+    const conversationId = optionString(options, "conversationId");
     const inputObject = optionalJsonObject(options, "input", "input");
     const metadata = optionalJsonObject(options, "metadata", "metadata");
     const workflowMode = parseSandboxWorkflowModeOption(options.workflowMode);
     const result = await client.agents.run(agentId, {
       teamId,
+      ...(conversationId ? { conversationId } : {}),
       ...(idempotencyKey ? { idempotencyKey } : {}),
       ...(workflowMode ? { workflowMode } : {}),
       ...(inputObject ? { input: inputObject } : {}),

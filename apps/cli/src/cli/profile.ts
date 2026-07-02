@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -6,6 +7,10 @@ import {
   commitActiveProfileChanges,
   defaultLocalProfileRepoPath,
   formatOpenPondProfileSetupRequirement,
+  hostedPublishStatusFromPayload,
+  hostedRunStatusFromRunSummary,
+  hostedRunSummaryFromPayload,
+  hostedSourceCheckStatusFromPayload,
   initLocalProfileRepo,
   loadLocalProfileRepo,
   loadOpenPondProfileState,
@@ -21,9 +26,16 @@ import {
   requiredTeamId,
   resolveSandboxClient,
 } from "./common";
+import {
+  collectAgentSdkProjectSourceUploadEntries,
+  collectProjectSourceUploadEntries,
+  mergeProjectSourceUploadEntries,
+} from "./project-source-upload";
+import { parseAgentSourceCheckDispatch } from "./project-agent-inputs";
 import type { OpenPondHostedProfileSummary } from "../sandbox/types/index";
 
 type CliOptions = Record<string, string | boolean>;
+type LoadedOpenPondProfileState = Awaited<ReturnType<typeof loadOpenPondProfileState>>;
 
 export async function runOpenPondInitCommand(options: CliOptions): Promise<void> {
   const state = await initLocalProfileRepo({
@@ -202,57 +214,303 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
     })),
   });
   const pushedAt = new Date().toISOString();
-  const pushStatus: LocalOpenPondProfilePushStatus = {
+  const preserveHostedPromotionEvidence =
+    state.hosted?.lastPushedLocalHead === state.git.head &&
+    state.hosted?.sourceCommitSha === result.sourceUpload.sourceCommitSha;
+  let pushStatus: LocalOpenPondProfilePushStatus = {
     status: "pushed",
-    promotionStatus: "uploaded",
-    hostedRunStatus: "not_started",
+    promotionStatus: preserveHostedPromotionEvidence
+      ? state.hosted?.promotionStatus ?? "uploaded"
+      : "uploaded",
+    hostedRunStatus: preserveHostedPromotionEvidence
+      ? (state.hosted?.hostedRunStatus as LocalOpenPondProfilePushStatus["hostedRunStatus"]) ?? "not_started"
+      : "not_started",
     pushedAt,
     teamId,
     projectId: result.profile.project.id,
     localHead: state.git.head,
     hostedHead: result.sourceUpload.sourceCommitSha,
     sourceRef: result.sourceUpload.sourceRef,
+    hostedRunAgentId: preserveHostedPromotionEvidence ? state.hosted?.hostedRunAgentId ?? null : null,
+    hostedRunId: preserveHostedPromotionEvidence ? state.hosted?.hostedRunId ?? null : null,
+    hostedRunAt: preserveHostedPromotionEvidence ? state.hosted?.hostedRunAt ?? null : null,
+    hostedSourceMaterialization: preserveHostedPromotionEvidence ? state.hosted?.hostedSourceMaterialization ?? null : null,
+    hostedSourceCheck: preserveHostedPromotionEvidence ? state.hosted?.hostedSourceCheck ?? null : null,
+    hostedPublish: preserveHostedPromotionEvidence ? state.hosted?.hostedPublish ?? null : null,
+    hostedRun: preserveHostedPromotionEvidence ? state.hosted?.hostedRun ?? null : null,
   };
   await saveProfilePushStatus(pushStatus);
 
+  const explicitHostedSourceAgentId = optionString(options, "hostedSourceAgentId");
+  const requestHostedSourceChecks = parseBooleanOption(options.hostedSourceChecks);
+  const publishHostedSource = parseBooleanOption(options.publishHostedSource);
   const hostedRunAgentId = optionString(options, "hostedRunAgentId");
+  const hostedSourceAgentId =
+    explicitHostedSourceAgentId ||
+    (requestHostedSourceChecks || publishHostedSource ? hostedRunAgentId : null);
+  let hostedRuntimeAgentId =
+    hostedSourceAgentId ??
+    resolveHostedRuntimeAgentIdForRun(state, hostedRunAgentId);
+  const hostedSourceDispatch =
+    parseAgentSourceCheckDispatch(
+      options.hostedSourceDispatch,
+      "hosted-source-dispatch"
+    ) ?? "coding_core";
+  let hostedSourceDeployPlan:
+    | Awaited<ReturnType<typeof client.agents.sourceDeployPlan>>
+    | null = null;
+  let hostedSourceChecks:
+    | Awaited<ReturnType<typeof client.agents.requestSourceChecks>>
+    | null = null;
+  let hostedSourcePublish:
+    | Awaited<ReturnType<typeof client.agents.publishSource>>
+    | null = null;
+
+  if (hostedSourceAgentId && (requestHostedSourceChecks || publishHostedSource || explicitHostedSourceAgentId)) {
+    try {
+      const hostedSourceMaterialization = await materializeHostedProfileAgentSource({
+        client,
+        teamId,
+        profileProjectId: result.profile.project.id,
+        profileName: state.activeProfile ?? manifest.defaultProfile,
+        state,
+        agentId: hostedSourceAgentId,
+        sourceRef: result.sourceUpload.sourceRef ?? state.git.branch ?? "main",
+        localHead: state.git.head,
+        hostedHead: result.sourceUpload.sourceCommitSha,
+        projectId:
+          optionString(options, "hostedSourceProjectId") ||
+          (state.hosted?.hostedSourceMaterialization?.agentId === hostedSourceAgentId
+            ? state.hosted.hostedSourceMaterialization.projectId
+            : null),
+      });
+      pushStatus = {
+        ...pushStatus,
+        promotionStatus: "hosted_source_materialized",
+        hostedSourceMaterialization,
+      };
+      hostedRuntimeAgentId = hostedSourceMaterialization.runtimeAgentId ?? hostedSourceAgentId;
+      await saveProfilePushStatus(pushStatus);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushStatus = {
+        ...pushStatus,
+        promotionStatus: "hosted_source_materialize_failed",
+        hostedSourceMaterialization: {
+          status: "failed",
+          agentId: hostedSourceAgentId,
+          projectId: optionString(options, "hostedSourceProjectId") ?? null,
+          error: message,
+        },
+        error: message,
+      };
+      await saveProfilePushStatus(pushStatus);
+      throw new Error(`Hosted source materialization failed after push: ${message}`);
+    }
+  }
+
+  if (requestHostedSourceChecks || publishHostedSource) {
+    if (!hostedSourceAgentId) {
+      throw new Error("--hosted-source-agent-id or --hosted-run-agent-id is required for hosted source checks or publish.");
+    }
+    try {
+      hostedSourceDeployPlan = await client.agents.sourceDeployPlan(hostedRuntimeAgentId, { teamId });
+      if (requestHostedSourceChecks) {
+        const sourceRef = pushStatus.hostedSourceMaterialization?.sourceRef ?? result.sourceUpload.sourceRef;
+        const baseSha = pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? result.sourceUpload.sourceCommitSha;
+        hostedSourceChecks = await client.agents.requestSourceChecks(hostedRuntimeAgentId, {
+          teamId,
+          ...(sourceRef ? { sourceRef } : {}),
+          ...(baseSha ? { baseSha } : {}),
+          checkKind: optionString(options, "hostedCheckKind") || optionString(options, "checkKind") || "all",
+          dispatch: hostedSourceDispatch,
+          metadata: {
+            source: "openpond_profile_push_checks",
+            localHead: state.git.head,
+            hostedHead: result.sourceUpload.sourceCommitSha,
+            materializedProjectId: pushStatus.hostedSourceMaterialization?.projectId ?? null,
+            materializedSourceCommitSha: pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? null,
+            sourceRef,
+            dispatch: hostedSourceDispatch,
+          },
+        });
+        if (hostedSourceChecks.dispatchResult?.status === "failed") {
+          throw new Error(hostedSourceChecks.dispatchResult.error ?? "hosted_source_check_dispatch_failed");
+        }
+        if (hostedSourceChecks.dispatchResult?.status === "completed") {
+          const refreshed = await refreshHostedSourceCheckStatus({
+            client,
+            teamId,
+            checkResult: hostedSourceChecks,
+          });
+          if (refreshed) {
+            hostedSourceChecks = refreshed as typeof hostedSourceChecks;
+          }
+          const sourceCheckStatus = record((hostedSourceChecks as Record<string, unknown>).sourceCheckStatus);
+          if (sourceCheckStatusPassed(sourceCheckStatus)) {
+            await bindValidatedHostedRuntimeSource({
+              client,
+              teamId,
+              runtimeAgentId: hostedRuntimeAgentId,
+              sourceRef,
+              sourceCommitSha: baseSha,
+              validatedAt: new Date().toISOString(),
+            });
+            hostedSourceDeployPlan = await client.agents.sourceDeployPlan(hostedRuntimeAgentId, { teamId });
+          }
+        }
+      }
+      pushStatus = {
+        ...pushStatus,
+        promotionStatus: requestHostedSourceChecks ? "hosted_source_check_pending" : pushStatus.promotionStatus,
+        hostedSourceCheck: hostedSourceCheckStatusFromPayload({
+          agentId: hostedRuntimeAgentId,
+          status: requestHostedSourceChecks ? "requested" : "deploy_plan_ready",
+          deployPlan: hostedSourceDeployPlan,
+          checkResult: hostedSourceChecks,
+        }),
+      };
+      await saveProfilePushStatus(pushStatus);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushStatus = {
+        ...pushStatus,
+        promotionStatus: "hosted_source_check_failed",
+        hostedSourceCheck: hostedSourceCheckStatusFromPayload({
+          agentId: hostedRuntimeAgentId,
+          status: "failed",
+          deployPlan: hostedSourceDeployPlan,
+          checkedAt: new Date().toISOString(),
+          error: message,
+        }),
+        error: message,
+      };
+      await saveProfilePushStatus(pushStatus);
+      throw new Error(`Hosted source check failed after push: ${message}`);
+    }
+  }
+
+  if (publishHostedSource) {
+    if (!hostedSourceAgentId) {
+      throw new Error("--hosted-source-agent-id or --hosted-run-agent-id is required for hosted source publish.");
+    }
+    try {
+      const expectedManifestHash =
+        optionString(options, "expectedManifestHash") ||
+        pushStatus.hostedSourceCheck?.manifestHash ||
+        hostedSourceDeployPlan?.source.manifestHash ||
+        undefined;
+      hostedSourcePublish = await client.agents.publishSource(hostedRuntimeAgentId, {
+        teamId,
+        ...(expectedManifestHash ? { expectedManifestHash } : {}),
+        ...(pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? result.sourceUpload.sourceCommitSha
+          ? { expectedSourceCommitSha: pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? result.sourceUpload.sourceCommitSha }
+          : {}),
+        ...(optionString(options, "workItemId") ? { workItemId: optionString(options, "workItemId") } : {}),
+      });
+      pushStatus = {
+        ...pushStatus,
+        promotionStatus: "hosted_source_published",
+        hostedPublish: hostedPublishStatusFromPayload({
+          agentId: hostedRuntimeAgentId,
+          publishResult: hostedSourcePublish,
+        }),
+      };
+      await saveProfilePushStatus(pushStatus);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushStatus = {
+        ...pushStatus,
+        promotionStatus: "hosted_source_publish_failed",
+        hostedPublish: {
+          status: "failed",
+          agentId: hostedRuntimeAgentId,
+          error: message,
+        },
+        error: message,
+      };
+      await saveProfilePushStatus(pushStatus);
+      throw new Error(`Hosted source publish failed after push: ${message}`);
+    }
+  }
+
   let hostedRun:
     | Awaited<ReturnType<typeof client.agents.run>>
     | null = null;
   if (hostedRunAgentId) {
+    const hostedRunRuntimeAgentId = hostedRuntimeAgentId || hostedRunAgentId;
     const hostedRunStartedAt = new Date().toISOString();
+    const hostedRunInput =
+      parseJsonObjectOption(options, "hostedRunInput") ??
+      { prompt: "hello", channel: "openpond_chat" };
+    const hostedRunConversationId =
+      optionString(options, "hostedRunConversationId") ||
+      optionString(options, "conversationId");
+    const hostedRunIdempotencyKey = buildHostedRunIdempotencyKey({
+      options,
+      localHead: state.git.head,
+      hostedHead: result.sourceUpload.sourceCommitSha,
+      runtimeAgentId: hostedRunRuntimeAgentId,
+      materializedSourceCommitSha: pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? null,
+      input: hostedRunInput,
+    });
     await saveProfilePushStatus({
       ...pushStatus,
       promotionStatus: "hosted_run_pending",
       hostedRunStatus: "running",
-      hostedRunAgentId,
+      hostedRunAgentId: hostedRunRuntimeAgentId,
       hostedRunAt: hostedRunStartedAt,
     });
     try {
-      hostedRun = await client.agents.run(hostedRunAgentId, {
+      hostedRun = await client.agents.run(hostedRunRuntimeAgentId, {
         teamId,
-        idempotencyKey: `profile-push-run:${state.git.head}:${hostedRunAgentId}`,
-        input:
-          parseJsonObjectOption(options, "hostedRunInput") ??
-          { prompt: "hello", channel: "openpond_chat" },
+        ...(hostedRunConversationId ? { conversationId: hostedRunConversationId } : {}),
+        idempotencyKey: hostedRunIdempotencyKey,
+        input: hostedRunInput,
         metadata: {
           source: "openpond_profile_push_run",
+          ...(hostedRunConversationId ? { conversationId: hostedRunConversationId } : {}),
           localHead: state.git.head,
           hostedHead: result.sourceUpload.sourceCommitSha,
-          sourceRef: result.sourceUpload.sourceRef,
+          hostedRunIdempotencyKey,
+          hostedRunRetry: parseBooleanOption(options.hostedRunRetry),
+          materializedProjectId: pushStatus.hostedSourceMaterialization?.projectId ?? null,
+          materializedSourceCommitSha: pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? null,
+          sourceRef: pushStatus.hostedSourceMaterialization?.sourceRef ?? result.sourceUpload.sourceRef,
+          publishedSnapshotId: pushStatus.hostedPublish?.snapshotId ?? null,
+          manifestHash:
+            pushStatus.hostedPublish?.manifestHash ??
+            pushStatus.hostedSourceCheck?.manifestHash ??
+            null,
         },
-        runtimeSourcePolicy: {
-          allowLatestSource: true,
-          source: "diagnostic",
-        },
+        runtimeSourcePolicy: publishHostedSource
+          ? {
+              requirePublishedSnapshot: true,
+              source: "diagnostic",
+            }
+          : {
+              allowLatestSource: true,
+              source: "diagnostic",
+            },
       });
+      const hostedRunSummary = hostedRunSummaryFromPayload({
+        agentId: hostedRunRuntimeAgentId,
+        runResult: hostedRun,
+      });
+      const hostedRunStatus = hostedRunStatusFromRunSummary(hostedRunSummary);
       await saveProfilePushStatus({
         ...pushStatus,
-        promotionStatus: "hosted_run_pending",
-        hostedRunStatus: "running",
-        hostedRunAgentId,
+        promotionStatus:
+          hostedRunStatus === "passed"
+            ? "hosted_run_passed"
+            : hostedRunStatus === "failed"
+              ? "hosted_run_failed"
+              : "hosted_run_pending",
+        hostedRunStatus,
+        hostedRunAgentId: hostedRunRuntimeAgentId,
         hostedRunId: hostedRun.run.id,
         hostedRunAt: hostedRun.run.createdAt ?? hostedRunStartedAt,
+        hostedRun: hostedRunSummary,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -260,8 +518,13 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
         ...pushStatus,
         promotionStatus: "hosted_run_failed",
         hostedRunStatus: "failed",
-        hostedRunAgentId,
+        hostedRunAgentId: hostedRunRuntimeAgentId,
         hostedRunAt: new Date().toISOString(),
+        hostedRun: {
+          status: "failed",
+          agentId: hostedRunRuntimeAgentId,
+          error: message,
+        },
         error: message,
       });
       throw new Error(`Hosted invocation failed to start after push: ${message}`);
@@ -269,7 +532,20 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
   }
 
   if (parseBooleanOption(options.json)) {
-    console.log(JSON.stringify({ ...result, uploaded: upload, hostedRun }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ...result,
+          uploaded: summarizeProfileSourceUpload(upload),
+          hostedSourceMaterialization: pushStatus.hostedSourceMaterialization ?? null,
+          hostedSourceChecks,
+          hostedSourcePublish,
+          hostedRun,
+        },
+        null,
+        2
+      )
+    );
     return;
   }
   console.log(`Pushed OpenPond profile ${state.activeProfile ?? "default"} to hosted profile repo.`);
@@ -285,7 +561,397 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
       ? `Hosted invocation: running ${hostedRun.run.id}`
       : "Hosted invocation: not started"
   );
+  if (pushStatus.hostedSourceMaterialization) {
+    console.log(
+      `Hosted materialized: ${pushStatus.hostedSourceMaterialization.status}` +
+        (pushStatus.hostedSourceMaterialization.projectId ? ` ${pushStatus.hostedSourceMaterialization.projectId}` : "") +
+        (pushStatus.hostedSourceMaterialization.sourceCommitSha ? ` ${pushStatus.hostedSourceMaterialization.sourceCommitSha}` : "")
+    );
+  }
+  if (pushStatus.hostedSourceCheck) {
+    console.log(
+      `Hosted source checks: ${pushStatus.hostedSourceCheck.status}` +
+        (pushStatus.hostedSourceCheck.workItemId ? ` ${pushStatus.hostedSourceCheck.workItemId}` : "")
+    );
+  }
+  if (pushStatus.hostedPublish) {
+    console.log(
+      `Hosted publish: ${pushStatus.hostedPublish.status}` +
+        (pushStatus.hostedPublish.snapshotId ? ` ${pushStatus.hostedPublish.snapshotId}` : "")
+    );
+  }
   console.log(`Uploaded files: ${upload.fileCount}`);
+}
+
+function summarizeProfileSourceUpload(upload: Awaited<ReturnType<typeof collectProfileSourceUploadEntries>>) {
+  return {
+    fileCount: upload.fileCount,
+    totalBytes: upload.totalBytes,
+    limits: upload.limits,
+    transport: upload.transport,
+  };
+}
+
+async function materializeHostedProfileAgentSource(input: {
+  client: Awaited<ReturnType<typeof resolveSandboxClient>>;
+  teamId: string;
+  profileProjectId: string;
+  profileName: string;
+  state: LoadedOpenPondProfileState;
+  agentId: string;
+  sourceRef: string;
+  localHead: string | null;
+  hostedHead: string | null;
+  projectId?: string | null;
+}): Promise<NonNullable<LocalOpenPondProfilePushStatus["hostedSourceMaterialization"]>> {
+  if (!input.state.sourcePath) {
+    throw new Error("Active OpenPond profile is missing a source path.");
+  }
+  const agent = input.state.agents.find((candidate) => candidate.id === input.agentId);
+  if (!agent) {
+    throw new Error(`Profile agent not found for hosted materialization: ${input.agentId}`);
+  }
+
+  const sourceRoot = resolveProfileAgentSourceRoot(input.state.sourcePath, agent.path);
+  const collected = await collectProjectSourceUploadEntries(sourceRoot);
+  const agentSdk = await collectAgentSdkProjectSourceUploadEntries(sourceRoot, collected.entries);
+  const upload = mergeProjectSourceUploadEntries(collected, agentSdk.entries);
+
+  const materializationProject = await getOrCreateHostedSourceProject({
+    client: input.client,
+    teamId: input.teamId,
+    projectId: input.projectId ?? null,
+    profileProjectId: input.profileProjectId,
+    profileName: input.profileName,
+    agentId: input.agentId,
+    localHead: input.localHead,
+    hostedHead: input.hostedHead,
+  });
+  const uploadedProject = await input.client.projects.uploadSource(materializationProject.id, {
+    teamId: input.teamId,
+    entries: upload.entries,
+    branch: input.sourceRef,
+    commitMessage: `Materialize OpenPond profile agent ${input.agentId}`,
+  });
+  const syncedProject = await input.client.projects.sync(uploadedProject.id, {
+    teamId: input.teamId,
+  });
+  const sourceCommitSha =
+    sandboxProjectSourceCommitSha(syncedProject) ??
+    sandboxProjectSourceCommitSha(uploadedProject);
+  const sourceRef =
+    sandboxProjectSourceRef(syncedProject) ??
+    sandboxProjectSourceRef(uploadedProject) ??
+    input.sourceRef;
+  const selectedEntrypoint = hostedEntrypointForProfileAgent(input.state, input.agentId);
+  const runtimeAgent = await input.client.agents.upsert({
+    teamId: input.teamId,
+    projectId: syncedProject.id,
+    name: agent.name || input.agentId,
+    slug: hostedRuntimeAgentSlug(input.profileName, input.agentId),
+    selectedEntrypoint,
+    triggerType: "manual",
+    runtimeSource: {
+      mode: "latest_source",
+      ...(sourceRef ? { sourceRef } : {}),
+      ...(sourceCommitSha ? { sourceCommitSha } : {}),
+    },
+    metadata: {
+      source: "openpond_profile_agent_materialization",
+      profileProjectId: input.profileProjectId,
+      profileName: input.profileName,
+      profileAgentId: input.agentId,
+      profileSourcePath: agent.path,
+      localHead: input.localHead,
+      hostedHead: input.hostedHead,
+    },
+    externalId: `openpond-profile-agent:${input.profileProjectId}:${input.profileName}:${input.agentId}`,
+  });
+
+  const uploadMetadata = record(agentSdk.uploadMetadata);
+  const commands = record(uploadMetadata?.commands);
+  const dependencySetup = record(uploadMetadata?.dependencySetup);
+  const setupCommands = stringArray(dependencySetup?.commands);
+  const validationCommands = [
+    text(commands?.validate),
+    text(commands?.eval),
+  ].filter((command): command is string => Boolean(command));
+
+  return {
+    status: "uploaded",
+    agentId: input.agentId,
+    runtimeAgentId: runtimeAgent.id,
+    projectId: syncedProject.id,
+    sourceRoot,
+    sourceRef,
+    sourceCommitSha: sourceCommitSha ?? null,
+    manifestHash: syncedProject.sandboxManifestHash ?? null,
+    manifestPath: syncedProject.sandboxManifestPath ?? null,
+    manifestSyncedAt: syncedProject.sandboxManifestSyncedAt ?? null,
+    fileCount: upload.fileCount,
+    totalBytes: upload.totalBytes,
+    generatedManifestPath: agentSdk.generatedManifestPath,
+    synthesizedOpenPondYaml: agentSdk.synthesizedOpenPondYaml,
+    uploadMetadataPath: agentSdk.uploadMetadataPath,
+    setupCommands,
+    validationCommands,
+    materializedAt: new Date().toISOString(),
+  };
+}
+
+async function getOrCreateHostedSourceProject(input: {
+  client: Awaited<ReturnType<typeof resolveSandboxClient>>;
+  teamId: string;
+  projectId: string | null;
+  profileProjectId: string;
+  profileName: string;
+  agentId: string;
+  localHead: string | null;
+  hostedHead: string | null;
+}) {
+  if (input.projectId) {
+    try {
+      return await input.client.projects.get(input.projectId, {
+        teamId: input.teamId,
+      });
+    } catch {
+      // Fall through to upsert when a previously recorded materialization project was deleted.
+    }
+  }
+  return input.client.projects.upsert({
+    teamId: input.teamId,
+    name: `OpenPond profile ${input.profileName} ${input.agentId}`,
+    sourceType: "manual",
+    externalId: `openpond-profile:${input.profileProjectId}:${input.profileName}:${input.agentId}`,
+    description: `Materialized OpenPond profile agent ${input.agentId} for hosted sandbox checks.`,
+    metadata: {
+      source: "openpond_profile_agent_materialization",
+      profileProjectId: input.profileProjectId,
+      profileName: input.profileName,
+      profileAgentId: input.agentId,
+      localHead: input.localHead,
+      hostedHead: input.hostedHead,
+    },
+  });
+}
+
+function resolveProfileAgentSourceRoot(sourcePath: string, agentPath: string): string {
+  const normalized = agentPath.replace(/\\/g, "/");
+  const absolute = path.resolve(sourcePath, normalized);
+  const relative = path.relative(sourcePath, absolute);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Profile agent path escapes profile source: ${agentPath}`);
+  }
+  return normalized === "agent/agent.ts" || normalized.endsWith("/agent.ts")
+    ? sourcePath
+    : absolute;
+}
+
+function hostedEntrypointForProfileAgent(
+  state: LoadedOpenPondProfileState,
+  agentId: string
+) {
+  const action =
+    state.actionCatalog.find(
+      (candidate) =>
+        candidate.agentId === agentId &&
+        (candidate.sourceActionId === "chat" || candidate.name === "chat")
+    ) ??
+    state.actionCatalog.find((candidate) => candidate.agentId === agentId);
+  return {
+    scope: "action" as const,
+    name:
+      (typeof action?.sourceActionId === "string" && action.sourceActionId) ||
+      (typeof action?.name === "string" && action.name) ||
+      "chat",
+  };
+}
+
+function hostedRuntimeAgentSlug(profileName: string, agentId: string): string {
+  const slug = `openpond-profile-${profileName}-${agentId}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "openpond-profile-agent";
+}
+
+function sandboxProjectSourceCommitSha(project: unknown): string | null {
+  const item = record(project);
+  const sourceConfig = record(item?.sourceConfig);
+  const metadata = record(item?.metadata);
+  return (
+    text(sourceConfig?.sourceCommitSha) ??
+    text(sourceConfig?.commitSha) ??
+    text(sourceConfig?.remoteSha) ??
+    text(metadata?.projectSourceUploadCommitSha) ??
+    text(metadata?.sourceCommitSha) ??
+    text(item?.templateRemoteSha)
+  );
+}
+
+function sandboxProjectSourceRef(project: unknown): string | null {
+  const item = record(project);
+  const sourceConfig = record(item?.sourceConfig);
+  return (
+    text(sourceConfig?.sourceRef) ??
+    text(sourceConfig?.branch) ??
+    text(item?.gitBranch) ??
+    text(item?.defaultBranch)
+  );
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function resolveHostedRuntimeAgentIdForRun(
+  state: LoadedOpenPondProfileState,
+  hostedRunAgentId: string | null
+): string | null {
+  if (!hostedRunAgentId) return null;
+  const materialization = state.hosted?.hostedSourceMaterialization;
+  if (
+    materialization?.agentId === hostedRunAgentId &&
+    materialization.runtimeAgentId
+  ) {
+    return materialization.runtimeAgentId;
+  }
+  return hostedRunAgentId;
+}
+
+async function refreshHostedSourceCheckStatus(input: {
+  client: Awaited<ReturnType<typeof resolveSandboxClient>>;
+  teamId: string;
+  checkResult: Awaited<ReturnType<Awaited<ReturnType<typeof resolveSandboxClient>>["agents"]["requestSourceChecks"]>>;
+}): Promise<Record<string, unknown> | null> {
+  const workItemId = text(record(input.checkResult.workItem)?.id);
+  if (!workItemId) return null;
+  const status = await input.client.workItems.status(workItemId, {
+    teamId: input.teamId,
+    includeArchived: true,
+    limit: 50,
+  });
+  return {
+    ...input.checkResult,
+    workItem: status.workItem,
+    activity: status.activity,
+    sourceCheckStatus: status.sourceCheckStatus,
+  };
+}
+
+async function bindValidatedHostedRuntimeSource(input: {
+  client: Awaited<ReturnType<typeof resolveSandboxClient>>;
+  teamId: string;
+  runtimeAgentId: string;
+  sourceRef: string | null;
+  sourceCommitSha: string | null;
+  validatedAt: string;
+}): Promise<void> {
+  if (!input.sourceRef || !input.sourceCommitSha) return;
+  await input.client.agents.update(input.runtimeAgentId, {
+    teamId: input.teamId,
+    runtimeSource: {
+      mode: "latest_source",
+      sourceRef: input.sourceRef,
+      sourceCommitSha: input.sourceCommitSha,
+      buildStatus: "succeeded",
+      validationStatus: "passed",
+      validatedAt: input.validatedAt,
+    },
+  });
+}
+
+function sourceCheckStatusPassed(status: Record<string, unknown> | null): boolean {
+  if (!status) return false;
+  const finalResultState = text(status.finalResultState)?.toLowerCase();
+  if (
+    finalResultState &&
+    finalResultState !== "completed" &&
+    !passingStatus(finalResultState)
+  ) {
+    return false;
+  }
+
+  const checkRuns = Array.isArray(status.checkRuns)
+    ? status.checkRuns.map(record).filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+  if (checkRuns.some(checkRunFailed)) return false;
+
+  const buildPassed = checkRuns.some(
+    (run) => checkRunCommand(run).includes("build") && checkEvidencePassed(run)
+  );
+  const validationPassed =
+    checkEvidencePassed(record(status.validation)) ||
+    checkRuns.some(
+      (run) => checkRunCommand(run).includes("validate") && checkEvidencePassed(run)
+    );
+  const evalEvidence = record(status.eval);
+  const evalRequired =
+    (text(status.requestedCheckKind) ?? "all") === "all" ||
+    (text(status.requestedCheckKind) ?? "") === "eval" ||
+    Boolean(evalEvidence) ||
+    checkRuns.some((run) => checkRunCommand(run).includes("eval"));
+  const evalPassed =
+    !evalRequired ||
+    checkEvidencePassed(evalEvidence) ||
+    checkRuns.some(
+      (run) => checkRunCommand(run).includes("eval") && checkEvidencePassed(run)
+    );
+
+  return buildPassed && validationPassed && evalPassed;
+}
+
+function checkRunCommand(run: Record<string, unknown>): string {
+  return (text(run.command) ?? "").toLowerCase();
+}
+
+function checkRunFailed(run: Record<string, unknown>): boolean {
+  const passed = run.passed;
+  if (typeof passed === "boolean") return !passed;
+  const exitCode = run.exitCode;
+  if (typeof exitCode === "number" && exitCode !== 0) return true;
+  const status = text(run.status)?.toLowerCase();
+  return Boolean(status && failingStatus(status));
+}
+
+function checkEvidencePassed(evidence: Record<string, unknown> | null): boolean {
+  if (!evidence) return false;
+  if (typeof evidence.passed === "boolean") return evidence.passed;
+  const failed = numericEvidence(evidence.failed) ?? numericEvidence(evidence.failedCount);
+  if (failed !== null && failed > 0) return false;
+  const exitCode = evidence.exitCode;
+  if (typeof exitCode === "number") return exitCode === 0;
+  const status = text(evidence.status)?.toLowerCase();
+  return Boolean(status && passingStatus(status));
+}
+
+function numericEvidence(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function passingStatus(status: string): boolean {
+  return status === "passed" || status === "succeeded" || status === "success";
+}
+
+function failingStatus(status: string): boolean {
+  return status === "failed" || status === "failure" || status === "cancelled";
 }
 
 async function runHostedProfileStatusCommand(options: CliOptions): Promise<void> {
@@ -379,6 +1045,33 @@ function printProfileState(state: Awaited<ReturnType<typeof loadOpenPondProfileS
   }
   if (state.hosted?.projectId || state.hosted?.sourceCommitSha) {
     console.log(`Hosted: ${state.hosted.projectId ?? "unbound"} ${state.hosted.sourceCommitSha ?? "no-source-head"}`);
+    if (state.hosted.hostedSourceMaterialization) {
+      console.log(
+        `Hosted materialized: ${state.hosted.hostedSourceMaterialization.status}` +
+          (state.hosted.hostedSourceMaterialization.agentId ? ` ${state.hosted.hostedSourceMaterialization.agentId}` : "") +
+          (state.hosted.hostedSourceMaterialization.sourceCommitSha ? ` ${state.hosted.hostedSourceMaterialization.sourceCommitSha}` : "")
+      );
+    }
+    if (state.hosted.hostedSourceCheck) {
+      console.log(
+        `Hosted checks: ${state.hosted.hostedSourceCheck.status}` +
+          (state.hosted.hostedSourceCheck.workItemId ? ` ${state.hosted.hostedSourceCheck.workItemId}` : "") +
+          (state.hosted.hostedSourceCheck.sandboxId ? ` sandbox ${state.hosted.hostedSourceCheck.sandboxId}` : "")
+      );
+    }
+    if (state.hosted.hostedPublish) {
+      console.log(
+        `Hosted publish: ${state.hosted.hostedPublish.status}` +
+          (state.hosted.hostedPublish.snapshotId ? ` ${state.hosted.hostedPublish.snapshotId}` : "")
+      );
+    }
+    if (state.hosted.hostedRun) {
+      console.log(
+        `Hosted run: ${state.hosted.hostedRun.status}` +
+          (state.hosted.hostedRun.runId ? ` ${state.hosted.hostedRun.runId}` : "") +
+          (state.hosted.hostedRun.runtimeId ? ` runtime ${state.hosted.hostedRun.runtimeId}` : "")
+      );
+    }
   }
   console.log(`Catalog: ${state.catalog.actionCount} action(s)${state.catalog.stale ? " stale" : ""}`);
   console.log(
@@ -535,4 +1228,38 @@ function parseJsonObjectOption(
     throw new Error(`--${key} must be a JSON object`);
   }
   return parsed as Record<string, unknown>;
+}
+
+function buildHostedRunIdempotencyKey(input: {
+  options: CliOptions;
+  localHead: string;
+  hostedHead?: string | null;
+  runtimeAgentId: string;
+  materializedSourceCommitSha?: string | null;
+  input: Record<string, unknown>;
+}): string {
+  const explicit = optionString(input.options, "hostedRunIdempotencyKey");
+  if (explicit) return explicit;
+  const sourceHead = input.materializedSourceCommitSha || input.hostedHead || "unknown-source";
+  const inputHash = hashStableJson(input.input).slice(0, 16);
+  const base = `profile-push-run:${input.localHead}:${sourceHead}:${input.runtimeAgentId}:${inputHash}`;
+  return parseBooleanOption(input.options.hostedRunRetry)
+    ? `${base}:retry:${randomUUID()}`
+    : base;
+}
+
+function hashStableJson(value: unknown): string {
+  return createHash("sha256").update(stableJsonStringify(value)).digest("hex");
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  }
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
+    .join(",")}}`;
 }

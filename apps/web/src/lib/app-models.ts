@@ -32,6 +32,7 @@ export type AppView =
   | "apps"
   | "cloud"
   | "get-started"
+  | "insights"
   | "profile"
   | "settings";
 export type SettingsSection =
@@ -93,6 +94,35 @@ export type ActionRunSummary = {
   childCalls: ActionRunChildCall[];
 };
 
+export type InsightsRunPromptEvidenceItem = {
+  evidenceSource: string;
+  evidenceKey: string;
+  fingerprint: string | null;
+  severity: string | null;
+  type: string | null;
+  title: string | null;
+  summary: string | null;
+  sourceSessionId: string | null;
+  sourceTurnId: string | null;
+  createPipelineState: string | null;
+  sourceEventSequence: number | null;
+};
+
+export type InsightsRunPromptSummary = {
+  runId: string | null;
+  trigger: string | null;
+  status: string | null;
+  evidenceSources: string[];
+  eventCount: number | null;
+  afterSequence: number | null;
+  latestSequence: number | null;
+  findingCount: number | null;
+  promptLength: number;
+  totalEvidenceCount: number;
+  truncated: boolean;
+  items: InsightsRunPromptEvidenceItem[];
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "activity_group" | "error" | "status_divider";
@@ -106,12 +136,14 @@ export type ChatMessage = {
   statusState?: "running" | "completed" | "failed";
   statusTone?: "info" | "success" | "danger";
   actionRun?: ActionRunSummary;
+  insightsRunPrompt?: InsightsRunPromptSummary;
   createPipelineRequest?: CreatePipelineRequest | null;
   createPipeline?: CreatePipelineSnapshot | null;
   createPipelineDebugActivities?: ActivityItem[];
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;
+export const SIDEBAR_CHAT_PAGE_SIZE = 10;
 
 export type DropdownOption = {
   value: string;
@@ -125,6 +157,16 @@ export type DropdownOption = {
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   defaultChatProvider: DEFAULT_CHAT_PROVIDER,
   defaultChatModel: DEFAULT_OPENPOND_CHAT_MODEL,
+  insightsEnabled: true,
+  insightsModelRef: null,
+  insightsEvidenceSources: {
+    createEdit: true,
+    stuckTurns: true,
+    toolFailures: true,
+    abandonedGoals: true,
+    userCorrections: true,
+    unresolvedConversations: true,
+  },
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   defaultBranchPrefix: "feat/",
@@ -505,6 +547,12 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
   return {
     defaultChatProvider: provider,
     defaultChatModel: normalizeChatModel(provider, preferences?.defaultChatModel),
+    insightsEnabled: preferences?.insightsEnabled ?? DEFAULT_APP_PREFERENCES.insightsEnabled,
+    insightsModelRef: preferences?.insightsModelRef ?? DEFAULT_APP_PREFERENCES.insightsModelRef,
+    insightsEvidenceSources: {
+      ...DEFAULT_APP_PREFERENCES.insightsEvidenceSources,
+      ...(preferences?.insightsEvidenceSources ?? {}),
+    },
     codexPermissionMode:
       preferences?.codexPermissionMode ?? DEFAULT_APP_PREFERENCES.codexPermissionMode,
     codexReasoningEffort:

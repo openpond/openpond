@@ -111,6 +111,9 @@ export type SandboxAgentSourceCheckKind =
   | "eval"
   | "publish_review"
   | "all";
+export type SandboxAgentSourceCheckDispatchMode =
+  | "request_only"
+  | "coding_core";
 export type SandboxAgentSourceProjectionStatus =
   | "missing_manifest"
   | "manifest_error"
@@ -249,6 +252,7 @@ export type SandboxAgentRun = {
   projectId: string;
   agentId: string;
   requestedByUserId: string;
+  conversationId: string | null;
   idempotencyKey: string | null;
   triggerType: SandboxAgentTriggerType;
   status: SandboxAgentRunStatus;
@@ -400,6 +404,7 @@ export type SandboxAgentSourceChecksRequestInput = {
   sourceRef?: string | null;
   baseSha?: string | null;
   checkKind?: SandboxAgentSourceCheckKind;
+  dispatch?: SandboxAgentSourceCheckDispatchMode;
   metadata?: Record<string, unknown>;
 };
 
@@ -523,6 +528,11 @@ export type SandboxAgentSourceChecksRequestResult = {
   createdEditWorkItem: boolean;
   activity: SandboxCodingWorkItemActivity;
   deployPlan: SandboxAgentSourceDeployPlan | null;
+  dispatchResult?: {
+    status: "not_requested" | "completed" | "failed";
+    taskRun: Record<string, unknown> | null;
+    error: string | null;
+  };
 };
 
 export type SandboxAgentSourcePublishInput = {
@@ -632,6 +642,7 @@ export type SandboxAgentUpdateInput = { teamId: string } & Partial<
 
 export type SandboxAgentRunInput = {
   teamId: string;
+  conversationId?: string | null;
   idempotencyKey?: string | null;
   triggerType?: SandboxAgentTriggerType;
   input?: Record<string, unknown>;

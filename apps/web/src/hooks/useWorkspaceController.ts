@@ -13,6 +13,7 @@ type UseWorkspaceControllerInput = {
   connection: ClientConnection | null;
   activeWorkspaceAppId: string | null | undefined;
   view: AppView;
+  shouldLoadWorkspaceDiff: boolean;
   sidebarWorkspaceAppIds: string[];
   setError: Dispatch<SetStateAction<string | null>>;
 };
@@ -25,6 +26,7 @@ export function useWorkspaceController({
   connection,
   activeWorkspaceAppId,
   view,
+  shouldLoadWorkspaceDiff,
   sidebarWorkspaceAppIds,
   setError,
 }: UseWorkspaceControllerInput) {
@@ -132,8 +134,7 @@ export function useWorkspaceController({
       .then((state) => {
         if (cancelled) return;
         rememberWorkspaceState(state);
-        if (state.initialized) void refreshWorkspaceDiff(activeWorkspaceAppId);
-        else setWorkspaceDiff(null);
+        if (!state.initialized) setWorkspaceDiff(null);
       })
       .catch((workspaceError) => {
         if (isAbortError(workspaceError)) return;
@@ -149,11 +150,21 @@ export function useWorkspaceController({
       cancelled = true;
       statusRequest.release();
     };
-  }, [activeWorkspaceAppId, connection, refreshWorkspaceDiff, rememberWorkspaceState, setError, view]);
+  }, [
+    activeWorkspaceAppId,
+    connection,
+    rememberWorkspaceState,
+    setError,
+    view,
+  ]);
 
   useEffect(() => {
     if (!connection || !activeWorkspaceAppId || !visibleWorkspaceState?.initialized || view !== "chat") {
       setWorkspaceDiff(null);
+      return;
+    }
+    if (!shouldLoadWorkspaceDiff) {
+      setWorkspaceDiff((current) => (current?.appId === activeWorkspaceAppId ? null : current));
       return;
     }
     void refreshWorkspaceDiff(activeWorkspaceAppId);
@@ -161,6 +172,7 @@ export function useWorkspaceController({
     activeWorkspaceAppId,
     connection,
     refreshWorkspaceDiff,
+    shouldLoadWorkspaceDiff,
     view,
     visibleWorkspaceState?.dirty,
     visibleWorkspaceState?.initialized,

@@ -39,7 +39,7 @@ export function userAuthIdentity(account: AccountState | null): UserAuthIdentity
       )
     : account?.state === "loading" || account?.state === "switching"
       ? "Loading account"
-      : "Add account";
+      : "Sign in";
 
   return {
     label: label ?? "Account",

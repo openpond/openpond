@@ -16,6 +16,14 @@ export type WorkspaceImagePayload = {
   sizeBytes: number;
 };
 
+export type ChatAttachmentImagePayloadRequest = {
+  sessionId: string;
+  turnId: string;
+  attachmentId: string;
+  storageName: string;
+  contentType: string;
+};
+
 export type HttpRouteDeps = {
   host: string;
   getActualPort: () => number;
@@ -28,11 +36,16 @@ export type HttpRouteDeps = {
   refreshCodexStatus: () => Promise<unknown>;
   bootstrapPayload: (options?: { forceOpenPond?: boolean; ensureProfile?: boolean }) => Promise<BootstrapPayload>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
+  listInsightsPayload: (requestUrl: URL) => Promise<unknown>;
+  runInsightsScanPayload: (requestUrl?: URL) => Promise<unknown>;
+  askInsightsPayload: (payload: unknown) => Promise<unknown>;
+  patchInsightPayload: (insightId: string, payload: unknown) => Promise<unknown>;
   loadMoreOpenPondAppsPayload: (requestUrl: URL) => Promise<unknown>;
   workspaceTemplateConfigPayload: (appId: string) => Promise<unknown>;
   refreshOpenPondPayload: () => Promise<unknown>;
   codexHistoryThreadPayload: (sessionId: string, requestUrl?: URL) => Promise<unknown>;
   sendCodexHistoryTurnPayload: (sessionId: string, payload: unknown) => Promise<unknown>;
+  interruptCodexHistoryTurnPayload: (sessionId: string) => Promise<unknown>;
   switchOpenPondPayload: (payload: unknown) => Promise<unknown>;
   saveOpenPondAccountPayload: (payload: unknown) => Promise<unknown>;
   profileCurrentPayload: () => Promise<unknown>;
@@ -62,6 +75,8 @@ export type HttpRouteDeps = {
   workspaceFilePayload: (appId: string, filePath: string | null) => Promise<unknown>;
   saveWorkspaceFilePayload: (appId: string, payload: unknown) => Promise<unknown>;
   workspaceImagePayload: (appId: string, filePath: string | null) => Promise<WorkspaceImagePayload>;
+  localImagePayload: (filePath: string) => Promise<WorkspaceImagePayload>;
+  chatAttachmentImagePayload: (input: ChatAttachmentImagePayloadRequest) => Promise<WorkspaceImagePayload>;
   workspaceLspTouchPayload: (appId: string, payload: unknown) => Promise<unknown>;
   workspaceLspActionPayload: (appId: string, payload: unknown) => Promise<unknown>;
   workspaceLspSettingsStatusPayload: () => Promise<unknown>;

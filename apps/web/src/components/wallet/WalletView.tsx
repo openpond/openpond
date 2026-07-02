@@ -12,7 +12,10 @@ export function WalletView({
   const profile = account?.profile ?? null;
   const products = account?.products ?? [];
   const assetRows = account?.balance?.breakdown ?? [];
-  const accountLabel = account?.label ?? account?.activeProfile?.handle ?? "Signed out";
+  const accountLabel =
+    account?.state === "signed_in"
+      ? (account?.label ?? account?.activeProfile?.handle ?? "OpenPond account")
+      : "Not signed in";
   const operatingWalletAddress = profile?.turnkeyOperatingWalletAddress ?? null;
   const productSummary = products.length > 0 ? products.map((product) => product.name).join(", ") : "None";
   const walletRows = [

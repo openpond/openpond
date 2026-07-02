@@ -14,6 +14,10 @@ import {
   OpenPondProfileSetupRequiredError,
   assertOpenPondProfileActionReady,
   buildOpenPondProfileSetupGate,
+  hostedPublishStatusFromPayload,
+  hostedRunStatusFromRunSummary,
+  hostedRunSummaryFromPayload,
+  hostedSourceCheckStatusFromPayload,
   initLocalProfileRepo,
   loadLocalProfileRepo,
   mergeActiveLocalProfileConfig,
@@ -77,6 +81,69 @@ describe("local profile control invariants", () => {
       hostedRunAgentId: "agent_123",
       hostedRunId: "run_123",
       hostedRunAt: "2026-06-28T18:14:28.572Z",
+      hostedSourceMaterialization: {
+        status: "uploaded",
+        agentId: "agent_123",
+        projectId: "project_123",
+        sourceRoot: "/workspace/profile-repo/profiles/default/agents/agent_123",
+        sourceRef: "main",
+        sourceCommitSha: "source_sha_123",
+        manifestHash: "manifest_hash_123",
+        manifestPath: "openpond.yaml",
+        manifestSyncedAt: "2026-06-28T18:14:00.572Z",
+        fileCount: 12,
+        totalBytes: 3456,
+        generatedManifestPath: ".openpond/openpond-manifest.preview.yaml",
+        synthesizedOpenPondYaml: true,
+        uploadMetadataPath: ".openpond/source-upload-metadata.json",
+        setupCommands: ["bun install"],
+        validationCommands: ["openpond-agent validate"],
+        materializedAt: "2026-06-28T18:14:01.572Z",
+      },
+      hostedSourceCheck: {
+        status: "requested",
+        agentId: "agent_123",
+        workItemId: "work_item_123",
+        deployPlanStatus: "ready",
+        canRun: true,
+        canDeploy: true,
+        sourceRef: "main",
+        sourceCommitSha: "5287f494a394f2d3e265382cafb7b8b10d7d4b05",
+        manifestHash: "manifest_hash_123",
+        setupCommands: ["bun install"],
+        validationCommands: ["openpond-agent validate"],
+        requiredChecks: ["openpond-agent validate"],
+        evalNames: ["support-items"],
+        blockedReasons: [],
+        staleReasons: [],
+        runtimeId: "runtime_123",
+        sandboxId: "sandbox_123",
+      },
+      hostedPublish: {
+        status: "published",
+        agentId: "agent_123",
+        snapshotId: "snapshot_123",
+        sourceRef: "main",
+        sourceCommitSha: "5287f494a394f2d3e265382cafb7b8b10d7d4b05",
+        manifestHash: "manifest_hash_123",
+        buildStatus: "passed",
+        validationStatus: "passed",
+        evalStatus: "passed",
+        publishedAt: "2026-06-28T18:14:20.572Z",
+      },
+      hostedRun: {
+        status: "running",
+        agentId: "agent_123",
+        runId: "run_123",
+        runtimeId: "runtime_123",
+        sandboxId: "sandbox_123",
+        sourceRef: "main",
+        sourceCommitSha: "5287f494a394f2d3e265382cafb7b8b10d7d4b05",
+        manifestHash: "manifest_hash_123",
+        setupGateStatus: "ready",
+        setupRequirementRefs: ["action_catalog:agent_123.chat:integration:fixtures"],
+        traceArtifactRefs: ["artifacts/trace.jsonl"],
+      },
     };
 
     expect(
@@ -121,6 +188,107 @@ describe("local profile control invariants", () => {
       profile: "support",
       mode: "local",
     });
+  });
+
+  test("extracts hosted promotion evidence from source check, publish, and run payloads", () => {
+    const sourceCheck = hostedSourceCheckStatusFromPayload({
+      agentId: "agent_123",
+      status: "requested",
+      checkResult: {
+        workItem: { id: "work_item_123" },
+        deployPlan: {
+          status: "ready",
+          canRun: true,
+          canDeploy: true,
+          blockedReasons: [],
+          staleReasons: [],
+          source: {
+            sourceRef: "main",
+            sourceCommitSha: "sha_123",
+            manifestHash: "manifest_hash_123",
+            manifestPath: "openpond.yaml",
+          },
+          checks: {
+            setupCommands: ["bun install"],
+            validationCommands: ["openpond-agent validate"],
+            requiredChecks: ["openpond-agent validate"],
+            evalNames: ["support-items"],
+          },
+        },
+        sourceCheckStatus: {
+          latestRuntimeId: "runtime_123",
+          latestSandboxId: "sandbox_123",
+          traceArtifactRefs: ["artifacts/trace.jsonl"],
+        },
+      },
+    });
+    const publish = hostedPublishStatusFromPayload({
+      agentId: "agent_123",
+      publishResult: {
+        activeManifestSnapshot: {
+          id: "snapshot_123",
+          sourceRef: "main",
+          sourceCommitSha: "sha_123",
+          manifestHash: "manifest_hash_123",
+          manifestPath: "openpond.yaml",
+          buildStatus: "passed",
+          validationStatus: "passed",
+          evalStatus: "passed",
+        },
+        publishedAt: "2026-07-02T12:00:00.000Z",
+      },
+    });
+    const run = hostedRunSummaryFromPayload({
+      agentId: "agent_123",
+      runResult: {
+        run: {
+          id: "run_123",
+          agentId: "agent_123",
+          status: "succeeded",
+          runtimeId: "runtime_123",
+          sandboxId: "sandbox_123",
+          runtimeSource: {
+            sourceRef: "main",
+            sourceCommitSha: "sha_123",
+          },
+          metadata: {
+            sourceSummary: { manifestHash: "manifest_hash_123" },
+            setupGate: {
+              status: "ready",
+              requirements: [{ ref: "setup:fixtures" }],
+            },
+            traceSummary: { artifactRefs: ["artifacts/trace.jsonl"] },
+            evalSummary: { artifactRefs: ["artifacts/eval.json"] },
+          },
+          createdAt: "2026-07-02T12:01:00.000Z",
+          completedAt: "2026-07-02T12:02:00.000Z",
+        },
+      },
+    });
+
+    expect(sourceCheck).toMatchObject({
+      status: "requested",
+      workItemId: "work_item_123",
+      manifestHash: "manifest_hash_123",
+      setupCommands: ["bun install"],
+      runtimeId: "runtime_123",
+      sandboxId: "sandbox_123",
+    });
+    expect(publish).toMatchObject({
+      status: "published",
+      snapshotId: "snapshot_123",
+      validationStatus: "passed",
+    });
+    expect(run).toMatchObject({
+      status: "succeeded",
+      runId: "run_123",
+      runtimeId: "runtime_123",
+      sandboxId: "sandbox_123",
+      manifestHash: "manifest_hash_123",
+      setupGateStatus: "ready",
+      setupRequirementRefs: ["setup:fixtures"],
+    });
+    expect(hostedRunStatusFromRunSummary(run)).toBe("passed");
   });
 
   test("profile setup gate blocks required unresolved action setup", () => {

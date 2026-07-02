@@ -60,7 +60,13 @@ export function SettingsView({
     preferences,
     providers: payload?.providers ?? null,
   });
-  const defaultsSettings = useDefaultsSettings({ connection, onError, onPayload, preferences });
+  const defaultsSettings = useDefaultsSettings({
+    connection,
+    onError,
+    onPayload,
+    preferences,
+    providers: payload?.providers ?? null,
+  });
   const editorSettings = useEditorSettings({
     connection,
     enabled: section === "editor",
@@ -112,7 +118,11 @@ export function SettingsView({
             {...providerSettings}
           />
         ) : section === "defaults" ? (
-          <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
+          <DefaultsSettingsSection
+            preferences={preferences}
+            providers={payload?.providers ?? null}
+            {...defaultsSettings}
+          />
         ) : section === "editor" ? (
           <EditorSettingsSection preferences={preferences} {...editorSettings} />
         ) : section === "remote" ? (

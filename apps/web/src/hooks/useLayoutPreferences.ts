@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { normalizePreferences } from "../lib/app-models";
 import { DEFAULT_DIFF_PANEL_WIDTH, DEFAULT_SIDEBAR_WIDTH, clampDiffPanelWidth, clampSidebarWidth } from "../lib/layout";
+import {
+  mergeSidebarSectionsCollapsedPreservingRecentLocal,
+  recordSidebarSectionPreferenceChanges,
+  type SidebarSectionPreferenceChangeTimes,
+} from "../lib/sidebar-preference-state";
 
 type SidebarSectionsCollapsed = BootstrapPayload["preferences"]["sidebarSectionsCollapsed"];
 
@@ -25,14 +30,21 @@ export function useLayoutPreferences({
   setBootstrap,
   setError,
 }: UseLayoutPreferencesInput) {
-  const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
-  const [projectsCollapsed, setProjectsCollapsed] = useState(false);
-  const [cloudProjectsCollapsed, setCloudProjectsCollapsed] = useState(false);
-  const [chatsCollapsed, setChatsCollapsed] = useState(false);
+  const [sidebarSectionsCollapsed, setSidebarSectionsCollapsed] = useState<SidebarSectionsCollapsed>(
+    () => normalizePreferences().sidebarSectionsCollapsed,
+  );
+  const sidebarSectionsCollapsedRef = useRef(sidebarSectionsCollapsed);
+  const sidebarSectionChangeTimesRef = useRef<SidebarSectionPreferenceChangeTimes>({});
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [diffPanelWidth, setDiffPanelWidth] = useState(DEFAULT_DIFF_PANEL_WIDTH);
   const [diffPanelResizing, setDiffPanelResizing] = useState(false);
+  const {
+    pinned: pinnedCollapsed,
+    projects: projectsCollapsed,
+    cloudProjects: cloudProjectsCollapsed,
+    chats: chatsCollapsed,
+  } = sidebarSectionsCollapsed;
 
   useEffect(() => {
     if (sidebarResizing) return;
@@ -45,11 +57,16 @@ export function useLayoutPreferences({
   }, [diffPanelResizing, preferences]);
 
   useEffect(() => {
-    const normalized = normalizePreferences(preferences);
-    setPinnedCollapsed(normalized.sidebarSectionsCollapsed.pinned);
-    setProjectsCollapsed(normalized.sidebarSectionsCollapsed.projects);
-    setCloudProjectsCollapsed(normalized.sidebarSectionsCollapsed.cloudProjects);
-    setChatsCollapsed(normalized.sidebarSectionsCollapsed.chats);
+    const incoming = normalizePreferences(preferences).sidebarSectionsCollapsed;
+    setSidebarSectionsCollapsed((current) => {
+      const next = mergeSidebarSectionsCollapsedPreservingRecentLocal(
+        current,
+        incoming,
+        sidebarSectionChangeTimesRef.current,
+      );
+      sidebarSectionsCollapsedRef.current = next;
+      return next;
+    });
   }, [preferences]);
 
   const updatePreferencePayload = useCallback(
@@ -95,49 +112,36 @@ export function useLayoutPreferences({
     [connection, setError, updatePreferencePayload]
   );
 
+  const updateSidebarSectionsCollapsed = useCallback(
+    (next: SidebarSectionsCollapsed) => {
+      const previous = sidebarSectionsCollapsedRef.current;
+      recordSidebarSectionPreferenceChanges(sidebarSectionChangeTimesRef.current, previous, next);
+      sidebarSectionsCollapsedRef.current = next;
+      setSidebarSectionsCollapsed(next);
+      void persistSidebarSectionsCollapsed(next);
+    },
+    [persistSidebarSectionsCollapsed]
+  );
+
   const togglePinnedCollapsed = useCallback(() => {
-    const pinned = !pinnedCollapsed;
-    setPinnedCollapsed(pinned);
-    void persistSidebarSectionsCollapsed({
-      pinned,
-      projects: projectsCollapsed,
-      cloudProjects: cloudProjectsCollapsed,
-      chats: chatsCollapsed,
-    });
-  }, [chatsCollapsed, cloudProjectsCollapsed, persistSidebarSectionsCollapsed, pinnedCollapsed, projectsCollapsed]);
+    const current = sidebarSectionsCollapsedRef.current;
+    updateSidebarSectionsCollapsed({ ...current, pinned: !current.pinned });
+  }, [updateSidebarSectionsCollapsed]);
 
   const toggleProjectsCollapsed = useCallback(() => {
-    const projects = !projectsCollapsed;
-    setProjectsCollapsed(projects);
-    void persistSidebarSectionsCollapsed({
-      pinned: pinnedCollapsed,
-      projects,
-      cloudProjects: cloudProjectsCollapsed,
-      chats: chatsCollapsed,
-    });
-  }, [chatsCollapsed, cloudProjectsCollapsed, persistSidebarSectionsCollapsed, pinnedCollapsed, projectsCollapsed]);
+    const current = sidebarSectionsCollapsedRef.current;
+    updateSidebarSectionsCollapsed({ ...current, projects: !current.projects });
+  }, [updateSidebarSectionsCollapsed]);
 
   const toggleCloudProjectsCollapsed = useCallback(() => {
-    const cloudProjects = !cloudProjectsCollapsed;
-    setCloudProjectsCollapsed(cloudProjects);
-    void persistSidebarSectionsCollapsed({
-      pinned: pinnedCollapsed,
-      projects: projectsCollapsed,
-      cloudProjects,
-      chats: chatsCollapsed,
-    });
-  }, [chatsCollapsed, cloudProjectsCollapsed, persistSidebarSectionsCollapsed, pinnedCollapsed, projectsCollapsed]);
+    const current = sidebarSectionsCollapsedRef.current;
+    updateSidebarSectionsCollapsed({ ...current, cloudProjects: !current.cloudProjects });
+  }, [updateSidebarSectionsCollapsed]);
 
   const toggleChatsCollapsed = useCallback(() => {
-    const chats = !chatsCollapsed;
-    setChatsCollapsed(chats);
-    void persistSidebarSectionsCollapsed({
-      pinned: pinnedCollapsed,
-      projects: projectsCollapsed,
-      cloudProjects: cloudProjectsCollapsed,
-      chats,
-    });
-  }, [chatsCollapsed, cloudProjectsCollapsed, persistSidebarSectionsCollapsed, pinnedCollapsed, projectsCollapsed]);
+    const current = sidebarSectionsCollapsedRef.current;
+    updateSidebarSectionsCollapsed({ ...current, chats: !current.chats });
+  }, [updateSidebarSectionsCollapsed]);
 
   const startSidebarResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {

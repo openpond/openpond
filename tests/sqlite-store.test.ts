@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import sqlite3 from "sqlite3";
 import { describe, expect, test } from "bun:test";
-import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import type { Approval, InsightItem, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SqliteStore } from "../apps/server/src/store/store";
 
 function openDatabase(filePath: string): Promise<sqlite3.Database> {
@@ -216,6 +216,13 @@ describe("SqliteStore hardening", () => {
           "projection_session_shells",
           "projection_thread_details",
         ]);
+        const insightTables = await all<{ name: string }>(
+          db,
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table'
+             AND name = 'insight_items'`,
+        );
+        expect(insightTables.map((row) => row.name)).toEqual(["insight_items"]);
       } finally {
         await close(db);
       }
@@ -371,6 +378,45 @@ describe("SqliteStore hardening", () => {
       }
     });
   });
+
+  test("persists and patches insight rows", async () => {
+    await withStoreDir(async (storeDir) => {
+      const store = new SqliteStore(storeDir);
+      const item = insightItem("insight-one", "active");
+      await store.upsertInsightItem(item);
+      await expect(store.listInsights({ status: "active" })).resolves.toMatchObject([
+        {
+          id: "insight-one",
+          status: "active",
+          payload: {
+            detector: "test",
+            createPipelineId: "create_pipeline_1",
+          },
+        },
+      ]);
+
+      const updated = await store.patchInsightStatus("insight-one", "resolved");
+      expect(updated?.status).toBe("resolved");
+      expect(updated?.resolvedAt).toBeTruthy();
+      await expect(store.listInsights({ status: "active" })).resolves.toEqual([]);
+      await expect(store.listInsights({ status: "resolved" })).resolves.toMatchObject([
+        { id: "insight-one", status: "resolved" },
+      ]);
+
+      await store.close();
+
+      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      try {
+        const row = await get<{ count: number }>(
+          db,
+          "SELECT COUNT(*) AS count FROM insight_items WHERE id = 'insight-one' AND status = 'resolved'",
+        );
+        expect(row.count).toBe(1);
+      } finally {
+        await close(db);
+      }
+    });
+  });
 });
 
 function session(id: string): Session {
@@ -443,5 +489,27 @@ function approval(id: string, sessionId: string, status: Approval["status"]): Ap
     detail: id,
     status,
     createdAt: "2026-07-01T10:00:00.000Z",
+  };
+}
+
+function insightItem(id: string, status: InsightItem["status"]): InsightItem {
+  return {
+    id,
+    scopeType: "session",
+    scopeId: "session-insights",
+    severity: "concern",
+    type: "create_edit.awaiting_plan_approval",
+    status,
+    fingerprint: `fingerprint:${id}`,
+    title: "Create agent is waiting for plan approval",
+    summary: "Review the generated plan.",
+    payload: {
+      detector: "test",
+      createPipelineId: "create_pipeline_1",
+    },
+    createdAt: "2026-07-01T10:00:00.000Z",
+    updatedAt: "2026-07-01T10:00:00.000Z",
+    resolvedAt: status === "resolved" ? "2026-07-01T10:00:00.000Z" : null,
+    dismissedAt: status === "dismissed" ? "2026-07-01T10:00:00.000Z" : null,
   };
 }

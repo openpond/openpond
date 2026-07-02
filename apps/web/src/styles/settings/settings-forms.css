@@ -78,6 +78,14 @@
   max-width: min(260px, 44vw);
 }
 
+.account-summary-meta .account-summary-copy {
+  max-width: min(520px, 52vw);
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.35;
+}
+
 .account-team-dropdown.compact {
   flex: 0 1 auto;
   justify-self: auto;
@@ -114,6 +122,47 @@
 
 .account-login-form {
   overflow: hidden;
+}
+
+.account-signin-panel {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(58, 163, 255, 0.055);
+}
+
+.account-signin-panel > svg {
+  color: #77bdff;
+}
+
+.account-signin-panel > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-signin-panel strong {
+  color: #f6f6f6;
+  font-size: 13px;
+  font-weight: 580;
+}
+
+.account-signin-panel span {
+  color: #a8b6c5;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.account-api-key-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  text-decoration: none;
 }
 
 .provider-settings-form {

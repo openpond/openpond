@@ -3,7 +3,8 @@ export type ComposerSlashCommandId =
   | "edit"
   | "goal"
   | "goal-local"
-  | "goal-remote";
+  | "goal-remote"
+  | "insights";
 
 export type ComposerSlashCommand = {
   id: ComposerSlashCommandId;
@@ -47,6 +48,12 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/goal-local",
     label: "Run a local goal",
     description: "Keep the goal in the current local OpenPond workspace.",
+  },
+  {
+    id: "insights",
+    command: "/insights",
+    label: "Open insights",
+    description: "Scan agent flow health.",
   },
 ];
 

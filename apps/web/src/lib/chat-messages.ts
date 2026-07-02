@@ -18,9 +18,20 @@ import {
   isCodexGoalContextEvent,
   isCompactionEvent,
 } from "./chat-activities";
+import { insightsRunPromptSummaryFromTurnStarted } from "./chat-insights";
 import { asRecord, findLast } from "./chat-message-utils";
 
 export { activityGroupSummary } from "./chat-activities";
+
+const chatMessagesCache = new WeakMap<RuntimeEvent[], ChatMessage[]>();
+
+export function buildCachedChatMessages(items: RuntimeEvent[]): ChatMessage[] {
+  const cached = chatMessagesCache.get(items);
+  if (cached) return cached;
+  const messages = buildChatMessages(items);
+  chatMessagesCache.set(items, messages);
+  return messages;
+}
 
 export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
@@ -44,11 +55,13 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           });
           continue;
         }
+        const insightsRunPrompt = insightsRunPromptSummaryFromTurnStarted(item.args, prompt);
         messages.push({
           id: item.id,
           role: "user",
-          content: prompt,
+          content: insightsRunPrompt ? undefined : prompt,
           attachments: extractAttachments(item.args),
+          ...(insightsRunPrompt ? { insightsRunPrompt } : {}),
           timestamp: item.timestamp,
           turnId: item.turnId,
         });

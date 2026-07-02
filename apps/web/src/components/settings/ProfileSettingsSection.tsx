@@ -1,17 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Approval, BootstrapPayload } from "@openpond/contracts";
 import {
   Bot,
-  CheckCircle2,
   FileText,
+  FolderGit2,
   GitCommit,
-  PackageCheck,
   Plus,
   RefreshCw,
   UploadCloud,
+  X,
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
-import { AccountStateBadge } from "../account/AccountBadges";
+
+type ProfileState = NonNullable<BootstrapPayload["profile"]>;
+type ProfileAgent = ProfileState["agents"][number];
+type ProfileSyncDifference = {
+  label: string;
+  detail: string;
+  count: number;
+  tone?: "warning";
+};
+type ProfileAgentRowStatus = {
+  check: ProfileStatusCell;
+  sync: ProfileStatusCell;
+};
+type ProfileStatusCell = {
+  state: "ready" | "warning" | "loading" | "disabled";
+  label: string;
+};
 
 type ProfileSettingsSectionProps = {
   payload: BootstrapPayload | null;
@@ -37,14 +53,6 @@ export function ProfileSettingsSection({
   const pendingCreatePlanReviews = useMemo(
     () => profileCreatePlanReviews(payload?.approvals ?? []),
     [payload?.approvals],
-  );
-  const setupRequirementCount = useMemo(
-    () =>
-      (profile?.actionCatalog ?? []).reduce(
-        (count, action) => count + (action.setupRequirements?.length ?? 0),
-        0,
-      ),
-    [profile?.actionCatalog],
   );
 
   useEffect(() => {
@@ -94,13 +102,6 @@ export function ProfileSettingsSection({
     });
   }
 
-  function submitProfileCheck() {
-    void runProfileControl("check", async () => {
-      await api.profileCheck(connection!, { kind: "all" });
-      await refreshBootstrapAfterProfileChange("Profile checks finished");
-    });
-  }
-
   function submitProfileCommit() {
     void runProfileControl("commit", async () => {
       await api.profileCommit(connection!, {
@@ -114,154 +115,69 @@ export function ProfileSettingsSection({
   function submitProfilePush() {
     void runProfileControl("push", async () => {
       if (!selectedDefaultTeamId) {
-        throw new Error("Select a default team before pushing a hosted profile.");
+        throw new Error("Select a default team before syncing a hosted profile.");
       }
+      await api.profileCheck(connection!, { kind: "all" });
       await api.profilePush(connection!, {
         teamId: selectedDefaultTeamId,
         ensureHosted: true,
-        message: profileCommitMessage.trim() || null,
+        message: null,
       });
-      setProfileCommitMessage("");
-      await refreshBootstrapAfterProfileChange("Profile pushed to hosted profile repo");
+      await refreshBootstrapAfterProfileChange("Profile synced to hosted profile repo");
     });
   }
 
   return (
     <section className="account-settings">
-      <div className="account-settings-title">
-        <h1>Profile</h1>
-        <button
-          className="settings-icon-button ghost"
-          disabled={!connection || Boolean(profileBusy)}
-          title="Refresh profile"
-          aria-label="Refresh profile"
-          type="button"
-          onClick={() => {
-            if (!connection) return;
-            void runProfileControl("refresh", async () => {
-              onPayload(await api.bootstrap(connection));
-            });
-          }}
-        >
-          <RefreshCw size={15} className={profileBusy === "refresh" ? "settings-spin" : undefined} />
-        </button>
-      </div>
-
       {profile?.mode === "local" ? (
         <>
-          <div className="account-list">
-            <div className="account-list-heading">
-              <span>Summary</span>
-              <small>{profile.summary.state}</small>
-            </div>
-            <div className="profile-summary-panel">
-              <div className="profile-summary-head">
-                <div className="account-details">
-                  <strong>{profile.activeProfile ?? "default"}</strong>
-                  <span title={profile.repoPath ?? undefined}>{profile.repoPath}</span>
-                  <span title={profile.sourcePath ?? undefined}>{profile.sourcePath ?? "Source missing"}</span>
-                </div>
-                <div className="profile-summary-message">
-                  {profile.summary?.message ?? profileSyncMessage(profile)}
-                </div>
-              </div>
-              <div className="profile-metric-grid">
-                <ProfileMetric label="Git" value={profileGitValue(profile)} />
-                <ProfileMetric label="Hosted" value={profileHostedValue(profile)} />
-                <ProfileMetric label="Catalog" value={profileCatalogValue(profile)} />
-                <ProfileMetric label="Setup gate" value={profileSetupGateValue(profile)} />
-                <ProfileMetric label="Default action" value={profile.summary.defaultAction ?? "None"} />
-                <ProfileMetric label="Agents" value={`${profile.agents.length} tracked`} />
-                <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile)} />
-                <ProfileMetric label="Plan review" value={profilePlanReviewValue(pendingCreatePlanReviews)} />
-              </div>
-              {pendingCreatePlanReviews.length ? (
-                <div className="profile-plan-review-list" aria-label="Pending profile plan reviews">
-                  {pendingCreatePlanReviews.map((approval) => (
-                    <div className="profile-plan-review-item" key={approval.id}>
-                      <FileText size={14} />
-                      <span>
-                        <strong>{approval.title}</strong>
-                        <small>
-                          {approval.detail} - session: {approval.sessionId}
-                          {approval.turnId ? ` - turn: ${approval.turnId}` : ""}
-                        </small>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {profileHasChanges(profile) ? (
-                <div className="profile-change-list">
-                  {profileChangeLines(profile).map((line) => (
-                    <span key={line}>{line}</span>
-                  ))}
-                </div>
-              ) : null}
-              {profile.lastCheck ? (
-                <div className="profile-footline">
-                  Last check: {profile.lastCheck.command} {profile.lastCheck.status}
-                </div>
-              ) : null}
-              {profile.summary.checkStaleReason ? (
-                <div className="profile-footline">{profile.summary.checkStaleReason}</div>
-              ) : null}
-              {profile.setupGate.blockingRequirements.length ? (
-                <div className="profile-footline warning">
-                  Blocking setup:{" "}
-                  {profile.setupGate.blockingRequirements
-                    .slice(0, 5)
-                    .map((requirement) => requirement.label)
-                    .join(", ")}
-                  {profile.setupGate.blockingRequirements.length > 5
-                    ? ` and ${profile.setupGate.blockingRequirements.length - 5} more`
-                    : ""}
-                </div>
-              ) : null}
-              {profile.error ? <div className="profile-footline warning">{profile.error}</div> : null}
-            </div>
-          </div>
-
           <ProfileControls
             connection={connection}
+            profile={profile}
             profileBusy={profileBusy}
             profileCommitMessage={profileCommitMessage}
             profileName={profileName}
             profilePath={profilePath}
-            pushDisabled={!selectedDefaultTeamId || Boolean(profile.git?.dirty)}
+            syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
             setProfileCommitMessage={setProfileCommitMessage}
             setProfileName={setProfileName}
             setProfilePath={setProfilePath}
-            submitProfileCheck={submitProfileCheck}
             submitProfileCommit={submitProfileCommit}
             submitProfileInit={submitProfileInit}
             submitProfileLoad={submitProfileLoad}
             submitProfilePush={submitProfilePush}
           />
 
-          <div className="account-list">
-            <div className="account-list-heading">
+          <div className="account-list profile-agent-list">
+            <div className="account-list-heading profile-agent-list-heading">
               <span>Agents</span>
-              <small>{profile.agents.length} source-backed</small>
             </div>
             {profile.agents.length ? (
-              profile.agents.map((agent) => (
-                <ProfileAgentRow
-                  actionCount={profile.actionCatalog.length}
-                  agent={agent}
-                  defaultAction={profile.summary.defaultAction}
-                  key={agent.id}
-                  profile={profile}
-                  setupRequirementCount={setupRequirementCount}
-                />
-              ))
+              <>
+                <div className="profile-agent-table-head" aria-hidden="true">
+                  <span>Agent</span>
+                  <span>Action</span>
+                  <span>Check</span>
+                  <span>Sync</span>
+                </div>
+                {profile.agents.map((agent) => (
+                  <ProfileAgentRow
+                    agent={agent}
+                    defaultAction={profile.summary.defaultAction}
+                    key={agent.id}
+                    profile={profile}
+                  />
+                ))}
+              </>
             ) : (
               <div className="empty-account-list">
                 <strong>No profile agents found</strong>
-                <span>Run profile checks after creating source-backed agents.</span>
+                <span>Run profile checks after creating agents.</span>
               </div>
             )}
           </div>
+
+          <ProfileSummary profile={profile} pendingCreatePlanReviews={pendingCreatePlanReviews} />
         </>
       ) : (
         <div className="account-list">
@@ -275,15 +191,15 @@ export function ProfileSettingsSection({
             <ProfileControls
               connection={connection}
               inline
+              profile={null}
               profileBusy={profileBusy}
               profileCommitMessage={profileCommitMessage}
               profileName={profileName}
               profilePath={profilePath}
-              pushDisabled
+              syncDisabledReason="Load a local profile before syncing."
               setProfileCommitMessage={setProfileCommitMessage}
               setProfileName={setProfileName}
               setProfilePath={setProfilePath}
-              submitProfileCheck={submitProfileCheck}
               submitProfileCommit={submitProfileCommit}
               submitProfileInit={submitProfileInit}
               submitProfileLoad={submitProfileLoad}
@@ -296,18 +212,142 @@ export function ProfileSettingsSection({
   );
 }
 
+function ProfileSummary({
+  profile,
+  pendingCreatePlanReviews,
+}: {
+  profile: ProfileState;
+  pendingCreatePlanReviews: Approval[];
+}) {
+  return (
+    <div className="account-list">
+      <div className="account-list-heading">
+        <span>Summary</span>
+        <small>{profile.summary.state}</small>
+      </div>
+      <div className="profile-summary-panel">
+        <div className="profile-summary-head">
+          <div className="account-details">
+            <strong>{profile.activeProfile ?? "default"}</strong>
+            <span>{profile.sourcePath ? "Local source configured" : "Source missing"}</span>
+          </div>
+          <div className="profile-summary-message">
+            {profile.summary?.message ?? profileSyncMessage(profile)}
+          </div>
+        </div>
+        <div className="profile-metric-grid">
+          <ProfileMetric label="Git" value={profileGitValue(profile)} />
+          <ProfileMetric label="Hosted" value={profileHostedValue(profile)} />
+          <ProfileMetric label="Catalog" value={profileCatalogValue(profile)} />
+          <ProfileMetric label="Setup gate" value={profileSetupGateValue(profile)} />
+          <ProfileMetric label="Default action" value={profile.summary.defaultAction ?? "None"} />
+          <ProfileMetric label="Agents" value={`${profile.agents.length} tracked`} />
+          <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile)} />
+          <ProfileMetric label="Plan review" value={profilePlanReviewValue(pendingCreatePlanReviews)} />
+        </div>
+        {pendingCreatePlanReviews.length ? (
+          <div className="profile-plan-review-list" aria-label="Pending profile plan reviews">
+            {pendingCreatePlanReviews.map((approval) => (
+              <div className="profile-plan-review-item" key={approval.id}>
+                <FileText size={14} />
+                <span>
+                  <strong>{approval.title}</strong>
+                  <small>
+                    {approval.detail} - session: {approval.sessionId}
+                    {approval.turnId ? ` - turn: ${approval.turnId}` : ""}
+                  </small>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {profileHasChanges(profile) ? (
+          <div className="profile-change-list">
+            {profileChangeLines(profile).map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </div>
+        ) : null}
+        {profile.lastCheck ? (
+          <div className="profile-footline">
+            Last check: {profile.lastCheck.command} {profile.lastCheck.status}
+          </div>
+        ) : null}
+        {profile.summary.checkStaleReason ? (
+          <div className="profile-footline">{profile.summary.checkStaleReason}</div>
+        ) : null}
+        {profile.setupGate.blockingRequirements.length ? (
+          <div className="profile-footline warning">
+            Blocking setup:{" "}
+            {profile.setupGate.blockingRequirements
+              .slice(0, 5)
+              .map((requirement) => requirement.label)
+              .join(", ")}
+            {profile.setupGate.blockingRequirements.length > 5
+              ? ` and ${profile.setupGate.blockingRequirements.length - 5} more`
+              : ""}
+          </div>
+        ) : null}
+        {profile.hosted?.hostedSourceMaterialization ? (
+          <div className={profile.hosted.hostedSourceMaterialization.status === "failed" ? "profile-footline warning" : "profile-footline"}>
+            Hosted materialized: {profile.hosted.hostedSourceMaterialization.status}
+            {profile.hosted.hostedSourceMaterialization.agentId
+              ? ` - ${profile.hosted.hostedSourceMaterialization.agentId}`
+              : ""}
+            {profile.hosted.hostedSourceMaterialization.sourceCommitSha
+              ? ` - ${profile.hosted.hostedSourceMaterialization.sourceCommitSha.slice(0, 10)}`
+              : ""}
+          </div>
+        ) : null}
+        {profile.hosted?.hostedSourceCheck ? (
+          <div className={profile.hosted.hostedSourceCheck.status === "failed" ? "profile-footline warning" : "profile-footline"}>
+            Hosted checks: {profile.hosted.hostedSourceCheck.status}
+            {profile.hosted.hostedSourceCheck.workItemId
+              ? ` - ${profile.hosted.hostedSourceCheck.workItemId}`
+              : ""}
+            {profile.hosted.hostedSourceCheck.sandboxId
+              ? ` - sandbox ${profile.hosted.hostedSourceCheck.sandboxId}`
+              : ""}
+          </div>
+        ) : null}
+        {profile.hosted?.hostedPublish ? (
+          <div className={profile.hosted.hostedPublish.status === "failed" ? "profile-footline warning" : "profile-footline"}>
+            Hosted publish: {profile.hosted.hostedPublish.status}
+            {profile.hosted.hostedPublish.snapshotId
+              ? ` - ${profile.hosted.hostedPublish.snapshotId}`
+              : ""}
+            {profile.hosted.hostedPublish.manifestHash
+              ? ` - ${profile.hosted.hostedPublish.manifestHash.slice(0, 10)}`
+              : ""}
+          </div>
+        ) : null}
+        {profile.hosted?.hostedRun ? (
+          <div className={profile.hosted.hostedRun.status === "failed" ? "profile-footline warning" : "profile-footline"}>
+            Hosted run: {profile.hosted.hostedRun.status}
+            {profile.hosted.hostedRun.runId ? ` - ${profile.hosted.hostedRun.runId}` : ""}
+            {profile.hosted.hostedRun.runtimeId
+              ? ` - runtime ${profile.hosted.hostedRun.runtimeId}`
+              : ""}
+          </div>
+        ) : null}
+        {profile.error ? <div className="profile-footline warning">{profile.error}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 type ProfileControlsProps = {
   connection: ClientConnection | null;
+  profile: ProfileState | null;
   profileBusy: string | null;
   profileCommitMessage: string;
   profileName: string;
   profilePath: string;
-  pushDisabled: boolean;
+  syncDisabledReason: string | null;
   inline?: boolean;
   setProfileCommitMessage: (value: string) => void;
   setProfileName: (value: string) => void;
   setProfilePath: (value: string) => void;
-  submitProfileCheck: () => void;
   submitProfileCommit: () => void;
   submitProfileInit: () => void;
   submitProfileLoad: () => void;
@@ -317,24 +357,296 @@ type ProfileControlsProps = {
 function ProfileControls({
   connection,
   inline = false,
+  profile,
   profileBusy,
   profileCommitMessage,
   profileName,
   profilePath,
-  pushDisabled,
+  syncDisabledReason,
   setProfileCommitMessage,
   setProfileName,
   setProfilePath,
-  submitProfileCheck,
   submitProfileCommit,
   submitProfileInit,
   submitProfileLoad,
   submitProfilePush,
 }: ProfileControlsProps) {
+  const [pathDialogOpen, setPathDialogOpen] = useState(false);
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const disabled = !connection || Boolean(profileBusy);
+
   return (
     <div className={`profile-control-panel ${inline ? "inline" : ""}`}>
-      <div className="profile-control-grid">
-        <label className="settings-select-field">
+      <div className="profile-control-toolbar">
+        <div className="profile-control-actions">
+          {!inline ? (
+            <>
+              <button
+                className="settings-secondary"
+                disabled={disabled}
+                type="button"
+                onClick={() => setCommitDialogOpen(true)}
+              >
+                <GitCommit size={14} />
+                <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
+              </button>
+              <button
+                className="settings-secondary"
+                disabled={disabled || !profile}
+                type="button"
+                onClick={() => setSyncDialogOpen(true)}
+              >
+                <UploadCloud size={14} />
+                <span>{profileBusy === "push" ? "Syncing" : "Sync"}</span>
+              </button>
+            </>
+          ) : null}
+          <button
+            className="settings-secondary"
+            disabled={Boolean(profileBusy)}
+            type="button"
+            onClick={() => setPathDialogOpen(true)}
+          >
+            <FolderGit2 size={14} />
+            <span>Repo</span>
+          </button>
+        </div>
+      </div>
+      {pathDialogOpen ? (
+        <ProfilePathDialog
+          disabled={disabled}
+          profileBusy={profileBusy}
+          profileName={profileName}
+          profilePath={profilePath}
+          setProfileName={setProfileName}
+          setProfilePath={setProfilePath}
+          submitProfileInit={submitProfileInit}
+          submitProfileLoad={submitProfileLoad}
+          onClose={() => setPathDialogOpen(false)}
+        />
+      ) : null}
+      {commitDialogOpen ? (
+        <ProfileCommitDialog
+          disabled={disabled}
+          profileBusy={profileBusy}
+          profileCommitMessage={profileCommitMessage}
+          setProfileCommitMessage={setProfileCommitMessage}
+          submitProfileCommit={submitProfileCommit}
+          onClose={() => setCommitDialogOpen(false)}
+        />
+      ) : null}
+      {syncDialogOpen && profile ? (
+        <ProfileSyncDialog
+          disabled={disabled}
+          profile={profile}
+          profileBusy={profileBusy}
+          syncDisabledReason={syncDisabledReason}
+          submitProfilePush={submitProfilePush}
+          onClose={() => setSyncDialogOpen(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ProfileCommitDialog({
+  disabled,
+  profileBusy,
+  profileCommitMessage,
+  setProfileCommitMessage,
+  submitProfileCommit,
+  onClose,
+}: {
+  disabled: boolean;
+  profileBusy: string | null;
+  profileCommitMessage: string;
+  setProfileCommitMessage: (value: string) => void;
+  submitProfileCommit: () => void;
+  onClose: () => void;
+}) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (disabled) return;
+    submitProfileCommit();
+    onClose();
+  }
+
+  return (
+    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <form
+        className="git-dialog profile-commit-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-commit-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={submit}
+      >
+        <button className="git-dialog-close" disabled={Boolean(profileBusy)} type="button" title="Close" aria-label="Close" onClick={onClose}>
+          <X size={14} />
+        </button>
+        <div className="git-dialog-icon">
+          <GitCommit size={18} />
+        </div>
+        <h2 id="profile-commit-dialog-title">Commit profile</h2>
+        <label className="git-dialog-field">
+          <span>Commit message</span>
+          <input
+            autoFocus
+            value={profileCommitMessage}
+            disabled={Boolean(profileBusy)}
+            placeholder="Update OpenPond profile"
+            onChange={(event) => setProfileCommitMessage(event.target.value)}
+          />
+        </label>
+        <div className="git-dialog-footer">
+          <button className="git-dialog-secondary" disabled={Boolean(profileBusy)} type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="git-dialog-primary" disabled={disabled} type="submit">
+            <GitCommit size={14} />
+            <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ProfileSyncDialog({
+  disabled,
+  profile,
+  profileBusy,
+  syncDisabledReason,
+  submitProfilePush,
+  onClose,
+}: {
+  disabled: boolean;
+  profile: ProfileState;
+  profileBusy: string | null;
+  syncDisabledReason: string | null;
+  submitProfilePush: () => void;
+  onClose: () => void;
+}) {
+  const differences = profileSyncDifferences(profile);
+  const outOfSyncCount = differences.reduce((count, difference) => count + difference.count, 0);
+  const canSync = !disabled && !syncDisabledReason;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSync) return;
+    submitProfilePush();
+    onClose();
+  }
+
+  return (
+    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <form
+        className="git-dialog profile-sync-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-sync-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={submit}
+      >
+        <button className="git-dialog-close" disabled={Boolean(profileBusy)} type="button" title="Close" aria-label="Close" onClick={onClose}>
+          <X size={14} />
+        </button>
+        <div className="git-dialog-icon">
+          <UploadCloud size={18} />
+        </div>
+        <h2 id="profile-sync-dialog-title">Sync profile</h2>
+        <div className="profile-dialog-summary">
+          <strong>{outOfSyncCount} {outOfSyncCount === 1 ? "item" : "items"} out of sync</strong>
+          <span>
+            Local {shortSha(profile.summary.localHead ?? profile.git?.head)} - Last pushed{" "}
+            {shortSha(profile.hosted?.lastPushedLocalHead)}
+          </span>
+        </div>
+        {differences.length ? (
+          <div className="profile-dialog-diff-list" aria-label="Profile sync differences">
+            {differences.map((difference) => (
+              <div className={`profile-dialog-diff-row ${difference.tone ?? ""}`} key={difference.label}>
+                <strong>{difference.label}</strong>
+                <span>{difference.detail}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="profile-dialog-diff-list" aria-label="Profile sync differences">
+            <div className="profile-dialog-diff-row">
+              <strong>Aligned</strong>
+              <span>Current local profile source has already been pushed.</span>
+            </div>
+          </div>
+        )}
+        {syncDisabledReason ? <div className="profile-dialog-warning">{syncDisabledReason}</div> : null}
+        <div className="git-dialog-footer">
+          <button className="git-dialog-secondary" disabled={Boolean(profileBusy)} type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="git-dialog-primary" disabled={!canSync} type="submit">
+            <UploadCloud size={14} />
+            <span>{profileBusy === "push" ? "Syncing" : "Confirm sync"}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ProfilePathDialog({
+  disabled,
+  profileBusy,
+  profileName,
+  profilePath,
+  setProfileName,
+  setProfilePath,
+  submitProfileInit,
+  submitProfileLoad,
+  onClose,
+}: {
+  disabled: boolean;
+  profileBusy: string | null;
+  profileName: string;
+  profilePath: string;
+  setProfileName: (value: string) => void;
+  setProfilePath: (value: string) => void;
+  submitProfileInit: () => void;
+  submitProfileLoad: () => void;
+  onClose: () => void;
+}) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (disabled || !profilePath.trim()) return;
+    submitProfileLoad();
+    onClose();
+  }
+
+  function createProfile() {
+    if (disabled) return;
+    submitProfileInit();
+    onClose();
+  }
+
+  return (
+    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <form
+        className="git-dialog profile-path-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-path-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={submit}
+      >
+        <button className="git-dialog-close" disabled={Boolean(profileBusy)} type="button" title="Close" aria-label="Close" onClick={onClose}>
+          <X size={14} />
+        </button>
+        <div className="git-dialog-icon">
+          <FolderGit2 size={18} />
+        </div>
+        <h2 id="profile-path-dialog-title">Profile repo</h2>
+        <label className="git-dialog-field">
           <span>Profile repo path</span>
           <input
             value={profilePath}
@@ -343,7 +655,7 @@ function ProfileControls({
             onChange={(event) => setProfilePath(event.target.value)}
           />
         </label>
-        <label className="settings-select-field">
+        <label className="git-dialog-field">
           <span>Active profile</span>
           <input
             value={profileName}
@@ -352,108 +664,54 @@ function ProfileControls({
             onChange={(event) => setProfileName(event.target.value)}
           />
         </label>
-      </div>
-      {!inline ? (
-        <label className="settings-select-field">
-          <span>Commit message</span>
-          <input
-            value={profileCommitMessage}
-            disabled={Boolean(profileBusy)}
-            placeholder="Update OpenPond profile"
-            onChange={(event) => setProfileCommitMessage(event.target.value)}
-          />
-        </label>
-      ) : null}
-      <div className="profile-control-actions">
-        <button
-          className="settings-secondary"
-          disabled={!connection || Boolean(profileBusy)}
-          type="button"
-          onClick={submitProfileInit}
-        >
-          <Plus size={14} />
-          <span>{profileBusy === "init" ? "Creating" : "Create"}</span>
-        </button>
-        <button
-          className="settings-secondary"
-          disabled={!connection || Boolean(profileBusy) || !profilePath.trim()}
-          type="button"
-          onClick={submitProfileLoad}
-        >
-          <RefreshCw size={14} className={profileBusy === "load" ? "settings-spin" : undefined} />
-          <span>{profileBusy === "load" ? "Loading" : "Load"}</span>
-        </button>
-        {!inline ? (
-          <>
-            <button
-              className="settings-secondary"
-              disabled={!connection || Boolean(profileBusy)}
-              type="button"
-              onClick={submitProfileCheck}
-            >
-              <CheckCircle2 size={14} />
-              <span>{profileBusy === "check" ? "Checking" : "Check"}</span>
-            </button>
-            <button
-              className="settings-secondary"
-              disabled={!connection || Boolean(profileBusy)}
-              type="button"
-              onClick={submitProfileCommit}
-            >
-              <GitCommit size={14} />
-              <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
-            </button>
-            <button
-              className="settings-secondary"
-              disabled={!connection || Boolean(profileBusy) || pushDisabled}
-              type="button"
-              onClick={submitProfilePush}
-            >
-              <UploadCloud size={14} />
-              <span>{profileBusy === "push" ? "Pushing" : "Push hosted"}</span>
-            </button>
-          </>
-        ) : null}
-      </div>
-      {!inline ? (
-        <div className="profile-footline">
-          Hosted push requires a clean committed profile and the selected default team.
+        <div className="git-dialog-footer">
+          <button className="git-dialog-secondary" disabled={Boolean(profileBusy)} type="button" onClick={onClose}>
+            Close
+          </button>
+          <button className="git-dialog-secondary" disabled={disabled} type="button" onClick={createProfile}>
+            <Plus size={14} />
+            <span>{profileBusy === "init" ? "Creating" : "Create"}</span>
+          </button>
+          <button className="git-dialog-primary" disabled={disabled || !profilePath.trim()} type="submit">
+            <RefreshCw size={14} className={profileBusy === "load" ? "settings-spin" : undefined} />
+            <span>{profileBusy === "load" ? "Loading" : "Load"}</span>
+          </button>
         </div>
-      ) : null}
+      </form>
     </div>
   );
 }
 
 function ProfileAgentRow({
-  actionCount,
   agent,
   defaultAction,
   profile,
-  setupRequirementCount,
 }: {
-  actionCount: number;
-  agent: NonNullable<BootstrapPayload["profile"]>["agents"][number];
+  agent: ProfileAgent;
   defaultAction: string | null;
-  profile: NonNullable<BootstrapPayload["profile"]>;
-  setupRequirementCount: number;
+  profile: ProfileState;
 }) {
-  const sourceState = profileAgentSourceState(profile);
+  const rowStatus = profileAgentRowStatus(profile, agent);
   return (
     <div className="product-row profile-agent-row">
-      <Bot size={18} />
-      <div>
-        <strong>{agent.name}</strong>
-        <span title={agent.path}>{agent.path}</span>
+      <div className="profile-agent-identity">
+        <Bot size={18} />
+        <div>
+          <strong>{agent.name}</strong>
+          <span title={agent.path}>{agent.path}</span>
+        </div>
       </div>
-      <div className="profile-agent-meta">
-        <span>{defaultAction ?? "No default action"}</span>
-        <span>{actionCount} action{actionCount === 1 ? "" : "s"}</span>
-        <span>{setupRequirementCount} setup</span>
+      <div className="profile-agent-action">
+        <span>{defaultAction ?? "None"}</span>
       </div>
-      <AccountStateBadge state={agent.enabled ? sourceState : "disabled"} />
-      <PackageCheck size={16} aria-hidden="true" />
+      <ProfileStatusText status={rowStatus.check} />
+      <ProfileStatusText status={rowStatus.sync} />
     </div>
   );
+}
+
+function ProfileStatusText({ status }: { status: ProfileStatusCell }) {
+  return <span className={`profile-status-text ${status.state}`}>{status.label}</span>;
 }
 
 function ProfileMetric({ label, value }: { label: string; value: string }) {
@@ -485,9 +743,10 @@ function profileHostedValue(profile: NonNullable<BootstrapPayload["profile"]>): 
 
 function profileHostedRunValue(profile: NonNullable<BootstrapPayload["profile"]>): string {
   if (!profile.hosted?.sourceCommitSha) return "Not pushed";
-  const status = profile.hosted.hostedRunStatus ?? "not_started";
-  return profile.hosted.hostedRunId
-    ? `${status} ${profile.hosted.hostedRunId.slice(0, 8)}`
+  const status = profile.hosted.hostedRun?.status ?? profile.hosted.hostedRunStatus ?? "not_started";
+  const runId = profile.hosted.hostedRun?.runId ?? profile.hosted.hostedRunId;
+  return runId
+    ? `${status} ${runId.slice(0, 8)}`
     : status;
 }
 
@@ -517,6 +776,103 @@ function profileSetupGateValue(profile: NonNullable<BootstrapPayload["profile"]>
   return "Ready";
 }
 
+function profileSyncDisabledReason(profile: ProfileState, selectedDefaultTeamId: string): string | null {
+  if (!selectedDefaultTeamId) return "Select a default team before syncing.";
+  if (!profile.git?.head) return "Commit the profile before syncing.";
+  if (profile.git.dirty) return "Commit local profile changes before syncing.";
+  return null;
+}
+
+function profileSyncDifferences(profile: ProfileState): ProfileSyncDifference[] {
+  const differences: ProfileSyncDifference[] = [];
+  const localHead = profile.summary.localHead ?? profile.git?.head ?? null;
+  const pushedLocalHead = profile.hosted?.lastPushedLocalHead ?? null;
+  const hostedUploadHead = profile.summary.hostedHead ?? profile.hosted?.sourceCommitSha ?? null;
+
+  if (!hostedUploadHead && !pushedLocalHead) {
+    differences.push({
+      label: "Hosted source",
+      detail: "No hosted profile commit has been recorded.",
+      count: 1,
+    });
+  } else if (localHead && pushedLocalHead && localHead !== pushedLocalHead) {
+    differences.push({
+      label: "Commit",
+      detail: `Local ${shortSha(localHead)} has not been pushed since ${shortSha(pushedLocalHead)}.`,
+      count: 1,
+    });
+  }
+
+  if (profile.git?.dirty) {
+    const fileCount = profile.git.files.length || profile.diff.files.length || 1;
+    differences.push({
+      label: "Uncommitted files",
+      detail: `${fileCount} local ${fileCount === 1 ? "file" : "files"} changed.`,
+      count: fileCount,
+      tone: "warning",
+    });
+  }
+
+  const profileDiffCount =
+    profile.diff.changedAgents.length +
+    profile.diff.newAgents.length +
+    profile.diff.deletedAgents.length +
+    profile.diff.changedActions.length +
+    profile.diff.changedExtensions.length +
+    profile.diff.setupChanges.length +
+    profile.diff.envRequirementChanges.length;
+  if (profileDiffCount > 0) {
+    differences.push({
+      label: "Profile changes",
+      detail: profileDiffSummary(profile),
+      count: profileDiffCount,
+      tone: profile.git?.dirty ? "warning" : undefined,
+    });
+  }
+
+  if (profile.catalog.stale) {
+    differences.push({
+      label: "Catalog",
+      detail: "Action catalog artifacts are stale or missing.",
+      count: 1,
+      tone: "warning",
+    });
+  }
+
+  if (profile.setupGate.blockingCount > 0) {
+    differences.push({
+      label: "Setup",
+      detail: `${profile.setupGate.blockingCount} blocking setup ${profile.setupGate.blockingCount === 1 ? "requirement" : "requirements"}.`,
+      count: profile.setupGate.blockingCount,
+      tone: "warning",
+    });
+  }
+
+  return differences;
+}
+
+function profileDiffSummary(profile: ProfileState): string {
+  const parts: string[] = [];
+  const agentCount =
+    profile.diff.changedAgents.length +
+    profile.diff.newAgents.length +
+    profile.diff.deletedAgents.length;
+  if (agentCount) parts.push(`${agentCount} agent ${agentCount === 1 ? "change" : "changes"}`);
+  if (profile.diff.changedActions.length) {
+    parts.push(`${profile.diff.changedActions.length} action ${profile.diff.changedActions.length === 1 ? "change" : "changes"}`);
+  }
+  if (profile.diff.changedExtensions.length) {
+    parts.push(`${profile.diff.changedExtensions.length} extension ${profile.diff.changedExtensions.length === 1 ? "change" : "changes"}`);
+  }
+  if (profile.diff.setupChanges.length) {
+    parts.push(`${profile.diff.setupChanges.length} setup ${profile.diff.setupChanges.length === 1 ? "change" : "changes"}`);
+  }
+  if (profile.diff.envRequirementChanges.length) {
+    parts.push(`${profile.diff.envRequirementChanges.length} env ${profile.diff.envRequirementChanges.length === 1 ? "change" : "changes"}`);
+  }
+  return parts.join(", ") || "Profile source has local changes.";
+}
+
 function profileSyncMessage(profile: NonNullable<BootstrapPayload["profile"]>): string {
   if (profile.mode !== "local") return "No local profile loaded";
   if (profile.git?.dirty) return "Local profile source has uncommitted changes.";
@@ -526,15 +882,96 @@ function profileSyncMessage(profile: NonNullable<BootstrapPayload["profile"]>): 
   return "Local profile source is ready.";
 }
 
-function profileAgentSourceState(
-  profile: NonNullable<BootstrapPayload["profile"]>,
-): "ready" | "warning" | "loading" {
-  if (profile.setupGate.blockingCount > 0) return "warning";
-  if (profile.summary.checkFresh && !profile.git?.dirty) return "ready";
-  if (profile.hosted?.sourceCommitSha && profile.git?.head === profile.hosted.sourceCommitSha) {
-    return "ready";
+function profileAgentRowStatus(profile: ProfileState, agent: ProfileAgent): ProfileAgentRowStatus {
+  if (!agent.enabled) {
+    return {
+      check: { state: "disabled", label: "Disabled" },
+      sync: { state: "disabled", label: "Disabled" },
+    };
   }
-  return profile.git?.dirty ? "warning" : "loading";
+  if (profile.error) {
+    return {
+      check: { state: "warning", label: "Error" },
+      sync: { state: "warning", label: "Blocked" },
+    };
+  }
+  if (profile.setupGate.blockingCount > 0) {
+    return {
+      check: { state: "warning", label: "Setup" },
+      sync: { state: "warning", label: "Blocked" },
+    };
+  }
+
+  const changeCount = profileAgentChangeCount(profile, agent);
+  if (profile.git?.dirty || changeCount > 0) {
+    return {
+      check: { state: "loading", label: "Pending" },
+      sync: { state: "warning", label: "Changed" },
+    };
+  }
+  if (profile.catalog.stale) {
+    return {
+      check: { state: "loading", label: "Stale" },
+      sync: { state: "loading", label: "Waiting" },
+    };
+  }
+  if (!profile.lastCheck) {
+    return {
+      check: { state: "loading", label: "Unchecked" },
+      sync: { state: "loading", label: "Waiting" },
+    };
+  }
+  if (profile.lastCheck.status === "failed") {
+    return {
+      check: { state: "warning", label: "Failed" },
+      sync: { state: "warning", label: "Blocked" },
+    };
+  }
+  if (!profile.summary.checkFresh) {
+    return {
+      check: { state: "loading", label: "Stale" },
+      sync: { state: "loading", label: "Waiting" },
+    };
+  }
+
+  const localHead = profile.summary.localHead ?? profile.git?.head ?? null;
+  const pushedLocalHead = profile.hosted?.lastPushedLocalHead ?? null;
+  const hostedUploadHead = profile.summary.hostedHead ?? profile.hosted?.sourceCommitSha ?? null;
+  if (!hostedUploadHead && !pushedLocalHead) {
+    return {
+      check: { state: "ready", label: "Passed" },
+      sync: { state: "loading", label: "Not synced" },
+    };
+  }
+  if (localHead && pushedLocalHead && localHead !== pushedLocalHead) {
+    return {
+      check: { state: "ready", label: "Passed" },
+      sync: { state: "loading", label: "Needed" },
+    };
+  }
+  return {
+    check: { state: "ready", label: "Passed" },
+    sync: { state: "ready", label: "Synced" },
+  };
+}
+
+function profileAgentChangeCount(profile: ProfileState, agent: ProfileAgent): number {
+  let count = 0;
+  if (profile.diff.changedAgents.includes(agent.id)) count += 1;
+  if (profile.diff.newAgents.includes(agent.id)) count += 1;
+  if (profile.diff.deletedAgents.includes(agent.id)) count += 1;
+  const normalizedAgentPath = agent.path.replace(/^profiles\/[^/]+\//, "");
+  for (const file of profile.diff.files) {
+    const normalizedFilePath = file.path.replace(/^profiles\/[^/]+\//, "");
+    if (
+      normalizedFilePath === normalizedAgentPath ||
+      normalizedFilePath.startsWith(`${normalizedAgentPath}/`) ||
+      normalizedFilePath.startsWith(`agents/${agent.id}/`)
+    ) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function profileChangeLines(profile: NonNullable<BootstrapPayload["profile"]>): string[] {

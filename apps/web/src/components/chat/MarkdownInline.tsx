@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 import type { ClientConnection } from "../../api";
+import { useLocalImageUrl } from "../../hooks/useLocalImageUrl";
+import type { LocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
+import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { WorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { matchChatFilePathAt, normalizeChatFilePath } from "../../lib/chat-file-links";
 import { isWorkspaceImagePath, workspaceFileName } from "../../lib/workspace-images";
@@ -27,13 +30,17 @@ export type MarkdownContext = {
   onOpenLinkMenu: (menu: LinkContextMenu | null) => void;
   onOpenImage: (image: { src: string; title: string }) => void;
   onPreviewImage: (image: ImageLinkPreview | null) => void;
+  localImageUrls: LocalImageUrlResolver;
   workspaceImageUrls: WorkspaceImageUrlResolver;
   workspaceRootPath: string | null;
 };
 
 type ImageLink =
   | { kind: "url"; src: string; title: string }
+  | { kind: "local"; path: string; src: string | null; title: string }
   | { kind: "workspace"; appId: string; path: string; src: string | null; title: string };
+
+const PUBLIC_IMAGE_EXTENSIONS = new Set([".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"]);
 
 export function MarkdownCheckbox({
   checked,
@@ -68,9 +75,32 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
     if (char === "`") {
       const closing = content.indexOf("`", index + 1);
       if (closing > index + 1) {
+        const codeContent = content.slice(index + 1, closing);
+        const imagePath = context.onOpenFileInSidebar && isStandaloneInlineCode(content, index, closing + 1)
+          ? normalizeChatFilePath(codeContent, { workspaceRootPath: context.workspaceRootPath })
+          : null;
+        const image = imagePath
+          ? imageLinkForFilePath(imagePath.path, imagePath.displayPath, context)
+          : null;
         flushText(index);
-        nodes.push(<code key={nodes.length}>{content.slice(index + 1, closing)}</code>);
+        nodes.push(image
+          ? renderFileLink(<code>{codeContent}</code>, imagePath!.path, imagePath!.displayPath, context, nodes.length)
+          : <code key={nodes.length}>{codeContent}</code>);
         index = closing + 1;
+        textStart = index;
+        continue;
+      }
+    }
+
+    const htmlImage = char === "<" || content.startsWith("!<img", index)
+      ? parseHtmlImage(content, index)
+      : null;
+    if (htmlImage) {
+      const image = imageLinkForHref(htmlImage.src, context);
+      if (image) {
+        flushText(index);
+        nodes.push(renderInlineImage(htmlImage.alt, image, context, nodes.length));
+        index = htmlImage.end;
         textStart = index;
         continue;
       }
@@ -99,6 +129,18 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       flushText(index);
       nodes.push(<MarkdownCheckbox checked={checkbox.checked} inline key={nodes.length} />);
       index = checkbox.end;
+      textStart = index;
+      continue;
+    }
+
+    const markdownImage = content.startsWith("![", index) ? parseMarkdownImage(content, index) : null;
+    if (markdownImage) {
+      const image = imageLinkForHref(markdownImage.href, context);
+      flushText(index);
+      nodes.push(image
+        ? renderInlineImage(markdownImage.label, image, context, nodes.length)
+        : renderLink(markdownImage.label || markdownImage.href, markdownImage.href, context, nodes.length));
+      index = markdownImage.end;
       textStart = index;
       continue;
     }
@@ -150,6 +192,10 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
 
   flushText(content.length);
   return nodes;
+}
+
+function isStandaloneInlineCode(content: string, start: number, end: number): boolean {
+  return !content.slice(0, start).trim() && !content.slice(end).trim();
 }
 
 function renderLink(label: string, href: string, context: MarkdownContext, key: number): ReactNode {
@@ -208,18 +254,92 @@ function renderLink(label: string, href: string, context: MarkdownContext, key: 
   );
 }
 
+function renderInlineImage(label: string, image: ImageLink, context: MarkdownContext, key: number): ReactNode {
+  return <MarkdownInlineImage context={context} image={image} key={key} label={label} />;
+}
+
+function MarkdownInlineImage({
+  context,
+  image,
+  label,
+}: {
+  context: MarkdownContext;
+  image: ImageLink;
+  label: string;
+}) {
+  const workspaceSrc = useWorkspaceImageUrl(
+    context.connection,
+    image.kind === "workspace" ? image.appId : null,
+    image.kind === "workspace" ? image.path : null,
+  );
+  const localSrc = useLocalImageUrl(
+    context.connection,
+    image.kind === "local" ? image.path : null,
+  );
+  const src = image.kind === "url" ? image.src : image.kind === "local" ? localSrc : workspaceSrc;
+  const title = label.trim() || image.title;
+
+  return (
+    <button
+      type="button"
+      className={`markdown-inline-image ${src ? "ready" : "loading"}`}
+      onClick={() => {
+        if (image.kind === "url") {
+          context.onOpenImage({ src: image.src, title });
+          return;
+        }
+        if (src) {
+          context.onOpenImage({ src, title });
+          return;
+        }
+        if (image.kind === "local") return;
+        context.onOpenWorkspaceImage({ appId: image.appId, path: image.path, title });
+      }}
+      title={title}
+    >
+      {src ? <img alt={title} decoding="async" loading="lazy" src={src} /> : <span aria-hidden="true" />}
+    </button>
+  );
+}
+
 function renderFileLink(
-  label: string,
+  label: ReactNode,
   path: string,
   displayPath: string,
   context: MarkdownContext,
   key: number,
 ): ReactNode {
+  const image = imageLinkForFilePath(path, displayPath, context);
+  if (image) {
+    return (
+      <MarkdownFileImageReference
+        context={context}
+        displayPath={displayPath}
+        image={image}
+        key={key}
+        label={label}
+        path={path}
+      />
+    );
+  }
+  return <MarkdownFileLink context={context} displayPath={displayPath} label={label} path={path} key={key} />;
+}
+
+function MarkdownFileLink({
+  context,
+  displayPath,
+  label,
+  path,
+}: {
+  context: MarkdownContext;
+  displayPath: string;
+  label: ReactNode;
+  path: string;
+}) {
   return (
     <a
       href="#"
       className="markdown-file-link"
-      key={key}
       onClick={(event) => {
         event.preventDefault();
         context.onOpenFileInSidebar?.(path);
@@ -236,15 +356,88 @@ function renderFileLink(
   );
 }
 
+function MarkdownFileImageReference({
+  context,
+  displayPath,
+  image,
+  label,
+  path,
+}: {
+  context: MarkdownContext;
+  displayPath: string;
+  image: ImageLink;
+  label: ReactNode;
+  path: string;
+}) {
+  const workspaceSrc = useWorkspaceImageUrl(
+    context.connection,
+    image.kind === "workspace" ? image.appId : null,
+    image.kind === "workspace" ? image.path : null,
+  );
+  const localSrc = useLocalImageUrl(
+    context.connection,
+    image.kind === "local" ? image.path : null,
+  );
+  const src = image.kind === "url" ? image.src : image.kind === "local" ? localSrc : workspaceSrc;
+  const title = image.title || displayPath;
+
+  return (
+    <span className="markdown-file-image-reference">
+      <MarkdownFileLink context={context} displayPath={displayPath} label={label} path={path} />
+      <button
+        type="button"
+        className={`markdown-file-image-preview ${src ? "ready" : "loading"}`}
+        onClick={() => {
+          if (image.kind === "url") {
+            context.onOpenImage({ src: image.src, title });
+            return;
+          }
+          if (src) {
+            context.onOpenImage({ src, title });
+            return;
+          }
+          if (image.kind === "local") return;
+          context.onOpenWorkspaceImage({ appId: image.appId, path: image.path, title });
+        }}
+        title={title}
+      >
+        {src ? <img alt={title} decoding="async" loading="lazy" src={src} /> : <span aria-hidden="true" />}
+      </button>
+    </span>
+  );
+}
+
+function parseMarkdownImage(content: string, start: number): { label: string; href: string; end: number } | null {
+  if (!content.startsWith("![", start)) return null;
+  const labelStart = start + 2;
+  const labelEnd = content.indexOf("]", labelStart);
+  if (labelEnd < labelStart || content[labelEnd + 1] !== "(") return null;
+  const link = parseMarkdownHref(content, labelEnd + 2);
+  if (!link) return null;
+  return {
+    label: content.slice(labelStart, labelEnd),
+    href: link.href,
+    end: link.end,
+  };
+}
+
 function parseMarkdownLink(content: string, start: number): { label: string; href: string; end: number } | null {
   const labelEnd = content.indexOf("]", start + 1);
   if (labelEnd <= start + 1 || content[labelEnd + 1] !== "(") return null;
-  const hrefStart = labelEnd + 2;
+  const link = parseMarkdownHref(content, labelEnd + 2);
+  if (!link) return null;
+  return {
+    label: content.slice(start + 1, labelEnd),
+    href: link.href,
+    end: link.end,
+  };
+}
+
+function parseMarkdownHref(content: string, hrefStart: number): { href: string; end: number } | null {
   if (content[hrefStart] === "<") {
     const hrefEnd = content.indexOf(">", hrefStart + 1);
     if (hrefEnd < 0 || content[hrefEnd + 1] !== ")") return null;
     return {
-      label: content.slice(start + 1, labelEnd),
       href: content.slice(hrefStart + 1, hrefEnd),
       end: hrefEnd + 2,
     };
@@ -263,7 +456,6 @@ function parseMarkdownLink(content: string, start: number): { label: string; hre
     if (char === ")") {
       if (depth === 0) {
         return {
-          label: content.slice(start + 1, labelEnd),
           href: content.slice(hrefStart, index),
           end: index + 1,
         };
@@ -272,6 +464,21 @@ function parseMarkdownLink(content: string, start: number): { label: string; hre
     }
   }
   return null;
+}
+
+function parseHtmlImage(content: string, start: number): { src: string; alt: string; end: number } | null {
+  const imageStart = content[start] === "!" ? start + 1 : start;
+  if (!/^<img\b/i.test(content.slice(imageStart))) return null;
+  const end = content.indexOf(">", imageStart + 4);
+  if (end < 0) return null;
+  const tag = content.slice(imageStart, end + 1);
+  const src = htmlAttributeValue(tag, "src");
+  if (!src) return null;
+  return {
+    src,
+    alt: htmlAttributeValue(tag, "alt") ?? htmlAttributeValue(tag, "title") ?? "",
+    end: end + 1,
+  };
 }
 
 function parseCheckboxToken(content: string, start: number): { checked: boolean; end: number } | null {
@@ -304,6 +511,12 @@ function stripInlineHtml(value: string): string {
   return value.replace(/<[^>]+>/g, "").trim() || value;
 }
 
+function htmlAttributeValue(tag: string, name: string): string | null {
+  const pattern = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
+  const match = pattern.exec(tag);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
 function isLinkLikeHref(value: string): boolean {
   return /^(https?:\/\/|file:\/\/|\/|\.{1,2}\/)/i.test(value);
 }
@@ -326,7 +539,20 @@ function imageLinkForHref(
     }
   }
   const imagePath = localImagePathFromHref(cleanHref);
-  if (!imagePath || !isWorkspaceImagePath(imagePath) || !context.connection || !context.activeWorkspaceAppId) return null;
+  const publicUrl = publicAssetImageUrlFromPath(imagePath ?? cleanHref, context.workspaceRootPath);
+  if (publicUrl) {
+    return { kind: "url", src: publicUrl, title: workspaceFileName(imagePath ?? cleanHref) };
+  }
+  if (!imagePath || !isWorkspaceImagePath(imagePath) || !context.connection) return null;
+  if (isAbsoluteLocalImageHref(imagePath)) {
+    return {
+      kind: "local",
+      path: imagePath,
+      src: context.localImageUrls.getUrl(imagePath),
+      title: workspaceFileName(imagePath),
+    };
+  }
+  if (!context.activeWorkspaceAppId) return null;
   const workspacePath = workspaceRelativeImagePath(imagePath, context.workspaceRootPath);
   if (!workspacePath || !isWorkspaceImagePath(workspacePath)) return null;
   return {
@@ -336,6 +562,50 @@ function imageLinkForHref(
     src: context.workspaceImageUrls.getUrl(context.activeWorkspaceAppId, workspacePath),
     title: workspaceFileName(workspacePath),
   };
+}
+
+function imageLinkForFilePath(path: string, displayPath: string, context: MarkdownContext): ImageLink | null {
+  const publicUrl = publicAssetImageUrlFromPath(path, context.workspaceRootPath)
+    ?? publicAssetImageUrlFromPath(displayPath, context.workspaceRootPath);
+  if (publicUrl) {
+    return { kind: "url", src: publicUrl, title: workspaceFileName(displayPath) };
+  }
+
+  if (!isWorkspaceImagePath(path) || !context.connection) return null;
+  if (isAbsoluteLocalImageHref(path)) {
+    return {
+      kind: "local",
+      path,
+      src: context.localImageUrls.getUrl(path),
+      title: workspaceFileName(path),
+    };
+  }
+  if (!context.activeWorkspaceAppId) return null;
+  const workspacePath = workspaceRelativeImagePath(path, context.workspaceRootPath);
+  if (!workspacePath || !isWorkspaceImagePath(workspacePath)) return null;
+  return {
+    kind: "workspace",
+    appId: context.activeWorkspaceAppId,
+    path: workspacePath,
+    src: context.workspaceImageUrls.getUrl(context.activeWorkspaceAppId, workspacePath),
+    title: workspaceFileName(workspacePath),
+  };
+}
+
+function publicAssetImageUrlFromPath(value: string, workspaceRootPath: string | null): string | null {
+  const workspacePath = workspaceRelativeImagePath(value, workspaceRootPath);
+  const publicPrefix = "apps/web/public/";
+  if (!workspacePath?.startsWith(publicPrefix)) return null;
+  const publicPath = workspacePath.slice(publicPrefix.length);
+  if (!publicPath || !isPublicImagePath(publicPath)) return null;
+  return `/${publicPath.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function isPublicImagePath(path: string): boolean {
+  const cleanPath = path.split("?")[0]?.split("#")[0] ?? path;
+  const dotIndex = cleanPath.lastIndexOf(".");
+  if (dotIndex < 0) return false;
+  return PUBLIC_IMAGE_EXTENSIONS.has(cleanPath.slice(dotIndex).toLowerCase());
 }
 
 function cleanLinkHref(href: string): string {
@@ -391,7 +661,7 @@ function isImageHttpUrl(url: URL, connection: ClientConnection | null): boolean 
     const serverUrl = new URL(connection.serverUrl);
     if (url.origin === serverUrl.origin) {
       if (url.pathname === "/v1/local-image" || /\/v1\/workspaces\/[^/]+\/file-image$/.test(url.pathname)) return false;
-      if (url.pathname === "/v1/assets/workspace-image") return true;
+      if (url.pathname === "/v1/assets/workspace-image" || url.pathname === "/v1/assets/chat-attachment-image") return true;
     }
   }
   if (isWorkspaceImagePath(url.pathname)) return true;
@@ -406,6 +676,10 @@ function workspaceImageTargetFromServerUrl(url: URL, context: MarkdownContext): 
   const signedPath = url.pathname === "/v1/assets/workspace-image" ? url.searchParams.get("path") : null;
   if (signedPath && isWorkspaceImagePath(signedPath)) {
     return { kind: "url", src: url.toString(), title: workspaceFileName(signedPath) };
+  }
+  const chatAttachmentName = url.pathname === "/v1/assets/chat-attachment-image" ? url.searchParams.get("storageName") : null;
+  if (chatAttachmentName && isWorkspaceImagePath(chatAttachmentName)) {
+    return { kind: "url", src: url.toString(), title: workspaceFileName(chatAttachmentName) };
   }
   const workspaceMatch = /^\/v1\/workspaces\/([^/]+)\/file-image$/.exec(url.pathname);
   const legacyPath = workspaceMatch ? url.searchParams.get("path") : null;
@@ -427,6 +701,10 @@ function openImageLink(image: ImageLink, context: MarkdownContext): void {
     context.onOpenImage(image);
     return;
   }
+  if (image.kind === "local") {
+    if (image.src) context.onOpenImage({ src: image.src, title: image.title });
+    return;
+  }
   if (image.src) {
     context.onOpenImage({ src: image.src, title: image.title });
     return;
@@ -437,6 +715,18 @@ function openImageLink(image: ImageLink, context: MarkdownContext): void {
 function previewImageLink(image: ImageLink, context: MarkdownContext, element: HTMLElement): void {
   if (image.kind === "url") {
     context.onPreviewImage(positionImagePreview(image, element));
+    return;
+  }
+  if (image.kind === "local") {
+    if (image.src) {
+      context.onPreviewImage(positionImagePreview({ src: image.src, title: image.title }, element));
+      return;
+    }
+    void context.localImageUrls.loadUrl(image.path).then((src) => {
+      if (src && element.matches(":hover")) {
+        context.onPreviewImage(positionImagePreview({ src, title: image.title }, element));
+      }
+    });
     return;
   }
   if (image.src) {

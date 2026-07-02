@@ -19,6 +19,7 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     loadMoreOpenPondAppsPayload,
     codexHistoryThreadPayload,
     sendCodexHistoryTurnPayload,
+    interruptCodexHistoryTurnPayload,
     workspaceTemplateConfigPayload,
   } = deps;
   if (request.method === "GET" && requestUrl.pathname === "/v1/bootstrap") {
@@ -119,6 +120,15 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
       response,
       202,
       await sendCodexHistoryTurnPayload(decodeURIComponent(codexHistoryTurnMatch[1]!), await readJson(request)),
+    );
+    return true;
+  }
+  const codexHistoryTurnInterruptMatch = /^\/v1\/codex-history\/([^/]+)\/turns\/interrupt$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && codexHistoryTurnInterruptMatch) {
+    sendJson(
+      response,
+      202,
+      await interruptCodexHistoryTurnPayload(decodeURIComponent(codexHistoryTurnInterruptMatch[1]!)),
     );
     return true;
   }

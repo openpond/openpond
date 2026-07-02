@@ -25,6 +25,16 @@ import {
 } from "../lib/openpond-organization-memory";
 import { preloadSandboxAgents } from "../lib/sandbox-agent-memory";
 import {
+  mergeSidebarAppPreferencesPreservingRecentLocal,
+  recordSidebarAppPreferenceChanges,
+  type SidebarAppPreferenceChangeTimes,
+} from "../lib/sidebar-preference-state";
+import {
+  mergeSessionListPreservingLocalSidebarState,
+  recordSessionSidebarStateChanges,
+  type SessionSidebarStateChangeTimes,
+} from "../lib/session-state";
+import {
   appStartupState,
   type AppStartupStageId,
 } from "../startup/app-startup";
@@ -58,11 +68,14 @@ export function useAppBootstrap(params: {
   const [connection, setConnection] = useState<ClientConnection | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [codexHistorySessions, setCodexHistorySessions] = useState<Session[]>([]);
+  const [sessions, setSessionsState] = useState<Session[]>([]);
+  const [codexHistorySessions, setCodexHistorySessionsState] = useState<Session[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [appPreferences, setAppPreferences] = useState<SidebarAppPreferences>({});
+  const [appPreferences, setAppPreferencesState] = useState<SidebarAppPreferences>({});
   const [startupStage, setStartupStage] = useState<AppStartupStageId>("connecting");
+  const appPreferenceChangeTimesRef = useRef<SidebarAppPreferenceChangeTimes>({});
+  const sessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
+  const codexHistorySessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
   const codexPreferenceSyncKeyRef = useRef<string | null>(null);
   const defaultTeamSyncKeyRef = useRef<string | null>(null);
   const latestDefaultTeamIdRef = useRef("");
@@ -73,6 +86,30 @@ export function useAppBootstrap(params: {
 
   const setBlockingStartupStage = useCallback((stage: Exclude<AppStartupStageId, "ready">) => {
     if (!startupReadyRef.current) setStartupStage(stage);
+  }, []);
+
+  const setAppPreferences = useCallback<Dispatch<SetStateAction<SidebarAppPreferences>>>((action) => {
+    setAppPreferencesState((current) => {
+      const next = typeof action === "function" ? action(current) : action;
+      recordSidebarAppPreferenceChanges(appPreferenceChangeTimesRef.current, current, next);
+      return next;
+    });
+  }, []);
+
+  const setSessions = useCallback<Dispatch<SetStateAction<Session[]>>>((action) => {
+    setSessionsState((current) => {
+      const next = typeof action === "function" ? action(current) : action;
+      recordSessionSidebarStateChanges(sessionSidebarChangeTimesRef.current, current, next);
+      return next;
+    });
+  }, []);
+
+  const setCodexHistorySessions = useCallback<Dispatch<SetStateAction<Session[]>>>((action) => {
+    setCodexHistorySessionsState((current) => {
+      const next = typeof action === "function" ? action(current) : action;
+      recordSessionSidebarStateChanges(codexHistorySessionSidebarChangeTimesRef.current, current, next);
+      return next;
+    });
   }, []);
 
   const completeStartup = useCallback(() => {
@@ -105,10 +142,28 @@ export function useAppBootstrap(params: {
       latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
       setEvents(payload.events);
-      setSessions(payload.sessions);
-      setCodexHistorySessions(payload.codexHistorySessions ?? []);
+      setSessionsState((current) =>
+        mergeSessionListPreservingLocalSidebarState(
+          current,
+          payload.sessions,
+          sessionSidebarChangeTimesRef.current,
+        ),
+      );
+      setCodexHistorySessionsState((current) =>
+        mergeSessionListPreservingLocalSidebarState(
+          current,
+          payload.codexHistorySessions ?? [],
+          codexHistorySessionSidebarChangeTimesRef.current,
+        ),
+      );
       setApprovals(payload.approvals);
-      setAppPreferences(payload.sidebarAppPreferences);
+      setAppPreferencesState((current) =>
+        mergeSidebarAppPreferencesPreservingRecentLocal(
+          current,
+          payload.sidebarAppPreferences,
+          appPreferenceChangeTimesRef.current,
+        ),
+      );
       setSelectedAppId((current) => (current && payload.apps.some((app) => app.id === current) ? current : null));
       setSelectedProjectId((current) => {
         if (!current) return null;

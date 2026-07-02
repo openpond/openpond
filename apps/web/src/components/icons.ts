@@ -52,6 +52,7 @@ export { default as HelpCircle } from "lucide-react/dist/esm/icons/circle-questi
 export { default as ImageIcon } from "lucide-react/dist/esm/icons/image.js";
 export { default as Info } from "lucide-react/dist/esm/icons/info.js";
 export { default as KeyRound } from "lucide-react/dist/esm/icons/key-round.js";
+export { default as Lightbulb } from "lucide-react/dist/esm/icons/lightbulb.js";
 export { default as ListFilter } from "lucide-react/dist/esm/icons/list-filter.js";
 export { default as Loader2 } from "lucide-react/dist/esm/icons/loader-circle.js";
 export { default as LoaderCircle } from "lucide-react/dist/esm/icons/loader-circle.js";

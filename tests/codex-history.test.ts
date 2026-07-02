@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -62,6 +63,211 @@ describe("codex history", () => {
     ]);
     expect(parsed.events[1]?.args?.prompt).toBe("show this thread");
     expect(parsed.events[2]?.output).toBe("thread loaded");
+  });
+
+  test("hides Codex attachment context from visible user prompts", () => {
+    const sessionId = codexHistorySessionId("019e7138-5da2-7671-8837-202a36e0fff1");
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "response_item",
+          timestamp: "2026-07-02T19:40:00.000Z",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  "testin image\n\n" +
+                  "<attachments>\n" +
+                  "The user attached 1 file with this message.\n" +
+                  "1. Screenshot from 2026-07-02 15.20.18.png (image/png, 31 KB, image).\n" +
+                  "</attachments>",
+              },
+            ],
+          },
+        },
+      ],
+      {
+        fallbackTimestamp: "2026-07-02T19:39:00.000Z",
+        sessionId,
+        threadId: "019e7138-5da2-7671-8837-202a36e0fff1",
+      },
+    );
+
+    const turnStarted = parsed.events.find((event) => event.name === "turn.started");
+    expect(turnStarted?.args?.prompt).toBe("testin image");
+    expect(turnStarted?.args?.attachments).toEqual([
+      {
+        id: `${sessionId}_turn_1_attachment_1_1`,
+        name: "Screenshot from 2026-07-02 15.20.18.png",
+        mediaType: "image/png",
+        sizeBytes: 31 * 1024,
+        kind: "image",
+      },
+    ]);
+    expect(JSON.stringify(turnStarted?.args)).not.toContain("<attachments>");
+  });
+
+  test("projects OpenPond-saved Codex history image attachments as previews", () => {
+    const threadId = "019e7138-5da2-7671-8837-202a36e0fff1";
+    const sessionId = codexHistorySessionId(threadId);
+    const turnId = `${sessionId}_turn_1`;
+    const attachmentRootDir = path.join(os.tmpdir(), "openpond-codex-history-attachments");
+    const storageName = "Screenshot from 2026-07-02 15.20.18.png";
+    const localPath = path.join(attachmentRootDir, sessionId, turnId, storageName);
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "response_item",
+          timestamp: "2026-07-02T19:40:00.000Z",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  "testin image\n\n" +
+                  "<attachments>\n" +
+                  "The user attached 1 file with this message.\n" +
+                  `1. ${storageName} (image/png, 31 KB, image). Saved locally at: ${localPath}\n` +
+                  "</attachments>",
+              },
+            ],
+          },
+        },
+      ],
+      {
+        attachmentRootDir,
+        fallbackTimestamp: "2026-07-02T19:39:00.000Z",
+        sessionId,
+        threadId,
+      },
+    );
+
+    const turnStarted = parsed.events.find((event) => event.name === "turn.started");
+    expect(turnStarted?.args?.attachments).toEqual([
+      {
+        id: `${turnId}_attachment_1_1`,
+        name: storageName,
+        mediaType: "image/png",
+        sizeBytes: 31 * 1024,
+        kind: "image",
+        imagePreview: {
+          sessionId,
+          turnId,
+          attachmentId: `${turnId}_attachment_1_1`,
+          storageName,
+          contentType: "image/png",
+        },
+      },
+    ]);
+  });
+
+  test("projects native Codex input images as user attachment previews", async () => {
+    const attachmentRootDir = await mkdtemp(path.join(os.tmpdir(), "openpond-codex-history-input-image-"));
+    try {
+      const threadId = "019e7138-5da2-7671-8837-202a36e0fff1";
+      const sessionId = codexHistorySessionId(threadId);
+      const turnId = `${sessionId}_turn_1`;
+      const parsed = parseCodexSessionRecords(
+        [
+          {
+            type: "response_item",
+            timestamp: "2026-07-02T19:54:00.000Z",
+            payload: {
+              type: "message",
+              role: "user",
+              content: [
+                { type: "input_text", text: "testing this image" },
+                {
+                  type: "input_text",
+                  text: '<image name=[Image #1] path="/home/glu/Pictures/Screenshots/Screenshot from 2026-07-02 15.54.41.png">',
+                },
+                {
+                  type: "input_image",
+                  image_url:
+                    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                },
+              ],
+            },
+          },
+        ],
+        {
+          attachmentRootDir,
+          fallbackTimestamp: "2026-07-02T19:53:00.000Z",
+          sessionId,
+          threadId,
+        },
+      );
+
+      const turnStarted = parsed.events.find((event) => event.name === "turn.started");
+      const attachment = Array.isArray(turnStarted?.args?.attachments)
+        ? turnStarted.args.attachments[0] as {
+            imagePreview?: { storageName: string };
+            name?: string;
+          }
+        : null;
+      expect(turnStarted?.args?.prompt).toBe("testing this image");
+      expect(attachment?.name).toBe("Screenshot from 2026-07-02 15.54.41.png");
+      expect(attachment?.imagePreview?.storageName).toContain("Screenshot from 2026-07-02 15.54.41.png");
+      expect(
+        existsSync(path.join(attachmentRootDir, sessionId, turnId, attachment!.imagePreview!.storageName)),
+      ).toBe(true);
+    } finally {
+      await rm(attachmentRootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("projects legacy Codex top-level message records into chat events", () => {
+    const sessionId = codexHistorySessionId("a9d2378a-0bd7-4b79-adb7-13a60a7fd671");
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "open an old thread" }],
+        },
+        {
+          type: "function_call",
+          name: "shell",
+          call_id: "call_1",
+          arguments: JSON.stringify({ command: "pwd" }),
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "/workspace/project",
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "old thread loaded" }],
+        },
+      ],
+      {
+        fallbackTimestamp: "2025-09-08T18:58:30.000Z",
+        sessionId,
+        threadId: "a9d2378a-0bd7-4b79-adb7-13a60a7fd671",
+      },
+    );
+
+    expect(parsed.status).toBe("idle");
+    expect(parsed.events.map((event) => event.name)).toEqual([
+      "session.started",
+      "turn.started",
+      "tool.started",
+      "tool.completed",
+      "command.output",
+      "assistant.delta",
+      "turn.completed",
+    ]);
+    expect(parsed.events[1]?.args?.prompt).toBe("open an old thread");
+    expect(parsed.events[2]?.output).toBe("pwd");
+    expect(parsed.events[4]?.output).toBe("/workspace/project");
+    expect(parsed.events[5]?.output).toBe("old thread loaded");
   });
 
   test("projects Codex control messages as assistant-side events", () => {
@@ -570,6 +776,7 @@ describe("codex history", () => {
       expect(applied.archived).toBe(false);
       expect(applied.order).toBe(2);
       expect(applied.status).toBe("active");
+      expect(applied.updatedAt).toBe(baseSession.updatedAt);
 
       await patchCodexHistorySidebarPreference(store, sessionId, { pinned: false, archived: true });
       preferences = await loadCodexHistorySidebarPreferences(store);
@@ -577,6 +784,7 @@ describe("codex history", () => {
       expect(applied.pinned).toBe(false);
       expect(applied.archived).toBe(true);
       expect(applied.order).toBe(2);
+      expect(applied.updatedAt).toBe(baseSession.updatedAt);
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });

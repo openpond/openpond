@@ -1,8 +1,21 @@
-import { createReadStream, promises as fs, type Stats } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  promises as fs,
+  readFileSync,
+  statSync,
+  writeFileSync,
+  type Stats,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import type { RuntimeEvent, Session } from "@openpond/contracts";
+import type { ChatAttachmentSummary, RuntimeEvent, Session } from "@openpond/contracts";
+import {
+  chatAttachmentImageContentType,
+  safeChatAttachmentPathSegment,
+} from "./chat-attachments.js";
 
 const CODEX_HISTORY_SESSION_PREFIX = "codex_history_";
 const CODEX_HISTORY_EVENT_SOURCE = "codex_history";
@@ -14,6 +27,7 @@ const THREAD_TAIL_BYTES = 2 * 1024 * 1024;
 const PROMPT_MAX_LENGTH = 30_000;
 const ASSISTANT_MAX_LENGTH = 60_000;
 const TOOL_OUTPUT_MAX_LENGTH = 8_000;
+const MAX_CODEX_HISTORY_IMAGE_BYTES = 15 * 1024 * 1024;
 
 type CodexHistoryFile = {
   threadId: string;
@@ -58,7 +72,15 @@ type TailStatus = {
 };
 
 type CodexRecord = {
+  arguments?: string;
+  call_id?: string;
+  content?: unknown;
+  name?: string;
+  output?: string;
   type?: string;
+  role?: string;
+  phase?: string;
+  record_type?: string;
   timestamp?: string;
   payload?: unknown;
 };
@@ -76,6 +98,7 @@ type CodexControlMessage = {
 };
 
 type ParseCodexSessionInput = {
+  attachmentRootDir?: string;
   fallbackTimestamp: string;
   maxEvents?: number;
   sessionId: string;
@@ -110,7 +133,13 @@ export async function loadCodexHistorySessions(options: {
 
 export async function readCodexHistoryThreadPayload(
   sessionId: string,
-  options: { codexHome?: string; maxEvents?: number; tail?: boolean; tailBytes?: number } = {},
+  options: {
+    attachmentRootDir?: string;
+    codexHome?: string;
+    maxEvents?: number;
+    tail?: boolean;
+    tailBytes?: number;
+  } = {},
 ): Promise<CodexHistoryThreadPayload> {
   const threadId = codexHistoryThreadIdFromSessionId(sessionId);
   if (!threadId) throw new Error("Codex history session not found");
@@ -122,6 +151,7 @@ export async function readCodexHistoryThreadPayload(
   const thread = threads.find((candidate) => candidate.threadId === threadId);
   if (!thread) throw new Error("Codex history session not found");
   const parseInput = {
+    attachmentRootDir: options.attachmentRootDir,
     filePath: thread.filePath,
     fallbackTimestamp: thread.session.updatedAt,
     maxEvents: options.maxEvents ?? eventLimit(),
@@ -424,12 +454,14 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         return;
       }
     }
-    if (record.type !== "response_item" || !payload) return;
+    const responsePayload = responsePayloadFromCodexRecord(record, payload);
+    if (!responsePayload) return;
 
-    if (payload.type === "message") {
-      const role = stringValue(payload.role);
-      const content = textFromContent(payload.content);
-      if (!content) return;
+    if (responsePayload.type === "message") {
+      const role = stringValue(responsePayload.role);
+      const rawContent = responsePayload.content;
+      const content = textFromContent(rawContent);
+      if (!content && !codexContentHasInputImage(rawContent)) return;
       if (role === "user") {
         const controlMessage = codexControlMessage(content);
         if (controlMessage) {
@@ -463,10 +495,15 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         }
         if (isCodexInjectedUserMessage(content)) return;
         const turnId = beginPromptTurn();
+        const userContent = visibleCodexUserContent(rawContent, {
+          attachmentRootDir: input.attachmentRootDir,
+          sessionId: input.sessionId,
+          turnId,
+        });
         assistantIndex = 0;
         toolIndex = 0;
         latestUserAt = timestamp;
-        if (!firstPrompt) firstPrompt = content;
+        if (!firstPrompt) firstPrompt = userContent.prompt;
         push(
           historyEvent({
             id: `${turnId}_started`,
@@ -475,7 +512,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             timestamp,
             name: "turn.started",
             source: "chat_action",
-            args: { prompt: truncateText(content, PROMPT_MAX_LENGTH) },
+            args: {
+              prompt: truncateText(userContent.prompt, PROMPT_MAX_LENGTH),
+              ...(userContent.attachments.length > 0 ? { attachments: userContent.attachments } : {}),
+            },
             status: "started",
             data: {
               source: CODEX_HISTORY_EVENT_SOURCE,
@@ -489,7 +529,8 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       if (role === "assistant") {
         assistantIndex += 1;
         const turnId = activeTurnId();
-        const phase = stringValue(payload.phase);
+        const phase = stringValue(responsePayload.phase);
+        const legacyFinalAnswer = record.type === "message";
         push(
           historyEvent({
             id: `${turnId}_assistant_${assistantIndex}`,
@@ -506,7 +547,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             },
           }),
         );
-        if (phase === "final_answer") {
+        if (phase === "final_answer" || legacyFinalAnswer) {
           latestFinalAt = timestamp;
           if (!currentTurnCompleted) {
             push(
@@ -531,12 +572,12 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       return;
     }
 
-    if (payload.type === "function_call") {
+    if (responsePayload.type === "function_call") {
       toolIndex += 1;
       const turnId = activeTurnId();
-      const callId = safeId(stringValue(payload.call_id) ?? String(toolIndex));
-      const name = stringValue(payload.name) ?? "tool";
-      const parsedArgs = parseMaybeJson(stringValue(payload.arguments) ?? "");
+      const callId = safeId(stringValue(responsePayload.call_id) ?? String(toolIndex));
+      const name = stringValue(responsePayload.name) ?? "tool";
+      const parsedArgs = parseMaybeJson(stringValue(responsePayload.arguments) ?? "");
       const command = commandFromToolCall(name, parsedArgs);
       push(
         historyEvent({
@@ -554,7 +595,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             codexThreadId: input.threadId,
             callId,
             tool: name,
-            arguments: parsedArgs ?? stringValue(payload.arguments) ?? "",
+            arguments: parsedArgs ?? stringValue(responsePayload.arguments) ?? "",
             command,
           },
         }),
@@ -562,11 +603,11 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       return;
     }
 
-    if (payload.type === "function_call_output") {
+    if (responsePayload.type === "function_call_output") {
       toolIndex += 1;
       const turnId = activeTurnId();
-      const callId = safeId(stringValue(payload.call_id) ?? String(toolIndex));
-      const output = truncateText(stringValue(payload.output) ?? "", TOOL_OUTPUT_MAX_LENGTH);
+      const callId = safeId(stringValue(responsePayload.call_id) ?? String(toolIndex));
+      const output = truncateText(stringValue(responsePayload.output) ?? "", TOOL_OUTPUT_MAX_LENGTH);
       push(
         historyEvent({
           id: `${turnId}_tool_completed_${toolIndex}_${callId}`,
@@ -787,10 +828,11 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
       }
       continue;
     }
-    if (record.type !== "response_item" || !payload) continue;
-    if (payload.type === "message") {
-      const role = stringValue(payload.role);
-      const content = textFromContent(payload.content);
+    const responsePayload = responsePayloadFromCodexRecord(record, payload);
+    if (!responsePayload) continue;
+    if (responsePayload.type === "message") {
+      const role = stringValue(responsePayload.role);
+      const content = textFromContent(responsePayload.content);
       if (role === "user" && content) {
         const controlMessage = codexControlMessage(content);
         if (controlMessage?.kind === "turn_aborted") latestFinalAt = timestamp;
@@ -798,10 +840,15 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
       }
       if (role === "assistant" && content) {
         latestAssistantAt = timestamp;
-        if (stringValue(payload.phase) === "final_answer") latestFinalAt = timestamp;
+        if (stringValue(responsePayload.phase) === "final_answer" || record.type === "message") {
+          latestFinalAt = timestamp;
+        }
       }
     }
-    if (payload.type === "function_call_output" && /Process running with session ID/i.test(stringValue(payload.output) ?? "")) {
+    if (
+      responsePayload.type === "function_call_output" &&
+      /Process running with session ID/i.test(stringValue(responsePayload.output) ?? "")
+    ) {
       hasRunningMarker = true;
     }
   }
@@ -878,6 +925,25 @@ function commandFromToolCall(name: string, args: unknown): string {
   return stringValue(record?.cmd) ?? stringValue(record?.command) ?? stringValue(record?.tool) ?? name;
 }
 
+function responsePayloadFromCodexRecord(
+  record: CodexRecord,
+  payload: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (record.type === "response_item") return payload;
+  if (!isLegacyResponseItemType(record.type)) return null;
+  return asRecord(record);
+}
+
+function isLegacyResponseItemType(type: string | undefined): boolean {
+  return (
+    type === "message" ||
+    type === "function_call" ||
+    type === "function_call_output" ||
+    type === "custom_tool_call" ||
+    type === "custom_tool_call_output"
+  );
+}
+
 function goalObjective(goal: Record<string, unknown>): string | null {
   return stringValue(goal.objective);
 }
@@ -918,6 +984,348 @@ function textFromContent(content: unknown): string {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+type VisibleCodexUserContent = {
+  prompt: string;
+  attachments: ChatAttachmentSummary[];
+};
+
+type VisibleCodexUserContentContext = {
+  attachmentRootDir?: string;
+  sessionId: string;
+  turnId: string;
+};
+
+type CodexUserContentParts = {
+  text: string;
+  inputImages: string[];
+};
+
+type CodexImageReference = {
+  label: string | null;
+  localPath: string | null;
+};
+
+const CODEX_ATTACHMENT_CONTEXT_PATTERN = /(?:^|\n)\s*<attachments>\s*([\s\S]*?)\s*<\/attachments>\s*/g;
+const CODEX_ATTACHMENT_LINE_PATTERN =
+  /^\s*\d+\.\s+(.+)\s+\(([^,]+),\s*([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB),\s*(image|text|file)\)\.(?:\s+Saved locally at:\s*(.+))?\s*$/i;
+const CODEX_IMAGE_TAG_PATTERN =
+  /<image\s+name=(?:\[([^\]]*)\]|"([^"]*)"|'([^']*)'|([^\s>]+))\s+path="([^"]+)"\s*>/g;
+const DATA_IMAGE_URL_PATTERN = /^data:([^;,]+);base64,([a-zA-Z0-9+/=\s]+)$/;
+
+function visibleCodexUserContent(content: unknown, context: VisibleCodexUserContentContext): VisibleCodexUserContent {
+  const parts = codexUserContentParts(content);
+  const attachments: ChatAttachmentSummary[] = [];
+  let blockIndex = 0;
+  const imageReferences = codexImageReferences(parts.text);
+  const prompt = parts.text
+    .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
+      attachments.push(...parseCodexAttachmentContext(body, context, blockIndex));
+      blockIndex += 1;
+      return "\n";
+    })
+    .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
+    .trim();
+
+  attachments.push(...codexInputImageAttachments(parts.inputImages, imageReferences, context, attachments.length));
+  if (parts.inputImages.length === 0) {
+    attachments.push(...codexImageReferenceAttachments(imageReferences, context, attachments.length));
+  }
+
+  return {
+    prompt: prompt || (attachments.length > 0 ? "Please review the attached files." : parts.text.trim()),
+    attachments,
+  };
+}
+
+function codexUserContentParts(content: unknown): CodexUserContentParts {
+  if (typeof content === "string") return { text: content.trim(), inputImages: [] };
+  if (!Array.isArray(content)) return { text: "", inputImages: [] };
+  const text: string[] = [];
+  const inputImages: string[] = [];
+  for (const item of content) {
+    if (typeof item === "string") {
+      text.push(item);
+      continue;
+    }
+    const record = asRecord(item);
+    const itemText = stringValue(record?.text);
+    if (itemText) text.push(itemText);
+    const imageUrl = stringValue(record?.image_url);
+    if (imageUrl && stringValue(record?.type) === "input_image") inputImages.push(imageUrl);
+  }
+  return {
+    text: text.filter(Boolean).join("\n").trim(),
+    inputImages,
+  };
+}
+
+function codexContentHasInputImage(content: unknown): boolean {
+  return codexUserContentParts(content).inputImages.length > 0;
+}
+
+function codexImageReferences(text: string): CodexImageReference[] {
+  return Array.from(text.matchAll(CODEX_IMAGE_TAG_PATTERN)).map((match) => ({
+    label: match[1] ?? match[2] ?? match[3] ?? match[4] ?? null,
+    localPath: match[5] ?? null,
+  }));
+}
+
+function parseCodexAttachmentContext(
+  body: string,
+  context: VisibleCodexUserContentContext,
+  blockIndex: number,
+): ChatAttachmentSummary[] {
+  const attachments: ChatAttachmentSummary[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const match = CODEX_ATTACHMENT_LINE_PATTERN.exec(line);
+    if (!match) continue;
+    const name = match[1]?.trim();
+    const mediaType = match[2]?.trim();
+    const sizeBytes = parseAttachmentByteSize(match[3], match[4]);
+    const kind = attachmentKind(match[5]);
+    if (!name || !mediaType || sizeBytes === null || !kind) continue;
+
+    const id = `${context.turnId}_attachment_${blockIndex + 1}_${attachments.length + 1}`;
+    const localPath = match[6]?.trim() || localImagePathByName(name);
+    const imagePreview = codexHistoryImagePreview({
+      attachmentId: id,
+      context,
+      kind,
+      localPath,
+      mediaType,
+    });
+    attachments.push({
+      id,
+      name,
+      mediaType,
+      sizeBytes,
+      kind,
+      ...(imagePreview ? { imagePreview } : {}),
+    });
+  }
+  return attachments;
+}
+
+function codexInputImageAttachments(
+  inputImages: string[],
+  references: CodexImageReference[],
+  context: VisibleCodexUserContentContext,
+  offset: number,
+): ChatAttachmentSummary[] {
+  const attachments: ChatAttachmentSummary[] = [];
+  for (const [index, dataUrl] of inputImages.entries()) {
+    const parsed = parseDataImageUrl(dataUrl);
+    if (!parsed) continue;
+    const reference = references[index];
+    const name = imageAttachmentName(reference, parsed.contentType, index);
+    const id = `${context.turnId}_input_image_${index + 1 + offset}`;
+    const imagePreview = materializedCodexHistoryImagePreview({
+      bytes: parsed.bytes,
+      attachmentId: id,
+      contentType: parsed.contentType,
+      context,
+      name,
+    });
+    attachments.push({
+      id,
+      name,
+      mediaType: parsed.contentType,
+      sizeBytes: parsed.bytes.byteLength,
+      kind: "image",
+      ...(imagePreview ? { imagePreview } : {}),
+    });
+  }
+  return attachments;
+}
+
+function codexImageReferenceAttachments(
+  references: CodexImageReference[],
+  context: VisibleCodexUserContentContext,
+  offset: number,
+): ChatAttachmentSummary[] {
+  const attachments: ChatAttachmentSummary[] = [];
+  for (const [index, reference] of references.entries()) {
+    const localPath = reference.localPath ?? null;
+    if (!localPath) continue;
+    const contentType = chatAttachmentImageContentType("", localPath);
+    const bytes = readCodexHistoryImageBytes(localPath);
+    if (!contentType || !bytes) continue;
+    const name = imageAttachmentName(reference, contentType, index);
+    const id = `${context.turnId}_image_reference_${index + 1 + offset}`;
+    const imagePreview = materializedCodexHistoryImagePreview({
+      bytes,
+      attachmentId: id,
+      contentType,
+      context,
+      name,
+    });
+    attachments.push({
+      id,
+      name,
+      mediaType: contentType,
+      sizeBytes: bytes.byteLength,
+      kind: "image",
+      ...(imagePreview ? { imagePreview } : {}),
+    });
+  }
+  return attachments;
+}
+
+function codexHistoryImagePreview(input: {
+  attachmentId: string;
+  context: VisibleCodexUserContentContext;
+  kind: ChatAttachmentSummary["kind"];
+  localPath?: string;
+  mediaType: string;
+}): ChatAttachmentSummary["imagePreview"] | undefined {
+  if (input.kind !== "image" || !input.localPath || !input.context.attachmentRootDir) return undefined;
+  const storageName = path.basename(input.localPath);
+  const contentType = chatAttachmentImageContentType(input.mediaType, storageName);
+  if (!contentType) return undefined;
+
+  const target = path.resolve(input.localPath);
+  const expectedDir = path.resolve(
+    input.context.attachmentRootDir,
+    safeChatAttachmentPathSegment(input.context.sessionId),
+    safeChatAttachmentPathSegment(input.context.turnId),
+  );
+  if (target === expectedDir || !target.startsWith(`${expectedDir}${path.sep}`)) {
+    const bytes = readCodexHistoryImageBytes(input.localPath);
+    return bytes
+      ? materializedCodexHistoryImagePreview({
+          attachmentId: input.attachmentId,
+          bytes,
+          contentType,
+          context: input.context,
+          name: storageName,
+        })
+      : undefined;
+  }
+
+  return {
+    sessionId: input.context.sessionId,
+    turnId: input.context.turnId,
+    attachmentId: input.attachmentId,
+    storageName,
+    contentType,
+  };
+}
+
+function materializedCodexHistoryImagePreview(input: {
+  attachmentId: string;
+  bytes: Buffer;
+  contentType: string;
+  context: VisibleCodexUserContentContext;
+  name: string;
+}): ChatAttachmentSummary["imagePreview"] | undefined {
+  if (!input.context.attachmentRootDir || input.bytes.byteLength > MAX_CODEX_HISTORY_IMAGE_BYTES) return undefined;
+  const storageName = uniqueCodexHistoryImageStorageName(input.attachmentId, input.name, input.contentType);
+  const turnDir = path.join(
+    input.context.attachmentRootDir,
+    safeChatAttachmentPathSegment(input.context.sessionId),
+    safeChatAttachmentPathSegment(input.context.turnId),
+  );
+  const target = path.join(turnDir, storageName);
+  try {
+    mkdirSync(turnDir, { recursive: true });
+    if (!existsSync(target)) writeFileSync(target, input.bytes, { mode: 0o600 });
+  } catch {
+    return undefined;
+  }
+  return {
+    sessionId: input.context.sessionId,
+    turnId: input.context.turnId,
+    attachmentId: input.attachmentId,
+    storageName,
+    contentType: input.contentType,
+  };
+}
+
+function parseDataImageUrl(value: string): { bytes: Buffer; contentType: string } | null {
+  const match = DATA_IMAGE_URL_PATTERN.exec(value.trim());
+  if (!match) return null;
+  const contentType = chatAttachmentImageContentType(match[1]!, "");
+  if (!contentType) return null;
+  const bytes = Buffer.from(match[2]!.replace(/\s+/g, ""), "base64");
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_CODEX_HISTORY_IMAGE_BYTES) return null;
+  return { bytes, contentType };
+}
+
+function readCodexHistoryImageBytes(localPath: string): Buffer | null {
+  try {
+    const stat = statSync(localPath);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_CODEX_HISTORY_IMAGE_BYTES) return null;
+    return readFileSync(localPath);
+  } catch {
+    return null;
+  }
+}
+
+function localImagePathByName(name: string): string | undefined {
+  const candidates = [
+    path.join(os.homedir(), "Pictures", "Screenshots", name),
+    path.join(os.homedir(), "Pictures", name),
+    path.join(os.homedir(), "Downloads", name),
+    path.join(os.homedir(), "Desktop", name),
+  ];
+  return candidates.find((candidate) => {
+    const contentType = chatAttachmentImageContentType("", candidate);
+    if (!contentType) return false;
+    try {
+      const stat = statSync(candidate);
+      return stat.isFile() && stat.size > 0 && stat.size <= MAX_CODEX_HISTORY_IMAGE_BYTES;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function imageAttachmentName(
+  reference: CodexImageReference | undefined,
+  contentType: string,
+  index: number,
+): string {
+  const localPathName = reference?.localPath ? path.basename(reference.localPath) : "";
+  if (localPathName) return localPathName;
+  const label = reference?.label?.trim();
+  if (label) return `${label}${imageExtension(contentType)}`;
+  return `image-${index + 1}${imageExtension(contentType)}`;
+}
+
+function uniqueCodexHistoryImageStorageName(attachmentId: string, name: string, contentType: string): string {
+  const extension = path.extname(name) || imageExtension(contentType);
+  const base = path.basename(name, path.extname(name)).replace(/[^a-zA-Z0-9._ -]+/g, "-").trim() || "image";
+  return `${safeId(attachmentId)}-${base}${extension}`;
+}
+
+function imageExtension(contentType: string): string {
+  if (contentType === "image/jpeg") return ".jpg";
+  if (contentType === "image/gif") return ".gif";
+  if (contentType === "image/webp") return ".webp";
+  return ".png";
+}
+
+function parseAttachmentByteSize(amountText: string | undefined, unitText: string | undefined): number | null {
+  if (!amountText || !unitText) return null;
+  const amount = Number.parseFloat(amountText);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  const unit = unitText.toUpperCase();
+  const multipliers: Record<string, number> = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4,
+  };
+  const multiplier = multipliers[unit];
+  return multiplier ? Math.round(amount * multiplier) : null;
+}
+
+function attachmentKind(value: string | undefined): ChatAttachmentSummary["kind"] | null {
+  if (value === "image" || value === "text" || value === "file") return value;
+  return null;
 }
 
 function isCodexInjectedUserMessage(content: string): boolean {

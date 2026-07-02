@@ -4,9 +4,18 @@ import type {
   CloudWorkItemBackgroundRequest,
   CloudWorkItemDetail,
   CompactSessionRequest,
+  ChatAttachmentSummary,
   CreateCloudWorkItemRequest,
   CreateLocalProjectRequest,
   CreateSessionRequest,
+  InsightStatus,
+  InsightEvidenceSource,
+  InsightRunStatus,
+  InsightRunTrigger,
+  InsightsListResponse,
+  InsightsScanResponse,
+  InsightsAskRequest,
+  InsightsAskResponse,
   LocalProject,
   UpdateLocalProjectAgentSetupRequest,
   PatchSessionRequest,
@@ -119,6 +128,46 @@ export const api = {
     const query = params.size ? `?${params.toString()}` : "";
     return apiFetch<RuntimeEventPagePayload>(connection, `/v1/events/page${query}`);
   },
+  insights: (
+    connection: ClientConnection,
+    input: {
+      status?: InsightStatus | "all";
+      limit?: number;
+      evidenceSource?: InsightEvidenceSource | "all";
+      runStatus?: InsightRunStatus | "all";
+      runTrigger?: InsightRunTrigger | "all";
+      runModel?: string | null;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (input.status) params.set("status", input.status);
+    if (input.limit !== undefined) params.set("limit", String(input.limit));
+    if (input.evidenceSource) params.set("evidenceSource", input.evidenceSource);
+    if (input.runStatus) params.set("runStatus", input.runStatus);
+    if (input.runTrigger) params.set("runTrigger", input.runTrigger);
+    if (input.runModel?.trim()) params.set("runModel", input.runModel.trim());
+    const query = params.size ? `?${params.toString()}` : "";
+    return apiFetch<InsightsListResponse>(connection, `/v1/insights${query}`);
+  },
+  runInsightsScan: (connection: ClientConnection, input: { trigger?: InsightRunTrigger } = {}) => {
+    const params = new URLSearchParams();
+    if (input.trigger) params.set("trigger", input.trigger);
+    const query = params.size ? `?${params.toString()}` : "";
+    return apiFetch<InsightsScanResponse>(connection, `/v1/insights/scan${query}`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  },
+  askInsights: (connection: ClientConnection, input: InsightsAskRequest) =>
+    apiFetch<InsightsAskResponse>(connection, "/v1/insights/question", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  patchInsight: (connection: ClientConnection, insightId: string, input: { status: InsightStatus }) =>
+    apiFetch<InsightsListResponse>(connection, `/v1/insights/${encodeURIComponent(insightId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
   refreshOpenPond: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/apps/refresh", {
       method: "POST",
@@ -263,7 +312,24 @@ export const api = {
     }),
   profilePush: (
     connection: ClientConnection,
-    input: { teamId: string; ensureHosted?: boolean; force?: boolean; message?: string | null },
+    input: {
+      teamId: string;
+      ensureHosted?: boolean;
+      force?: boolean;
+      message?: string | null;
+      hostedSourceAgentId?: string | null;
+      hostedSourceProjectId?: string | null;
+      hostedSourceChecks?: boolean;
+      hostedSourceDispatch?: "request_only" | "coding_core" | null;
+      publishHostedSource?: boolean;
+      hostedCheckKind?: string | null;
+      hostedRunAgentId?: string | null;
+      hostedRunIdempotencyKey?: string | null;
+      hostedRunInput?: Record<string, unknown> | null;
+      hostedRunRetry?: boolean;
+      expectedManifestHash?: string | null;
+      workItemId?: string | null;
+    },
   ) =>
     apiFetch<{
       profile: unknown;
@@ -329,6 +395,14 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
+      },
+    ),
+  interruptCodexHistoryTurn: (connection: ClientConnection, sessionId: string) =>
+    apiFetch<{ interrupted: boolean }>(
+      connection,
+      `/v1/codex-history/${encodeURIComponent(sessionId)}/turns/interrupt`,
+      {
+        method: "POST",
       },
     ),
   patchSidebarAppPreference: (
@@ -404,6 +478,19 @@ export const api = {
     ),
   signWorkspaceImageUrl: (connection: ClientConnection, input: { appId: string; path: string }) =>
     apiFetch<{ url: string; expiresAt: number }>(connection, "/v1/assets/workspace-image-url", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  signLocalImageUrl: (connection: ClientConnection, input: { path: string }) =>
+    apiFetch<{ url: string; expiresAt: number }>(connection, "/v1/assets/local-image-url", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  signChatAttachmentImageUrl: (
+    connection: ClientConnection,
+    input: NonNullable<ChatAttachmentSummary["imagePreview"]>,
+  ) =>
+    apiFetch<{ url: string; expiresAt: number }>(connection, "/v1/assets/chat-attachment-image-url", {
       method: "POST",
       body: JSON.stringify(input),
     }),

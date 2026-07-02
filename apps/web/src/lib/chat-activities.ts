@@ -422,8 +422,14 @@ function isImagePathKey(key: string): boolean {
 }
 
 function extractImagePathFromText(value: string): string | null {
-  const match = /(?:\.\/|[\w.-]+\/)[^\s"'`<>]+\.(?:avif|gif|jpe?g|png|webp)\b/i.exec(value);
-  return match?.[0] ?? null;
+  const match = /(?:file:\/\/)?(?:\/|\.\/|[\w.-]+\/)[^\s"'`<>]+\.(?:avif|gif|jpe?g|png|webp)\b/i.exec(value);
+  if (!match) return null;
+  if (!match[0].startsWith("file://")) return match[0];
+  try {
+    return decodeURIComponent(new URL(match[0]).pathname);
+  } catch {
+    return match[0].replace(/^file:\/\//i, "");
+  }
 }
 
 type CodexControlMessage = {

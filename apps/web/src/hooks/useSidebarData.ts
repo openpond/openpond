@@ -6,7 +6,7 @@ import type {
   Session,
   SidebarAppPreferences,
 } from "@openpond/contracts";
-import { buildChatMessages } from "../lib/chat-messages";
+import { buildCachedChatMessages } from "../lib/chat-messages";
 import {
   SIDEBAR_SECTION_LIMIT,
   sidebarDragKey,
@@ -36,7 +36,7 @@ type UseSidebarDataInput = {
   selectedSessionId: string | null;
   archivedChatsOpen: boolean;
   projectsExpanded: boolean;
-  chatsExpanded: boolean;
+  chatRowsVisibleCount: number;
 };
 
 export function useSidebarData({
@@ -49,11 +49,37 @@ export function useSidebarData({
   selectedSessionId,
   archivedChatsOpen,
   projectsExpanded,
-  chatsExpanded,
+  chatRowsVisibleCount,
 }: UseSidebarDataInput) {
-  const activeSessions = useMemo(() => sessions.filter((session) => !session.archived), [sessions]);
+  const selectedSession = useMemo(
+    () => sessions.find((session) => session.id === selectedSessionId) ?? null,
+    [selectedSessionId, sessions],
+  );
+  const visibleLocalProjects = useMemo(
+    () =>
+      localProjects.filter(
+        (project) =>
+          !project.hiddenFromDefaultSidebar ||
+          (project.systemKind && selectedSession?.localProjectId === project.id),
+      ),
+    [localProjects, selectedSession?.localProjectId],
+  );
+  const visibleLocalProjectIds = useMemo(
+    () => new Set(visibleLocalProjects.map((project) => project.id)),
+    [visibleLocalProjects],
+  );
+  const activeSessions = useMemo(
+    () =>
+      sessions.filter(
+        (session) => !session.archived && isVisibleActiveSidebarSession(session, visibleLocalProjectIds),
+      ),
+    [sessions, visibleLocalProjectIds],
+  );
   const pinnedSessions = useMemo(() => activeSessions.filter((session) => session.pinned), [activeSessions]);
-  const archivedSessions = useMemo(() => sessions.filter((session) => session.archived), [sessions]);
+  const archivedSessions = useMemo(
+    () => sessions.filter((session) => session.archived && !session.hiddenFromDefaultSidebar),
+    [sessions],
+  );
   const localProjectIds = useMemo(() => new Set(localProjects.map((project) => project.id)), [localProjects]);
   const cloudProjectIds = useMemo(
     () => new Set(cloudProjects.map((project) => project.id)),
@@ -114,7 +140,7 @@ export function useSidebarData({
   }, [activeSessions, sidebarProjectIdBySessionId]);
   const localProjectRows = useMemo<SidebarProjectItem[]>(
     () =>
-      localProjects
+      visibleLocalProjects
         .map((project, index) => {
           const id = projectSelectionKey("local", project.id);
           return {
@@ -126,7 +152,7 @@ export function useSidebarData({
           };
         })
         .sort(sortSidebarProjectRows),
-    [appPreferences, localProjects],
+    [appPreferences, visibleLocalProjects],
   );
   const cloudProjectRows = useMemo<SidebarProjectItem[]>(
     () =>
@@ -206,14 +232,14 @@ export function useSidebarData({
     [archivedChatsOpen, archivedChatSessions, chatSessions]
   );
   const visibleChatRows = useMemo(
-    () => (chatsExpanded ? chatRows : chatRows.slice(0, SIDEBAR_SECTION_LIMIT)),
-    [chatRows, chatsExpanded]
+    () => chatRows.slice(0, Math.max(SIDEBAR_SECTION_LIMIT, chatRowsVisibleCount)),
+    [chatRows, chatRowsVisibleCount]
   );
   const sessionEvents = useMemo(
     () => runtimeEventsForSession(runtimeIndexes, selectedSessionId),
     [runtimeIndexes, selectedSessionId]
   );
-  const chatMessages = useMemo(() => buildChatMessages(sessionEvents), [sessionEvents]);
+  const chatMessages = useMemo(() => buildCachedChatMessages(sessionEvents), [sessionEvents]);
   const contextUsage = latestContextUsageForSession(runtimeIndexes, selectedSessionId);
   const goalRuntime = latestGoalRuntimeForSession(runtimeIndexes, selectedSessionId);
 
@@ -237,6 +263,11 @@ export function useSidebarData({
     contextUsage,
     goalRuntime,
   };
+}
+
+function isVisibleActiveSidebarSession(session: Session, visibleLocalProjectIds: ReadonlySet<string>): boolean {
+  if (!session.hiddenFromDefaultSidebar) return true;
+  return Boolean(session.systemKind && session.localProjectId && visibleLocalProjectIds.has(session.localProjectId));
 }
 
 function sortSidebarProjectRows(left: SidebarProjectItem, right: SidebarProjectItem): number {

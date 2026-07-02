@@ -105,7 +105,7 @@ type ComposerProps = {
     command?: ComposerSlashCommand | null,
     options?: ComposerSubmitOptions,
   ) => Promise<boolean>;
-  onStop: () => void;
+  onStop: () => Promise<boolean | void> | boolean | void;
 };
 
 export type ComposerSubmitOptions = {
@@ -261,6 +261,7 @@ export function Composer({
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const submittingRef = useRef(false);
   const [cursorIndex, setCursorIndex] = useState(prompt.length);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [actionIndex, setActionIndex] = useState(0);
@@ -278,9 +279,10 @@ export function Composer({
     attachmentError,
     attachments,
     addFiles,
-    clearAttachments,
     removeAttachment,
+    settleStagedAttachments,
     setAttachmentError,
+    stageAttachmentsForSubmit,
   } = useComposerAttachments();
   const placeholder = mode === "start" ? "Ask Openpond Anything" : "Ask for follow-up changes";
   const modelValue = normalizeChatModel(provider, model, providerSettings);
@@ -330,8 +332,10 @@ export function Composer({
     }
     return null;
   }, [prompt.length, selectedAction, selectedCommand, selectedInvocationPosition]);
-  const sendDisabled = busy || serializingAttachments || !hasComposerInput;
-  const sendTooltip = busy ? "Response running" : serializingAttachments ? "Preparing files" : "Send";
+  const sendDisabled = serializingAttachments || !hasComposerInput;
+  const sendTooltip = serializingAttachments ? "Preparing files" : running ? "Interrupt and send" : "Send";
+  const inputDisabled = serializingAttachments;
+  const controlsDisabled = busy || serializingAttachments;
   const providerOptions = useMemo(
     () => {
       const options = providerOptionsFromSettings(providerSettings, { enabledOnly: true })
@@ -389,7 +393,7 @@ export function Composer({
       .map((action) => ({ kind: "action" as const, action }));
     return [...appMatches, ...actionMatches].slice(0, 8);
   }, [actionCatalog, mentionApps, mentionContext]);
-  const showMentionMenu = Boolean(!busy && mentionContext && mentionMatches.length > 0);
+  const showMentionMenu = Boolean(!inputDisabled && mentionContext && mentionMatches.length > 0);
   const activeSlashContext = useMemo(
     () => activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
     [cursorIndex, prompt],
@@ -415,7 +419,7 @@ export function Composer({
     [actionMatches, appContextMatches, commandMatches],
   );
   const showActionMenu = Boolean(
-    !busy &&
+    !inputDisabled &&
     activeSlashContext &&
     activeSlashKey &&
     actionMenuDismissedPrompt !== activeSlashKey,
@@ -665,29 +669,39 @@ export function Composer({
   }
 
   async function submitComposer() {
-    if (sendDisabled) return;
+    if (submittingRef.current || sendDisabled) return;
+    submittingRef.current = true;
     setAddMenuOpen(false);
     setAttachmentError(null);
     setSerializingAttachments(true);
-	    try {
-	      const payloads = await Promise.all(attachments.map(readComposerAttachmentPayload));
-	      const displayPrompt =
-	        selectedAction && selectedActionMentionText
-	          ? promptWithSelectedInvocationText(prompt, selectedActionMentionText, selectedInvocationPosition)
-	          : null;
-	      const sent = await onSubmit(
-	        payloads,
-	        selectedAction,
-	        selectedCommand,
-	        displayPrompt ? { displayPrompt } : undefined,
-	      );
-      if (sent) {
-        clearAttachments();
-        clearSelectedInvocation();
+    try {
+      if (running) {
+        const stopped = await onStop();
+        if (stopped === false) return;
+      }
+      const stagedAttachments = stageAttachmentsForSubmit();
+      try {
+        const payloads = await Promise.all(stagedAttachments.map(readComposerAttachmentPayload));
+        const displayPrompt =
+          selectedAction && selectedActionMentionText
+            ? promptWithSelectedInvocationText(prompt, selectedActionMentionText, selectedInvocationPosition)
+            : null;
+        const sent = await onSubmit(
+          payloads,
+          selectedAction,
+          selectedCommand,
+          displayPrompt ? { displayPrompt } : undefined,
+        );
+        settleStagedAttachments(stagedAttachments, sent ? "dispose" : "restore");
+        if (sent) clearSelectedInvocation();
+      } catch (submitError) {
+        settleStagedAttachments(stagedAttachments, "restore");
+        throw submitError;
       }
     } catch (error) {
       setAttachmentError(error instanceof Error ? error.message : String(error));
     } finally {
+      submittingRef.current = false;
       setSerializingAttachments(false);
     }
   }
@@ -772,7 +786,7 @@ export function Composer({
         >
           <ComposerInlineInput
             ref={inputRef}
-            disabled={busy}
+            disabled={inputDisabled}
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
               if (showMentionMenu) {
@@ -830,7 +844,7 @@ export function Composer({
               }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                if (hasComposerInput && !busy) void submitComposer();
+                if (hasComposerInput && !serializingAttachments) void submitComposer();
               }
             }}
             onPromptChange={(nextValue, nextPromptCursor) => {
@@ -879,7 +893,7 @@ export function Composer({
           contextStatusStyle={contextStatusStyle}
           contextStatusTooltipId={contextStatusTooltipId}
           contextWindowStatus={contextWindowStatus}
-          disabled={busy || serializingAttachments}
+          disabled={controlsDisabled}
           dropdownPlacement={dropdownPlacement}
           fileInputRef={fileInputRef}
           mentionApps={mentionApps}
@@ -898,7 +912,7 @@ export function Composer({
           onTranscript={insertDictationTranscript}
           provider={provider}
           providerOptions={providerOptions}
-          running={running}
+          running={running && !hasComposerInput}
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           selectedMentionAppId={selectedMentionAppId}

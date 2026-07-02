@@ -98,7 +98,7 @@ describe("UserAuthFooter", () => {
         }),
       ),
     ).toEqual({
-      label: "Add account",
+      label: "Sign in",
       image: null,
     });
   });

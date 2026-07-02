@@ -15,11 +15,18 @@ import { emptyOpenPondProfileState } from "@openpond/contracts";
 import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import { buildInitialCreatePipelineSnapshot } from "../apps/web/src/lib/create-pipeline-request";
 import {
+  nextSidebarChatVisibleCount,
+  previousSidebarChatVisibleCount,
   SidebarSectionList,
   sidebarProjectClickAction,
 } from "../apps/web/src/components/sidebar/SidebarSectionList";
 import type { SidebarProps } from "../apps/web/src/components/sidebar/Sidebar.types";
-import { projectSelectionKey, type AppView, type SidebarProjectItem } from "../apps/web/src/lib/app-models";
+import {
+  SIDEBAR_SECTION_LIMIT,
+  projectSelectionKey,
+  type AppView,
+  type SidebarProjectItem,
+} from "../apps/web/src/lib/app-models";
 
 const NOW = "2026-06-17T00:00:00.000Z";
 
@@ -233,13 +240,13 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     archivedChatsOpen: false,
     projectsExpanded: false,
     cloudProjectsExpanded: false,
-    chatsExpanded: false,
     sectionMenuOpen: "cloud",
     dragItem: null,
     pinnedRows: [],
     pinnedSessions: [],
     visibleLocalProjectRows: localProjectRows,
     localProjectRows,
+    insightsSystemProjectHidden: true,
     cloudProjectRows,
     cloudWorkItemsByProjectId: {
       [cloudProjectKey]: [workItem],
@@ -261,11 +268,12 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     setSettingsSection: noopDispatch,
     onTogglePinnedCollapsed: noop,
     onToggleProjectsCollapsed: noop,
+    onToggleCloudProjectsCollapsed: noop,
     onToggleChatsCollapsed: noop,
     setArchivedChatsOpen: noopDispatch,
     setProjectsExpanded: noopDispatch,
     setCloudProjectsExpanded: noopDispatch,
-    setChatsExpanded: noopDispatch,
+    setChatRowsVisibleCount: noopDispatch,
     beginNewChat: noop,
     dockSessionRight: noop,
     openCloudHome: noop,
@@ -276,6 +284,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     startCloudProjectFromScratch: noop,
     moveProjectToCloud: noop,
     removeProject: noop,
+    toggleInsightsSystemProjectVisibility: noop,
     toggleProjectPinned: noop,
     toggleSessionPinned: noop,
     archiveSession: noop,
@@ -354,6 +363,99 @@ describe("Cloud native UI", () => {
     expect(markup).not.toContain("Start from GitHub repo");
     expect(markup).not.toContain("Start from template");
     expect(markup).not.toContain("Upload/link local project");
+  });
+
+  test("renders Local Projects options menu with Insights folder toggle", () => {
+    const hiddenMarkup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({ sectionMenuOpen: "projects-options", insightsSystemProjectHidden: true }),
+      ),
+    );
+    const visibleMarkup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({ sectionMenuOpen: "projects-options", insightsSystemProjectHidden: false }),
+      ),
+    );
+
+    expect(hiddenMarkup).toContain('aria-label="Local Projects options"');
+    expect(hiddenMarkup).toContain("Show Insights folder");
+    expect(visibleMarkup).toContain("Hide Insights folder");
+  });
+
+  test("paginates top-level chats ten at a time", () => {
+    const chatRows = Array.from({ length: 24 }, (_, index) =>
+      chatSession({ id: `session_${index}`, title: `Feature chat ${index}` }),
+    );
+    const pagedMarkup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          chatRows,
+          visibleChatRows: chatRows.slice(0, SIDEBAR_SECTION_LIMIT + 10),
+        }),
+      ),
+    );
+    const fullyVisibleMarkup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          chatRows,
+          visibleChatRows: chatRows,
+        }),
+      ),
+    );
+
+    expect(pagedMarkup).toContain("Show more");
+    expect(pagedMarkup).toContain("Show less");
+    expect(pagedMarkup).toContain("Showing 15 of 24 chats");
+    expect(fullyVisibleMarkup).not.toContain("Show more");
+    expect(fullyVisibleMarkup).toContain("Show less");
+    expect(fullyVisibleMarkup).toContain("Showing 24 of 24 chats");
+  });
+
+  test("paginates chats inside individual projects", () => {
+    const localProjectRows = localProjectSidebarRows([localProject()]);
+    const projectId = localProjectRows[0]!.id;
+    const projectSessions = Array.from({ length: 24 }, (_, index) =>
+      chatSession({ id: `project_session_${index}`, title: `Project chat ${index}` }),
+    );
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          selectedProjectId: projectId,
+          localProjectRows,
+          visibleLocalProjectRows: localProjectRows,
+          cloudProjectRows: [],
+          cloudWorkItemsByProjectId: {},
+          expandedProjectIds: new Set([projectId]),
+          projectSessionRowsByProjectId: {
+            [projectId]: projectSessions,
+          },
+        }),
+      ),
+    );
+
+    expect(markup).toContain("Project chat 4");
+    expect(markup).not.toContain("Project chat 5");
+    expect(markup).toContain("Show more");
+    expect(markup).not.toContain("Show less");
+    expect(markup).toContain("Showing 5 of 24 project chats");
+  });
+
+  test("advances the visible chat count by one page without overshooting", () => {
+    expect(nextSidebarChatVisibleCount(SIDEBAR_SECTION_LIMIT, 24)).toBe(15);
+    expect(nextSidebarChatVisibleCount(15, 24)).toBe(24);
+    expect(nextSidebarChatVisibleCount(0, 24)).toBe(15);
+  });
+
+  test("reduces the visible chat count by one page level", () => {
+    expect(previousSidebarChatVisibleCount(24, 24)).toBe(15);
+    expect(previousSidebarChatVisibleCount(15, 24)).toBe(SIDEBAR_SECTION_LIMIT);
+    expect(previousSidebarChatVisibleCount(35, 35)).toBe(25);
+    expect(previousSidebarChatVisibleCount(40, 24)).toBe(15);
   });
 
   test("marks agent SDK projects with composite sidebar icons", () => {

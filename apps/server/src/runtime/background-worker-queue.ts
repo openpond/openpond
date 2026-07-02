@@ -32,12 +32,14 @@ export type BackgroundWorkerQueue = {
 export type ServerWorkQueueId =
   | "turn-follow-up"
   | "checkpoint-diff"
-  | "provider-runtime-ingestion";
+  | "provider-runtime-ingestion"
+  | "insights";
 
 export type ServerWorkQueues = {
   turnFollowUp: BackgroundWorkerQueue;
   checkpointDiff: BackgroundWorkerQueue;
   providerRuntimeIngestion: BackgroundWorkerQueue;
+  insights: BackgroundWorkerQueue;
   drain: (queueId?: ServerWorkQueueId) => Promise<void>;
   receipts: (queueId?: ServerWorkQueueId) => BackgroundWorkReceipt[];
 };
@@ -134,16 +136,19 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     queueId: "provider-runtime-ingestion",
     logger,
   });
+  const insights = createBackgroundWorkerQueue({ queueId: "insights", logger });
   const byId: Record<ServerWorkQueueId, BackgroundWorkerQueue> = {
     "turn-follow-up": turnFollowUp,
     "checkpoint-diff": checkpointDiff,
     "provider-runtime-ingestion": providerRuntimeIngestion,
+    insights,
   };
 
   return {
     turnFollowUp,
     checkpointDiff,
     providerRuntimeIngestion,
+    insights,
     drain: async (queueId?: ServerWorkQueueId) => {
       if (queueId) {
         await byId[queueId].drain();

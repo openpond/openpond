@@ -21,6 +21,8 @@ export type WorkspaceTemplateConfigView = z.infer<typeof WorkspaceTemplateConfig
 
 export const WorkspaceToolNameSchema = z.enum([
   "create_sandbox_template_scaffold",
+  "resource_read",
+  "resource_search",
   "list_files",
   "read_files",
   "search_files",

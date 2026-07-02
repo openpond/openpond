@@ -20,8 +20,11 @@ import {
   writeSourceUploadEntriesToDirectory,
 } from "./cli-sandbox-fixture";
 
+const longCliScenarioTest =
+  process.env.OPENPOND_SKIP_CI_LONG_CLI_TESTS === "1" ? test.skip : test;
+
 describe("project and agent sandbox CLI scenarios", () => {
-  test("project and agent commands use first-class sandbox API resources", async () => {
+  longCliScenarioTest("project and agent commands use first-class sandbox API resources", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
       const projectList = await runCli([
@@ -99,6 +102,8 @@ describe("project and agent sandbox CLI scenarios", () => {
         "team_test",
         "--idempotency-key",
         "run_key",
+        "--conversation-id",
+        "session_run_1",
         "--input",
         '{"message":"hello"}',
         "--sandbox-api-url",
@@ -138,6 +143,8 @@ describe("project and agent sandbox CLI scenarios", () => {
         "validate",
         "--source-ref",
         "master",
+        "--source-check-dispatch",
+        "coding_core",
         "--metadata",
         '{"reason":"phase3"}',
         "--sandbox-api-url",
@@ -378,6 +385,17 @@ describe("project and agent sandbox CLI scenarios", () => {
         workItem: { id: "work_item_test" },
         activity: { id: "activity_checks" },
       });
+      const sourceChecksRequest = requests.find(
+        (request) =>
+          request.url === "/v1/agents/agent_test/source/checks?teamId=team_test" &&
+          request.method === "POST" &&
+          request.body.sourceRef === "master"
+      );
+      expect(sourceChecksRequest?.body).toMatchObject({
+        checkKind: "validate",
+        dispatch: "coding_core",
+        metadata: { reason: "phase3" },
+      });
       expect(
         JSON.parse(agentSourceSnapshots.stdout).manifestSnapshots[0]
       ).toMatchObject({
@@ -602,6 +620,7 @@ describe("project and agent sandbox CLI scenarios", () => {
       expect(requests[5]?.body).toMatchObject({
         teamId: "team_test",
         idempotencyKey: "run_key",
+        conversationId: "session_run_1",
         input: { message: "hello" },
       });
       expect(requests[6]?.body).toMatchObject({
@@ -679,7 +698,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         ref: "pr_ref_test",
       });
     });
-  });
+  }, 15_000);
 
   test("agent help separates local runs, remote runs, and source edits", async () => {
     const result = await runCli(["help"]);

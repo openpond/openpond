@@ -1,0 +1,74 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, test } from "bun:test";
+import type { RuntimeEvent, Session } from "@openpond/contracts";
+import { createSessionStore } from "../apps/server/src/store/session-store";
+import { SqliteStore } from "../apps/server/src/store/store";
+
+describe("session store patches", () => {
+  test("keeps updatedAt stable for sidebar-only patches", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const store = new SqliteStore(storeDir);
+    const baseSession = session("session-sidebar");
+
+    try {
+      await store.insertSessionAtFront(baseSession);
+      const { patchSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+      });
+
+      const pinned = await patchSession(baseSession.id, { pinned: true, archived: false });
+
+      expect(pinned.pinned).toBe(true);
+      expect(pinned.archived).toBe(false);
+      expect(pinned.updatedAt).toBe(baseSession.updatedAt);
+
+      const reordered = await patchSession(baseSession.id, { order: 7 });
+
+      expect(reordered.order).toBe(7);
+      expect(reordered.updatedAt).toBe(baseSession.updatedAt);
+
+      const rebound = await patchSession(baseSession.id, {
+        provider: "openpond",
+        workspaceKind: "local_project",
+        workspaceId: "project_1",
+        workspaceName: "Project",
+        cwd: "/tmp/project",
+      });
+
+      expect(rebound.workspaceKind).toBe("local_project");
+      expect(rebound.workspaceId).toBe("project_1");
+      expect(rebound.updatedAt).toBe(baseSession.updatedAt);
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+});
+
+function session(id: string): Session {
+  return {
+    id,
+    provider: "openpond",
+    modelRef: null,
+    title: id,
+    appId: null,
+    appName: null,
+    workspaceId: null,
+    workspaceName: null,
+    localProjectId: null,
+    cloudProjectId: null,
+    cloudTeamId: null,
+    cwd: "/tmp/openpond",
+    codexThreadId: null,
+    createdAt: "2026-07-01T10:00:00.000Z",
+    updatedAt: "2026-07-01T10:00:00.000Z",
+    status: "idle",
+    pinned: false,
+    archived: false,
+    order: 0,
+  };
+}

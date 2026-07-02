@@ -2,15 +2,18 @@ import type { Session } from "@openpond/contracts";
 import { useState } from "react";
 import {
   Cloud,
+  Eye,
+  EyeOff,
   FolderOpen,
   FolderPlus,
   ListFilter,
+  MoreHorizontal,
   Plus,
   Settings,
   SquarePen,
 } from "../icons";
 import type { AppView, SidebarProjectItem } from "../../lib/app-models";
-import { SIDEBAR_SECTION_LIMIT } from "../../lib/app-models";
+import { SIDEBAR_CHAT_PAGE_SIZE, SIDEBAR_SECTION_LIMIT } from "../../lib/app-models";
 import type { SidebarProps } from "./Sidebar.types";
 import {
   SidebarCloudWorkItemRow,
@@ -32,13 +35,29 @@ export function sidebarProjectClickAction(input: {
     : "toggle_project";
 }
 
+export function nextSidebarChatVisibleCount(currentCount: number, totalCount: number): number {
+  return Math.min(
+    Math.max(currentCount, SIDEBAR_SECTION_LIMIT) + SIDEBAR_CHAT_PAGE_SIZE,
+    totalCount,
+  );
+}
+
+export function previousSidebarChatVisibleCount(currentCount: number, totalCount: number): number {
+  const boundedCount = Math.max(SIDEBAR_SECTION_LIMIT, Math.min(currentCount, totalCount));
+  if (boundedCount <= SIDEBAR_SECTION_LIMIT) return SIDEBAR_SECTION_LIMIT;
+  const pageCount = Math.ceil((boundedCount - SIDEBAR_SECTION_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE);
+  return Math.max(
+    SIDEBAR_SECTION_LIMIT,
+    SIDEBAR_SECTION_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE,
+  );
+}
+
 export function SidebarSectionList({
   addProjectFolder,
   archivedChatsOpen,
   archiveSession,
   beginNewChat,
   chatsCollapsed,
-  chatsExpanded,
   chatRows,
   cloudProjectsCollapsed,
   cloudProjectsExpanded,
@@ -51,6 +70,7 @@ export function SidebarSectionList({
   dockSessionRight,
   expandedProjectIds,
   expandProject,
+  insightsSystemProjectHidden,
   onToggleChatsCollapsed,
   onToggleCloudProjectsCollapsed,
   onTogglePinnedCollapsed,
@@ -77,7 +97,7 @@ export function SidebarSectionList({
   sidebarProjectIdBySessionId,
   setArchivedChatsOpen,
   setCloudProjectsExpanded,
-  setChatsExpanded,
+  setChatRowsVisibleCount,
   setProjectsExpanded,
   setSearchOpen,
   setSectionMenuOpen,
@@ -88,25 +108,38 @@ export function SidebarSectionList({
   startPinnedDrag,
   startCloudProjectFromScratch,
   startProjectFromScratch,
+  toggleInsightsSystemProjectVisibility,
   toggleProjectPinned,
+  toggleSystemProjectVisibility,
   toggleProjectExpanded,
   toggleSessionPinned,
   visibleChatRows,
   visibleLocalProjectRows,
   view,
 }: SidebarProps) {
-  const [expandedProjectChatIds, setExpandedProjectChatIds] = useState<Set<string>>(() => new Set());
+  const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<Record<string, number>>({});
   const [expandedCloudProjectWorkItemIds, setExpandedCloudProjectWorkItemIds] = useState<Set<string>>(() => new Set());
 
-  function toggleProjectChatRows(projectId: string) {
-    setExpandedProjectChatIds((current) => {
-      const next = new Set(current);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
+  function showMoreProjectChats(projectId: string, totalCount: number) {
+    setProjectChatVisibleCounts((current) => {
+      const currentCount = current[projectId] ?? SIDEBAR_SECTION_LIMIT;
+      const nextCount = nextSidebarChatVisibleCount(currentCount, totalCount);
+      if (nextCount === currentCount) return current;
+      return { ...current, [projectId]: nextCount };
+    });
+  }
+
+  function showLessProjectChats(projectId: string, totalCount: number) {
+    setProjectChatVisibleCounts((current) => {
+      const currentCount = current[projectId] ?? SIDEBAR_SECTION_LIMIT;
+      const previousCount = previousSidebarChatVisibleCount(currentCount, totalCount);
+      if (previousCount === currentCount) return current;
+      if (previousCount <= SIDEBAR_SECTION_LIMIT) {
+        const next = { ...current };
+        delete next[projectId];
+        return next;
       }
-      return next;
+      return { ...current, [projectId]: previousCount };
     });
   }
 
@@ -153,6 +186,7 @@ export function SidebarSectionList({
   function selectSession(session: Session) {
     setSelectedSessionId(session.id);
     const projectId = sidebarProjectIdBySessionId[session.id] ?? null;
+    if (projectId) expandProject(projectId);
     setSelectedAppId(projectId ? null : session.appId);
     setSelectedProjectId(projectId);
     setView("chat");
@@ -163,8 +197,10 @@ export function SidebarSectionList({
     if (!expandedProjectIds.has(item.id)) return null;
     const sessions = projectSessionRowsByProjectId[item.id] ?? [];
     if (sessions.length === 0) return null;
-    const chatsExpandedForProject = expandedProjectChatIds.has(item.id);
-    const visibleSessions = chatsExpandedForProject ? sessions : sessions.slice(0, SIDEBAR_SECTION_LIMIT);
+    const visibleCount = Math.max(SIDEBAR_SECTION_LIMIT, projectChatVisibleCounts[item.id] ?? SIDEBAR_SECTION_LIMIT);
+    const visibleSessions = sessions.slice(0, visibleCount);
+    const canShowMoreProjectChats = visibleSessions.length < sessions.length;
+    const canShowLessProjectChats = visibleSessions.length > SIDEBAR_SECTION_LIMIT;
 
     return (
       <div className="sidebar-project-children">
@@ -182,11 +218,22 @@ export function SidebarSectionList({
             onArchive={() => archiveSession(session)}
           />
         ))}
-        {sessions.length > SIDEBAR_SECTION_LIMIT && (
-          <SidebarShowMoreButton
-            expanded={chatsExpandedForProject}
-            onClick={() => toggleProjectChatRows(item.id)}
-          />
+        {sessions.length > SIDEBAR_SECTION_LIMIT && (canShowMoreProjectChats || canShowLessProjectChats) && (
+          <div
+            className="sidebar-pagination-controls"
+            aria-label={`Showing ${visibleSessions.length} of ${sessions.length} project chats`}
+          >
+            {canShowMoreProjectChats ? (
+              <SidebarShowMoreButton onClick={() => showMoreProjectChats(item.id, sessions.length)}>
+                Show more
+              </SidebarShowMoreButton>
+            ) : null}
+            {canShowLessProjectChats ? (
+              <SidebarShowMoreButton onClick={() => showLessProjectChats(item.id, sessions.length)}>
+                Show less
+              </SidebarShowMoreButton>
+            ) : null}
+          </div>
         )}
       </div>
     );
@@ -225,6 +272,16 @@ export function SidebarSectionList({
   const visibleCloudProjectRows = cloudProjectsExpanded
     ? cloudProjectRows
     : cloudProjectRows.slice(0, SIDEBAR_SECTION_LIMIT);
+  const canShowMoreChats = visibleChatRows.length < chatRows.length;
+  const canShowLessChats = visibleChatRows.length > SIDEBAR_SECTION_LIMIT;
+
+  function showMoreChats() {
+    setChatRowsVisibleCount((count) => nextSidebarChatVisibleCount(count, chatRows.length));
+  }
+
+  function showLessChats() {
+    setChatRowsVisibleCount((count) => previousSidebarChatVisibleCount(count, chatRows.length));
+  }
 
   return (
     <div className="sidebar-scroll">
@@ -245,6 +302,7 @@ export function SidebarSectionList({
                   onNewChat={() => beginProjectChat(row.item)}
                   onMoveToCloud={row.item.kind === "local" ? () => moveProjectToCloud(row.item) : undefined}
                   onTogglePin={() => toggleProjectPinned(row.item)}
+                  onToggleSystemVisibility={row.item.kind === "local" && row.item.project.systemKind ? () => toggleSystemProjectVisibility(row.item) : undefined}
                   onRemove={() => removeProject(row.item)}
                   onDragStart={(event) => startPinnedDrag(event, { type: "project", id: row.id })}
                   onDragEnd={clearSidebarDrag}
@@ -300,45 +358,78 @@ export function SidebarSectionList({
         collapsed={projectsCollapsed}
         onToggleCollapsed={onToggleProjectsCollapsed}
         actions={
-          <div className="section-menu">
-            <button
-              type="button"
-              className={`section-icon ${sectionMenuOpen === "projects" ? "active" : ""}`}
-              data-tooltip="Add project"
-              aria-label="Add project"
-              aria-haspopup="menu"
-              aria-expanded={sectionMenuOpen === "projects"}
-              onClick={() => setSectionMenuOpen((current) => (current === "projects" ? null : "projects"))}
-            >
-              <Plus size={14} />
-            </button>
-            {sectionMenuOpen === "projects" && (
-              <div className="section-menu-popover" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setSectionMenuOpen(null);
-                    startProjectFromScratch();
-                  }}
-                >
-                  <FolderPlus size={13} />
-                  <span>New Local Project</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setSectionMenuOpen(null);
-                    addProjectFolder();
-                  }}
-                >
-                  <FolderOpen size={13} />
-                  <span>Use existing folder</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <>
+            <div className="section-menu">
+              <button
+                type="button"
+                className={`section-icon ${sectionMenuOpen === "projects" ? "active" : ""}`}
+                data-tooltip="Add project"
+                aria-label="Add project"
+                aria-haspopup="menu"
+                aria-expanded={sectionMenuOpen === "projects"}
+                onClick={() => setSectionMenuOpen((current) => (current === "projects" ? null : "projects"))}
+              >
+                <Plus size={14} />
+              </button>
+              {sectionMenuOpen === "projects" && (
+                <div className="section-menu-popover" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setSectionMenuOpen(null);
+                      startProjectFromScratch();
+                    }}
+                  >
+                    <FolderPlus size={13} />
+                    <span>New Local Project</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setSectionMenuOpen(null);
+                      addProjectFolder();
+                    }}
+                  >
+                    <FolderOpen size={13} />
+                    <span>Use existing folder</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="section-menu">
+              <button
+                type="button"
+                className={`section-icon ${sectionMenuOpen === "projects-options" ? "active" : ""}`}
+                data-tooltip="Local Projects options"
+                aria-label="Local Projects options"
+                aria-haspopup="menu"
+                aria-expanded={sectionMenuOpen === "projects-options"}
+                onClick={() =>
+                  setSectionMenuOpen((current) => (current === "projects-options" ? null : "projects-options"))
+                }
+              >
+                <MoreHorizontal size={14} />
+              </button>
+              {sectionMenuOpen === "projects-options" && (
+                <div className="section-menu-popover" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={insightsSystemProjectHidden === null}
+                    onClick={() => {
+                      setSectionMenuOpen(null);
+                      toggleInsightsSystemProjectVisibility();
+                    }}
+                  >
+                    {insightsSystemProjectHidden === false ? <EyeOff size={13} /> : <Eye size={13} />}
+                    <span>{insightsSystemProjectHidden === false ? "Hide Insights folder" : "Show Insights folder"}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
         }
       >
         {visibleLocalProjectRows.map((item) => (
@@ -353,6 +444,7 @@ export function SidebarSectionList({
               onNewChat={() => beginProjectChat(item)}
               onMoveToCloud={() => moveProjectToCloud(item)}
               onTogglePin={() => toggleProjectPinned(item)}
+              onToggleSystemVisibility={item.kind === "local" && item.project.systemKind ? () => toggleSystemProjectVisibility(item) : undefined}
               onRemove={() => removeProject(item)}
             />
             {renderProjectChildren(item)}
@@ -520,8 +612,18 @@ export function SidebarSectionList({
           )
         )}
         {chatRows.length === 0 && <div className="empty-row">No chats</div>}
-        {chatRows.length > SIDEBAR_SECTION_LIMIT && (
-          <SidebarShowMoreButton expanded={chatsExpanded} onClick={() => setChatsExpanded((expanded) => !expanded)} />
+        {chatRows.length > SIDEBAR_SECTION_LIMIT && (canShowMoreChats || canShowLessChats) && (
+          <div
+            className="sidebar-pagination-controls"
+            aria-label={`Showing ${visibleChatRows.length} of ${chatRows.length} chats`}
+          >
+            {canShowMoreChats ? (
+              <SidebarShowMoreButton onClick={showMoreChats}>Show more</SidebarShowMoreButton>
+            ) : null}
+            {canShowLessChats ? (
+              <SidebarShowMoreButton onClick={showLessChats}>Show less</SidebarShowMoreButton>
+            ) : null}
+          </div>
         )}
       </SidebarSection>
     </div>

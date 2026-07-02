@@ -329,6 +329,8 @@ export const LocalProjectSchema = z.object({
   workspacePath: z.string(),
   repoPath: z.string().nullable(),
   source: z.enum(["folder", "git"]),
+  systemKind: z.enum(["openpond.insights"]).nullable().optional(),
+  hiddenFromDefaultSidebar: z.boolean().optional(),
   sandboxTemplate: LocalProjectSandboxTemplateSchema.nullable().optional().default(null),
   agentSdk: ProjectAgentSdkSchema.nullable().optional(),
   linkedOpenPondApp: LocalProjectOpenPondLinkSchema.nullable().optional().default(null),
@@ -372,6 +374,7 @@ export type CreateLocalProjectRequest = z.infer<typeof CreateLocalProjectRequest
 export const UpdateLocalProjectAgentSetupRequestSchema = z.object({
   linkedSandboxProject: LocalProjectSandboxProjectLinkSchema.nullable().optional(),
   preferredSandboxAgentId: z.string().nullable().optional(),
+  hiddenFromDefaultSidebar: z.boolean().optional(),
 });
 
 export type UpdateLocalProjectAgentSetupRequest = z.infer<

@@ -88,6 +88,12 @@ export {
   type OpenPondProfileSourceUpload,
   type OpenPondProfileSourceUploadEntry,
 } from "./profile-source-upload.js";
+export {
+  hostedPublishStatusFromPayload,
+  hostedRunStatusFromRunSummary,
+  hostedRunSummaryFromPayload,
+  hostedSourceCheckStatusFromPayload,
+} from "./profile-promotion.js";
 
 export type InitLocalProfileInput = {
   repoPath?: string;
@@ -640,6 +646,10 @@ function hostedBindingFromConfig(config: LocalOpenPondProfileConfig): OpenPondPr
     hostedRunAgentId: push.hostedRunAgentId ?? null,
     hostedRunId: push.hostedRunId ?? null,
     hostedRunAt: push.hostedRunAt ?? null,
+    hostedSourceMaterialization: push.hostedSourceMaterialization ?? null,
+    hostedSourceCheck: push.hostedSourceCheck ?? null,
+    hostedPublish: push.hostedPublish ?? null,
+    hostedRun: push.hostedRun ?? null,
   };
 }
 

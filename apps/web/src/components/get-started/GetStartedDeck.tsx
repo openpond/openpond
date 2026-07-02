@@ -55,8 +55,8 @@ export function GetStartedDeckView({
           </div>
           <div className="get-started-slide-copy">
             <h2>{activeSlide.title}</h2>
-            <p>{activeSlide.body}</p>
-            <p>{activeSlide.detail}</p>
+            {activeSlide.body ? <p>{activeSlide.body}</p> : null}
+            {activeSlide.detail ? <p>{activeSlide.detail}</p> : null}
           </div>
         </div>
         <GetStartedVisual accent={activeSlide.accent} kind={activeSlide.visual} />

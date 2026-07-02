@@ -5,6 +5,7 @@ import {
   DEFAULT_OPENPOND_OPCHAT_API_BASE_URL,
   resolveHostedChatApiBaseUrl,
 } from "../packages/runtime/src/urls";
+import { HOSTED_CHAT_SYSTEM_PROMPT } from "../apps/server/src/constants";
 
 const originalFetch = globalThis.fetch;
 const originalOpChatUrl = process.env.OPENPOND_OPCHAT_API_URL;
@@ -22,6 +23,12 @@ afterEach(() => {
 });
 
 describe("OpenPond runtime OpChat routing", () => {
+  test("guides OpenPond Chat to emit markdown image syntax when asked to show images", () => {
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("Markdown image syntax");
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("![description](path-or-url)");
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("instead of a bare path or raw HTML");
+  });
+
   test("resolves hosted chat bases to the OpChat route root", () => {
     expect(resolveHostedChatApiBaseUrl(null, {}, "https://api.openpond.ai")).toBe(
       DEFAULT_OPENPOND_OPCHAT_API_BASE_URL,

@@ -91,6 +91,9 @@ export type SandboxRequestAction =
   | { type: "agent_get"; agentId: string; payload: unknown }
   | { type: "agent_archive"; agentId: string; payload: unknown }
   | { type: "agent_run"; agentId: string; payload: unknown }
+  | { type: "agent_source_deploy_plan"; agentId: string; payload: unknown }
+  | { type: "agent_source_checks"; agentId: string; payload: unknown }
+  | { type: "agent_source_publish"; agentId: string; payload: unknown }
   | { type: "create"; payload: unknown }
   | { type: "get"; sandboxId: string }
   | { type: "delete"; sandboxId: string; failOnUnpreservedChanges?: boolean }
@@ -727,6 +730,53 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         path: `/agents/${encodeURIComponent(action.agentId)}/run`,
         method: "POST",
         body: asRecord(action.payload),
+      })),
+      account,
+    };
+  }
+  if (action.type === "agent_source_deploy_plan") {
+    return {
+      ...(await requestSandboxPublicApiRoot({
+        apiKey,
+        sandboxApiUrl,
+        path: sandboxScopedCollectionPath(
+          `/agents/${encodeURIComponent(action.agentId)}/source/deploy-plan`,
+          normalizeSandboxListInput(action.payload),
+        ),
+      })),
+      account,
+    };
+  }
+  if (action.type === "agent_source_checks") {
+    const payload = asRecord(action.payload);
+    const { teamId: _teamId, ...body } = payload;
+    return {
+      ...(await requestSandboxPublicApiRoot({
+        apiKey,
+        sandboxApiUrl,
+        path: sandboxScopedCollectionPath(
+          `/agents/${encodeURIComponent(action.agentId)}/source/checks`,
+          normalizeSandboxListInput(payload),
+        ),
+        method: "POST",
+        body,
+      })),
+      account,
+    };
+  }
+  if (action.type === "agent_source_publish") {
+    const payload = asRecord(action.payload);
+    const { teamId: _teamId, ...body } = payload;
+    return {
+      ...(await requestSandboxPublicApiRoot({
+        apiKey,
+        sandboxApiUrl,
+        path: sandboxScopedCollectionPath(
+          `/agents/${encodeURIComponent(action.agentId)}/source/publish`,
+          normalizeSandboxListInput(payload),
+        ),
+        method: "POST",
+        body,
       })),
       account,
     };

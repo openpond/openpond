@@ -85,7 +85,7 @@ export function ComposerPrimaryControls({
   onPlanningAppSelect: (app: OpenPondApp) => void;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
-  onStop: () => void;
+  onStop: () => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
   onTranscript: (text: string) => void;
   provider: ChatProvider;

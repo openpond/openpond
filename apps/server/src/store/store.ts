@@ -3,12 +3,16 @@ import path from "node:path";
 import sqlite3 from "sqlite3";
 import type {
   Approval,
+  ContextUsageSnapshot,
+  InsightItem,
+  InsightStatus,
   RuntimeEvent,
   Session,
   SidebarAppPreference,
   SidebarAppPreferences,
   Turn,
 } from "@openpond/contracts";
+import { ContextUsageSnapshotSchema } from "@openpond/contracts";
 import type {
   CacheEntry,
   CacheEntryRow,
@@ -40,6 +44,26 @@ type TableInfoRow = {
 
 type EventPagePayloadRow = PayloadRow & {
   sequence: number;
+};
+
+type InsightItemRow = {
+  id: string;
+  scope_type: string;
+  scope_id: string;
+  severity: string;
+  type: string;
+  status: string;
+  fingerprint: string;
+  title: string;
+  summary: string;
+  payload: string;
+  last_run_id: string | null;
+  last_run_session_id: string | null;
+  last_run_turn_id: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  dismissed_at: string | null;
 };
 
 type ThreadDetailProjectionRow = PayloadRow & {
@@ -170,6 +194,20 @@ export class SqliteStore {
     return row ? JSON.parse(row.payload) as Turn : null;
   }
 
+  async turnsForSession(sessionId: string, limit = 50): Promise<Turn[]> {
+    await this.ready;
+    await this.writeQueue;
+    const boundedLimit = Math.max(1, Math.min(500, Math.trunc(limit)));
+    const rows = await this.all<PayloadRow>(
+      `SELECT payload FROM turns
+       WHERE session_id = ?
+       ORDER BY sort_index DESC
+       LIMIT ?`,
+      [sessionId, boundedLimit],
+    );
+    return rows.map((row) => JSON.parse(row.payload) as Turn);
+  }
+
   async latestEventSequence(): Promise<number> {
     await this.ready;
     await this.writeQueue;
@@ -298,6 +336,169 @@ export class SqliteStore {
     return rows
       .map((row) => runtimeEventWithSequence(row.payload, row.sequence))
       .reverse();
+  }
+
+  async latestRuntimeEventSequenceByName(name: RuntimeEvent["name"]): Promise<number> {
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<{ sequence: number | null }>(
+      "SELECT MAX(sequence) AS sequence FROM events WHERE name = ?",
+      [name],
+    );
+    return row?.sequence ?? 0;
+  }
+
+  async runtimeEventRowsByNameAfter(
+    name: RuntimeEvent["name"],
+    afterSequence: number,
+  ): Promise<Array<{ sequence: number; event: RuntimeEvent }>> {
+    await this.ready;
+    await this.writeQueue;
+    const rows = await this.all<EventPagePayloadRow>(
+      `SELECT sequence, payload FROM events
+       WHERE name = ? AND sequence > ?
+       ORDER BY sequence ASC`,
+      [name, Math.max(0, Math.trunc(afterSequence))],
+    );
+    return rows.map((row) => ({
+      sequence: row.sequence,
+      event: runtimeEventWithSequence(row.payload, row.sequence),
+    }));
+  }
+
+  async latestContextUsageForTurn(sessionId: string, turnId: string): Promise<ContextUsageSnapshot | null> {
+    await this.ready;
+    await this.writeQueue;
+    const rows = await this.all<EventPagePayloadRow>(
+      `SELECT sequence, payload FROM events
+       WHERE session_id = ? AND turn_id = ? AND name = ?
+       ORDER BY sequence DESC
+       LIMIT 10`,
+      [sessionId, turnId, "session.context.updated"],
+    );
+    for (const row of rows) {
+      const runtimeEvent = runtimeEventWithSequence(row.payload, row.sequence);
+      const parsed = ContextUsageSnapshotSchema.safeParse(runtimeEvent.data);
+      if (parsed.success) return parsed.data;
+    }
+    return null;
+  }
+
+  async listInsights(query: {
+    status?: InsightStatus | "all" | null;
+    limit?: number;
+  } = {}): Promise<InsightItem[]> {
+    await this.ready;
+    await this.writeQueue;
+    const limit = Math.max(1, Math.min(500, Math.trunc(query.limit ?? 200)));
+    const status = query.status && query.status !== "all" ? query.status : null;
+    const rows = status
+      ? await this.all<InsightItemRow>(
+          `SELECT * FROM insight_items
+           WHERE status = ?
+           ORDER BY updated_at DESC
+           LIMIT ?`,
+          [status, limit],
+        )
+      : await this.all<InsightItemRow>(
+          `SELECT * FROM insight_items
+           ORDER BY
+             CASE status
+               WHEN 'active' THEN 0
+               WHEN 'resolved' THEN 1
+               ELSE 2
+             END,
+             updated_at DESC
+           LIMIT ?`,
+          [limit],
+        );
+    return rows.map(insightItemFromRow);
+  }
+
+  async upsertInsightItem(item: InsightItem): Promise<InsightItem> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.run(
+        `INSERT INTO insight_items (
+           id,
+           scope_type,
+           scope_id,
+           severity,
+           type,
+           status,
+           fingerprint,
+           title,
+           summary,
+           payload,
+           last_run_id,
+           last_run_session_id,
+           last_run_turn_id,
+           created_at,
+           updated_at,
+           resolved_at,
+           dismissed_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id)
+         DO UPDATE SET
+           scope_type = excluded.scope_type,
+           scope_id = excluded.scope_id,
+           severity = excluded.severity,
+           type = excluded.type,
+           fingerprint = excluded.fingerprint,
+           title = excluded.title,
+           summary = excluded.summary,
+           payload = excluded.payload,
+           last_run_id = excluded.last_run_id,
+           last_run_session_id = excluded.last_run_session_id,
+           last_run_turn_id = excluded.last_run_turn_id,
+           updated_at = excluded.updated_at,
+           status = CASE
+             WHEN insight_items.status = 'dismissed' THEN insight_items.status
+             ELSE excluded.status
+           END,
+           resolved_at = CASE
+             WHEN insight_items.status = 'dismissed' THEN insight_items.resolved_at
+             ELSE excluded.resolved_at
+           END,
+           dismissed_at = CASE
+             WHEN insight_items.status = 'dismissed' THEN insight_items.dismissed_at
+             ELSE excluded.dismissed_at
+           END`,
+        insightItemParams(item),
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return (await this.getInsightItem(item.id)) ?? item;
+  }
+
+  async getInsightItem(id: string): Promise<InsightItem | null> {
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<InsightItemRow>("SELECT * FROM insight_items WHERE id = ?", [id]);
+    return row ? insightItemFromRow(row) : null;
+  }
+
+  async patchInsightStatus(id: string, status: InsightStatus): Promise<InsightItem | null> {
+    await this.ready;
+    const updatedAt = now();
+    const resolvedAt = status === "resolved" ? updatedAt : null;
+    const dismissedAt = status === "dismissed" ? updatedAt : null;
+    const write = this.writeQueue.then(async () => {
+      await this.run(
+        `UPDATE insight_items
+         SET status = ?,
+             updated_at = ?,
+             resolved_at = ?,
+             dismissed_at = ?
+         WHERE id = ?`,
+        [status, updatedAt, resolvedAt, dismissedAt, id],
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return this.getInsightItem(id);
   }
 
   async sessionCount(): Promise<number> {
@@ -876,6 +1077,45 @@ export class SqliteStore {
     await this.rebuildReadModels();
   }
 
+  async createInsightTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS insight_items (
+        id TEXT PRIMARY KEY,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        last_run_id TEXT,
+        last_run_session_id TEXT,
+        last_run_turn_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        resolved_at TEXT,
+        dismissed_at TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS insight_items_scope_status_idx
+        ON insight_items(scope_type, scope_id, status, updated_at);
+
+      CREATE INDEX IF NOT EXISTS insight_items_fingerprint_idx
+        ON insight_items(fingerprint);
+    `);
+    await this.addColumnIfMissing("insight_items", "last_run_id", "TEXT");
+    await this.addColumnIfMissing("insight_items", "last_run_session_id", "TEXT");
+    await this.addColumnIfMissing("insight_items", "last_run_turn_id", "TEXT");
+  }
+
+  async createInsightRunLinkColumns(): Promise<void> {
+    await this.addColumnIfMissing("insight_items", "last_run_id", "TEXT");
+    await this.addColumnIfMissing("insight_items", "last_run_session_id", "TEXT");
+    await this.addColumnIfMissing("insight_items", "last_run_turn_id", "TEXT");
+  }
+
   private async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
     const rows = await this.all<TableInfoRow>(`PRAGMA table_info(${table})`);
     if (rows.some((row) => row.name === column)) return;
@@ -1190,7 +1430,63 @@ const SQLITE_MIGRATIONS: Migration[] = [
     version: 3,
     run: (store) => store.createReadModelTables(),
   },
+  {
+    version: 4,
+    run: (store) => store.createInsightTables(),
+  },
+  {
+    version: 5,
+    run: (store) => store.createInsightRunLinkColumns(),
+  },
+  {
+    version: 6,
+    run: (store) => store.createInsightRunLinkColumns(),
+  },
 ];
+
+function insightItemFromRow(row: InsightItemRow): InsightItem {
+  return {
+    id: row.id,
+    scopeType: row.scope_type as InsightItem["scopeType"],
+    scopeId: row.scope_id,
+    severity: row.severity as InsightItem["severity"],
+    type: row.type,
+    status: row.status as InsightItem["status"],
+    fingerprint: row.fingerprint,
+    title: row.title,
+    summary: row.summary,
+    payload: JSON.parse(row.payload) as InsightItem["payload"],
+    lastRunId: row.last_run_id,
+    lastRunSessionId: row.last_run_session_id,
+    lastRunTurnId: row.last_run_turn_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at,
+    dismissedAt: row.dismissed_at,
+  };
+}
+
+function insightItemParams(item: InsightItem): unknown[] {
+  return [
+    item.id,
+    item.scopeType,
+    item.scopeId,
+    item.severity,
+    item.type,
+    item.status,
+    item.fingerprint,
+    item.title,
+    item.summary,
+    JSON.stringify(item.payload),
+    item.lastRunId ?? null,
+    item.lastRunSessionId ?? null,
+    item.lastRunTurnId ?? null,
+    item.createdAt,
+    item.updatedAt,
+    item.resolvedAt,
+    item.dismissedAt,
+  ];
+}
 
 function timestampForPath(): string {
   return new Date().toISOString().replace(/\D/g, "").slice(0, 14);

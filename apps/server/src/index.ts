@@ -3,9 +3,14 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   CompactSessionRequestSchema,
+  InsightsAskRequestSchema,
+  PatchInsightRequestSchema,
   type Approval,
   type ChatProvider,
   type CodexStatus,
+  type InsightStatus,
+  type InsightsListResponse,
+  type InsightsScanResponse,
   type RuntimeEvent,
   type ServerStatus,
 } from "@openpond/contracts";
@@ -37,6 +42,7 @@ import {
   checkWorkspaceGitAvailability,
   startMacOSCommandLineToolsInstall,
 } from "./workspace/workspaces.js";
+import { readLocalImageFile } from "./workspace/workspace-common.js";
 import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
 import { createServerPayloads } from "./api/server-payloads.js";
@@ -54,16 +60,19 @@ import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
+import { readChatAttachmentImageFile } from "./chat-attachments.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
 import { organizationRequestPayload } from "./openpond/organizations.js";
 import { sandboxRequestPayload } from "./openpond/sandboxes.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
+import { createInsightsService } from "./insights/create-edit-insights.js";
+import { createInsightsBackgroundLoop } from "./insights/insights-background-loop.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
-const MAX_HOSTED_WORKSPACE_TOOL_ROUNDS = 12;
+const DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS = 64;
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
 export async function createOpenPondServer(
@@ -74,6 +83,8 @@ export async function createOpenPondServer(
   const storeDir = options.storeDir ?? appDataDir();
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
+  const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds);
+  const attachmentRootDir = path.join(storeDir, "attachments");
   const logger = createLogger({
     channel: "server",
     logDir: path.join(storeDir, "logs"),
@@ -164,6 +175,7 @@ export async function createOpenPondServer(
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,
     sendCodexHistoryTurnPayload,
+    interruptCodexHistoryTurnPayload,
     findOpenPondApp,
     gitBaseUrlFromContext,
     findLocalWorkspace,
@@ -212,6 +224,7 @@ export async function createOpenPondServer(
 	      profileRunPayload,
     waitForOpenPondRefresh,
   } = createServerPayloads({
+    attachmentRootDir,
     store,
     storeDir,
     providersFilePath,
@@ -331,7 +344,7 @@ export async function createOpenPondServer(
     updateTurnCreatePipeline,
     resolveCreatePipelineApproval,
   } = createTurnRunner({
-    attachmentRootDir: path.join(storeDir, "attachments"),
+    attachmentRootDir,
     store,
     upsertApproval,
     getSession,
@@ -370,8 +383,24 @@ export async function createOpenPondServer(
       }
     },
     turnFollowUpQueue: workQueues.turnFollowUp,
-    maxHostedWorkspaceToolRounds: MAX_HOSTED_WORKSPACE_TOOL_ROUNDS,
+    maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
+  });
+  const insightsService = createInsightsService({
+    store,
+    storeDir,
+    createSession,
+    updateSession,
+    sendTurn,
+    appendRuntimeEvent,
+    loadAppPreferences,
+    logger,
+  });
+  const insightsBackgroundLoop = createInsightsBackgroundLoop({
+    service: insightsService,
+    queue: workQueues.insights,
+    isClosing: () => closing,
+    logger,
   });
 
   async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval> {
@@ -564,6 +593,60 @@ export async function createOpenPondServer(
     });
   }
 
+  async function listInsightsPayload(requestUrl: URL): Promise<unknown> {
+    const rawStatus = requestUrl.searchParams.get("status");
+    const status = rawStatus === "active" || rawStatus === "resolved" || rawStatus === "dismissed" || rawStatus === "all"
+      ? rawStatus
+      : "all";
+    const rawLimit = Number(requestUrl.searchParams.get("limit") ?? "200");
+    const limit = Number.isFinite(rawLimit) ? rawLimit : 200;
+    const rawEvidenceSource = requestUrl.searchParams.get("evidenceSource");
+    const evidenceSource = isInsightEvidenceSourceFilter(rawEvidenceSource) ? rawEvidenceSource : "all";
+    const rawRunStatus = requestUrl.searchParams.get("runStatus");
+    const runStatus = rawRunStatus === "running" || rawRunStatus === "completed" || rawRunStatus === "failed" || rawRunStatus === "skipped" || rawRunStatus === "all"
+      ? rawRunStatus
+      : "all";
+    const rawRunTrigger = requestUrl.searchParams.get("runTrigger");
+    const runTrigger = rawRunTrigger === "startup" || rawRunTrigger === "interval" || rawRunTrigger === "manual" || rawRunTrigger === "slash_command" || rawRunTrigger === "all"
+      ? rawRunTrigger
+      : "all";
+    const runModel = requestUrl.searchParams.get("runModel");
+    return withInsightsSchedule(await insightsService.list({
+      status,
+      limit,
+      evidenceSource,
+      runStatus,
+      runTrigger,
+      runModel,
+    }));
+  }
+
+  async function runInsightsScanPayload(requestUrl?: URL): Promise<unknown> {
+    const rawTrigger = requestUrl?.searchParams.get("trigger");
+    const trigger = rawTrigger === "slash_command" ? "slash_command" : "manual";
+    return withInsightsSchedule(await insightsBackgroundLoop.scanNow({ force: true, trigger }));
+  }
+
+  async function askInsightsPayload(payload: unknown): Promise<unknown> {
+    const input = InsightsAskRequestSchema.parse(payload);
+    return withInsightsSchedule(await insightsService.ask(input.question));
+  }
+
+  async function patchInsightPayload(insightId: string, payload: unknown): Promise<unknown> {
+    const input = PatchInsightRequestSchema.parse(payload);
+    return withInsightsSchedule(await insightsService.patchStatus(insightId, input.status as InsightStatus));
+  }
+
+  function withInsightsSchedule<T extends InsightsListResponse | InsightsScanResponse>(payload: T): T {
+    const status = insightsBackgroundLoop.status();
+    return {
+      ...payload,
+      nextScanAt: status.nextScanAt,
+      scanRunning: status.scanRunning,
+      scanStartedAt: status.scanStartedAt,
+    };
+  }
+
   async function patchSessionPayload(sessionId: string, payload: unknown): Promise<unknown> {
     return isCodexHistorySessionId(sessionId)
       ? patchCodexHistorySessionPayload(sessionId, payload)
@@ -597,8 +680,13 @@ export async function createOpenPondServer(
       refreshCodexStatus,
       bootstrapPayload,
       eventPagePayload,
+      listInsightsPayload,
+      runInsightsScanPayload,
+      askInsightsPayload,
+      patchInsightPayload,
       codexHistoryThreadPayload,
       sendCodexHistoryTurnPayload,
+      interruptCodexHistoryTurnPayload,
       loadMoreOpenPondAppsPayload,
       workspaceTemplateConfigPayload,
       refreshOpenPondPayload,
@@ -631,6 +719,22 @@ export async function createOpenPondServer(
       workspaceFilePayload,
       saveWorkspaceFilePayload,
       workspaceImagePayload,
+      localImagePayload: async (filePath) => {
+        const image = await readLocalImageFile(filePath);
+        if (!image) throw new Error("Image not found");
+        return image;
+      },
+      chatAttachmentImagePayload: async (input) => {
+        const image = await readChatAttachmentImageFile({
+          attachmentRootDir,
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          storageName: input.storageName,
+          contentType: input.contentType,
+        });
+        if (!image) throw new Error("Image not found");
+        return image;
+      },
       workspaceLspTouchPayload,
       workspaceLspActionPayload,
       workspaceLspSettingsStatusPayload,
@@ -675,6 +779,7 @@ export async function createOpenPondServer(
     webRoot: options.webRoot ?? null,
   });
   actualPort = await listenOpenPondHttpServer({ host, httpServer, logger, port, serverId });
+  insightsBackgroundLoop.start();
 
   const status: ServerStatus = {
     id: serverId,
@@ -695,6 +800,7 @@ export async function createOpenPondServer(
     close: async () => {
       logger.info("server closing", { serverId });
       closing = true;
+      insightsBackgroundLoop.stop();
       await closeEventSubscribers();
       terminalWebSockets.close();
       await waitForOpenPondRefresh();
@@ -712,6 +818,38 @@ export async function createOpenPondServer(
       workQueueReceipts: workQueues.receipts,
     },
   };
+}
+
+function resolveMaxHostedWorkspaceToolRounds(optionValue: number | undefined): number {
+  if (typeof optionValue === "number" && Number.isFinite(optionValue) && optionValue > 0) {
+    return Math.floor(optionValue);
+  }
+  const envValue = process.env.OPENPOND_HOSTED_WORKSPACE_TOOL_ROUNDS?.trim();
+  if (!envValue) return DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
+  if (/^(unlimited|infinite|infinity)$/i.test(envValue)) return Number.POSITIVE_INFINITY;
+  const parsed = Number.parseInt(envValue, 10);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
+}
+
+function isInsightEvidenceSourceFilter(value: string | null): value is
+  | "all"
+  | "create_edit"
+  | "stuck_turn"
+  | "tool_failure"
+  | "abandoned_goal"
+  | "user_correction"
+  | "unresolved_conversation" {
+  return (
+    value === "all" ||
+    value === "create_edit" ||
+    value === "stuck_turn" ||
+    value === "tool_failure" ||
+    value === "abandoned_goal" ||
+    value === "user_correction" ||
+    value === "unresolved_conversation"
+  );
 }
 
 function findRecentCodexCompactionCompleted(

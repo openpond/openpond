@@ -6,6 +6,7 @@ import {
 import type {
   SandboxAgentEditWorkItemOpenInput,
   SandboxAgentEntrypointScope,
+  SandboxAgentSourceCheckDispatchMode,
   SandboxAgentSourceCheckKind,
   SandboxAgentSourceChecksRequestInput,
   SandboxAgentSourcePublishInput,
@@ -194,6 +195,23 @@ export function parseAgentSourceCheckKind(
   return checkKind;
 }
 
+export function parseAgentSourceCheckDispatch(
+  value: string | boolean | undefined,
+  optionName = "source-check-dispatch"
+): SandboxAgentSourceCheckDispatchMode | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${optionName} must be a non-empty value`);
+  }
+  const dispatch = value.trim() as SandboxAgentSourceCheckDispatchMode;
+  if (dispatch !== "request_only" && dispatch !== "coding_core") {
+    throw new Error(
+      `${optionName} must be one of request_only, coding_core`
+    );
+  }
+  return dispatch;
+}
+
 export function parsePositiveLimit(
   value: string | boolean | undefined
 ): number | undefined {
@@ -210,6 +228,9 @@ export function buildAgentSourceChecksInput(
 ): SandboxAgentSourceChecksRequestInput {
   const metadata = optionalJsonObject(options, "metadata", "metadata");
   const checkKind = parseAgentSourceCheckKind(options.checkKind);
+  const dispatch = parseAgentSourceCheckDispatch(
+    options.sourceCheckDispatch ?? options.dispatch
+  );
   return {
     teamId,
     ...(optionString(options, "sourceRef")
@@ -219,6 +240,7 @@ export function buildAgentSourceChecksInput(
       ? { baseSha: optionString(options, "baseSha") }
       : {}),
     ...(checkKind ? { checkKind } : {}),
+    ...(dispatch ? { dispatch } : {}),
     ...(metadata ? { metadata } : {}),
   };
 }

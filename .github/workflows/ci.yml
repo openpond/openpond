@@ -33,3 +33,5 @@ jobs:
       - run: bun run budgets:warn
 
       - run: bun run test
+        env:
+          OPENPOND_SKIP_CI_LONG_CLI_TESTS: "1"

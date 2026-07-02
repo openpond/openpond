@@ -50,6 +50,18 @@ describe("server HTTP route table", () => {
       await expect(expectJsonRequest(origin, "GET", "/v1/lsp/status", 200)).resolves.toMatchObject({
         name: "workspaceLspRuntimeStatusPayload",
       });
+      await expect(expectJsonRequest(origin, "GET", "/v1/insights?status=active", 200)).resolves.toMatchObject({
+        name: "listInsightsPayload",
+      });
+      await expect(expectJsonRequest(origin, "POST", "/v1/insights/scan", 202)).resolves.toMatchObject({
+        name: "runInsightsScanPayload",
+      });
+      await expect(
+        expectJsonRequest(origin, "PATCH", "/v1/insights/insight-1", 200, { status: "dismissed" }),
+      ).resolves.toMatchObject({
+        name: "patchInsightPayload",
+        args: ["insight-1", { status: "dismissed" }],
+      });
       await expect(expectJsonRequest(origin, "POST", "/v1/lsp/restart", 200)).resolves.toMatchObject({
         name: "restartWorkspaceLspPayload",
       });
@@ -59,6 +71,12 @@ describe("server HTTP route table", () => {
           name: "sendTurn",
           args: ["session-1", { prompt: "Hi" }],
         });
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/codex-history/codex_history_thread-1/turns/interrupt", 202),
+      ).resolves.toMatchObject({
+        name: "interruptCodexHistoryTurnPayload",
+        args: ["codex_history_thread-1"],
+      });
 
       expect(calls.map((call) => call.name)).toEqual([
         "profileCurrentPayload",
@@ -68,8 +86,12 @@ describe("server HTTP route table", () => {
         "listProviderModelsPayload",
         "workspaceDiffPayload",
         "workspaceLspRuntimeStatusPayload",
+        "listInsightsPayload",
+        "runInsightsScanPayload",
+        "patchInsightPayload",
         "restartWorkspaceLspPayload",
         "sendTurn",
+        "interruptCodexHistoryTurnPayload",
       ]);
     } finally {
       server.close();

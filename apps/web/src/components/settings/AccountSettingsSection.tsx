@@ -1,7 +1,7 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
-import { Plus, RefreshCw } from "../icons";
+import { ExternalLink, KeyRound, Plus, RefreshCw } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
@@ -33,6 +33,8 @@ type AccountSettingsSectionProps = {
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
 
+const OPENPOND_API_KEYS_URL = "https://openpond.ai/settings/api-keys";
+
 export function AccountSettingsSection({
   payload,
   connection,
@@ -48,6 +50,10 @@ export function AccountSettingsSection({
   onToast,
 }: AccountSettingsSectionProps) {
   const account = payload?.account;
+  const accountState = account?.state ?? "loading";
+  const signedIn = accountState === "signed_in";
+  const signedOut = accountState === "signed_out";
+  const authError = accountState === "auth_error";
   const accountEmail = account?.email?.trim() || null;
   const accounts = account?.accounts ?? [];
   const [organizations, setOrganizations] = useState<OpenPondOrganization[]>([]);
@@ -60,14 +66,35 @@ export function AccountSettingsSection({
   const visibleDefaultTeamId = pendingDefaultTeamId ?? defaultTeamId;
   const organizationCacheKey = openPondOrganizationCacheKey(account);
   const accountRefreshKey = payload?.accountMeta.asOf ?? "";
-  const activeLabel = firstPresentText(
-    activeCandidate?.displayLabel,
-    activeCandidate?.handle,
-    account?.label,
-    account?.activeProfile?.handle,
-    "Signed out",
-  );
-  const showAccountList = accounts.length !== 1;
+  const activeEnvironment = firstPresentText(account?.environment, activeCandidate?.environment);
+  const activeLabel = signedIn
+    ? firstPresentText(
+        activeCandidate?.displayLabel,
+        activeCandidate?.handle,
+        account?.label,
+        account?.activeProfile?.handle,
+        "Signed in",
+      )
+    : authError
+      ? "Account needs attention"
+      : signedOut
+        ? "No account connected"
+        : "Loading account";
+  const activeMetaLabel = signedIn
+    ? accountEmail ?? accountEnvironmentLabel(activeEnvironment)
+    : authError
+      ? account?.error ?? "Reconnect this account to restore OpenPond cloud features."
+      : signedOut
+        ? "Cloud projects, hosted agents, wallet, and team defaults are disabled until you sign in."
+        : "Checking account status.";
+  const showAccountList = accounts.length > 1;
+  const formTitle = signedOut ? "Sign in to OpenPond" : authError ? "Reconnect account" : "Add or update account";
+  const formDescription = signedOut
+    ? "Paste an OpenPond API key to connect this desktop app."
+    : authError
+      ? "Paste a fresh OpenPond API key for the active account."
+      : "Saved to OpenPond CLI config.";
+  const submitLabel = signedOut ? "Sign in" : authError ? "Reconnect" : "Save account";
   const activeOrganizations = useMemo(
     () => organizations.filter((organization) => organization.status === "active"),
     [organizations],
@@ -202,15 +229,24 @@ export function AccountSettingsSection({
     </div>
     <div className="account-summary">
       <div className="account-summary-main">
-        <AccountAvatar handle={activeLabel} image={account?.avatarUrl ?? activeCandidate?.avatarUrl ?? null} />
+        <AccountAvatar handle={activeLabel} image={signedIn ? account?.avatarUrl ?? activeCandidate?.avatarUrl ?? null : null} />
         <div>
           <span>Active account</span>
           <strong>{activeLabel}</strong>
           <div className="account-summary-meta">
-            <small className={accountEmail ? "private-account-email" : undefined} tabIndex={accountEmail ? 0 : undefined}>
-              {accountEmail ?? "Production"}
+            <small
+              className={
+                signedIn && accountEmail
+                  ? "private-account-email"
+                  : signedIn
+                    ? undefined
+                    : "account-summary-copy"
+              }
+              tabIndex={signedIn && accountEmail ? 0 : undefined}
+            >
+              {activeMetaLabel}
             </small>
-            {showTeamControl ? (
+            {signedIn && showTeamControl ? (
             <DropdownSelect
               className="account-team-dropdown"
               compact
@@ -225,14 +261,36 @@ export function AccountSettingsSection({
         </div>
       </div>
       <div className="account-summary-actions">
-        <AccountStateBadge state={account?.state ?? "loading"} />
+        <AccountStateBadge state={accountState} label={signedOut ? "not signed in" : undefined} />
       </div>
     </div>
 
     <form className="account-login-form" onSubmit={(event) => void saveAccount(event)}>
+      {(signedOut || authError) ? (
+        <div className="account-signin-panel">
+          <KeyRound size={18} />
+          <div>
+            <strong>{signedOut ? "Connect this app to your OpenPond account" : "Refresh the saved OpenPond credential"}</strong>
+            <span>
+              {signedOut
+                ? "Local projects stay available without sign-in; cloud agents, wallet, teams, and hosted runs need an account."
+                : "The saved credential could not authenticate. Replace it to resume cloud features."}
+            </span>
+          </div>
+          <a
+            className="settings-secondary account-api-key-link"
+            href={OPENPOND_API_KEYS_URL}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <ExternalLink size={14} />
+            <span>Create key</span>
+          </a>
+        </div>
+      ) : null}
       <div className="account-list-heading">
-        <span>Add or update account</span>
-        <small>Saved to OpenPond CLI config</small>
+        <span>{formTitle}</span>
+        <small>{formDescription}</small>
       </div>
       <div className="account-form-grid">
         <label>
@@ -247,7 +305,7 @@ export function AccountSettingsSection({
       </div>
       <button className="settings-primary" disabled={saving || !apiKey.trim()}>
         <Plus size={15} />
-        <span>{saving ? "Saving" : "Save account"}</span>
+        <span>{saving ? "Saving" : submitLabel}</span>
       </button>
     </form>
 
@@ -291,12 +349,6 @@ export function AccountSettingsSection({
           </div>
         );
       })}
-      {accounts.length === 0 && (
-        <div className="empty-account-list">
-          <strong>No accounts found</strong>
-          <span>Add an API key above to create the first OpenPond account.</span>
-        </div>
-      )}
     </div>
     ) : null}
 
@@ -338,4 +390,9 @@ function firstPresentText(...values: Array<string | null | undefined>): string {
     if (text) return text;
   }
   return "";
+}
+
+function accountEnvironmentLabel(value: string): string {
+  if (!value) return "Production";
+  return value.slice(0, 1).toUpperCase() + value.slice(1);
 }

@@ -27,6 +27,274 @@ function commandStarted(id: string, turnId: string, command: string): RuntimeEve
 }
 
 describe("chat message projection", () => {
+  test("renders Insights scan prompts as compact evidence cards", () => {
+    const evidenceItems = Array.from({ length: 6 }, (_, index) => ({
+      evidenceSource: index % 2 === 0 ? "tool_failure" : "stuck_turn",
+      evidenceKey: `evidence_${index}`,
+      fingerprint: `fingerprint_${index}`,
+      insight: {
+        severity: index === 0 ? "blocker" : "concern",
+        type: "insight",
+        title: `Insight ${index}`,
+        summary: `Evidence summary ${index}`,
+        sourceSessionId: `session_${index}`,
+        sourceTurnId: `turn_${index}`,
+        createPipelineState: null,
+        sourceEventSequence: index + 1,
+      },
+    }));
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "insights_turn_started",
+        name: "turn.started",
+        sessionId: "insights_session",
+        turnId: "insights_turn",
+        args: {
+          prompt: "You are the built-in OpenPond Insights agent.\n\nEvidence JSON:\n{}",
+          insightsRun: {
+            id: "insights_run_1",
+            trigger: "interval",
+            status: "completed",
+            evidenceSources: ["stuck_turn", "tool_failure"],
+            findingCount: 6,
+          },
+          insightsEvidencePreview: {
+            afterSequence: 10,
+            latestSequence: 20,
+            eventCount: 11,
+            evidenceSources: ["stuck_turn", "tool_failure"],
+            totalCount: evidenceItems.length,
+            truncated: true,
+            items: evidenceItems,
+          },
+        },
+      }),
+    ]);
+
+    expect(messages[0]?.content).toBeUndefined();
+    expect(messages[0]?.insightsRunPrompt?.items).toHaveLength(6);
+
+    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[0]! }));
+    expect(html).toContain("Insights scan");
+    expect(html).toContain("6 evidence items");
+    expect(html).toContain("Insight 0");
+    expect(html).toContain("Insight 4");
+    expect(html).not.toContain("Insight 5");
+    expect(html).toContain("Show 1 more");
+    expect(html).not.toContain("Evidence JSON");
+  });
+
+  test("recovers Insights evidence rows from truncated prompt JSON", () => {
+    const prompt = [
+      "You are the built-in OpenPond Insights agent.",
+      "",
+      "Evidence JSON:",
+      "{",
+      '  "eventCount": 12,',
+      '  "evidenceSources": ["tool_failure"],',
+      '  "evidence": [',
+      '    {"evidenceSource":"tool_failure","evidenceKey":"tool_1","fingerprint":"one","insight":{"title":"Tool failed","summary":"Command exited 1","severity":"concern","type":"tool","sourceSessionId":"session_1","sourceTurnId":"turn_1","createPipelineState":null,"sourceEventSequence":7}},',
+      '    {"evidenceSource":"tool_failure","evidenceKey":"tool_2","fingerprint":"two","insight":{"title":"Tool failed again","summary":"Command exited 2","severity":"concern","type":"tool","sourceSessionId":"session_2","sourceTurnId":"turn_2","createPipelineState":null,"sourceEventSequence":8}}',
+      "",
+      "...truncated",
+    ].join("\n");
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "insights_turn_started",
+        name: "turn.started",
+        sessionId: "insights_session",
+        turnId: "insights_turn",
+        args: {
+          prompt,
+          insightsRun: {
+            id: "insights_run_1",
+            trigger: "startup",
+            status: "completed",
+            evidenceSources: ["tool_failure"],
+          },
+        },
+      }),
+    ]);
+
+    expect(messages[0]?.insightsRunPrompt?.eventCount).toBe(12);
+    expect(messages[0]?.insightsRunPrompt?.items.map((item) => item.title)).toEqual([
+      "Tool failed",
+      "Tool failed again",
+    ]);
+  });
+
+  test("renders image attachments as inline user message previews", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_with_image",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: {
+          prompt: "Can you inspect this bug screenshot?",
+          attachments: [
+            {
+              id: "attachment_1",
+              name: "Screenshot from 2026-07-02 13.49.59.png",
+              mediaType: "image/png",
+              sizeBytes: 44 * 1024,
+              kind: "image",
+              imagePreview: {
+                sessionId: "session_1",
+                turnId: "turn_1",
+                attachmentId: "attachment_1",
+                storageName: "Screenshot from 2026-07-02 13.49.59.png",
+                contentType: "image/png",
+              },
+            },
+            {
+              id: "attachment_2",
+              name: "notes.txt",
+              mediaType: "text/plain",
+              sizeBytes: 128,
+              kind: "text",
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(messages[0]?.attachments?.[0]?.imagePreview).toEqual({
+      sessionId: "session_1",
+      turnId: "turn_1",
+      attachmentId: "attachment_1",
+      storageName: "Screenshot from 2026-07-02 13.49.59.png",
+      contentType: "image/png",
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[0]!,
+        connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
+      }),
+    );
+    expect(html).toContain("has-image-attachments");
+    expect(html).toContain("user-message-image-attachment");
+    expect(html).toContain("Screenshot from 2026-07-02 13.49.59.png");
+    expect(html).toContain("notes.txt");
+    expect(html).toContain("user-message-attachment");
+  });
+
+  test("renders OpenPond Chat markdown image output inline", () => {
+    const imageUrl =
+      "http://127.0.0.1:17876/v1/assets/chat-attachment-image?storageName=OpenPond%20Chat%20signed-out%20failure.png&signature=sig";
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_openpond_chat",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: {
+          prompt: "Show the signed-out screenshots.",
+          provider: "openpond",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+        },
+      }),
+      runtimeEvent({
+        id: "assistant_image",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: `OpenPond Chat failure after sending:\n\n![OpenPond Chat signed-out failure](${imageUrl})`,
+      }),
+    ]);
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+        connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
+      }),
+    );
+    expect(html).toContain("OpenPond Chat failure after sending");
+    expect(html).toContain("markdown-inline-image ready");
+    expect(html).toContain("<img");
+    expect(html).toContain('alt="OpenPond Chat signed-out failure"');
+    expect(html).not.toContain("!<a");
+  });
+
+  test("renders OpenPond Chat html image output inline", () => {
+    const imageUrl =
+      "http://127.0.0.1:17876/v1/assets/chat-attachment-image?storageName=OpenPond%20Chat%20signed-out%20failure.png&signature=sig";
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_openpond_chat_html_image",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: {
+          prompt: "Show the signed-out screenshots.",
+          provider: "openpond",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+        },
+      }),
+      runtimeEvent({
+        id: "assistant_html_image",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: `OpenPond Chat failure after sending:\n\n!<img src="${imageUrl}" alt="OpenPond Chat signed-out failure" />`,
+      }),
+    ]);
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+        connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
+      }),
+    );
+    expect(html).toContain("OpenPond Chat failure after sending");
+    expect(html).toContain("markdown-inline-image ready");
+    expect(html).toContain("<img");
+    expect(html).toContain('alt="OpenPond Chat signed-out failure"');
+    expect(html).not.toContain("!&lt;img");
+  });
+
+  test("renders OpenPond Chat public image file inventories inline", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_openpond_chat_image_inventory",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: {
+          prompt: "testing, can you show me all the images in this directory",
+          provider: "openpond",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+        },
+      }),
+      runtimeEvent({
+        id: "assistant_image_inventory",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output:
+          "There are 13 image files in this workspace, all under `apps/web/public/`:\n\n" +
+          "**PNG files:**\n" +
+          "- `apps/web/public/openpond-icon.png`\n\n" +
+          "**SVG files (connected-apps):**\n" +
+          "- `apps/web/public/connected-apps/github.svg`",
+      }),
+    ]);
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+        onOpenFileInSidebar: () => {},
+        workspaceRootPath: "/home/glu/Projects/all/openpond",
+      }),
+    );
+    expect(html).toContain("There are 13 image files");
+    expect(html).toContain("markdown-file-image-reference");
+    expect(html).toContain("markdown-file-image-preview ready");
+    expect(html).toContain('src="/openpond-icon.png"');
+    expect(html).toContain('src="/connected-apps/github.svg"');
+  });
+
   test("projects create pipeline turn metadata into a review message", () => {
     const now = "2026-05-16T00:00:00.000Z";
     const createPipelineRequest = {
@@ -355,6 +623,35 @@ describe("chat message projection", () => {
       path: "assets/photo.png",
       appId: "app_1",
       title: "photo.png",
+    });
+  });
+
+  test("projects Codex absolute image reads as local activity image previews", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Read the image" },
+      }),
+      runtimeEvent({
+        id: "tool_1",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "dynamicToolCall",
+        status: "completed",
+        data: {
+          tool: "tools.view_image",
+          path: "/tmp/image.png",
+        },
+      }),
+    ]);
+
+    expect(messages[1]?.role).toBe("activity_group");
+    expect(messages[1]?.activities?.[0]?.imagePreview).toEqual({
+      path: "/tmp/image.png",
+      appId: null,
+      title: "image.png",
     });
   });
 

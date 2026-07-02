@@ -176,14 +176,14 @@ export function buildOpenPondProfileActionRunInput({
       ...(attachments.length > 0 ? { attachments } : {}),
     },
     metadata: {
-	      source: "openpond_app",
-	      selectedActionId: action.actionId,
-	      selectedActionLabel: action.actionLabel,
-	      selectedBy: selectedByForPrompt({ displayPrompt, prompt }),
-	      ...(displayPrompt && displayPrompt !== prompt ? { displayPrompt } : {}),
-	      ...(sessionId ? { sessionId } : {}),
-	    },
-	  };
+        source: "openpond_app",
+        selectedActionId: action.actionId,
+        selectedActionLabel: action.actionLabel,
+        selectedBy: selectedByForPrompt({ displayPrompt, prompt }),
+        ...(displayPrompt && displayPrompt !== prompt ? { displayPrompt } : {}),
+        ...(sessionId ? { sessionId } : {}),
+      },
+    };
 }
 
 export function buildOpenPondAppActionRunInput({

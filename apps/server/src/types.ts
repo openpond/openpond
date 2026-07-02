@@ -51,6 +51,7 @@ export type OpenPondServerOptions = {
   webRoot?: string | null;
   version?: string;
   silent?: boolean;
+  maxHostedWorkspaceToolRounds?: number;
 };
 
 export type OpenPondServerInstance = {

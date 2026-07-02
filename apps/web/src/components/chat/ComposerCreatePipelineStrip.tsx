@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, CircleAlert, FileText, HelpCircle, Loader2, PanelRight, X } from "../icons";
+import { Check, CircleAlert, FileText, HelpCircle, Loader2, X } from "../icons";
 import type {
   CreatePipelineQuestion,
   CreatePipelineRequest,
@@ -19,7 +19,6 @@ export type ComposerCreatePipelineRuntime = {
   ) => Promise<void>;
   onApprove?: (input: CreatePipelineReviewActionInput) => Promise<void>;
   onCancel?: (input: CreatePipelineReviewActionInput) => Promise<void>;
-  onOpenDetails?: () => void;
   onRevise?: (input: CreatePipelineReviewActionInput, revision: string) => Promise<void>;
 };
 
@@ -66,12 +65,6 @@ export function ComposerCreatePipelineStrip({
         {tone === "danger" ? <CircleAlert size={15} /> : state === "awaiting_questions" ? <HelpCircle size={15} /> : state === "applying_source" || state === "running_checks" ? <Loader2 size={15} /> : <FileText size={15} />}
         <span>{createPipelineTitle(state)}</span>
         <small>{runtime.request.operation}</small>
-        {runtime.onOpenDetails ? (
-          <button type="button" className="composer-create-details-button" onClick={runtime.onOpenDetails}>
-            <PanelRight size={13} />
-            <span>Details</span>
-          </button>
-        ) : null}
       </div>
 
       {state === "awaiting_questions" && question ? (
@@ -172,9 +165,11 @@ export function ComposerCreatePipelineStrip({
           <p>{snapshot?.blockedReason ?? "Create is blocked. Review the details before retrying."}</p>
         </div>
       ) : state === "ready_local" ? (
-        <div className="composer-create-status-body">
+        <div className="composer-create-status-body composer-create-status-body-reveals">
           <p>Generated source is ready locally.</p>
-          <CreatePlanFacts snapshot={snapshot} />
+          <div className="composer-create-hover-details">
+            <CreatePlanFacts snapshot={snapshot} />
+          </div>
         </div>
       ) : (
         <div className="composer-create-status-body">

@@ -3,6 +3,7 @@ import type { Approval, RuntimeEvent } from "@openpond/contracts";
 import {
   approvalsWithStatus,
   buildRuntimeIndexes,
+  buildRuntimeIndexesWithReuse,
   latestContextUsageForSession,
   latestGoalRuntimeForSession,
   latestPendingApprovalForSession,
@@ -122,6 +123,30 @@ describe("runtime indexes", () => {
     expect(latestPendingApprovalForSession(indexes, "s1")).toBe(newerPending);
     expect(latestPendingApprovalForSession(indexes, "s2")).toBe(otherSessionPending);
     expect(latestPendingApprovalForSession(indexes, "missing")).toBeNull();
+  });
+
+  test("preserves unchanged session event arrays when appending events", () => {
+    const firstEvents = [
+      runtimeEvent({ id: "s1_delta", sessionId: "s1", name: "assistant.delta", output: "one" }),
+      runtimeEvent({ id: "s2_delta", sessionId: "s2", name: "assistant.delta", output: "two" }),
+    ];
+    const firstIndexes = buildRuntimeIndexes(firstEvents, []);
+    const nextEvents = [
+      ...firstEvents,
+      runtimeEvent({ id: "s2_more", sessionId: "s2", name: "assistant.delta", output: " more" }),
+    ];
+
+    const nextIndexes = buildRuntimeIndexesWithReuse(nextEvents, [], {
+      events: firstEvents,
+      indexes: firstIndexes,
+    });
+
+    expect(runtimeEventsForSession(nextIndexes, "s1")).toBe(runtimeEventsForSession(firstIndexes, "s1"));
+    expect(runtimeEventsForSession(nextIndexes, "s2")).not.toBe(runtimeEventsForSession(firstIndexes, "s2"));
+    expect(runtimeEventsForSession(nextIndexes, "s2").map((event) => event.id)).toEqual([
+      "s2_delta",
+      "s2_more",
+    ]);
   });
 });
 

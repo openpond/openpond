@@ -112,6 +112,26 @@ describe("OpenAI-compatible provider adapter", () => {
     });
   });
 
+  test("marks current GLM models as reasoning capable when discovered", async () => {
+    globalThis.fetch = async () =>
+      jsonResponse({
+        data: [
+          {
+            id: "glm-5.2",
+            name: "GLM-5.2",
+          },
+        ],
+      });
+
+    const models = await listOpenAiCompatibleProviderModels({
+      ...providerState(),
+      providerId: "openrouter",
+      modelId: "glm-5.2",
+    });
+
+    expect(models[0]?.capabilities.reasoning).toBe(true);
+  });
+
   test("normalizes endpoint-shaped base URLs before building requests", async () => {
     const requests: string[] = [];
     globalThis.fetch = async (input) => {

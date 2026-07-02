@@ -2194,6 +2194,7 @@ export function sandboxAgentRunRecord(
     projectId: "project_test",
     agentId: "agent_test",
     requestedByUserId: "user_test",
+    conversationId: input.conversationId ?? null,
     idempotencyKey: input.idempotencyKey ?? null,
     triggerType: input.triggerType ?? "manual",
     status: "running",

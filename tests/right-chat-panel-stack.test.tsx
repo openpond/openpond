@@ -11,48 +11,13 @@ import type { WorkspaceTargetState } from "../apps/web/src/lib/workspace-locatio
 
 const noop = () => undefined;
 const noopAsync = async () => undefined;
+const noopAsyncBoolean = async () => true;
 
 describe("Right chat panel stack", () => {
   test("keeps Summary and Review in the right-sidebar chrome above side chats", () => {
-    const markup = renderToStaticMarkup(
-      createElement(RightChatPanelStack, {
-        panels: [rightChatPanel("panel_top", "Top chat"), rightChatPanel("panel_bottom", "Bottom chat")],
-        busy: false,
-        codexPermissionMode: "default",
-        codexReasoningEffort: "medium",
-        connection: null,
-        mentionApps: [],
-        projectTarget: {
-          value: "none",
-          label: "No project",
-          detail: "General chat",
-          options: [{ value: "none", label: "No project", detail: "General chat", kind: "none" }],
-          busy: false,
-        },
-        providerSettings: null,
-        showToast: noop,
-        workspaceTarget: workspaceTargetState(),
-        onAddChat: noop,
-        onClosePanel: noop,
-        onCodexPermissionModeChange: noop,
-        onCodexReasoningEffortChange: noop,
-        onModelChange: noop,
-        onOpenFileInSidebar: noop,
-        onOpenProfileSettings: noop,
-        onProviderChange: noop,
-        onProviderSetupOpen: noop,
-        onPromptChange: noop,
-        onProjectTargetChange: noop,
-        onResolveApproval: noopAsync,
-        onResizeStart: noop,
-        onSelectReview: noop,
-        onSelectSummary: noop,
-        onShowBrowserPanel: noop,
-        onStop: noopAsync,
-        onSubmit: async () => true,
-        onWorkspaceTargetChange: noop,
-      }),
-    );
+    const markup = renderRightChatStack({
+      panels: [rightChatPanel("panel_top", "Top chat"), rightChatPanel("panel_bottom", "Bottom chat")],
+    });
 
     expect(markup).toContain("right-chat-topbar");
     expect(markup).toContain("Summary");
@@ -69,7 +34,86 @@ describe("Right chat panel stack", () => {
     expect(markup).not.toContain("right-chat-status-dot");
     expect(markup).not.toContain("titlebar-add-menu");
   });
+
+  test("keeps an idle side-chat composer editable while another chat is busy", () => {
+    const markup = renderRightChatStack({
+      busy: true,
+      panels: [{ ...rightChatPanel("panel_idle", "Idle chat"), prompt: "hello" }],
+    });
+
+    expect(markup.toLowerCase()).toContain('contenteditable="true"');
+    expect(markup).toContain('aria-label="Send"');
+    expect(markup).not.toContain('aria-label="Stop response"');
+  });
+
+  test("keeps a running side-chat composer editable while the stop control is visible", () => {
+    const markup = renderRightChatStack({
+      panels: [{ ...rightChatPanel("panel_running", "Running chat"), running: true }],
+    });
+
+    expect(markup.toLowerCase()).toContain('contenteditable="true"');
+    expect(markup).toContain('aria-label="Stop response"');
+    expect(markup).not.toContain('aria-label="Interrupt and send"');
+  });
+
+  test("shows interrupt send for a running side-chat with a drafted follow-up", () => {
+    const markup = renderRightChatStack({
+      panels: [{ ...rightChatPanel("panel_running", "Running chat"), prompt: "new idea", running: true }],
+    });
+
+    expect(markup.toLowerCase()).toContain('contenteditable="true"');
+    expect(markup).toContain('aria-label="Interrupt and send"');
+    expect(markup).not.toContain('aria-label="Stop response"');
+  });
 });
+
+function renderRightChatStack({
+  busy = false,
+  panels,
+}: {
+  busy?: boolean;
+  panels: RightChatPanelView[];
+}): string {
+  return renderToStaticMarkup(
+    createElement(RightChatPanelStack, {
+      panels,
+      busy,
+      codexPermissionMode: "default",
+      codexReasoningEffort: "medium",
+      connection: null,
+      mentionApps: [],
+      projectTarget: {
+        value: "none",
+        label: "No project",
+        detail: "General chat",
+        options: [{ value: "none", label: "No project", detail: "General chat", kind: "none" }],
+        busy: false,
+      },
+      providerSettings: null,
+      showToast: noop,
+      workspaceTarget: workspaceTargetState(),
+      onAddChat: noop,
+      onClosePanel: noop,
+      onCodexPermissionModeChange: noop,
+      onCodexReasoningEffortChange: noop,
+      onModelChange: noop,
+      onOpenFileInSidebar: noop,
+      onOpenProfileSettings: noop,
+      onProviderChange: noop,
+      onProviderSetupOpen: noop,
+      onPromptChange: noop,
+      onProjectTargetChange: noop,
+      onResolveApproval: noopAsync,
+      onResizeStart: noop,
+      onSelectReview: noop,
+      onSelectSummary: noop,
+      onShowBrowserPanel: noop,
+      onStop: noopAsyncBoolean,
+      onSubmit: async () => true,
+      onWorkspaceTargetChange: noop,
+    }),
+  );
+}
 
 function rightChatPanel(id: string, title: string): RightChatPanelView {
   return {

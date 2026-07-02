@@ -225,6 +225,8 @@ function WorkspaceDiffPanelInner({
   const sandboxId = sandboxFileSource?.sandboxId?.trim() || null;
   const sandboxMode = Boolean(sandboxFileSource);
   const sourceKey = sandboxMode ? `sandbox:${sandboxId ?? "pending"}` : `workspace:${appId ?? "none"}`;
+  const canOpenRequestedFile = sandboxMode ? Boolean(sandboxId) : Boolean(appId);
+  const previousSourceKeyRef = useRef(sourceKey);
   const hasGoalDetails = Boolean(goalDetails?.createRuntime || goalDetails?.goalRuntime);
 
   const refreshSandboxWorkspace = useCallback(
@@ -314,7 +316,6 @@ function WorkspaceDiffPanelInner({
   const openFiles = useMemo(
     () =>
       openFilePaths
-        .filter((path) => repoFiles.includes(path))
         .map(
           (path) =>
             currentDiffFileByPath.get(path) ??
@@ -322,7 +323,7 @@ function WorkspaceDiffPanelInner({
             displayDiffFileByPath.get(path) ??
             placeholderFile(path),
         ),
-    [currentDiffFileByPath, displayDiffFileByPath, loadedFiles, openFilePaths, repoFiles]
+    [currentDiffFileByPath, displayDiffFileByPath, loadedFiles, openFilePaths]
   );
   const openFileContentByPath = useMemo(() => {
     const next: Record<string, string> = {};
@@ -350,10 +351,6 @@ function WorkspaceDiffPanelInner({
     if (!query) return paths;
     return paths.filter((path) => path.toLowerCase().includes(query));
   }, [repoFiles, searchQuery]);
-
-  useEffect(() => {
-    setOpenFilePaths((current) => current.filter((path) => repoFiles.includes(path)));
-  }, [repoFiles]);
 
   useEffect(() => {
     loadedFilesRef.current = loadedFiles;
@@ -395,38 +392,43 @@ function WorkspaceDiffPanelInner({
   }, [diff?.updatedAt, openFileContentByPath, openFilePaths]);
 
   useEffect(() => {
-    if (!openFileRequest || lastOpenFileRequestIdRef.current === openFileRequest.id) return;
-    if (!repoFiles.includes(openFileRequest.path)) return;
-    lastOpenFileRequestIdRef.current = openFileRequest.id;
-    openFile(openFileRequest.path);
-  }, [openFileRequest, repoFiles]);
-
-  useEffect(() => {
     refreshRef.current = onRefresh;
   }, [onRefresh]);
 
   useEffect(() => {
-    lspAbortControllerRef.current?.abort(new Error("lsp_diagnostics_source_changed"));
-    lspAbortControllerRef.current = null;
-    setLoadedFiles({});
-    setFileDrafts({});
-    setSandboxDiff(null);
-    setSandboxError(null);
-    setSandboxLoading(false);
-    setLspDiagnosticsByPath({});
-    setLspServersByPath({});
-    setLspCheckingPath(null);
-    setFileLoadingPath(null);
-    setFileError(null);
-    setFileSaveErrors({});
-    setSavingPath(null);
-    setPreviewImagePath(null);
-    setTemplateConfigPath(null);
+    if (previousSourceKeyRef.current !== sourceKey) {
+      previousSourceKeyRef.current = sourceKey;
+      lspAbortControllerRef.current?.abort(new Error("lsp_diagnostics_source_changed"));
+      lspAbortControllerRef.current = null;
+      setOpenFilePaths([]);
+      setSelectedPath(null);
+      setLoadedFiles({});
+      setFileDrafts({});
+      setSandboxDiff(null);
+      setSandboxError(null);
+      setSandboxLoading(false);
+      setLspDiagnosticsByPath({});
+      setLspServersByPath({});
+      setLspCheckingPath(null);
+      setFileLoadingPath(null);
+      setFileError(null);
+      setFileSaveErrors({});
+      setSavingPath(null);
+      setPreviewImagePath(null);
+      setTemplateConfigPath(null);
+    }
     return () => {
       lspAbortControllerRef.current?.abort(new Error("lsp_diagnostics_unmounted"));
       lspAbortControllerRef.current = null;
     };
   }, [sourceKey]);
+
+  useEffect(() => {
+    if (!openFileRequest || lastOpenFileRequestIdRef.current === openFileRequest.id) return;
+    if (!canOpenRequestedFile) return;
+    lastOpenFileRequestIdRef.current = openFileRequest.id;
+    openFile(openFileRequest.path);
+  }, [canOpenRequestedFile, openFileRequest]);
 
   useEffect(() => {
     if (!sandboxMode) return undefined;
@@ -512,9 +514,9 @@ function WorkspaceDiffPanelInner({
   }, [appId, connection, sandboxMode, workspaceKind]);
 
   useEffect(() => {
-    if (!selectedPath || repoFiles.includes(selectedPath)) return;
+    if (!selectedPath || repoFiles.includes(selectedPath) || openFilePaths.includes(selectedPath)) return;
     setSelectedPath(files[0]?.path ?? null);
-  }, [files, repoFiles, selectedPath]);
+  }, [files, openFilePaths, repoFiles, selectedPath]);
 
   useEffect(() => {
     if (goalDetails?.active && hasGoalDetails) setActiveTab("goal");
@@ -881,11 +883,12 @@ function WorkspaceDiffPanelInner({
 
   const hasChangedFiles = files.length > 0;
   const hasRepoFiles = repoFiles.length > 0;
-  const hasPanelContent = hasGoalDetails || hasChangedFiles || hasRepoFiles;
+  const hasOpenFiles = openFilePaths.length > 0;
+  const hasPanelContent = hasGoalDetails || hasChangedFiles || hasRepoFiles || hasOpenFiles;
   const visibleTab: DiffTab =
     activeTab === "goal" && hasGoalDetails
       ? "goal"
-      : hasChangedFiles || (activeTab === "file" && selectedPath && hasRepoFiles)
+      : hasChangedFiles || (activeTab === "file" && selectedPath)
         ? activeTab
         : "summary";
   const waitingForLocalWorkspace = workspaceKind === "local_project" && !workspaceInitialized && !workspaceError;

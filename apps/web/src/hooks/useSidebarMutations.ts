@@ -70,7 +70,6 @@ export function useSidebarMutations(params: {
     const optimistic: Session = {
       ...session,
       ...patch,
-      updatedAt: new Date().toISOString(),
     };
     setTargetSessions((current) =>
       current.some((candidate) => candidate.id === session.id)

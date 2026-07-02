@@ -80,6 +80,88 @@ export const OpenPondProfileDiffSummarySchema = z.object({
   files: z.array(OpenPondProfileGitFileChangeSchema),
 });
 
+export const OpenPondProfileHostedSourceCheckStatusSchema = z.object({
+  status: z.string(),
+  agentId: z.string().nullable().optional(),
+  workItemId: z.string().nullable().optional(),
+  deployPlanStatus: z.string().nullable().optional(),
+  canRun: z.boolean().nullable().optional(),
+  canDeploy: z.boolean().nullable().optional(),
+  sourceRef: z.string().nullable().optional(),
+  sourceCommitSha: z.string().nullable().optional(),
+  manifestHash: z.string().nullable().optional(),
+  manifestPath: z.string().nullable().optional(),
+  setupCommands: z.array(z.string()).optional(),
+  validationCommands: z.array(z.string()).optional(),
+  requiredChecks: z.array(z.string()).optional(),
+  evalNames: z.array(z.string()).optional(),
+  blockedReasons: z.array(z.string()).optional(),
+  staleReasons: z.array(z.string()).optional(),
+  runtimeId: z.string().nullable().optional(),
+  sandboxId: z.string().nullable().optional(),
+  traceArtifactRefs: z.array(z.string()).optional(),
+  evalResultArtifactRefs: z.array(z.string()).optional(),
+  validatorArtifactRefs: z.array(z.string()).optional(),
+  checkedAt: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export const OpenPondProfileHostedMaterializationStatusSchema = z.object({
+  status: z.string(),
+  agentId: z.string().nullable().optional(),
+  runtimeAgentId: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  sourceRoot: z.string().nullable().optional(),
+  sourceRef: z.string().nullable().optional(),
+  sourceCommitSha: z.string().nullable().optional(),
+  manifestHash: z.string().nullable().optional(),
+  manifestPath: z.string().nullable().optional(),
+  manifestSyncedAt: z.string().nullable().optional(),
+  fileCount: z.number().nullable().optional(),
+  totalBytes: z.number().nullable().optional(),
+  generatedManifestPath: z.string().nullable().optional(),
+  synthesizedOpenPondYaml: z.boolean().nullable().optional(),
+  uploadMetadataPath: z.string().nullable().optional(),
+  setupCommands: z.array(z.string()).optional(),
+  validationCommands: z.array(z.string()).optional(),
+  materializedAt: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export const OpenPondProfileHostedPublishStatusSchema = z.object({
+  status: z.string(),
+  agentId: z.string().nullable().optional(),
+  snapshotId: z.string().nullable().optional(),
+  sourceRef: z.string().nullable().optional(),
+  sourceCommitSha: z.string().nullable().optional(),
+  manifestHash: z.string().nullable().optional(),
+  manifestPath: z.string().nullable().optional(),
+  buildStatus: z.string().nullable().optional(),
+  validationStatus: z.string().nullable().optional(),
+  evalStatus: z.string().nullable().optional(),
+  publishedAt: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export const OpenPondProfileHostedRunSummarySchema = z.object({
+  status: z.string(),
+  agentId: z.string().nullable().optional(),
+  runId: z.string().nullable().optional(),
+  runtimeId: z.string().nullable().optional(),
+  sandboxId: z.string().nullable().optional(),
+  sourceRef: z.string().nullable().optional(),
+  sourceCommitSha: z.string().nullable().optional(),
+  manifestHash: z.string().nullable().optional(),
+  setupGateStatus: z.string().nullable().optional(),
+  setupRequirementRefs: z.array(z.string()).optional(),
+  artifactRefs: z.array(z.string()).optional(),
+  traceArtifactRefs: z.array(z.string()).optional(),
+  evalArtifactRefs: z.array(z.string()).optional(),
+  startedAt: z.string().nullable().optional(),
+  completedAt: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
 export const OpenPondProfileHostedBindingSchema = z.object({
   teamId: z.string().nullable(),
   projectId: z.string().nullable(),
@@ -95,6 +177,10 @@ export const OpenPondProfileHostedBindingSchema = z.object({
   hostedRunAgentId: z.string().nullable().optional().default(null),
   hostedRunId: z.string().nullable().optional().default(null),
   hostedRunAt: z.string().nullable().optional().default(null),
+  hostedSourceMaterialization: OpenPondProfileHostedMaterializationStatusSchema.nullable().optional().default(null),
+  hostedSourceCheck: OpenPondProfileHostedSourceCheckStatusSchema.nullable().optional().default(null),
+  hostedPublish: OpenPondProfileHostedPublishStatusSchema.nullable().optional().default(null),
+  hostedRun: OpenPondProfileHostedRunSummarySchema.nullable().optional().default(null),
 });
 
 export const OpenPondProfileSummarySchema = z.object({

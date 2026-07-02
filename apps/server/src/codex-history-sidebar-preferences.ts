@@ -5,7 +5,6 @@ import {
 } from "@openpond/contracts";
 import { codexHistoryThreadIdFromSessionId } from "./codex-history.js";
 import type { SqliteStore } from "./store/store.js";
-import { now } from "./utils.js";
 
 const CODEX_HISTORY_SIDEBAR_PREFERENCES_TYPE = "codex_history.sidebar_preferences";
 
@@ -73,7 +72,6 @@ export function applyCodexHistorySidebarPreference(
     ...(typeof preference.archived === "boolean" ? { archived: preference.archived } : {}),
     ...(typeof preference.order === "number" ? { order: preference.order } : {}),
     ...(preference.title ? { title: preference.title } : {}),
-    updatedAt: latestIso(session.updatedAt, preference.updatedAt),
   };
 }
 
@@ -90,7 +88,6 @@ function mergePreferencePatch(
   if (input.pinned === true) next.archived = false;
   if (input.archived === true) next.pinned = false;
 
-  next.updatedAt = now();
   return next;
 }
 
@@ -112,13 +109,4 @@ function normalizePreference(value: unknown): CodexHistorySidebarPreference {
 
   if (preference.archived === true) preference.pinned = false;
   return preference;
-}
-
-function latestIso(left: string, right: string | null | undefined): string {
-  if (!right) return left;
-  const leftMs = Date.parse(left);
-  const rightMs = Date.parse(right);
-  if (!Number.isFinite(leftMs)) return right;
-  if (!Number.isFinite(rightMs)) return left;
-  return rightMs > leftMs ? right : left;
 }

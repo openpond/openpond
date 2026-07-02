@@ -282,11 +282,23 @@
   flex: 0 0 auto;
 }
 
+.section-menu-popover button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.62;
+}
+
 .section-menu-popover button:hover,
 .section-menu-popover button:focus-visible {
   outline: 0;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
+}
+
+.section-menu-popover button:disabled:hover,
+.section-menu-popover button:disabled:focus-visible {
+  background: transparent;
+  color: var(--muted);
 }
 
 .sidebar-section-body {
@@ -460,10 +472,18 @@
   height: 16px;
   place-items: center;
   color: #8a8a8a;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
 .sidebar-project-caret svg {
   display: block;
+}
+
+.sidebar-project-row:hover .sidebar-project-caret,
+.sidebar-project-row:focus-visible .sidebar-project-caret,
+.sidebar-project-row:focus-within .sidebar-project-caret {
+  opacity: 1;
 }
 
 .sidebar-row-icon.cloud {
@@ -753,6 +773,20 @@
 
 .sidebar-show-more:hover {
   color: var(--text);
+}
+
+.sidebar-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  padding-left: 25px;
+  content-visibility: auto;
+  contain-intrinsic-size: 24px;
+}
+
+.sidebar-pagination-controls .sidebar-show-more {
+  padding-left: 0;
 }
 
 .user-auth-footer {

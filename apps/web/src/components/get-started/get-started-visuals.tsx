@@ -153,10 +153,28 @@ export function GetStartedVisual({ accent, kind }: GetStartedVisualProps) {
           <SetupGateGraph />
         </VisualShell>
       );
-    case "surface-router":
+    case "insights-loop":
       return (
         <VisualShell accent={accent}>
-          <SurfaceRouterGraph />
+          <InsightsLoopGraph />
+        </VisualShell>
+      );
+    case "insights-list":
+      return (
+        <VisualShell accent={accent}>
+          <InsightsListGraph />
+        </VisualShell>
+      );
+    case "apps-grid":
+      return (
+        <VisualShell accent={accent}>
+          <AppsGridGraph />
+        </VisualShell>
+      );
+    case "channel-router":
+      return (
+        <VisualShell accent={accent}>
+          <ChannelRouterGraph />
         </VisualShell>
       );
     default:
@@ -449,12 +467,64 @@ function SetupGateGraph() {
   );
 }
 
-function SurfaceRouterGraph() {
+function InsightsLoopGraph() {
+  return (
+    <div className="get-started-insights-loop">
+      <DiagramNode title="create_pipeline.updated" detail="runtime event stream" tone="source" />
+      <Connector label="scan" />
+      <DiagramNode title="detector" detail="waiting, blocked, failed" tone="gate" />
+      <Connector label="persist" />
+      <DiagramNode title="insight_items" detail="active rows + fingerprints" tone="state" />
+    </div>
+  );
+}
+
+function InsightsListGraph() {
+  return (
+    <div className="get-started-insights-list">
+      <div className="get-started-insights-toolbar">
+        <span>All</span>
+        <span>Active</span>
+        <span>Blocker</span>
+        <span>Scan</span>
+      </div>
+      {[
+        ["Blocker", "failed", "Create agent failed"],
+        ["Concern", "awaiting approval", "Edit agent needs plan approval"],
+        ["Concern", "awaiting answers", "Create agent is waiting for input"],
+      ].map(([severity, state, title]) => (
+        <div className="get-started-insight-row" key={title}>
+          <span>{severity}</span>
+          <strong>{title}</strong>
+          <em>{state}</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AppsGridGraph() {
+  return (
+    <div className="get-started-apps-graph">
+      <div className="get-started-app-grid">
+        {CONNECTED_APP_TILES.map((app) => (
+          <AppIconTile app={app} key={app.id} />
+        ))}
+      </div>
+      <div className="get-started-router-core">
+        <strong>profile catalog</strong>
+        <span>actions + setup + permissions</span>
+      </div>
+    </div>
+  );
+}
+
+function ChannelRouterGraph() {
   return (
     <div className="get-started-router-graph">
-      <div className="get-started-surface-cloud">
-        {["web", "desktop", "Slack", "Teams", "API", "MCP"].map((label) => (
-          <span key={label}>{label}</span>
+      <div className="get-started-channel-list">
+        {CHANNEL_TILES.map((app) => (
+          <AppIconTile app={app} key={app.id} />
         ))}
       </div>
       <div className="get-started-router-core">
@@ -468,6 +538,71 @@ function SurfaceRouterGraph() {
       </div>
     </div>
   );
+}
+
+type AppIconId =
+  | "github"
+  | "google"
+  | "slack"
+  | "microsoft_teams"
+  | "notion"
+  | "linear"
+  | "mcp"
+  | "web";
+
+type AppIconTileModel = {
+  id: AppIconId;
+  label: string;
+};
+
+const CONNECTED_APP_TILES: AppIconTileModel[] = [
+  { id: "github", label: "GitHub" },
+  { id: "google", label: "Google Drive" },
+  { id: "slack", label: "Slack" },
+  { id: "microsoft_teams", label: "Microsoft Teams" },
+  { id: "notion", label: "Notion" },
+  { id: "linear", label: "Linear" },
+  { id: "mcp", label: "MCP" },
+];
+
+const CHANNEL_TILES: AppIconTileModel[] = [
+  { id: "web", label: "Web" },
+  { id: "slack", label: "Slack" },
+  { id: "microsoft_teams", label: "Microsoft Teams" },
+  { id: "mcp", label: "MCP" },
+];
+
+function AppIconTile({ app }: { app: AppIconTileModel }) {
+  return (
+    <span className="get-started-app-icon-tile">
+      <span className="get-started-app-icon">
+        <img alt="" src={iconSrcForApp(app.id)} />
+      </span>
+      <span>{app.label}</span>
+    </span>
+  );
+}
+
+function iconSrcForApp(appId: AppIconId): string {
+  switch (appId) {
+    case "github":
+      return "/connected-apps/github.svg";
+    case "google":
+      return "/connected-apps/google.svg";
+    case "slack":
+      return "/connected-apps/slack.svg";
+    case "microsoft_teams":
+      return "/connected-apps/microsoft.svg";
+    case "notion":
+      return "/connected-apps/notion.svg";
+    case "linear":
+      return "/connected-apps/linear.svg";
+    case "web":
+      return "/openpond-icon.png";
+    case "mcp":
+    default:
+      return "/connected-apps/openpond-mcp.svg";
+  }
 }
 
 type DiagramNodeProps = {

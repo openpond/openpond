@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "../icons";
 import type { ClientConnection } from "../../api";
+import { useLocalImageUrl } from "../../hooks/useLocalImageUrl";
 import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { ActivityItem, ChatMessage } from "../../lib/app-models";
 import {
@@ -221,8 +222,15 @@ function useActivityImageUrl(
   connection: ClientConnection | null,
   activeWorkspaceAppId: string | null,
 ): string | null {
+  const localPath = image && isAbsoluteLocalImagePath(image.path) ? image.path : null;
   const appId = image?.appId ?? activeWorkspaceAppId;
-  return useWorkspaceImageUrl(connection, appId, image?.path);
+  const localUrl = useLocalImageUrl(connection, localPath);
+  const workspaceUrl = useWorkspaceImageUrl(connection, localPath ? null : appId, localPath ? null : image?.path);
+  return localPath ? localUrl : workspaceUrl;
+}
+
+function isAbsoluteLocalImagePath(path: string): boolean {
+  return /^file:\/\//i.test(path) || /^\//.test(path) || /^[A-Za-z]:[\\/]/.test(path);
 }
 
 function isMultilineActivity(value: string): boolean {

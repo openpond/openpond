@@ -1,5 +1,7 @@
 import type {
   BootstrapPayload,
+  InsightItem,
+  InsightSummary,
   LocalProject,
   OpenPondApp,
   WorkspaceDiffSummary,
@@ -11,6 +13,7 @@ import type {
 import { lazy, Suspense } from "react";
 import {
   ChevronRight,
+  Lightbulb,
   MoreHorizontal,
   PanelLeft,
   PanelRight,
@@ -50,6 +53,7 @@ export function AppTopBar({
   onToggleDiffPanel,
   onOpenSearch,
   onToggleTerminal,
+  onOpenInsights,
   onRunTerminalCommand,
   onWorkspaceToolAction,
   onOpenCommitDialog,
@@ -61,6 +65,9 @@ export function AppTopBar({
   onShowSidebar,
   platform,
   showWorkspaceControls = true,
+  insightsItems = [],
+  insightsSummary,
+  insightsScanning = false,
 }: {
   sidebarOpen: boolean;
   title: string;
@@ -81,6 +88,7 @@ export function AppTopBar({
   onToggleDiffPanel: () => void;
   onOpenSearch: () => void;
   onToggleTerminal: () => void;
+  onOpenInsights: () => void;
   onRunTerminalCommand: (command: string) => void;
   onWorkspaceToolAction: (
     action: WorkspaceToolRequest["action"],
@@ -95,10 +103,15 @@ export function AppTopBar({
   onShowSidebar: () => void;
   platform?: string | null;
   showWorkspaceControls?: boolean;
+  insightsItems?: InsightItem[];
+  insightsSummary?: InsightSummary | null;
+  insightsScanning?: boolean;
 }) {
   const filesChanged = workspaceDiff?.filesChanged ?? 0;
   const showWindowControls = isDesktopShell() && !isMacPlatform(platform);
   const showRightControls = showWorkspaceControls || showWindowControls;
+  const activeInsightCount = insightsSummary?.activeCount ?? 0;
+  const activeInsights = insightsItems.filter((item) => item.status === "active");
   return (
     <header className="app-titlebar">
       <div className="titlebar-left">
@@ -166,6 +179,38 @@ export function AppTopBar({
                   onOpenSandboxWorkspace={onOpenSandboxWorkspace}
                 />
               </Suspense>
+              <div className={`topbar-insights ${insightsScanning ? "scanning" : ""}`}>
+                <button
+                  type="button"
+                  className="topbar-insights-button"
+                  title={`${activeInsightCount} active Insights`}
+                  aria-label={`${activeInsightCount} active Insights`}
+                  aria-haspopup={activeInsights.length ? "menu" : undefined}
+                  onClick={onOpenInsights}
+                >
+                  <Lightbulb size={16} />
+                  <span className="topbar-insights-count">{activeInsightCount}</span>
+                </button>
+                {activeInsights.length ? (
+                  <div className="topbar-insights-dropdown" role="menu" aria-label="Active Insights">
+                    {activeInsights.map((item) => (
+                      <button
+                        type="button"
+                        className="topbar-insights-dropdown-row"
+                        key={item.id}
+                        role="menuitem"
+                        onClick={onOpenInsights}
+                      >
+                        <span className="topbar-insights-dropdown-meta">{item.severity}</span>
+                        <span className="topbar-insights-dropdown-copy">
+                          <strong>{item.title}</strong>
+                          <span>{item.summary}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
                 className="titlebar-icon"

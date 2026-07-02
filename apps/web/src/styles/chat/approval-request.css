@@ -81,7 +81,7 @@
 }
 
 .chat-column.has-approval .chat-thread {
-  padding-bottom: 128px;
+  padding-bottom: var(--chat-composer-reserve, 132px);
 }
 
 .approval-request-shell {

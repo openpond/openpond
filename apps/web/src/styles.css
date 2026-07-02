@@ -13,6 +13,7 @@
 @import "./styles/browser/browser-sidebar.css";
 @import "./styles/terminal/terminal-overlay.css";
 @import "./styles/goal/goal-details.css";
+@import "./styles/insights/insights.css";
 @import "./styles/wallet/wallet.css";
 @import "./styles/apps/apps.css";
 @import "./styles/get-started/get-started.css";

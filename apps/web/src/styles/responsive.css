@@ -38,7 +38,7 @@
   }
 
   .chat-thread {
-    padding: 68px 20px 18px;
+    padding: 68px 20px var(--chat-composer-reserve, 132px);
   }
 
   .main-pane.chat-active.diff-open {
@@ -117,6 +117,24 @@
     grid-template-columns: 1fr;
   }
 
+  .profile-control-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-control-actions {
+    justify-content: flex-start;
+  }
+
+  .profile-agent-table-head {
+    display: none;
+  }
+
+  .profile-agent-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
   .remote-access-peer-row {
     grid-template-columns: 38px minmax(0, 1fr);
   }
@@ -127,6 +145,32 @@
 
   .remote-access-summary .account-summary-actions {
     justify-content: flex-start;
+  }
+
+  .account-summary {
+    display: grid;
+    align-items: start;
+  }
+
+  .account-summary .account-summary-actions {
+    justify-content: flex-start;
+  }
+
+  .account-summary-main strong {
+    white-space: normal;
+  }
+
+  .account-summary-meta .account-summary-copy {
+    max-width: 100%;
+  }
+
+  .account-signin-panel {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .account-api-key-link {
+    justify-self: start;
+    grid-column: 2;
   }
 
   .account-form-grid,

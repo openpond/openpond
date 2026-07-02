@@ -1,4 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 import {
   AccountStateSchema,
@@ -66,16 +68,25 @@ import {
   collectProfileSourceUploadEntries,
   commitActiveProfileChanges,
   emptyProfileState,
+  hostedPublishStatusFromPayload,
+  hostedRunStatusFromRunSummary,
+  hostedRunSummaryFromPayload,
+  hostedSourceCheckStatusFromPayload,
   initLocalProfileRepo,
   loadLocalProfileRepo,
   loadOpenPondProfileState,
   runProfileCheck,
   runProfileSdkCommand,
   saveProfilePushStatus,
+  type LocalOpenPondProfilePushStatus,
   type ProfileRepoManifest,
 } from "@openpond/cloud";
 import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
-import { chatAttachmentContext, formatPromptWithAttachmentContext } from "../chat-attachments.js";
+import {
+  chatAttachmentContext,
+  formatPromptWithAttachmentContext,
+  materializeChatAttachments,
+} from "../chat-attachments.js";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
 import {
   assertCreatePipelineMutationApproved,
@@ -168,6 +179,16 @@ const AGENT_SDK_DEPENDENCY_FIELDS: ProjectAgentSdkDependencyType[] = [
   "peerDependencies",
   "optionalDependencies",
 ];
+
+type ActiveCodexHistoryTurn = {
+  client: CodexAppServerClient;
+  completion: Promise<unknown> | null;
+  interrupted: boolean;
+  ready: Promise<void>;
+  resolveReady: () => void;
+  threadId: string;
+  turnId: string | null;
+};
 const CLOUD_PROJECT_CACHE_TYPE = "openpond.cloudProjects";
 const BOOTSTRAP_EVENT_WINDOW_LIMIT = 500;
 const BOOTSTRAP_DIAGNOSTIC_LIMIT = 50;
@@ -430,6 +451,45 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function parseHostedSourceDispatch(value: string | null): "request_only" | "coding_core" | null {
+  if (!value) return null;
+  if (value === "request_only" || value === "coding_core") return value;
+  throw new Error("hostedSourceDispatch must be one of request_only, coding_core.");
+}
+
+function buildProfileHostedRunIdempotencyKey(input: {
+  input: Record<string, unknown>;
+  localHead: string;
+  hostedHead?: string | null;
+  hostedRunAgentId: string;
+  hostedRunInput: Record<string, unknown>;
+}): string {
+  const explicit = stringValue(input.input.hostedRunIdempotencyKey);
+  if (explicit) return explicit;
+  const sourceHead = input.hostedHead || "unknown-source";
+  const inputHash = hashStableJson(input.hostedRunInput).slice(0, 16);
+  const base = `profile-push-run:${input.localHead}:${sourceHead}:${input.hostedRunAgentId}:${inputHash}`;
+  return booleanValue(input.input.hostedRunRetry)
+    ? `${base}:retry:${randomUUID()}`
+    : base;
+}
+
+function hashStableJson(value: unknown): string {
+  return createHash("sha256").update(stableJsonStringify(value)).digest("hex");
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  }
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
+    .join(",")}}`;
+}
+
 function stringArrayValue(value: unknown): string[] {
   return Array.isArray(value)
     ? value
@@ -482,6 +542,7 @@ function profileActionRunSummary(input: {
 }
 
 export function createServerPayloads(deps: {
+  attachmentRootDir?: string;
   store: SqliteStore;
   storeDir: string;
   providersFilePath: string;
@@ -509,6 +570,7 @@ export function createServerPayloads(deps: {
     appendRuntimeEvent,
     isClosing,
   } = deps;
+  const attachmentRootDir = deps.attachmentRootDir ?? path.join(storeDir, "attachments");
   const {
     appendAppPage,
     loadOpenPondData,
@@ -524,6 +586,7 @@ export function createServerPayloads(deps: {
     keyFilePath: providerSecretsKeyPath(storeDir),
   };
   const providerDiagnostics = new ProviderDiagnosticsTracker();
+  const activeCodexHistoryTurns = new Map<string, ActiveCodexHistoryTurn>();
 
   async function loadAppPreferences(): Promise<AppPreferences> {
     const entry = await store.getCacheEntry<unknown>(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY);
@@ -1017,7 +1080,10 @@ export function createServerPayloads(deps: {
 
   async function codexHistoryThreadPayload(sessionId: string, requestUrl?: URL): Promise<unknown> {
     const [payload, preferences] = await Promise.all([
-      readCodexHistoryThreadPayload(sessionId, codexHistoryThreadReadOptions(requestUrl)),
+      readCodexHistoryThreadPayload(sessionId, {
+        ...codexHistoryThreadReadOptions(requestUrl),
+        attachmentRootDir,
+      }),
       loadCodexHistorySidebarPreferences(store),
     ]);
     return {
@@ -1028,18 +1094,28 @@ export function createServerPayloads(deps: {
 
   async function patchCodexHistorySessionPayload(sessionId: string, payload: unknown): Promise<unknown> {
     PatchSessionRequestSchema.parse(payload);
-    const current = await readCodexHistoryThreadPayload(sessionId);
+    const current = await readCodexHistoryThreadPayload(sessionId, { attachmentRootDir });
     await patchCodexHistorySidebarPreference(store, sessionId, payload);
     return applyCodexHistorySidebarPreference(current.session, await loadCodexHistorySidebarPreferences(store));
   }
 
   async function sendCodexHistoryTurnPayload(sessionId: string, payload: unknown): Promise<unknown> {
     const input = SendTurnRequestSchema.parse(payload);
-    const current = await readCodexHistoryThreadPayload(sessionId);
+    if (activeCodexHistoryTurns.has(sessionId)) {
+      throw new Error("A Codex history turn is already running for this chat.");
+    }
+    const current = await readCodexHistoryThreadPayload(sessionId, { attachmentRootDir });
     const threadId = current.session.codexThreadId;
     if (!threadId) throw new Error("Codex history session is missing its Codex thread id");
     const cwd = input.cwd ?? current.session.cwd;
-    const providerPrompt = formatPromptWithAttachmentContext(input.prompt, chatAttachmentContext(input.attachments));
+    const turnId = nextCodexHistoryTurnId(current.events, current.session.id);
+    const attachmentContexts = await materializeChatAttachments({
+      attachmentRootDir,
+      sessionId: current.session.id,
+      turnId,
+      attachments: input.attachments,
+    });
+    const providerPrompt = formatPromptWithAttachmentContext(input.prompt, chatAttachmentContext(attachmentContexts));
     const client = new CodexAppServerClient({
       binaryPath: process.env.CODEX_BINARY || "codex",
       clientName: "openpond-app",
@@ -1048,6 +1124,20 @@ export function createServerPayloads(deps: {
       onNotification: () => undefined,
       onServerRequest: async (request) => defaultServerRequestResult(request),
     });
+    let resolveReady: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    const activeTurn: ActiveCodexHistoryTurn = {
+      client,
+      completion: null,
+      interrupted: false,
+      ready,
+      resolveReady,
+      threadId,
+      turnId: null,
+    };
+    activeCodexHistoryTurns.set(sessionId, activeTurn);
     try {
       await client.resumeThread({
         threadId,
@@ -1064,11 +1154,37 @@ export function createServerPayloads(deps: {
         approvalPolicy: input.approvalPolicy,
         sandbox: input.sandbox,
       });
-      await client.waitForTurn(turn.turnId);
+      const completion = client.waitForTurn(turn.turnId);
+      activeTurn.completion = completion;
+      activeTurn.turnId = turn.turnId;
+      activeTurn.resolveReady();
+      try {
+        await completion;
+      } catch (error) {
+        if (!activeTurn.interrupted) throw error;
+      }
       return codexHistoryThreadPayload(sessionId);
     } finally {
+      activeTurn.resolveReady();
+      if (activeTurn && activeCodexHistoryTurns.get(sessionId) === activeTurn) {
+        activeCodexHistoryTurns.delete(sessionId);
+      }
       await client.stop().catch(() => undefined);
     }
+  }
+
+  async function interruptCodexHistoryTurnPayload(sessionId: string): Promise<unknown> {
+    const activeTurn = activeCodexHistoryTurns.get(sessionId);
+    if (!activeTurn) return { interrupted: false };
+    activeTurn.interrupted = true;
+    await activeTurn.ready;
+    if (!activeTurn.turnId || !activeTurn.completion) return { interrupted: false };
+    await activeTurn.client.interruptTurn({
+      threadId: activeTurn.threadId,
+      turnId: activeTurn.turnId,
+    });
+    await activeTurn.completion.catch(() => undefined);
+    return { interrupted: true };
   }
 
   function validBootstrapSessions(sessions: Session[]): Session[] {
@@ -1727,7 +1843,7 @@ export function createServerPayloads(deps: {
     const pushedProfile = asRecord(pushPayload.profile);
     const pushedSourceUpload = asRecord(pushPayload.sourceUpload);
     const pushedAt = new Date().toISOString();
-    const pushStatus = {
+    let pushStatus: LocalOpenPondProfilePushStatus = {
       status: "pushed",
       promotionStatus: "uploaded",
       hostedRunStatus: "not_started",
@@ -1737,14 +1853,148 @@ export function createServerPayloads(deps: {
       localHead: profile.git.head,
       hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
       sourceRef: stringValue(pushedSourceUpload?.sourceRef),
-    } as const;
+    };
     await saveProfilePushStatus(pushStatus);
+
+    const hostedSourceAgentId =
+      stringValue(input.hostedSourceAgentId) ?? stringValue(input.hostedRunAgentId);
+    const requestHostedSourceChecks = Boolean(booleanValue(input.hostedSourceChecks));
+    const publishHostedSource = Boolean(booleanValue(input.publishHostedSource));
+    const hostedSourceDispatch =
+      parseHostedSourceDispatch(stringValue(input.hostedSourceDispatch)) ?? "coding_core";
+    let hostedSourceDeployPlan: Record<string, unknown> | null = null;
+    let hostedSourceChecks: Record<string, unknown> | null = null;
+    let hostedSourcePublish: Record<string, unknown> | null = null;
+    if (requestHostedSourceChecks || publishHostedSource) {
+      if (!hostedSourceAgentId) {
+        throw new Error("hostedSourceAgentId or hostedRunAgentId is required for hosted source checks or publish.");
+      }
+      try {
+        const deployPlanPayload = asRecord(
+          await sandboxRequestPayload({
+            type: "agent_source_deploy_plan",
+            agentId: hostedSourceAgentId,
+            payload: { teamId },
+          }),
+        );
+        hostedSourceDeployPlan = asRecord(deployPlanPayload.deployPlan);
+        if (requestHostedSourceChecks) {
+          hostedSourceChecks = asRecord(
+            await sandboxRequestPayload({
+              type: "agent_source_checks",
+              agentId: hostedSourceAgentId,
+              payload: {
+                teamId,
+                sourceRef: stringValue(pushedSourceUpload?.sourceRef),
+                baseSha: stringValue(pushedSourceUpload?.sourceCommitSha),
+                checkKind: stringValue(input.hostedCheckKind) ?? stringValue(input.checkKind) ?? "all",
+                dispatch: hostedSourceDispatch,
+                metadata: {
+                  source: "openpond_profile_push_checks",
+                  localHead: profile.git.head,
+                  hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
+                  sourceRef: stringValue(pushedSourceUpload?.sourceRef),
+                  dispatch: hostedSourceDispatch,
+                },
+              },
+            }),
+          );
+          const dispatchResult = asRecord(hostedSourceChecks.dispatchResult);
+          if (stringValue(dispatchResult.status) === "failed") {
+            throw new Error(stringValue(dispatchResult.error) ?? "hosted_source_check_dispatch_failed");
+          }
+        }
+        pushStatus = {
+          ...pushStatus,
+          promotionStatus: requestHostedSourceChecks ? "hosted_source_check_pending" : pushStatus.promotionStatus,
+          hostedSourceCheck: hostedSourceCheckStatusFromPayload({
+            agentId: hostedSourceAgentId,
+            status: requestHostedSourceChecks ? "requested" : "deploy_plan_ready",
+            deployPlan: hostedSourceDeployPlan,
+            checkResult: hostedSourceChecks,
+          }),
+        };
+        await saveProfilePushStatus(pushStatus);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        pushStatus = {
+          ...pushStatus,
+          promotionStatus: "hosted_source_check_failed",
+          hostedSourceCheck: hostedSourceCheckStatusFromPayload({
+            agentId: hostedSourceAgentId,
+            status: "failed",
+            deployPlan: hostedSourceDeployPlan,
+            checkedAt: new Date().toISOString(),
+            error: message,
+          }),
+          error: message,
+        };
+        await saveProfilePushStatus(pushStatus);
+        throw new Error(`Hosted source check failed after push: ${message}`);
+      }
+    }
+
+    if (publishHostedSource) {
+      if (!hostedSourceAgentId) {
+        throw new Error("hostedSourceAgentId or hostedRunAgentId is required for hosted source publish.");
+      }
+      try {
+        const deployPlanSource = asRecord(hostedSourceDeployPlan?.source);
+        const expectedManifestHash =
+          stringValue(input.expectedManifestHash) ??
+          pushStatus.hostedSourceCheck?.manifestHash ??
+          stringValue(deployPlanSource?.manifestHash);
+        hostedSourcePublish = asRecord(
+          await sandboxRequestPayload({
+            type: "agent_source_publish",
+            agentId: hostedSourceAgentId,
+            payload: {
+              teamId,
+              expectedManifestHash,
+              expectedSourceCommitSha: stringValue(pushedSourceUpload?.sourceCommitSha),
+              workItemId: stringValue(input.workItemId),
+            },
+          }),
+        );
+        pushStatus = {
+          ...pushStatus,
+          promotionStatus: "hosted_source_published",
+          hostedPublish: hostedPublishStatusFromPayload({
+            agentId: hostedSourceAgentId,
+            publishResult: hostedSourcePublish,
+          }),
+        };
+        await saveProfilePushStatus(pushStatus);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        pushStatus = {
+          ...pushStatus,
+          promotionStatus: "hosted_source_publish_failed",
+          hostedPublish: {
+            status: "failed",
+            agentId: hostedSourceAgentId,
+            error: message,
+          },
+          error: message,
+        };
+        await saveProfilePushStatus(pushStatus);
+        throw new Error(`Hosted source publish failed after push: ${message}`);
+      }
+    }
+
     const hostedRunAgentId = stringValue(input.hostedRunAgentId);
     let hostedRun: Record<string, unknown> | null = null;
     if (hostedRunAgentId) {
       const hostedRunStartedAt = new Date().toISOString();
       const hostedRunInput = nonEmptyRecord(input.hostedRunInput)
         ?? { prompt: "hello", channel: "openpond_chat" };
+      const hostedRunIdempotencyKey = buildProfileHostedRunIdempotencyKey({
+        input,
+        localHead: profile.git.head,
+        hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
+        hostedRunAgentId,
+        hostedRunInput,
+      });
       await saveProfilePushStatus({
         ...pushStatus,
         promotionStatus: "hosted_run_pending",
@@ -1759,29 +2009,52 @@ export function createServerPayloads(deps: {
             agentId: hostedRunAgentId,
             payload: {
               teamId,
-              idempotencyKey: `profile-push-run:${profile.git.head}:${hostedRunAgentId}`,
+              idempotencyKey: hostedRunIdempotencyKey,
               input: hostedRunInput,
               metadata: {
                 source: "openpond_profile_push_run",
                 localHead: profile.git.head,
                 hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
+                hostedRunIdempotencyKey,
+                hostedRunRetry: Boolean(booleanValue(input.hostedRunRetry)),
                 sourceRef: stringValue(pushedSourceUpload?.sourceRef),
+                publishedSnapshotId: pushStatus.hostedPublish?.snapshotId ?? null,
+                manifestHash:
+                  pushStatus.hostedPublish?.manifestHash ??
+                  pushStatus.hostedSourceCheck?.manifestHash ??
+                  null,
               },
-              runtimeSourcePolicy: {
-                allowLatestSource: true,
-                source: "diagnostic",
-              },
+              runtimeSourcePolicy: publishHostedSource
+                ? {
+                    requirePublishedSnapshot: true,
+                    source: "diagnostic",
+                  }
+                : {
+                    allowLatestSource: true,
+                    source: "diagnostic",
+                  },
             },
           }),
         );
         const run = asRecord(hostedRun.run);
+        const hostedRunSummary = hostedRunSummaryFromPayload({
+          agentId: hostedRunAgentId,
+          runResult: hostedRun,
+        });
+        const hostedRunStatus = hostedRunStatusFromRunSummary(hostedRunSummary);
         await saveProfilePushStatus({
           ...pushStatus,
-          promotionStatus: "hosted_run_pending",
-          hostedRunStatus: "running",
+          promotionStatus:
+            hostedRunStatus === "passed"
+              ? "hosted_run_passed"
+              : hostedRunStatus === "failed"
+                ? "hosted_run_failed"
+                : "hosted_run_pending",
+          hostedRunStatus,
           hostedRunAgentId,
           hostedRunId: stringValue(run.id),
           hostedRunAt: stringValue(run.createdAt) ?? hostedRunStartedAt,
+          hostedRun: hostedRunSummary,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1791,6 +2064,11 @@ export function createServerPayloads(deps: {
           hostedRunStatus: "failed",
           hostedRunAgentId,
           hostedRunAt: new Date().toISOString(),
+          hostedRun: {
+            status: "failed",
+            agentId: hostedRunAgentId,
+            error: message,
+          },
           error: message,
         });
         throw new Error(`Hosted invocation failed to start after push: ${message}`);
@@ -1807,6 +2085,8 @@ export function createServerPayloads(deps: {
     );
     return {
       ...pushPayload,
+      hostedSourceChecks,
+      hostedSourcePublish,
       hostedRun,
       uploaded: upload,
       localProfile: await loadOpenPondProfileState(),
@@ -1916,6 +2196,7 @@ export function createServerPayloads(deps: {
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,
     sendCodexHistoryTurnPayload,
+    interruptCodexHistoryTurnPayload,
     ...workspacePayloads,
     uploadLocalProjectCloudSourcePayload,
     listCloudWorkItemsPayload,
@@ -2300,6 +2581,19 @@ function codexHistoryThreadReadOptions(requestUrl: URL | undefined): {
     ...(maxEvents ? { maxEvents } : {}),
     tail: requestUrl.searchParams.get("tail") === "1",
   };
+}
+
+function nextCodexHistoryTurnId(events: RuntimeEvent[], sessionId: string): string {
+  const prefix = `${sessionId}_turn_`;
+  let maxTurnIndex = 0;
+  for (const event of events) {
+    const turnId = event.turnId;
+    if (!turnId?.startsWith(prefix)) continue;
+    const value = turnId.slice(prefix.length);
+    if (!/^\d+$/.test(value)) continue;
+    maxTurnIndex = Math.max(maxTurnIndex, Number.parseInt(value, 10));
+  }
+  return `${prefix}${maxTurnIndex + 1}`;
 }
 
 function positiveIntegerParam(value: string | null): number | undefined {

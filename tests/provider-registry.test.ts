@@ -64,6 +64,14 @@ describe("local BYOK provider registry", () => {
     expect(settings.modelCaches.openrouter?.models.map((model) => model.id)).toContain(
       "moonshotai/kimi-k2",
     );
+    expect(settings.providers.zai?.baseUrl).toBe("https://open.bigmodel.cn/api/paas/v4");
+    expect(settings.providers.zai?.defaultModel).toBe("glm-5.2");
+    expect(settings.modelCaches.zai?.models.map((model) => model.id)).toEqual([
+      "glm-5.2",
+      "glm-5.1",
+      "glm-5",
+      "glm-4.7",
+    ]);
   });
 
   test("merges manual model overrides into searchable provider model lists", () => {

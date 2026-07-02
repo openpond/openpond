@@ -33,6 +33,14 @@ export const CHAT_ATTACHMENT_LIMITS = {
 
 export const ChatAttachmentKindSchema = z.enum(["image", "text", "file"]);
 
+export const ChatAttachmentImagePreviewSchema = z.object({
+  sessionId: z.string().trim().min(1).max(200),
+  turnId: z.string().trim().min(1).max(200),
+  attachmentId: z.string().trim().min(1).max(200),
+  storageName: z.string().trim().min(1).max(240),
+  contentType: z.string().trim().min(1).max(160),
+});
+
 export const ChatAttachmentSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1).max(240),
@@ -48,6 +56,8 @@ export type ChatAttachment = z.infer<typeof ChatAttachmentSchema>;
 export const ChatAttachmentSummarySchema = ChatAttachmentSchema.omit({
   text: true,
   contentsBase64: true,
+}).extend({
+  imagePreview: ChatAttachmentImagePreviewSchema.optional(),
 });
 
 export type ChatAttachmentSummary = z.infer<typeof ChatAttachmentSummarySchema>;
@@ -55,6 +65,8 @@ export type ChatAttachmentSummary = z.infer<typeof ChatAttachmentSummarySchema>;
 export const CreateSessionRequestSchema = z.object({
   provider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   modelRef: ChatModelRefSchema.optional(),
+  systemKind: z.enum(["openpond.insights"]).nullable().optional(),
+  hiddenFromDefaultSidebar: z.boolean().optional(),
   appId: z.string().nullable().optional(),
   appName: z.string().nullable().optional(),
   workspaceKind: WorkspaceKindSchema.optional(),
@@ -167,6 +179,9 @@ export type CloudWorkItemBackgroundRequest = z.infer<
 
 export const OpenPondActionCatalogEntrySchema = z.object({
   id: z.string().trim().min(1).max(191),
+  agentId: z.string().trim().min(1).max(191).optional().nullable(),
+  sourcePath: z.string().trim().min(1).max(2000).optional().nullable(),
+  sourceActionId: z.string().trim().min(1).max(191).optional().nullable(),
   name: z.string().trim().min(1).max(191).optional().nullable(),
   label: z.string().trim().min(1).max(160).optional().nullable(),
   description: z.string().trim().max(1000).optional().nullable(),
@@ -200,6 +215,7 @@ export type OpenCloudWorkItemRequest = z.infer<typeof OpenCloudWorkItemRequestSc
 
 export const SendTurnRequestSchema = z.object({
   prompt: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   modelRef: ChatModelRefSchema.optional(),

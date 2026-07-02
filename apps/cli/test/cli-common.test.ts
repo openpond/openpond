@@ -102,6 +102,42 @@ describe("CLI common parsing", () => {
     expect(parsed.rest).toEqual(["pty-write", "sandbox-1", "pty-1"]);
     expect(parsed.options.input).toBe("ls -la");
   });
+
+  test("parses profile hosted promotion options with typed JSON input", () => {
+    const parsed = parseArgs([
+      "profile",
+      "push",
+      "--team-id",
+      "team_1",
+      "--hosted-source-checks",
+      "--publish-hosted-source",
+      "--hosted-source-agent-id",
+      "agent_1",
+      "--hosted-source-dispatch",
+      "coding_core",
+      "--hosted-run-input",
+      '{"prompt":"hello"}',
+      "--hosted-run-retry",
+      "--hosted-run-idempotency-key",
+      "retry-key-1",
+      "--hosted-run-conversation-id",
+      "session_hosted_1",
+      "--conversation-id",
+      "session_alias_1",
+    ]);
+
+    expect(parsed.command).toBe("profile");
+    expect(parsed.rest).toEqual(["push"]);
+    expect(parsed.options.hostedSourceChecks).toBe("true");
+    expect(parsed.options.publishHostedSource).toBe("true");
+    expect(parsed.options.hostedSourceAgentId).toBe("agent_1");
+    expect(parsed.options.hostedSourceDispatch).toBe("coding_core");
+    expect(parsed.options.hostedRunInput).toBe('{"prompt":"hello"}');
+    expect(parsed.options.hostedRunRetry).toBe("true");
+    expect(parsed.options.hostedRunIdempotencyKey).toBe("retry-key-1");
+    expect(parsed.options.hostedRunConversationId).toBe("session_hosted_1");
+    expect(parsed.options.conversationId).toBe("session_alias_1");
+  });
 });
 
 describe("CLI common process runner", () => {

@@ -321,7 +321,7 @@ function capabilitiesForModelId(modelId: string): ProviderModelCapabilities {
     toolCalling: true,
     structuredOutput: true,
     vision: /vision|gpt-4\.1|gpt-5|gemini|claude|pixtral|vl/.test(normalized),
-    reasoning: /reason|r1|o1|o3|o4|gpt-5|glm-4\.5|kimi-k2/.test(normalized),
+    reasoning: /reason|r1|o1|o3|o4|gpt-5|glm-(?:4\.[5-9]|5(?:\.\d+)?)|kimi-k2/.test(normalized),
   };
 }
 

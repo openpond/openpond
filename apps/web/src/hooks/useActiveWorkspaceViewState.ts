@@ -118,7 +118,7 @@ export function useActiveWorkspaceViewState({
   const accountLabel = accountPending
     ? null
     : accountSignedOut
-      ? "Add account"
+      ? "Sign in"
       : (account?.label ?? account?.activeProfile?.handle ?? "Account");
   const activeUserHandle = account?.activeProfile?.handle?.trim() ?? "";
   const startMessage = activeUserHandle ? `Welcome, ${activeUserHandle}` : "Welcome";

@@ -33,6 +33,7 @@ type LoadWorkspaceDiffOptions = {
 
 const WORKSPACE_DIFF_FILE_CONCURRENCY = 6;
 const WORKSPACE_DIFF_CACHE_MAX_ENTRIES = 60;
+const WORKSPACE_EXPLICIT_FILE_SEARCH_MAX_ENTRIES = 10_000;
 const workspaceDiffCache = new Map<string, WorkspaceDiffSummary>();
 
 export async function mapWorkspaceDiffEntriesWithConcurrency<T, R>(
@@ -414,15 +415,23 @@ export async function loadWorkspaceFileAtPath(repoPath: string, filePath: string
   const initialized = await isGitRepo(repoPath);
   const normalizedPath = normalizeWorkspaceFilePath(filePath);
   if (!normalizedPath) throw new Error("File not found");
+  if (isGeneratedWorkspacePath(normalizedPath)) throw new Error("File not found");
   if (initialized) {
     const detail = await loadGitWorkspaceFileAtPath(repoPath, normalizedPath);
     if (detail) return detail;
-    if (!(await isVisibleGitWorkspaceFile(repoPath, normalizedPath))) throw new Error("File not found");
   }
-  const content = await readWorkspaceFile(repoPath, normalizedPath);
+  let resolvedPath = normalizedPath;
+  let content = await readWorkspaceFile(repoPath, resolvedPath);
+  if (content === null) {
+    const basenameMatch = await resolveExplicitMarkdownBasenamePath(repoPath, normalizedPath);
+    if (basenameMatch) {
+      resolvedPath = basenameMatch;
+      content = await readWorkspaceFile(repoPath, resolvedPath);
+    }
+  }
   if (content === null) throw new Error("File not found");
   return {
-    path: normalizedPath,
+    path: resolvedPath,
     status: "unchanged",
     additions: 0,
     deletions: 0,
@@ -454,6 +463,45 @@ async function loadGitWorkspaceFileAtPath(repoPath: string, filePath: string): P
       ? { additions: countTextLines(await readWorkspaceFile(repoPath, entry.path)), deletions: 0 }
       : await gitNumstatForFile(gitContext, entry.path);
   return loadGitWorkspaceFileDetail(repoPath, entry, gitContext, fileStats);
+}
+
+async function resolveExplicitMarkdownBasenamePath(repoPath: string, normalizedPath: string): Promise<string | null> {
+  if (normalizedPath.includes("/") || !isMarkdownWorkspacePath(normalizedPath)) return null;
+  const targetName = normalizedPath.toLowerCase();
+  const matches: string[] = [];
+  const queue: Array<{ absolutePath: string; prefix: string }> = [{ absolutePath: repoPath, prefix: "" }];
+  let visitedEntries = 0;
+
+  while (queue.length > 0 && visitedEntries < WORKSPACE_EXPLICIT_FILE_SEARCH_MAX_ENTRIES) {
+    const current = queue.shift()!;
+    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+    try {
+      entries = await fs.readdir(current.absolutePath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (visitedEntries >= WORKSPACE_EXPLICIT_FILE_SEARCH_MAX_ENTRIES) break;
+      const relativePath = current.prefix ? `${current.prefix}/${entry.name}` : entry.name;
+      if (isGeneratedWorkspacePath(relativePath)) continue;
+      visitedEntries += 1;
+      const absolutePath = path.join(current.absolutePath, entry.name);
+      if (entry.isDirectory()) {
+        queue.push({ absolutePath, prefix: relativePath });
+      } else if (entry.isFile() && entry.name.toLowerCase() === targetName) {
+        matches.push(relativePath);
+      }
+    }
+  }
+
+  if (matches.length === 1) return matches[0] ?? null;
+  const workingDocMatches = matches.filter((candidate) => candidate.startsWith("docs/working-docs/"));
+  return workingDocMatches.length === 1 ? workingDocMatches[0] ?? null : null;
+}
+
+function isMarkdownWorkspacePath(filePath: string): boolean {
+  return /\.(?:md|markdown|mdx)$/i.test(filePath);
 }
 
 async function loadGitWorkspaceFileDetail(

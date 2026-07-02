@@ -21,6 +21,7 @@ import { runWorkspaceCommand, type WorkspacePaths } from "./workspaces.js";
 
 const LOCAL_PROJECTS_CACHE_TYPE = "local.projects";
 const LOCAL_PROJECTS_CACHE_KEY = "v1";
+const SYSTEM_LOCAL_PROJECT_SOURCE = "folder" as const;
 const SANDBOX_TEMPLATE_SCAN_DEPTH = 2;
 const SANDBOX_TEMPLATE_MANIFEST_NAME = OPENPOND_MANIFEST_FILE_NAME;
 const IGNORED_PACKAGE_SCAN_DIRS = new Set([
@@ -363,6 +364,49 @@ export async function listLocalProjects(store: SqliteStore): Promise<LocalProjec
   );
 }
 
+export async function ensureSystemLocalProject(
+  store: SqliteStore,
+  input: {
+    id: string;
+    name: string;
+    workspacePath: string;
+    systemKind: NonNullable<LocalProject["systemKind"]>;
+    hiddenFromDefaultSidebar?: boolean;
+  },
+): Promise<LocalProject> {
+  await fs.mkdir(input.workspacePath, { recursive: true });
+  const projects = await listLocalProjects(store);
+  const existing = projects.find((project) => project.id === input.id || project.systemKind === input.systemKind);
+  const timestamp = now();
+  const project: LocalProject = {
+    id: existing?.id ?? input.id,
+    name: existing?.name || input.name,
+    path: input.workspacePath,
+    workspacePath: input.workspacePath,
+    repoPath: null,
+    source: SYSTEM_LOCAL_PROJECT_SOURCE,
+    systemKind: input.systemKind,
+    hiddenFromDefaultSidebar: existing?.hiddenFromDefaultSidebar ?? input.hiddenFromDefaultSidebar ?? true,
+    sandboxTemplate: null,
+    agentSdk: null,
+    linkedOpenPondApp: null,
+    linkedSandboxProject: null,
+    preferredSandboxAgentId: null,
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: existing?.updatedAt ?? timestamp,
+  };
+  const unchanged =
+    existing &&
+    existing.path === project.path &&
+    existing.workspacePath === project.workspacePath &&
+    existing.systemKind === project.systemKind &&
+    existing.hiddenFromDefaultSidebar === project.hiddenFromDefaultSidebar;
+  if (!unchanged) {
+    await saveLocalProjects(store, [project, ...projects.filter((candidate) => candidate.id !== project.id)]);
+  }
+  return unchanged ? existing : project;
+}
+
 export async function upsertLocalProject(
   store: SqliteStore,
   payload: unknown,
@@ -438,6 +482,9 @@ export async function updateLocalProjectAgentSetup(
       : {}),
     ...(Object.hasOwn(input, "preferredSandboxAgentId")
       ? { preferredSandboxAgentId: input.preferredSandboxAgentId ?? null }
+      : {}),
+    ...(Object.hasOwn(input, "hiddenFromDefaultSidebar")
+      ? { hiddenFromDefaultSidebar: input.hiddenFromDefaultSidebar ?? false }
       : {}),
     updatedAt: now(),
   };

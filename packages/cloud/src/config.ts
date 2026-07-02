@@ -31,9 +31,91 @@ export type LocalOpenPondProfileCheckStatus = {
   sourceHead?: string | null;
 };
 
+export type LocalOpenPondProfileHostedSourceCheckStatus = {
+  status: string;
+  agentId?: string | null;
+  workItemId?: string | null;
+  deployPlanStatus?: string | null;
+  canRun?: boolean | null;
+  canDeploy?: boolean | null;
+  sourceRef?: string | null;
+  sourceCommitSha?: string | null;
+  manifestHash?: string | null;
+  manifestPath?: string | null;
+  setupCommands?: string[];
+  validationCommands?: string[];
+  requiredChecks?: string[];
+  evalNames?: string[];
+  blockedReasons?: string[];
+  staleReasons?: string[];
+  runtimeId?: string | null;
+  sandboxId?: string | null;
+  traceArtifactRefs?: string[];
+  evalResultArtifactRefs?: string[];
+  validatorArtifactRefs?: string[];
+  checkedAt?: string | null;
+  error?: string | null;
+};
+
+export type LocalOpenPondProfileHostedMaterializationStatus = {
+  status: string;
+  agentId?: string | null;
+  runtimeAgentId?: string | null;
+  projectId?: string | null;
+  sourceRoot?: string | null;
+  sourceRef?: string | null;
+  sourceCommitSha?: string | null;
+  manifestHash?: string | null;
+  manifestPath?: string | null;
+  manifestSyncedAt?: string | null;
+  fileCount?: number | null;
+  totalBytes?: number | null;
+  generatedManifestPath?: string | null;
+  synthesizedOpenPondYaml?: boolean | null;
+  uploadMetadataPath?: string | null;
+  setupCommands?: string[];
+  validationCommands?: string[];
+  materializedAt?: string | null;
+  error?: string | null;
+};
+
+export type LocalOpenPondProfileHostedPublishStatus = {
+  status: string;
+  agentId?: string | null;
+  snapshotId?: string | null;
+  sourceRef?: string | null;
+  sourceCommitSha?: string | null;
+  manifestHash?: string | null;
+  manifestPath?: string | null;
+  buildStatus?: string | null;
+  validationStatus?: string | null;
+  evalStatus?: string | null;
+  publishedAt?: string | null;
+  error?: string | null;
+};
+
+export type LocalOpenPondProfileHostedRunSummary = {
+  status: string;
+  agentId?: string | null;
+  runId?: string | null;
+  runtimeId?: string | null;
+  sandboxId?: string | null;
+  sourceRef?: string | null;
+  sourceCommitSha?: string | null;
+  manifestHash?: string | null;
+  setupGateStatus?: string | null;
+  setupRequirementRefs?: string[];
+  artifactRefs?: string[];
+  traceArtifactRefs?: string[];
+  evalArtifactRefs?: string[];
+  startedAt?: string | null;
+  completedAt?: string | null;
+  error?: string | null;
+};
+
 export type LocalOpenPondProfilePushStatus = {
   status: "pushed" | "failed";
-  promotionStatus?: "uploaded" | "hosted_run_pending" | "hosted_run_passed" | "hosted_run_failed" | null;
+  promotionStatus?: "uploaded" | "hosted_source_materialized" | "hosted_source_materialize_failed" | "hosted_source_check_pending" | "hosted_source_check_failed" | "hosted_source_published" | "hosted_source_publish_failed" | "hosted_run_pending" | "hosted_run_passed" | "hosted_run_failed" | null;
   hostedRunStatus?: "not_started" | "running" | "passed" | "failed" | null;
   pushedAt: string;
   teamId?: string | null;
@@ -46,6 +128,10 @@ export type LocalOpenPondProfilePushStatus = {
   hostedRunAgentId?: string | null;
   hostedRunId?: string | null;
   hostedRunAt?: string | null;
+  hostedSourceMaterialization?: LocalOpenPondProfileHostedMaterializationStatus | null;
+  hostedSourceCheck?: LocalOpenPondProfileHostedSourceCheckStatus | null;
+  hostedPublish?: LocalOpenPondProfileHostedPublishStatus | null;
+  hostedRun?: LocalOpenPondProfileHostedRunSummary | null;
   error?: string | null;
 };
 
@@ -300,6 +386,12 @@ function sanitizeLocalOpenPondProfile(
           ? { sourceRef: push.sourceRef }
           : {}),
         ...(push.promotionStatus === "uploaded" ||
+        push.promotionStatus === "hosted_source_materialized" ||
+        push.promotionStatus === "hosted_source_materialize_failed" ||
+        push.promotionStatus === "hosted_source_check_pending" ||
+        push.promotionStatus === "hosted_source_check_failed" ||
+        push.promotionStatus === "hosted_source_published" ||
+        push.promotionStatus === "hosted_source_publish_failed" ||
         push.promotionStatus === "hosted_run_pending" ||
         push.promotionStatus === "hosted_run_passed" ||
         push.promotionStatus === "hosted_run_failed" ||
@@ -328,6 +420,18 @@ function sanitizeLocalOpenPondProfile(
         ...(typeof push.hostedRunAt === "string" || push.hostedRunAt === null
           ? { hostedRunAt: push.hostedRunAt }
           : {}),
+        ...(sanitizeHostedMaterializationStatus(push.hostedSourceMaterialization)
+          ? { hostedSourceMaterialization: sanitizeHostedMaterializationStatus(push.hostedSourceMaterialization) }
+          : {}),
+        ...(sanitizeHostedSourceCheckStatus(push.hostedSourceCheck)
+          ? { hostedSourceCheck: sanitizeHostedSourceCheckStatus(push.hostedSourceCheck) }
+          : {}),
+        ...(sanitizeHostedPublishStatus(push.hostedPublish)
+          ? { hostedPublish: sanitizeHostedPublishStatus(push.hostedPublish) }
+          : {}),
+        ...(sanitizeHostedRunSummary(push.hostedRun)
+          ? { hostedRun: sanitizeHostedRunSummary(push.hostedRun) }
+          : {}),
         ...(typeof push.error === "string" || push.error === null
           ? { error: push.error }
           : {}),
@@ -335,6 +439,158 @@ function sanitizeLocalOpenPondProfile(
     }
   }
   return out;
+}
+
+function sanitizeHostedMaterializationStatus(
+  value: unknown
+): LocalOpenPondProfileHostedMaterializationStatus | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const status = stringField(input.status);
+  if (!status) return null;
+  return {
+    status,
+    ...nullableStringProp(input, "agentId"),
+    ...nullableStringProp(input, "runtimeAgentId"),
+    ...nullableStringProp(input, "projectId"),
+    ...nullableStringProp(input, "sourceRoot"),
+    ...nullableStringProp(input, "sourceRef"),
+    ...nullableStringProp(input, "sourceCommitSha"),
+    ...nullableStringProp(input, "manifestHash"),
+    ...nullableStringProp(input, "manifestPath"),
+    ...nullableStringProp(input, "manifestSyncedAt"),
+    ...nullableNumberProp(input, "fileCount"),
+    ...nullableNumberProp(input, "totalBytes"),
+    ...nullableStringProp(input, "generatedManifestPath"),
+    ...nullableBooleanProp(input, "synthesizedOpenPondYaml"),
+    ...nullableStringProp(input, "uploadMetadataPath"),
+    ...stringArrayProp(input, "setupCommands"),
+    ...stringArrayProp(input, "validationCommands"),
+    ...nullableStringProp(input, "materializedAt"),
+    ...nullableStringProp(input, "error"),
+  };
+}
+
+function sanitizeHostedSourceCheckStatus(
+  value: unknown
+): LocalOpenPondProfileHostedSourceCheckStatus | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const status = stringField(input.status);
+  if (!status) return null;
+  return {
+    status,
+    ...nullableStringProp(input, "agentId"),
+    ...nullableStringProp(input, "workItemId"),
+    ...nullableStringProp(input, "deployPlanStatus"),
+    ...nullableBooleanProp(input, "canRun"),
+    ...nullableBooleanProp(input, "canDeploy"),
+    ...nullableStringProp(input, "sourceRef"),
+    ...nullableStringProp(input, "sourceCommitSha"),
+    ...nullableStringProp(input, "manifestHash"),
+    ...nullableStringProp(input, "manifestPath"),
+    ...stringArrayProp(input, "setupCommands"),
+    ...stringArrayProp(input, "validationCommands"),
+    ...stringArrayProp(input, "requiredChecks"),
+    ...stringArrayProp(input, "evalNames"),
+    ...stringArrayProp(input, "blockedReasons"),
+    ...stringArrayProp(input, "staleReasons"),
+    ...nullableStringProp(input, "runtimeId"),
+    ...nullableStringProp(input, "sandboxId"),
+    ...stringArrayProp(input, "traceArtifactRefs"),
+    ...stringArrayProp(input, "evalResultArtifactRefs"),
+    ...stringArrayProp(input, "validatorArtifactRefs"),
+    ...nullableStringProp(input, "checkedAt"),
+    ...nullableStringProp(input, "error"),
+  };
+}
+
+function sanitizeHostedPublishStatus(
+  value: unknown
+): LocalOpenPondProfileHostedPublishStatus | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const status = stringField(input.status);
+  if (!status) return null;
+  return {
+    status,
+    ...nullableStringProp(input, "agentId"),
+    ...nullableStringProp(input, "snapshotId"),
+    ...nullableStringProp(input, "sourceRef"),
+    ...nullableStringProp(input, "sourceCommitSha"),
+    ...nullableStringProp(input, "manifestHash"),
+    ...nullableStringProp(input, "manifestPath"),
+    ...nullableStringProp(input, "buildStatus"),
+    ...nullableStringProp(input, "validationStatus"),
+    ...nullableStringProp(input, "evalStatus"),
+    ...nullableStringProp(input, "publishedAt"),
+    ...nullableStringProp(input, "error"),
+  };
+}
+
+function sanitizeHostedRunSummary(
+  value: unknown
+): LocalOpenPondProfileHostedRunSummary | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const status = stringField(input.status);
+  if (!status) return null;
+  return {
+    status,
+    ...nullableStringProp(input, "agentId"),
+    ...nullableStringProp(input, "runId"),
+    ...nullableStringProp(input, "runtimeId"),
+    ...nullableStringProp(input, "sandboxId"),
+    ...nullableStringProp(input, "sourceRef"),
+    ...nullableStringProp(input, "sourceCommitSha"),
+    ...nullableStringProp(input, "manifestHash"),
+    ...nullableStringProp(input, "setupGateStatus"),
+    ...stringArrayProp(input, "setupRequirementRefs"),
+    ...stringArrayProp(input, "artifactRefs"),
+    ...stringArrayProp(input, "traceArtifactRefs"),
+    ...stringArrayProp(input, "evalArtifactRefs"),
+    ...nullableStringProp(input, "startedAt"),
+    ...nullableStringProp(input, "completedAt"),
+    ...nullableStringProp(input, "error"),
+  };
+}
+
+function nullableStringProp<T extends string>(
+  input: Record<string, unknown>,
+  key: T
+): Partial<Record<T, string | null>> {
+  const value = input[key];
+  return typeof value === "string" || value === null ? { [key]: value } as Partial<Record<T, string | null>> : {};
+}
+
+function nullableBooleanProp<T extends string>(
+  input: Record<string, unknown>,
+  key: T
+): Partial<Record<T, boolean | null>> {
+  const value = input[key];
+  return typeof value === "boolean" || value === null ? { [key]: value } as Partial<Record<T, boolean | null>> : {};
+}
+
+function nullableNumberProp<T extends string>(
+  input: Record<string, unknown>,
+  key: T
+): Partial<Record<T, number | null>> {
+  const value = input[key];
+  return typeof value === "number" || value === null ? { [key]: value } as Partial<Record<T, number | null>> : {};
+}
+
+function stringArrayProp<T extends string>(
+  input: Record<string, unknown>,
+  key: T
+): Partial<Record<T, string[]>> {
+  const value = input[key];
+  if (!Array.isArray(value)) return {};
+  const strings = value.filter((item): item is string => typeof item === "string");
+  return { [key]: strings } as Partial<Record<T, string[]>>;
+}
+
+function stringField(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function accountMatchesSelector(

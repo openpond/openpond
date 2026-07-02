@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { OpenPondApp } from "@openpond/contracts";
-import { BookOpenText, Bot, Plug, SquarePen } from "../icons";
+import { BookOpenText, Bot, Lightbulb, Plug, SquarePen } from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
 
@@ -66,6 +66,17 @@ export function SidebarNavigation({
             />
           ) : null}
         </span>
+      </button>
+      <button
+        className={`nav-command ${view === "insights" ? "active" : ""}`}
+        onClick={() => {
+          clearWorkspaceSelection();
+          setView("insights");
+        }}
+        type="button"
+      >
+        <Lightbulb size={16} />
+        <span>Insights</span>
       </button>
       <button
         className={`nav-command ${view === "apps" ? "active" : ""}`}

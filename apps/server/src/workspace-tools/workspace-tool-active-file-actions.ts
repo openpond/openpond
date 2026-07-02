@@ -11,6 +11,12 @@ import {
   searchWorkspaceFiles,
   writeWorkspaceFile,
 } from "./workspace-tools.js";
+import {
+  readLocalWorkspaceResource,
+  searchLocalWorkspaceResources,
+  type ResourceReadRequest,
+  type ResourceSearchRequest,
+} from "../openpond/resources.js";
 import { stringArg, stringArrayArg, stringRecordArg, stringValueArg } from "./workspace-tool-arg-utils.js";
 import type { ActiveWorkspaceActionContext } from "./workspace-tool-active-types.js";
 
@@ -20,6 +26,34 @@ export async function handleActiveWorkspaceFileAction(
   const { app, args, input, runChecks, runPostEditWorkflow, session, state, turnId } = context;
 
   switch (input.action) {
+    case "resource_read": {
+      const resource = await readLocalWorkspaceResource({
+        repoPath: state.repoPath,
+        request: resourceReadRequest(args),
+      });
+      return WorkspaceToolResultSchema.parse({
+        ok: true,
+        action: input.action,
+        appId: app.id,
+        output: `Read resource ${resource.ref}.`,
+        data: { resource },
+      });
+    }
+
+    case "resource_search": {
+      const result = await searchLocalWorkspaceResources({
+        repoPath: state.repoPath,
+        request: resourceSearchRequest(args),
+      });
+      return WorkspaceToolResultSchema.parse({
+        ok: true,
+        action: input.action,
+        appId: app.id,
+        output: `Found ${result.items.length} resource${result.items.length === 1 ? "" : "s"}.`,
+        data: { result },
+      });
+    }
+
     case "workspace_status":
       return WorkspaceToolResultSchema.parse({
         ok: true,
@@ -189,4 +223,45 @@ export async function handleActiveWorkspaceFileAction(
     default:
       return null;
   }
+}
+
+function resourceReadRequest(args: Record<string, unknown>): ResourceReadRequest {
+  const ref = stringArg(args, "ref");
+  const mode = args.mode;
+  if (
+    mode !== undefined &&
+    mode !== "content" &&
+    mode !== "summary" &&
+    mode !== "metadata"
+  ) {
+    throw new Error("mode must be content, summary, or metadata");
+  }
+  return {
+    ref,
+    ...(typeof args.maxBytes === "number" ? { maxBytes: args.maxBytes } : {}),
+    ...(mode ? { mode } : {}),
+  };
+}
+
+function resourceSearchRequest(args: Record<string, unknown>): ResourceSearchRequest {
+  const scope = args.scope;
+  if (
+    scope !== "workspace" &&
+    scope !== "git" &&
+    scope !== "events" &&
+    scope !== "messages" &&
+    scope !== "artifacts" &&
+    scope !== "goal-context" &&
+    scope !== "sandbox"
+  ) {
+    throw new Error("scope must be workspace, git, events, messages, artifacts, goal-context, or sandbox");
+  }
+  return {
+    scope,
+    query: stringArg(args, "query"),
+    ...(typeof args.limit === "number" ? { limit: args.limit } : {}),
+    ...(args.filters && typeof args.filters === "object" && !Array.isArray(args.filters)
+      ? { filters: args.filters as Record<string, unknown> }
+      : {}),
+  };
 }

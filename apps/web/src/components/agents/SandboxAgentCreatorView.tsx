@@ -159,9 +159,9 @@ export function SandboxAgentCreatorView({
     return (
       <section className="agent-create-view">
         <div className="agent-create-empty">
-          <p>Connect an OpenPond account before viewing agents.</p>
+          <p>Sign in to an OpenPond account before viewing agents.</p>
           <button type="button" onClick={onOpenSettings}>
-            Open account
+            Sign in
           </button>
         </div>
       </section>

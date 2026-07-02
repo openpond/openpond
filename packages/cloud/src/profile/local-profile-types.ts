@@ -1,4 +1,10 @@
-import type { LocalOpenPondProfileCheckStatus } from "../config.js";
+import type {
+  LocalOpenPondProfileCheckStatus,
+  LocalOpenPondProfileHostedMaterializationStatus,
+  LocalOpenPondProfileHostedPublishStatus,
+  LocalOpenPondProfileHostedRunSummary,
+  LocalOpenPondProfileHostedSourceCheckStatus,
+} from "../config.js";
 
 export type OpenPondProfileAgent = {
   id: string;
@@ -107,6 +113,10 @@ export type OpenPondProfileHostedBinding = {
   hostedRunAgentId: string | null;
   hostedRunId: string | null;
   hostedRunAt: string | null;
+  hostedSourceMaterialization: LocalOpenPondProfileHostedMaterializationStatus | null;
+  hostedSourceCheck: LocalOpenPondProfileHostedSourceCheckStatus | null;
+  hostedPublish: LocalOpenPondProfileHostedPublishStatus | null;
+  hostedRun: LocalOpenPondProfileHostedRunSummary | null;
 };
 
 export type OpenPondProfileSummary = {
