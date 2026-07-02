@@ -1,0 +1,501 @@
+import { describe, expect, test } from "bun:test";
+import type { RuntimeEvent } from "@openpond/contracts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MessageRow } from "../apps/web/src/components/chat/Messages";
+import { activityGroupSummary, buildChatMessages } from "../apps/web/src/lib/chat-messages";
+
+function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
+  return {
+    timestamp: "2026-05-16T00:00:00.000Z",
+    ...input,
+  };
+}
+
+function commandStarted(id: string, turnId: string, command: string): RuntimeEvent {
+  return runtimeEvent({
+    id,
+    name: "tool.started",
+    turnId,
+    action: "exec_command",
+    status: "started",
+    data: {
+      callId: id,
+      command,
+    },
+  });
+}
+
+describe("chat message projection", () => {
+  test("projects create pipeline turn metadata into a review message", () => {
+    const now = "2026-05-16T00:00:00.000Z";
+    const createPipelineRequest = {
+      schemaVersion: "openpond.createPipeline.request.v1",
+      id: "create_request_1",
+      operation: "create",
+      surface: "direct_prompt_create",
+      command: "/create",
+      objective: "Create a release notes agent",
+      adapter: {
+        kind: "hosted",
+        sourceAuthority: "hosted_profile",
+        teamId: "team_1",
+        projectId: "profile_project_1",
+        activeProfile: "default",
+        sourceRef: "main",
+        baseSha: null,
+        workItemId: null,
+        confirmationPolicy: "always_require_plan_approval",
+      },
+      actor: { id: "sam", kind: "user", label: "Sam" },
+      scope: {
+        conversationId: "session_1",
+        workItemId: null,
+        projectId: "profile_project_1",
+        targetProject: null,
+      },
+      context: {
+        messageIds: [],
+        conversationExcerpts: [],
+        attachments: [],
+        apps: [],
+        tools: [],
+        targetRepoAssumptions: [],
+      },
+      targetAgent: {
+        agentId: null,
+        displayName: null,
+        defaultActionKey: "chat",
+      },
+      metadata: { source: "web_composer_slash" },
+      createdAt: now,
+    };
+    const createPipeline = {
+      schemaVersion: "openpond.createPipeline.snapshot.v1",
+      id: "create_pipeline_1",
+      goalId: "create_request_1",
+      state: "awaiting_plan_approval",
+      request: createPipelineRequest,
+      plan: null,
+      workflowCapture: null,
+      approvalIds: [],
+      checkRefs: [],
+      sourceRefs: [],
+      localGoalId: null,
+      localProfileCommit: null,
+      hostedGoalId: null,
+      hostedSourceCommit: null,
+      hostedSourceRef: null,
+      blockedReason: null,
+      metadata: {},
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: {
+          prompt: "/create release notes agent",
+          createPipelineRequest,
+          createPipeline,
+        },
+      }),
+      runtimeEvent({
+        id: "create_pipeline_approved",
+        name: "create_pipeline.updated",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        data: {
+          createPipelineRequest,
+          createPipeline: {
+            ...createPipeline,
+            state: "applying_source",
+            updatedAt: now,
+          },
+        },
+      }),
+      runtimeEvent({
+        id: "assistant_source_apply",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "I will inspect the existing profile",
+      }),
+      runtimeEvent({
+        id: "assistant_source_apply_more",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: " and create files now.",
+      }),
+      runtimeEvent({
+        id: "source_apply_tool",
+        name: "tool.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        action: "commandExecution",
+        status: "started",
+        output: "sed -n '1,200p' profiles/default/settings/profile.yaml",
+      }),
+      runtimeEvent({
+        id: "source_apply_output",
+        name: "command.output",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "large provider diagnostic output",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[1]?.createPipelineRequest?.objective).toBe("Create a release notes agent");
+    expect(messages[1]?.createPipeline?.state).toBe("applying_source");
+    expect(messages[1]?.content).toBeUndefined();
+    expect(messages[1]?.actionRun).toBeUndefined();
+    expect(messages[1]?.createPipelineDebugActivities).toHaveLength(2);
+    expect(messages[1]?.createPipelineDebugActivities?.[0]).toMatchObject({
+      label: "assistant delta",
+      content: "I will inspect the existing profile and create files now.",
+    });
+    expect(messages[1]?.createPipelineDebugActivities?.[1]).toMatchObject({
+      label: "Started",
+      content: "sed -n '1,200p' profiles/default/settings/profile.yaml",
+      detail: "large provider diagnostic output",
+      kind: "command",
+    });
+  });
+
+  test("projects profile action run results into normal assistant messages", () => {
+    const supportSummary =
+      "Open customer support tracker: 4 open items. Needs attention first: CS-1042 Northstar Analytics.";
+
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "profile_action_user",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "openpond_profile_action_1",
+        source: "chat_action",
+        args: { prompt: "Which open customer support items need attention first?" },
+      }),
+      runtimeEvent({
+        id: "profile_action_result",
+        name: "workspace_action_result",
+        sessionId: "session_1",
+        turnId: "openpond_profile_action_1",
+        source: "chat_action",
+        action: "profile_run_action",
+        status: "completed",
+        output: supportSummary,
+        data: {
+          openPondProfileActionRun: true,
+          action: {
+            name: "help-me-keep-track-of-open-customer-support-item.chat",
+            label: "Chat",
+            agentName: "Open Items Assistant",
+            implementation: {
+              type: "openpond-profile-action",
+              actionId: "help-me-keep-track-of-open-customer-support-item.chat",
+              agentName: "Open Items Assistant",
+            },
+          },
+          responseSummary: {
+            status: "available",
+            text: supportSummary,
+          },
+          artifactRefs: ["open-support-items-summary.json"],
+          traceArtifactRefs: [".openpond/traces/run-chat-123.jsonl"],
+        },
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[1]?.actionRun?.actionName).toBe(
+      "help-me-keep-track-of-open-customer-support-item.chat",
+    );
+    expect(messages[1]?.actionRun?.title).toBe("Chat");
+    expect(messages[1]?.actionRun?.status).toBe("completed");
+    expect(messages[1]?.actionRun?.responseText).toBe(supportSummary);
+    expect(messages[1]?.actionRun?.implementationType).toBe("openpond-profile-action");
+    expect(messages[1]?.actionRun?.refs.map((ref) => ref.target)).toEqual([
+      "open-support-items-summary.json",
+      ".openpond/traces/run-chat-123.jsonl",
+    ]);
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+        onOpenProfileSettings: () => undefined,
+      }),
+    );
+    expect(html).toContain("Open customer support tracker: 4 open items.");
+    expect(html).not.toContain("Agent:");
+    expect(html).toContain("action-run-agent-link");
+    expect(html).toContain("Open Items Assistant");
+    expect(html).not.toContain("help-me-keep-track-of-open-customer-support-item");
+    expect(html).not.toContain("action-run-card");
+    expect(html).not.toContain("openpond-profile-action");
+    expect(html).not.toContain(".openpond/traces/run-chat-123.jsonl");
+  });
+
+  test("renders pending profile action runs as normal assistant messages", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "profile_action_user",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "openpond_profile_action_2",
+        source: "chat_action",
+        args: { prompt: "Produce a keepable invoice triage summary." },
+      }),
+      runtimeEvent({
+        id: "profile_action_started",
+        name: "workspace_action",
+        sessionId: "session_1",
+        turnId: "openpond_profile_action_2",
+        source: "chat_action",
+        action: "profile_run_action",
+        status: "started",
+        args: {
+          actionName: "triage-invoices",
+        },
+        data: {
+          openPondProfileActionRun: true,
+          action: {
+            name: "triage-invoices",
+            label: "Triage Invoices",
+            agentName: "Finance Review Desk",
+            implementation: {
+              type: "openpond-profile-action",
+              actionId: "triage-invoices",
+              agentName: "Finance Review Desk",
+            },
+          },
+        },
+      }),
+    ]);
+
+    expect(messages[1]?.actionRun?.implementationType).toBe("openpond-profile-action");
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+      }),
+    );
+    expect(html).toContain("Triage Invoices is running...");
+    expect(html).not.toContain("Agent:");
+    expect(html).toContain("Finance Review Desk");
+    expect(html).not.toContain("action-run-card");
+  });
+
+  test("renders auto compaction as one status divider", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Continue the work" },
+      }),
+      runtimeEvent({
+        id: "compact_started",
+        name: "session.compaction.started",
+        turnId: "turn_1",
+        status: "started",
+        data: { reason: "auto" },
+      }),
+      runtimeEvent({
+        id: "compact_done",
+        name: "session.compaction.completed",
+        turnId: "turn_1",
+        status: "completed",
+        data: { reason: "auto" },
+      }),
+      runtimeEvent({
+        id: "assistant_1",
+        name: "assistant.delta",
+        turnId: "turn_1",
+        output: "Done.",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "status_divider", "assistant"]);
+    expect(messages[1]?.content).toBe("Auto compacted context");
+    expect(messages[1]?.statusTone).toBe("success");
+  });
+
+  test("projects Codex image reads as activity image previews", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Read the image" },
+      }),
+      runtimeEvent({
+        id: "tool_1",
+        appId: "app_1",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "dynamicToolCall",
+        status: "started",
+        data: {
+          tool: "tools.view_image",
+          openpondImagePreviewPath: "assets/photo.png",
+        },
+      }),
+    ]);
+
+    expect(messages[1]?.role).toBe("activity_group");
+    expect(messages[1]?.activities?.[0]?.label).toBe("Reading image");
+    expect(messages[1]?.activities?.[0]?.content).toBe("assets/photo.png");
+    expect(messages[1]?.activities?.[0]?.imagePreview).toEqual({
+      path: "assets/photo.png",
+      appId: "app_1",
+      title: "photo.png",
+    });
+  });
+
+  test("merges Codex command lifecycle into one compact activity", () => {
+    const rawOutput = [
+      "Chunk ID: 6088d8",
+      "Wall time: 0.7318 seconds",
+      "Process exited with code 0",
+      "Original token count: 19",
+      "Output:",
+      "To github.com:openpond/sandbox.git",
+      "   0b0d5ad..38dc899  develop -> develop",
+    ].join("\n");
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Push develop" },
+      }),
+      runtimeEvent({
+        id: "tool_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "exec_command",
+        status: "started",
+        data: {
+          callId: "call_1",
+          command: "git push origin develop",
+        },
+      }),
+      runtimeEvent({
+        id: "tool_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "function_call_output",
+        status: "completed",
+        output: rawOutput,
+        data: {
+          callId: "call_1",
+        },
+      }),
+      runtimeEvent({
+        id: "command_output",
+        name: "command.output",
+        turnId: "turn_1",
+        output: rawOutput,
+        data: {
+          callId: "call_1",
+        },
+      }),
+    ]);
+
+    const activities = messages[1]?.activities ?? [];
+    expect(activities).toHaveLength(1);
+    expect(activities[0]?.label).toBe("Ran");
+    expect(activities[0]?.content).toBe("git push origin develop");
+    expect(activities[0]?.detail).toBe(
+      "To github.com:openpond/sandbox.git\n   0b0d5ad..38dc899  develop -> develop",
+    );
+    expect(activityGroupSummary(activities)).toBe("Ran a command");
+  });
+
+  test("summarizes one command by activity instead of raw command text", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Search the app" },
+      }),
+      commandStarted("search_1", "turn_1", "rg \"activityGroupSummary\" apps/web/src"),
+    ]);
+
+    const activities = messages[1]?.activities ?? [];
+    expect(activityGroupSummary(activities)).toBe("Searched code");
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+      }),
+    );
+    expect(html).toContain("Searched code");
+    expect(html).not.toContain("activityGroupSummary");
+  });
+
+  test("summarizes mixed command groups with deterministic counts", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Inspect chat activity UI" },
+      }),
+      commandStarted("read_1", "turn_1", "sed -n '1,160p' apps/web/src/components/chat/MessageActivityGroup.tsx"),
+      commandStarted("read_2", "turn_1", "cat apps/web/src/lib/chat-activities.ts"),
+      commandStarted("search_1", "turn_1", "rg \"activity-summary\" apps/web/src"),
+      commandStarted("list_1", "turn_1", "rg --files apps/web/src/components/chat"),
+    ]);
+
+    const activities = messages[1]?.activities ?? [];
+    expect(activityGroupSummary(activities)).toBe("Read 2 files, searched code, and listed files");
+  });
+
+  test("summarizes edits and verification commands", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Patch and test" },
+      }),
+      commandStarted("edit_1", "turn_1", "apply_patch"),
+      commandStarted("check_1", "turn_1", "bun test tests/chat-messages.test.ts"),
+    ]);
+
+    const activities = messages[1]?.activities ?? [];
+    expect(activityGroupSummary(activities)).toBe("Made edits and ran checks");
+  });
+
+  test("renders Codex control prompts as activity rows", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "goal_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "<goal_context>\nKeep the sidebar work in scope.\n</goal_context>" },
+      }),
+      runtimeEvent({
+        id: "abort_1",
+        name: "turn.interrupted",
+        turnId: "turn_1",
+        output: "The user interrupted the previous turn.",
+        data: { kind: "turn_aborted" },
+      }),
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("activity_group");
+    expect(messages[0]?.activities?.map((activity) => activity.label)).toEqual(["Goal context", "Turn aborted"]);
+    expect(messages[0]?.activities?.[0]?.content).toBe("Keep the sidebar work in scope.");
+    expect(messages[0]?.activities?.[1]?.content).toBe("The user interrupted the previous turn.");
+  });
+});

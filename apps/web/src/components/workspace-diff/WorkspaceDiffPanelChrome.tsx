@@ -1,0 +1,415 @@
+import type { KeyboardEvent, MouseEvent } from "react";
+import {
+  AlignLeft,
+  BookOpenText,
+  CircleAlert,
+  CircleCheck,
+  Columns2,
+  FileText,
+  Globe2,
+  LoaderCircle,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Plus,
+  Redo2,
+  Save,
+  Search,
+  SquareCode,
+  Undo2,
+  X,
+} from "../icons";
+import type { WorkspaceDiffFile } from "@openpond/contracts";
+import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
+import type { DiffTab } from "./workspace-diff-panel-model";
+
+export function WorkspaceDiffTabs({
+  addMenuOpen,
+  expanded,
+  filteredFiles,
+  dirtyFilePaths,
+  openFiles,
+  goalDetailsAvailable,
+  reviewOpen,
+  searchOpen,
+  searchQuery,
+  selectedPath,
+  visibleTab,
+  onCloseFileTab,
+  onCloseReviewTab,
+  onCloseSearch,
+  onOpenFile,
+  onOpenBrowser,
+  onOpenReviewTab,
+  onOpenSearch,
+  onSearchQueryChange,
+  onSelectFile,
+  onSelectGoal,
+  onSelectSummary,
+  onToggleAddMenu,
+  onToggleExpanded,
+}: {
+  addMenuOpen: boolean;
+  expanded: boolean;
+  filteredFiles: string[];
+  dirtyFilePaths: ReadonlySet<string>;
+  openFiles: WorkspaceDiffFile[];
+  goalDetailsAvailable: boolean;
+  reviewOpen: boolean;
+  searchOpen: boolean;
+  searchQuery: string;
+  selectedPath: string | null;
+  visibleTab: DiffTab;
+  onCloseFileTab: (path: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onCloseReviewTab: (event: MouseEvent<HTMLButtonElement>) => void;
+  onCloseSearch: () => void;
+  onOpenFile: (path: string) => void;
+  onOpenBrowser: () => void;
+  onOpenReviewTab: () => void;
+  onOpenSearch: () => void;
+  onSearchQueryChange: (value: string) => void;
+  onSelectFile: (path: string) => void;
+  onSelectGoal: () => void;
+  onSelectSummary: () => void;
+  onToggleAddMenu: () => void;
+  onToggleExpanded: () => void;
+}) {
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      onCloseSearch();
+      return;
+    }
+    if (event.key === "Enter" && filteredFiles[0]) onOpenFile(filteredFiles[0]);
+  }
+
+  return (
+    <div className="workspace-diff-topbar">
+      <div className="workspace-diff-tabs" role="tablist" aria-label="Right sidebar views">
+        {goalDetailsAvailable ? (
+          <button
+            type="button"
+            className={`workspace-diff-tab ${visibleTab === "goal" ? "active" : ""}`}
+            role="tab"
+            aria-selected={visibleTab === "goal"}
+            onClick={onSelectGoal}
+          >
+            <FileText size={14} />
+            <span>Goal</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={`workspace-diff-tab ${visibleTab === "summary" ? "active" : ""}`}
+          role="tab"
+          aria-selected={visibleTab === "summary"}
+          onClick={onSelectSummary}
+        >
+          <AlignLeft size={14} />
+          <span>Summary</span>
+        </button>
+        {openFiles.map((file) => (
+          <div
+            className={`workspace-diff-tab file ${visibleTab === "file" && selectedPath === file.path ? "active" : ""}`}
+            key={file.path}
+          >
+            <button
+              type="button"
+              className="workspace-diff-tab-main"
+              role="tab"
+              aria-selected={visibleTab === "file" && selectedPath === file.path}
+              title={file.path}
+              onClick={() => onSelectFile(file.path)}
+            >
+              <FileText className="workspace-diff-tab-icon" size={13} />
+              {dirtyFilePaths.has(file.path) && <span className="workspace-diff-tab-dirty" aria-hidden="true" />}
+              <span>{file.path.split("/").pop()}</span>
+            </button>
+            <button
+              type="button"
+              className="workspace-diff-tab-close"
+              title={`Close ${file.path}`}
+              onClick={(event) => onCloseFileTab(file.path, event)}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+        {reviewOpen && (
+          <div className={`workspace-diff-tab review ${visibleTab === "review" ? "active" : ""}`}>
+            <button
+              type="button"
+              className="workspace-diff-tab-main"
+              role="tab"
+              aria-selected={visibleTab === "review"}
+              onClick={onOpenReviewTab}
+            >
+              <SquareCode className="workspace-diff-tab-icon" size={14} />
+              <span>Review</span>
+            </button>
+            <button type="button" className="workspace-diff-tab-close" title="Close Review" onClick={onCloseReviewTab}>
+              <X size={12} />
+            </button>
+          </div>
+        )}
+        <div className="workspace-diff-add-anchor">
+          <button
+            type="button"
+            className={`workspace-diff-add-tab ${addMenuOpen || searchOpen ? "active" : ""}`}
+            title="Add file"
+            onClick={onToggleAddMenu}
+          >
+            <Plus size={15} />
+          </button>
+          {addMenuOpen && (
+            <div className="workspace-diff-add-menu" role="menu">
+              <button type="button" role="menuitem" onClick={onOpenSearch}>
+                <Search size={14} />
+                <span>Open file</span>
+                <kbd>Ctrl+P</kbd>
+              </button>
+              <button type="button" role="menuitem" onClick={onOpenBrowser}>
+                <Globe2 size={14} />
+                <span>Browser</span>
+                <kbd>Ctrl+I</kbd>
+              </button>
+              {!reviewOpen && (
+                <button type="button" role="menuitem" onClick={onOpenReviewTab}>
+                  <SquareCode size={14} />
+                  <span>Review</span>
+                  <kbd />
+                </button>
+              )}
+            </div>
+          )}
+          {searchOpen && (
+            <div className="workspace-file-search-popover">
+              <input
+                autoFocus
+                placeholder="Search files"
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+              />
+              <span>Files</span>
+              <div className="workspace-file-search-results">
+                {filteredFiles.length === 0 ? (
+                  <small>Type to search for files</small>
+                ) : (
+                  filteredFiles.map((path) => (
+                    <button type="button" key={path} onClick={() => onOpenFile(path)}>
+                      {path}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="diff-icon-button"
+        title={expanded ? "Restore review panel" : "Expand review panel"}
+        aria-label={expanded ? "Restore review panel" : "Expand review panel"}
+        onClick={onToggleExpanded}
+      >
+        {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+    </div>
+  );
+}
+
+export function WorkspaceDiffToolbar({
+  canCheckActiveFile,
+  canSaveActiveFile,
+  collapsed,
+  editorControlsVisible,
+  editorDiagnosticStatus,
+  editorDiagnosticsChecking,
+  hideWhiteSpace,
+  loadFullFiles,
+  menuOpen,
+  renderMarkdown,
+  reviewFileMode,
+  showEditorCommandBar,
+  showRenderMarkdownToggle,
+  splitView,
+  wordDiffs,
+  wordWrap,
+  onCopyGitApply,
+  onEditorCheck,
+  onEditorRedo,
+  onEditorSave,
+  onEditorUndo,
+  onRefresh,
+  onToggleCollapsed,
+  onToggleEditorControlsVisible,
+  onToggleHideWhiteSpace,
+  onToggleLoadFullFiles,
+  onToggleMenu,
+  onToggleRenderMarkdown,
+  onToggleReviewFileMode,
+  onToggleSplitView,
+  onToggleWordDiffs,
+  onToggleWordWrap,
+}: {
+  canCheckActiveFile: boolean;
+  canSaveActiveFile: boolean;
+  collapsed: boolean;
+  editorControlsVisible: boolean;
+  editorDiagnosticStatus: EditorDiagnosticStatus | null;
+  editorDiagnosticsChecking: boolean;
+  hideWhiteSpace: boolean;
+  loadFullFiles: boolean;
+  menuOpen: boolean;
+  renderMarkdown: boolean;
+  reviewFileMode: boolean;
+  showEditorCommandBar: boolean;
+  showRenderMarkdownToggle: boolean;
+  splitView: boolean;
+  wordDiffs: boolean;
+  wordWrap: boolean;
+  onCopyGitApply: () => void;
+  onEditorCheck: () => void;
+  onEditorRedo: () => void;
+  onEditorSave: () => void;
+  onEditorUndo: () => void;
+  onRefresh: () => void;
+  onToggleCollapsed: () => void;
+  onToggleEditorControlsVisible: () => void;
+  onToggleHideWhiteSpace: () => void;
+  onToggleLoadFullFiles: () => void;
+  onToggleMenu: (open?: boolean) => void;
+  onToggleRenderMarkdown: () => void;
+  onToggleReviewFileMode: () => void;
+  onToggleSplitView: () => void;
+  onToggleWordDiffs: () => void;
+  onToggleWordWrap: () => void;
+}) {
+  return (
+    <div className="workspace-diff-toolbar">
+      <div className="workspace-diff-toolbar-actions">
+        <div className="workspace-diff-menu-anchor">
+          <button
+            type="button"
+            className="diff-icon-button"
+            title="Diff options"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => onToggleMenu()}
+          >
+            <MoreHorizontal size={15} />
+          </button>
+          {menuOpen && (
+            <DiffOptionsMenu
+              collapsed={collapsed}
+              editorControlsVisible={editorControlsVisible}
+              hideWhiteSpace={hideWhiteSpace}
+              loadFullFiles={loadFullFiles}
+              renderMarkdown={renderMarkdown}
+              reviewFileMode={reviewFileMode}
+              wordDiffs={wordDiffs}
+              wordWrap={wordWrap}
+              onClose={() => onToggleMenu(false)}
+              onCopyGitApply={onCopyGitApply}
+              onRefresh={onRefresh}
+              onToggleCollapsed={onToggleCollapsed}
+              onToggleEditorControlsVisible={onToggleEditorControlsVisible}
+              onToggleHideWhiteSpace={onToggleHideWhiteSpace}
+              onToggleLoadFullFiles={onToggleLoadFullFiles}
+              onToggleRenderMarkdown={onToggleRenderMarkdown}
+              onToggleReviewFileMode={onToggleReviewFileMode}
+              onToggleWordDiffs={onToggleWordDiffs}
+              onToggleWordWrap={onToggleWordWrap}
+            />
+          )}
+        </div>
+        {showEditorCommandBar && (
+          <div className="workspace-editor-command-bar" aria-label="Editor controls">
+            <button
+              type="button"
+              className="diff-icon-button"
+              title="Save file"
+              aria-label="Save file"
+              disabled={!canSaveActiveFile}
+              onClick={onEditorSave}
+            >
+              <Save size={14} />
+            </button>
+            <button
+              type="button"
+              className="diff-icon-button"
+              title="Undo"
+              aria-label="Undo"
+              onClick={onEditorUndo}
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              type="button"
+              className="diff-icon-button"
+              title="Redo"
+              aria-label="Redo"
+              onClick={onEditorRedo}
+            >
+              <Redo2 size={14} />
+            </button>
+            <button
+              type="button"
+              className="diff-icon-button"
+              title="Check file"
+              aria-label="Check file"
+              disabled={!canCheckActiveFile}
+              onClick={onEditorCheck}
+            >
+              {editorDiagnosticsChecking ? (
+                <LoaderCircle className="spinning" size={14} />
+              ) : (
+                <CircleCheck size={14} />
+              )}
+            </button>
+            {editorDiagnosticStatus && (
+              <span className={`workspace-editor-diagnostic-chip ${editorDiagnosticStatus.severity}`}>
+                {editorDiagnosticStatus.severity === "error" ||
+                editorDiagnosticStatus.severity === "warning" ||
+                editorDiagnosticStatus.severity === "unavailable" ? (
+                  <CircleAlert size={13} />
+                ) : (
+                  <CircleCheck size={13} />
+                )}
+                <span>{editorDiagnosticStatus.label}</span>
+              </span>
+            )}
+          </div>
+        )}
+        {showRenderMarkdownToggle && (
+          <button
+            type="button"
+            className={`diff-icon-button ${renderMarkdown ? "active" : ""}`}
+            title={renderMarkdown ? "Show Markdown source" : "Render Markdown"}
+            aria-label={renderMarkdown ? "Show Markdown source" : "Render Markdown"}
+            aria-pressed={renderMarkdown}
+            onClick={onToggleRenderMarkdown}
+          >
+            <BookOpenText size={14} />
+          </button>
+        )}
+        <button
+          type="button"
+          className={`diff-icon-button ${splitView ? "active" : ""}`}
+          title={splitView ? "Show unified diff" : "Show split diff"}
+          aria-label={splitView ? "Show unified diff" : "Show split diff"}
+          aria-pressed={splitView}
+          onClick={onToggleSplitView}
+        >
+          <Columns2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export type EditorDiagnosticStatus = {
+  label: string;
+  severity: "none" | "error" | "warning" | "info" | "unavailable";
+};

@@ -1,0 +1,24 @@
+.project-kind-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.project-kind-icon-svg {
+  display: block;
+  overflow: visible;
+}
+
+.project-kind-icon-base {
+  color: inherit;
+}
+
+.project-kind-icon-agent {
+  color: inherit;
+  stroke-width: 1.75;
+}
+
+.project-kind-icon-agent rect {
+  fill: #181818;
+}

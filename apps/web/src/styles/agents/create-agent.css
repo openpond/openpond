@@ -1,0 +1,142 @@
+.agent-create-view {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  width: min(1120px, calc(100% - 72px));
+  min-width: 0;
+  justify-self: center;
+  padding: 28px 0;
+}
+
+.agent-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 12px;
+}
+
+.agent-create-loading {
+  display: grid;
+  place-items: center;
+  min-height: min(420px, calc(100vh - 220px));
+}
+
+.agent-create-loading span {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #f2f2f2;
+  border-radius: 999px;
+  animation: topbar-spin 0.85s linear infinite;
+}
+
+.agent-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #181818;
+  padding: 14px;
+}
+
+.agent-card-topline,
+.agent-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-card-topline span,
+.agent-card-footer span {
+  min-width: 0;
+  overflow: hidden;
+  color: #9b9b9b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.agent-card-topline span:first-child {
+  color: #8ddfa8;
+}
+
+.agent-card strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #f4f4f4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.agent-card p {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #b4b4b4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agent-create-error,
+.agent-create-empty {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #181818;
+}
+
+.agent-create-error {
+  padding: 12px 14px;
+  color: #ffb4a8;
+  font-size: 13px;
+}
+
+.agent-create-empty {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: 420px;
+  padding: 18px;
+}
+
+.agent-create-empty p {
+  margin: 0;
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.agent-create-empty button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #111;
+  color: #f1f1f1;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.agent-create-empty button:hover {
+  background: #222;
+}
+
+@media (max-width: 900px) {
+  .agent-create-view {
+    width: min(100% - 28px, 680px);
+  }
+
+  .agent-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  }
+}

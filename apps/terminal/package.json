@@ -1,0 +1,18 @@
+{
+  "name": "@openpond/terminal",
+  "version": "0.0.5",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "openpond-app": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "bun src/index.ts chat"
+  },
+  "dependencies": {
+    "@openpond/contracts": "workspace:*"
+  }
+}

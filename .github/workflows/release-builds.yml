@@ -1,0 +1,357 @@
+name: Release builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        required: true
+        default: nightly
+        type: choice
+        options:
+          - nightly
+          - stable
+      version:
+        description: Optional release version, for example 0.1.0 or 0.1.0-nightly.20260511.1
+        required: false
+        type: string
+  schedule:
+    - cron: "0 7 * * *"
+  push:
+    branches:
+      - master
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-builds-${{ github.ref || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.release.outputs.channel }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      release_name: ${{ steps.release.outputs.release_name }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      make_latest: ${{ steps.release.outputs.make_latest }}
+      ref: ${{ steps.release.outputs.ref }}
+      short_sha: ${{ steps.release.outputs.short_sha }}
+      should_release: ${{ steps.release.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: release
+        name: Resolve channel and version
+        shell: bash
+        env:
+          INPUT_CHANNEL: ${{ github.event.inputs.channel }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+
+          short_sha="$(git rev-parse --short HEAD)"
+          ref="${GITHUB_SHA}"
+
+          should_release="true"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            channel="nightly"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            channel="${INPUT_CHANNEL:-nightly}"
+          elif [[ "${GITHUB_REF_TYPE}" == "branch" && "${GITHUB_REF_NAME}" == "master" ]]; then
+            channel="nightly"
+            if git log -1 --pretty=%s | grep -Eq '^chore: release v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              should_release="false"
+            fi
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if [[ "${GITHUB_REF_NAME}" == *"-nightly."* ]]; then
+              channel="nightly"
+              should_release="false"
+            else
+              channel="stable"
+            fi
+          else
+            echo "Unsupported release event: ${GITHUB_EVENT_NAME}" >&2
+            exit 1
+          fi
+
+          if [[ "${channel}" != "stable" && "${channel}" != "nightly" ]]; then
+            echo "Unsupported release channel: ${channel}" >&2
+            exit 1
+          fi
+
+          if [[ "${channel}" == "stable" ]]; then
+            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+              raw_version="${GITHUB_REF_NAME}"
+            else
+              raw_version="${INPUT_VERSION}"
+            fi
+            if [[ -z "${raw_version}" ]]; then
+              echo "Stable workflow_dispatch releases require the version input." >&2
+              exit 1
+            fi
+            version="${raw_version#v}"
+            prerelease="false"
+            make_latest="true"
+            release_name="OpenPond App v${version}"
+          else
+            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+              version="${GITHUB_REF_NAME#v}"
+            elif [[ -n "${INPUT_VERSION}" ]]; then
+              version="${INPUT_VERSION#v}"
+            else
+              base_version="$(node -p "require('./apps/desktop/package.json').version.split('-')[0]")"
+              nightly_date="$(date -u +%Y%m%d)"
+              version="${base_version}-nightly.${nightly_date}.${GITHUB_RUN_NUMBER}"
+            fi
+            prerelease="true"
+            make_latest="false"
+            release_name="OpenPond App Nightly v${version}"
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            latest_nightly_tag="$(git tag --sort=-creatordate --list 'v*-nightly.*' | head -n 1)"
+            if [[ -n "${latest_nightly_tag}" ]]; then
+              latest_nightly_sha="$(git rev-list -n 1 "${latest_nightly_tag}")"
+              if [[ "${latest_nightly_sha}" == "${GITHUB_SHA}" ]]; then
+                should_release="false"
+              fi
+            fi
+          fi
+
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release version: ${version}" >&2
+            exit 1
+          fi
+
+          {
+            echo "channel=${channel}"
+            echo "version=${version}"
+            echo "tag=v${version}"
+            echo "release_name=${release_name}"
+            echo "prerelease=${prerelease}"
+            echo "make_latest=${make_latest}"
+            echo "ref=${ref}"
+            echo "short_sha=${short_sha}"
+            echo "should_release=${should_release}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.name }}
+    needs: meta
+    if: needs.meta.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-appimage
+            os: ubuntu-latest
+            package_script: package:linux:release
+          - name: mac-zip
+            os: macos-latest
+            package_script: package:mac:release
+          - name: windows-nsis
+            os: windows-latest
+            package_script: package:win:release
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Prepare release build config
+        run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+
+      - run: bun run ${{ matrix.package_script }}
+
+      - name: Build CLI installer tarball
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${RUNNER_OS}" in
+            Linux) cli_os="linux" ;;
+            macOS) cli_os="darwin" ;;
+            *) echo "unsupported CLI release OS: ${RUNNER_OS}" >&2; exit 1 ;;
+          esac
+          case "$(uname -m)" in
+            x86_64|amd64) cli_arch="x64" ;;
+            arm64|aarch64) cli_arch="arm64" ;;
+            *) echo "unsupported CLI release arch: $(uname -m)" >&2; exit 1 ;;
+          esac
+          rm -rf release-cli
+          mkdir -p release-cli release
+          bun build apps/cli/src/cli/main.ts --compile --outfile release-cli/openpond
+          cp release-cli/openpond release-cli/op
+          cp apps/cli/package.json release-cli/package.json
+          chmod +x release-cli/openpond release-cli/op
+          tar -czf "release/openpond-cli-${cli_os}-${cli_arch}.tar.gz" -C release-cli openpond op package.json
+
+      - name: Install Linux packaged-smoke display dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Smoke packaged desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-smoke
+          report_path="release-smoke/smoke-${{ matrix.name }}.json"
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            xvfb-run -a bun run smoke:desktop:packaged -- --json "${report_path}"
+          else
+            bun run smoke:desktop:packaged -- --json "${report_path}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-smoke-${{ matrix.name }}
+          path: release-smoke/*.json
+          if-no-files-found: error
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-publish
+          shopt -s nullglob
+          files=(release/*.AppImage release/*.zip release/*.exe release/*.blockmap release/*.yml release/*.tar.gz)
+          for index in "${!files[@]}"; do
+            if [[ "$(basename "${files[$index]}")" == "builder-debug.yml" ]]; then
+              unset 'files[$index]'
+            fi
+          done
+          if (( ${#files[@]} == 0 )); then
+            echo "No release assets were produced." >&2
+            exit 1
+          fi
+          cp "${files[@]}" release-publish/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: release-publish/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [meta, build]
+    if: needs.meta.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Fetch release tags
+        run: git fetch --force --tags origin
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: release-assets
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packaged-smoke-*
+          merge-multiple: true
+          path: release-smoke-artifacts
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Validate packaged smoke reports
+        run: bun run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts
+
+      - name: Generate SBOM
+        run: bun run release:sbom
+
+      - name: Generate release inventory
+        run: bun run release:inventory -- --release-assets release-assets --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf "%P\0" | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - id: release_notes
+        name: Resolve release notes range
+        env:
+          RELEASE_CHANNEL: ${{ needs.meta.outputs.channel }}
+          RELEASE_TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${RELEASE_CHANNEL}" == "stable" ]]; then
+            previous_tag="$(
+              git tag --merged HEAD --sort=-v:refname --list 'v[0-9]*.[0-9]*.[0-9]*' \
+                | grep -Ev '(-nightly\.|^'"${RELEASE_TAG}"'$)' \
+                | head -n 1 \
+                || true
+            )"
+          else
+            previous_tag="$(
+              git tag --merged HEAD --sort=-creatordate --list 'v*-nightly.*' \
+                | grep -v '^'"${RELEASE_TAG}"'$' \
+                | head -n 1 \
+                || true
+            )"
+          fi
+
+          echo "previous_tag=${previous_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.release_notes.outputs.previous_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          target_commitish: ${{ needs.meta.outputs.ref }}
+          name: ${{ needs.meta.outputs.release_name }}
+          generate_release_notes: true
+          previous_tag: ${{ steps.release_notes.outputs.previous_tag }}
+          prerelease: ${{ needs.meta.outputs.prerelease }}
+          make_latest: ${{ needs.meta.outputs.make_latest }}
+          files: release-assets/*
+          fail_on_unmatched_files: true
+
+      - name: Publish first release
+        if: steps.release_notes.outputs.previous_tag == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          target_commitish: ${{ needs.meta.outputs.ref }}
+          name: ${{ needs.meta.outputs.release_name }}
+          generate_release_notes: true
+          prerelease: ${{ needs.meta.outputs.prerelease }}
+          make_latest: ${{ needs.meta.outputs.make_latest }}
+          files: release-assets/*
+          fail_on_unmatched_files: true

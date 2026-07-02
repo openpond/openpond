@@ -1,0 +1,35 @@
+{
+  "name": "@openpond/local-server",
+  "version": "0.0.5",
+  "main": "./dist/index.js",
+  "dependencies": {
+    "@openpond/cloud": "workspace:*",
+    "@openpond/codex-provider": "workspace:*",
+    "@openpond/contracts": "workspace:*",
+    "@openpond/runtime": "workspace:*",
+    "node-pty": "^1.1.0",
+    "sqlite3": "^6.0.1",
+    "ws": "^8.20.1"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "openpond-app-server": "./dist/index.js"
+  },
+  "private": true,
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "bun run --cwd ../.. build:server && node dist/index.js",
+    "serve": "bun run --cwd ../.. build:server && node dist/index.js serve",
+    "web": "bun run --cwd ../.. build:web && bun run --cwd ../.. build:server && node dist/index.js web"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}

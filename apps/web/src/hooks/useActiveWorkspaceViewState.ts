@@ -1,0 +1,317 @@
+import { useMemo } from "react";
+import { localPathWorkspaceId } from "@openpond/contracts";
+import type {
+  BootstrapPayload,
+  ChatProvider,
+  CloudProject,
+  LocalProject,
+  OpenPondApp,
+  Session,
+  WorkspaceKind,
+} from "@openpond/contracts";
+import type { ComposerProjectTargetState } from "../components/chat/Composer";
+import { normalizeChatModel, normalizePreferences } from "../lib/app-models";
+import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
+import {
+  cloudProjectLabel,
+  isCloudWorkspaceKind,
+  isPendingCloudStartSession,
+  type WorkspaceLocation,
+  type WorkspaceTargetState,
+} from "../lib/workspace-location";
+
+export function useActiveWorkspaceViewState({
+  bootstrap,
+  draftModel,
+  draftProvider,
+  selectedApp,
+  selectedAppId,
+  selectedCloudProject,
+  selectedProject,
+  selectedSession,
+  selectedSessionId,
+  selectedSessionLinkedProject,
+}: {
+  bootstrap: BootstrapPayload | null;
+  draftModel: string;
+  draftProvider: ChatProvider;
+  selectedApp: OpenPondApp | null;
+  selectedAppId: string | null;
+  selectedCloudProject: CloudProject | null;
+  selectedProject: LocalProject | null;
+  selectedSession: Session | null;
+  selectedSessionId: string | null;
+  selectedSessionLinkedProject: LocalProject | null;
+}) {
+  const selectedSessionProjectId =
+    selectedSession?.workspaceKind === "local_project"
+      ? (selectedSession.workspaceId ?? null)
+      : (selectedSessionLinkedProject?.id ?? null);
+  const selectedCodexHistoryPending = isCodexHistorySessionId(selectedSessionId) && !selectedSession;
+  const selectedSessionCloudWorkspace = selectedSession
+    ? isCloudWorkspaceKind(selectedSession.workspaceKind)
+    : false;
+  const selectedSessionPendingCloudStart = selectedSession
+    ? isPendingCloudStartSession(selectedSession)
+    : false;
+  const selectedSessionCodexWorkspaceId =
+    selectedSession?.provider === "codex" && selectedSession.cwd && !selectedSessionCloudWorkspace
+      ? localPathWorkspaceId(selectedSession.cwd)
+      : null;
+  const providerSettings = bootstrap?.providers ?? null;
+  const activeProvider =
+    selectedSession?.modelRef?.providerId ??
+    selectedSession?.provider ??
+    (selectedCloudProject ? "openpond" : draftProvider);
+  const activeModel =
+    selectedSession?.modelRef?.modelId ??
+    normalizeChatModel(activeProvider, draftModel, providerSettings);
+  const appDefaults = normalizePreferences(bootstrap?.preferences);
+  const activeWorkspaceKind: WorkspaceKind | null = selectedCodexHistoryPending
+    ? null
+    : selectedSession
+      ? selectedSessionCloudWorkspace
+        ? (selectedSession.workspaceKind ?? "sandbox")
+        : selectedSessionPendingCloudStart
+          ? "sandbox"
+          : selectedSessionProjectId
+            ? "local_project"
+            : selectedSessionCodexWorkspaceId
+              ? "local_project"
+              : (selectedSession.workspaceKind ?? (selectedSession.appId ? "sandbox_app" : null))
+      : selectedCloudProject
+        ? "sandbox"
+        : selectedProject
+          ? "local_project"
+          : selectedAppId
+            ? "sandbox_app"
+            : null;
+  const activeWorkspaceAppId = selectedCodexHistoryPending
+    ? null
+    : selectedSession
+      ? selectedSessionCloudWorkspace || selectedSessionPendingCloudStart
+        ? null
+        : selectedSessionProjectId
+          ? selectedSessionProjectId
+          : (selectedSessionCodexWorkspaceId ?? selectedSession.workspaceId ?? selectedSession.appId)
+      : selectedCloudProject
+        ? null
+        : (selectedProject?.id ?? selectedAppId);
+  const activeWorkspaceId = selectedCodexHistoryPending
+    ? null
+    : selectedSession
+      ? selectedSessionCloudWorkspace
+        ? (selectedSession.workspaceId ?? null)
+        : selectedSessionPendingCloudStart
+          ? null
+          : (selectedSessionProjectId ??
+              selectedSessionCodexWorkspaceId ??
+              selectedSession.workspaceId ??
+              selectedSession.appId)
+      : selectedCloudProject
+        ? null
+        : (selectedProject?.id ?? selectedAppId);
+  const account = bootstrap?.account ?? null;
+  const accountPending =
+    !bootstrap || account?.state === "loading" || account?.state === "switching";
+  const accountSignedOut = !accountPending && account?.state === "signed_out";
+  const accountLabel = accountPending
+    ? null
+    : accountSignedOut
+      ? "Add account"
+      : (account?.label ?? account?.activeProfile?.handle ?? "Account");
+  const activeUserHandle = account?.activeProfile?.handle?.trim() ?? "";
+  const startMessage = activeUserHandle ? `Welcome, ${activeUserHandle}` : "Welcome";
+  const workspaceName =
+    selectedSession?.workspaceName ??
+    selectedSession?.appName ??
+    selectedCloudProject?.name ??
+    selectedProject?.name ??
+    selectedApp?.name ??
+    null;
+  const activeWorkspaceLocation: WorkspaceLocation =
+    isCloudWorkspaceKind(activeWorkspaceKind) ? "cloud" : "local";
+  const localTargetName =
+    selectedProject?.name ??
+    selectedSessionLinkedProject?.name ??
+    (selectedSession?.workspaceKind === "local_project" ? selectedSession.workspaceName : null) ??
+    "Local workspace";
+  const cloudTargetName =
+    (activeWorkspaceLocation === "cloud" ? workspaceName : null) ??
+    selectedCloudProject?.name ??
+    cloudProjectLabel(selectedProject) ??
+    selectedProject?.name ??
+    "Cloud workspace";
+  const cloudLinked = Boolean(
+    selectedCloudProject?.id ||
+      selectedProject?.linkedSandboxProject?.projectId ||
+      selectedSession?.cloudProjectId ||
+      activeWorkspaceLocation === "cloud",
+  );
+
+  return {
+    account,
+    accountLabel,
+    accountPending,
+    accountSignedOut,
+    activeModel,
+    activeProvider,
+    activeWorkspaceAppId,
+    activeWorkspaceId,
+    activeWorkspaceKind,
+    activeWorkspaceLocation,
+    appDefaults,
+    cloudLinked,
+    cloudTargetName,
+    localTargetName,
+    selectedCodexHistoryPending,
+    selectedSessionCloudWorkspace,
+    selectedSessionCodexWorkspaceId,
+    selectedSessionPendingCloudStart,
+    selectedSessionProjectId,
+    startMessage,
+    workspaceName,
+  };
+}
+
+export function useWorkspaceTargetState({
+  accountPending,
+  accountSignedOut,
+  activeWorkspaceLocation,
+  bootstrap,
+  busy,
+  cloudLinked,
+  cloudTargetName,
+  localTargetName,
+  selectedCloudProject,
+  selectedProject,
+  selectedSession,
+  workspaceBusy,
+}: {
+  accountPending: boolean;
+  accountSignedOut: boolean;
+  activeWorkspaceLocation: WorkspaceLocation;
+  bootstrap: BootstrapPayload | null;
+  busy: boolean;
+  cloudLinked: boolean;
+  cloudTargetName: string;
+  localTargetName: string;
+  selectedCloudProject: CloudProject | null;
+  selectedProject: LocalProject | null;
+  selectedSession: Session | null;
+  workspaceBusy: boolean;
+}) {
+  const projectTarget = useMemo<ComposerProjectTargetState>(() => {
+    const localOptions = (bootstrap?.localProjects ?? []).map((project) => ({
+      value: `local:${project.id}`,
+      label: project.name,
+      detail: project.workspacePath,
+      kind: "local" as const,
+    }));
+    const cloudOptions = (bootstrap?.cloudProjects ?? []).map((project) => ({
+      value: `cloud:${project.id}`,
+      label: project.name,
+      detail: project.organizationName ?? project.sourceLabel ?? "OpenPond Cloud",
+      kind: "cloud" as const,
+    }));
+    const value = selectedProject
+      ? `local:${selectedProject.id}`
+      : selectedCloudProject
+        ? `cloud:${selectedCloudProject.id}`
+        : "none";
+    const selectedOption =
+      [...localOptions, ...cloudOptions].find((option) => option.value === value) ?? null;
+    return {
+      value,
+      label: selectedOption?.label ?? "No project",
+      detail: selectedOption?.detail ?? "General chat",
+      busy: workspaceBusy || busy,
+      options: [
+        ...localOptions,
+        ...cloudOptions,
+        {
+          value: "action:add-local-project",
+          label: "Add Local Project",
+          detail: "Choose a folder on this machine",
+          kind: "action" as const,
+        },
+        {
+          value: "none",
+          label: "Don't work in a project",
+          detail: "General chat without project files",
+          kind: "none" as const,
+        },
+      ],
+    };
+  }, [bootstrap?.cloudProjects, bootstrap?.localProjects, busy, selectedCloudProject, selectedProject, workspaceBusy]);
+  const cloudSetupAvailable = Boolean(cloudLinked || selectedProject);
+  const cloudOptionDetail = accountPending
+    ? "Checking OpenPond account..."
+    : accountSignedOut
+      ? "Add an OpenPond account to use Cloud"
+      : selectedProject
+        ? cloudLinked
+          ? `Upload source to OpenPond Git for ${cloudTargetName}`
+          : "Upload source to OpenPond Git, then configure Cloud"
+        : cloudLinked
+          ? cloudTargetName
+          : "Select a Project before Cloud coding";
+  const workspaceTarget = useMemo<WorkspaceTargetState>(
+    () => {
+      const localOption = {
+        value: "local" as const,
+        label: "Local",
+        detail: selectedProject?.workspacePath ?? selectedSession?.cwd ?? "Use files on this machine",
+        disabled: !selectedProject && activeWorkspaceLocation !== "local",
+        disabledReason: "No linked local workspace.",
+      };
+      const cloudOption = {
+        value: "cloud" as const,
+        label: "Cloud",
+        detail: cloudOptionDetail,
+        disabled: accountPending || accountSignedOut || !cloudSetupAvailable,
+        disabledReason: accountSignedOut
+          ? "Add an OpenPond account before using Cloud."
+          : "Select a Project before Cloud coding.",
+      };
+      const actionTarget = activeWorkspaceLocation === "cloud" ? "local" : "cloud";
+      const actionOption = actionTarget === "local" ? localOption : cloudOption;
+      return {
+        value: activeWorkspaceLocation,
+        label: activeWorkspaceLocation === "cloud" ? "Cloud" : "Local",
+        detail:
+          activeWorkspaceLocation === "cloud"
+            ? cloudTargetName
+            : selectedProject?.workspacePath ?? selectedSession?.cwd ?? localTargetName,
+        busy: workspaceBusy,
+        action: {
+          ...actionOption,
+          label:
+            actionTarget === "cloud"
+              ? "Move to Cloud"
+              : selectedProject
+                ? "Open Local"
+                : "Clone Locally",
+        },
+        options: [localOption, cloudOption],
+      };
+    },
+    [
+      activeWorkspaceLocation,
+      accountPending,
+      accountSignedOut,
+      cloudOptionDetail,
+      cloudSetupAvailable,
+      cloudTargetName,
+      localTargetName,
+      selectedProject,
+      selectedSession?.cwd,
+      workspaceBusy,
+    ],
+  );
+
+  return {
+    projectTarget,
+    workspaceTarget,
+  };
+}

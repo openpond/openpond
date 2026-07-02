@@ -1,0 +1,149 @@
+@media (max-width: 980px) {
+  :root {
+    --sidebar-width: min(332px, 86vw);
+  }
+
+  .app-shell.sidebar-open {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    box-shadow: 18px 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  .sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .main-pane.chat-start {
+    padding: 28px 18px;
+  }
+
+  .wallet-view {
+    width: calc(100% - 28px);
+  }
+
+  .wallet-credit-card {
+    min-height: 224px;
+  }
+
+  .wallet-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-card-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-thread {
+    padding: 68px 20px 18px;
+  }
+
+  .main-pane.chat-active.diff-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .main-pane.chat-start.diff-open {
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    padding: 28px 18px;
+  }
+
+  .workspace-diff-panel {
+    display: none;
+  }
+
+  .main-pane.diff-expanded .workspace-diff-panel {
+    display: grid;
+  }
+
+  .composer.dock,
+  .composer-stack.dock,
+  .error-line {
+    width: calc(100% - 28px);
+    max-width: none;
+  }
+
+  .approval-request-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .approval-request-actions {
+    justify-content: flex-start;
+    max-width: none;
+  }
+
+  .start-panel {
+    width: 100%;
+  }
+
+  .settings-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-drag-region {
+    left: 0;
+  }
+
+  .settings-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 14px;
+  }
+
+  .settings-content {
+    padding: 28px 18px;
+  }
+
+  .command-overlay {
+    padding-top: 72px;
+    place-items: start center;
+  }
+
+  .command-menu {
+    width: min(100%, calc(100vw - 24px));
+    max-height: calc(100vh - 92px);
+    border-radius: 16px;
+  }
+
+  .account-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .profile-summary-head,
+  .profile-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-access-peer-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .remote-access-summary {
+    display: grid;
+  }
+
+  .remote-access-summary .account-summary-actions {
+    justify-content: flex-start;
+  }
+
+  .account-form-grid,
+  .provider-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lsp-language-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .active-pill,
+  .inline-action,
+  .account-row-actions,
+  .account-state {
+    justify-self: start;
+    grid-column: 2;
+  }
+}

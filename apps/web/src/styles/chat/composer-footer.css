@@ -1,0 +1,596 @@
+.composer-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 7px;
+  margin-top: -21px;
+  min-height: 43px;
+  border-radius: 0 0 21px 21px;
+  background: #1f1f1f;
+  padding: 25px 12px 7px;
+}
+
+.composer.has-goal-runtime .composer-footer,
+.composer.has-create-runtime .composer-footer {
+  padding-right: 28px;
+  padding-left: 28px;
+}
+
+.composer-primary-controls {
+  position: absolute;
+  z-index: 4;
+  right: 12px;
+  bottom: 8px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 7px;
+  min-width: 0;
+  min-height: 29px;
+  overflow: visible;
+}
+
+.composer.has-goal-runtime .composer-primary-controls,
+.composer.has-create-runtime .composer-primary-controls {
+  right: 28px;
+  left: 28px;
+}
+
+.composer-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.composer-icon {
+  position: relative;
+  width: 29px;
+  height: 29px;
+  border-radius: 15px;
+}
+
+.composer-icon.active,
+.composer-icon:hover:not(:disabled),
+.composer-icon:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+}
+
+.composer-add-control {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.composer-create-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  height: 29px;
+  max-width: 92px;
+  border: 0;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.composer-create-control svg {
+  flex: 0 0 auto;
+  color: #c4dfff;
+}
+
+.composer-create-control span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-create-control:hover:not(:disabled),
+.composer-create-control:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.composer-create-control:disabled {
+  opacity: 0.42;
+}
+
+.composer-file-input {
+  display: none;
+}
+
+.composer-add-menu {
+  position: absolute;
+  z-index: 75;
+  left: 0;
+  top: calc(100% + 5px);
+  display: grid;
+  width: max-content;
+  min-width: 0;
+  max-width: min(300px, 82vw);
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
+  border: 0;
+  border-radius: 11px;
+  background: #1f1f1f;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  padding: 4px;
+}
+
+.composer-add-control.open-up .composer-add-menu {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+.composer-add-menu button {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e7e7e7;
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.composer-add-menu button:hover,
+.composer-add-menu button:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.composer-add-menu svg {
+  color: #c4dfff;
+}
+
+.composer-add-menu span {
+  display: grid;
+  min-width: 0;
+}
+
+.composer-add-menu strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-add-menu strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.composer-add-menu small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9d9d9d;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.composer-add-menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.permission-select-placeholder {
+  width: 0;
+  height: 29px;
+}
+
+.composer-project-target {
+  position: relative;
+  min-width: 0;
+}
+
+.composer-project-trigger,
+.workspace-action-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 188px;
+  height: 27px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #d8d8d8;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-action-trigger {
+  max-width: 132px;
+}
+
+.workspace-action-trigger.icon-only {
+  justify-content: center;
+  width: 29px;
+  max-width: 29px;
+  padding: 0;
+}
+
+.composer-project-trigger span,
+.workspace-action-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-project-trigger svg,
+.workspace-action-trigger svg {
+  flex: 0 0 auto;
+  color: #969696;
+}
+
+.composer-project-trigger.cloud > svg:first-child,
+.workspace-action-trigger.cloud > svg:first-child {
+  color: #67b7ff;
+}
+
+.composer-project-trigger:hover:not(:disabled),
+.composer-project-trigger.active,
+.workspace-action-trigger:hover:not(:disabled),
+.workspace-action-trigger:focus-visible {
+  outline: 0;
+  color: #f1f1f1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.composer-project-trigger:disabled,
+.workspace-action-trigger:disabled {
+  opacity: 0.55;
+}
+
+.composer-project-menu {
+  position: absolute;
+  z-index: 70;
+  left: 0;
+  top: calc(100% + 5px);
+  display: grid;
+  gap: 4px;
+  width: max-content;
+  min-width: 250px;
+  max-width: min(320px, 82vw);
+  max-height: min(390px, calc(100vh - 118px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 11px;
+  background: #1f1f1f;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  padding: 6px;
+}
+
+.composer-project-target.open-up .composer-project-menu {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+.composer-project-menu.composer-slash-menu {
+  right: auto;
+  bottom: auto;
+  min-width: 250px;
+  max-width: min(320px, calc(100% - 16px));
+  max-height: min(320px, calc(100vh - 96px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-width: thin;
+  transform: translateY(calc(-100% - 5px));
+}
+
+.composer-project-menu.composer-slash-menu::-webkit-scrollbar {
+  width: 9px;
+}
+
+.composer-project-menu.composer-slash-menu::-webkit-scrollbar-track,
+.composer-project-menu.composer-slash-menu::-webkit-scrollbar-corner {
+  background: #1f1f1f;
+}
+
+.composer-project-menu.composer-slash-menu::-webkit-scrollbar-thumb {
+  border: 2px solid #1f1f1f;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  background-clip: padding-box;
+}
+
+.composer-project-menu.composer-slash-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+  background-clip: padding-box;
+}
+
+.composer-menu-search {
+  padding: 2px;
+}
+
+.composer-menu-search input {
+  width: 100%;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #111;
+  color: #f3f3f3;
+  padding: 0 9px;
+  font-size: 12px;
+  outline: none;
+}
+
+.composer-menu-search input:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.composer-menu-title {
+  padding: 6px 7px 3px;
+  color: #8f8f8f;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.composer-menu-items {
+  max-height: 214px;
+  overflow: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-width: thin;
+}
+
+.composer-menu-empty {
+  padding: 10px 8px;
+  color: #7d7d7d;
+  font-size: 12px;
+}
+
+.composer-project-option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #d8d8d8;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.composer-project-option svg {
+  color: #9c9c9c;
+}
+
+.composer-project-option.cloud > svg:first-child {
+  color: #67b7ff;
+}
+
+.composer-project-option span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.composer-project-option strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-project-option small {
+  overflow: hidden;
+  color: #898989;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-project-option:hover:not(:disabled),
+.composer-project-option.selected {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f3f3;
+}
+
+.composer-project-option.action {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0 0 8px 8px;
+  margin-top: 4px;
+}
+
+.composer-project-option:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 560px) {
+  .composer-footer {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .composer-project-target {
+    min-width: 0;
+  }
+
+  .composer-project-trigger {
+    max-width: 156px;
+  }
+
+  .workspace-action-trigger {
+    max-width: 122px;
+  }
+
+  .dropdown-select.compact .dropdown-trigger,
+  .codex-model-trigger {
+    max-width: 144px;
+  }
+}
+
+@media (max-width: 400px) {
+  .composer-footer {
+    gap: 6px;
+    padding-inline: 10px;
+  }
+
+  .composer-project-trigger {
+    max-width: 132px;
+  }
+
+  .workspace-action-trigger {
+    max-width: 108px;
+  }
+
+  .composer-project-trigger,
+  .workspace-action-trigger {
+    gap: 4px;
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+
+  .dropdown-select.compact .dropdown-trigger,
+  .codex-model-trigger {
+    max-width: 128px;
+  }
+}
+
+.codex-model-reasoning {
+  position: relative;
+  min-width: 0;
+}
+
+.codex-model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 178px;
+  height: 29px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #d8d8d8;
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.codex-model-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-model-trigger svg {
+  flex: 0 0 auto;
+  color: #8f8f8f;
+}
+
+.codex-model-trigger:hover:not(:disabled),
+.codex-model-trigger.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f3f3;
+}
+
+.codex-model-trigger:disabled {
+  opacity: 0.55;
+}
+
+.codex-model-menu {
+  position: absolute;
+  z-index: 65;
+  top: calc(100% + 5px);
+  right: 0;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  min-width: 202px;
+  max-width: min(270px, 78vw);
+  max-height: min(430px, calc(100vh - 118px));
+  overflow: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
+  scrollbar-width: thin;
+  border: 0;
+  border-radius: 10px;
+  background: #1f1f1f;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  padding: 6px;
+}
+
+.codex-model-menu::-webkit-scrollbar {
+  width: 9px;
+}
+
+.codex-model-menu::-webkit-scrollbar-track,
+.codex-model-menu::-webkit-scrollbar-corner {
+  background: #1f1f1f;
+}
+
+.codex-model-menu::-webkit-scrollbar-thumb {
+  border: 2px solid #1f1f1f;
+  border-radius: 999px;
+  background: #5a5a5a;
+  background-clip: padding-box;
+}
+
+.codex-model-menu::-webkit-scrollbar-thumb:hover {
+  background: #777;
+  background-clip: padding-box;
+}
+
+.codex-model-reasoning.open-up .codex-model-menu {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+.codex-model-menu-title {
+  padding: 6px 7px 3px;
+  color: #8f8f8f;
+  font-size: 12px;
+}
+
+.codex-model-menu button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 29px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f0f0f0;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.codex-model-menu button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-model-menu button:hover,
+.codex-model-menu button:focus-visible,
+.codex-model-menu button.selected {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+}

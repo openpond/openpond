@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "command": "openpond agent inspect --json",
+  "packageCommand": "openpond-agent inspect --json",
+  "sourceOfTruth": "agent-source",
+  "project": {
+    "name": "cloud-water-estimator-example",
+    "version": "0.1.0",
+    "useCase": "cloud-water-estimator",
+    "description": "Construction drawing task planning and water-treatment estimate review."
+  },
+  "agent": {
+    "id": "cloud-water-estimator-example",
+    "defaultAction": "chat",
+    "manifestHash": "bbad782e26f8955553890c02b77ff7ff7c147e59531343b3cf7276cc0ee0baa3"
+  },
+  "sourceLayout": {
+    "root": ".",
+    "agentConfig": "agent/agent.ts",
+    "actions": "agent/actions.ts",
+    "editable": "agent/editable.ts",
+    "workflows": "agent/workflows",
+    "channels": "agent/channels",
+    "tools": "agent/tools",
+    "evals": "agent/evals",
+    "volumes": "agent/volumes.ts",
+    "integrations": "agent/integrations.ts",
+    "schedules": "agent/schedules"
+  },
+  "generatedArtifacts": {
+    "inspectJson": ".openpond/agent-inspect.json",
+    "agentManifestJson": ".openpond/agent-manifest.json",
+    "actionRegistryJson": ".openpond/action-registry.json",
+    "runtimeManifestPreviewYaml": ".openpond/openpond-manifest.preview.yaml",
+    "validatorReport": ".openpond/validator-report.md",
+    "evalResultsJson": ".openpond/eval-results.json",
+    "traces": ".openpond/traces"
+  },
+  "runtimeManifest": ".openpond/openpond-manifest.preview.yaml",
+  "editable": {
+    "kind": "editable",
+    "enabled": true,
+    "backend": "openpond-coding-work-item",
+    "runtimeEnvironmentId": "openpond-coding-core-v1",
+    "sourceOfTruth": "agent-source",
+    "policyDiscovery": {
+      "command": "openpond agent inspect --json",
+      "runAfter": "source-materialized"
+    },
+    "allowedPaths": [
+      "agent/**",
+      "src/**",
+      "package.json",
+      "README.md"
+    ],
+    "requiredChecks": [
+      "openpond-agent validate",
+      "openpond-agent eval"
+    ],
+    "defaultResultMode": "patch_only",
+    "supportedResultModes": [
+      "patch_only",
+      "commit_to_runtime_ref",
+      "create_branch",
+      "open_pr"
+    ]
+  },
+  "capabilities": {
+    "actions": [
+      "chat",
+      "generate-task-plan",
+      "render-drawings",
+      "extract-sheet-index",
+      "extract-page-tasks",
+      "consolidate-task-plan",
+      "export-task-plan",
+      "generate-estimate",
+      "task-plan-history",
+      "revise-task-plan"
+    ],
+    "channels": [
+      "openpond_chat",
+      "microsoft_teams",
+      "slack",
+      "mcp"
+    ],
+    "tools": [
+      "generate_task_plan",
+      "review_water_estimate",
+      "revise_task_plan",
+      "lookup_task_plan_history",
+      "render_drawings",
+      "extract_sheet_index",
+      "extract_page_tasks",
+      "export_task_plan"
+    ],
+    "workflows": [
+      "generate-task-plan",
+      "generate-estimate-review",
+      "render-drawings",
+      "extract-sheet-index",
+      "extract-page-tasks",
+      "consolidate-task-plan",
+      "export-task-plan",
+      "task-plan-history",
+      "task-plan-revision"
+    ],
+    "schedules": [
+      "daily-estimate-digest"
+    ],
+    "evals": [
+      "drawing-pdf-generates-task-plan",
+      "history-and-proposal-routes-to-estimate-review",
+      "empty-chat-asks-for-input"
+    ],
+    "volumes": [
+      "drawing-plans",
+      "water-history"
+    ],
+    "integrations": [
+      "opchat",
+      "microsoft_teams",
+      "slack"
+    ]
+  },
+  "validation": {
+    "declaredCommands": [
+      "test -f agent/agent.ts",
+      "test -f agent/workflows/chat.ts",
+      "command -v pdfinfo",
+      "command -v pdftoppm"
+    ],
+    "requiredChecks": [
+      "openpond-agent validate",
+      "openpond-agent eval"
+    ]
+  }
+}

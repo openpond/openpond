@@ -1,0 +1,286 @@
+import { randomUUID } from "node:crypto";
+import {
+  DEFAULT_OPENPOND_CHAT_MODEL,
+  type RuntimeEvent,
+  type Session,
+} from "@openpond/contracts";
+import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
+import type { HostedChatMessage } from "@openpond/cloud";
+import { formatPromptWithAttachmentContext } from "../chat-attachments.js";
+import { estimateHostedMessageTokens, hostedContextLimit, usableHostedContextLimit } from "./context-usage.js";
+import { buildChatMessagesForProvider } from "./hosted-chat.js";
+import { textFromUnknown } from "../utils.js";
+
+export type HostedCompactionProvider = "openpond";
+
+export type HostedCompactionResult = {
+  summary: string;
+  model: string;
+  compactedThroughEventId: string | null;
+  compactedThroughTurnId: string | null;
+  preservedFromEventId: string | null;
+  sourceEventCount: number;
+  preservedEventCount: number;
+  inputTokensBefore: number;
+  inputTokensAfter: number;
+  maxContextTokens: number;
+  tokenSource: "heuristic";
+};
+
+export type HostedAutoCompactionDecision = {
+  shouldCompact: boolean;
+  projectedTokens: number;
+  thresholdTokens: number;
+  usableContextTokens: number;
+  maxContextTokens: number;
+  tokenSource: "heuristic";
+};
+
+type HostedCompactionInput = {
+  session: Session;
+  events: RuntimeEvent[];
+  provider: HostedCompactionProvider;
+  model?: string | null;
+  signal?: AbortSignal;
+};
+
+const HOSTED_AUTO_COMPACT_THRESHOLD_RATIO = 0.85;
+const MAX_SERIALIZED_EVENT_CHARS = 6_000;
+const MAX_COMPACTION_INPUT_CHARS = 180_000;
+
+const COMPACTION_SYSTEM_PROMPT = [
+  "You compact conversation history for OpenPond App.",
+  "Write a concise continuation summary that preserves everything needed for future turns.",
+  "Preserve exact user goals, constraints, decisions, file paths, app ids, branch names, command names, errors, tool outcomes, and pending work.",
+  "Remove stale or contradicted details. Do not claim work is complete unless the transcript supports it.",
+  "Do not mention that compaction happened.",
+  "Use terse markdown bullets under these headings: Goal, Constraints & Preferences, Progress, Key Decisions, Next Steps, Critical Context, Relevant Files.",
+].join("\n");
+
+export function hostedAutoCompactionDecision(input: {
+  provider: HostedCompactionProvider;
+  model: string;
+  messages: HostedChatMessage[];
+}): HostedAutoCompactionDecision {
+  const maxContextTokens = hostedContextLimit(input.provider, input.model);
+  const usableContextTokens = usableHostedContextLimit(maxContextTokens);
+  const thresholdTokens = Math.max(1, Math.floor(usableContextTokens * HOSTED_AUTO_COMPACT_THRESHOLD_RATIO));
+  const projectedTokens = estimateHostedMessageTokens(input.messages);
+  return {
+    shouldCompact: projectedTokens >= thresholdTokens,
+    projectedTokens,
+    thresholdTokens,
+    usableContextTokens,
+    maxContextTokens,
+    tokenSource: "heuristic",
+  };
+}
+
+export async function runHostedContextCompaction(input: HostedCompactionInput): Promise<HostedCompactionResult> {
+  const model = hostedCompactionModel(input.model);
+  const projectionEvents = eventsForHostedCompaction(input.events);
+  const { summaryEvents, preservedEvents } = splitEventsForHostedCompaction(projectionEvents);
+  if (summaryEvents.length === 0) throw new Error("There is not enough prior context to compact.");
+
+  const serialized = serializeEventsForCompaction(summaryEvents);
+  if (!serialized.trim()) throw new Error("There is not enough prior context to compact.");
+
+  const messages: HostedChatMessage[] = [
+    { role: "system", content: COMPACTION_SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        "Compact the following OpenPond App transcript into a durable continuation summary.",
+        "The recent tail that remains outside the summary is not included here.",
+        "",
+        serialized,
+      ].join("\n"),
+    },
+  ];
+
+  const summary = (await streamCompactionSummary({ ...input, model, messages })).trim();
+  if (!summary) throw new Error("Compaction summary was empty.");
+
+  const beforeMessages = buildChatMessagesForProvider(input.events, "", "Compaction projection");
+  const preservedMessages = buildChatMessagesForProvider(preservedEvents, "", "Compaction projection").slice(1);
+  const afterMessages: HostedChatMessage[] = [
+    { role: "system", content: "Compaction projection" },
+    { role: "system", content: summary },
+    ...preservedMessages,
+  ];
+
+  return {
+    summary,
+    model,
+    compactedThroughEventId: summaryEvents[summaryEvents.length - 1]?.id ?? null,
+    compactedThroughTurnId: lastTurnId(summaryEvents),
+    preservedFromEventId: preservedEvents[0]?.id ?? null,
+    sourceEventCount: summaryEvents.length,
+    preservedEventCount: preservedEvents.length,
+    inputTokensBefore: estimateHostedMessageTokens(beforeMessages),
+    inputTokensAfter: estimateHostedMessageTokens(afterMessages),
+    maxContextTokens: hostedContextLimit(input.provider, model),
+    tokenSource: "heuristic",
+  };
+}
+
+function hostedCompactionModel(model?: string | null): string {
+  if (model?.trim()) return model.trim();
+  return DEFAULT_OPENPOND_CHAT_MODEL;
+}
+
+function splitEventsForHostedCompaction(events: RuntimeEvent[]): {
+  summaryEvents: RuntimeEvent[];
+  preservedEvents: RuntimeEvent[];
+} {
+  const turnStartIndexes = events
+    .map((item, index) => (item.name === "turn.started" ? index : -1))
+    .filter((index) => index >= 0);
+  const preserveTurnCount = turnStartIndexes.length >= 3 ? 2 : turnStartIndexes.length === 2 ? 1 : 0;
+  const preserveStartIndex =
+    preserveTurnCount > 0 ? turnStartIndexes[turnStartIndexes.length - preserveTurnCount]! : events.length;
+  return {
+    summaryEvents: events.slice(0, preserveStartIndex),
+    preservedEvents: events.slice(preserveStartIndex),
+  };
+}
+
+function eventsForHostedCompaction(events: RuntimeEvent[]): RuntimeEvent[] {
+  const compacted = latestCompletedCompaction(events);
+  if (!compacted) return events;
+  const preservedIndex = compacted.preservedFromEventId
+    ? events.findIndex((item) => item.id === compacted.preservedFromEventId)
+    : -1;
+  const replayStart = preservedIndex >= 0 && preservedIndex < compacted.index ? preservedIndex : compacted.index + 1;
+  return [compacted.event, ...events.slice(replayStart, compacted.index), ...events.slice(compacted.index + 1)];
+}
+
+function latestCompletedCompaction(events: RuntimeEvent[]): {
+  event: RuntimeEvent;
+  index: number;
+  preservedFromEventId: string | null;
+} | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const item = events[index]!;
+    if (item.name !== "session.compaction.completed" || !summaryFromCompactionEvent(item)) continue;
+    return {
+      event: item,
+      index,
+      preservedFromEventId: preservedFromCompactionEvent(item),
+    };
+  }
+  return null;
+}
+
+async function streamCompactionSummary(input: HostedCompactionInput & {
+  model: string;
+  messages: HostedChatMessage[];
+}): Promise<string> {
+  let text = "";
+  const requestId = `compact-${randomUUID()}`;
+  for await (const delta of streamOpenPondHostedChatTurn({
+    model: input.model,
+    messages: input.messages,
+    requestId,
+    signal: input.signal,
+  })) {
+    if (delta.type === "text_delta" && delta.text) text += delta.text;
+  }
+  return text;
+}
+
+function serializeEventsForCompaction(events: RuntimeEvent[]): string {
+  const lines: string[] = [];
+  let totalChars = 0;
+
+  function append(block: string): void {
+    if (!block.trim() || totalChars >= MAX_COMPACTION_INPUT_CHARS) return;
+    const remaining = MAX_COMPACTION_INPUT_CHARS - totalChars;
+    const value = block.length > remaining ? `${block.slice(0, Math.max(0, remaining - 32))}\n[compaction input truncated]` : block;
+    lines.push(value);
+    totalChars += value.length;
+  }
+
+  for (const item of events) {
+    if (item.name === "session.context.updated" || item.name === "session.compaction.started") continue;
+    if (item.name === "session.compaction.failed") continue;
+    if (item.name === "session.compaction.completed") {
+      const summary = summaryFromCompactionEvent(item);
+      if (summary) append(section("Previous Summary", summary));
+      continue;
+    }
+    if (item.name === "turn.started") {
+      const prompt = typeof item.args?.prompt === "string" ? item.args.prompt : "";
+      const attachmentContext =
+        typeof item.args?.attachmentContext === "string" ? item.args.attachmentContext : "";
+      append(section("User", formatPromptWithAttachmentContext(prompt, attachmentContext), item));
+      continue;
+    }
+    if (item.name === "assistant.delta") {
+      append(section("Assistant", item.output ?? "", item));
+      continue;
+    }
+    if (item.name === "workspace_action" || item.name === "workspace_action_result") {
+      append(section("Workspace Activity", eventPreview(item), item));
+      continue;
+    }
+    if (item.name === "tool.started" || item.name === "tool.completed" || item.name === "command.output") {
+      append(section("Tool Activity", eventPreview(item), item));
+      continue;
+    }
+    if (item.name === "turn.failed") {
+      append(section("Turn Failed", item.error ?? item.output ?? "", item));
+      continue;
+    }
+    if (item.name === "diagnostic") continue;
+    append(section(item.name, eventPreview(item), item));
+  }
+
+  return lines.join("\n\n");
+}
+
+function section(title: string, body: string, event?: RuntimeEvent): string {
+  const metadata = event
+    ? [
+        event.turnId ? `turn=${event.turnId}` : null,
+        event.action ? `action=${event.action}` : null,
+        event.status ? `status=${event.status}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
+  const prefix = metadata ? `### ${title} (${metadata})` : `### ${title}`;
+  return `${prefix}\n${truncate(body.trim() || eventPreview(event), MAX_SERIALIZED_EVENT_CHARS)}`;
+}
+
+function eventPreview(event?: RuntimeEvent): string {
+  if (!event) return "";
+  const parts = [event.output, event.error, event.action, event.data ? textFromUnknown(event.data) : null].filter(
+    (value): value is string => Boolean(value)
+  );
+  return parts.join("\n");
+}
+
+function truncate(value: string, maxChars: number): string {
+  return value.length > maxChars ? `${value.slice(0, maxChars)}\n[truncated]` : value;
+}
+
+function summaryFromCompactionEvent(event: RuntimeEvent): string | null {
+  if (!event.data || typeof event.data !== "object") return null;
+  const summary = (event.data as { summary?: unknown }).summary;
+  return typeof summary === "string" && summary.trim() ? summary.trim() : null;
+}
+
+function preservedFromCompactionEvent(event: RuntimeEvent): string | null {
+  if (!event.data || typeof event.data !== "object") return null;
+  const preservedFromEventId = (event.data as { preservedFromEventId?: unknown }).preservedFromEventId;
+  return typeof preservedFromEventId === "string" && preservedFromEventId.trim() ? preservedFromEventId : null;
+}
+
+function lastTurnId(events: RuntimeEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const turnId = events[index]?.turnId;
+    if (turnId) return turnId;
+  }
+  return null;
+}

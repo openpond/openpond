@@ -1,0 +1,68 @@
+schemaVersion: 1
+name: deepseek-v4-flash-sandbox-template
+version: 0.1.0
+useCase: chat-agent
+description: DeepSeek V4 Flash streaming chat agent that waits for the next user turn.
+runtime:
+  base: node-bun-workspace
+resources:
+  cpu: 0.5
+  memoryGb: 1
+  diskGb: 8
+setup:
+  commands:
+    - mkdir -p artifacts
+validation:
+  commands:
+    - test -f deepseek-chat-stream.ts
+    - test -f wait-for-user-harness.ts
+start:
+  command: bun wait-for-user-harness.ts
+  timeoutSeconds: 180
+  ports: []
+  artifactPaths:
+    - artifacts/conversation-state.json
+    - artifacts/stream-events.jsonl
+    - artifacts/wait-for-user.json
+    - artifacts/workflow-events.jsonl
+actions:
+  - name: stream-chat
+    command: bun deepseek-chat-stream.ts
+    timeoutSeconds: 180
+    ports: []
+    artifactPaths:
+      - artifacts/conversation-state.json
+      - artifacts/stream-events.jsonl
+      - artifacts/workflow-events.jsonl
+  - name: wait-for-user
+    command: bun wait-for-user-harness.ts
+    timeoutSeconds: 180
+    ports: []
+    artifactPaths:
+      - artifacts/wait-for-user.json
+      - artifacts/workflow-events.jsonl
+services: []
+inputs:
+  schema:
+    type: object
+    properties:
+      prompt:
+        type: string
+        title: Prompt
+        default: Reply with one short sentence about checkpointing.
+      userReply:
+        type: string
+        title: User reply
+  env:
+    - name: DEEPSEEK_API_KEY_SANDBOX
+      required: true
+      secret: true
+      description: DeepSeek staging smoke key injected through the sandbox secret/env-ref path.
+artifacts:
+  paths:
+    - artifacts/conversation-state.json
+    - artifacts/stream-events.jsonl
+    - artifacts/wait-for-user.json
+    - artifacts/workflow-events.jsonl
+network:
+  egress: allow

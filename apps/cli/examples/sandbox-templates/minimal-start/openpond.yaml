@@ -1,0 +1,39 @@
+schemaVersion: 1
+name: minimal-start
+version: 0.1.0
+useCase: sandbox-template-example
+description: Minimal start command example for sandbox template validation.
+runtime:
+  base: node-bun-workspace
+resources:
+  cpu: 1
+  memoryGb: 1
+  diskGb: 4
+setup:
+  commands:
+    - mkdir -p artifacts
+validation:
+  commands:
+    - test -f scripts/start.sh
+start:
+  command: bash scripts/start.sh
+  timeoutSeconds: 120
+  ports: []
+  artifactPaths:
+    - artifacts/start.json
+actions: []
+services: []
+inputs:
+  schema:
+    type: object
+    properties:
+      subject:
+        type: string
+        title: Subject
+        default: world
+artifacts:
+  paths:
+    - artifacts/start.json
+network:
+  egress: restricted
+

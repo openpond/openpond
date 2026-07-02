@@ -1,0 +1,11 @@
+{
+  "name": "deepseek-streaming-wait-for-user",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "openpond sandbox-template validate --file openpond.yaml",
+    "start": "bun wait-for-user-harness.ts",
+    "stream": "bun deepseek-chat-stream.ts"
+  }
+}

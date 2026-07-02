@@ -1,0 +1,105 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { beforeAll, describe, expect, test } from "bun:test";
+
+import { listCliCommandDefinitions } from "../src/cli/command-registry";
+import { runProcessCommand } from "../src/process-runner";
+
+const cliRoot = join(import.meta.dir, "..");
+
+type CliPackageJson = {
+  version: string;
+  bin?: Record<string, string>;
+};
+
+async function readCliPackageJson(): Promise<CliPackageJson> {
+  return JSON.parse(
+    await readFile(join(cliRoot, "package.json"), "utf-8")
+  ) as CliPackageJson;
+}
+
+describe("CLI installed-package smoke", () => {
+  let packageJson: CliPackageJson;
+
+  beforeAll(async () => {
+    packageJson = await readCliPackageJson();
+    const build = await runProcessCommand(process.execPath, ["run", "build:cli"], {
+      cwd: cliRoot,
+    });
+    if (build.code !== 0) {
+      throw new Error(build.stderr || build.stdout || "CLI build failed");
+    }
+  });
+
+  test("runs from a source checkout TypeScript entrypoint", async () => {
+    const result = await runProcessCommand(
+      process.execPath,
+      ["run", "src/cli/main.ts", "--version"],
+      { cwd: cliRoot }
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe(packageJson.version);
+    expect(result.stderr.trim()).toBe("");
+  });
+
+  test("runs the built dist bin entrypoint under Node", async () => {
+    const binPath = packageJson.bin?.openpond;
+    expect(binPath).toBe("dist/cli.js");
+
+    const result = await runProcessCommand("node", [join(cliRoot, binPath!), "--version"], {
+      cwd: cliRoot,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe(packageJson.version);
+    expect(result.stderr.trim()).toBe("");
+  });
+
+  test(
+    "prints help for every documented command group from the built dist bin",
+    async () => {
+      const binPath = packageJson.bin?.openpond;
+      expect(binPath).toBe("dist/cli.js");
+
+      for (const definition of listCliCommandDefinitions()) {
+        const result = await runProcessCommand(
+          "node",
+          [join(cliRoot, binPath!), definition.name, "--help"],
+          { cwd: cliRoot }
+        );
+
+        expect(result.code, definition.name).toBe(0);
+        expect(result.timedOut, definition.name).toBe(false);
+        expect(result.stderr.trim(), definition.name).toBe("");
+        expect(result.stdout, definition.name).toContain("Usage:");
+        expect(result.stdout, definition.name).toContain(definition.usage);
+      }
+    },
+    30_000
+  );
+
+  test("prints canonical help for documented command aliases from the built dist bin", async () => {
+    const binPath = packageJson.bin?.openpond;
+    expect(binPath).toBe("dist/cli.js");
+
+    for (const definition of listCliCommandDefinitions()) {
+      for (const alias of definition.aliases ?? []) {
+        const result = await runProcessCommand(
+          "node",
+          [join(cliRoot, binPath!), alias, "--help"],
+          { cwd: cliRoot }
+        );
+
+        expect(result.code, alias).toBe(0);
+        expect(result.timedOut, alias).toBe(false);
+        expect(result.stderr.trim(), alias).toBe("");
+        expect(result.stdout, alias).toContain("Usage:");
+        expect(result.stdout, alias).toContain(definition.usage);
+        expect(result.stdout, alias).toContain("Aliases:");
+        expect(result.stdout, alias).toContain(alias);
+      }
+    }
+  });
+});

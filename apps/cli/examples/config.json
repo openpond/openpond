@@ -1,0 +1,24 @@
+{
+  "accounts": [
+    {
+      "handle": "primary",
+      "apiKey": "opk_prod_replace_me",
+      "session": {
+        "appId": "app_primary_replace_me",
+        "conversationId": "conv_primary_replace_me"
+      }
+    },
+    {
+      "handle": "secondary",
+      "apiKey": "opk_secondary_replace_me",
+      "session": {
+        "appId": "app_secondary_replace_me",
+        "conversationId": "conv_secondary_replace_me"
+      }
+    }
+  ],
+  "activeHandle": "primary",
+  "lspEnabled": true,
+  "executionMode": "hosted",
+  "mode": "builder"
+}

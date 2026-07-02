@@ -1,0 +1,428 @@
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import type {
+  Approval,
+  BootstrapPayload,
+  ChatProvider,
+  CodexPermissionMode,
+  CodexReasoningEffort,
+  RuntimeEvent,
+  Session,
+  SidebarAppPreferences,
+} from "@openpond/contracts";
+import { api, resolveConnection, type ClientConnection } from "../api";
+import { normalizePreferences, parseProjectSelection, projectSelectionKey } from "../lib/app-models";
+import { latestReadyLocalCreatePipelineProfileRefreshKey } from "../lib/create-pipeline-profile-refresh";
+import {
+  codexPreferencesWithLocalOverrides,
+  storedCodexPreferenceSyncPatch,
+} from "../lib/codex-preferences";
+import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
+import { isSameConnection } from "../lib/layout";
+import type { OpenPondOrganization } from "../lib/organization-types";
+import {
+  openPondOrganizationCacheKey,
+  preloadOpenPondOrganizations,
+} from "../lib/openpond-organization-memory";
+import { preloadSandboxAgents } from "../lib/sandbox-agent-memory";
+import {
+  appStartupState,
+  type AppStartupStageId,
+} from "../startup/app-startup";
+import { useRuntimeEvents } from "./useAppEffects";
+
+type SetState<T> = Dispatch<SetStateAction<T>>;
+
+const STARTUP_SPLASH_FAST_MINIMUM_MS = 650;
+const STARTUP_SPLASH_SLOW_THRESHOLD_MS = 1200;
+
+export function useAppBootstrap(params: {
+  setDraftModel: SetState<string>;
+  setDraftProvider: SetState<ChatProvider>;
+  setCodexPermissionMode: SetState<CodexPermissionMode>;
+  setCodexReasoningEffort: SetState<CodexReasoningEffort>;
+  setError: SetState<string | null>;
+  setSelectedAppId: SetState<string | null>;
+  setSelectedProjectId: SetState<string | null>;
+  setSelectedSessionId: SetState<string | null>;
+}) {
+  const {
+    setDraftModel,
+    setDraftProvider,
+    setCodexPermissionMode,
+    setCodexReasoningEffort,
+    setError,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+  } = params;
+  const [connection, setConnection] = useState<ClientConnection | null>(null);
+  const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
+  const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [codexHistorySessions, setCodexHistorySessions] = useState<Session[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [appPreferences, setAppPreferences] = useState<SidebarAppPreferences>({});
+  const [startupStage, setStartupStage] = useState<AppStartupStageId>("connecting");
+  const codexPreferenceSyncKeyRef = useRef<string | null>(null);
+  const defaultTeamSyncKeyRef = useRef<string | null>(null);
+  const latestDefaultTeamIdRef = useRef("");
+  const startupReadyRef = useRef(false);
+  const startupStartedAtRef = useRef(Date.now());
+  const startupCompleteTimerRef = useRef<number | null>(null);
+  const profileRefreshCreatePipelineKeyRef = useRef<string | null>(null);
+
+  const setBlockingStartupStage = useCallback((stage: Exclude<AppStartupStageId, "ready">) => {
+    if (!startupReadyRef.current) setStartupStage(stage);
+  }, []);
+
+  const completeStartup = useCallback(() => {
+    if (startupReadyRef.current || startupCompleteTimerRef.current !== null) return;
+    const finishStartup = () => {
+      startupCompleteTimerRef.current = null;
+      if (startupReadyRef.current) return;
+      startupReadyRef.current = true;
+      setStartupStage("ready");
+    };
+    const elapsed = Date.now() - startupStartedAtRef.current;
+    const remaining = startupSplashRemainingMs(elapsed);
+    if (remaining === 0) {
+      finishStartup();
+      return;
+    }
+    startupCompleteTimerRef.current = window.setTimeout(finishStartup, remaining);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (startupCompleteTimerRef.current !== null) {
+        window.clearTimeout(startupCompleteTimerRef.current);
+      }
+    };
+  }, []);
+
+  const applyBootstrapPayload = useCallback(
+    (payload: BootstrapPayload) => {
+      latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
+      setBootstrap(payload);
+      setEvents(payload.events);
+      setSessions(payload.sessions);
+      setCodexHistorySessions(payload.codexHistorySessions ?? []);
+      setApprovals(payload.approvals);
+      setAppPreferences(payload.sidebarAppPreferences);
+      setSelectedAppId((current) => (current && payload.apps.some((app) => app.id === current) ? current : null));
+      setSelectedProjectId((current) => {
+        if (!current) return null;
+        const selection = parseProjectSelection(current);
+        if (selection?.kind === "local" && payload.localProjects.some((project) => project.id === selection.id)) {
+          return projectSelectionKey("local", selection.id);
+        }
+        if (selection?.kind === "cloud" && (payload.cloudProjects ?? []).some((project) => project.id === selection.id)) {
+          return projectSelectionKey("cloud", selection.id);
+        }
+        if (payload.localProjects.some((project) => project.id === current)) return projectSelectionKey("local", current);
+        if ((payload.cloudProjects ?? []).some((project) => project.id === current)) return projectSelectionKey("cloud", current);
+        return null;
+      });
+      setSelectedSessionId((current) =>
+        current &&
+        [...payload.sessions, ...(payload.codexHistorySessions ?? [])].some(
+          (session) => session.id === current && !session.archived
+        )
+          ? current
+          : null
+      );
+    },
+    [setSelectedAppId, setSelectedProjectId, setSelectedSessionId]
+  );
+
+  useEffect(() => {
+    const preferences = normalizePreferences(bootstrap?.preferences);
+    setDraftProvider(preferences.defaultChatProvider);
+    setDraftModel(preferences.defaultChatModel);
+  }, [
+    bootstrap?.preferences.defaultChatProvider,
+    bootstrap?.preferences.defaultChatModel,
+    setDraftModel,
+    setDraftProvider,
+  ]);
+
+  useEffect(() => {
+    setCodexPermissionMode(codexPreferencesWithLocalOverrides(bootstrap?.preferences).codexPermissionMode);
+  }, [
+    bootstrap?.preferences.codexPermissionMode,
+    setCodexPermissionMode,
+  ]);
+
+  useEffect(() => {
+    setCodexReasoningEffort(codexPreferencesWithLocalOverrides(bootstrap?.preferences).codexReasoningEffort);
+  }, [
+    bootstrap?.preferences.codexReasoningEffort,
+    setCodexReasoningEffort,
+  ]);
+
+  useEffect(() => {
+    if (!connection || !bootstrap) return;
+    const patch = storedCodexPreferenceSyncPatch(bootstrap.preferences);
+    const syncKey = JSON.stringify(patch);
+    if (syncKey === "{}") {
+      codexPreferenceSyncKeyRef.current = null;
+      return;
+    }
+    if (codexPreferenceSyncKeyRef.current === syncKey) return;
+    codexPreferenceSyncKeyRef.current = syncKey;
+    void api
+      .savePreferences(connection, patch)
+      .then(applyBootstrapPayload)
+      .catch((syncError) => {
+        codexPreferenceSyncKeyRef.current = null;
+        setError(syncError instanceof Error ? syncError.message : String(syncError));
+      });
+  }, [
+    applyBootstrapPayload,
+    bootstrap,
+    bootstrap?.preferences.codexPermissionMode,
+    bootstrap?.preferences.codexReasoningEffort,
+    connection,
+    setError,
+  ]);
+
+  useEffect(() => {
+    if (!connection || !bootstrap) {
+      defaultTeamSyncKeyRef.current = null;
+      return;
+    }
+
+    if (bootstrap.account.state !== "signed_in") {
+      defaultTeamSyncKeyRef.current = null;
+      completeStartup();
+      return;
+    }
+
+    const accountKey = openPondOrganizationCacheKey(bootstrap.account);
+    if (!accountKey) {
+      defaultTeamSyncKeyRef.current = null;
+      completeStartup();
+      return;
+    }
+    completeStartup();
+    setBlockingStartupStage("team");
+
+    const currentDefaultTeamId = bootstrap.preferences.defaultTeamId?.trim() ?? "";
+    const syncKey = defaultTeamPreferenceSyncKey(
+      accountKey,
+      currentDefaultTeamId,
+      bootstrap.accountMeta.asOf ?? "initial",
+    );
+    if (defaultTeamSyncKeyRef.current === syncKey) return;
+    defaultTeamSyncKeyRef.current = syncKey;
+
+    let cancelled = false;
+    let settled = false;
+    const preloadTeamAgents = (teamId: string) =>
+      preloadSandboxAgents({
+        teamId,
+        fetchAgents: async (nextTeamId) => {
+          const agentsPayload = await api.listSandboxAgents(connection, { teamId: nextTeamId });
+          return agentsPayload.agents;
+        },
+      }).catch(() => {
+        if (!cancelled && defaultTeamSyncKeyRef.current === syncKey) {
+          defaultTeamSyncKeyRef.current = null;
+        }
+      });
+
+    void preloadOpenPondOrganizations({
+      accountKey,
+      force: true,
+      fetchOrganizations: async () => {
+        const payload = await api.organizations(connection);
+        return payload.organizations
+          .map(normalizeOpenPondOrganization)
+          .filter((organization): organization is OpenPondOrganization => Boolean(organization))
+          .filter((organization) => organization.status === "active");
+      },
+    })
+      .then(async (activeOrganizations) => {
+        if (cancelled) return;
+        if (activeOrganizations.length === 0) {
+          completeStartup();
+          return;
+        }
+
+        const currentDefaultStillActive =
+          Boolean(currentDefaultTeamId) &&
+          activeOrganizations.some((organization) => organization.teamId === currentDefaultTeamId);
+        if (currentDefaultStillActive) {
+          await preloadTeamAgents(currentDefaultTeamId);
+          completeStartup();
+          return;
+        }
+
+        const firstTeamId = activeOrganizations[0]?.teamId;
+        if (!firstTeamId) {
+          completeStartup();
+          return;
+        }
+        if (currentDefaultTeamId) {
+          await preloadTeamAgents(currentDefaultTeamId);
+          completeStartup();
+          return;
+        }
+        const latestDefaultTeamId = latestDefaultTeamIdRef.current;
+        if (latestDefaultTeamId && latestDefaultTeamId !== currentDefaultTeamId) {
+          completeStartup();
+          return;
+        }
+        const preloadAgentsPromise = preloadTeamAgents(firstTeamId);
+        defaultTeamSyncKeyRef.current = defaultTeamPreferenceSyncKey(
+          accountKey,
+          firstTeamId,
+          bootstrap.accountMeta.asOf ?? "initial",
+        );
+        const updatedPayload = await api.savePreferences(connection, { defaultTeamId: firstTeamId });
+        await preloadAgentsPromise;
+        const latestDefaultTeamIdAfterSave = latestDefaultTeamIdRef.current;
+        if (cancelled) {
+          if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== firstTeamId) {
+            void api
+              .savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave })
+              .then(applyBootstrapPayload)
+              .catch((defaultTeamError) => {
+                setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
+              });
+          }
+          return;
+        }
+        if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== firstTeamId) {
+          applyBootstrapPayload(
+            await api.savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave }),
+          );
+          completeStartup();
+          return;
+        }
+        if (!cancelled) {
+          applyBootstrapPayload(updatedPayload);
+          completeStartup();
+        }
+      })
+      .catch((defaultTeamError) => {
+        if (cancelled) return;
+        defaultTeamSyncKeyRef.current = null;
+        setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
+        completeStartup();
+      })
+      .finally(() => {
+        settled = true;
+      });
+
+    return () => {
+      cancelled = true;
+      if (!settled && defaultTeamSyncKeyRef.current === syncKey) {
+        defaultTeamSyncKeyRef.current = null;
+      }
+    };
+  }, [applyBootstrapPayload, bootstrap, completeStartup, connection, setBlockingStartupStage, setError]);
+
+  const load = useCallback(async () => {
+    setBlockingStartupStage("connecting");
+    const nextConnection = await resolveConnection();
+    setConnection((current) => (isSameConnection(current, nextConnection) ? current : nextConnection));
+    setBlockingStartupStage("account");
+    const payload = await api.bootstrap(nextConnection);
+    applyBootstrapPayload(payload);
+    completeStartup();
+    setError((current) => (current === "Failed to fetch" || current === "Event stream disconnected" ? null : current));
+  }, [applyBootstrapPayload, completeStartup, setBlockingStartupStage, setError]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryId: number | null = null;
+    const run = async (attempt: number) => {
+      try {
+        await load();
+      } catch (loadError) {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
+        const delay = Math.min(5000, 750 + attempt * 750);
+        retryId = window.setTimeout(() => void run(attempt + 1), delay);
+      }
+    };
+    void run(0);
+    return () => {
+      cancelled = true;
+      if (retryId !== null) window.clearTimeout(retryId);
+    };
+  }, [load, setError]);
+
+  const recoverConnection = useCallback(() => {
+    void load().catch(() => undefined);
+  }, [load]);
+
+  useRuntimeEvents({
+    connection,
+    setEvents,
+    setApprovals,
+    setError,
+    onDisconnected: recoverConnection,
+  });
+
+  useEffect(() => {
+    if (!connection || !bootstrap) {
+      profileRefreshCreatePipelineKeyRef.current = null;
+      return;
+    }
+    const refreshKey = latestReadyLocalCreatePipelineProfileRefreshKey(events);
+    if (!refreshKey || profileRefreshCreatePipelineKeyRef.current === refreshKey) return;
+    profileRefreshCreatePipelineKeyRef.current = refreshKey;
+    void api
+      .profileCurrent(connection)
+      .then((profile) => {
+        setBootstrap((current) => (current ? { ...current, profile } : current));
+      })
+      .catch((refreshError) => {
+        profileRefreshCreatePipelineKeyRef.current = null;
+        setError(refreshError instanceof Error ? refreshError.message : String(refreshError));
+      });
+  }, [bootstrap, connection, events, setError]);
+
+  const refreshOpenPondAccount = useCallback(() => {
+    if (!connection) return;
+    void api
+      .refreshOpenPondAccount(connection)
+      .then(({ account, accountMeta }) => {
+        setBootstrap((current) => (current ? { ...current, account, accountMeta } : current));
+      })
+      .catch((refreshError) => setError(refreshError instanceof Error ? refreshError.message : String(refreshError)));
+  }, [connection, setError]);
+
+  return {
+    appPreferences,
+    applyBootstrapPayload,
+    approvals,
+    bootstrap,
+    codexHistorySessions,
+    connection,
+    events,
+    refreshOpenPondAccount,
+    sessions,
+    startup: appStartupState(startupStage),
+    setAppPreferences,
+    setBootstrap,
+    setCodexHistorySessions,
+    setEvents,
+    setSessions,
+  };
+}
+
+export function startupSplashRemainingMs(elapsedMs: number): number {
+  if (elapsedMs >= STARTUP_SPLASH_SLOW_THRESHOLD_MS) return 0;
+  return Math.max(0, STARTUP_SPLASH_FAST_MINIMUM_MS - elapsedMs);
+}
+
+function defaultTeamPreferenceSyncKey(
+  accountKey: string,
+  defaultTeamId: string,
+  accountRefreshKey: string,
+): string {
+  return `${accountKey}::${defaultTeamId || "none"}::${accountRefreshKey}`;
+}

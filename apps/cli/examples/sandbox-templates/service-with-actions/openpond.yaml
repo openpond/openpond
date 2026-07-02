@@ -1,0 +1,67 @@
+schemaVersion: 1
+name: service-with-actions
+version: 0.1.0
+useCase: sandbox-template-example
+description: Long-lived service with one-off action commands.
+runtime:
+  base: node-bun-workspace
+resources:
+  cpu: 1
+  memoryGb: 1
+  diskGb: 4
+volumes:
+  - name: app-state
+    mountPath: /workspace/volumes/app-state
+    storageGb: 1
+    deleteOnSandboxDelete: false
+setup:
+  commands:
+    - mkdir -p artifacts volumes/app-state
+validation:
+  commands:
+    - test -f src/server.ts
+    - test -f scripts/smoke.sh
+    - test -f scripts/ingest.sh
+    - test -f scripts/snapshot.sh
+start:
+  command: bash scripts/smoke.sh
+  timeoutSeconds: 120
+  ports: []
+  artifactPaths:
+    - artifacts/smoke.json
+services:
+  - name: web
+    command: bun src/server.ts
+    ports:
+      - port: 3000
+        protocol: http
+        label: web
+        access: private
+        path: /
+actions:
+  - name: ingest
+    command: bash scripts/ingest.sh
+    timeoutSeconds: 120
+    ports: []
+    artifactPaths:
+      - artifacts/ingest.json
+  - name: snapshot
+    command: bash scripts/snapshot.sh
+    timeoutSeconds: 120
+    ports: []
+    artifactPaths:
+      - artifacts/snapshot.json
+inputs:
+  schema:
+    type: object
+    properties:
+      subject:
+        type: string
+        title: Subject
+        default: service action
+artifacts:
+  paths:
+    - artifacts/smoke.json
+network:
+  egress: restricted
+

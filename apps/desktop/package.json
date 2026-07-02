@@ -1,0 +1,14 @@
+{
+  "name": "@openpond/desktop",
+  "version": "0.0.5",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "dev": "bun run --cwd ../.. bundle:server && tsc -b && electron .",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "electron": "^39.2.7"
+  }
+}

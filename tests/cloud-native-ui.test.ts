@@ -1,0 +1,721 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { createElement, type Dispatch, type SetStateAction } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type {
+  CloudProject,
+  CloudWorkItem,
+  CloudWorkItemDetail,
+  CreatePipelineRequest,
+  LocalProject,
+  Session,
+} from "@openpond/contracts";
+import { emptyOpenPondProfileState } from "@openpond/contracts";
+
+import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
+import { buildInitialCreatePipelineSnapshot } from "../apps/web/src/lib/create-pipeline-request";
+import {
+  SidebarSectionList,
+  sidebarProjectClickAction,
+} from "../apps/web/src/components/sidebar/SidebarSectionList";
+import type { SidebarProps } from "../apps/web/src/components/sidebar/Sidebar.types";
+import { projectSelectionKey, type AppView, type SidebarProjectItem } from "../apps/web/src/lib/app-models";
+
+const NOW = "2026-06-17T00:00:00.000Z";
+
+const noop = () => undefined;
+const noopDispatch = (() => undefined) as Dispatch<SetStateAction<never>>;
+
+function cloudProject(overrides: Partial<CloudProject> = {}): CloudProject {
+  return {
+    id: "cloud_project_1",
+    teamId: "team_1",
+    name: "Cloud Repo",
+    slug: "cloud-repo",
+    sourceType: "github_repo",
+    sourceLabel: "openpond/cloud-repo",
+    defaultBranch: "main",
+    internalRepoPath: null,
+    manifestPath: null,
+    manifestHash: null,
+    syncedAt: NOW,
+    organizationName: "OpenPond",
+    organizationSlug: "openpond",
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function localProject(overrides: Partial<LocalProject> = {}): LocalProject {
+  return {
+    id: "local_project_1",
+    name: "Local Repo",
+    path: "/workspace/local-repo",
+    workspacePath: "/workspace/local-repo",
+    repoPath: "/workspace/local-repo",
+    source: "git",
+    sandboxTemplate: null,
+    linkedOpenPondApp: null,
+    linkedSandboxProject: null,
+    preferredSandboxAgentId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function chatSession(overrides: Partial<Session> = {}): Session {
+  return {
+    id: "session_1",
+    provider: "openpond",
+    title: "Feature chat",
+    appId: null,
+    appName: null,
+    workspaceKind: "local",
+    workspaceId: null,
+    workspaceName: null,
+    localProjectId: null,
+    cloudProjectId: null,
+    cloudTeamId: null,
+    cwd: "/workspace/local-repo",
+    codexThreadId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    status: "idle",
+    pinned: false,
+    archived: false,
+    order: 0,
+    ...overrides,
+  };
+}
+
+function cloudWorkItem(overrides: Partial<CloudWorkItem> = {}): CloudWorkItem {
+  return {
+    id: "work_item_1",
+    teamId: "team_1",
+    projectId: "cloud_project_1",
+    conversationId: "conversation_1",
+    title: "Implement Cloud follow-up",
+    status: "running",
+    sourceRef: "main",
+    baseSha: null,
+    latestRuntimeId: "runtime_1",
+    latestSandboxId: "sandbox_1",
+    latestTaskRunId: "task_run_1",
+    assignedAgentId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    archivedAt: null,
+    metadata: {},
+    ...overrides,
+  };
+}
+
+function cloudWorkItemDetail(workItem: CloudWorkItem): CloudWorkItemDetail {
+  return {
+    workItem,
+    messages: [
+      {
+        id: "message_user_1",
+        workItemId: workItem.id,
+        teamId: workItem.teamId,
+        projectId: workItem.projectId,
+        conversationId: workItem.conversationId ?? undefined,
+        role: "user",
+        body: "Polish the Cloud UI",
+        createdByUserId: "user_1",
+        createdAt: NOW,
+        metadata: {},
+      },
+      {
+        id: "message_assistant_1",
+        workItemId: workItem.id,
+        teamId: workItem.teamId,
+        projectId: workItem.projectId,
+        conversationId: workItem.conversationId ?? undefined,
+        role: "assistant",
+        body: "Updated the thread styling.",
+        createdByUserId: null,
+        createdAt: NOW,
+        metadata: {},
+      },
+    ],
+    activity: [
+      {
+        id: "activity_1",
+        workItemId: workItem.id,
+        teamId: workItem.teamId,
+        projectId: workItem.projectId,
+        kind: "task_progress",
+        summary: "Task is running.",
+        createdAt: NOW,
+        metadata: {},
+      },
+    ],
+    runtimeSessions: [],
+  };
+}
+
+function hostedCreatePipelineRequest(overrides: Partial<CreatePipelineRequest> = {}): CreatePipelineRequest {
+  return {
+    schemaVersion: "openpond.createPipeline.request.v1",
+    id: "create_request_cloud",
+    operation: "create",
+    surface: "hosted_create",
+    command: "/create",
+    objective: "Create a hosted release notes agent",
+    adapter: {
+      kind: "hosted",
+      sourceAuthority: "hosted_profile",
+      teamId: "team_1",
+      projectId: "cloud_project_1",
+      activeProfile: "default",
+      sourceRef: "main",
+      baseSha: "abc123",
+      workItemId: null,
+      confirmationPolicy: "always_require_plan_approval",
+    },
+    actor: { id: "sam", kind: "user", label: "Sam" },
+    scope: {
+      conversationId: "conversation_1",
+      workItemId: null,
+      projectId: "cloud_project_1",
+      targetProject: {
+        id: "cloud_project_1",
+        name: "Cloud Repo",
+        workspacePath: null,
+        sourceRef: "main",
+        baseSha: null,
+      },
+    },
+    context: {
+      messageIds: [],
+      conversationExcerpts: [],
+      attachments: [],
+      apps: [],
+      tools: [],
+      targetRepoAssumptions: ["cloud project: openpond/cloud-repo"],
+    },
+    targetAgent: {
+      agentId: null,
+      displayName: null,
+      defaultActionKey: "chat",
+    },
+    metadata: { source: "cloud_work_home" },
+    createdAt: NOW,
+    ...overrides,
+  };
+}
+
+function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
+  const project = localProject();
+  const cloud = cloudProject();
+  const workItem = cloudWorkItem({ projectId: cloud.id });
+  const localProjectRows = localProjectSidebarRows([project]);
+  const cloudProjectRows = cloudProjectSidebarRows([cloud]);
+  const chat = chatSession();
+  const setView = ((_value: SetStateAction<AppView>) => undefined) as Dispatch<SetStateAction<AppView>>;
+  const cloudProjectKey = projectSelectionKey("cloud", cloud.id);
+
+  return {
+    view: "cloud",
+    selectedAppId: null,
+    selectedProjectId: cloudProjectKey,
+    selectedSessionId: null,
+    selectedCloudWorkItemId: workItem.id,
+    account: null,
+    profile: emptyOpenPondProfileState(),
+    pinnedCollapsed: false,
+    projectsCollapsed: false,
+    cloudProjectsCollapsed: false,
+    chatsCollapsed: false,
+    archivedChatsOpen: false,
+    projectsExpanded: false,
+    cloudProjectsExpanded: false,
+    chatsExpanded: false,
+    sectionMenuOpen: "cloud",
+    dragItem: null,
+    pinnedRows: [],
+    pinnedSessions: [],
+    visibleLocalProjectRows: localProjectRows,
+    localProjectRows,
+    cloudProjectRows,
+    cloudWorkItemsByProjectId: {
+      [cloudProjectKey]: [workItem],
+    },
+    projectSessionRowsByProjectId: {},
+    sidebarProjectIdBySessionId: {},
+    runningSessionIds: new Set(),
+    visibleChatRows: [chat],
+    chatRows: [chat],
+    expandedProjectIds: new Set([cloudProjectKey]),
+    onSidebarResizeStart: noop,
+    setSidebarOpen: noopDispatch,
+    setView,
+    setSelectedAppId: noopDispatch,
+    setSelectedProjectId: noopDispatch,
+    setSelectedSessionId: noopDispatch,
+    setSearchOpen: noopDispatch,
+    setSectionMenuOpen: noopDispatch,
+    setSettingsSection: noopDispatch,
+    onTogglePinnedCollapsed: noop,
+    onToggleProjectsCollapsed: noop,
+    onToggleChatsCollapsed: noop,
+    setArchivedChatsOpen: noopDispatch,
+    setProjectsExpanded: noopDispatch,
+    setCloudProjectsExpanded: noopDispatch,
+    setChatsExpanded: noopDispatch,
+    beginNewChat: noop,
+    openCloudHome: noop,
+    createCloudEnvironment: noop,
+    selectCloudWorkItem: noop,
+    addProjectFolder: noop,
+    startProjectFromScratch: noop,
+    startCloudProjectFromScratch: noop,
+    moveProjectToCloud: noop,
+    removeProject: noop,
+    toggleProjectPinned: noop,
+    toggleSessionPinned: noop,
+    archiveSession: noop,
+    restoreSession: noop,
+    expandProject: noop,
+    toggleProjectExpanded: noop,
+    startPinnedDrag: noop,
+    clearSidebarDrag: noop,
+    previewPinnedDrop: noop,
+    commitPinnedDrop: noop,
+    commitPinnedPreviewDrop: noop,
+    ...overrides,
+  };
+}
+
+function localProjectSidebarRows(projects: LocalProject[]): SidebarProjectItem[] {
+  return projects.map((project, index) => ({
+    kind: "local" as const,
+    id: projectSelectionKey("local", project.id),
+    pinned: false,
+    order: index,
+    project,
+  }));
+}
+
+function cloudProjectSidebarRows(projects: CloudProject[]): SidebarProjectItem[] {
+  return projects.map((project, index) => ({
+    kind: "cloud" as const,
+    id: projectSelectionKey("cloud", project.id),
+    pinned: false,
+    order: index,
+    project,
+  }));
+}
+
+describe("Cloud native UI", () => {
+  test("renders Cloud Projects as project folders with grouped work items", () => {
+    const markup = renderToStaticMarkup(createElement(SidebarSectionList, sidebarProps()));
+    const localProjectsIndex = markup.indexOf(">Local Projects<");
+    const cloudProjectsIndex = markup.indexOf(">Cloud Projects<");
+    const chatsIndex = markup.indexOf(">Chats<");
+
+    expect(localProjectsIndex).toBeGreaterThan(-1);
+    expect(cloudProjectsIndex).toBeGreaterThan(localProjectsIndex);
+    expect(chatsIndex).toBeGreaterThan(-1);
+    expect(chatsIndex).toBeGreaterThan(cloudProjectsIndex);
+    const localProjectsSection = markup.slice(localProjectsIndex, cloudProjectsIndex);
+    const cloudProjectsSection = markup.slice(cloudProjectsIndex, chatsIndex);
+    expect(localProjectsSection).not.toContain("Cloud Repo");
+    expect(markup.slice(cloudProjectsIndex, chatsIndex)).toContain("Cloud Repo");
+    expect(markup).toContain('class="section-title-link"><span>Cloud Projects</span>');
+    expect(markup).toContain("Cloud Repo");
+    expect(markup).toContain("New task");
+    expect(markup).toContain("New Cloud Project");
+    expect(markup).toContain("Create environment");
+    expect(localProjectsSection).toContain('row-label">Local Repo</span><span class="sidebar-project-caret"');
+    expect(localProjectsSection).toContain("lucide-chevron-right");
+    expect(cloudProjectsSection).toContain('row-label">Cloud Repo</span><span class="sidebar-project-caret"');
+    expect(cloudProjectsSection).toContain("lucide-chevron-down");
+    expect(localProjectsSection.indexOf('aria-label="More project actions"')).toBeGreaterThan(
+      localProjectsSection.indexOf('aria-label="Pin project"'),
+    );
+    expect(localProjectsSection.indexOf('data-tooltip="New chat"')).toBeGreaterThan(
+      localProjectsSection.indexOf('aria-label="More project actions"'),
+    );
+    expect(markup).toContain("Implement Cloud follow-up");
+    expect(markup).not.toContain("Open project chat");
+    expect(markup).toContain('data-tooltip="New chat"');
+    expect(markup).toContain('aria-label="More project actions"');
+    expect(markup).not.toContain('data-tooltip="Move to Cloud"');
+    expect(markup).not.toContain("lucide-cloud-upload");
+    expect(markup).not.toContain("actions-3");
+    expect(markup).not.toContain("All tasks");
+    expect(markup).not.toContain("Use existing");
+    expect(markup).not.toContain("Start from GitHub repo");
+    expect(markup).not.toContain("Start from template");
+    expect(markup).not.toContain("Upload/link local project");
+  });
+
+  test("marks agent SDK projects with composite sidebar icons", () => {
+    const agentSdk = {
+      detected: true,
+      packageName: "openpond-agent-sdk",
+      rootPath: null,
+      manifestPath: "package.json",
+      version: "^1.0.0",
+      dependencyType: "dependencies" as const,
+    };
+    const localProjectRows = localProjectSidebarRows([
+      localProject({ agentSdk }),
+    ]);
+    const cloudProjectRows = cloudProjectSidebarRows([
+      cloudProject({ agentSdk }),
+    ]);
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: null,
+        selectedCloudWorkItemId: null,
+        localProjectRows,
+        visibleLocalProjectRows: localProjectRows,
+        cloudProjectRows,
+        cloudWorkItemsByProjectId: {},
+        expandedProjectIds: new Set([localProjectRows[0]!.id]),
+      })),
+    );
+
+    expect(markup.match(/project-kind-icon-agent/g)?.length).toBe(2);
+    expect(markup).toContain("lucide-folder-open");
+    expect(markup).toContain("lucide-cloud");
+  });
+
+  test("selects sidebar projects only from a draft chat", () => {
+    expect(sidebarProjectClickAction({ view: "chat", selectedSessionId: null })).toBe("select_draft_project");
+    expect(sidebarProjectClickAction({ view: "chat", selectedSessionId: "session_1" })).toBe("toggle_project");
+    expect(sidebarProjectClickAction({ view: "apps", selectedSessionId: null })).toBe("toggle_project");
+  });
+
+  test("keeps Cloud project actions mounted while the Cloud Projects body is collapsed", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({ cloudProjectsCollapsed: true, sectionMenuOpen: "cloud" })),
+    );
+    const cloudProjectsIndex = markup.indexOf(">Cloud Projects<");
+    const chatsIndex = markup.indexOf(">Chats<");
+    const cloudSection = markup.slice(cloudProjectsIndex, chatsIndex);
+
+    expect(cloudProjectsIndex).toBeGreaterThan(-1);
+    expect(cloudSection).toContain("New Cloud Project");
+    expect(cloudSection).toContain("New task");
+    expect(cloudSection).toContain("Create environment");
+    expect(cloudSection).not.toContain("Cloud Repo");
+    expect(cloudSection).not.toContain("Implement Cloud follow-up");
+  });
+
+  test("keeps Local Projects and Cloud Projects Show more independent", () => {
+    const localProjects = Array.from({ length: 6 }, (_, index) =>
+      localProject({
+        id: `local_project_${index + 1}`,
+        name: `Local Repo ${index + 1}`,
+      }),
+    );
+    const cloudProjects = Array.from({ length: 6 }, (_, index) =>
+      cloudProject({
+        id: `cloud_project_${index + 1}`,
+        name: `Cloud Repo ${index + 1}`,
+      }),
+    );
+    const localProjectRows = localProjectSidebarRows(localProjects);
+    const cloudProjectRows = cloudProjectSidebarRows(cloudProjects);
+
+    const collapsedMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: null,
+        selectedCloudWorkItemId: null,
+        localProjectRows,
+        visibleLocalProjectRows: localProjectRows.slice(0, 5),
+        cloudProjectRows,
+        cloudWorkItemsByProjectId: {},
+        expandedProjectIds: new Set(),
+      })),
+    );
+    expect(collapsedMarkup).toContain("Local Repo 5");
+    expect(collapsedMarkup).not.toContain("Local Repo 6");
+    expect(collapsedMarkup).toContain("Cloud Repo 5");
+    expect(collapsedMarkup).not.toContain("Cloud Repo 6");
+    expect(collapsedMarkup.match(/Show more/g)?.length).toBe(2);
+
+    const localExpandedMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: null,
+        selectedCloudWorkItemId: null,
+        projectsExpanded: true,
+        cloudProjectsExpanded: false,
+        localProjectRows,
+        visibleLocalProjectRows: localProjectRows,
+        cloudProjectRows,
+        cloudWorkItemsByProjectId: {},
+        expandedProjectIds: new Set(),
+      })),
+    );
+    expect(localExpandedMarkup).toContain("Local Repo 6");
+    expect(localExpandedMarkup).not.toContain("Cloud Repo 6");
+
+    const cloudExpandedMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: null,
+        selectedCloudWorkItemId: null,
+        projectsExpanded: false,
+        cloudProjectsExpanded: true,
+        localProjectRows,
+        visibleLocalProjectRows: localProjectRows.slice(0, 5),
+        cloudProjectRows,
+        cloudWorkItemsByProjectId: {},
+        expandedProjectIds: new Set(),
+      })),
+    );
+    expect(cloudExpandedMarkup).not.toContain("Local Repo 6");
+    expect(cloudExpandedMarkup).toContain("Cloud Repo 6");
+  });
+
+  test("reveals Cloud work items only when the stable cloud project key is expanded", () => {
+    const cloud = cloudProject();
+    const workItem = cloudWorkItem({ projectId: cloud.id });
+    const cloudProjectRows = cloudProjectSidebarRows([cloud]);
+    const cloudProjectKey = projectSelectionKey("cloud", cloud.id);
+    const cloudWorkItemsByProjectId = { [cloudProjectKey]: [workItem] };
+
+    const rawIdMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: cloudProjectKey,
+        selectedCloudWorkItemId: workItem.id,
+        cloudProjectRows,
+        cloudWorkItemsByProjectId,
+        expandedProjectIds: new Set([cloud.id]),
+      })),
+    );
+    expect(rawIdMarkup).toContain("Cloud Repo");
+    expect(rawIdMarkup).not.toContain("Implement Cloud follow-up");
+
+    const stableKeyMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: cloudProjectKey,
+        selectedCloudWorkItemId: workItem.id,
+        cloudProjectRows,
+        cloudWorkItemsByProjectId,
+        expandedProjectIds: new Set([cloudProjectKey]),
+      })),
+    );
+    expect(stableKeyMarkup).toContain("Cloud Repo");
+    expect(stableKeyMarkup).toContain("Implement Cloud follow-up");
+  });
+
+  test("renders Cloud thread with native chat classes and no web-only header actions", () => {
+    const workItem = cloudWorkItem();
+    const markup = renderToStaticMarkup(
+      createElement(CloudWorkView, {
+        projects: [cloudProject()],
+        workItems: [workItem],
+        selectedWorkItem: workItem,
+        detail: cloudWorkItemDetail(workItem),
+        loading: false,
+        actionBusy: false,
+        connection: null,
+        error: null,
+        model: "openpond-chat",
+        showToast: noop,
+        onBack: noop,
+        onModelChange: noop,
+        onSetupCloudProject: noop,
+        onCreateWork: async () => undefined,
+        onSelectWorkItem: noop,
+        onSendMessage: async () => undefined,
+        onHandleBackground: async () => undefined,
+        onCancelCreatePlan: async () => undefined,
+        onCancelTask: async () => undefined,
+        onShowFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain('class="cloud-work-view thread"');
+    expect(markup).toContain('class="cloud-thread-body"');
+    expect(markup).toContain('class="cloud-thread-timeline"');
+    expect(markup).toContain('class="cloud-thread-inline-nav"');
+    expect(markup).toContain('class="cloud-message user"');
+    expect(markup).toContain('class="cloud-message assistant"');
+    expect(markup).toContain('class="cloud-thread-composer"');
+    expect(markup).toContain(">Files<");
+    expect(markup).toContain("Stop task");
+    expect(markup).not.toContain("cloud-thread-topbar");
+    expect(markup).not.toContain("Loading task thread");
+    expect(markup).not.toContain(">Archive<");
+    expect(markup).not.toContain(">Share<");
+    expect(markup).not.toContain("Open in cloud");
+  });
+
+  test("renders hosted create pipeline plan review in Cloud thread", () => {
+    const createPipelineRequest = hostedCreatePipelineRequest({
+      metadata: {
+        source: "cloud_work_home",
+        actionShape: {
+          mode: "chat_and_direct_actions",
+          label: "Chat plus direct action",
+          detail: "Expose a default chat route and a repeatable direct action when the generated source has a tool-like run.",
+          defaultActionKey: "chat",
+          directActionHint: "Create a direct action only for the repeatable tool-like behavior.",
+          artifactPolicy: "Persist trace and run summary; declare output artifacts when the direct action produces files.",
+        },
+      },
+      context: {
+        messageIds: ["message_1"],
+        conversationExcerpts: [],
+        attachments: [
+          {
+            id: "attachment_1",
+            name: "release-notes.txt",
+            mediaType: "text/plain",
+            ref: "chat-attachment:attachment_1",
+          },
+        ],
+        apps: [
+          {
+            id: "github",
+            name: "GitHub",
+            connectionId: null,
+            required: true,
+          },
+        ],
+        tools: [
+          {
+            name: "github.search_pull_requests",
+            inputSummary: "Search merged pull requests",
+            outputSummary: "Found 4 merged PRs.",
+            artifactRefs: ["artifact://pr-list"],
+            sideEffects: ["action completed"],
+          },
+        ],
+        targetRepoAssumptions: ["cloud project: openpond/cloud-repo"],
+      },
+    });
+    const createPipeline = buildInitialCreatePipelineSnapshot(createPipelineRequest);
+    expect(createPipeline.plan?.approvalId).toBeTruthy();
+    expect(createPipeline.approvalIds).toEqual([createPipeline.plan?.approvalId]);
+    const workItem = cloudWorkItem({
+      status: "backlog",
+      title: createPipelineRequest.objective,
+      createPipelineRequest,
+      createPipeline,
+    });
+    const baseDetail = cloudWorkItemDetail(workItem);
+    const detail = {
+      ...baseDetail,
+      messages: [
+        {
+          id: "message_create_pipeline_link",
+          workItemId: workItem.id,
+          teamId: workItem.teamId,
+          projectId: workItem.projectId,
+          conversationId: workItem.conversationId ?? undefined,
+          role: "system" as const,
+          body: "Create pipeline metadata linked to this work item.",
+          createdByUserId: null,
+          createdAt: NOW,
+          metadata: {
+            source: "openpond_app_cloud_create_pipeline_link",
+            hidden: true,
+          },
+        },
+        ...baseDetail.messages,
+      ],
+      createPipelineRequest,
+      createPipeline,
+    };
+    const markup = renderToStaticMarkup(
+      createElement(CloudWorkView, {
+        projects: [cloudProject()],
+        workItems: [workItem],
+        selectedWorkItem: workItem,
+        detail,
+        loading: false,
+        actionBusy: false,
+        connection: null,
+        error: null,
+        model: "openpond-chat",
+        showToast: noop,
+        onBack: noop,
+        onModelChange: noop,
+        onSetupCloudProject: noop,
+        onCreateWork: async () => undefined,
+        onSelectWorkItem: noop,
+        onSendMessage: async () => undefined,
+        onHandleBackground: async () => undefined,
+        onCancelCreatePlan: async () => undefined,
+        onCancelTask: async () => undefined,
+        onShowFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("Agent plan review");
+    expect(markup).toContain("Create a hosted release notes agent");
+    expect(markup).toContain("Hosted profile");
+    expect(markup).toContain("Action shape");
+    expect(markup).toContain("Chat plus direct action");
+    expect(markup).toContain("agents/create-a-hosted-release-notes-agent");
+    expect(markup).not.toContain("agent/agent.ts");
+    expect(markup).toContain("release-notes.txt");
+    expect(markup).toContain("GitHub");
+    expect(markup).toContain("github.search_pull_requests");
+    expect(markup).toContain("Requirements");
+    expect(markup).toContain("Workflow evidence");
+    expect(markup).toContain("Side effects");
+    expect(markup).toContain("action completed");
+    expect(markup).toContain("artifact://pr-list");
+    expect(markup).toContain("Confirm plan");
+    expect(markup).toContain("Edit plan");
+    expect(markup).toContain("Cancel");
+    expect(markup).not.toContain("Create pipeline metadata linked to this work item.");
+  });
+
+  test("silently hydrates Cloud thread details without loading copy", () => {
+    const workItem = cloudWorkItem({ title: "Hydrate without flashing" });
+    const markup = renderToStaticMarkup(
+      createElement(CloudWorkView, {
+        projects: [cloudProject()],
+        workItems: [workItem],
+        selectedWorkItem: workItem,
+        detail: null,
+        loading: true,
+        actionBusy: false,
+        connection: null,
+        error: null,
+        model: "openpond-chat",
+        showToast: noop,
+        onBack: noop,
+        onModelChange: noop,
+        onSetupCloudProject: noop,
+        onCreateWork: async () => undefined,
+        onSelectWorkItem: noop,
+        onSendMessage: async () => undefined,
+        onHandleBackground: async () => undefined,
+        onCancelCreatePlan: async () => undefined,
+        onCancelTask: async () => undefined,
+        onShowFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("Hydrate without flashing");
+    expect(markup).not.toContain("Loading task thread");
+  });
+
+  test("keeps Cloud thread spacing and composer styles aligned with native chat", () => {
+    const css = readFileSync(
+      new URL("../apps/web/src/styles/cloud/cloud-work.css", import.meta.url),
+      "utf8",
+    );
+
+    expect(css).toContain("grid-template-rows: minmax(0, 1fr) auto;");
+    expect(css).toContain("padding: 22px max(48px, calc((100% - 960px) / 2)) 132px;");
+    expect(css).toContain("max-width: 960px;");
+    expect(css).toContain("max-width: min(620px, 72%);");
+    expect(css).toContain("width: min(736px, calc(100% - 80px));");
+    expect(css).toContain("background: #2b2b2b;");
+    expect(css).not.toContain(".cloud-thread-topbar");
+    expect(css).toContain(".cloud-message.assistant");
+  });
+});

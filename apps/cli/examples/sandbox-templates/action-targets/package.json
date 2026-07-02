@@ -1,0 +1,13 @@
+{
+  "name": "openpond-example-action-targets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "default-report": "bash scripts/default-report.sh",
+    "summarize": "bash scripts/summarize.sh",
+    "export-json": "bash scripts/export-json.sh",
+    "validate": "openpond sandbox-template validate --file openpond.yaml"
+  }
+}
+

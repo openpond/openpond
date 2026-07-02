@@ -1,0 +1,10 @@
+PackageIdentifier: OpenPond.OpenPondApp
+PackageVersion: 0.1.0
+InstallerLocale: en-US
+InstallerType: nullsoft
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/openpond/openpond-app/releases/download/v0.1.0/OpenPond%20App%20Setup%200.1.0.exe
+    InstallerSha256: 660378EEBBC580EF6D1AC87E64F04ADEF0987B1A46A073070DEF1B201DC624E2
+ManifestType: installer
+ManifestVersion: 1.9.0

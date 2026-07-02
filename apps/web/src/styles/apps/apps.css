@@ -1,0 +1,493 @@
+.connected-apps-view {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  width: min(960px, calc(100% - 72px));
+  min-width: 0;
+  justify-self: center;
+  padding: 42px 0 40px;
+}
+
+.connected-apps-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  align-items: start;
+  gap: 24px;
+  min-width: 0;
+}
+
+.connected-apps-header h1,
+.connected-apps-hero h2 {
+  margin: 0;
+  color: #f4f4f5;
+  letter-spacing: 0;
+}
+
+.connected-apps-header h1 {
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 650;
+}
+
+.connected-apps-header p {
+  margin: 6px 0 0;
+  color: #9b9b9b;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.connected-apps-search {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.connected-apps-search svg {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  color: #6f6f6f;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.connected-apps-search input {
+  width: 100%;
+  height: 38px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  background: #050505;
+  color: #f3f3f3;
+  padding: 0 14px 0 38px;
+  font-size: 13px;
+  outline: none;
+}
+
+.connected-apps-search input:focus {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.connected-apps-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 40px;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #a76b42, #8fb7d9 48%, #38a39d);
+  padding: 28px 32px;
+}
+
+.connected-apps-hero-copy {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  max-width: 390px;
+  color: #fff;
+}
+
+.connected-apps-hero-icon,
+.connected-apps-context-card,
+.connected-app-icon {
+  display: grid;
+  place-items: center;
+}
+
+.connected-apps-hero-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.connected-apps-hero-icon .connected-app-icon {
+  background: transparent;
+}
+
+.connected-apps-hero h2 {
+  margin-top: 46px;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 560;
+}
+
+.connected-apps-hero p {
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.connected-apps-context-card {
+  align-content: start;
+  justify-items: stretch;
+  min-height: 190px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  padding: 18px;
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.18);
+}
+
+.connected-apps-context-card strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.connected-apps-context-card div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+
+.connected-apps-context-card span {
+  min-width: 0;
+  border-radius: 7px;
+  padding: 8px 11px;
+  color: #111;
+}
+
+.connected-apps-context-card .files {
+  background: #dff0fb;
+}
+
+.connected-apps-context-card .chat {
+  background: #cef8df;
+}
+
+.connected-apps-context-card .oauth {
+  background: #fff2bd;
+}
+
+.connected-apps-context-card .mcp {
+  background: #ece6fb;
+}
+
+.connected-apps-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.connected-apps-filters button {
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #d1d1d1;
+  padding: 0 17px;
+  font-size: 14px;
+}
+
+.connected-apps-filters button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.connected-apps-filters button.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.connected-apps-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 44px;
+  row-gap: 2px;
+  min-width: 0;
+}
+
+.connected-app-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 8px 6px;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+
+.connected-app-row:hover,
+.connected-app-row:focus-visible {
+  background: rgba(255, 255, 255, 0.055);
+  outline: none;
+}
+
+.connected-app-row > svg {
+  color: #686868;
+}
+
+.connected-app-row-main {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.connected-app-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: #050505;
+}
+
+.connected-app-icon img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.connected-app-icon.app-google img,
+.connected-app-icon.app-slack img,
+.connected-app-icon.app-slack_oauth img,
+.connected-app-icon.app-microsoft_teams img,
+.connected-app-icon.app-microsoft_teams_oauth img {
+  width: 19px;
+  height: 19px;
+}
+
+.connected-app-icon.app-mcp {
+  background: #0f172a;
+}
+
+.connected-app-icon.app-mcp img {
+  width: 22px;
+  height: 22px;
+}
+
+.connected-app-copy,
+.connected-app-title {
+  display: block;
+  min-width: 0;
+}
+
+.connected-app-title {
+  color: #f4f4f5;
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 520;
+}
+
+.connected-app-title strong,
+.connected-app-title span,
+.connected-app-copy > span:last-child {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connected-app-title span {
+  margin-top: 1px;
+  color: #777;
+  font-size: 11px;
+  font-weight: 450;
+}
+
+.connected-app-copy > span:last-child {
+  margin-top: 3px;
+  color: #777;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.connected-apps-empty {
+  grid-column: 1 / -1;
+  min-height: 80px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #888;
+  font-size: 13px;
+}
+
+.connected-app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.68);
+  padding: 20px;
+}
+
+.connected-app-dialog {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  width: min(480px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #292929;
+  color: #f5f5f5;
+  padding: 32px 24px 24px;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45);
+}
+
+.connected-app-dialog-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #b8b8b8;
+  padding: 0;
+}
+
+.connected-app-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.connected-app-dialog-close:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.24);
+  outline-offset: 2px;
+}
+
+.connected-app-dialog-identity,
+.connection-dots,
+.connected-app-approval,
+.connected-app-dialog-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.connected-app-dialog-identity {
+  gap: 14px;
+  padding-top: 2px;
+}
+
+.openpond-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  background: #050505;
+}
+
+.openpond-mark img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.connected-app-dialog-identity .connected-app-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+}
+
+.connected-app-dialog-identity .connected-app-icon img {
+  width: 25px;
+  height: 25px;
+}
+
+.connection-dots {
+  gap: 5px;
+}
+
+.connection-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.connected-app-dialog h2 {
+  margin: 0;
+  text-align: center;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.connected-app-approval {
+  gap: 7px;
+  color: #35d680;
+  font-size: 14px;
+}
+
+.connected-app-dialog-body {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+}
+
+.connected-app-dialog-body section {
+  padding: 14px 16px;
+}
+
+.connected-app-dialog-body section + section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.connected-app-dialog-body h3 {
+  margin: 0 0 6px;
+  color: #f0f0f0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.connected-app-dialog-body p {
+  margin: 0;
+  color: #b8b8b8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.connected-app-dialog-primary {
+  gap: 7px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: #f5f5f5;
+  color: #222;
+  font-size: 14px;
+}
+
+.connected-app-dialog-primary:hover {
+  background: #dedede;
+}
+
+@media (max-width: 840px) {
+  .connected-apps-view {
+    width: min(100% - 28px, 680px);
+    padding-top: 24px;
+  }
+
+  .connected-apps-header,
+  .connected-apps-hero,
+  .connected-apps-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .connected-apps-context-card {
+    display: none;
+  }
+
+  .connected-apps-hero h2 {
+    margin-top: 30px;
+  }
+}

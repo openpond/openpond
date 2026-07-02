@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+packages/agent-sdk/examples/*/node_modules/
+
+# Environment
+.env
+.env.*
+apps/*/.env
+apps/*/.env.*
+packages/*/.env
+packages/*/.env.*
+packages/agent-sdk/examples/*/.env
+packages/agent-sdk/examples/*/.env.*
+
+# Build outputs
+dist/
+build/
+coverage/
+.phase5-profile-test/
+.smoke-home/
+.smoke-profile/
+.next/
+out/
+release-assets/
+release-smoke-artifacts/
+release/
+apps/*/dist/
+apps/*/build/
+!apps/desktop/build/
+!apps/desktop/build/**
+apps/*/coverage/
+apps/*/.next/
+apps/*/out/
+apps/*/release-assets/
+apps/*/release/
+packages/*/dist/
+packages/*/build/
+packages/*/coverage/
+packages/*/.next/
+packages/*/out/
+packages/*/release-assets/
+packages/*/release/
+apps/cli/artifacts/
+apps/cli/runs/
+
+# Generated TypeScript state
+*.tsbuildinfo
+
+# Package artifacts
+*.tgz
+
+# Local planning docs
+docs/working-docs/
+docs/staging/
+
+# Logs
+*.log
+tmp-*.png
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

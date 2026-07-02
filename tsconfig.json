@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/cloud" },
+    { "path": "packages/contracts" },
+    { "path": "packages/codex-provider" },
+    { "path": "packages/runtime" },
+    { "path": "apps/server" },
+    { "path": "apps/web" },
+    { "path": "apps/terminal" },
+    { "path": "apps/desktop" }
+  ]
+}

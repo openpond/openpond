@@ -1,0 +1,17 @@
+{
+  "name": "water-estimator-agent-sdk-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openpond-agent-sdk": "file:../..",
+    "zod": "^4.1.11"
+  },
+  "scripts": {
+    "agent:inspect": "openpond-agent inspect --json",
+    "agent:validate": "openpond-agent validate",
+    "agent:build": "openpond-agent build",
+    "agent:eval": "openpond-agent eval",
+    "agent:check": "openpond-agent eval --json"
+  }
+}

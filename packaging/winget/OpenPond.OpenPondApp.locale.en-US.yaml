@@ -1,0 +1,9 @@
+PackageIdentifier: OpenPond.OpenPondApp
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: OpenPond
+PackageName: OpenPond App
+ShortDescription: OpenPond desktop and local server app.
+License: Proprietary
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

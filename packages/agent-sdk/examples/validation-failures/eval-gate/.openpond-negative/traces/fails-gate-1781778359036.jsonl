@@ -1,0 +1,4 @@
+{"schemaVersion":1,"schema":"openpond.agent.trace.v1","kind":"event","name":"action.started","payload":{"action":"chat"},"timestamp":"2026-06-18T10:25:59.035Z"}
+{"schemaVersion":1,"schema":"openpond.agent.trace.v1","kind":"event","name":"workflow.started","payload":{"name":"reply","workflow":"reply"},"timestamp":"2026-06-18T10:25:59.036Z"}
+{"schemaVersion":1,"schema":"openpond.agent.trace.v1","kind":"event","name":"workflow.completed","payload":{"name":"reply","durationMs":1},"timestamp":"2026-06-18T10:25:59.036Z"}
+{"schemaVersion":1,"schema":"openpond.agent.trace.v1","kind":"event","name":"action.completed","payload":{"action":"chat","intent":"reply"},"timestamp":"2026-06-18T10:25:59.036Z"}

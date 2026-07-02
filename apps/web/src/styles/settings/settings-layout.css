@@ -1,0 +1,133 @@
+.settings-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.settings-window-controls {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.settings-drag-region {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 300px;
+  height: 43px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.settings-sidebar {
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: #101010;
+  padding: 12px 7px 0;
+}
+
+.settings-shell.platform-macos .settings-sidebar {
+  padding-top: 43px;
+}
+
+.settings-back {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #8e8e8e;
+  padding: 0 10px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.settings-back span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-back:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-nav {
+  display: grid;
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.settings-nav-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 29px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #f5f5f5;
+  padding: 0 10px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.settings-nav-item.active {
+  background: #2a2a2a;
+}
+
+.settings-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 64px max(48px, 12vw);
+  scrollbar-width: none;
+}
+
+.settings-content::-webkit-scrollbar {
+  display: none;
+}
+
+.account-settings {
+  display: grid;
+  gap: 28px;
+  max-width: 760px;
+}
+
+.account-settings h1 {
+  margin: 0 0 24px;
+  color: #f7f7f7;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.account-settings-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.account-settings-title h1 {
+  margin: 0;
+}

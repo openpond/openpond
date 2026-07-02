@@ -1,0 +1,51 @@
+.voice-input-control {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.voice-input-control > button {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.voice-input-control > button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.voice-input-control.recording,
+.voice-input-control > button.recording {
+  color: #ff7777;
+}
+
+.voice-input-status {
+  position: absolute;
+  z-index: 90;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(320px, 76vw);
+  border-radius: 9px;
+  background: #191919;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.46);
+  color: #f2f2f2;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  pointer-events: none;
+  text-align: left;
+}
+
+.cloud-composer-mic.voice-input-control > button {
+  border-radius: inherit;
+}

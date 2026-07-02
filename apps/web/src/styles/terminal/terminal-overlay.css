@@ -1,0 +1,268 @@
+.guake-terminal-overlay {
+  position: relative;
+  z-index: 30;
+  min-width: 0;
+  min-height: 0;
+  height: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.main-pane.terminal-open > .guake-terminal-overlay {
+  height: 100%;
+}
+
+.guake-terminal-panel {
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: none;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(100%);
+  transition:
+    transform 190ms ease,
+    opacity 120ms ease,
+    visibility 0s linear 190ms;
+  visibility: hidden;
+}
+
+.guake-terminal-overlay.open .guake-terminal-panel {
+  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.42);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition:
+    transform 190ms ease,
+    opacity 120ms ease;
+  visibility: visible;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.guake-terminal-tabs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  padding: 5px 8px;
+}
+
+.guake-terminal-tab-list {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(64vw, 760px);
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.guake-terminal-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.guake-terminal-tab {
+  display: inline-flex;
+  align-items: center;
+  min-width: 118px;
+  max-width: 188px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #9d9d9d;
+  overflow: hidden;
+}
+
+.guake-terminal-tab.active,
+.guake-terminal-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+}
+
+.guake-terminal-tab-main {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 6px 0 8px;
+}
+
+.terminal-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 999px;
+  background: #7b8492;
+}
+
+.terminal-status-dot.running {
+  background: #62d26f;
+}
+
+.terminal-status-dot.connecting {
+  background: #f5c451;
+}
+
+.terminal-status-dot.exited,
+.terminal-status-dot.error {
+  background: #ff706a;
+}
+
+.guake-terminal-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.guake-terminal-tab-close,
+.guake-terminal-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #8d8d8d;
+  padding: 0;
+}
+
+.guake-terminal-tab-close {
+  width: 24px;
+  height: 100%;
+}
+
+.guake-terminal-tab-close:hover,
+.guake-terminal-icon-button:hover {
+  color: #f3f3f3;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.guake-terminal-icon-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.guake-terminal-spacer {
+  flex: 1 1 auto;
+  min-width: 10px;
+}
+
+.guake-terminal-cwd,
+.guake-terminal-error {
+  min-width: 0;
+  max-width: min(38vw, 560px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.guake-terminal-cwd {
+  color: var(--muted);
+}
+
+.guake-terminal-error {
+  color: #ff8a86;
+}
+
+.guake-terminal-body {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #0f0f0f;
+}
+
+.guake-terminal-pane {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guake-terminal-pane.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.guake-terminal-pane .xterm {
+  height: 100%;
+  padding: 10px 12px;
+}
+
+.guake-terminal-pane .xterm-viewport {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.guake-terminal-pane .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.guake-terminal-pane .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.guake-terminal-pane .xterm-viewport::-webkit-scrollbar-thumb {
+  border: 3px solid #0f0f0f;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.guake-terminal-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 8px 11px;
+  transform: translate(-50%, -50%);
+}
+
+.guake-terminal-empty:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--panel-hover);
+}
+
+@media (max-width: 760px) {
+  .main-pane {
+    --terminal-panel-height: clamp(200px, 42vh, 360px);
+  }
+
+  .guake-terminal-tab-list {
+    max-width: calc(100vw - 116px);
+  }
+
+  .guake-terminal-tab {
+    min-width: 104px;
+    max-width: 148px;
+  }
+
+  .guake-terminal-cwd,
+  .guake-terminal-error {
+    display: none;
+  }
+}

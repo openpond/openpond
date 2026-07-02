@@ -1,0 +1,52 @@
+.send-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 15px;
+  background: #a7a7a7;
+  color: #202020;
+}
+
+.send-button:hover:not(:disabled) {
+  background: #efefef;
+}
+
+.send-button.stop-button {
+  background: #3a3a3a;
+  color: #fff;
+}
+
+.send-button.stop-button:hover:not(:disabled) {
+  background: #4a4a4a;
+}
+
+.send-button.stop-button svg {
+  display: block;
+  transform: translateY(-0.25px);
+}
+
+.send-button:disabled {
+  opacity: 0.42;
+}
+
+.error-line {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  gap: 7px;
+  max-width: min(736px, calc(100% - 108px));
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 15px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #ff9d9d;
+  font-size: 12px;
+}
+
+.main-pane.chat-start .error-line {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+}

@@ -1,0 +1,14 @@
+{
+  "name": "openpond-example-service-with-actions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "bash scripts/smoke.sh",
+    "dev": "bun src/server.ts",
+    "ingest": "bash scripts/ingest.sh",
+    "snapshot": "bash scripts/snapshot.sh",
+    "validate": "openpond sandbox-template validate --file openpond.yaml"
+  }
+}
+

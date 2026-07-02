@@ -1,0 +1,446 @@
+.account-list {
+  overflow: hidden;
+}
+
+.account-list-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: #f5f5f5;
+  font-size: 13px;
+}
+
+.account-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.account-row:last-child {
+  border-bottom: 0;
+}
+
+.profile-summary-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.profile-summary-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.55fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.profile-summary-message {
+  min-width: 0;
+  color: #d5d5d5;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.profile-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 9px 10px;
+}
+
+.profile-metric span,
+.profile-footline {
+  color: #9b9b9b;
+  font-size: 11px;
+}
+
+.profile-metric strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f2f2f2;
+  font-size: 12px;
+  font-weight: 540;
+}
+
+.profile-change-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profile-change-list span {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(6, 182, 212, 0.18);
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.08);
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #b9eff6;
+  font-size: 11px;
+}
+
+.profile-plan-review-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.profile-plan-review-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(58, 163, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(58, 163, 255, 0.08);
+  padding: 8px 9px;
+}
+
+.profile-plan-review-item svg {
+  margin-top: 1px;
+  color: #77bdff;
+}
+
+.profile-plan-review-item span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-plan-review-item strong,
+.profile-plan-review-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-plan-review-item strong {
+  color: #eef6ff;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.profile-plan-review-item small {
+  color: #a7c8ef;
+  font-size: 11px;
+}
+
+.profile-footline.warning {
+  color: #ffad7d;
+}
+
+.profile-control-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.profile-control-panel.inline {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.profile-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.6fr);
+  gap: 10px;
+}
+
+.profile-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--cyan);
+  font-weight: 650;
+  overflow: hidden;
+}
+
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.account-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.account-details strong,
+.account-details span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-details strong {
+  color: #f6f6f6;
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.account-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.active-pill,
+.account-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border-radius: 12px;
+  padding: 0 9px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.active-pill {
+  background: rgba(58, 163, 255, 0.14);
+  color: #77bdff;
+}
+
+.inline-action {
+  min-height: 24px;
+  border-radius: 12px;
+  padding: 0 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.account-state {
+  background: #242424;
+  color: #bdbdbd;
+}
+
+.account-state.signed_in {
+  background: rgba(80, 200, 120, 0.13);
+  color: #8ddfa8;
+}
+
+.account-state.signed_out,
+.account-state.auth_error {
+  background: rgba(255, 122, 47, 0.13);
+  color: #ffad7d;
+}
+
+.account-state.ready {
+  background: rgba(80, 200, 120, 0.13);
+  color: #8ddfa8;
+}
+
+.account-state.warning {
+  background: rgba(255, 196, 87, 0.14);
+  color: #ffd38a;
+}
+
+.account-state.loading {
+  background: rgba(58, 163, 255, 0.14);
+  color: #77bdff;
+}
+
+.account-state.disabled {
+  background: rgba(255, 255, 255, 0.07);
+  color: #858585;
+}
+
+.empty-account-list {
+  display: grid;
+  gap: 5px;
+  padding: 18px 16px;
+}
+
+.empty-account-list strong {
+  color: #f5f5f5;
+  font-size: 14px;
+}
+
+.product-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.product-row:last-child {
+  border-bottom: 0;
+}
+
+.product-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.product-row strong,
+.product-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-row strong {
+  color: #f6f6f6;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.profile-agent-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1.2fr) minmax(0, 1fr) auto 18px;
+  justify-content: stretch;
+}
+
+.profile-agent-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-agent-meta span {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 4px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cfcfcf;
+}
+
+.settings-footnote {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 16px;
+}
+
+.settings-footnote.warning {
+  border-color: rgba(255, 122, 47, 0.24);
+}
+
+.settings-footnote strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d9d9d9;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.diagnostics-log-panel {
+  overflow: hidden;
+}
+
+.diagnostics-log-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.diagnostics-log-viewer {
+  display: grid;
+  align-content: start;
+  max-height: min(46vh, 420px);
+  min-height: 260px;
+  overflow: auto;
+  background: #0f0f0f;
+  scrollbar-color: #424242 transparent;
+}
+
+.diagnostics-log-entry {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 10px;
+  min-width: max-content;
+  padding: 5px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  content-visibility: auto;
+  contain-intrinsic-size: 26px;
+}
+
+.diagnostics-log-source {
+  color: #8f8f8f;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: nowrap;
+}
+
+.diagnostics-log-entry code {
+  color: #dcdcdc;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre;
+}
+
+.diagnostics-log-empty {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  color: #8f8f8f;
+  font-size: 13px;
+}
+
+.diagnostics-log-dir {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.diagnostics-log-dir span {
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.diagnostics-log-dir strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d9d9d9;
+  font-size: 12px;
+  font-weight: 500;
+}

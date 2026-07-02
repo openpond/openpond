@@ -1,0 +1,687 @@
+.cloud-work-view {
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.cloud-work-view.home {
+  display: grid;
+  place-items: start center;
+  overflow: auto;
+  padding: 72px 24px 48px;
+}
+
+.cloud-home-shell {
+  display: grid;
+  width: min(692px, 100%);
+  gap: 28px;
+}
+
+.cloud-home-shell h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 30px;
+  font-weight: 500;
+}
+
+.cloud-home-composer,
+.cloud-thread-composer {
+  position: relative;
+  display: grid;
+  border-radius: 22px;
+  background: #242424;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.cloud-home-composer {
+  min-height: 90px;
+  padding: 16px 16px 12px;
+}
+
+.cloud-home-composer textarea,
+.cloud-thread-composer textarea {
+  min-width: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.cloud-home-composer textarea::placeholder,
+.cloud-thread-composer textarea::placeholder {
+  color: #9b9b9b;
+}
+
+.cloud-home-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cloud-composer-selects {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cloud-composer-selects .dropdown-select {
+  justify-self: auto;
+}
+
+.cloud-composer-selects .dropdown-trigger {
+  max-width: 174px;
+}
+
+.cloud-composer-selects .cloud-project-select .dropdown-trigger {
+  max-width: 210px;
+}
+
+.cloud-composer-plus,
+.cloud-composer-mic,
+.cloud-composer-submit {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  color: var(--muted);
+}
+
+.cloud-composer-plus,
+.cloud-composer-mic,
+.cloud-composer-submit {
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  background: transparent;
+}
+
+.cloud-composer-plus:hover,
+.cloud-composer-plus.active,
+.cloud-composer-mic:hover,
+.cloud-composer-submit:not(:disabled):hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cloud-composer-submit {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.cloud-home-composer-actions .cloud-composer-submit {
+  margin-left: 0;
+}
+
+.cloud-composer-submit:disabled {
+  opacity: 0.45;
+}
+
+.cloud-composer-options {
+  position: absolute;
+  z-index: 20;
+  left: 16px;
+  bottom: calc(100% + 10px);
+  display: grid;
+  min-width: min(360px, calc(100vw - 48px));
+  gap: 8px;
+  border-radius: 12px;
+  background: #2e2e2e;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.46);
+  padding: 10px;
+}
+
+.cloud-composer-options.thread-options {
+  bottom: calc(100% + 8px);
+}
+
+.cloud-composer-options label,
+.cloud-composer-options button {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 0 8px;
+  text-align: left;
+}
+
+.cloud-composer-options button {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.cloud-composer-options button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.cloud-composer-options select {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: #1f1f1f;
+  color: var(--text);
+  padding: 0 8px;
+}
+
+.cloud-task-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cloud-task-tabs {
+  display: inline-flex;
+  gap: 18px;
+}
+
+.cloud-task-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.cloud-task-tabs button.active {
+  border-bottom-color: var(--text);
+  color: var(--text);
+}
+
+.cloud-task-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.cloud-task-search input {
+  width: 120px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.cloud-task-list {
+  display: grid;
+}
+
+.cloud-task-row {
+  display: grid;
+  gap: 4px;
+  min-height: 66px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+}
+
+.cloud-task-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cloud-task-row small,
+.cloud-empty,
+.cloud-muted {
+  color: var(--muted);
+}
+
+.cloud-empty {
+  padding: 22px 12px;
+}
+
+.cloud-work-view.thread {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.cloud-thread-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 22px max(48px, calc((100% - 960px) / 2)) 132px;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-width: thin;
+}
+
+.cloud-thread-body::-webkit-scrollbar {
+  width: 9px;
+}
+
+.cloud-thread-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cloud-thread-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+}
+
+.cloud-thread-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+  background-clip: padding-box;
+}
+
+.cloud-thread-timeline {
+  display: grid;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  gap: 22px;
+}
+
+.cloud-thread-inline-nav {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-self: start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-thread-inline-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  padding: 0 8px 0 6px;
+  font: inherit;
+}
+
+.cloud-thread-inline-nav button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.cloud-thread-inline-nav > span {
+  min-width: 0;
+  max-width: min(280px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-message {
+  display: grid;
+  gap: 8px;
+  justify-self: start;
+  max-width: min(960px, 100%);
+  color: #f4f4f5;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.cloud-message.user {
+  justify-self: end;
+  max-width: min(620px, 72%);
+  border-radius: 20px;
+  background: #242424;
+  color: #fff;
+  padding: 10px 15px;
+  line-height: 1.55;
+}
+
+.cloud-message.assistant,
+.cloud-message.system,
+.cloud-message.task,
+.cloud-message.runtime {
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.cloud-message p,
+.cloud-activity p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.cloud-worked-line {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-self: start;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 13px;
+}
+
+.cloud-worked-line button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 0 8px;
+  font: inherit;
+}
+
+.cloud-worked-line button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cloud-worked-line button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.cloud-activity {
+  display: grid;
+  gap: 8px;
+  justify-self: start;
+  max-width: min(960px, 100%);
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  color: #f4f4f5;
+  padding-left: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.cloud-activity span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.cloud-create-plan-review {
+  display: grid;
+  gap: 14px;
+  justify-self: stretch;
+  max-width: min(960px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #202020;
+  padding: 14px;
+}
+
+.cloud-create-plan-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cloud-create-plan-heading > svg {
+  flex: 0 0 auto;
+  color: #b8d7ff;
+}
+
+.cloud-create-plan-heading div,
+.cloud-create-plan-copy section,
+.cloud-create-plan-grid section {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cloud-create-plan-heading span,
+.cloud-create-plan-copy span,
+.cloud-create-plan-grid span {
+  color: #f4f4f5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cloud-create-plan-heading small,
+.cloud-create-plan-copy p,
+.cloud-create-plan-grid small {
+  min-width: 0;
+  margin: 0;
+  color: #b6b6b6;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cloud-create-plan-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.cloud-create-plan-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.cloud-create-plan-grid ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cloud-create-plan-grid li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cloud-create-plan-grid code {
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ececec;
+  padding: 3px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.cloud-create-plan-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cloud-create-plan-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #ececec;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.cloud-create-plan-actions button:first-child {
+  border-color: rgba(55, 178, 117, 0.38);
+  background: rgba(55, 178, 117, 0.16);
+  color: #c7f9df;
+}
+
+.cloud-create-plan-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cloud-create-plan-actions button:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.cloud-thread-composer {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0 7px;
+  width: min(736px, calc(100% - 80px));
+  min-height: 111px;
+  margin: 0 auto 12px;
+  border-radius: 21px;
+  background: #2b2b2b;
+  padding: 0 12px 10px;
+}
+
+.cloud-thread-composer textarea {
+  grid-column: 1 / -1;
+  width: calc(100% + 24px);
+  height: 66px;
+  min-height: 66px;
+  max-height: 253px;
+  margin: 0 -12px;
+  overflow-y: hidden;
+  border-radius: 21px 21px 0 0;
+  color: #f7f7f7;
+  padding: 15px 14px 6px;
+  line-height: 1.45;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-width: thin;
+}
+
+.cloud-thread-composer textarea::placeholder {
+  color: #858585;
+}
+
+.cloud-thread-composer textarea::-webkit-scrollbar {
+  width: 9px;
+}
+
+.cloud-thread-composer textarea::-webkit-scrollbar-track,
+.cloud-thread-composer textarea::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.cloud-thread-composer textarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+}
+
+.cloud-thread-composer textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+  background-clip: padding-box;
+}
+
+.cloud-thread-composer .cloud-composer-plus,
+.cloud-thread-composer .cloud-composer-mic {
+  width: 29px;
+  height: 29px;
+  border-radius: 15px;
+}
+
+.cloud-thread-composer .cloud-composer-plus {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.cloud-thread-composer .cloud-composer-mic {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.cloud-thread-composer .cloud-composer-submit {
+  grid-column: 4;
+  grid-row: 2;
+  width: 30px;
+  height: 30px;
+  margin-left: 0;
+  border-radius: 15px;
+  background: #a7a7a7;
+  color: #202020;
+}
+
+.cloud-thread-composer .cloud-composer-submit:not(:disabled):hover {
+  background: #efefef;
+}
+
+.cloud-error {
+  width: min(692px, 100%);
+  margin: 0 auto;
+  border-radius: 10px;
+  background: rgba(255, 75, 75, 0.1);
+  color: #ff9b9b;
+  padding: 10px 12px;
+}
+
+@media (max-width: 720px) {
+  .cloud-work-view.home {
+    padding: 48px 16px 32px;
+  }
+
+  .cloud-home-shell h1 {
+    font-size: 24px;
+  }
+
+  .cloud-task-list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cloud-task-tabs {
+    justify-content: space-between;
+  }
+
+  .cloud-home-composer-actions {
+    flex-wrap: wrap;
+  }
+
+  .cloud-composer-selects {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .cloud-composer-selects .dropdown-select {
+    flex: 1 1 0;
+  }
+
+  .cloud-composer-selects .dropdown-trigger {
+    max-width: none;
+  }
+
+  .cloud-thread-body {
+    padding: 18px 20px;
+  }
+
+  .cloud-thread-timeline {
+    gap: 18px;
+  }
+
+  .cloud-create-plan-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cloud-create-plan-actions button {
+    flex: 1 1 132px;
+  }
+
+  .cloud-thread-composer {
+    width: calc(100% - 24px);
+  }
+}

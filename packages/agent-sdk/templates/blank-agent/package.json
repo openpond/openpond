@@ -1,0 +1,16 @@
+{
+  "name": "openpond-blank-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openpond-agent-sdk": "file:../.."
+  },
+  "scripts": {
+    "agent:inspect": "openpond-agent inspect --json",
+    "agent:build": "openpond-agent build",
+    "agent:validate": "openpond-agent validate",
+    "agent:eval": "openpond-agent eval",
+    "agent:check": "openpond-agent eval --json"
+  }
+}

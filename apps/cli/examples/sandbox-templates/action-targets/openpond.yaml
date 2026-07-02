@@ -1,0 +1,53 @@
+schemaVersion: 1
+name: action-targets
+version: 0.1.0
+useCase: sandbox-template-example
+description: Default start plus named action targets.
+runtime:
+  base: node-bun-workspace
+resources:
+  cpu: 1
+  memoryGb: 1
+  diskGb: 4
+setup:
+  commands:
+    - mkdir -p artifacts
+validation:
+  commands:
+    - test -f scripts/default-report.sh
+    - test -f scripts/summarize.sh
+    - test -f scripts/export-json.sh
+start:
+  command: bash scripts/default-report.sh
+  timeoutSeconds: 120
+  ports: []
+  artifactPaths:
+    - artifacts/default-report.txt
+actions:
+  - name: summarize
+    command: bash scripts/summarize.sh
+    timeoutSeconds: 120
+    ports: []
+    artifactPaths:
+      - artifacts/summary.txt
+  - name: export-json
+    command: bash scripts/export-json.sh
+    timeoutSeconds: 120
+    ports: []
+    artifactPaths:
+      - artifacts/export.json
+services: []
+inputs:
+  schema:
+    type: object
+    properties:
+      subject:
+        type: string
+        title: Subject
+        default: action target
+artifacts:
+  paths:
+    - artifacts/default-report.txt
+network:
+  egress: restricted
+

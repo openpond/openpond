@@ -1,0 +1,44 @@
+schemaVersion: 1
+name: preview-service
+version: 0.1.0
+useCase: sandbox-template-example
+description: Long-lived HTTP preview service example.
+runtime:
+  base: node-bun-workspace
+resources:
+  cpu: 1
+  memoryGb: 1
+  diskGb: 4
+setup:
+  commands:
+    - mkdir -p artifacts
+validation:
+  commands:
+    - test -f src/server.ts
+    - test -f scripts/smoke.sh
+start:
+  command: bash scripts/smoke.sh
+  timeoutSeconds: 120
+  ports: []
+  artifactPaths:
+    - artifacts/smoke.json
+actions: []
+services:
+  - name: web
+    command: bun src/server.ts
+    ports:
+      - port: 3000
+        protocol: http
+        label: web
+        access: private
+        path: /
+inputs:
+  schema:
+    type: object
+    properties: {}
+artifacts:
+  paths:
+    - artifacts/smoke.json
+network:
+  egress: restricted
+

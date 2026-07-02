@@ -1,0 +1,95 @@
+{
+  "name": "@openpond/cloud",
+  "version": "0.0.5",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "package.json"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./api": {
+      "import": "./dist/api.js",
+      "types": "./dist/api.d.ts"
+    },
+    "./api/*": {
+      "import": "./dist/api/*.js",
+      "types": "./dist/api/*.d.ts"
+    },
+    "./cache": {
+      "import": "./dist/cache.js",
+      "types": "./dist/cache.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    },
+    "./client-types": {
+      "import": "./dist/client-types.js",
+      "types": "./dist/client-types.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config.js",
+      "types": "./dist/config.d.ts"
+    },
+    "./hosted-chat": {
+      "import": "./dist/hosted-chat.js",
+      "types": "./dist/hosted-chat.d.ts"
+    },
+    "./indicators": {
+      "import": "./dist/indicators.js",
+      "types": "./dist/indicators.d.ts"
+    },
+    "./opchat-smoke": {
+      "import": "./dist/opchat-smoke.js",
+      "types": "./dist/opchat-smoke.d.ts"
+    },
+    "./profile/*": {
+      "import": "./dist/profile/*.js",
+      "types": "./dist/profile/*.d.ts"
+    },
+    "./sandbox/*": {
+      "import": "./dist/sandbox/*.js",
+      "types": "./dist/sandbox/*.d.ts"
+    },
+    "./sandbox/types": {
+      "import": "./dist/sandbox/types/index.js",
+      "types": "./dist/sandbox/types/index.d.ts"
+    },
+    "./sandbox/types/*": {
+      "import": "./dist/sandbox/types/*.js",
+      "types": "./dist/sandbox/types/*.d.ts"
+    },
+    "./sandbox-template/*": {
+      "import": "./dist/sandbox-template/*.js",
+      "types": "./dist/sandbox-template/*.d.ts"
+    },
+    "./stream": {
+      "import": "./dist/stream.js",
+      "types": "./dist/stream.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    },
+    "./urls": {
+      "import": "./dist/urls.js",
+      "types": "./dist/urls.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1",
+    "openpond-agent-sdk": "workspace:*",
+    "zod": "^4.1.13"
+  }
+}

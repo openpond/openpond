@@ -1,0 +1,365 @@
+.context-status-shell {
+  justify-self: end;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.composer-status {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 999px;
+  background: conic-gradient(var(--context-color) var(--context-fill), #555 var(--context-fill));
+  cursor: default;
+}
+
+.composer-status::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: #2b2b2b;
+}
+
+.composer-status:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.28);
+  outline-offset: 3px;
+}
+
+.context-status-shell.low,
+.composer-status.low {
+  --context-color: #8fcf9f;
+}
+
+.context-status-shell.medium,
+.composer-status.medium {
+  --context-color: #e4b06b;
+}
+
+.context-status-shell.high,
+.composer-status.high {
+  --context-color: #df7777;
+}
+
+.context-status-shell.unknown,
+.composer-status.unknown {
+  --context-color: #858585;
+}
+
+.context-status-tooltip {
+  position: absolute;
+  z-index: 40;
+  right: 50%;
+  bottom: calc(100% + 9px);
+  display: grid;
+  gap: 8px;
+  width: min(264px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #1d1d1d;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(50%, 3px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  visibility: hidden;
+}
+
+.context-status-tooltip::after {
+  content: "";
+  position: absolute;
+  right: calc(50% - 5px);
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1d1d1d;
+  transform: rotate(45deg);
+}
+
+.dropdown-select[data-tooltip],
+.codex-model-reasoning[data-tooltip],
+.composer-goal-strip[data-tooltip],
+.composer-project-target[data-tooltip],
+.workspace-action-trigger[data-tooltip],
+.composer-project-option[data-tooltip],
+.composer-icon[data-tooltip],
+.chat-scroll-control-button[data-tooltip],
+.send-button[data-tooltip],
+.section-icon[data-tooltip],
+.sidebar-icon[data-tooltip],
+.sidebar-row-action[data-tooltip],
+.sidebar-profile-change-dot[data-tooltip],
+.sidebar-running-dot[data-tooltip] {
+  position: relative;
+}
+
+.dropdown-select[data-tooltip]::after,
+.codex-model-reasoning[data-tooltip]::after,
+.composer-goal-strip[data-tooltip]::after,
+.composer-project-target[data-tooltip]::after,
+.workspace-action-trigger[data-tooltip]::after,
+.composer-project-option[data-tooltip]::after,
+.composer-icon[data-tooltip]::after,
+.chat-scroll-control-button[data-tooltip]::after,
+.send-button[data-tooltip]::after,
+.section-icon[data-tooltip]::after,
+.sidebar-icon[data-tooltip]::after,
+.sidebar-row-action[data-tooltip]::after,
+.sidebar-profile-change-dot[data-tooltip]::after,
+.sidebar-running-dot[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #1d1d1d;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38);
+  color: #f1f1f1;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 3px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  visibility: hidden;
+  white-space: normal;
+}
+
+.dropdown-select[data-tooltip]::before,
+.codex-model-reasoning[data-tooltip]::before,
+.composer-goal-strip[data-tooltip]::before,
+.composer-project-target[data-tooltip]::before,
+.workspace-action-trigger[data-tooltip]::before,
+.composer-project-option[data-tooltip]::before,
+.composer-icon[data-tooltip]::before,
+.chat-scroll-control-button[data-tooltip]::before,
+.send-button[data-tooltip]::before,
+.section-icon[data-tooltip]::before,
+.sidebar-icon[data-tooltip]::before,
+.sidebar-row-action[data-tooltip]::before,
+.sidebar-profile-change-dot[data-tooltip]::before,
+.sidebar-running-dot[data-tooltip]::before {
+  content: "";
+  position: absolute;
+  z-index: 61;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  width: 8px;
+  height: 8px;
+  background: #1d1d1d;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 3px) rotate(45deg);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  visibility: hidden;
+}
+
+.dropdown-select[data-tooltip]:hover::after,
+.dropdown-select[data-tooltip]:hover::before,
+.dropdown-select[data-tooltip]:focus-within::after,
+.dropdown-select[data-tooltip]:focus-within::before,
+.codex-model-reasoning[data-tooltip]:hover::after,
+.codex-model-reasoning[data-tooltip]:hover::before,
+.codex-model-reasoning[data-tooltip]:focus-within::after,
+.codex-model-reasoning[data-tooltip]:focus-within::before,
+.composer-goal-strip[data-tooltip]:hover::after,
+.composer-goal-strip[data-tooltip]:hover::before,
+.composer-goal-strip[data-tooltip]:focus-within::after,
+.composer-goal-strip[data-tooltip]:focus-within::before,
+.composer-project-target[data-tooltip]:hover::after,
+.composer-project-target[data-tooltip]:hover::before,
+.composer-project-target[data-tooltip]:focus-within::after,
+.composer-project-target[data-tooltip]:focus-within::before,
+.workspace-action-trigger[data-tooltip]:hover::after,
+.workspace-action-trigger[data-tooltip]:hover::before,
+.workspace-action-trigger[data-tooltip]:focus-visible::after,
+.workspace-action-trigger[data-tooltip]:focus-visible::before,
+.composer-project-option[data-tooltip]:hover::after,
+.composer-project-option[data-tooltip]:hover::before,
+.composer-project-option[data-tooltip]:focus-visible::after,
+.composer-project-option[data-tooltip]:focus-visible::before,
+.composer-icon[data-tooltip]:hover::after,
+.composer-icon[data-tooltip]:hover::before,
+.composer-icon[data-tooltip]:focus-visible::after,
+.composer-icon[data-tooltip]:focus-visible::before,
+.chat-scroll-control-button[data-tooltip]:hover::after,
+.chat-scroll-control-button[data-tooltip]:hover::before,
+.chat-scroll-control-button[data-tooltip]:focus-visible::after,
+.chat-scroll-control-button[data-tooltip]:focus-visible::before,
+.send-button[data-tooltip]:hover::after,
+.send-button[data-tooltip]:hover::before,
+.send-button[data-tooltip]:focus-visible::after,
+.send-button[data-tooltip]:focus-visible::before,
+.section-icon[data-tooltip]:hover::after,
+.section-icon[data-tooltip]:hover::before,
+.section-icon[data-tooltip]:focus-visible::after,
+.section-icon[data-tooltip]:focus-visible::before,
+.sidebar-icon[data-tooltip]:hover::after,
+.sidebar-icon[data-tooltip]:hover::before,
+.sidebar-icon[data-tooltip]:focus-visible::after,
+.sidebar-icon[data-tooltip]:focus-visible::before,
+.sidebar-row-action[data-tooltip]:hover::after,
+.sidebar-row-action[data-tooltip]:hover::before,
+.sidebar-row-action[data-tooltip]:focus-visible::after,
+.sidebar-row-action[data-tooltip]:focus-visible::before,
+.sidebar-profile-change-dot[data-tooltip]:hover::after,
+.sidebar-profile-change-dot[data-tooltip]:hover::before,
+.sidebar-profile-change-dot[data-tooltip]:focus-visible::after,
+.sidebar-profile-change-dot[data-tooltip]:focus-visible::before,
+.sidebar-running-dot[data-tooltip]:hover::after,
+.sidebar-running-dot[data-tooltip]:hover::before,
+.sidebar-running-dot[data-tooltip]:focus-visible::after,
+.sidebar-running-dot[data-tooltip]:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
+.dropdown-select[data-tooltip]:hover::before,
+.dropdown-select[data-tooltip]:focus-within::before,
+.codex-model-reasoning[data-tooltip]:hover::before,
+.codex-model-reasoning[data-tooltip]:focus-within::before,
+.composer-goal-strip[data-tooltip]:hover::before,
+.composer-goal-strip[data-tooltip]:focus-within::before,
+.composer-project-target[data-tooltip]:hover::before,
+.composer-project-target[data-tooltip]:focus-within::before,
+.workspace-action-trigger[data-tooltip]:hover::before,
+.workspace-action-trigger[data-tooltip]:focus-visible::before,
+.composer-project-option[data-tooltip]:hover::before,
+.composer-project-option[data-tooltip]:focus-visible::before,
+.composer-icon[data-tooltip]:hover::before,
+.composer-icon[data-tooltip]:focus-visible::before,
+.chat-scroll-control-button[data-tooltip]:hover::before,
+.chat-scroll-control-button[data-tooltip]:focus-visible::before,
+.send-button[data-tooltip]:hover::before,
+.send-button[data-tooltip]:focus-visible::before,
+.section-icon[data-tooltip]:hover::before,
+.section-icon[data-tooltip]:focus-visible::before,
+.sidebar-icon[data-tooltip]:hover::before,
+.sidebar-icon[data-tooltip]:focus-visible::before,
+.sidebar-row-action[data-tooltip]:hover::before,
+.sidebar-row-action[data-tooltip]:focus-visible::before,
+.sidebar-profile-change-dot[data-tooltip]:hover::before,
+.sidebar-profile-change-dot[data-tooltip]:focus-visible::before,
+.sidebar-running-dot[data-tooltip]:hover::before,
+.sidebar-running-dot[data-tooltip]:focus-visible::before {
+  transform: translate(-50%, 0) rotate(45deg);
+}
+
+.context-status-shell:hover .context-status-tooltip,
+.context-status-shell:focus-within .context-status-tooltip {
+  opacity: 1;
+  transform: translate(50%, 0);
+  visibility: visible;
+}
+
+.sidebar-icon[data-tooltip]::after,
+.section-icon[data-tooltip]::after,
+.sidebar-row-action[data-tooltip]::after,
+.sidebar-running-dot[data-tooltip]::after {
+  right: 0;
+  left: auto;
+  transform: translate(0, 3px);
+}
+
+.sidebar-icon[data-tooltip]::before,
+.section-icon[data-tooltip]::before,
+.sidebar-row-action[data-tooltip]::before,
+.sidebar-running-dot[data-tooltip]::before {
+  right: 8px;
+  left: auto;
+  transform: translate(0, 3px) rotate(45deg);
+}
+
+.sidebar-icon[data-tooltip]:hover::after,
+.sidebar-icon[data-tooltip]:focus-visible::after,
+.section-icon[data-tooltip]:hover::after,
+.section-icon[data-tooltip]:focus-visible::after,
+.sidebar-row-action[data-tooltip]:hover::after,
+.sidebar-row-action[data-tooltip]:focus-visible::after,
+.sidebar-running-dot[data-tooltip]:hover::after,
+.sidebar-running-dot[data-tooltip]:focus-visible::after {
+  transform: translate(0, 0);
+}
+
+.sidebar-icon[data-tooltip]:hover::before,
+.sidebar-icon[data-tooltip]:focus-visible::before,
+.section-icon[data-tooltip]:hover::before,
+.section-icon[data-tooltip]:focus-visible::before,
+.sidebar-row-action[data-tooltip]:hover::before,
+.sidebar-row-action[data-tooltip]:focus-visible::before,
+.sidebar-running-dot[data-tooltip]:hover::before,
+.sidebar-running-dot[data-tooltip]:focus-visible::before {
+  transform: translate(0, 0) rotate(45deg);
+}
+
+.context-status-tooltip-title,
+.context-status-tooltip-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.context-status-tooltip-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.context-status-tooltip-main span:first-child {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.context-status-tooltip-main span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: #a8a8a8;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-status-tooltip-bar {
+  display: block;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #343434;
+}
+
+.context-status-tooltip-bar span {
+  display: block;
+  width: var(--context-bar-fill);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--context-color);
+}
+
+.context-status-tooltip-detail {
+  color: #8d8d8d;
+}

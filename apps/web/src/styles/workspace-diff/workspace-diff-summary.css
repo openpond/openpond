@@ -1,0 +1,185 @@
+.workspace-diff-summary-view {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-width: thin;
+}
+
+.workspace-file-tree-card,
+.workspace-diff-summary-card {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: #181818;
+}
+
+.workspace-file-tree-header {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  color: #e6e6e6;
+  padding: 0 11px;
+  font-size: 13px;
+}
+
+.workspace-file-tree-header span {
+  color: #8f8f8f;
+  font-size: 12px;
+}
+
+.workspace-file-tree {
+  display: grid;
+  max-height: 320px;
+  overflow: auto;
+  padding: 5px;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-width: thin;
+}
+
+.workspace-file-tree-node {
+  display: grid;
+}
+
+.workspace-file-tree-row {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #cfcfcf;
+  padding-right: 7px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.workspace-file-tree-row:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: #f1f1f1;
+}
+
+.workspace-file-tree-row.folder {
+  color: #a9a9a9;
+}
+
+.workspace-file-tree-row.file.changed {
+  border-left-color: #3fd27f;
+  background: rgba(63, 210, 127, 0.055);
+}
+
+.workspace-file-tree-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-file-tree-row small {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.workspace-diff-summary-header,
+.workspace-diff-summary-files button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 11px;
+}
+
+.workspace-diff-summary-header {
+  color: #f1f1f1;
+  font-size: 13px;
+}
+
+.workspace-diff-summary-files {
+  display: grid;
+}
+
+.workspace-diff-summary-files button {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: transparent;
+  color: #f1f1f1;
+  text-align: left;
+  font-size: 13px;
+}
+
+.workspace-diff-summary-files button:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.workspace-diff-summary-files button > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-diff-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.workspace-diff-file-list {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px 4px;
+}
+
+.workspace-diff-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 27px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #f1f1f1;
+  padding: 0 5px;
+  text-align: left;
+}
+
+.workspace-diff-file:hover,
+.workspace-diff-file.selected {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
+.workspace-diff-file span,
+.workspace-diff-file small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-diff-file span {
+  font-size: 13px;
+}
+
+.workspace-diff-file small {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-size: 12px;
+}

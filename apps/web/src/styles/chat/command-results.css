@@ -1,0 +1,121 @@
+.command-input-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #9b9b9b;
+  padding: 0 14px;
+}
+
+.command-input-row input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.command-input-row input::placeholder {
+  color: #777;
+}
+
+.command-input-row kbd {
+  min-width: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: #171717;
+  color: #8c8c8c;
+  padding: 3px 7px;
+  text-align: center;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.command-results {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-width: thin;
+}
+
+.command-results::-webkit-scrollbar {
+  width: 8px;
+}
+
+.command-results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.command-results::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: padding-box;
+}
+
+.command-group {
+  display: grid;
+  gap: 3px;
+}
+
+.command-group-label {
+  padding: 5px 6px 3px;
+  color: #787878;
+  font-size: 12px;
+}
+
+.command-result {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 0 8px;
+  text-align: left;
+}
+
+.command-result:hover,
+.command-result:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.command-result span,
+.command-result small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-result span {
+  color: inherit;
+  font-size: 14px;
+}
+
+.command-result small {
+  color: #858585;
+  font-size: 12px;
+}
+
+.command-create {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #262626;
+}
+
+.command-empty {
+  padding: 7px 8px 8px;
+  color: #6f6f6f;
+  font-size: 13px;
+}

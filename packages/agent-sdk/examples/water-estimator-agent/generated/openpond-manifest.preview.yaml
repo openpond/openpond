@@ -1,0 +1,402 @@
+schemaVersion: 1
+schema: openpond.runtime.manifest.v1
+name: cloud-water-estimator-example
+version: 0.1.0
+useCase: cloud-water-estimator
+description: "Construction drawing task planning and water-treatment estimate review."
+runtime:
+  base: node-bun-workspace
+resources:
+  cpu: 2
+  memoryGb: 4
+  diskGb: 20
+setup:
+  commands:
+    - "mkdir -p artifacts volumes/drawing-plans/drawings volumes/drawing-plans/rendered volumes/drawing-plans/artifacts volumes/water-history/history volumes/water-history/proposals volumes/water-history/artifacts"
+validation:
+  commands:
+    - "test -f agent/agent.ts"
+    - "test -f agent/workflows/chat.ts"
+    - "command -v pdfinfo"
+    - "command -v pdftoppm"
+start:
+  command: "openpond-agent run chat"
+  timeoutSeconds: 10800
+  artifactPaths:
+    - artifacts/chat-result.json
+    - artifacts/openpond-trace.jsonl
+    - artifacts/drawing-render-manifest.json
+    - artifacts/drawing-rendered-pages.csv
+    - artifacts/sheet-index.json
+    - artifacts/page-extractions.json
+    - artifacts/consolidated-task-plan.json
+    - artifacts/task-plan.csv
+    - artifacts/task-plan.xlsx
+    - artifacts/task-plan-export.json
+    - artifacts/task-plan-ledger.json
+    - artifacts/example-estimate.json
+    - artifacts/example-estimate.csv
+    - artifacts/example-estimate.xlsx
+    - artifacts/search-results.json
+    - artifacts/proposal-review.json
+    - artifacts/sqlite-import-summary.json
+    - artifacts/microsoft-upload-refs.json
+    - artifacts/task-plan-history-answer.json
+    - artifacts/task-plan-history-candidates.json
+    - artifacts/task-plan-revision.json
+    - artifacts/task-plan-v2.csv
+    - artifacts/task-plan-v2.xlsx
+    - artifacts/task-plan-approved.csv
+    - artifacts/task-plan-approved.xlsx
+  ports:
+    []
+actions:
+  - id: chat
+    name: chat
+    label: Chat
+    command: "openpond-agent run chat"
+    timeoutSeconds: 10800
+    artifactPaths:
+      - artifacts/chat-result.json
+      - artifacts/openpond-trace.jsonl
+      - artifacts/drawing-render-manifest.json
+      - artifacts/drawing-rendered-pages.csv
+      - artifacts/sheet-index.json
+      - artifacts/page-extractions.json
+      - artifacts/consolidated-task-plan.json
+      - artifacts/task-plan.csv
+      - artifacts/task-plan.xlsx
+      - artifacts/task-plan-export.json
+      - artifacts/task-plan-ledger.json
+      - artifacts/example-estimate.json
+      - artifacts/example-estimate.csv
+      - artifacts/example-estimate.xlsx
+      - artifacts/search-results.json
+      - artifacts/proposal-review.json
+      - artifacts/sqlite-import-summary.json
+      - artifacts/microsoft-upload-refs.json
+      - artifacts/task-plan-history-answer.json
+      - artifacts/task-plan-history-candidates.json
+      - artifacts/task-plan-revision.json
+      - artifacts/task-plan-v2.csv
+      - artifacts/task-plan-v2.xlsx
+      - artifacts/task-plan-approved.csv
+      - artifacts/task-plan-approved.xlsx
+    ports:
+      []
+  - id: generate-task-plan
+    name: generate-task-plan
+    label: "Generate Task Plan"
+    command: "openpond-agent run generate-task-plan"
+    timeoutSeconds: 10800
+    artifactPaths:
+      - artifacts/drawing-render-manifest.json
+      - artifacts/drawing-rendered-pages.csv
+      - artifacts/sheet-index.json
+      - artifacts/page-extractions.json
+      - artifacts/consolidated-task-plan.json
+      - artifacts/task-plan.csv
+      - artifacts/task-plan.xlsx
+      - artifacts/task-plan-export.json
+      - artifacts/task-plan-ledger.json
+    ports:
+      []
+  - id: render-drawings
+    name: render-drawings
+    label: "Render Drawings"
+    command: "openpond-agent run render-drawings"
+    timeoutSeconds: 1800
+    artifactPaths:
+      - artifacts/drawing-render-manifest.json
+      - artifacts/drawing-rendered-pages.csv
+    ports:
+      []
+  - id: extract-sheet-index
+    name: extract-sheet-index
+    label: "Extract Sheet Index"
+    command: "openpond-agent run extract-sheet-index"
+    timeoutSeconds: 1800
+    artifactPaths:
+      - artifacts/sheet-index.json
+    ports:
+      []
+  - id: extract-page-tasks
+    name: extract-page-tasks
+    label: "Extract Page Tasks"
+    command: "openpond-agent run extract-page-tasks"
+    timeoutSeconds: 7200
+    artifactPaths:
+      - artifacts/page-extractions.json
+    ports:
+      []
+  - id: consolidate-task-plan
+    name: consolidate-task-plan
+    label: "Consolidate Task Plan"
+    command: "openpond-agent run consolidate-task-plan"
+    timeoutSeconds: 1800
+    artifactPaths:
+      - artifacts/consolidated-task-plan.json
+    ports:
+      []
+  - id: export-task-plan
+    name: export-task-plan
+    label: "Export Task Plan"
+    command: "openpond-agent run export-task-plan"
+    timeoutSeconds: 1800
+    artifactPaths:
+      - artifacts/consolidated-task-plan.json
+      - artifacts/task-plan.csv
+      - artifacts/task-plan.xlsx
+      - artifacts/task-plan-export.json
+      - artifacts/task-plan-ledger.json
+    ports:
+      []
+  - id: generate-estimate
+    name: generate-estimate
+    label: "Generate Estimate"
+    command: "openpond-agent run generate-estimate"
+    timeoutSeconds: 3600
+    artifactPaths:
+      - artifacts/example-estimate.json
+      - artifacts/example-estimate.csv
+      - artifacts/example-estimate.xlsx
+      - artifacts/search-results.json
+      - artifacts/proposal-review.json
+      - artifacts/sqlite-import-summary.json
+    ports:
+      []
+  - id: task-plan-history
+    name: task-plan-history
+    label: "Task Plan History"
+    command: "openpond-agent run task-plan-history"
+    timeoutSeconds: 1800
+    artifactPaths:
+      - artifacts/task-plan-history-answer.json
+      - artifacts/task-plan-history-candidates.json
+    ports:
+      []
+  - id: revise-task-plan
+    name: revise-task-plan
+    label: "Revise Task Plan"
+    command: "openpond-agent run revise-task-plan"
+    timeoutSeconds: 1800
+    artifactPaths:
+      - artifacts/task-plan-revision.json
+      - artifacts/task-plan-v2.csv
+      - artifacts/task-plan-v2.xlsx
+      - artifacts/task-plan-approved.csv
+      - artifacts/task-plan-approved.xlsx
+    ports:
+      []
+services:
+  []
+schedules:
+  - name: daily-estimate-digest
+    cron: "0 8 * * MON-FRI"
+    timezone: America/New_York
+    enabled: false
+    action: chat
+    metadata:
+      input:
+        prompt: "Summarize recent task-plan revisions and water estimate review items."
+        channel: schedule
+        context:
+          reportKind: daily-estimate-digest
+volumes:
+  - name: drawing-plans
+    mountPath: /workspace/volumes/drawing-plans
+    storageGb: 8
+    deleteOnSandboxDelete: false
+  - name: water-history
+    mountPath: /workspace/volumes/water-history
+    storageGb: 8
+    deleteOnSandboxDelete: false
+integrations:
+  requiredLeases:
+    []
+permissions:
+  opchat:
+    models:
+      - openpond-chat
+    scopes:
+      - opchat:model:read
+      - opchat:chat:create
+inputs:
+  schema:
+    type: object
+    properties:
+      drawingFiles:
+        type: array
+        title: "Construction drawing PDFs"
+        items:
+          type: string
+          format: file
+        x-openpond-upload:
+          accept:
+            - .pdf
+          multiple: true
+          targetPath: volumes/drawing-plans/drawings
+      drawingFile:
+        type: string
+        title: "Construction drawing PDF"
+        format: file
+        x-openpond-upload:
+          accept:
+            - .pdf
+          targetPath: volumes/drawing-plans/drawings
+      historyFiles:
+        type: array
+        title: "Historical estimate files"
+        items:
+          type: string
+          format: file
+        x-openpond-upload:
+          accept:
+            - .xlsx
+            - .xls
+            - .csv
+          multiple: true
+          targetPath: volumes/water-history/history
+      proposalFile:
+        type: string
+        title: "Proposal file"
+        format: file
+        x-openpond-upload:
+          accept:
+            - .pdf
+            - .txt
+            - .md
+            - .csv
+            - .xlsx
+            - .xls
+          targetPath: volumes/water-history/proposals
+      proposalUrl:
+        type: string
+        title: "Proposal URL"
+      query:
+        type: string
+        title: "Estimate search query"
+      lookupName:
+        type: string
+        title: "Saved task-plan lookup name"
+      operation:
+        type: string
+        title: "Task-plan revision operation"
+        enum:
+          - approve
+          - reject
+          - export
+          - open-review
+          - rename-run
+          - edit-task
+          - remove-task
+          - combine-tasks
+          - split-task
+          - add-task
+      taskId:
+        type: string
+        title: "Task id"
+      taskIds:
+        type: array
+        title: "Task ids"
+        items:
+          type: string
+      versionLabel:
+        type: string
+        title: "Version label"
+      revisionNote:
+        type: string
+        title: "Revision note"
+      edits:
+        type: array
+        title: "Revision edits"
+        items:
+          type: object
+      customerName:
+        type: string
+        title: "Project or customer name"
+      pageSelection:
+        type: string
+        title: "Page selection"
+        description: "Optional pages to render, such as 1-3,7,10. Leave blank to render the first maxPages pages."
+      maxPages:
+        type: integer
+        title: "Max pages"
+        default: 12
+        minimum: 1
+        maximum: 500
+      renderAllPages:
+        type: boolean
+        title: "Render all pages"
+        default: false
+      renderDpi:
+        type: integer
+        title: "Render DPI"
+        default: 200
+        minimum: 72
+        maximum: 300
+      drawingDirectory:
+        type: string
+        title: "Drawing directory"
+      taskPageSelection:
+        type: string
+        title: "Task page selection"
+        description: "Optional pages to send to vision, such as 7,9-10,31,33. Leave blank to use taskMaxPages unless taskAllPages is enabled."
+      taskSheetNumbers:
+        type: string
+        title: "Task sheet numbers"
+        description: "Optional comma-separated sheet numbers to send to vision, such as C 110.00,D 110.00,EI 100.00."
+      taskMaxPages:
+        type: integer
+        title: "Max task pages"
+        default: 16
+        minimum: 1
+        maximum: 500
+      taskAllPages:
+        type: boolean
+        title: "Extract tasks from all indexed pages"
+        default: false
+      openaiModel:
+        type: string
+        title: "OpenAI model"
+        default: gpt-4.1
+      visionDetail:
+        type: string
+        title: "Vision detail"
+        default: high
+        enum:
+          - low
+          - high
+          - auto
+          - original
+  env:
+    []
+artifacts:
+  paths:
+    - artifacts/chat-result.json
+    - artifacts/openpond-trace.jsonl
+    - artifacts/drawing-render-manifest.json
+    - artifacts/drawing-rendered-pages.csv
+    - artifacts/sheet-index.json
+    - artifacts/page-extractions.json
+    - artifacts/consolidated-task-plan.json
+    - artifacts/task-plan.csv
+    - artifacts/task-plan.xlsx
+    - artifacts/task-plan-export.json
+    - artifacts/task-plan-ledger.json
+    - artifacts/example-estimate.json
+    - artifacts/example-estimate.csv
+    - artifacts/example-estimate.xlsx
+    - artifacts/search-results.json
+    - artifacts/proposal-review.json
+    - artifacts/sqlite-import-summary.json
+    - artifacts/microsoft-upload-refs.json
+    - artifacts/task-plan-history-answer.json
+    - artifacts/task-plan-history-candidates.json
+    - artifacts/task-plan-revision.json
+    - artifacts/task-plan-v2.csv
+    - artifacts/task-plan-v2.xlsx
+    - artifacts/task-plan-approved.csv
+    - artifacts/task-plan-approved.xlsx
+network:
+  egress: restricted

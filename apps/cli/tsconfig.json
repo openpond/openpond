@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@openpond/cloud": ["../../packages/cloud/src/index.ts"],
+      "@openpond/cloud/*": ["../../packages/cloud/src/*"],
+      "@openpond/contracts": ["../../packages/contracts/src/index.ts"],
+      "@openpond/contracts/*": ["../../packages/contracts/src/*"],
+      "openpond-agent-sdk": ["../../packages/agent-sdk/src/index.ts"],
+      "openpond-agent-sdk/*": ["../../packages/agent-sdk/src/*"]
+    },
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}

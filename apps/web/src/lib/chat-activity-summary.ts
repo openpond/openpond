@@ -1,0 +1,349 @@
+import type { ActivityItem } from "./app-models";
+
+export type ActivityGroupSummaryKind =
+  | "approval"
+  | "command"
+  | "control"
+  | "edit"
+  | "image"
+  | "list"
+  | "read"
+  | "search"
+  | "web";
+
+export type ActivityGroupSummary = {
+  kind: ActivityGroupSummaryKind;
+  text: string;
+};
+
+type ActivityCounters = {
+  approvals: number;
+  controlCount: number;
+  editCount: number;
+  imageCount: number;
+  listedFiles: number;
+  readFileCount: number;
+  readFiles: Set<string>;
+  runCount: number;
+  searchedCode: number;
+  testsOrChecks: number;
+  webSearches: number;
+};
+
+type CommandSummary = {
+  countedAsRun: boolean;
+  editCount?: number;
+  listedFiles?: number;
+  readFiles?: string[];
+  searchedCode?: number;
+  testsOrChecks?: number;
+};
+
+export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGroupSummary {
+  const counters = emptyCounters();
+  let fallbackLabel = "";
+
+  for (const activity of activities) {
+    if (!fallbackLabel && activity.label) fallbackLabel = activity.label;
+    if (activity.kind === "command" && activity.content) {
+      applyCommandSummary(counters, summarizeCommandActivity(activity.content));
+      continue;
+    }
+    applyLabeledActivity(counters, activity);
+  }
+
+  const clauses = primaryClauses(counters);
+  const runClause = counters.runCount > 0 ? ranClause(counters.runCount) : "";
+  const text = formatActivityClauses(clauses, runClause) || fallbackLabel || "Ran command";
+
+  return {
+    kind: summaryKind(counters, clauses, runClause),
+    text,
+  };
+}
+
+export function activityGroupSummary(activities: ActivityItem[]): string {
+  return summarizeActivityGroup(activities).text;
+}
+
+export function summarizeShellCommand(command: string): string | null {
+  const tokens = shellWords(command);
+  if (tokens.length === 0) return null;
+  if (tokens.some(isShellOperator)) return null;
+  const executable = tokens[0]!;
+  if (executable === "cat") {
+    const files = nonFlagArgs(tokens.slice(1));
+    return files.length > 0 ? `Read ${formatCommandTargets(files)}` : "Read standard input";
+  }
+  if (executable === "sed") {
+    return summarizeSedCommand(tokens);
+  }
+  if (executable === "rg") {
+    return summarizeRipgrepCommand(tokens);
+  }
+  return null;
+}
+
+function emptyCounters(): ActivityCounters {
+  return {
+    approvals: 0,
+    controlCount: 0,
+    editCount: 0,
+    imageCount: 0,
+    listedFiles: 0,
+    readFileCount: 0,
+    readFiles: new Set<string>(),
+    runCount: 0,
+    searchedCode: 0,
+    testsOrChecks: 0,
+    webSearches: 0,
+  };
+}
+
+function applyCommandSummary(counters: ActivityCounters, summary: CommandSummary): void {
+  counters.editCount += summary.editCount ?? 0;
+  counters.listedFiles += summary.listedFiles ?? 0;
+  counters.searchedCode += summary.searchedCode ?? 0;
+  counters.testsOrChecks += summary.testsOrChecks ?? 0;
+  for (const file of summary.readFiles ?? []) counters.readFiles.add(file);
+  if (summary.readFiles?.length) counters.readFileCount += summary.readFiles.length;
+  if (summary.countedAsRun) counters.runCount += 1;
+}
+
+function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem): void {
+  const label = activity.label.toLowerCase();
+  if (activity.controlKind) {
+    counters.controlCount += 1;
+    return;
+  }
+  if (label.includes("approval")) {
+    counters.approvals += 1;
+    return;
+  }
+  if (label.includes("image")) {
+    counters.imageCount += 1;
+    return;
+  }
+  if (label.includes("web")) {
+    counters.webSearches += 1;
+    return;
+  }
+  if (/\b(searching|searched)\b/.test(label)) {
+    counters.searchedCode += 1;
+    return;
+  }
+  if (/\b(listing|listed)\b/.test(label)) {
+    counters.listedFiles += 1;
+    return;
+  }
+  if (/\b(reading|read)\b/.test(label)) {
+    counters.readFileCount += 1;
+    return;
+  }
+  if (/\b(editing|edited|writing|wrote|deleting|deleted|moving|moved|uploading|uploaded|creating|created)\b/.test(label)) {
+    counters.editCount += 1;
+  }
+}
+
+function summarizeCommandActivity(command: string): CommandSummary {
+  const tokens = shellWords(command);
+  if (tokens.length === 0 || tokens.some(isShellOperator)) return { countedAsRun: true };
+
+  const executable = stripCommandWrapper(tokens);
+  if (!executable) return { countedAsRun: true };
+  const [name, args] = executable;
+
+  if (name === "apply_patch") return { countedAsRun: false, editCount: 1 };
+  if (["rm", "mv", "cp", "mkdir", "touch"].includes(name)) return { countedAsRun: false, editCount: 1 };
+  if (isPackageCheckCommand(name, args) || isDirectCheckCommand(name)) {
+    return { countedAsRun: false, testsOrChecks: 1 };
+  }
+  if (name === "rg") {
+    return args.includes("--files")
+      ? { countedAsRun: false, listedFiles: 1 }
+      : { countedAsRun: false, searchedCode: 1 };
+  }
+  if (["grep", "ag"].includes(name)) return { countedAsRun: false, searchedCode: 1 };
+  if (name === "git" && args[0] === "grep") return { countedAsRun: false, searchedCode: 1 };
+  if (["ls", "find", "tree", "fd"].includes(name)) return { countedAsRun: false, listedFiles: 1 };
+
+  const readFiles = commandReadFiles(name, args);
+  if (readFiles.length > 0) return { countedAsRun: false, readFiles };
+
+  return { countedAsRun: true };
+}
+
+function stripCommandWrapper(tokens: string[]): [string, string[]] | null {
+  let index = 0;
+  while (/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(tokens[index] ?? "")) index += 1;
+  const command = tokens[index];
+  if (!command) return null;
+  if (command === "bunx" || command === "npx") {
+    const wrapped = tokens[index + 1];
+    return wrapped ? [wrapped, tokens.slice(index + 2)] : [command, []];
+  }
+  return [command, tokens.slice(index + 1)];
+}
+
+function isPackageCheckCommand(name: string, args: string[]): boolean {
+  if (!["bun", "npm", "pnpm", "yarn"].includes(name)) return false;
+  const joined = args.join(" ").toLowerCase();
+  return /\b(test|typecheck|check|lint|vitest|jest|playwright|tsc)\b/.test(joined);
+}
+
+function isDirectCheckCommand(name: string): boolean {
+  return ["eslint", "jest", "playwright", "prettier", "tsc", "vitest"].includes(name);
+}
+
+function commandReadFiles(name: string, args: string[]): string[] {
+  if (name === "cat" || name === "nl" || name === "head" || name === "tail" || name === "wc") {
+    return likelyFileArgs(nonFlagArgs(args));
+  }
+  if (name === "sed") {
+    const expressionIndex = args.findIndex((token) => token !== "-n" && !token.startsWith("--"));
+    return likelyFileArgs(expressionIndex >= 0 ? nonFlagArgs(args.slice(expressionIndex + 1)) : []);
+  }
+  if (name === "awk" || name === "jq") {
+    return likelyFileArgs(nonFlagArgs(args.slice(1)));
+  }
+  return [];
+}
+
+function likelyFileArgs(values: string[]): string[] {
+  return values.filter((value) => {
+    if (!value || value === "." || value === "-") return false;
+    if (/^\d+$/.test(value)) return false;
+    return true;
+  });
+}
+
+function primaryClauses(counters: ActivityCounters): string[] {
+  const clauses: string[] = [];
+  if (counters.editCount > 0) clauses.push("made edits");
+  const readCount = counters.readFiles.size || counters.readFileCount;
+  if (readCount > 0) clauses.push(countClause("read", readCount, "file"));
+  if (counters.searchedCode > 0) clauses.push("searched code");
+  if (counters.listedFiles > 0) clauses.push("listed files");
+  if (counters.testsOrChecks > 0) clauses.push(counters.testsOrChecks === 1 ? "ran checks" : `ran ${counters.testsOrChecks} checks`);
+  if (counters.webSearches > 0) clauses.push("searched web");
+  if (counters.imageCount > 0) clauses.push(countClause("read", counters.imageCount, "image"));
+  if (counters.approvals > 0) clauses.push("requested approval");
+  if (clauses.length === 0 && counters.controlCount > 0) clauses.push("updated context");
+  return clauses;
+}
+
+function summaryKind(
+  counters: ActivityCounters,
+  clauses: string[],
+  runClause: string,
+): ActivityGroupSummaryKind {
+  const activeKinds: ActivityGroupSummaryKind[] = [];
+  if (counters.editCount > 0) activeKinds.push("edit");
+  if (counters.readFiles.size > 0 || counters.readFileCount > 0) activeKinds.push("read");
+  if (counters.searchedCode > 0) activeKinds.push("search");
+  if (counters.listedFiles > 0) activeKinds.push("list");
+  if (counters.webSearches > 0) activeKinds.push("web");
+  if (counters.imageCount > 0) activeKinds.push("image");
+  if (counters.approvals > 0) activeKinds.push("approval");
+  if (counters.controlCount > 0) activeKinds.push("control");
+  if (counters.testsOrChecks > 0 || runClause) activeKinds.push("command");
+  return activeKinds[0] ?? "command";
+}
+
+function ranClause(count: number): string {
+  return count === 1 ? "ran a command" : `ran ${count} commands`;
+}
+
+function countClause(verb: string, count: number, noun: string): string {
+  if (count === 1) return `${verb} a ${noun}`;
+  return `${verb} ${count} ${noun}s`;
+}
+
+function formatActivityClauses(primary: string[], runClause: string): string {
+  if (primary.length === 0) return runClause ? capitalize(runClause) : "";
+  if (runClause) return `${capitalize(formatList(primary))}, ${runClause}`;
+  return capitalize(formatList(primary));
+}
+
+function formatList(values: string[]): string {
+  if (values.length === 0) return "";
+  if (values.length === 1) return values[0]!;
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
+}
+
+function capitalize(value: string): string {
+  return value ? `${value[0]!.toUpperCase()}${value.slice(1)}` : value;
+}
+
+function summarizeSedCommand(tokens: string[]): string | null {
+  const expressionIndex = tokens.findIndex((token, index) => index > 0 && token !== "-n" && !token.startsWith("--"));
+  const expression = expressionIndex >= 0 ? tokens[expressionIndex] ?? "" : "";
+  const files = expressionIndex >= 0 ? nonFlagArgs(tokens.slice(expressionIndex + 1)) : [];
+  const lineMatch = /^(\d+)(?:,(\d+))?p$/.exec(expression);
+  if (lineMatch) {
+    const start = lineMatch[1]!;
+    const end = lineMatch[2];
+    const range = end ? `lines ${start}-${end}` : `line ${start}`;
+    return files.length > 0 ? `Read ${range} of ${formatCommandTargets(files)}` : `Read ${range}`;
+  }
+  return files.length > 0 ? `Read ${formatCommandTargets(files)} with sed` : "Run sed";
+}
+
+function summarizeRipgrepCommand(tokens: string[]): string | null {
+  const args = tokens.slice(1);
+  if (args.includes("--files")) {
+    const filters = nonFlagArgs(args.filter((token) => token !== "--files"));
+    return filters.length > 0 ? `List files matching ${formatCommandTargets(filters)}` : "List files";
+  }
+  const positional = nonFlagArgs(args);
+  const query = positional[0];
+  const targets = positional.slice(1);
+  if (!query) return "Search files";
+  return targets.length > 0
+    ? `Search for ${quoteCommandText(query)} in ${formatCommandTargets(targets)}`
+    : `Search for ${quoteCommandText(query)}`;
+}
+
+function shellWords(command: string): string[] {
+  const matches = command.match(/"([^"\\]|\\.)*"|'[^']*'|[^\s]+/g) ?? [];
+  return matches.map((token) => unquoteShellToken(token)).filter(Boolean);
+}
+
+function unquoteShellToken(token: string): string {
+  if ((token.startsWith("'") && token.endsWith("'")) || (token.startsWith("\"") && token.endsWith("\""))) {
+    return token.slice(1, -1);
+  }
+  return token;
+}
+
+function isShellOperator(token: string): boolean {
+  return ["|", "&&", "||", ";", ">", ">>", "<", "(", ")"].includes(token);
+}
+
+function nonFlagArgs(tokens: string[]): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (!token.startsWith("-")) {
+      values.push(token);
+      continue;
+    }
+    if (flagTakesValue(token) && index + 1 < tokens.length) index += 1;
+  }
+  return values;
+}
+
+function flagTakesValue(flag: string): boolean {
+  return ["-e", "-f", "-g", "--glob", "--type", "-t", "--context", "-C", "-A", "-B", "-m", "-n", "-c"].includes(flag);
+}
+
+function formatCommandTargets(values: string[]): string {
+  if (values.length === 1) return values[0]!;
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values[0]} and ${values.length - 1} more`;
+}
+
+function quoteCommandText(value: string): string {
+  return `"${value}"`;
+}

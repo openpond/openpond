@@ -1,0 +1,188 @@
+.remote-access-summary {
+  align-items: flex-start;
+}
+
+.remote-access-summary .account-summary-actions {
+  flex-wrap: wrap;
+}
+
+.remote-access-icon,
+.remote-access-peer-dot {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #9d9d9d;
+}
+
+.remote-access-icon.configured {
+  background: rgba(58, 163, 255, 0.13);
+  color: #77bdff;
+}
+
+.remote-access-icon.online {
+  background: rgba(80, 200, 120, 0.13);
+  color: #8ddfa8;
+}
+
+.remote-access-link-heading {
+  align-items: center;
+}
+
+.remote-access-link-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.remote-access-link-heading span,
+.remote-access-link-heading small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-access-value-row {
+  align-items: flex-start;
+}
+
+.remote-access-value-row div {
+  gap: 6px;
+}
+
+.remote-access-value-row strong.flash {
+  animation: remote-access-title-flash 1500ms ease-out;
+}
+
+.remote-access-value-row code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #dcdcdc;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.remote-access-peer-row {
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+}
+
+.remote-access-environment {
+  display: grid;
+}
+
+.remote-access-environment-row {
+  display: grid;
+  min-height: 62px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.remote-access-environment-row:last-child {
+  border-bottom: 0;
+}
+
+.remote-access-environment-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.remote-access-environment-row.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.remote-access-environment-cell {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.remote-access-environment-cell:last-child {
+  border-right: 0;
+}
+
+.remote-access-environment-cell strong,
+.remote-access-environment-cell span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-access-environment-cell strong {
+  color: #f6f6f6;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.remote-access-environment-cell span {
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.remote-access-peer-dot {
+  width: 11px;
+  height: 11px;
+  justify-self: center;
+  border-radius: 999px;
+  background: #555;
+}
+
+.remote-access-peer-dot.online {
+  background: #58d68d;
+  box-shadow: 0 0 0 4px rgba(88, 214, 141, 0.12);
+}
+
+.remote-access-config {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #181818;
+}
+
+.remote-access-config pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  background: #0f0f0f;
+  color: #dcdcdc;
+  padding: 14px 16px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre;
+}
+
+@keyframes remote-access-title-flash {
+  0%,
+  100% {
+    color: #f6f6f6;
+    text-shadow: none;
+  }
+
+  18%,
+  55% {
+    color: #ffbc8f;
+    text-shadow: 0 0 12px rgba(255, 156, 86, 0.35);
+  }
+}
+
+@media (max-width: 720px) {
+  .remote-access-environment-row.three,
+  .remote-access-environment-row.two {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-access-environment-cell {
+    min-height: 56px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .remote-access-environment-cell:last-child {
+    border-bottom: 0;
+  }
+}
