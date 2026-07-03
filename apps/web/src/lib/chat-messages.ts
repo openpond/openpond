@@ -18,8 +18,10 @@ import {
   isCodexGoalContextEvent,
   isCompactionEvent,
 } from "./chat-activities";
+import { classifyChatError } from "./chat-errors";
 import { insightsRunPromptSummaryFromTurnStarted } from "./chat-insights";
 import { asRecord, findLast } from "./chat-message-utils";
+import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
 
 export { activityGroupSummary } from "./chat-activities";
 
@@ -36,6 +38,7 @@ export function buildCachedChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
   const createPipelineTurnIds = createPipelineTurnIdSet(items);
+  const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
 
   for (const item of items) {
     if (item.name === "turn.started") {
@@ -115,23 +118,32 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       if (previous?.role === "assistant" && previous.turnId === item.turnId) {
         previous.content = `${previous.content ?? ""}${content}`;
         previous.timestamp = item.timestamp;
+        previous.sources = mergeChatSources(
+          previous.sources,
+          takePendingSources(pendingSourcesByTurnId, item.turnId) ?? [],
+        );
       } else {
+        const sources = takePendingSources(pendingSourcesByTurnId, item.turnId);
         messages.push({
           id: item.id,
           role: "assistant",
           content,
           timestamp: item.timestamp,
           turnId: item.turnId,
+          ...(sources?.length ? { sources } : {}),
         });
       }
       continue;
     }
 
     if (item.name === "turn.failed") {
+      const content = item.error ?? "Turn failed";
+      const errorKind = classifyChatError(content, item.data);
       messages.push({
         id: item.id,
         role: "error",
-        content: item.error ?? "Turn failed",
+        content,
+        ...(errorKind ? { errorKind } : {}),
         timestamp: item.timestamp,
         turnId: item.turnId,
       });
@@ -146,6 +158,9 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     if (
       item.name === "tool.started" ||
       item.name === "tool.completed" ||
+      item.name === "skill.selected" ||
+      item.name === "skill.loaded" ||
+      item.name === "skill.load_failed" ||
       item.name === "command.output" ||
       item.name === "workspace_action" ||
       item.name === "workspace_action_result" ||
@@ -161,6 +176,10 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       if (actionRun) {
         appendActionRunMessage(messages, item, actionRun);
         continue;
+      }
+      const webSources = webSearchSourcesFromEvent(item);
+      if (webSources.length > 0) {
+        appendSourcesToTurn(messages, pendingSourcesByTurnId, item.turnId, webSources);
       }
       appendActivityMessage(messages, item);
     }
@@ -184,6 +203,31 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   }
 
   return messages;
+}
+
+function appendSourcesToTurn(
+  messages: ChatMessage[],
+  pendingSourcesByTurnId: Map<string, ChatMessage["sources"]>,
+  turnId: string | undefined,
+  sources: NonNullable<ChatMessage["sources"]>,
+): void {
+  if (!turnId) return;
+  const assistant = messages[messages.length - 1];
+  if (assistant?.role !== "assistant" || assistant.turnId !== turnId) {
+    pendingSourcesByTurnId.set(turnId, mergeChatSources(pendingSourcesByTurnId.get(turnId), sources));
+    return;
+  }
+  assistant.sources = mergeChatSources(assistant.sources, sources);
+}
+
+function takePendingSources(
+  pendingSourcesByTurnId: Map<string, ChatMessage["sources"]>,
+  turnId: string | undefined,
+): ChatMessage["sources"] {
+  if (!turnId) return undefined;
+  const sources = pendingSourcesByTurnId.get(turnId);
+  if (sources) pendingSourcesByTurnId.delete(turnId);
+  return sources;
 }
 
 function appendCreatePipelineDebugActivity(messages: ChatMessage[], item: RuntimeEvent): void {

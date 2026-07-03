@@ -25,7 +25,7 @@ import type { ChatMessage } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
-import type { WorkspaceLocation, WorkspaceTargetState } from "../../lib/workspace-location";
+import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import {
   buildChatTimelineRows,
@@ -58,6 +58,9 @@ export function RightChatPanelStack({
   mentionApps,
   projectTarget,
   providerSettings,
+  accountBaseUrl,
+  billingOrganizationSlug,
+  billingTeamId,
   showToast,
   workspaceTarget,
   onAddChat,
@@ -88,6 +91,9 @@ export function RightChatPanelStack({
   mentionApps: OpenPondApp[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
+  accountBaseUrl?: string | null;
+  billingOrganizationSlug?: string | null;
+  billingTeamId?: string | null;
   showToast: ShowAppToast;
   workspaceTarget: WorkspaceTargetState;
   onAddChat: () => void;
@@ -117,7 +123,7 @@ export function RightChatPanelStack({
       command?: ComposerSlashCommand | null,
       options?: ComposerSubmitOptions,
     ) => Promise<boolean>;
-  onWorkspaceTargetChange: (target: WorkspaceLocation) => void;
+  onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [splitPercent, setSplitPercent] = useState(50);
@@ -264,6 +270,9 @@ export function RightChatPanelStack({
             panel={panel}
             projectTarget={projectTarget}
             providerSettings={providerSettings}
+            accountBaseUrl={accountBaseUrl}
+            billingOrganizationSlug={billingOrganizationSlug}
+            billingTeamId={billingTeamId}
             showToast={showToast}
             workspaceTarget={workspaceTarget}
             onCodexPermissionModeChange={onCodexPermissionModeChange}
@@ -305,6 +314,9 @@ function RightChatPane({
   mentionApps,
   projectTarget,
   providerSettings,
+  accountBaseUrl,
+  billingOrganizationSlug,
+  billingTeamId,
   showToast,
   workspaceTarget,
   onCodexPermissionModeChange,
@@ -330,6 +342,9 @@ function RightChatPane({
   mentionApps: OpenPondApp[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
+  accountBaseUrl?: string | null;
+  billingOrganizationSlug?: string | null;
+  billingTeamId?: string | null;
   showToast: ShowAppToast;
   workspaceTarget: WorkspaceTargetState;
   onCodexPermissionModeChange: (mode: CodexPermissionMode) => void;
@@ -353,7 +368,7 @@ function RightChatPane({
     command?: ComposerSlashCommand | null,
     options?: ComposerSubmitOptions,
   ) => Promise<boolean>;
-  onWorkspaceTargetChange: (target: WorkspaceLocation) => void;
+  onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
 }) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const stickyToBottomRef = useRef(true);
@@ -411,6 +426,9 @@ function RightChatPane({
             ) : (
               <MessageRow
                 activeWorkspaceAppId={panel.activeWorkspaceAppId}
+                accountBaseUrl={accountBaseUrl}
+                billingOrganizationSlug={billingOrganizationSlug}
+                billingTeamId={billingTeamId}
                 connection={connection}
                 key={row.id}
                 message={row.message}

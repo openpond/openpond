@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import type { CloudProject, CloudWorkItem, LocalProject, Session } from "@openpond/contracts";
+import type { CloudProject, CloudWorkItem, LocalProject, Session, WorkspaceState } from "@openpond/contracts";
 import {
   Archive,
   ArchiveRestore,
@@ -12,12 +12,15 @@ import {
   PanelRight,
   Pin,
   PinOff,
+  SquareTerminal,
   SquarePen,
   X,
 } from "../icons";
 import { relativeAge } from "../../lib/chat-messages";
+import { projectCapabilityNote } from "../../lib/project-workflow-state";
 import { CloudMoveIcon } from "../common/CloudMoveIcon";
 import { ProjectKindIcon } from "../common/ProjectKindIcon";
+import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 
@@ -155,6 +158,7 @@ export function SidebarSessionRow({
   dragging,
   placeholder,
   running,
+  terminalIndicator,
   onSelect,
   onTogglePin,
   onDockRight,
@@ -173,6 +177,7 @@ export function SidebarSessionRow({
   dragging?: boolean;
   placeholder?: boolean;
   running?: boolean;
+  terminalIndicator?: SidebarTerminalIndicator | null;
   onSelect: () => void;
   onTogglePin: () => void;
   onDockRight?: () => void;
@@ -204,11 +209,14 @@ export function SidebarSessionRow({
         <span className="row-label">{session.title}</span>
       </span>
       <div className="row-meta">
-        {rowRunning ? (
-          <span className="sidebar-running-dot" style={runningDotStyle} data-tooltip="Running" aria-label="Running" />
-        ) : (
-          <time>{relativeAge(session.updatedAt)}</time>
-        )}
+        <span className="row-meta-status">
+          {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
+          {rowRunning ? (
+            <span className="sidebar-running-dot" style={runningDotStyle} data-tooltip="Running" aria-label="Running" />
+          ) : (
+            <time>{relativeAge(session.updatedAt)}</time>
+          )}
+        </span>
         <div className="sidebar-row-actions">
           <SidebarRowAction label={session.pinned ? "Unpin chat" : "Pin chat"} onClick={onTogglePin}>
             {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
@@ -233,7 +241,9 @@ export function SidebarProjectRow({
   pinned = false,
   selected,
   expanded = false,
+  workspaceState,
   placeholder,
+  terminalIndicator,
   onSelect,
   onNewChat,
   onMoveToCloud,
@@ -250,7 +260,9 @@ export function SidebarProjectRow({
   pinned?: boolean;
   selected: boolean;
   expanded?: boolean;
+  workspaceState?: WorkspaceState | null;
   placeholder?: boolean;
+  terminalIndicator?: SidebarTerminalIndicator | null;
   onSelect: () => void;
   onNewChat: () => void;
   onMoveToCloud?: () => void;
@@ -264,6 +276,7 @@ export function SidebarProjectRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onToggleSystemVisibility) || Boolean(onRemove);
+  const linkedCloud = kind === "local" && Boolean((project as LocalProject).linkedSandboxProject?.projectId);
 
   function closeMenu() {
     setMenuOpen(false);
@@ -285,18 +298,30 @@ export function SidebarProjectRow({
       <ProjectKindIcon
         kind={kind}
         agentSdk={Boolean(project.agentSdk?.detected)}
+        linkedCloud={linkedCloud}
         open={kind === "local" && expanded}
         className="sidebar-row-icon"
         baseSize={15}
       />
       <span className="row-label-shell">
         <span className="row-label">{project.name}</span>
+        <span className="row-label-detail">
+          {projectCapabilityNote({
+            kind,
+            localProject: kind === "local" ? project as LocalProject : null,
+            cloudProject: kind === "cloud" ? project as CloudProject : null,
+            workspaceState,
+          })}
+        </span>
         <span className="sidebar-project-caret" aria-hidden="true">
           {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </span>
       </span>
       <div className="row-meta">
-        <time>{projectRowMeta(project, kind)}</time>
+        <span className="row-meta-status">
+          {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
+          <time>{projectRowMeta(project, kind)}</time>
+        </span>
         <div className="sidebar-row-actions">
           <SidebarRowAction label={pinned ? "Unpin project" : "Pin project"} onClick={onTogglePin}>
             {pinned ? <PinOff size={13} /> : <Pin size={13} />}
@@ -359,7 +384,7 @@ export function SidebarCloudWorkItemRow({
       )}
       <span className="row-label-shell">
         <span className="row-label">{workItem.title}</span>
-        {workItem.sourceRef ? <span className="row-label-detail">{workItem.sourceRef}</span> : null}
+        <span className="row-label-detail">{cloudWorkItemDetailNote(workItem)}</span>
       </span>
       <div className="row-meta">
         {running ? (
@@ -372,11 +397,41 @@ export function SidebarCloudWorkItemRow({
   );
 }
 
+function SidebarTerminalStatusIcon({ indicator }: { indicator: SidebarTerminalIndicator }) {
+  return (
+    <span
+      className={`sidebar-terminal-indicator ${indicator.status}`}
+      data-tooltip={indicator.label}
+      aria-label={indicator.label}
+      title={indicator.label}
+    >
+      <SquareTerminal size={13} />
+    </span>
+  );
+}
+
 function cloudWorkItemMeta(workItem: CloudWorkItem): string {
   if (workItem.status === "needs_review") return "Review";
   if (workItem.status === "failed") return "Failed";
   if (workItem.status === "cancelled") return "Cancelled";
   return relativeAge(workItem.updatedAt);
+}
+
+function cloudWorkItemDetailNote(workItem: CloudWorkItem): string {
+  const parts = [statusLabelForSidebar(workItem.status)];
+  if (workItem.sourceRef) parts.push(workItem.sourceRef);
+  if (workItem.latestSandboxId) parts.push("sandbox ready");
+  if (workItem.latestTaskRunId && (workItem.status === "queued" || workItem.status === "running")) {
+    parts.push("task running");
+  }
+  if (workItem.status === "needs_review") parts.push("patch ready");
+  if (workItem.status === "failed") parts.push("open logs");
+  return parts.join(" / ");
+}
+
+function statusLabelForSidebar(status: CloudWorkItem["status"]): string {
+  if (status === "needs_review") return "review";
+  return status.replace(/_/g, " ");
 }
 
 function projectRowMeta(project: LocalProject | CloudProject, kind: "local" | "cloud"): string {

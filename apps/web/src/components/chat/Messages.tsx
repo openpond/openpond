@@ -1,10 +1,11 @@
-import { memo } from "react";
-import { Copy, FileText, ImageIcon } from "../icons";
+import { memo, useState } from "react";
+import { Copy, CreditCard, ExternalLink, FileText, Globe2, ImageIcon } from "../icons";
 import type { ChatAttachmentSummary } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
-import type { ChatMessage } from "../../lib/app-models";
+import type { ChatMessage, ChatSource } from "../../lib/app-models";
 import { formatMessageTimestamp, formatMessageTimestampTitle } from "../../lib/chat-messages";
+import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { copyToClipboard } from "../../lib/clipboard";
 import { MarkdownText } from "./MarkdownText";
 import {
@@ -20,6 +21,9 @@ import { InsightsRunPromptCard } from "./MessageInsightsRunPrompt";
 
 type MessageRowProps = {
   activeWorkspaceAppId?: string | null;
+  accountBaseUrl?: string | null;
+  billingOrganizationSlug?: string | null;
+  billingTeamId?: string | null;
   connection?: ClientConnection | null;
   message: ChatMessage;
   onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
@@ -31,6 +35,9 @@ type MessageRowProps = {
 
 export const MessageRow = memo(function MessageRow({
   activeWorkspaceAppId = null,
+  accountBaseUrl = null,
+  billingOrganizationSlug = null,
+  billingTeamId = null,
   connection = null,
   message,
   onOpenBrowserLink,
@@ -48,6 +55,18 @@ export const MessageRow = memo(function MessageRow({
   }
 
   if (message.role === "error") {
+    if (message.errorKind === "opchat_quota_exceeded") {
+      return (
+        <article className="message-row assistant">
+          <OpChatQuotaErrorCard
+            accountBaseUrl={accountBaseUrl}
+            billingOrganizationSlug={billingOrganizationSlug}
+            billingTeamId={billingTeamId}
+            onOpenBrowserLink={onOpenBrowserLink}
+          />
+        </article>
+      );
+    }
     return (
       <article className="message-row assistant">
         <div className="assistant-message error-message">{message.content ?? ""}</div>
@@ -88,6 +107,9 @@ export const MessageRow = memo(function MessageRow({
             workspaceRootPath={workspaceRootPath}
           />
         </div>
+      ) : null}
+      {message.sources?.length ? (
+        <MessageSources sources={message.sources} onOpenBrowserLink={onOpenBrowserLink} />
       ) : null}
       {message.actionRun && isProfileActionRun(message.actionRun) ? (
         <div className={`assistant-message action-run-profile-message ${message.actionRun.status}`}>
@@ -158,6 +180,9 @@ export const MessageRow = memo(function MessageRow({
 function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
   return (
     previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
+    previous.accountBaseUrl === next.accountBaseUrl &&
+    previous.billingOrganizationSlug === next.billingOrganizationSlug &&
+    previous.billingTeamId === next.billingTeamId &&
     previous.connection === next.connection &&
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
@@ -179,14 +204,160 @@ function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): bool
     previous.statusKind === next.statusKind &&
     previous.statusState === next.statusState &&
     previous.statusTone === next.statusTone &&
+    previous.errorKind === next.errorKind &&
     messageAttachmentsEqual(previous.attachments, next.attachments) &&
     previous.activities === next.activities &&
+    previous.sources === next.sources &&
     previous.actionRun === next.actionRun &&
     previous.insightsRunPrompt === next.insightsRunPrompt &&
     previous.changeSummary === next.changeSummary &&
     previous.createPipelineRequest === next.createPipelineRequest &&
     previous.createPipeline === next.createPipeline &&
     previous.createPipelineDebugActivities === next.createPipelineDebugActivities
+  );
+}
+
+function MessageSources({
+  sources,
+  onOpenBrowserLink,
+}: {
+  sources: ChatSource[];
+  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+}) {
+  return (
+    <div className="assistant-sources" aria-label="Sources">
+      <span className="assistant-sources-label">
+        <Globe2 size={13} />
+        <span>Sources</span>
+      </span>
+      {sources.map((source) => (
+        <SourcePill key={`${source.id}:${source.url}`} source={source} onOpenBrowserLink={onOpenBrowserLink} />
+      ))}
+    </div>
+  );
+}
+
+function SourcePill({
+  source,
+  onOpenBrowserLink,
+}: {
+  source: ChatSource;
+  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+}) {
+  const label = sourceLabel(source);
+  const title = [source.title, hostnameFromUrl(source.url)].filter(Boolean).join(" - ");
+  const content = (
+    <>
+      <SourceFavicon source={source} />
+      <span>{label}</span>
+    </>
+  );
+
+  if (onOpenBrowserLink) {
+    return (
+      <button
+        type="button"
+        className="assistant-source-pill"
+        title={title || label}
+        aria-label={`Open source ${label}`}
+        onClick={() => onOpenBrowserLink(source.url, { newTab: true })}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <a
+      className="assistant-source-pill"
+      href={source.url}
+      target="_blank"
+      rel="noreferrer"
+      title={title || label}
+      aria-label={`Open source ${label}`}
+    >
+      {content}
+    </a>
+  );
+}
+
+function SourceFavicon({ source }: { source: ChatSource }) {
+  const [failed, setFailed] = useState(false);
+  if (!source.faviconUrl || failed) {
+    return <Globe2 className="assistant-source-fallback-icon" size={13} />;
+  }
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className="assistant-source-favicon"
+      decoding="async"
+      loading="lazy"
+      src={source.faviconUrl}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function sourceLabel(source: ChatSource): string {
+  return source.sourceName?.trim() || hostnameFromUrl(source.url) || source.title;
+}
+
+function hostnameFromUrl(value: string): string | null {
+  try {
+    return new URL(value).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+function OpChatQuotaErrorCard({
+  accountBaseUrl,
+  billingOrganizationSlug,
+  billingTeamId,
+  onOpenBrowserLink,
+}: {
+  accountBaseUrl?: string | null;
+  billingOrganizationSlug?: string | null;
+  billingTeamId?: string | null;
+  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+}) {
+  const billingUrl = buildOpenPondBillingUrl({
+    accountBaseUrl,
+    organizationSlug: billingOrganizationSlug,
+    teamId: billingTeamId,
+  });
+  const actionContent = (
+    <>
+      <CreditCard size={15} />
+      <span>Add credits</span>
+      <ExternalLink size={13} />
+    </>
+  );
+
+  return (
+    <div className="assistant-message quota-error-card" role="alert">
+      <div className="quota-error-card-icon">
+        <CreditCard size={17} />
+      </div>
+      <div className="quota-error-card-body">
+        <strong>OpenPond Chat allowance reached</strong>
+        <p>You have reached your OpChat token allowance for this period. Add credits or wait for the allowance to reset.</p>
+        {onOpenBrowserLink ? (
+          <button
+            type="button"
+            className="quota-error-card-action"
+            onClick={() => onOpenBrowserLink(billingUrl, { newTab: true })}
+          >
+            {actionContent}
+          </button>
+        ) : (
+          <a className="quota-error-card-action" href={billingUrl} target="_blank" rel="noreferrer">
+            {actionContent}
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { parseSkillMarkdown } from "openpond-agent-sdk/skills";
 
 const packageRoot = path.resolve(import.meta.dir, "..");
 const fixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "primitive-contract");
@@ -356,6 +357,12 @@ export default defineAgentProject({
     expect(manifest.skills[0].files[0]).toMatchObject({
       path: "references/tone.md",
       artifactRef: ".openpond/skills/tone/references/tone.md",
+    });
+    expect(parseSkillMarkdown(firstBuild["skills/tone/SKILL.md"])).toMatchObject({
+      name: "tone",
+      description: "Use when shaping answer tone.",
+      body: "Be concise.",
+      messages: [],
     });
     await runSdkJson(["build", "--json", "--cwd", fixtureRoot]);
     const secondBuild = await readArtifacts(".openpond", buildArtifacts);

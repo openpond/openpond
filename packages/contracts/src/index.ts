@@ -1,4 +1,5 @@
 export * from "./runtime.js";
+export * from "./terminal.js";
 export * from "./apps.js";
 export * from "./connected-apps.js";
 export * from "./workspaces.js";
@@ -17,3 +18,4 @@ export * from "./remote-access.js";
 export * from "./profile.js";
 export * from "./create-pipeline.js";
 export * from "./insights.js";
+export * from "./goal-status.js";

@@ -6,7 +6,12 @@ import {
   type ProviderModelCapabilities,
   type ProviderSettings,
 } from "@openpond/contracts";
-import type { HostedChatMessage } from "@openpond/cloud";
+import type {
+  HostedChatMessage,
+  HostedChatTool,
+  HostedChatToolCall,
+  HostedChatToolChoice,
+} from "@openpond/cloud";
 import type { ProviderSecrets } from "./provider-secrets.js";
 
 export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
@@ -26,6 +31,7 @@ export type OpenAiCompatibleProviderId = (typeof OPENAI_COMPATIBLE_PROVIDER_IDS)
 export type OpenAiCompatibleStreamDelta =
   | { type: "text_delta"; text: string; raw: unknown }
   | { type: "reasoning_delta"; text: string; raw: unknown }
+  | { type: "tool_call_delta"; toolCalls: HostedChatToolCall[]; raw: unknown }
   | { type: "usage"; usage: unknown; raw: unknown }
   | { type: "finish"; finishReason: string; raw: unknown };
 
@@ -179,6 +185,8 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   secrets: ProviderSecrets;
   modelId?: string | null;
   messages: HostedChatMessage[];
+  tools?: HostedChatTool[];
+  toolChoice?: HostedChatToolChoice;
   requestId?: string;
   signal?: AbortSignal;
   requestTimeoutMs?: number;
@@ -191,11 +199,12 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
     response = await fetch(providerEndpointUrl(provider.baseUrl, "chat/completions"), {
       method: "POST",
       headers: providerHeaders(provider.apiKey, "text/event-stream", input.requestId),
-      body: JSON.stringify({
+      body: JSON.stringify(buildChatCompletionBody({
         model: provider.model,
         messages: input.messages,
-        stream: true,
-      }),
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+      })),
       signal: requestSignal.signal,
     });
   } finally {
@@ -216,6 +225,26 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
       yield delta;
     }
   }
+}
+
+function buildChatCompletionBody(input: {
+  model: string;
+  messages: HostedChatMessage[];
+  tools?: HostedChatTool[];
+  toolChoice?: HostedChatToolChoice;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: input.model,
+    messages: input.messages,
+    stream: true,
+  };
+  if (input.tools) {
+    body.tools = input.tools;
+  }
+  if (input.toolChoice !== undefined) {
+    body.tool_choice = input.toolChoice;
+  }
+  return body;
 }
 
 function providerEndpointUrl(baseUrl: string, path: "models" | "chat/completions"): string {
@@ -507,10 +536,20 @@ function streamDeltasFromChunk(raw: unknown): OpenAiCompatibleStreamDelta[] {
         raw,
       });
     }
+    const toolCalls = parseToolCalls(delta.tool_calls);
+    if (toolCalls.length > 0) {
+      deltas.push({ type: "tool_call_delta", toolCalls, raw });
+    }
     const finishReason = stringValue(choiceRecord.finish_reason);
     if (finishReason) deltas.push({ type: "finish", finishReason, raw });
   }
   return deltas;
+}
+
+function parseToolCalls(value: unknown): HostedChatToolCall[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is HostedChatToolCall => Boolean(item) && typeof item === "object")
+    : [];
 }
 
 function parseUsage(raw: unknown): unknown | null {

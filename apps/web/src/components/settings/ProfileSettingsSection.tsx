@@ -14,6 +14,7 @@ import { api, type ClientConnection } from "../../api";
 
 type ProfileState = NonNullable<BootstrapPayload["profile"]>;
 type ProfileAgent = ProfileState["agents"][number];
+type ProfileSkill = ProfileState["skills"][number];
 type ProfileSyncDifference = {
   label: string;
   detail: string;
@@ -35,6 +36,7 @@ type ProfileSettingsSectionProps = {
   onPayload: (payload: BootstrapPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
+  onSkillCommand?: (command: string) => void;
 };
 
 export function ProfileSettingsSection({
@@ -43,6 +45,7 @@ export function ProfileSettingsSection({
   onPayload,
   onError,
   onToast,
+  onSkillCommand,
 }: ProfileSettingsSectionProps) {
   const [profilePath, setProfilePath] = useState("");
   const [profileName, setProfileName] = useState("default");
@@ -176,6 +179,11 @@ export function ProfileSettingsSection({
               </div>
             )}
           </div>
+
+          <ProfileSkillsSection
+            onSkillCommand={onSkillCommand}
+            profile={profile}
+          />
 
           <ProfileSummary profile={profile} pendingCreatePlanReviews={pendingCreatePlanReviews} />
         </>
@@ -710,6 +718,119 @@ function ProfileAgentRow({
   );
 }
 
+function ProfileSkillsSection({
+  onSkillCommand,
+  profile,
+}: {
+  onSkillCommand?: (command: string) => void;
+  profile: ProfileState;
+}) {
+  const skills = profile.skills.slice().sort((left, right) => left.name.localeCompare(right.name));
+  const commandDisabled = !onSkillCommand;
+
+  function runCommand(command: string) {
+    onSkillCommand?.(command);
+  }
+
+  return (
+    <div className="account-list profile-skill-list">
+      <div className="account-list-heading profile-agent-list-heading">
+        <span>Skills</span>
+        <div className="profile-skill-heading-actions">
+          <small>{profile.skillCatalog.skillCount} tracked</small>
+          <button
+            className="settings-secondary"
+            disabled={commandDisabled}
+            type="button"
+            title="Create profile skill"
+            onClick={() => runCommand("/skill create ")}
+          >
+            <Plus size={14} />
+            <span>Create</span>
+          </button>
+        </div>
+      </div>
+      {skills.length ? (
+        <>
+          <div className="profile-skill-table-head" aria-hidden="true">
+            <span>Skill</span>
+            <span>Trigger</span>
+            <span>Status</span>
+            <span>Source</span>
+            <span>Actions</span>
+          </div>
+          {skills.map((skill) => (
+            <ProfileSkillRow
+              commandDisabled={commandDisabled}
+              key={skill.name}
+              onSkillCommand={runCommand}
+              skill={skill}
+            />
+          ))}
+        </>
+      ) : (
+        <div className="empty-account-list">
+          <strong>No profile skills found</strong>
+          <span>Use /skill create to add reusable profile instructions.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProfileSkillRow({
+  commandDisabled,
+  onSkillCommand,
+  skill,
+}: {
+  commandDisabled: boolean;
+  onSkillCommand: (command: string) => void;
+  skill: ProfileSkill;
+}) {
+  const status: ProfileStatusCell =
+    skill.validationStatus === "valid"
+      ? { state: "ready", label: "valid" }
+      : { state: "warning", label: skill.validationStatus };
+  return (
+    <div className="product-row profile-skill-row">
+      <div className="profile-agent-identity">
+        <FileText size={18} />
+        <div>
+          <strong>{skill.name}</strong>
+          <span title={skill.path}>{skill.path}</span>
+        </div>
+      </div>
+      <div className="profile-skill-description" title={skill.description}>
+        {skill.description || "No description"}
+      </div>
+      <ProfileStatusText status={status} />
+      <div className="profile-agent-action">
+        <span title={skill.sourcePath}>{skill.sourcePath}</span>
+      </div>
+      <div className="profile-skill-actions">
+        <button
+          className="settings-secondary compact"
+          disabled={commandDisabled || !skill.enabled}
+          type="button"
+          title={`Use ${skill.name}`}
+          onClick={() => onSkillCommand(`$${skill.name} `)}
+        >
+          <span>Use</span>
+        </button>
+        <button
+          className="settings-secondary compact"
+          disabled={commandDisabled}
+          type="button"
+          title={`Edit ${skill.name}`}
+          onClick={() => onSkillCommand(`/skill edit ${skill.name} `)}
+        >
+          <span>Edit</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProfileStatusText({ status }: { status: ProfileStatusCell }) {
   return <span className={`profile-status-text ${status.state}`}>{status.label}</span>;
 }
@@ -817,6 +938,7 @@ function profileSyncDifferences(profile: ProfileState): ProfileSyncDifference[] 
     profile.diff.changedAgents.length +
     profile.diff.newAgents.length +
     profile.diff.deletedAgents.length +
+    profile.diff.changedSkills.length +
     profile.diff.changedActions.length +
     profile.diff.changedExtensions.length +
     profile.diff.setupChanges.length +
@@ -860,6 +982,9 @@ function profileDiffSummary(profile: ProfileState): string {
   if (agentCount) parts.push(`${agentCount} agent ${agentCount === 1 ? "change" : "changes"}`);
   if (profile.diff.changedActions.length) {
     parts.push(`${profile.diff.changedActions.length} action ${profile.diff.changedActions.length === 1 ? "change" : "changes"}`);
+  }
+  if (profile.diff.changedSkills.length) {
+    parts.push(`${profile.diff.changedSkills.length} skill ${profile.diff.changedSkills.length === 1 ? "change" : "changes"}`);
   }
   if (profile.diff.changedExtensions.length) {
     parts.push(`${profile.diff.changedExtensions.length} extension ${profile.diff.changedExtensions.length === 1 ? "change" : "changes"}`);
@@ -981,6 +1106,7 @@ function profileChangeLines(profile: NonNullable<BootstrapPayload["profile"]>): 
   for (const agent of diff.newAgents.slice(0, 3)) lines.push(`new agent: ${agent}`);
   for (const agent of diff.changedAgents.slice(0, 3)) lines.push(`agent changed: ${agent}`);
   for (const agent of diff.deletedAgents.slice(0, 3)) lines.push(`agent removed: ${agent}`);
+  for (const skill of diff.changedSkills.slice(0, 3)) lines.push(`skill: ${skill}`);
   for (const action of diff.changedActions.slice(0, 3)) lines.push(`action: ${action}`);
   for (const extension of diff.changedExtensions.slice(0, 3)) lines.push(`extension: ${extension}`);
   for (const setup of diff.setupChanges.slice(0, 2)) lines.push(`setup: ${setup}`);
@@ -995,6 +1121,7 @@ function profileHasChanges(profile: NonNullable<BootstrapPayload["profile"]>): b
     diff.changedAgents.length > 0 ||
     diff.newAgents.length > 0 ||
     diff.deletedAgents.length > 0 ||
+    diff.changedSkills.length > 0 ||
     diff.changedActions.length > 0 ||
     diff.changedExtensions.length > 0 ||
     diff.setupChanges.length > 0 ||

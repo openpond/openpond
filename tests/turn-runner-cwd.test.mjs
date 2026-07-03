@@ -1127,7 +1127,7 @@ describe("turn runner workspace cwd", () => {
       defaultSessionCwd: (appId) => `/default/${appId ?? "none"}`,
       resolveSessionWorkspaceCwd: async (candidate, options = {}) => {
         resolveCalls.push({ workspaceKind: candidate.workspaceKind, appId: candidate.appId, options });
-        return "/home/glu/Projects/all/templates-staging/mpp-service-tool";
+        return "/home/glu/Projects/all/templates-qa/mpp-service-tool";
       },
       ensureCodexRuntime: async (candidate, turnInput) => {
         codexRuntimeSession = { ...candidate };
@@ -1171,9 +1171,9 @@ describe("turn runner workspace cwd", () => {
     });
 
     assert.equal(turn.status, "completed");
-    assert.equal(session.cwd, "/home/glu/Projects/all/templates-staging/mpp-service-tool");
-    assert.equal(codexRuntimeSession.cwd, "/home/glu/Projects/all/templates-staging/mpp-service-tool");
-    assert.equal(codexStartTurn.cwd, "/home/glu/Projects/all/templates-staging/mpp-service-tool");
+    assert.equal(session.cwd, "/home/glu/Projects/all/templates-qa/mpp-service-tool");
+    assert.equal(codexRuntimeSession.cwd, "/home/glu/Projects/all/templates-qa/mpp-service-tool");
+    assert.equal(codexStartTurn.cwd, "/home/glu/Projects/all/templates-qa/mpp-service-tool");
     assert.equal(resolveCalls.length, 2);
     assert.deepEqual(resolveCalls.map((call) => call.options.ensureOpenPond), [false, false]);
   });

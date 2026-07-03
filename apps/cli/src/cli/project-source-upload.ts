@@ -42,6 +42,7 @@ const AGENT_SDK_MATERIALIZED_DEPENDENCY_SPEC =
   `file:${AGENT_SDK_VENDOR_TARBALL_PATH}`;
 const AGENT_SDK_SYNTHESIZED_OPENPOND_YAML_SENTINEL =
   "# openpond-agent-sdk-source-upload: synthesized-openpond-yaml";
+const AGENT_SDK_GENERATED_SKILLS_DIR = ".openpond/skills";
 const AGENT_SDK_GENERATED_ARTIFACTS = [
   ".openpond/agent-inspect.json",
   ".openpond/agent-manifest.json",
@@ -312,8 +313,8 @@ export async function collectAgentSdkProjectSourceUploadEntries(
       projectSourceUploadBufferEntry(tarball.path, tarball.contents)
     );
   }
-  for (const artifactPath of AGENT_SDK_GENERATED_ARTIFACTS) {
-    if (!existsSync(path.join(projectPath, artifactPath))) continue;
+  const generatedArtifactPaths = await collectAgentSdkGeneratedArtifactPaths(projectPath);
+  for (const artifactPath of generatedArtifactPaths) {
     entries.push(await projectSourceUploadFileEntry(projectPath, artifactPath));
   }
 
@@ -336,6 +337,7 @@ export async function collectAgentSdkProjectSourceUploadEntries(
   const uploadMetadata = await buildAgentSdkSourceUploadMetadata(projectPath, {
     packageJson,
     generatedManifestPath: manifestPath,
+    generatedArtifactPaths,
     synthesizedOpenPondYaml: !hasAuthoredOpenPondYaml,
     openPondYamlSource,
     dependencySetup: materializedDependency?.dependencySetup ?? null,
@@ -367,6 +369,7 @@ async function buildAgentSdkSourceUploadMetadata(
   params: {
     packageJson: Record<string, unknown>;
     generatedManifestPath: string;
+    generatedArtifactPaths: string[];
     synthesizedOpenPondYaml: boolean;
     openPondYamlSource: string;
     dependencySetup: Record<string, unknown> | null;
@@ -374,11 +377,12 @@ async function buildAgentSdkSourceUploadMetadata(
 ): Promise<Record<string, unknown>> {
   const packageManager = detectAgentSdkPackageManager(projectPath, params.packageJson);
   const commandHints = buildAgentSdkCommandHints(params.packageJson, packageManager);
+  const setupRequirements = await collectAgentSdkSourceSetupRequirements(projectPath);
   const artifactHashes: Record<
     string,
     { sha256: string; sizeBytes: number }
   > = {};
-  for (const artifactPath of AGENT_SDK_GENERATED_ARTIFACTS) {
+  for (const artifactPath of params.generatedArtifactPaths) {
     const absolutePath = path.join(projectPath, artifactPath);
     if (!existsSync(absolutePath)) continue;
     const contents = await fs.readFile(absolutePath);
@@ -402,11 +406,108 @@ async function buildAgentSdkSourceUploadMetadata(
     },
     commands: commandHints,
     ...(params.dependencySetup ? { dependencySetup: params.dependencySetup } : {}),
+    ...(setupRequirements.length > 0 ? { setupRequirements } : {}),
     generatedManifestPath: params.generatedManifestPath,
     synthesizedOpenPondYaml: params.synthesizedOpenPondYaml,
     openPondYamlMode: params.synthesizedOpenPondYaml ? "synthesized" : "authored",
     artifactHashes,
   };
+}
+
+export async function collectAgentSdkGeneratedArtifactPaths(projectPath: string): Promise<string[]> {
+  const generatedArtifacts = new Set<string>();
+  for (const artifactPath of AGENT_SDK_GENERATED_ARTIFACTS) {
+    if (existsSync(path.join(projectPath, artifactPath))) {
+      generatedArtifacts.add(artifactPath);
+    }
+  }
+  for (const skillArtifactPath of await collectAgentSdkGeneratedSkillArtifactPaths(projectPath)) {
+    generatedArtifacts.add(skillArtifactPath);
+  }
+  return Array.from(generatedArtifacts).sort((left, right) => left.localeCompare(right));
+}
+
+async function collectAgentSdkGeneratedSkillArtifactPaths(projectPath: string): Promise<string[]> {
+  const skillsRoot = path.join(projectPath, AGENT_SDK_GENERATED_SKILLS_DIR);
+  if (!existsSync(skillsRoot)) return [];
+
+  const results: string[] = [];
+  async function visit(relativeDir: string): Promise<void> {
+    const absoluteDir = path.join(projectPath, relativeDir);
+    const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const relativePath = path.join(relativeDir, entry.name).replace(/\\/g, "/");
+      if (!isSafeProjectSourcePath(relativePath)) continue;
+      if (entry.isDirectory()) {
+        await visit(relativePath);
+        continue;
+      }
+      if (entry.isFile()) results.push(relativePath);
+    }
+  }
+
+  await visit(AGENT_SDK_GENERATED_SKILLS_DIR);
+  return results;
+}
+
+async function collectAgentSdkSourceSetupRequirements(
+  projectPath: string
+): Promise<Record<string, unknown>[]> {
+  const requirements: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  for (const relativePath of [
+    ".openpond/action-registry.json",
+    ".openpond/agent-manifest.json",
+  ]) {
+    const payload = await readJsonFileIfExists(path.join(projectPath, relativePath));
+    if (!payload) continue;
+    for (const actionRecord of [
+      ...recordArray((payload as Record<string, unknown>).actions),
+      ...recordArray((payload as Record<string, unknown>).actionCatalog),
+    ]) {
+      const actionId = text(actionRecord.id) ?? text(actionRecord.name);
+      const actionName = text(actionRecord.name) ?? actionId;
+      if (!actionId && !actionName) continue;
+      for (const setupRecord of recordArray(actionRecord.setupRequirements)) {
+        const setupRequirement: Record<string, unknown> = { ...setupRecord };
+        if (actionId) setupRequirement.actionId = actionId;
+        if (actionName && actionName !== actionId) setupRequirement.actionName = actionName;
+        const key = setupRequirementIdentity(setupRequirement);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        requirements.push(setupRequirement);
+      }
+    }
+  }
+  return requirements;
+}
+
+async function readJsonFileIfExists(filePath: string): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(filePath, "utf8")) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function setupRequirementIdentity(record: Record<string, unknown>): string {
+  return [
+    text(record.actionId) ?? "",
+    text(record.actionName) ?? "",
+    text(record.kind) ?? text(record.type) ?? "",
+    text(record.label) ??
+      text(record.name) ??
+      text(record.key) ??
+      text(record.provider) ??
+      text(record.tool) ??
+      text(record.command) ??
+      text(record.packageName) ??
+      "",
+  ].join(":");
 }
 
 function readAgentSdkProjectPackageJson(
@@ -876,6 +977,19 @@ function recordCopy(value: unknown): Record<string, unknown> {
   return { ...(value as Record<string, unknown>) };
 }
 
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object" && !Array.isArray(item)
+      )
+    : [];
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function agentSdkDependencyInstallCommand(
   packageManager: "bun" | "npm" | "pnpm" | "yarn" | "unknown"
 ): string {
@@ -1099,4 +1213,3 @@ export function mergeProjectSourceUploadEntries(
     transport: PROJECT_SOURCE_UPLOAD_TRANSPORT,
   };
 }
-

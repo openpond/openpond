@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from "@openpond/contracts";
+import { openPondGoalStatusPresentation, type OpenPondGoalStatusTone } from "./openpond-goal-status";
 
 export type GoalRuntimeStatus = {
   objective: string;
@@ -11,7 +12,7 @@ export type GoalRuntimeStatus = {
   label: string;
   detail: string;
   tooltip: string;
-  tone: "active" | "paused" | "done" | "limited";
+  tone: OpenPondGoalStatusTone;
 };
 
 type ThreadGoalRecord = {
@@ -59,8 +60,7 @@ function isTerminalTurnEvent(item: RuntimeEvent | undefined): boolean {
 }
 
 function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
-  const tone = goalRuntimeTone(goal.status);
-  const actionLabel = goalRuntimeActionLabel(tone);
+  const presentation = openPondGoalStatusPresentation(goal.status);
   const timeLabel = formatDuration(goal.timeUsedSeconds);
   const label = `Goal ${timeLabel}`;
   const tokens =
@@ -76,12 +76,12 @@ function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
     timeUsedSeconds: goal.timeUsedSeconds,
     tokensUsed: goal.tokensUsed,
     tokenBudget: goal.tokenBudget,
-    actionLabel,
+    actionLabel: presentation.actionLabel,
     timeLabel,
     label,
     detail,
     tooltip: `Goal runtime: ${formatDurationLong(goal.timeUsedSeconds)}. ${detail}. ${goal.objective}`,
-    tone,
+    tone: presentation.tone,
   };
 }
 
@@ -149,22 +149,6 @@ function statusLabel(status: string): string {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function goalRuntimeTone(status: string): GoalRuntimeStatus["tone"] {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("complete")) return "done";
-  if (normalized.includes("achieved")) return "done";
-  if (normalized.includes("blocked") || normalized.includes("limited")) return "limited";
-  if (normalized.includes("paused")) return "paused";
-  return "active";
-}
-
-function goalRuntimeActionLabel(tone: GoalRuntimeStatus["tone"]): string {
-  if (tone === "done") return "Goal achieved";
-  if (tone === "limited") return "Goal blocked";
-  if (tone === "paused") return "Goal paused";
-  return "Pursuing goal";
 }
 
 function formatDuration(seconds: number): string {

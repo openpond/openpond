@@ -17,7 +17,7 @@ import {
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
-import type { WorkspaceLocation, WorkspaceTargetState } from "../../lib/workspace-location";
+import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import {
@@ -91,7 +91,7 @@ type ComposerProps = {
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
-  onWorkspaceTargetChange: (value: WorkspaceLocation) => void;
+  onWorkspaceTargetChange: (value: WorkspaceTargetValue) => void;
   onModelChange: (value: string) => void;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
@@ -928,7 +928,8 @@ export function Composer({
             onChange={onProjectTargetChange}
           />
           <WorkspaceActionControl
-            busy={busy || workspaceTarget.busy}
+            busy={busy}
+            placement={dropdownPlacement}
             state={workspaceTarget}
             onChange={onWorkspaceTargetChange}
           />

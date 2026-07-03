@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { CreatePipelineRequestSchema } from "@openpond/contracts";
+import { CreatePipelineRequestSchema, emptyOpenPondProfileState } from "@openpond/contracts";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import {
   createPipelineSnapshotFromPlannerDecision,
@@ -450,6 +450,304 @@ describe("model-backed create pipeline planner", () => {
       ),
     ).toBe(true);
   });
+
+  test("native openpond_create_pipeline tool starts the existing create planner path", async () => {
+    let session = baseSession({
+      provider: "openrouter",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+      cwd: "/workspace/current",
+    });
+    const turns: any[] = [];
+    const events: any[] = [];
+    const approvals: any[] = [];
+    const plannerCalls: any[] = [];
+    let streamCalls = 0;
+    let providedToolNames: string[] = [];
+
+    const runner = createTurnRunner({
+      attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-tool-")),
+      store: {
+        async snapshot() {
+          return { events, turns, approvals };
+        },
+        async getTurn(turnId: string) {
+          return turns.find((candidate) => candidate.id === turnId) ?? null;
+        },
+        async insertTurn(turn: any) {
+          turns.push(turn);
+        },
+        async updateTurn(turnId: string, updater: (turn: any) => any) {
+          const index = turns.findIndex((candidate) => candidate.id === turnId);
+          if (index === -1) return null;
+          turns[index] = updater(turns[index]);
+          return turns[index];
+        },
+        async getApproval(approvalId: string) {
+          return approvals.find((candidate) => candidate.id === approvalId) ?? null;
+        },
+      },
+      upsertApproval: async (approval: any) => {
+        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        if (index === -1) approvals.push(approval);
+        else approvals[index] = approval;
+      },
+      getSession: async () => session,
+      updateSession: async (_sessionId: string, patch: Record<string, unknown>) => {
+        session = { ...session, ...patch };
+        return session;
+      },
+      completeTurn: async (_sessionId: string, turnId: string, providerTurnId: string | null = null) => {
+        const turn = turns.find((candidate) => candidate.id === turnId);
+        Object.assign(turn, {
+          providerTurnId,
+          completedAt: "2026-07-01T00:00:01.000Z",
+          status: "completed",
+        });
+        session = { ...session, status: "idle" };
+        return turn;
+      },
+      failTurn: async (_session: any, turnId: string, message: string) => {
+        const turn = turns.find((candidate) => candidate.id === turnId);
+        Object.assign(turn, { status: "failed", error: message });
+        return turn;
+      },
+      interruptTurn: async (_session: any, turnId: string) => {
+        const turn = turns.find((candidate) => candidate.id === turnId);
+        Object.assign(turn, { status: "interrupted" });
+        return turn;
+      },
+      defaultSessionCwd: () => "/tmp/openpond",
+      findOpenPondApp: async () => {
+        throw new Error("apps should not load for create tool test");
+      },
+      resolveSessionWorkspaceCwd: async () => null,
+      ensureCodexRuntime: async () => {
+        throw new Error("source runtime should not start before plan approval");
+      },
+      appendWorkspaceDiffEvent: async () => undefined,
+      workspaceDiffBaseline: async () => null,
+      appendRuntimeEvent: async (event: any) => {
+        events.push(event);
+      },
+      executeWorkspaceTool: async () => {
+        throw new Error("workspace tools should not run for create tool test");
+      },
+      loadOpenPondProfileState: async () => ({
+        ...emptyOpenPondProfileState(),
+        mode: "local",
+        repoPath: "/profiles/default-repo",
+        activeProfile: "default",
+        sourcePath: "/profiles/default-repo/profiles/default",
+        git: {
+          isRepo: true,
+          branch: "main",
+          head: "abc123",
+          shortHead: "abc123",
+          dirty: false,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          remoteUrl: null,
+          files: [],
+          error: null,
+        },
+      }),
+      loadPersonalizationSoul: async () => "",
+      maybeCreateScaffoldForTurn: async (current) => current,
+      hostedSystemPrompt: async () => "System prompt",
+      appendAssistantText: async (currentSession, turnId, text) => {
+        events.push({
+          sessionId: currentSession.id,
+          turnId,
+          name: "assistant.delta",
+          source: "provider",
+          output: text,
+        });
+      },
+      appendHostedContextUsage: async () => undefined,
+      streamLocalByokChatTurn: async function* (input) {
+        streamCalls += 1;
+        if (streamCalls === 1) {
+          providedToolNames = (input.tools ?? []).map((tool: any) => tool.function.name);
+          yield {
+            toolCalls: [
+              {
+                id: "call_create",
+                type: "function",
+                function: {
+                  name: "openpond_create_pipeline",
+                  arguments: JSON.stringify({
+                    operation: "create",
+                    objective: "Create a support triage agent.",
+                    source: "natural_language",
+                  }),
+                },
+              },
+            ],
+          };
+          return;
+        }
+        yield { text: "Create Pipeline plan is ready for review." };
+      },
+      planCreatePipeline: async (input) => {
+        plannerCalls.push(input);
+        return createPipelineSnapshotFromPlannerDecision({
+          request: input.request,
+          previousSnapshot: input.previousSnapshot,
+          modelRef: input.modelRef,
+          decision: {
+            schemaVersion: "openpond.createPipeline.plannerDecision.v1",
+            decision: "plan",
+            plan: {
+              agentId: "support-triage",
+              agentName: "Support Triage",
+              summary: "Create a support triage agent.",
+              capturedContextSummary: "Natural-language native tool request.",
+              actionShape: {
+                mode: "chat",
+                label: "Chat only",
+                detail: "Expose support triage through chat.",
+                defaultActionKey: "chat",
+                directActionHint: null,
+                artifactPolicy: "Persist trace and run summary.",
+              },
+              sourcePlan: [
+                {
+                  path: "agents/support-triage",
+                  operation: "create",
+                  reason: "Implement the support triage agent.",
+                },
+              ],
+              requirements: [],
+              checks: [],
+            },
+          },
+        });
+      },
+      turnFollowUpQueue: {
+        enqueue() {
+          return { id: "unused" };
+        },
+      } as any,
+      maxHostedWorkspaceToolRounds: 3,
+      maxRepeatedInvalidToolRequests: 1,
+      hostedToolFlags: {
+        toolMode: "native",
+        nativeToolTransport: true,
+        resourceTools: true,
+        webSearchTool: false,
+        dynamicActionTools: false,
+        textToolFallback: false,
+      },
+    });
+
+    const turn = await runner.sendTurn("session_1", {
+      prompt: "Create a support triage agent.",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(providedToolNames).toContain("openpond_create_pipeline");
+    expect(plannerCalls).toHaveLength(1);
+    expect(plannerCalls[0].request).toMatchObject({
+      operation: "create",
+      command: "/create",
+      objective: "Create a support triage agent.",
+      adapter: {
+        kind: "local",
+        sourceAuthority: "local_profile",
+        repoPath: "/profiles/default-repo",
+        sourcePath: "/profiles/default-repo/profiles/default",
+        localHead: "abc123",
+      },
+      metadata: {
+        source: "native_model_tool",
+        toolName: "openpond_create_pipeline",
+        routingSource: "natural_language",
+      },
+    });
+    expect(turn.createPipeline?.state).toBe("awaiting_plan_approval");
+    expect(turn.createPipelineRequest?.id).toBe(plannerCalls[0].request.id);
+    expect(approvals).toHaveLength(1);
+    expect(events.some((event) => event.name === "tool.completed" && event.action === "openpond_create_pipeline")).toBe(true);
+    expect(events.some((event) => event.name === "create_pipeline.updated" && event.output === "Create planner is preparing the plan.")).toBe(true);
+    expect(events.some((event) => event.name === "create_pipeline.updated" && event.data?.createPipeline?.state === "awaiting_plan_approval")).toBe(true);
+  });
+
+  test("native openpond_create_pipeline edit uses the selected agent target", async () => {
+    const result = await runNativeCreatePipelineToolHarness({
+      sessionOverrides: {
+        provider: "openrouter",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+        appId: "agent_support",
+        appName: "Support Agent",
+      },
+      toolArgs: {
+        operation: "edit",
+        objective: "Add escalation summaries.",
+      },
+    });
+
+    expect(result.turn.status).toBe("completed");
+    expect(result.plannerCalls).toHaveLength(1);
+    expect(result.plannerCalls[0].request).toMatchObject({
+      operation: "edit",
+      command: "/edit",
+      surface: "direct_prompt_edit",
+      targetAgent: {
+        agentId: "agent_support",
+        displayName: "Support Agent",
+        defaultActionKey: "agent_support.chat",
+      },
+    });
+    expect(result.turn.createPipeline?.state).toBe("awaiting_plan_approval");
+  });
+
+  test("native openpond_create_pipeline edit fails without a selected or explicit target", async () => {
+    const result = await runNativeCreatePipelineToolHarness({
+      sessionOverrides: {
+        provider: "openrouter",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      },
+      toolArgs: {
+        operation: "edit",
+        objective: "Add escalation summaries.",
+      },
+    });
+
+    expect(result.turn.status).toBe("completed");
+    expect(result.plannerCalls).toHaveLength(0);
+    expect(result.events.some(
+      (event) =>
+        event.name === "tool.completed" &&
+        event.action === "openpond_create_pipeline" &&
+        event.status === "failed" &&
+        String(event.output).includes("requires targetAgentId"),
+    )).toBe(true);
+  });
+
+  test("native openpond_create_pipeline rejects empty objectives before planning", async () => {
+    const result = await runNativeCreatePipelineToolHarness({
+      sessionOverrides: {
+        provider: "openrouter",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      },
+      toolArgs: {
+        operation: "create",
+        objective: "   ",
+      },
+    });
+
+    expect(result.turn.status).toBe("completed");
+    expect(result.plannerCalls).toHaveLength(0);
+    expect(result.events.some(
+      (event) =>
+        event.name === "tool.completed" &&
+        event.action === "openpond_create_pipeline" &&
+        event.status === "failed" &&
+        String(event.output).includes("objective is required"),
+    )).toBe(true);
+  });
 });
 
 function createPipelineRequest() {
@@ -494,7 +792,7 @@ function createPipelineRequest() {
   });
 }
 
-function baseSession() {
+function baseSession(overrides: Record<string, unknown> = {}) {
   return {
     id: "session_1",
     provider: "openpond",
@@ -513,5 +811,200 @@ function baseSession() {
     pinned: false,
     archived: false,
     order: 0,
+    ...overrides,
   } as any;
+}
+
+async function runNativeCreatePipelineToolHarness(input: {
+  sessionOverrides: Record<string, unknown>;
+  toolArgs: Record<string, unknown>;
+}) {
+  let session = baseSession({
+    cwd: "/workspace/current",
+    ...input.sessionOverrides,
+  });
+  const turns: any[] = [];
+  const events: any[] = [];
+  const approvals: any[] = [];
+  const plannerCalls: any[] = [];
+  let streamCalls = 0;
+
+  const runner = createTurnRunner({
+    attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-tool-harness-")),
+    store: {
+      async snapshot() {
+        return { events, turns, approvals };
+      },
+      async getTurn(turnId: string) {
+        return turns.find((candidate) => candidate.id === turnId) ?? null;
+      },
+      async insertTurn(turn: any) {
+        turns.push(turn);
+      },
+      async updateTurn(turnId: string, updater: (turn: any) => any) {
+        const index = turns.findIndex((candidate) => candidate.id === turnId);
+        if (index === -1) return null;
+        turns[index] = updater(turns[index]);
+        return turns[index];
+      },
+      async getApproval(approvalId: string) {
+        return approvals.find((candidate) => candidate.id === approvalId) ?? null;
+      },
+    },
+    upsertApproval: async (approval: any) => {
+      const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+      if (index === -1) approvals.push(approval);
+      else approvals[index] = approval;
+    },
+    getSession: async () => session,
+    updateSession: async (_sessionId: string, patch: Record<string, unknown>) => {
+      session = { ...session, ...patch };
+      return session;
+    },
+    completeTurn: async (_sessionId: string, turnId: string, providerTurnId: string | null = null) => {
+      const turn = turns.find((candidate) => candidate.id === turnId);
+      Object.assign(turn, {
+        providerTurnId,
+        completedAt: "2026-07-01T00:00:01.000Z",
+        status: "completed",
+      });
+      session = { ...session, status: "idle" };
+      return turn;
+    },
+    failTurn: async (_session: any, turnId: string, message: string) => {
+      const turn = turns.find((candidate) => candidate.id === turnId);
+      Object.assign(turn, { status: "failed", error: message });
+      return turn;
+    },
+    interruptTurn: async (_session: any, turnId: string) => {
+      const turn = turns.find((candidate) => candidate.id === turnId);
+      Object.assign(turn, { status: "interrupted" });
+      return turn;
+    },
+    defaultSessionCwd: () => "/tmp/openpond",
+    findOpenPondApp: async () => {
+      throw new Error("apps should not load for create tool harness");
+    },
+    resolveSessionWorkspaceCwd: async () => null,
+    ensureCodexRuntime: async () => {
+      throw new Error("source runtime should not start before plan approval");
+    },
+    appendWorkspaceDiffEvent: async () => undefined,
+    workspaceDiffBaseline: async () => null,
+    appendRuntimeEvent: async (event: any) => {
+      events.push(event);
+    },
+    executeWorkspaceTool: async () => {
+      throw new Error("workspace tools should not run for create tool harness");
+    },
+    loadOpenPondProfileState: async () => ({
+      ...emptyOpenPondProfileState(),
+      mode: "local",
+      repoPath: "/profiles/default-repo",
+      activeProfile: "default",
+      sourcePath: "/profiles/default-repo/profiles/default",
+      git: {
+        isRepo: true,
+        branch: "main",
+        head: "abc123",
+        shortHead: "abc123",
+        dirty: false,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        remoteUrl: null,
+        files: [],
+        error: null,
+      },
+    }),
+    loadPersonalizationSoul: async () => "",
+    maybeCreateScaffoldForTurn: async (current) => current,
+    hostedSystemPrompt: async () => "System prompt",
+    appendAssistantText: async (currentSession, turnId, text) => {
+      events.push({
+        sessionId: currentSession.id,
+        turnId,
+        name: "assistant.delta",
+        source: "provider",
+        output: text,
+      });
+    },
+    appendHostedContextUsage: async () => undefined,
+    streamLocalByokChatTurn: async function* () {
+      streamCalls += 1;
+      if (streamCalls === 1) {
+        yield {
+          toolCalls: [
+            {
+              id: "call_create",
+              type: "function",
+              function: {
+                name: "openpond_create_pipeline",
+                arguments: JSON.stringify(input.toolArgs),
+              },
+            },
+          ],
+        };
+        return;
+      }
+      yield { text: "Done." };
+    },
+    planCreatePipeline: async (plannerInput) => {
+      plannerCalls.push(plannerInput);
+      return createPipelineSnapshotFromPlannerDecision({
+        request: plannerInput.request,
+        previousSnapshot: plannerInput.previousSnapshot,
+        modelRef: plannerInput.modelRef,
+        decision: {
+          schemaVersion: "openpond.createPipeline.plannerDecision.v1",
+          decision: "plan",
+          plan: {
+            agentId: "support-triage",
+            agentName: "Support Triage",
+            summary: "Create or edit a support triage agent.",
+            capturedContextSummary: "Natural-language native tool request.",
+            actionShape: {
+              mode: "chat",
+              label: "Chat only",
+              detail: "Expose support triage through chat.",
+              defaultActionKey: "chat",
+              directActionHint: null,
+              artifactPolicy: "Persist trace and run summary.",
+            },
+            sourcePlan: [
+              {
+                path: "agents/support-triage",
+                operation: input.toolArgs.operation === "edit" ? "update" : "create",
+                reason: "Apply the requested support triage change.",
+              },
+            ],
+            requirements: [],
+            checks: [],
+          },
+        },
+      });
+    },
+    turnFollowUpQueue: {
+      enqueue() {
+        return { id: "unused" };
+      },
+    } as any,
+    maxHostedWorkspaceToolRounds: 3,
+    maxRepeatedInvalidToolRequests: 1,
+    hostedToolFlags: {
+      toolMode: "native",
+      nativeToolTransport: true,
+      resourceTools: true,
+      webSearchTool: false,
+      dynamicActionTools: false,
+      textToolFallback: false,
+    },
+  });
+
+  const turn = await runner.sendTurn("session_1", {
+    prompt: "Create or edit a support triage agent.",
+    modelRef: session.modelRef,
+  });
+
+  return { turn, events, approvals, plannerCalls };
 }

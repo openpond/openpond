@@ -3,6 +3,7 @@ import type { SidebarProjectKind } from "../../lib/app-models";
 type ProjectKindIconProps = {
   kind: SidebarProjectKind;
   agentSdk?: boolean;
+  linkedCloud?: boolean;
   open?: boolean;
   className?: string;
   baseSize?: number;
@@ -11,6 +12,7 @@ type ProjectKindIconProps = {
 export function ProjectKindIcon({
   kind,
   agentSdk = false,
+  linkedCloud = false,
   open = false,
   className,
   baseSize = 15,
@@ -22,6 +24,7 @@ export function ProjectKindIcon({
         "project-kind-icon",
         kind,
         agentSdk ? "agent-sdk" : "",
+        linkedCloud ? "linked-cloud" : "",
         className ?? "",
       ]
         .filter(Boolean)
@@ -41,6 +44,7 @@ export function ProjectKindIcon({
         strokeLinejoin="round"
       >
         {kind === "cloud" ? <CloudShape /> : open ? <FolderOpenShape /> : <FolderShape />}
+        {linkedCloud && kind === "local" ? <LinkedCloudBadge /> : null}
         {agentSdk ? <AgentSdkBotGlyph kind={kind} /> : null}
       </svg>
     </span>
@@ -71,6 +75,15 @@ function CloudShape() {
       className="project-kind-icon-base"
       d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"
     />
+  );
+}
+
+function LinkedCloudBadge() {
+  return (
+    <g className="project-kind-icon-cloud-badge">
+      <circle cx="18" cy="17" r="5" />
+      <path d="M20.4 18.6h-4.2a2.2 2.2 0 1 1 2.08-2.9h.88a1.45 1.45 0 1 1 1.24 2.9Z" />
+    </g>
   );
 }
 

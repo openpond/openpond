@@ -1,17 +1,24 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
-import type { CreatePipelineRequest, CreatePipelineSnapshot } from "@openpond/contracts";
+import type { CreatePipelineRequest, CreatePipelineSnapshot, LocalProject } from "@openpond/contracts";
 import {
   assertCreatePipelineBackgroundApproved,
   createServerPayloads,
 } from "../apps/server/src/api/server-payloads";
 import { sandboxRequestPayload } from "../apps/server/src/openpond/sandboxes";
+import { SqliteStore } from "../apps/server/src/store/store";
+import { runWorkspaceCommand } from "../apps/server/src/workspace/workspaces";
 
 const originalFetch = globalThis.fetch;
 const originalSandboxApiKey = process.env.OPENPOND_SANDBOX_API_KEY;
 const originalSandboxApiUrl = process.env.OPENPOND_SANDBOX_API_URL;
+const tempRoots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   globalThis.fetch = originalFetch;
   if (originalSandboxApiKey === undefined) {
     delete process.env.OPENPOND_SANDBOX_API_KEY;
@@ -23,6 +30,7 @@ afterEach(() => {
   } else {
     process.env.OPENPOND_SANDBOX_API_URL = originalSandboxApiUrl;
   }
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe("Cloud work item chat", () => {
@@ -231,6 +239,226 @@ describe("Cloud work item chat", () => {
       },
     ]);
   });
+
+  test("stores queued local project context as Cloud work item metadata", async () => {
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+
+    const requests: Array<{
+      body: Record<string, unknown>;
+      method: string | undefined;
+      pathname: string;
+    }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      requests.push({
+        body,
+        method: init?.method,
+        pathname: url.pathname,
+      });
+      return Response.json({
+        workItem: {
+          id: "work_item_queued",
+          teamId: "team_1",
+          projectId: "cloud_project_1",
+          conversationId: "conversation_1",
+          title: String(body.title),
+          status: "queued",
+          sourceRef: body.sourceRef ?? null,
+          baseSha: body.baseSha ?? null,
+          latestRuntimeId: null,
+          latestSandboxId: null,
+          latestTaskRunId: null,
+          assignedAgentId: null,
+          createdAt: "2026-06-17T00:00:00.000Z",
+          updatedAt: "2026-06-17T00:00:00.000Z",
+          archivedAt: null,
+          metadata: body.metadata ?? {},
+        },
+      });
+    };
+
+    const payloads = createServerPayloads({
+      store: {} as never,
+      storeDir: "",
+      providersFilePath: "",
+      serverId: "server_test",
+      host: "127.0.0.1",
+      getActualPort: () => 0,
+      startedAt: "2026-06-17T00:00:00.000Z",
+      version: "test",
+      runtimeVersion: "test",
+      getCodexStatus: () => ({
+        available: false,
+        binaryPath: null,
+        version: null,
+        authHealth: "unknown",
+        account: null,
+        appServer: { status: "idle", lastError: null },
+      }),
+      appendRuntimeEvent: async () => undefined,
+      isClosing: () => false,
+    });
+
+    const detail = await payloads.createCloudWorkItemPayload({
+      teamId: "team_1",
+      projectId: "cloud_project_1",
+      title: "Queue proof",
+      initialMessage: "Run this in Cloud",
+      sourceRef: "main",
+      baseSha: "abc123",
+      localProjectId: "local_project_1",
+      localProjectName: "Local Repo",
+      localWorkspacePath: "/workspace/local-repo",
+      requestedExecutionTarget: "queue_cloud",
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      pathname: "/v1/projects/cloud_project_1/work-items",
+      body: {
+        teamId: "team_1",
+        title: "Queue proof",
+        initialMessage: "Run this in Cloud",
+        sourceRef: "main",
+        baseSha: "abc123",
+        metadata: {
+          source: "openpond_app_cloud",
+          requestedExecutionTarget: "queue_cloud",
+          localProjectId: "local_project_1",
+          localProjectName: "Local Repo",
+          localWorkspacePath: "/workspace/local-repo",
+        },
+      },
+    });
+    expect(Object.hasOwn(requests[0].body, "localProjectId")).toBe(false);
+    expect(Object.hasOwn(requests[0].body, "requestedExecutionTarget")).toBe(false);
+    expect(detail.workItem.metadata).toMatchObject({
+      requestedExecutionTarget: "queue_cloud",
+      localProjectId: "local_project_1",
+      localProjectName: "Local Repo",
+      localWorkspacePath: "/workspace/local-repo",
+    });
+  });
+
+  test("applies reviewed Cloud patches only through an explicitly linked clean local checkout", async () => {
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+
+    const repoPath = await mkdtemp(join(tmpdir(), "openpond-cloud-apply-local-repo-"));
+    const storeDir = await mkdtemp(join(tmpdir(), "openpond-cloud-apply-local-store-"));
+    tempRoots.push(repoPath, storeDir);
+    await writeFile(join(repoPath, "README.md"), "# Local repo\n", "utf8");
+    await git(repoPath, ["init"]);
+    await git(repoPath, ["branch", "-M", "main"]);
+    await git(repoPath, ["config", "user.email", "openpond-app@example.local"]);
+    await git(repoPath, ["config", "user.name", "OpenPond App"]);
+    await git(repoPath, ["add", "README.md"]);
+    await git(repoPath, ["commit", "-m", "Initial local state"]);
+    const head = (await git(repoPath, ["rev-parse", "HEAD"])).stdout.trim();
+    const patchText = [
+      "diff --git a/README.md b/README.md",
+      "--- a/README.md",
+      "+++ b/README.md",
+      "@@ -1 +1,2 @@",
+      " # Local repo",
+      "+Cloud patch applied",
+      "",
+    ].join("\n");
+    const requests: Array<{ body: Record<string, unknown>; method: string | undefined; pathname: string }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      requests.push({
+        body: init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {},
+        method: init?.method,
+        pathname: url.pathname,
+      });
+      if (url.pathname === "/v1/work-items/work_item_1") {
+        return Response.json({
+          workItem: cloudWorkItem({
+            latestSandboxId: "sandbox_1",
+            sourceRef: "main",
+            baseSha: head,
+          }),
+        });
+      }
+      if (url.pathname === "/v1/work-items/work_item_1/messages") {
+        return Response.json({ messages: [] });
+      }
+      if (url.pathname === "/v1/work-items/work_item_1/activity") {
+        return Response.json({ activity: [] });
+      }
+      if (url.pathname === "/v1/sandboxes/sandbox_1/git/export-patch") {
+        return Response.json({
+          patch: {
+            patch: patchText,
+            empty: false,
+            isRepo: true,
+            filename: "cloud-work-item.patch",
+            bytes: Buffer.byteLength(patchText, "utf8"),
+          },
+        });
+      }
+      return Response.json({ error: `Unexpected sandbox request: ${url.pathname}` }, { status: 500 });
+    };
+
+    const store = new SqliteStore(storeDir);
+    try {
+      await store.setCacheEntry("local.projects", "v1", [localProject(repoPath, head)]);
+      const payloads = createServerPayloads({
+        store,
+        storeDir,
+        providersFilePath: join(storeDir, "providers.json"),
+        serverId: "server_test",
+        host: "127.0.0.1",
+        getActualPort: () => 0,
+        startedAt: "2026-06-17T00:00:00.000Z",
+        version: "test",
+        runtimeVersion: "test",
+        getCodexStatus: () => ({
+          available: false,
+          binaryPath: null,
+          version: null,
+          authHealth: "unknown",
+          account: null,
+          appServer: { status: "idle", lastError: null },
+        }),
+        appendRuntimeEvent: async () => undefined,
+        isClosing: () => false,
+      });
+
+      const response = await payloads.applyCloudWorkItemLocalPatchPayload("work_item_1", {
+        teamId: "team_1",
+        localProjectId: "local_project_1",
+        sandboxId: "sandbox_1",
+      });
+
+      expect(await readFile(join(repoPath, "README.md"), "utf8")).toBe(
+        "# Local repo\nCloud patch applied\n",
+      );
+      expect(response.localProject.id).toBe("local_project_1");
+      expect(response.patch).toMatchObject({
+        sandboxId: "sandbox_1",
+        filename: "cloud-work-item.patch",
+        applied: true,
+        fileCount: 1,
+      });
+      expect(response.workspaceState.dirty).toBe(true);
+      expect(response.workspaceState.changedFilesCount).toBe(1);
+      expect(new Set(requests.slice(0, 3).map((request) => request.pathname))).toEqual(
+        new Set([
+          "/v1/work-items/work_item_1",
+          "/v1/work-items/work_item_1/messages",
+          "/v1/work-items/work_item_1/activity",
+        ]),
+      );
+      expect(requests.at(-1)?.pathname).toBe("/v1/sandboxes/sandbox_1/git/export-patch");
+    } finally {
+      await store.close();
+    }
+  });
 });
 
 function createPipelineRequest(): CreatePipelineRequest {
@@ -276,6 +504,70 @@ function createPipelineRequest(): CreatePipelineRequest {
     metadata: {},
     createdAt: now,
   };
+}
+
+function cloudWorkItem(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "work_item_1",
+    teamId: "team_1",
+    projectId: "cloud_project_1",
+    conversationId: "conversation_1",
+    title: "Review Cloud patch",
+    status: "needs_review",
+    sourceRef: "main",
+    baseSha: null,
+    latestRuntimeId: "runtime_1",
+    latestSandboxId: "sandbox_1",
+    latestTaskRunId: "task_1",
+    assignedAgentId: null,
+    createdAt: "2026-06-17T00:00:00.000Z",
+    updatedAt: "2026-06-17T00:00:01.000Z",
+    archivedAt: null,
+    metadata: {},
+    ...overrides,
+  };
+}
+
+function localProject(repoPath: string, head: string): LocalProject {
+  const now = "2026-06-17T00:00:00.000Z";
+  return {
+    id: "local_project_1",
+    name: "Local Project",
+    path: repoPath,
+    workspacePath: repoPath,
+    repoPath,
+    source: "git",
+    systemKind: null,
+    hiddenFromDefaultSidebar: false,
+    sandboxTemplate: null,
+    agentSdk: null,
+    linkedOpenPondApp: null,
+    linkedSandboxProject: {
+      teamId: "team_1",
+      projectId: "cloud_project_1",
+      projectSlug: "cloud-project",
+      projectName: "Cloud Project",
+      sourceRepoUrl: null,
+      defaultBranch: "main",
+      lastUploadedCommit: head,
+      lastUploadTransport: "api_source_upload",
+      manifestPath: null,
+      manifestHash: null,
+      syncedAt: now,
+      linkedAt: now,
+    },
+    preferredSandboxAgentId: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function git(cwd: string, args: string[]) {
+  const result = await runWorkspaceCommand("git", args, cwd);
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args.join(" ")} failed`);
+  }
+  return result;
 }
 
 function createPipelineSnapshot(

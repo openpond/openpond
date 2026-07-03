@@ -36,7 +36,16 @@ export type ValidationIssue = {
     column?: number;
   };
   setupRequirement?: {
-    kind: "channel" | "connection" | "integration" | "env" | "volume" | "schedule";
+    kind:
+      | "channel"
+      | "connection"
+      | "integration"
+      | "env"
+      | "volume"
+      | "schedule"
+      | "package"
+      | "python"
+      | "native_tool";
     name: string;
     required: boolean;
   };

@@ -178,8 +178,21 @@ function activityLabel(item: RuntimeEvent): string {
   if (item.name === "turn.interrupted") return "Turn aborted";
   if (isViewImageEvent(item) && item.name === "tool.started") return "Reading image";
   if (isViewImageEvent(item) && item.name === "tool.completed") return "Read image";
+  if (item.action === "resource_search" && item.name === "tool.started") return "Searching resources";
+  if (item.action === "resource_search" && item.name === "tool.completed") return "Searched resources";
+  if (item.action === "resource_read" && item.name === "tool.started") return "Reading resource";
+  if (item.action === "resource_read" && item.name === "tool.completed") return "Read resource";
   if (item.action === "web_search" && item.name === "tool.started") return "Searching web";
   if (item.action === "web_search" && item.name === "tool.completed") return "Searched web";
+  if (item.action === "openpond_action_search" && item.name === "tool.started") return "Searching actions";
+  if (item.action === "openpond_action_search" && item.name === "tool.completed") return "Searched actions";
+  if (item.action === "openpond_action_run" && item.name === "tool.started") return "Running OpenPond action";
+  if (item.action === "openpond_action_run" && item.name === "tool.completed") return "Ran OpenPond action";
+  const capabilityLabel = capabilityToolActivityLabel(item);
+  if (capabilityLabel) return capabilityLabel;
+  if (item.name === "skill.selected") return "Selected skill";
+  if (item.name === "skill.loaded") return "Loaded skill";
+  if (item.name === "skill.load_failed") return "Skill load failed";
   if (item.name === "tool.started") return "Started";
   if (item.name === "tool.completed") return "Ran";
   if (item.name === "command.output") return "Output";
@@ -195,6 +208,8 @@ function activityLabel(item: RuntimeEvent): string {
 
 const WORKSPACE_ACTIVITY_LABELS: Record<string, { started: string; completed: string; failed?: string; pending?: string }> = {
   workspace_status: { started: "Checking workspace", completed: "Checked workspace" },
+  resource_search: { started: "Searching resources", completed: "Searched resources" },
+  resource_read: { started: "Reading resource", completed: "Read resource" },
   list_files: { started: "Listing files", completed: "Listed files" },
   read_files: { started: "Reading files", completed: "Read files" },
   search_files: { started: "Searching files", completed: "Searched files" },
@@ -255,6 +270,8 @@ function activityContent(item: RuntimeEvent, imagePreview?: ActivityItem["imageP
   const marker = codexControlMessage(item.output ?? "");
   if (marker) return marker.text;
   if (isCodexGoalContextEvent(item) || item.name === "turn.interrupted") return item.output ?? item.error ?? "";
+  const capabilityContent = capabilityToolActivityContent(item);
+  if (capabilityContent) return capabilityContent;
   const command = commandTextFromEvent(item);
   if (command) return command;
   if (item.name === "command.output") return cleanCommandOutput(item.output ?? "");
@@ -277,6 +294,46 @@ function activityContent(item: RuntimeEvent, imagePreview?: ActivityItem["imageP
     return item.error ?? item.output ?? "";
   }
   return item.output ?? item.action ?? "";
+}
+
+function capabilityToolActivityLabel(item: RuntimeEvent): string | null {
+  if (item.name !== "tool.started" && item.name !== "tool.completed") return null;
+  const failed = item.status === "failed";
+  if (item.action === "openpond_create_pipeline") {
+    if (item.name === "tool.started") return "Starting Create Pipeline";
+    return failed ? "Create Pipeline failed" : "Started Create Pipeline";
+  }
+  if (item.action === "openpond_profile_skill_goal") {
+    if (item.name === "tool.started") return "Starting profile skill goal";
+    return failed ? "Profile skill goal failed" : "Started profile skill goal";
+  }
+  if (item.action === "openpond_goal_control") {
+    if (item.name === "tool.started") return "Updating goal";
+    return failed ? "Goal update failed" : "Updated goal";
+  }
+  return null;
+}
+
+function capabilityToolActivityContent(item: RuntimeEvent): string | null {
+  if (
+    item.action !== "openpond_create_pipeline" &&
+    item.action !== "openpond_profile_skill_goal" &&
+    item.action !== "openpond_goal_control"
+  ) {
+    return null;
+  }
+  const result = asRecord(asRecord(item.data)?.result);
+  const resultStep = stringValue(result, ["nextStep"]);
+  if (resultStep) return resultStep;
+  const parsedOutput = asRecord(parseMaybeJson(item.output ?? ""));
+  const output = stringValue(parsedOutput, ["output"]);
+  if (output) return output;
+  const args = asRecord(item.args);
+  const reason = stringValue(args, ["reason"]);
+  if (reason) return reason;
+  const objective = stringValue(args, ["objective"]);
+  if (objective) return objective;
+  return item.error ?? null;
 }
 
 function commandActivityKind(item: RuntimeEvent): ActivityItem["kind"] | undefined {

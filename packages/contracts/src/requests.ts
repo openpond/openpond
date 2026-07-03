@@ -91,6 +91,14 @@ export type UploadLocalProjectCloudSourceRequest = z.infer<
   typeof UploadLocalProjectCloudSourceRequestSchema
 >;
 
+export const PreviewLocalProjectCloudSourceRequestSchema = z.object({
+  branch: z.string().trim().min(1).max(120).optional(),
+});
+
+export type PreviewLocalProjectCloudSourceRequest = z.infer<
+  typeof PreviewLocalProjectCloudSourceRequestSchema
+>;
+
 export const ListCloudWorkItemsRequestSchema = z.object({
   teamId: z.string().trim().min(1),
   projectIds: z.array(z.string().trim().min(1)).min(1).max(100),
@@ -108,6 +116,13 @@ export const CreateCloudWorkItemRequestSchema = z.object({
   sourceRef: z.string().trim().min(1).max(191).optional().nullable(),
   baseSha: z.string().trim().min(1).max(191).optional().nullable(),
   assignedAgentId: z.string().trim().min(1).max(191).optional().nullable(),
+  localProjectId: z.string().trim().min(1).max(191).optional().nullable(),
+  localProjectName: z.string().trim().min(1).max(500).optional().nullable(),
+  localWorkspacePath: z.string().trim().min(1).max(2000).optional().nullable(),
+  requestedExecutionTarget: z
+    .enum(["queue_cloud", "cloud_workspace", "cloud_home"])
+    .optional()
+    .nullable(),
   createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
   createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
 });
@@ -212,6 +227,17 @@ export const OpenCloudWorkItemRequestSchema = z.object({
 });
 
 export type OpenCloudWorkItemRequest = z.infer<typeof OpenCloudWorkItemRequestSchema>;
+
+export const ApplyCloudWorkItemLocalPatchRequestSchema = z.object({
+  teamId: z.string().trim().min(1),
+  localProjectId: z.string().trim().min(1).optional().nullable(),
+  sandboxId: z.string().trim().min(1).max(191).optional().nullable(),
+  baseRef: z.string().trim().min(1).max(191).optional().nullable(),
+});
+
+export type ApplyCloudWorkItemLocalPatchRequest = z.infer<
+  typeof ApplyCloudWorkItemLocalPatchRequestSchema
+>;
 
 export const SendTurnRequestSchema = z.object({
   prompt: z.string().min(1),

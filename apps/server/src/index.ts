@@ -15,6 +15,7 @@ import {
   type ServerStatus,
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
+import { loadOpenPondProfileState, readProfileSkill, runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "@openpond/cloud";
 import { getBundledRuntimeVersion } from "@openpond/runtime";
 import { DEFAULT_HOST, DEFAULT_PORT, VERSION } from "./constants.js";
 import { runOpenPondServerCli } from "./cli.js";
@@ -55,6 +56,7 @@ import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
 import { readProviderSecrets } from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
+import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { isCodexHistorySessionId } from "./codex-history.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
@@ -84,6 +86,7 @@ export async function createOpenPondServer(
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
   const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds);
+  const executeWebSearch = createWebSearchExecutorFromEnv();
   const attachmentRootDir = path.join(storeDir, "attachments");
   const logger = createLogger({
     channel: "server",
@@ -200,6 +203,7 @@ export async function createOpenPondServer(
     createLocalProjectPayload,
     deleteLocalProjectPayload,
     updateLocalProjectAgentSetupPayload,
+    previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
     listCloudWorkItemsPayload,
     getCloudWorkItemPayload,
@@ -208,6 +212,7 @@ export async function createOpenPondServer(
     handleCloudWorkItemBackgroundPayload,
     cancelCloudWorkItemTaskPayload,
     openCloudWorkItemPayload,
+    applyCloudWorkItemLocalPatchPayload,
     patchSidebarAppPreference,
     reorderSidebarApps,
     refreshOpenPondPayload,
@@ -361,6 +366,12 @@ export async function createOpenPondServer(
     workspaceDiffBaseline,
     appendRuntimeEvent,
     executeWorkspaceTool,
+    executeProfileAction: profileRunPayload,
+    loadOpenPondProfileState,
+    readOpenPondProfileSkill: readProfileSkill,
+    executeProfileSkillCommand: ({ prompt }) => runProfileSkillCommandFromPrompt(prompt),
+    executeProfileSkillGoal: (input) => runProfileSkillGoalCommand(input),
+    executeWebSearch: executeWebSearch ?? undefined,
     loadPersonalizationSoul: async () => (await loadPersonalizationSettings(store, storeDir)).soul,
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
@@ -374,13 +385,17 @@ export async function createOpenPondServer(
         secrets: state.secrets,
         modelId: input.modelId,
         messages: input.messages,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
         requestId: input.requestId,
         signal: input.signal,
       })) {
         if (delta.type === "text_delta" || delta.type === "reasoning_delta") {
           yield { text: delta.text, raw: delta.raw };
         }
+        if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls, raw: delta.raw };
         if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
+        if (delta.type === "finish") yield { finishReason: delta.finishReason, raw: delta.raw };
       }
     },
     turnFollowUpQueue: workQueues.turnFollowUp,
@@ -745,6 +760,7 @@ export async function createOpenPondServer(
       createLocalProjectPayload,
       deleteLocalProjectPayload,
       updateLocalProjectAgentSetupPayload,
+      previewLocalProjectCloudSourcePayload,
       uploadLocalProjectCloudSourcePayload,
       listCloudWorkItemsPayload,
       getCloudWorkItemPayload,
@@ -753,6 +769,7 @@ export async function createOpenPondServer(
       handleCloudWorkItemBackgroundPayload,
       cancelCloudWorkItemTaskPayload,
       openCloudWorkItemPayload,
+      applyCloudWorkItemLocalPatchPayload,
       organizationPayload: organizationRequestPayload,
       sandboxPayload: sandboxRequestPayload,
       gitAvailabilityPayload,

@@ -10,6 +10,7 @@ import {
   PROJECT_SOURCE_UPLOAD_TRANSPORT,
   collectProjectSourceUploadEntries,
 } from "../apps/cli/src/cli/project-agent";
+import { collectAgentSdkGeneratedArtifactPaths } from "../apps/cli/src/cli/project-source-upload";
 import {
   PROFILE_SOURCE_UPLOAD_LIMITS,
   PROFILE_SOURCE_UPLOAD_TRANSPORT,
@@ -127,6 +128,32 @@ describe("profile source upload", () => {
     expect(secondUpload.entries).toEqual(firstUpload.entries);
     expect(secondUpload.totalBytes).toBe(firstUpload.totalBytes);
     expect(secondUpload.entries.map((entry) => entry.path)).not.toContain(SOURCE_UPLOAD_CACHE_PATH);
+  });
+
+  test("agent SDK generated artifact collection includes skill packages without broad .openpond upload", async () => {
+    const projectPath = await mkdtemp(join(tmpdir(), "openpond-agent-sdk-skill-artifacts-"));
+    await mkdir(join(projectPath, ".openpond", "skills", "release-notes", "references"), { recursive: true });
+    await writeFile(join(projectPath, ".openpond", "agent-manifest.json"), "{}\n", "utf8");
+    await writeFile(join(projectPath, ".openpond", "eval-results.json"), "{}\n", "utf8");
+    await writeFile(join(projectPath, ".openpond", "source-upload-cache.json"), "{}\n", "utf8");
+    await writeFile(
+      join(projectPath, ".openpond", "skills", "release-notes", "SKILL.md"),
+      "---\nname: release-notes\ndescription: Write release notes.\n---\n\nUse concise bullets.\n",
+      "utf8",
+    );
+    await writeFile(
+      join(projectPath, ".openpond", "skills", "release-notes", "references", "tone.md"),
+      "Use short sentences.\n",
+      "utf8",
+    );
+
+    const paths = await collectAgentSdkGeneratedArtifactPaths(projectPath);
+
+    expect(paths).toContain(".openpond/agent-manifest.json");
+    expect(paths).toContain(".openpond/skills/release-notes/SKILL.md");
+    expect(paths).toContain(".openpond/skills/release-notes/references/tone.md");
+    expect(paths).not.toContain(".openpond/eval-results.json");
+    expect(paths).not.toContain(".openpond/source-upload-cache.json");
   });
 });
 

@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -20,6 +19,7 @@ import {
   type LocalOpenPondProfilePushStatus,
   type ProfileRepoManifest,
 } from "../profile/local-profile";
+import { buildHostedRunIdempotencyKey } from "../profile/hosted-run-idempotency";
 import {
   optionString,
   parseBooleanOption,
@@ -192,9 +192,19 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
     );
   }
 
+  const explicitHostedSourceAgentId = optionString(options, "hostedSourceAgentId");
+  const requestHostedSourceChecks = parseBooleanOption(options.hostedSourceChecks);
+  const publishHostedSource = parseBooleanOption(options.publishHostedSource);
+  const hostedRunAgentId = optionString(options, "hostedRunAgentId");
+  const hostedSourceAgentId =
+    explicitHostedSourceAgentId ||
+    (requestHostedSourceChecks || publishHostedSource ? hostedRunAgentId : null);
   const manifest = JSON.parse(await readFile(state.manifestPath, "utf8")) as ProfileRepoManifest;
   const sourcePath = manifest.profiles[state.activeProfile ?? manifest.defaultProfile]?.path ?? "profiles/default";
-  const upload = await collectProfileSourceUploadEntries(state.repoPath);
+  const upload = await collectProfileSourceUploadForPush({
+    state,
+    hostedSourceAgentId,
+  });
   const result = await client.profile.push({
     teamId,
     entries: upload.entries,
@@ -241,13 +251,6 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
   };
   await saveProfilePushStatus(pushStatus);
 
-  const explicitHostedSourceAgentId = optionString(options, "hostedSourceAgentId");
-  const requestHostedSourceChecks = parseBooleanOption(options.hostedSourceChecks);
-  const publishHostedSource = parseBooleanOption(options.publishHostedSource);
-  const hostedRunAgentId = optionString(options, "hostedRunAgentId");
-  const hostedSourceAgentId =
-    explicitHostedSourceAgentId ||
-    (requestHostedSourceChecks || publishHostedSource ? hostedRunAgentId : null);
   let hostedRuntimeAgentId =
     hostedSourceAgentId ??
     resolveHostedRuntimeAgentIdForRun(state, hostedRunAgentId);
@@ -446,12 +449,16 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
     const hostedRunConversationId =
       optionString(options, "hostedRunConversationId") ||
       optionString(options, "conversationId");
+    const hostedRunTargetProjectId = optionString(options, "hostedRunTargetProjectId");
     const hostedRunIdempotencyKey = buildHostedRunIdempotencyKey({
-      options,
+      explicitKey: optionString(options, "hostedRunIdempotencyKey"),
+      retry: parseBooleanOption(options.hostedRunRetry),
       localHead: state.git.head,
-      hostedHead: result.sourceUpload.sourceCommitSha,
+      sourceHead:
+        pushStatus.hostedSourceMaterialization?.sourceCommitSha ??
+        result.sourceUpload.sourceCommitSha,
       runtimeAgentId: hostedRunRuntimeAgentId,
-      materializedSourceCommitSha: pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? null,
+      targetProjectId: hostedRunTargetProjectId,
       input: hostedRunInput,
     });
     await saveProfilePushStatus({
@@ -465,11 +472,14 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
       hostedRun = await client.agents.run(hostedRunRuntimeAgentId, {
         teamId,
         ...(hostedRunConversationId ? { conversationId: hostedRunConversationId } : {}),
+        ...(hostedRunTargetProjectId ? { targetProjectId: hostedRunTargetProjectId } : {}),
+        ...(hostedRunTargetProjectId ? { targetProject: { id: hostedRunTargetProjectId } } : {}),
         idempotencyKey: hostedRunIdempotencyKey,
         input: hostedRunInput,
         metadata: {
           source: "openpond_profile_push_run",
           ...(hostedRunConversationId ? { conversationId: hostedRunConversationId } : {}),
+          targetProjectId: hostedRunTargetProjectId || null,
           localHead: state.git.head,
           hostedHead: result.sourceUpload.sourceCommitSha,
           hostedRunIdempotencyKey,
@@ -590,6 +600,49 @@ function summarizeProfileSourceUpload(upload: Awaited<ReturnType<typeof collectP
     limits: upload.limits,
     transport: upload.transport,
   };
+}
+
+export async function collectProfileSourceUploadForPush(input: {
+  state: LoadedOpenPondProfileState;
+  hostedSourceAgentId: string | null;
+}): Promise<Awaited<ReturnType<typeof collectProfileSourceUploadEntries>>> {
+  const collected = await collectProfileSourceUploadEntries(input.state.repoPath);
+  if (!input.hostedSourceAgentId) return collected;
+  if (!input.state.sourcePath) {
+    throw new Error("Active OpenPond profile is missing a source path.");
+  }
+  const agent = input.state.agents.find(
+    (candidate) => candidate.id === input.hostedSourceAgentId,
+  );
+  if (!agent) {
+    throw new Error(
+      `Profile agent not found for hosted source upload: ${input.hostedSourceAgentId}`,
+    );
+  }
+  const sourceRoot = resolveProfileAgentSourceRoot(
+    input.state.sourcePath,
+    agent.path,
+  );
+  const relativeSourceRoot = path
+    .relative(input.state.repoPath, sourceRoot)
+    .replace(/\\/g, "/");
+  if (relativeSourceRoot.startsWith("..") || path.isAbsolute(relativeSourceRoot)) {
+    throw new Error(`Profile agent path escapes profile repo: ${agent.path}`);
+  }
+  const agentSdk = await collectAgentSdkProjectSourceUploadEntries(
+    sourceRoot,
+    [],
+  );
+  if (agentSdk.entries.length === 0) return collected;
+  return mergeProjectSourceUploadEntries(
+    collected,
+    agentSdk.entries.map((entry) => ({
+      ...entry,
+      path: relativeSourceRoot
+        ? `${relativeSourceRoot}/${entry.path}`
+        : entry.path,
+    })),
+  );
 }
 
 async function materializeHostedProfileAgentSource(input: {
@@ -1106,6 +1159,13 @@ function printProfileState(state: Awaited<ReturnType<typeof loadOpenPondProfileS
       console.log(`  ${agent.id} (${agent.enabled ? "enabled" : "disabled"}) ${agent.path}`);
     }
   }
+  if (state.skills.length > 0) {
+    console.log("Skills:");
+    for (const skill of state.skills) {
+      const status = skill.validationStatus === "valid" ? "valid" : skill.validationStatus;
+      console.log(`  ${skill.name} (${status}) ${skill.path}`);
+    }
+  }
 }
 
 function printProfileDiff(state: Awaited<ReturnType<typeof loadOpenPondProfileState>>): void {
@@ -1119,6 +1179,7 @@ function printProfileDiff(state: Awaited<ReturnType<typeof loadOpenPondProfileSt
     ["Changed agents", state.diff.changedAgents],
     ["New agents", state.diff.newAgents],
     ["Deleted agents", state.diff.deletedAgents],
+    ["Changed skills", state.diff.changedSkills],
     ["Changed actions", state.diff.changedActions],
     ["Changed extensions", state.diff.changedExtensions],
     ["Setup changes", state.diff.setupChanges],
@@ -1228,38 +1289,4 @@ function parseJsonObjectOption(
     throw new Error(`--${key} must be a JSON object`);
   }
   return parsed as Record<string, unknown>;
-}
-
-function buildHostedRunIdempotencyKey(input: {
-  options: CliOptions;
-  localHead: string;
-  hostedHead?: string | null;
-  runtimeAgentId: string;
-  materializedSourceCommitSha?: string | null;
-  input: Record<string, unknown>;
-}): string {
-  const explicit = optionString(input.options, "hostedRunIdempotencyKey");
-  if (explicit) return explicit;
-  const sourceHead = input.materializedSourceCommitSha || input.hostedHead || "unknown-source";
-  const inputHash = hashStableJson(input.input).slice(0, 16);
-  const base = `profile-push-run:${input.localHead}:${sourceHead}:${input.runtimeAgentId}:${inputHash}`;
-  return parseBooleanOption(input.options.hostedRunRetry)
-    ? `${base}:retry:${randomUUID()}`
-    : base;
-}
-
-function hashStableJson(value: unknown): string {
-  return createHash("sha256").update(stableJsonStringify(value)).digest("hex");
-}
-
-function stableJsonStringify(value: unknown): string {
-  if (value === undefined) return "undefined";
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
-  }
-  return `{${Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
-    .join(",")}}`;
 }

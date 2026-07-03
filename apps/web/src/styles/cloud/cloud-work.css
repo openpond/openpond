@@ -397,6 +397,87 @@
   opacity: 0.5;
 }
 
+.cloud-work-boundary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: min(960px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.cloud-work-boundary-strip > div:first-child {
+  display: grid;
+  flex: 1 1 220px;
+  min-width: 0;
+  gap: 2px;
+}
+
+.cloud-work-boundary-strip span {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.cloud-work-boundary-strip small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-work-boundary-chips {
+  display: flex;
+  flex: 1 1 260px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cloud-work-boundary-chips span {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted-strong);
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cloud-work-boundary-strip button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.cloud-work-boundary-strip button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cloud-work-boundary-strip button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.cloud-work-boundary-strip button:disabled:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .cloud-activity {
   display: grid;
   gap: 8px;
@@ -680,6 +761,18 @@
 
   .cloud-thread-timeline {
     gap: 18px;
+  }
+
+  .cloud-work-boundary-strip {
+    align-items: stretch;
+  }
+
+  .cloud-work-boundary-chips {
+    justify-content: flex-start;
+  }
+
+  .cloud-work-boundary-strip button {
+    justify-self: start;
   }
 
   .cloud-create-plan-grid {

@@ -10,7 +10,9 @@ export async function handleProjectCloudRoutes({ deps, request, requestUrl, resp
     handleCloudWorkItemBackgroundPayload,
     cancelCloudWorkItemTaskPayload,
     openCloudWorkItemPayload,
+    applyCloudWorkItemLocalPatchPayload,
     getCloudWorkItemPayload,
+    previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
     updateLocalProjectAgentSetupPayload,
     deleteLocalProjectPayload,
@@ -99,6 +101,20 @@ export async function handleProjectCloudRoutes({ deps, request, requestUrl, resp
     );
     return true;
   }
+  const cloudWorkItemApplyLocalMatch = /^\/v1\/cloud\/work-items\/([^/]+)\/apply-local$/.exec(
+    requestUrl.pathname,
+  );
+  if (request.method === "POST" && cloudWorkItemApplyLocalMatch) {
+    sendJson(
+      response,
+      200,
+      await applyCloudWorkItemLocalPatchPayload(
+        decodeURIComponent(cloudWorkItemApplyLocalMatch[1]!),
+        await readJson(request),
+      ),
+    );
+    return true;
+  }
   const cloudWorkItemMatch = /^\/v1\/cloud\/work-items\/([^/]+)$/.exec(requestUrl.pathname);
   if (request.method === "GET" && cloudWorkItemMatch) {
     sendJson(
@@ -114,6 +130,22 @@ export async function handleProjectCloudRoutes({ deps, request, requestUrl, resp
   const localProjectCloudSourceMatch = /^\/v1\/projects\/([^/]+)\/cloud-source$/.exec(
     requestUrl.pathname,
   );
+  const localProjectCloudSourcePreviewMatch = /^\/v1\/projects\/([^/]+)\/cloud-source\/preview$/.exec(
+    requestUrl.pathname,
+  );
+  if (request.method === "GET" && localProjectCloudSourcePreviewMatch) {
+    sendJson(
+      response,
+      200,
+      await previewLocalProjectCloudSourcePayload(
+        decodeURIComponent(localProjectCloudSourcePreviewMatch[1]!),
+        {
+          branch: requestUrl.searchParams.get("branch") ?? undefined,
+        },
+      ),
+    );
+    return true;
+  }
   if (request.method === "POST" && localProjectCloudSourceMatch) {
     sendJson(
       response,

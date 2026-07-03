@@ -644,6 +644,8 @@ export type SandboxAgentRunInput = {
   teamId: string;
   conversationId?: string | null;
   idempotencyKey?: string | null;
+  targetProjectId?: string | null;
+  targetProject?: { id: string } | null;
   triggerType?: SandboxAgentTriggerType;
   input?: Record<string, unknown>;
   metadata?: Record<string, unknown>;

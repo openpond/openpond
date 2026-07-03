@@ -84,6 +84,33 @@ describe("chat message projection", () => {
     expect(html).not.toContain("Evidence JSON");
   });
 
+  test("renders OpChat quota failures as a billing action card", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_failed",
+        name: "turn.failed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        error:
+          "OpenPond OpChat stream failed: 429 opchat_quota_exceeded: invalid_request_error: OpChat token allowance is exhausted for this period.",
+      }),
+    ]);
+
+    expect(messages[0]?.errorKind).toBe("opchat_quota_exceeded");
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[0]!,
+        accountBaseUrl: "https://qa.openpond.example/dashboard",
+        billingOrganizationSlug: "example-org",
+      }),
+    );
+
+    expect(html).toContain("OpenPond Chat allowance reached");
+    expect(html).toContain("https://qa.openpond.example/sandboxes/example-org/billing");
+    expect(html).not.toContain("OpenPond OpChat stream failed");
+  });
+
   test("recovers Insights evidence rows from truncated prompt JSON", () => {
     const prompt = [
       "You are the built-in OpenPond Insights agent.",
@@ -252,6 +279,85 @@ describe("chat message projection", () => {
     expect(html).toContain("<img");
     expect(html).toContain('alt="OpenPond Chat signed-out failure"');
     expect(html).not.toContain("!&lt;img");
+  });
+
+  test("renders web search results as source pills on the assistant message", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_web_search",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "Who scored in the USMNT game?" },
+      }),
+      runtimeEvent({
+        id: "web_search_completed",
+        name: "tool.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        action: "web_search",
+        status: "completed",
+        output: "Found 2 web results.",
+        data: {
+          tool: "web_search",
+          type: "native_model_tool",
+          result: {
+            result: {
+              query: "USMNT July 1 2026 goals",
+              provider: "exa",
+              searchedAt: "2026-07-03T00:00:00.000Z",
+              truncated: false,
+              results: [
+                {
+                  id: "us-soccer",
+                  title: "USMNT match report",
+                  url: "https://www.ussoccer.com/stories/2026/07/usmnt-match-report",
+                  snippet: "Folarin Balogun and Malik Tillman scored.",
+                  sourceName: "U.S. Soccer",
+                  faviconUrl: "https://www.ussoccer.com/favicon.ico",
+                  publishedAt: "2026-07-01T00:00:00.000Z",
+                  updatedAt: null,
+                },
+                {
+                  id: "espn",
+                  title: "United States game recap",
+                  url: "https://www.espn.com/soccer/report/_/gameId/123",
+                  snippet: "The match was played July 1, 2026.",
+                  sourceName: "ESPN",
+                  publishedAt: null,
+                  updatedAt: null,
+                },
+              ],
+            },
+          },
+        },
+      }),
+      runtimeEvent({
+        id: "assistant_answer",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "Goals were by Folarin Balogun and Malik Tillman. Sources: U.S. Soccer, ESPN.",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
+    expect(messages[2]?.sources?.map((source) => source.sourceName)).toEqual(["U.S. Soccer", "ESPN"]);
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[2]!,
+        onOpenBrowserLink: () => undefined,
+      }),
+    );
+    expect(html).toContain("assistant-sources");
+    expect(html).toContain("assistant-source-pill");
+    expect(html).toContain("Open source U.S. Soccer");
+    expect(html).toContain("Open source ESPN");
+    expect(html).toContain("assistant-source-favicon");
+    expect(html).toContain('src="https://www.ussoccer.com/favicon.ico"');
+    expect(html).toContain(">U.S. Soccer</span>");
+    expect(html).not.toContain(">https://www.ussoccer.com");
   });
 
   test("renders OpenPond Chat public image file inventories inline", () => {
@@ -624,6 +730,122 @@ describe("chat message projection", () => {
       appId: "app_1",
       title: "photo.png",
     });
+  });
+
+  test("projects profile skill lifecycle as activity rows", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Use $release-notes" },
+      }),
+      runtimeEvent({
+        id: "skill_1",
+        name: "skill.loaded",
+        turnId: "turn_1",
+        action: "profile_skill_read",
+        status: "completed",
+        output: "Loaded profile skill release-notes.",
+        data: { skillName: "release-notes" },
+      }),
+    ]);
+
+    expect(messages[1]?.role).toBe("activity_group");
+    expect(messages[1]?.activities?.[0]?.label).toBe("Loaded skill");
+    expect(messages[1]?.activities?.[0]?.content).toBe("Loaded profile skill release-notes.");
+  });
+
+  test("projects OpenPond capability tools as compact activity rows", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "restart this goal" },
+      }),
+      runtimeEvent({
+        id: "create_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "openpond_create_pipeline",
+        status: "started",
+        args: { objective: "Create a support triage agent." },
+      }),
+      runtimeEvent({
+        id: "create_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "openpond_create_pipeline",
+        status: "completed",
+        output: JSON.stringify({ ok: true, output: "Create Pipeline plan is ready for review." }),
+        data: {
+          result: {
+            nextStep: "Create Pipeline plan is ready for review.",
+          },
+        },
+      }),
+      runtimeEvent({
+        id: "skill_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "openpond_profile_skill_goal",
+        status: "started",
+        args: { objective: "Draft reusable release notes." },
+      }),
+      runtimeEvent({
+        id: "skill_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "openpond_profile_skill_goal",
+        status: "completed",
+        output: JSON.stringify({ ok: true, output: "Started profile skill goal: Create release notes." }),
+        data: {
+          result: {
+            nextStep: "Started profile skill goal: Create release notes.",
+          },
+        },
+      }),
+      runtimeEvent({
+        id: "goal_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "openpond_goal_control",
+        status: "started",
+        args: { reason: "User asked to restart this goal." },
+      }),
+      runtimeEvent({
+        id: "goal_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "openpond_goal_control",
+        status: "completed",
+        output: JSON.stringify({ ok: true, output: "OpenPond goal restarted." }),
+        data: {
+          result: {
+            nextStep: "OpenPond goal restarted.",
+          },
+        },
+      }),
+    ]);
+
+    expect(messages[1]?.role).toBe("activity_group");
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
+      "Starting Create Pipeline",
+      "Started Create Pipeline",
+      "Starting profile skill goal",
+      "Started profile skill goal",
+      "Updating goal",
+      "Updated goal",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
+      "Create a support triage agent.",
+      "Create Pipeline plan is ready for review.",
+      "Draft reusable release notes.",
+      "Started profile skill goal: Create release notes.",
+      "User asked to restart this goal.",
+      "OpenPond goal restarted.",
+    ]);
   });
 
   test("projects Codex absolute image reads as local activity image previews", () => {

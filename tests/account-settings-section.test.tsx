@@ -137,16 +137,16 @@ describe("AccountSettingsSection", () => {
     const html = renderAccountSettings(
       accountState({
         state: "signed_in",
-        activeProfile: { handle: "qa", baseUrl: "https://staging.openpond.ai" },
+        activeProfile: { handle: "qa", baseUrl: "https://qa.openpond.example" },
         label: "QA User",
-        environment: "staging",
+        environment: "qa",
         accounts: [
           {
             handle: "qa",
-            baseUrl: "https://staging.openpond.ai",
-            apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+            baseUrl: "https://qa.openpond.example",
+            apiBaseUrl: "https://api.qa.openpond.example",
             chatApiBaseUrl: null,
-            environment: "staging",
+            environment: "qa",
             isActive: true,
             authHealth: "signed_in",
             displayLabel: "QA User",
@@ -159,8 +159,8 @@ describe("AccountSettingsSection", () => {
 
     expect(html).toContain("QA User");
     expect(html).toContain("Environment");
-    expect(html).not.toContain(">staging<");
-    expect(html).not.toContain("https://staging.openpond.ai");
-    expect(html).not.toContain("https://api-new.staging-api.openpond.ai");
+    expect(html).not.toContain(">qa<");
+    expect(html).not.toContain("https://qa.openpond.example");
+    expect(html).not.toContain("https://api.qa.openpond.example");
   });
 });

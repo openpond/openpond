@@ -141,7 +141,11 @@ export function createServerWorkspacePayloads(deps: {
         await loadWorkspaceStateAtPath(
           localProjectWorkspacePaths(localProject),
           localProjectStateWorkspace(localProject),
-          { clone: false, allowPlainFolder: true }
+          {
+            clone: false,
+            allowPlainFolder: true,
+            linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null,
+          }
         )
       );
     }
@@ -268,7 +272,8 @@ export function createServerWorkspacePayloads(deps: {
         await createAndCheckoutBranchAtPath(
           localProjectWorkspacePaths(localProject),
           localProjectStateWorkspace(localProject),
-          input.branch
+          input.branch,
+          { linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null }
         )
       );
     }
@@ -290,7 +295,8 @@ export function createServerWorkspacePayloads(deps: {
         await checkoutBranchAtPath(
           localProjectWorkspacePaths(localProject),
           localProjectStateWorkspace(localProject),
-          input.branch
+          input.branch,
+          { linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null }
         )
       );
     }

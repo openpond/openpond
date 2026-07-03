@@ -48,7 +48,7 @@ describe("updateOpenPondAccountConfig", () => {
         baseUrl: "https://new-web.example",
         apiBaseUrl: "https://new-api.example",
         chatApiBaseUrl: null,
-        environment: "staging",
+        environment: "qa",
       });
       console.log(JSON.stringify({
         apiBaseUrl: context.apiBaseUrl,
@@ -80,7 +80,7 @@ describe("updateOpenPondAccountConfig", () => {
         apiKey: "opk_existing_secret",
         baseUrl: "https://new-web.example",
         apiBaseUrl: "https://new-api.example",
-        environment: "staging",
+        environment: "qa",
       },
     ]);
     expect(context.apiKey).toBe("opk_existing_secret");

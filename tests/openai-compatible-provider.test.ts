@@ -63,6 +63,80 @@ describe("OpenAI-compatible provider adapter", () => {
     ]);
   });
 
+  test("sends native tools to BYOK providers and streams tool call deltas", async () => {
+    const requests: Array<{ url: string; authorization: string | null; body: Record<string, unknown> }> = [];
+    globalThis.fetch = async (input, init) => {
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return streamResponse([
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_resource","type":"function","function":{"name":"resource_read","arguments":"{\\"ref\\":\\"workspace:README.md\\"}"}}]},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    };
+
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "resource_read",
+          description: "Read a workspace resource by reference.",
+          parameters: {
+            type: "object",
+            properties: {
+              ref: { type: "string" },
+            },
+            required: ["ref"],
+          },
+        },
+      },
+    ] as const;
+    const deltas = [];
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState(),
+      providerId: "openrouter",
+      modelId: "test/model",
+      messages: [{ role: "user", content: "read README" }],
+      tools: [...tools],
+      toolChoice: "auto",
+      requestId: "turn_tools",
+    })) {
+      deltas.push(delta);
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "https://provider.example/v1/chat/completions",
+        authorization: "Bearer sk-test",
+        body: {
+          model: "test/model",
+          messages: [{ role: "user", content: "read README" }],
+          stream: true,
+          tools,
+          tool_choice: "auto",
+        },
+      },
+    ]);
+    expect(deltas).toHaveLength(2);
+    expect(deltas[0]).toMatchObject({
+      type: "tool_call_delta",
+      toolCalls: [
+        {
+          id: "call_resource",
+          type: "function",
+          function: {
+            name: "resource_read",
+            arguments: '{"ref":"workspace:README.md"}',
+          },
+        },
+      ],
+    });
+    expect(deltas[1]).toMatchObject({ type: "finish", finishReason: "tool_calls" });
+  });
+
   test("lists and validates provider models from /models", async () => {
     const requests: string[] = [];
     globalThis.fetch = async (input) => {

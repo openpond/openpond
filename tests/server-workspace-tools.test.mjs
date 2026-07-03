@@ -1172,7 +1172,7 @@ describe("server workspace tool harness", () => {
         body: JSON.stringify({
           action: "run_opentool_tool",
           args: {
-            appUrl: "https://staging.openpond.ai/openpondai/mpp-service-tool",
+            appUrl: "https://qa.openpond.example/openpondai/mpp-service-tool",
             deploymentId: "deployment_mpp_service_tool",
             body: {},
           },

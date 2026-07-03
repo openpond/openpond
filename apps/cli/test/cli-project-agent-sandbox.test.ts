@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import { createOpenPondSandboxClient } from "../src/sandbox/client";
+import { collectProfileSourceUploadForPush } from "../src/cli/profile";
 import {
   AGENT_SDK_PILOT_NAMES,
   LARGE_RAW_MARKER,
@@ -104,6 +105,8 @@ describe("project and agent sandbox CLI scenarios", () => {
         "run_key",
         "--conversation-id",
         "session_run_1",
+        "--target-project-id",
+        "target_project_test",
         "--input",
         '{"message":"hello"}',
         "--sandbox-api-url",
@@ -621,6 +624,8 @@ describe("project and agent sandbox CLI scenarios", () => {
         teamId: "team_test",
         idempotencyKey: "run_key",
         conversationId: "session_run_1",
+        targetProjectId: "target_project_test",
+        targetProject: { id: "target_project_test" },
         input: { message: "hello" },
       });
       expect(requests[6]?.body).toMatchObject({
@@ -715,6 +720,43 @@ describe("project and agent sandbox CLI scenarios", () => {
     expect(result.stdout).toContain(
       "openpond agent edit checkpoint-result|commit-result|pr-result"
     );
+  });
+
+  test("agent run-test sends target project binding", async () => {
+    const requests: CapturedRequest[] = [];
+    await withSandboxApi(requests, async (sandboxApiUrl) => {
+      const result = await runCli([
+        "agent",
+        "run-test",
+        "agent_test",
+        "--team-id",
+        "team_test",
+        "--target-project-id",
+        "target_project_test",
+        "--input",
+        '{"prompt":"read workspace sentinel"}',
+        "--sandbox-api-url",
+        sandboxApiUrl,
+      ]);
+
+      expect(result.code).toBe(0);
+      const runRequest = requests.find(
+        (request) =>
+          request.method === "POST" &&
+          request.url === "/v1/agents/agent_test/run"
+      );
+      expect(runRequest?.body).toMatchObject({
+        teamId: "team_test",
+        targetProjectId: "target_project_test",
+        targetProject: { id: "target_project_test" },
+        input: { prompt: "read workspace sentinel" },
+        metadata: { source: "agent_run_test" },
+        runtimeSourcePolicy: {
+          source: "diagnostic",
+          allowLatestSource: true,
+        },
+      });
+    });
   });
 
   test("agent edit check-status classifies setup, policy, validation, eval, and publish failures", async () => {
@@ -1046,6 +1088,118 @@ describe("project and agent sandbox CLI scenarios", () => {
     });
   });
 
+  test("profile push uploads selected nested SDK agent dependencies", async () => {
+    const repoPath = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-sdk-upload-")
+    );
+    try {
+      const sourcePath = path.join(repoPath, "profiles", "default");
+      const agentRoot = path.join(sourcePath, "agents", "invoice-agent");
+      await mkdir(sourcePath, { recursive: true });
+      await writeAgentSdkUploadFixture(agentRoot);
+      await writeFile(
+        path.join(repoPath, "openpond-profile.json"),
+        JSON.stringify(
+          {
+            schema: "openpond.profileRepo.v1",
+            defaultProfile: "default",
+            profiles: {
+              default: {
+                path: "profiles/default",
+                defaultAgent: "invoice-agent",
+                enabledAgents: ["invoice-agent"],
+              },
+            },
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+      await runTestCommand("git", ["init", "-b", "main"], repoPath);
+      await runTestCommand("git", ["add", "-A"], repoPath);
+
+      const upload = await collectProfileSourceUploadForPush({
+        state: {
+          repoPath,
+          sourcePath,
+          agents: [
+            {
+              id: "invoice-agent",
+              name: "Invoice Agent",
+              enabled: true,
+              path: "agents/invoice-agent",
+            },
+          ],
+        } as Parameters<typeof collectProfileSourceUploadForPush>[0]["state"],
+        hostedSourceAgentId: "invoice-agent",
+      });
+      const paths = upload.entries.map((entry) => entry.path).sort();
+      expect(paths).toContain(
+        "profiles/default/agents/invoice-agent/package.json"
+      );
+      expect(paths).toContain(
+        "profiles/default/agents/invoice-agent/.openpond/source-upload-metadata.json"
+      );
+      expect(paths).toContain(
+        "profiles/default/agents/invoice-agent/.openpond/vendor/openpond-agent-sdk.tgz"
+      );
+      expect(paths).toContain(
+        "profiles/default/agents/invoice-agent/.openpond/vendor/npm/fixture-runtime-dep.tgz"
+      );
+
+      const uploadedPackageJson = upload.entries.find(
+        (entry) =>
+          entry.path === "profiles/default/agents/invoice-agent/package.json"
+      );
+      const uploadedPackage = JSON.parse(
+        Buffer.from(
+          uploadedPackageJson?.contentsBase64 ?? "",
+          "base64"
+        ).toString("utf8")
+      ) as {
+        dependencies?: Record<string, string>;
+        overrides?: Record<string, string>;
+      };
+      expect(uploadedPackage.dependencies?.["openpond-agent-sdk"]).toBe(
+        "file:.openpond/vendor/openpond-agent-sdk.tgz"
+      );
+      expect(uploadedPackage.dependencies?.["fixture-runtime-dep"]).toBe(
+        "file:.openpond/vendor/npm/fixture-runtime-dep.tgz"
+      );
+      expect(uploadedPackage.overrides?.["fixture-runtime-dep"]).toBe(
+        "file:.openpond/vendor/npm/fixture-runtime-dep.tgz"
+      );
+
+      const materializedDir = await mkdtemp(
+        path.join(os.tmpdir(), "openpond-profile-sdk-materialized-")
+      );
+      try {
+        await writeSourceUploadEntriesToDirectory(upload.entries, materializedDir);
+        const materializedAgentRoot = path.join(
+          materializedDir,
+          "profiles",
+          "default",
+          "agents",
+          "invoice-agent"
+        );
+        await runDependencySetupFromUploadMetadata(materializedAgentRoot);
+        const inspectResult = await runTestCommandWithOutput(
+          "bun",
+          ["run", "agent:inspect"],
+          materializedAgentRoot
+        );
+        expect(JSON.parse(inspectResult.stdout)).toMatchObject({
+          editable: { enabled: true },
+        });
+      } finally {
+        await rm(materializedDir, { recursive: true, force: true });
+      }
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
   test("project source-upload builds SDK agents and uploads generated manifest artifacts", async () => {
     const projectDir = await mkdtemp(
       path.join(os.tmpdir(), "openpond-agent-sdk-upload-")
@@ -1167,6 +1321,7 @@ describe("project and agent sandbox CLI scenarios", () => {
               sizeBytes?: number;
             }>;
           };
+          setupRequirements?: Array<Record<string, unknown>>;
           generatedManifestPath?: string;
           synthesizedOpenPondYaml?: boolean;
           artifactHashes?: Record<string, { sha256?: string; sizeBytes?: number }>;
@@ -1207,6 +1362,16 @@ describe("project and agent sandbox CLI scenarios", () => {
               },
             ],
           },
+          setupRequirements: [
+            {
+              actionId: "chat",
+              kind: "env",
+              name: "UPLOAD_FIXTURE_TOKEN",
+              required: true,
+              secret: true,
+              status: "setup_required",
+            },
+          ],
         });
         expect(
           uploadMetadataJson.dependencySetup?.sdkPackage?.sha256

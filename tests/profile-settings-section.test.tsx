@@ -48,6 +48,13 @@ function profilePayload(): BootstrapPayload {
         stale: false,
         error: null,
       },
+      skillCatalog: {
+        skillCount: 0,
+        generatedAt: null,
+        stale: false,
+        error: null,
+      },
+      skills: [],
       actionCatalog: [
         {
           id: "chat",
@@ -68,6 +75,7 @@ function profilePayload(): BootstrapPayload {
         changedAgents: [],
         newAgents: [],
         deletedAgents: [],
+        changedSkills: [],
         changedActions: [],
         changedExtensions: [],
         setupChanges: [],
@@ -217,5 +225,47 @@ describe("ProfileSettingsSection", () => {
     expect(syncIndex).toBeLessThan(agentsIndex);
     expect(repoIndex).toBeLessThan(agentsIndex);
     expect(agentsIndex).toBeLessThan(summaryIndex);
+  });
+
+  test("renders profile skills beside profile agents", () => {
+    const payload = profilePayload();
+    payload.profile.skills = [
+      {
+        name: "release-notes",
+        description: "Draft release notes from user-facing changes.",
+        path: "skills/release-notes/SKILL.md",
+        scope: "profile",
+        enabled: true,
+        sourcePath: "/workspace/openpond-profile/profiles/default",
+        charCount: 240,
+        sourceHash: "e".repeat(64),
+        validationStatus: "valid",
+        validationMessages: [],
+      },
+    ];
+    payload.profile.skillCatalog = {
+      skillCount: 1,
+      generatedAt: NOW,
+      stale: false,
+      error: null,
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(ProfileSettingsSection, {
+        payload,
+        connection: null,
+        onPayload: noop,
+        onError: noop,
+        onSkillCommand: noop,
+      }),
+    );
+
+    expect(html).toContain("<span>Skills</span>");
+    expect(html).toContain("release-notes");
+    expect(html).toContain("Draft release notes from user-facing changes.");
+    expect(html).toContain("skills/release-notes/SKILL.md");
+    expect(html).toContain(">Use<");
+    expect(html).toContain(">Edit<");
+    expect(html).toContain(">Create<");
   });
 });

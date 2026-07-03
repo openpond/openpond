@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
-import type { ChatAttachment, RuntimeEvent, Session } from "@openpond/contracts";
+import type { ChatAttachment, RuntimeEvent, Session, WorkspaceState, TerminalScope } from "@openpond/contracts";
 import {
   appReducer,
   createAppSetters,
@@ -27,6 +27,13 @@ import {
 import { latestGoalRuntimeFromEvents } from "./lib/goal-runtime";
 import { isCodexHistorySessionId } from "./lib/sidebar-session-projects";
 import {
+  migrateDraftTerminalTabs,
+  terminalScopeForSelection,
+  terminalScopesEqual,
+  terminalScopeSummaries,
+} from "./components/terminal/terminal-state";
+import type { TerminalQueuedCommand, TerminalTab } from "./components/terminal/terminal-overlay-types";
+import {
   upsertSessionPreservingLocalSidebarState,
   upsertSessionPreservingLocalSidebarStateAndRecency,
 } from "./lib/session-state";
@@ -45,6 +52,7 @@ import type { WorkspaceDiffTabRequest } from "./components/workspace-diff/worksp
 import {
   isCloudWorkspaceKind,
 } from "./lib/workspace-location";
+import { queuedCloudWorkSubmission } from "./lib/queued-cloud-work";
 import {
   useActiveWorkspaceViewState,
   useWorkspaceTargetState,
@@ -109,12 +117,14 @@ function promptForRightChatCommand(command: ComposerSlashCommand, prompt: string
   const args = prompt.trim();
   if (command.id === "create") return `/create ${args}`;
   if (command.id === "edit") return `/edit ${args}`;
+  if (command.id === "skill") return `/skill ${args}`;
   return `Goal: ${args}`;
 }
 
 export function App() {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
-  const [pendingTerminalCommand, setPendingTerminalCommand] = useState<{ id: number; command: string } | null>(null);
+  const [pendingTerminalCommand, setPendingTerminalCommand] = useState<TerminalQueuedCommand | null>(null);
+  const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
   const [mentionedAppId, setMentionedAppId] = useState<string | null>(null);
   const [cloudSetupDialog, setCloudSetupDialog] = useState<CloudSetupDialogState | null>(null);
   const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(null);
@@ -122,6 +132,10 @@ export function App() {
   const [rightChatHistoryEvents, setRightChatHistoryEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<Record<string, ChatHistoryLoadState>>({});
   const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
+  const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
+  const rememberCloudWorkspaceState = useCallback((state: WorkspaceState) => {
+    rememberWorkspaceStateRef.current?.(state);
+  }, []);
   const {
     confirmProjectAction,
     projectConfirmDialog,
@@ -396,6 +410,8 @@ export function App() {
     cloudWorkItems,
     selectedCloudWorkItem,
     selectedCloudWorkItemId,
+    selectedCloudWorkItemLocalProject,
+    applyCloudWorkItemPatchLocally,
     cancelCloudWorkItemCreatePipeline,
     cancelCloudWorkItemTask,
     createCloudWork,
@@ -414,6 +430,7 @@ export function App() {
     setSelectedSessionId,
     setView,
     setError,
+    rememberWorkspaceState: rememberCloudWorkspaceState,
     showToast,
   });
 
@@ -678,7 +695,7 @@ export function App() {
     pinnedItems,
     projectRows,
     localProjectRows,
-    visibleLocalProjectRows,
+    visibleProjectRows,
     cloudProjectRows,
     cloudWorkItemsByProjectId,
     projectSessionRowsByProjectId,
@@ -700,6 +717,28 @@ export function App() {
     projectsExpanded,
     chatRowsVisibleCount,
   });
+  const activeTerminalScope = useMemo<TerminalScope>(
+    () => terminalScopeForSelection({ selectedAppId, selectedProjectId, selectedSessionId }),
+    [selectedAppId, selectedProjectId, selectedSessionId],
+  );
+  const previousTerminalScopeRef = useRef<TerminalScope | null>(null);
+
+  useEffect(() => {
+    const previousScope = previousTerminalScopeRef.current;
+    previousTerminalScopeRef.current = activeTerminalScope;
+    if (!previousScope || previousScope.kind !== "draft" || activeTerminalScope.kind !== "session") return;
+    if (terminalScopesEqual(previousScope, activeTerminalScope)) return;
+    setTerminalTabs((current) => {
+      const next = migrateDraftTerminalTabs({
+        tabs: current,
+        previousScope,
+        activeScope: activeTerminalScope,
+      });
+      const changed = next.some((tab, index) => tab !== current[index]);
+      return changed ? next : current;
+    });
+  }, [activeTerminalScope]);
+  const terminalSummaries = useMemo(() => terminalScopeSummaries(terminalTabs), [terminalTabs]);
   const codexHistoryPrefetchSessionIds = useMemo(() => {
     const ids: string[] = [];
     const seen = new Set<string>();
@@ -711,7 +750,7 @@ export function App() {
       ids.push(session.id);
     };
 
-    for (const item of visibleLocalProjectRows) {
+    for (const item of visibleProjectRows) {
       for (const session of (projectSessionRowsByProjectId[item.id] ?? []).slice(0, 2)) {
         addSession(session);
       }
@@ -733,7 +772,7 @@ export function App() {
     projectSessionRowsByProjectId,
     selectedSessionId,
     visibleChatRows,
-    visibleLocalProjectRows,
+    visibleProjectRows,
   ]);
   useEffect(() => {
     if (!connection || codexHistoryPrefetchSessionIds.length === 0) return undefined;
@@ -789,7 +828,7 @@ export function App() {
       pinnedPreviewKeys: pinnedPreviewKeys ?? [],
       pinnedProjects,
       projectRows,
-      visibleLocalProjectRows,
+      visibleProjectRows,
     });
   const shouldLoadWorkspaceDiff = Boolean(
     activeWorkspaceAppId &&
@@ -815,6 +854,7 @@ export function App() {
     sidebarWorkspaceAppIds,
     setError,
   });
+  rememberWorkspaceStateRef.current = rememberWorkspaceState;
   const refreshWorkspaceDiffWhenNeeded = useCallback(
     (appId: string | null | undefined = activeWorkspaceAppId) => {
       if (!appId || appId !== activeWorkspaceAppId || !shouldLoadWorkspaceDiff) {
@@ -842,6 +882,7 @@ export function App() {
     activeWorkspaceKind === "local_project" &&
     Boolean(selectedProject?.sandboxTemplate?.detected) &&
     !selectedProject?.linkedOpenPondApp?.appId;
+  const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<"queue_cloud" | null>(null);
   const { projectTarget, workspaceTarget } = useWorkspaceTargetState({
     accountPending,
     accountSignedOut,
@@ -849,13 +890,16 @@ export function App() {
     bootstrap,
     busy,
     cloudLinked,
-    cloudTargetName,
-    localTargetName,
     selectedCloudProject,
     selectedProject,
     selectedSession,
+    pendingWorkspaceTarget,
+    workspaceStates,
     workspaceBusy,
   });
+  useEffect(() => {
+    setPendingWorkspaceTarget(null);
+  }, [selectedCloudProject?.id, selectedProject?.id, selectedSession?.id]);
   const title = view === "apps"
     ? "Apps"
     : view === "insights"
@@ -1088,7 +1132,7 @@ export function App() {
     setSessions,
   });
   const {
-    changeWorkspaceTarget,
+    changeWorkspaceTarget: changeWorkspaceTargetBase,
     moveProjectToCloud,
     openCloudSetupForLocalProject,
     startCloudSetupUpload,
@@ -1118,6 +1162,89 @@ export function App() {
     visibleWorkspaceState,
     workspaceBusy,
   });
+  const changeWorkspaceTarget = useCallback(
+    async (target: "local" | "cloud" | "queue_cloud" | "upload_cloud") => {
+      if (target === "queue_cloud") {
+        const linkedCloudProjectId =
+          selectedCloudProject?.id ?? selectedProject?.linkedSandboxProject?.projectId ?? null;
+        if (!linkedCloudProjectId) {
+          setPendingWorkspaceTarget(null);
+          await changeWorkspaceTargetBase(target);
+          return;
+        }
+        setPendingWorkspaceTarget("queue_cloud");
+        showToast("Next message will queue a Cloud work item and keep this chat local.", "info");
+        return;
+      }
+      setPendingWorkspaceTarget(null);
+      await changeWorkspaceTargetBase(target);
+    },
+    [changeWorkspaceTargetBase, selectedCloudProject?.id, selectedProject?.linkedSandboxProject?.projectId, showToast],
+  );
+  const sendPromptFromMainComposer = useCallback(
+    async (
+      attachments: ChatAttachment[] = [],
+      action: SandboxActionCatalogEntry | null = null,
+      promptOverride?: string,
+      options: ComposerSubmitOptions = {},
+    ) => {
+      const queuedSubmission = queuedCloudWorkSubmission({
+        pendingWorkspaceTarget,
+        actionSelected: Boolean(action),
+        promptOverrideProvided: promptOverride !== undefined,
+        attachmentCount: attachments.length,
+        selectedCloudProjectId: selectedCloudProject?.id ?? null,
+        selectedProjectCloudProjectId: selectedProject?.linkedSandboxProject?.projectId ?? null,
+        selectedLocalProjectId: selectedProject?.id ?? null,
+        selectedLocalProjectName: selectedProject?.name ?? null,
+        selectedLocalWorkspacePath: selectedProject?.workspacePath ?? selectedProject?.path ?? null,
+        selectedProjectCloudSourceRef:
+          selectedProject?.linkedSandboxProject?.defaultBranch ??
+          visibleWorkspaceState?.currentBranch ??
+          null,
+        selectedProjectCloudBaseSha: selectedProject?.linkedSandboxProject?.lastUploadedCommit ?? null,
+        prompt,
+      });
+      if (queuedSubmission.kind !== "not_queued") {
+        if (queuedSubmission.kind === "attachments_unsupported") {
+          showToast(queuedSubmission.message, "error");
+          return false;
+        }
+        if (queuedSubmission.kind === "missing_cloud_project") {
+          showToast(queuedSubmission.message, "error");
+          setPendingWorkspaceTarget(null);
+          return false;
+        }
+        if (queuedSubmission.kind === "empty_prompt") return false;
+        const created = await createCloudWork(queuedSubmission.request);
+        if (created) {
+          setPrompt("");
+          setMentionedAppId(null);
+          setPendingWorkspaceTarget(null);
+        }
+        return created;
+      }
+      return sendPrompt(attachments, action, promptOverride, options);
+    },
+    [
+      createCloudWork,
+      pendingWorkspaceTarget,
+      prompt,
+      selectedCloudProject?.id,
+      selectedProject?.linkedSandboxProject?.projectId,
+      selectedProject?.linkedSandboxProject?.defaultBranch,
+      selectedProject?.linkedSandboxProject?.lastUploadedCommit,
+      selectedProject?.id,
+      selectedProject?.name,
+      selectedProject?.path,
+      selectedProject?.workspacePath,
+      sendPrompt,
+      setMentionedAppId,
+      setPrompt,
+      showToast,
+      visibleWorkspaceState?.currentBranch,
+    ],
+  );
 
   const openSandboxWorkspace = useOpenSandboxWorkspace({
     appDispatch,
@@ -1523,13 +1650,15 @@ export function App() {
         dragItem,
         pinnedRows,
         pinnedSessions,
-        visibleLocalProjectRows,
+        visibleProjectRows,
         localProjectRows,
         insightsSystemProjectHidden,
         cloudProjectRows,
+        workspaceStates,
         cloudWorkItemsByProjectId,
         projectSessionRowsByProjectId,
         sidebarProjectIdBySessionId,
+        terminalSummaries,
         runningSessionIds,
         visibleChatRows,
         chatRows,
@@ -1609,7 +1738,7 @@ export function App() {
           setView("insights");
         },
         onRunTerminalCommand: (command) => {
-          setPendingTerminalCommand({ id: Date.now(), command });
+          setPendingTerminalCommand({ id: Date.now(), scope: activeTerminalScope, command });
           setTerminalOpen(true);
         },
         onWorkspaceToolAction: runWorkspaceTool,
@@ -1661,6 +1790,8 @@ export function App() {
         rightPanelTabRequest,
         rightChatPanels: rightChatPanelViews,
         browserConversationId,
+        terminalScope: activeTerminalScope,
+        terminalTabs,
         terminalCwd,
         pendingTerminalCommand,
         terminalOpen,
@@ -1679,6 +1810,7 @@ export function App() {
         cloudWorkItems,
         selectedCloudWorkItem,
         cloudWorkItemDetail,
+        cloudWorkItemLocalProjectName: selectedCloudWorkItemLocalProject?.name ?? null,
         cloudLoading,
         cloudBusy,
         cloudError,
@@ -1693,6 +1825,7 @@ export function App() {
         onShowRightChatPanel: showRightChatPanel,
         onShowSummaryPanel: () => showRightPanelDiffTab("summary"),
         onAddRightChat: () => openRightChatPanel(null),
+        onTerminalTabsChange: setTerminalTabs,
         onCloseRightChatPanel: closeRightChatPanel,
         onRightChatModelChange: updateRightChatModel,
         onRightChatPromptChange: updateRightChatPrompt,
@@ -1709,6 +1842,7 @@ export function App() {
         onHandleCloudWorkItemBackground: handleCloudWorkItemBackground,
         onCancelCloudWorkItemCreatePipeline: cancelCloudWorkItemCreatePipeline,
         onCancelCloudWorkItemTask: cancelCloudWorkItemTask,
+        onApplyCloudWorkItemPatchLocally: applyCloudWorkItemPatchLocally,
         onLoadMoreChatHistory: loadMoreSelectedChatHistory,
         canSyncWorkspace: canSyncActiveWorkspace,
         startMessage,
@@ -1735,7 +1869,7 @@ export function App() {
         setPrompt,
         setMentionedAppId,
         showToast,
-        sendPrompt,
+        sendPrompt: sendPromptFromMainComposer,
         stopTurn,
         syncWorkspaceLocally,
         refreshWorkspaceDiff: (options) =>

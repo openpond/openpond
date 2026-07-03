@@ -4,6 +4,7 @@ import {
   commitWorkspaceChanges,
   ensureWorkspaceGitRepository,
   fetchWorkspaceRemote,
+  getWorkspaceGitDiff,
   getWorkspaceGitStatus,
   pushWorkspaceBranch,
 } from "./workspace-tools.js";
@@ -43,6 +44,20 @@ export async function handleActiveWorkspaceGitAction(
           ? `Workspace has ${status.files.length} changed file${status.files.length === 1 ? "" : "s"}.`
           : "Workspace has no uncommitted changes.",
         data: status,
+      });
+    }
+
+    case "git_diff": {
+      const staged = args.staged === true;
+      const diff = await getWorkspaceGitDiff(state.repoPath, { staged });
+      return WorkspaceToolResultSchema.parse({
+        ok: true,
+        action: input.action,
+        appId: app.id,
+        output: diff.diff.trim()
+          ? staged ? "Read staged git diff." : "Read working tree git diff."
+          : staged ? "Staged git diff is empty." : "Working tree git diff is empty.",
+        data: diff,
       });
     }
 

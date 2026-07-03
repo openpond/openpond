@@ -170,32 +170,49 @@ export function useSidebarData({
         .sort(sortSidebarProjectRows),
     [appPreferences, cloudProjects]
   );
+  const localProjectKeyByLinkedCloudProjectId = useMemo(() => {
+    const rows = new Map<string, string>();
+    for (const project of visibleLocalProjects) {
+      const cloudProjectId = project.linkedSandboxProject?.projectId;
+      if (cloudProjectId) rows.set(cloudProjectId, projectSelectionKey("local", project.id));
+    }
+    return rows;
+  }, [visibleLocalProjects]);
+  const cloudOnlyProjectRows = useMemo(
+    () => cloudProjectRows.filter((item) => !localProjectKeyByLinkedCloudProjectId.has(item.project.id)),
+    [cloudProjectRows, localProjectKeyByLinkedCloudProjectId],
+  );
   const projectRows = useMemo<SidebarProjectItem[]>(
-    () => [...localProjectRows, ...cloudProjectRows].sort(sortSidebarProjectRows),
-    [cloudProjectRows, localProjectRows],
+    () => [...localProjectRows, ...cloudOnlyProjectRows].sort(sortSidebarProjectRows),
+    [cloudOnlyProjectRows, localProjectRows],
   );
   const pinnedProjects = useMemo(() => projectRows.filter((item) => item.pinned), [projectRows]);
-  const visibleLocalProjectRows = useMemo(
-    () => (projectsExpanded ? localProjectRows : localProjectRows.slice(0, SIDEBAR_SECTION_LIMIT)),
-    [localProjectRows, projectsExpanded]
+  const visibleProjectRows = useMemo(
+    () => (projectsExpanded ? projectRows : projectRows.slice(0, SIDEBAR_SECTION_LIMIT)),
+    [projectRows, projectsExpanded]
   );
   const cloudWorkItemsByProjectId = useMemo(() => {
     const rows: Record<string, CloudWorkItem[]> = {};
-    for (const workItem of cloudWorkItems) {
-      if (workItem.archivedAt) continue;
-      const projectKey = projectSelectionKey("cloud", workItem.projectId);
+    const addWorkItem = (projectKey: string, workItem: CloudWorkItem) => {
       const projectRows = rows[projectKey];
       if (projectRows) {
         projectRows.push(workItem);
       } else {
         rows[projectKey] = [workItem];
       }
+    };
+    for (const workItem of cloudWorkItems) {
+      if (workItem.archivedAt) continue;
+      const projectKey = projectSelectionKey("cloud", workItem.projectId);
+      addWorkItem(projectKey, workItem);
+      const linkedLocalProjectKey = localProjectKeyByLinkedCloudProjectId.get(workItem.projectId);
+      if (linkedLocalProjectKey) addWorkItem(linkedLocalProjectKey, workItem);
     }
     for (const [projectKey, items] of Object.entries(rows)) {
       rows[projectKey] = items.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
     }
     return rows;
-  }, [cloudWorkItems]);
+  }, [cloudWorkItems, localProjectKeyByLinkedCloudProjectId]);
   const pinnedItems = useMemo<PinnedSidebarItem[]>(
     () =>
       [
@@ -252,8 +269,8 @@ export function useSidebarData({
     pinnedItems,
     projectRows,
     localProjectRows,
-    visibleLocalProjectRows,
-    cloudProjectRows,
+    visibleProjectRows,
+    cloudProjectRows: cloudOnlyProjectRows,
     cloudWorkItemsByProjectId,
     projectSessionRowsByProjectId,
     sidebarProjectIdBySessionId,

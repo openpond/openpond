@@ -92,6 +92,46 @@ describe("Insights sidebar visibility", () => {
     expect(visible).toContain("projects=system_openpond_insights");
     expect(visible).toContain("projectSessions=local:system_openpond_insights=insights_session");
   });
+
+  test("keeps local terminal chats visible as chat rows or project children", () => {
+    const project = localProject({
+      id: "local_visible",
+      name: "Visible Project",
+      path: "/workspace/local-project",
+      workspacePath: "/workspace/local-project",
+      repoPath: "/workspace/local-project",
+    });
+    const plainTerminalChat = session({
+      id: "terminal_plain",
+      provider: "openai",
+      title: "Terminal chat",
+      workspaceKind: undefined,
+      workspaceId: null,
+      localProjectId: null,
+      cwd: "/workspace/local-project",
+    });
+    const projectTerminalChat = session({
+      id: "terminal_project",
+      provider: "openai",
+      title: "Visible Project terminal",
+      workspaceKind: "local_project",
+      workspaceId: project.id,
+      workspaceName: project.name,
+      localProjectId: project.id,
+      cwd: "/workspace/local-project",
+    });
+
+    const rendered = renderSidebarDataProbe({
+      projects: [project],
+      sessions: [plainTerminalChat, projectTerminalChat],
+      selectedSessionId: plainTerminalChat.id,
+    });
+
+    expect(rendered).toContain("active=2");
+    expect(rendered).toContain("chats=terminal_plain");
+    expect(rendered).toContain("visibleChats=terminal_plain");
+    expect(rendered).toContain("projectSessions=local:local_visible=terminal_project");
+  });
 });
 
 function renderSidebarDataProbe(input: {
@@ -129,6 +169,8 @@ function SidebarDataProbe({
     [
       `projects=${data.localProjectRows.map((row) => row.project.id).join(",")}`,
       `active=${data.activeSessions.length}`,
+      `chats=${data.chatRows.map((row) => row.id).join(",")}`,
+      `visibleChats=${data.visibleChatRows.map((row) => row.id).join(",")}`,
       `projectSessions=${Object.entries(data.projectSessionRowsByProjectId)
         .map(([projectId, rows]) => `${projectId}=${rows.map((row) => row.id).join(",")}`)
         .join("|")}`,

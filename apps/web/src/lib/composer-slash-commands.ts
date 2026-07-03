@@ -1,6 +1,7 @@
 export type ComposerSlashCommandId =
   | "create"
   | "edit"
+  | "skill"
   | "goal"
   | "goal-local"
   | "goal-remote"
@@ -30,6 +31,12 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/edit",
     label: "Edit selected agent",
     description: "Refine the current project agent or workflow.",
+  },
+  {
+    id: "skill",
+    command: "/skill",
+    label: "Manage skills",
+    description: "Manage profile-backed reusable skill instructions.",
   },
   {
     id: "goal",

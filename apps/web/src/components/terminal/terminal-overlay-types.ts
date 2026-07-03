@@ -1,19 +1,33 @@
+import type { TerminalCommandStatus, TerminalScope } from "@openpond/contracts";
+
 export type TerminalStatus = "connecting" | "running" | "exited" | "error";
 
 export type TerminalTab = {
   id: string;
+  scope: TerminalScope;
   title: string;
   cwd: string | null;
   appId: string | null;
   status: TerminalStatus;
+  commandStatus: TerminalCommandStatus;
+  lastExitCode: number | null;
+  lastCommand: string | null;
   shell: string | null;
   detail: string | null;
+  updatedAt: number;
+};
+
+export type TerminalQueuedCommand = {
+  id: number;
+  scope: TerminalScope;
+  command: string;
 };
 
 export type TerminalClientMessage =
   | {
       type: "start";
       terminalId: string;
+      scope: TerminalScope;
       cwd: string | null;
       appId: string | null;
       cols: number;
@@ -59,6 +73,23 @@ export type TerminalServerMessage =
       terminalId: string;
       code: number;
       signal: number | null;
+    }
+  | {
+      type: "command_start";
+      terminalId: string;
+      command: string | null;
+      sequence: number;
+    }
+  | {
+      type: "command_end";
+      terminalId: string;
+      exitCode: number;
+      sequence: number;
+    }
+  | {
+      type: "prompt_ready";
+      terminalId: string;
+      sequence: number;
     }
   | {
       type: "error";

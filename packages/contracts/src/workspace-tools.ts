@@ -40,6 +40,7 @@ export const WorkspaceToolNameSchema = z.enum([
   "run_sandbox_template",
   "git_init",
   "git_status",
+  "git_diff",
   "git_fetch",
   "git_commit",
   "git_push",

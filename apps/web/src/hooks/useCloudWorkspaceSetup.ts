@@ -15,7 +15,18 @@ import {
 import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
 import { canManageOpenPondOrganization, type OpenPondOrganization } from "../lib/organization-types";
 import { implicitOrganization } from "../lib/project-agent-setup";
-import { isCloudWorkspaceKind, type WorkspaceLocation } from "../lib/workspace-location";
+import {
+  isCloudWorkspaceKind,
+  type WorkspaceLocation,
+  type WorkspaceTargetValue,
+} from "../lib/workspace-location";
+
+type CloudWorkspaceSetupControls = {
+  changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
+  moveProjectToCloud: (item: SidebarProjectItem) => void;
+  openCloudSetupForLocalProject: (project: LocalProject, branchOverride?: string | null) => void;
+  startCloudSetupUpload: () => Promise<void>;
+};
 
 export function useCloudWorkspaceSetup({
   account,
@@ -67,8 +78,53 @@ export function useCloudWorkspaceSetup({
   showToast: ShowAppToast;
   visibleWorkspaceState: WorkspaceState | null;
   workspaceBusy: boolean;
-}) {
+}): CloudWorkspaceSetupControls {
   const accountBaseUrl = account?.baseUrl ?? account?.activeProfile?.baseUrl ?? null;
+  const loadCloudSourcePreview = useCallback(
+    async (project: LocalProject, branch: string) => {
+      if (!connection) return;
+      try {
+        const response = await api.previewLocalProjectCloudSource(connection, project.id, { branch });
+        setCloudSetupDialog((current) => {
+          if (
+            !current ||
+            current.status !== "confirm" ||
+            current.localProjectId !== project.id ||
+            current.branch !== branch
+          ) {
+            return current;
+          }
+          return {
+            ...current,
+            branch: response.preview.branch,
+            cloudProjectId: response.preview.targetProjectId,
+            preview: response.preview,
+            previewLoading: false,
+            previewError: null,
+          };
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setCloudSetupDialog((current) => {
+          if (
+            !current ||
+            current.status !== "confirm" ||
+            current.localProjectId !== project.id ||
+            current.branch !== branch
+          ) {
+            return current;
+          }
+          return {
+            ...current,
+            preview: null,
+            previewLoading: false,
+            previewError: message,
+          };
+        });
+      }
+    },
+    [connection, setCloudSetupDialog],
+  );
   const startCloudSetupUpload = useCallback(
     async () => {
       const dialog = cloudSetupDialog;
@@ -110,6 +166,7 @@ export function useCloudWorkspaceSetup({
               ...current,
               status: "uploading",
               error: null,
+              previewLoading: false,
             }
           : current,
       );
@@ -161,7 +218,12 @@ export function useCloudWorkspaceSetup({
           projectUrl,
           setupUrl,
           branch: upload.upload.branch,
+          preview: dialog.preview ?? null,
+          previewLoading: false,
+          previewError: null,
           upload: {
+            branch: upload.upload.branch,
+            headCommit: upload.upload.headCommit,
             fileCount: upload.upload.fileCount,
             byteCount: upload.upload.byteCount,
             skippedCount: upload.upload.skippedCount,
@@ -225,17 +287,54 @@ export function useCloudWorkspaceSetup({
         projectUrl: null,
         setupUrl: null,
         branch,
+        preview: null,
+        previewLoading: true,
+        previewError: null,
         upload: null,
         error: null,
       });
+      void loadCloudSourcePreview(project, branch);
     },
-    [accountPending, accountSignedOut, connection, setCloudSetupDialog, showToast],
+    [accountPending, accountSignedOut, connection, loadCloudSourcePreview, setCloudSetupDialog, showToast],
   );
 
   const changeWorkspaceTarget = useCallback(
-    async (target: WorkspaceLocation) => {
+    async (target: WorkspaceTargetValue) => {
       if (target === activeWorkspaceLocation || workspaceBusy || busy) return;
       setError(null);
+
+      if (target === "queue_cloud") {
+        const linkedCloudProject =
+          selectedCloudProject ??
+          (selectedProject?.linkedSandboxProject?.projectId
+            ? {
+                id: selectedProject.linkedSandboxProject.projectId,
+                name: selectedProject.linkedSandboxProject.projectName ?? selectedProject.name,
+              }
+            : null);
+        if (!linkedCloudProject) {
+          if (selectedProject) {
+            openCloudSetupForLocalProject(selectedProject, visibleWorkspaceState?.currentBranch ?? null);
+            return;
+          }
+          showToast("Select a Project before queueing Cloud work.", "error");
+          return;
+        }
+        showToast(
+          `Next Cloud task will use ${linkedCloudProject.name}. Start the message with /goal-remote to queue it while this chat stays local.`,
+          "info",
+        );
+        return;
+      }
+
+      if (target === "upload_cloud") {
+        if (!selectedProject) {
+          showToast("Select a local Project before uploading source.", "error");
+          return;
+        }
+        openCloudSetupForLocalProject(selectedProject, visibleWorkspaceState?.currentBranch ?? null);
+        return;
+      }
 
       if (target === "local") {
         const localProjectId =
@@ -296,6 +395,9 @@ export function useCloudWorkspaceSetup({
             source: "openpond-app",
           }),
           branch: selectedCloudProject.defaultBranch ?? "main",
+          preview: null,
+          previewLoading: false,
+          previewError: null,
           upload: null,
           error: null,
         });

@@ -1,5 +1,6 @@
 import type {
   Approval,
+  ApplyCloudWorkItemLocalPatchRequest,
   BootstrapPayload,
   CloudWorkItemBackgroundRequest,
   CloudWorkItemDetail,
@@ -66,10 +67,12 @@ import { organizationApi } from "./api/organization-api";
 import { sandboxApi } from "./api/sandbox";
 import type {
   CloudWorkItemCancelTaskResponse,
+  CloudWorkItemApplyLocalPatchResponse,
   CloudWorkItemMessageResponse,
   CloudWorkItemOpenCloudResponse,
   CloudWorkItemsResponse,
   GitAvailability,
+  LocalProjectCloudSourcePreviewResponse,
   LocalProjectCloudSourceUploadResponse,
   VoiceTranscriptionRequest,
   VoiceTranscriptionResponse,
@@ -110,6 +113,7 @@ export type {
   CloudWorkItemOpenCloudResponse,
   CloudWorkItemsResponse,
   GitAvailability,
+  LocalProjectCloudSourcePreviewResponse,
   LocalProjectCloudSourceUploadResponse,
   VoiceTranscriptionRequest,
   VoiceTranscriptionResponse,
@@ -570,6 +574,19 @@ export const api = {
         body: JSON.stringify(input),
       },
     ),
+  previewLocalProjectCloudSource: (
+    connection: ClientConnection,
+    projectId: string,
+    input: { branch?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (input.branch?.trim()) query.set("branch", input.branch.trim());
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return apiFetch<LocalProjectCloudSourcePreviewResponse>(
+      connection,
+      `/v1/projects/${encodeURIComponent(projectId)}/cloud-source/preview${suffix}`,
+    );
+  },
   cloudWorkItems: (connection: ClientConnection, input: ListCloudWorkItemsRequest) => {
     const query = new URLSearchParams({
       teamId: input.teamId,
@@ -648,6 +665,19 @@ export const api = {
     apiFetch<CloudWorkItemOpenCloudResponse>(
       connection,
       `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/open-cloud`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
+  applyCloudWorkItemLocalPatch: (
+    connection: ClientConnection,
+    workItemId: string,
+    input: ApplyCloudWorkItemLocalPatchRequest,
+  ) =>
+    apiFetch<CloudWorkItemApplyLocalPatchResponse>(
+      connection,
+      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/apply-local`,
       {
         method: "POST",
         body: JSON.stringify(input),

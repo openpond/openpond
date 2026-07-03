@@ -73,6 +73,7 @@ export async function runAgentCommand(
     }
     const idempotencyKey = optionString(options, "idempotencyKey");
     const conversationId = optionString(options, "conversationId");
+    const targetProjectId = optionString(options, "targetProjectId");
     const triggerType = parseAgentTriggerType(options.triggerType);
     const workflowMode = parseSandboxWorkflowModeOption(options.workflowMode);
     const inputObject = optionalJsonObject(options, "input", "input");
@@ -82,6 +83,8 @@ export async function runAgentCommand(
       teamId,
       ...(conversationId ? { conversationId } : {}),
       ...(idempotencyKey ? { idempotencyKey } : {}),
+      ...(targetProjectId ? { targetProjectId } : {}),
+      ...(targetProjectId ? { targetProject: { id: targetProjectId } } : {}),
       ...(triggerType ? { triggerType } : {}),
       ...(workflowMode ? { workflowMode } : {}),
       ...(inputObject ? { input: inputObject } : {}),
@@ -127,6 +130,7 @@ export async function runAgentCommand(
     }
     const idempotencyKey = optionString(options, "idempotencyKey");
     const conversationId = optionString(options, "conversationId");
+    const targetProjectId = optionString(options, "targetProjectId");
     const inputObject = optionalJsonObject(options, "input", "input");
     const metadata = optionalJsonObject(options, "metadata", "metadata");
     const workflowMode = parseSandboxWorkflowModeOption(options.workflowMode);
@@ -134,6 +138,8 @@ export async function runAgentCommand(
       teamId,
       ...(conversationId ? { conversationId } : {}),
       ...(idempotencyKey ? { idempotencyKey } : {}),
+      ...(targetProjectId ? { targetProjectId } : {}),
+      ...(targetProjectId ? { targetProject: { id: targetProjectId } } : {}),
       ...(workflowMode ? { workflowMode } : {}),
       ...(inputObject ? { input: inputObject } : {}),
       metadata: {

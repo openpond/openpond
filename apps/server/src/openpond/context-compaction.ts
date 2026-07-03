@@ -19,6 +19,7 @@ export type HostedCompactionResult = {
   compactedThroughEventId: string | null;
   compactedThroughTurnId: string | null;
   preservedFromEventId: string | null;
+  preservedResourceRefs: string[];
   sourceEventCount: number;
   preservedEventCount: number;
   inputTokensBefore: number;
@@ -115,6 +116,7 @@ export async function runHostedContextCompaction(input: HostedCompactionInput): 
     compactedThroughEventId: summaryEvents[summaryEvents.length - 1]?.id ?? null,
     compactedThroughTurnId: lastTurnId(summaryEvents),
     preservedFromEventId: preservedEvents[0]?.id ?? null,
+    preservedResourceRefs: durableResourceRefs(input.events),
     sourceEventCount: summaryEvents.length,
     preservedEventCount: preservedEvents.length,
     inputTokensBefore: estimateHostedMessageTokens(beforeMessages),
@@ -228,6 +230,10 @@ function serializeEventsForCompaction(events: RuntimeEvent[]): string {
       append(section("Tool Activity", eventPreview(item), item));
       continue;
     }
+    if (isGoalContextEvent(item)) {
+      append(section("Goal Context", goalContextPreview(item), item));
+      continue;
+    }
     if (item.name === "turn.failed") {
       append(section("Turn Failed", item.error ?? item.output ?? "", item));
       continue;
@@ -259,6 +265,49 @@ function eventPreview(event?: RuntimeEvent): string {
     (value): value is string => Boolean(value)
   );
   return parts.join("\n");
+}
+
+function isGoalContextEvent(event: RuntimeEvent): boolean {
+  if (!event.data || typeof event.data !== "object" || Array.isArray(event.data)) return false;
+  const kind = (event.data as { kind?: unknown }).kind;
+  return kind === "goal_context" || kind === "thread_goal";
+}
+
+function goalContextPreview(event: RuntimeEvent): string {
+  if (!event.data || typeof event.data !== "object" || Array.isArray(event.data)) return event.output ?? "";
+  const data = event.data as Record<string, unknown>;
+  const ref = event.id ? `goal-context:${event.id}` : null;
+  return [ref ? `ref: ${ref}` : null, event.output, textFromUnknown(data)].filter(Boolean).join("\n");
+}
+
+function durableResourceRefs(events: RuntimeEvent[]): string[] {
+  const refs = new Set<string>();
+  for (const item of events) {
+    if (isGoalContextEvent(item) && item.id) refs.add(`goal-context:${item.id}`);
+    collectResourceRefs(item.data, refs);
+    collectResourceRefs(item.args, refs);
+  }
+  return [...refs].slice(0, 100);
+}
+
+function collectResourceRefs(value: unknown, refs: Set<string>): void {
+  if (!value) return;
+  if (typeof value === "string") {
+    if (isDurableResourceRef(value)) refs.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectResourceRefs(item, refs);
+    return;
+  }
+  if (typeof value !== "object") return;
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    collectResourceRefs(child, refs);
+  }
+}
+
+function isDurableResourceRef(value: string): boolean {
+  return /^(workspace:(?:file|dir):|sandbox:(?:file|dir):|git:|event:|message:|artifact:|goal-context:)/.test(value);
 }
 
 function truncate(value: string, maxChars: number): string {

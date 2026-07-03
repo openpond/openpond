@@ -36,6 +36,7 @@ export function useWorkspaceController({
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const [diffBusy, setDiffBusy] = useState(false);
   const requestedWorkspaceStatusAppIds = useRef<Set<string>>(new Set());
+  const inFlightSidebarWorkspaceStatusAppIds = useRef<Set<string>>(new Set());
   const refreshCoordinatorRef = useRef(createWorkspaceRefreshCoordinator());
 
   const visibleWorkspaceState =
@@ -180,32 +181,45 @@ export function useWorkspaceController({
 
   useEffect(() => {
     if (!connection || sidebarWorkspaceAppIds.length === 0) return undefined;
-    const pendingIds = sidebarWorkspaceAppIds.filter((appId) => !requestedWorkspaceStatusAppIds.current.has(appId));
+    const pendingIds = sidebarWorkspaceAppIds.filter(
+      (appId) =>
+        !requestedWorkspaceStatusAppIds.current.has(appId) &&
+        !inFlightSidebarWorkspaceStatusAppIds.current.has(appId),
+    );
     if (pendingIds.length === 0) return undefined;
-    pendingIds.forEach((appId) => requestedWorkspaceStatusAppIds.current.add(appId));
+    pendingIds.forEach((appId) => inFlightSidebarWorkspaceStatusAppIds.current.add(appId));
     let cancelled = false;
     const requests = pendingIds.map((appId) =>
-      refreshCoordinatorRef.current.request(
-        workspaceStatusRefreshKey(connection, appId, false),
-        (signal) => api.workspaceStatus(connection, appId, false, { signal }),
-      )
+      ({
+        appId,
+        request: refreshCoordinatorRef.current.request(
+          workspaceStatusRefreshKey(connection, appId, false),
+          (signal) => api.workspaceStatus(connection, appId, false, { signal }),
+        ),
+      })
     );
     void Promise.all(
-      requests.map((request) =>
+      requests.map(({ appId, request }) =>
         request.promise
-          .then((state) => state)
-          .catch((error) => (isAbortError(error) ? null : null))
-          .finally(() => request.release())
+          .then((state) => ({ appId, state }))
+          .catch(() => ({ appId, state: null }))
+          .finally(() => {
+            request.release();
+            inFlightSidebarWorkspaceStatusAppIds.current.delete(appId);
+          })
       )
     ).then((results) => {
       if (cancelled) return;
-      for (const state of results) {
-        if (state) rememberWorkspaceState(state);
+      for (const result of results) {
+        if (result.state) rememberWorkspaceState(result.state);
       }
     });
     return () => {
       cancelled = true;
-      requests.forEach((request) => request.release());
+      requests.forEach(({ appId, request }) => {
+        request.release();
+        inFlightSidebarWorkspaceStatusAppIds.current.delete(appId);
+      });
     };
   }, [connection, rememberWorkspaceState, sidebarWorkspaceAppIds]);
 

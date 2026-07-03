@@ -52,10 +52,20 @@ export function buildOpenPondProfileSetupGate(
   const requirements = new Map<string, OpenPondProfileSetupRequirement>();
 
   for (const record of input.sourceSetupRequirements ?? []) {
+    const sourceActionId = setupRequirementActionId(record);
+    if (
+      input.actionId &&
+      sourceActionId &&
+      sourceActionId !== input.actionId &&
+      text(record.actionName) !== input.actionId &&
+      text(record.sourceActionId) !== input.actionId
+    ) {
+      continue;
+    }
     const requirement = setupRequirementFromRecord({
       record,
       source: "source_upload_metadata",
-      actionId: null,
+      actionId: sourceActionId,
     });
     if (requirement) requirements.set(requirement.ref, requirement);
   }
@@ -113,6 +123,10 @@ function setupRequirementFromRecord(input: {
   source: SetupRequirementSource;
   actionId: string | null;
 }): OpenPondProfileSetupRequirement | null {
+  const source =
+    input.source === "action_catalog" && text(input.record.source) === "source_upload_metadata"
+      ? "source_upload_metadata"
+      : input.source;
   const kind = text(input.record.kind) ?? text(input.record.type);
   const label =
     text(input.record.label) ??
@@ -131,14 +145,14 @@ function setupRequirementFromRecord(input: {
   const required = input.record.required !== false;
   const status = setupStatus(input.record, required);
   const ref = [
-    input.source,
+    source,
     input.actionId ?? "source",
     kind ?? "requirement",
     label,
   ].join(":");
   return {
     ref,
-    source: input.source,
+    source,
     actionId: input.actionId,
     kind,
     label,
@@ -146,6 +160,10 @@ function setupRequirementFromRecord(input: {
     required,
     blocking: required && !isReadyStatus(status),
   };
+}
+
+function setupRequirementActionId(record: Record<string, unknown>): string | null {
+  return text(record.actionId) ?? text(record.sourceActionId) ?? text(record.actionName);
 }
 
 function setupStatus(record: Record<string, unknown>, required: boolean): string {

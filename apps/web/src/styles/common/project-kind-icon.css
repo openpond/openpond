@@ -22,3 +22,21 @@
 .project-kind-icon-agent rect {
   fill: #181818;
 }
+
+.project-kind-icon.linked-cloud {
+  color: #b6c7d7;
+}
+
+.project-kind-icon-cloud-badge {
+  stroke-width: 1.65;
+}
+
+.project-kind-icon-cloud-badge circle {
+  fill: #111820;
+  stroke: #67b7ff;
+}
+
+.project-kind-icon-cloud-badge path {
+  fill: none;
+  stroke: #67b7ff;
+}

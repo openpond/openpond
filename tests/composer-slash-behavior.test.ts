@@ -9,6 +9,7 @@ import {
   promptWithSelectedInvocationText,
   type ComposerProjectTargetState,
 } from "../apps/web/src/components/chat/Composer";
+import { workspaceTargetOptionStatusText } from "../apps/web/src/components/chat/ComposerControls";
 import { ComposerInvocationPill } from "../apps/web/src/components/chat/ComposerInvocationPill";
 import { ComposerPrimaryControls } from "../apps/web/src/components/chat/ComposerPrimaryControls";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
@@ -54,26 +55,42 @@ const projectTarget: ComposerProjectTargetState = {
 
 const workspaceTarget: WorkspaceTargetState = {
   value: "local",
-  label: "Local",
-  detail: "/workspace/local-project",
+  label: "Local checkout",
+  detail: "main / synced",
   busy: false,
   action: {
     value: "cloud",
-    label: "Move to Cloud",
-    detail: "Cloud Project",
+    label: "Cloud workspace",
+    detail: "Use cloud workspace",
     disabled: false,
   },
   options: [
     {
       value: "local",
-      label: "Local",
-      detail: "/workspace/local-project",
+      label: "Local checkout",
+      detail: "Use files on this machine.",
+      stateNote: "main / synced",
+      disabled: false,
+    },
+    {
+      value: "queue_cloud",
+      label: "Queue cloud work item",
+      detail: "Run the next task in a hosted sandbox.",
+      stateNote: "will use main / setup ready",
       disabled: false,
     },
     {
       value: "cloud",
-      label: "Cloud",
-      detail: "Cloud Project",
+      label: "Cloud workspace",
+      detail: "Chat inside the hosted sandbox.",
+      stateNote: "main / setup ready",
+      disabled: false,
+    },
+    {
+      value: "upload_cloud",
+      label: "Upload/sync to cloud",
+      detail: "Push local source to OpenPond Git.",
+      stateNote: "nothing to upload",
       disabled: false,
     },
   ],
@@ -432,12 +449,63 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
-    expect(markup).toContain('aria-label="Move to Cloud"');
-    expect(markup).toContain("lucide-cloud-upload");
+    expect(markup).toContain('aria-label="Working in"');
+    expect(markup).toContain("Working in: Local checkout");
     expect(markup).not.toContain("<span>Move to Cloud</span>");
     expect(markup).not.toContain('data-tooltip="Provider"');
     expect(markup).toContain("Run Water Estimate");
     expect(markup).toContain("Estimate water usage for the current project.");
+  });
+
+  test("working target disabled options expose the concrete reason as row status text", () => {
+    expect(
+      workspaceTargetOptionStatusText({
+        stateNote: "upload required",
+        disabled: true,
+        disabledReason: "Upload/sync this Project to Cloud before queueing work.",
+      }),
+    ).toBe("Upload/sync this Project to Cloud before queueing work.");
+
+    expect(
+      workspaceTargetOptionStatusText({
+        stateNote: "main / synced",
+        disabled: false,
+      }),
+    ).toBe("main / synced");
+  });
+
+  test("working target trigger remains inspectable while workspace state refreshes", () => {
+    const markup = renderToStaticMarkup(
+      createElement(Composer, {
+        mode: "start",
+        prompt: "",
+        mentionApps: [],
+        selectedMentionAppId: null,
+        contextWindowStatus,
+        goalRuntime: null,
+        agents: [],
+        projectAgents: [],
+        projectTarget,
+        workspaceTarget: { ...workspaceTarget, busy: true },
+        codexPermissionMode: "default",
+        codexReasoningEffort: "medium",
+        onProviderChange: noop,
+        onProjectTargetChange: noop,
+        onWorkspaceTargetChange: noop,
+        onModelChange: noop,
+        onCodexPermissionModeChange: noop,
+        onCodexReasoningEffortChange: noop,
+        onPromptChange: noop,
+        onMentionAppSelect: noop,
+        showToast: noop,
+        onSubmit: async () => true,
+        onStop: noop,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Working in"');
+    expect(markup).toContain("Working in: Local checkout");
+    expect(markup).not.toMatch(/class="workspace-action-trigger[^"]*"[^>]* disabled=""/);
   });
 
   test("regular chat composer shows agents in the slash menu without selected project actions", () => {
@@ -618,7 +686,7 @@ describe("composer slash behavior", () => {
 
     expect(markup).not.toContain("composer-footer");
     expect(markup).toContain('class="composer-textarea-frame"');
-    expect(markup).not.toContain('aria-label="Move to Cloud"');
+    expect(markup).not.toContain('aria-label="Working in"');
     expect(markup).toContain('aria-label="Add photos and files"');
   });
 
@@ -659,6 +727,7 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("/create Create agent or project");
     expect(markup).toContain("Start a guided creation flow in OpenPond Cloud.");
     expect(markup).toContain("/edit Edit selected agent");
+    expect(markup).toContain("/skill Manage skills");
     expect(markup).toContain("/goal Run a goal");
     expect(markup).toContain("/goal-remote Run a cloud goal");
     expect(markup).toContain("/goal-local Run a local goal");

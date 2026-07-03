@@ -94,6 +94,7 @@ async function loadProfileActionCatalogSource(
     const sourceUploadMetadata = await readJsonIfExists(sourceUploadMetadataPath);
     const sourceSetupRequirements =
       recordArray(asRecord(sourceUploadMetadata)?.setupRequirements) ?? [];
+    const sourceRequirementsByAction = sourceSetupRequirementsByAction(sourceSetupRequirements);
     const byId = new Map<string, OpenPondProfileActionCatalogEntry>();
 
     for (const record of [
@@ -104,6 +105,15 @@ async function loadProfileActionCatalogSource(
       const id = text(record.id) ?? text(record.name);
       if (!id) continue;
       const existing = byId.get(id);
+      const actionSourceRequirements = setupRequirementsForActionSource({
+        sourceRequirementsByAction,
+        actionId: id,
+        actionName: text(record.name),
+      });
+      const setupRequirements = mergeSetupRequirements(
+        recordArray(record.setupRequirements) ?? existing?.setupRequirements ?? [],
+        actionSourceRequirements,
+      );
       const next: OpenPondProfileActionCatalogEntry = {
         id,
         agentId: source.agentId,
@@ -117,7 +127,7 @@ async function loadProfileActionCatalogSource(
         outputSchema: schemaValue(record.outputSchema) ?? existing?.outputSchema ?? null,
         approvalPolicy: asRecord(record.approvalPolicy) ?? existing?.approvalPolicy ?? null,
         artifactPolicy: asRecord(record.artifactPolicy) ?? existing?.artifactPolicy ?? null,
-        setupRequirements: recordArray(record.setupRequirements) ?? existing?.setupRequirements ?? [],
+        setupRequirements,
         mcp: asRecord(record.mcp) ?? existing?.mcp ?? null,
         schedulePolicy: asRecord(record.schedulePolicy) ?? existing?.schedulePolicy ?? null,
         trace: asRecord(record.trace) ?? existing?.trace ?? null,
@@ -176,6 +186,76 @@ function latestIso(values: Array<string | null>): string | null {
     if (Number.isFinite(time)) latest = Math.max(latest, time);
   }
   return latest > 0 ? new Date(latest).toISOString() : null;
+}
+
+function sourceSetupRequirementsByAction(
+  records: Record<string, unknown>[],
+): Map<string, Record<string, unknown>[]> {
+  const byAction = new Map<string, Record<string, unknown>[]>();
+  for (const record of records) {
+    const actionIds = [
+      text(record.actionId),
+      text(record.sourceActionId),
+      text(record.actionName),
+    ].filter((value): value is string => Boolean(value));
+    for (const actionId of actionIds) {
+      const current = byAction.get(actionId) ?? [];
+      current.push(record);
+      byAction.set(actionId, current);
+    }
+  }
+  return byAction;
+}
+
+function setupRequirementsForActionSource(input: {
+  sourceRequirementsByAction: Map<string, Record<string, unknown>[]>;
+  actionId: string;
+  actionName: string | null;
+}): Record<string, unknown>[] {
+  const matched = [
+    ...(input.sourceRequirementsByAction.get(input.actionId) ?? []),
+    ...(input.actionName && input.actionName !== input.actionId
+      ? input.sourceRequirementsByAction.get(input.actionName) ?? []
+      : []),
+  ];
+  return matched.map((record) => ({
+    ...record,
+    source: "source_upload_metadata",
+  }));
+}
+
+function mergeSetupRequirements(
+  primary: Record<string, unknown>[],
+  sourceUploadMetadata: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  if (sourceUploadMetadata.length === 0) return primary;
+  const merged: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  for (const record of [...primary, ...sourceUploadMetadata]) {
+    const key = setupRequirementIdentity(record);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(record);
+  }
+  return merged;
+}
+
+function setupRequirementIdentity(record: Record<string, unknown>): string {
+  return [
+    text(record.actionId) ?? text(record.sourceActionId) ?? text(record.actionName) ?? "",
+    text(record.kind) ?? text(record.type) ?? "",
+    text(record.name) ??
+      text(record.key) ??
+      text(record.provider) ??
+      text(record.tool) ??
+      text(record.command) ??
+      text(record.packageName) ??
+      text(record.path) ??
+      text(record.repo) ??
+      text(record.url) ??
+      text(record.id) ??
+      "",
+  ].join(":");
 }
 
 function missingSourceArtifactsMessage(source: ProfileActionCatalogSource, missingArtifacts: string[]): string {

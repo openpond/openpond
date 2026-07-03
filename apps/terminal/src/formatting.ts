@@ -347,6 +347,7 @@ export function formatProfileDiff(profile: ProfileState): string {
     diff.newAgents.length ? `New agents: ${diff.newAgents.join(", ")}` : "",
     diff.changedAgents.length ? `Changed agents: ${diff.changedAgents.join(", ")}` : "",
     diff.deletedAgents.length ? `Deleted agents: ${diff.deletedAgents.join(", ")}` : "",
+    diff.changedSkills.length ? `Changed skills: ${diff.changedSkills.join(", ")}` : "",
     diff.changedActions.length ? `Changed actions: ${diff.changedActions.join(", ")}` : "",
     diff.changedExtensions.length ? `Extensions: ${diff.changedExtensions.join(", ")}` : "",
     diff.setupChanges.length ? `Setup: ${diff.setupChanges.join(", ")}` : "",

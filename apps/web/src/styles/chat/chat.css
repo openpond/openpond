@@ -327,6 +327,75 @@
   line-height: 1.65;
 }
 
+.assistant-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(760px, 100%);
+  min-width: 0;
+  margin-top: -6px;
+}
+
+.assistant-sources-label,
+.assistant-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #d5d8dd;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.assistant-sources-label {
+  color: #b8c0ca;
+}
+
+.assistant-source-pill {
+  max-width: min(220px, 100%);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.assistant-source-pill:hover,
+.assistant-source-pill:focus-visible {
+  border-color: rgba(126, 200, 255, 0.44);
+  background: rgba(126, 200, 255, 0.09);
+  color: #f0f8ff;
+  outline: 0;
+}
+
+.assistant-sources-label svg,
+.assistant-source-pill svg {
+  flex: 0 0 auto;
+}
+
+.assistant-source-favicon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.assistant-source-fallback-icon {
+  color: #a7d7ff;
+}
+
+.assistant-source-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-create-receipt {
   display: grid;
   gap: 7px;
@@ -714,6 +783,70 @@
 
 .error-message {
   color: #ff8d8d;
+}
+
+.quota-error-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  width: min(560px, 100%);
+  border: 1px solid rgba(255, 190, 92, 0.26);
+  border-radius: 8px;
+  background: #24211a;
+  color: #f6f1e7;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.quota-error-card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255, 190, 92, 0.12);
+  color: #ffd28a;
+}
+
+.quota-error-card-body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.quota-error-card-body strong {
+  color: #fff7e8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quota-error-card-body p {
+  margin: 0;
+  color: #dacdb8;
+  font-size: 13px;
+}
+
+.quota-error-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid rgba(255, 210, 138, 0.34);
+  border-radius: 6px;
+  background: rgba(255, 210, 138, 0.12);
+  color: #ffe0a6;
+  padding: 0 10px;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quota-error-card-action:hover,
+.quota-error-card-action:focus-visible {
+  border-color: rgba(255, 210, 138, 0.54);
+  background: rgba(255, 210, 138, 0.18);
 }
 
 .assistant-message-footer {

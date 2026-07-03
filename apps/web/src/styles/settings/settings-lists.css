@@ -523,6 +523,55 @@
   white-space: nowrap;
 }
 
+.profile-skill-list {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.profile-skill-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-skill-table-head,
+.profile-skill-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.3fr) minmax(78px, 0.38fr) minmax(140px, 0.8fr) minmax(120px, 0.54fr);
+  align-items: center;
+  justify-content: stretch;
+}
+
+.profile-skill-table-head {
+  min-height: 34px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  color: #858585;
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.profile-skill-table-head span,
+.profile-skill-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-skill-description {
+  color: #a9a9a9;
+  font-size: 12px;
+}
+
+.profile-skill-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .profile-agent-identity {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);

@@ -18,7 +18,7 @@ export function useAppDerivedRows({
   pinnedPreviewKeys,
   pinnedProjects,
   projectRows,
-  visibleLocalProjectRows,
+  visibleProjectRows,
 }: {
   activeProvider: ChatProvider;
   contextUsage: ContextUsageSnapshot | null;
@@ -26,7 +26,7 @@ export function useAppDerivedRows({
   pinnedPreviewKeys: string[];
   pinnedProjects: SidebarProjectItem[];
   projectRows: SidebarProjectItem[];
-  visibleLocalProjectRows: SidebarProjectItem[];
+  visibleProjectRows: SidebarProjectItem[];
 }) {
   const pinnedRows = useMemo(
     () => orderPinnedItemsByKeys(pinnedItems, pinnedPreviewKeys),
@@ -44,12 +44,12 @@ export function useAppDerivedRows({
     () =>
       Array.from(
         new Set(
-          [...pinnedProjects, ...visibleLocalProjectRows]
+          [...pinnedProjects, ...visibleProjectRows]
             .filter(isLocalSidebarProjectItem)
             .map((item) => item.project.id),
         ),
       ),
-    [pinnedProjects, visibleLocalProjectRows],
+    [pinnedProjects, visibleProjectRows],
   );
   const commandProjectRows = useMemo(
     () => [...pinnedProjects, ...projectRows],

@@ -135,6 +135,19 @@ export async function getWorkspaceGitStatus(repoPath: string): Promise<GitStatus
   };
 }
 
+export async function getWorkspaceGitDiff(
+  repoPath: string,
+  options: { staged?: boolean } = {},
+): Promise<{ staged: boolean; diff: string }> {
+  const args = options.staged ? ["diff", "--staged"] : ["diff"];
+  const result = await runWorkspaceCommand("git", args, repoPath);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || result.stdout.trim() || "git diff failed");
+  return {
+    staged: options.staged === true,
+    diff: result.stdout,
+  };
+}
+
 export async function commitWorkspaceChanges(
   repoPath: string,
   message: string,

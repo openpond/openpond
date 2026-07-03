@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { expect } from "bun:test";
 
 export const CLI_SECRET = "cli-secret-value-that-must-not-echo";
 export const LARGE_RAW_MARKER = "raw-large-payload-that-must-not-echo";
@@ -1562,7 +1563,7 @@ export function agentSdkUploadFixtureBin(): string {
     "  writeFileSync(path.join(artifactDir, 'openpond-manifest.preview.yaml'), manifest);",
     "  writeFileSync(path.join(artifactDir, 'agent-inspect.json'), JSON.stringify({ editable: { enabled: true } }, null, 2));",
     "  writeFileSync(path.join(artifactDir, 'agent-manifest.json'), JSON.stringify({ schemaVersion: 1 }, null, 2));",
-    "  writeFileSync(path.join(artifactDir, 'action-registry.json'), JSON.stringify({ actions: [{ name: 'chat' }] }, null, 2));",
+    "  writeFileSync(path.join(artifactDir, 'action-registry.json'), JSON.stringify({ actions: [{ id: 'chat', name: 'chat', setupRequirements: [{ kind: 'env', name: 'UPLOAD_FIXTURE_TOKEN', required: true, secret: true, status: 'setup_required' }] }] }, null, 2));",
     "  writeFileSync(path.join(artifactDir, 'runtime-bridge.mjs'), 'export const actionRegistry = {};\\n');",
     "  writeFileSync(path.join(artifactDir, 'validator-report.md'), '# ok\\n');",
     "  process.exit(0);",

@@ -8,6 +8,7 @@ export type WorkspaceOptions = {
   clone?: boolean;
   gitBaseUrl?: string | null;
   allowPlainFolder?: boolean;
+  linkedSourceHeadCommit?: string | null;
 };
 
 export type GitBackedWorkspace = Pick<OpenPondApp, "id" | "gitOwner" | "gitRepo" | "gitHost" | "defaultBranch">;
@@ -35,6 +36,7 @@ const GENERATED_WORKSPACE_DIRS = new Set([
   ".next",
   ".nox",
   ".nuxt",
+  ".openpond",
   ".output",
   ".parcel-cache",
   ".pytest_cache",

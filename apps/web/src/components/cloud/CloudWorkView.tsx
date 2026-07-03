@@ -58,6 +58,8 @@ type CloudWorkViewProps = {
   onHandleBackground: (message: string | null) => Promise<void>;
   onCancelCreatePlan: () => Promise<void>;
   onCancelTask: () => Promise<void>;
+  localProjectName?: string | null;
+  onApplyLocalPatch?: () => Promise<void>;
   onShowFiles?: () => void;
 };
 
@@ -151,6 +153,91 @@ function sourcePlan(request: CreatePipelineRequest, snapshot: CreatePipelineSnap
       reason: "Expose the default chat action through the hosted profile catalog.",
     },
   ];
+}
+
+function CloudWorkBoundaryStrip({
+  workItem,
+  detail,
+  actionBusy,
+  localProjectName,
+  onApplyLocalPatch,
+  onShowFiles,
+}: {
+  workItem: CloudWorkItem;
+  detail: CloudWorkItemDetail | null;
+  actionBusy: boolean;
+  localProjectName?: string | null;
+  onApplyLocalPatch?: () => Promise<void>;
+  onShowFiles?: () => void;
+}) {
+  const chips = cloudWorkBoundaryChips(workItem, detail);
+  const canApplyLocalPatch = workItem.status === "needs_review" && Boolean(localProjectName && onApplyLocalPatch);
+  return (
+    <article className="cloud-work-boundary-strip">
+      <div>
+        <span>{cloudWorkBoundaryTitle(workItem)}</span>
+        <small>{cloudWorkBoundaryDetail(workItem)}</small>
+      </div>
+      <div className="cloud-work-boundary-chips">
+        {chips.map((chip) => (
+          <span key={chip}>{chip}</span>
+        ))}
+      </div>
+      {workItem.status === "needs_review" ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (onApplyLocalPatch) void onApplyLocalPatch();
+          }}
+          disabled={actionBusy || !canApplyLocalPatch}
+          title={
+            canApplyLocalPatch
+              ? `Apply to ${localProjectName}`
+              : "Link this Cloud Project to a local checkout before applying locally."
+          }
+        >
+          <Check size={13} />
+          <span>{canApplyLocalPatch ? "Apply locally" : "No local checkout"}</span>
+        </button>
+      ) : null}
+      {onShowFiles ? (
+        <button type="button" onClick={onShowFiles}>
+          <FileText size={13} />
+          <span>Files</span>
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function cloudWorkBoundaryTitle(workItem: CloudWorkItem): string {
+  if (workItem.status === "needs_review") return "Cloud patch ready";
+  if (workItem.status === "queued" || workItem.status === "running") return "Running in Cloud";
+  if (workItem.status === "failed") return "Cloud task failed";
+  return "Cloud task";
+}
+
+function cloudWorkBoundaryDetail(workItem: CloudWorkItem): string {
+  if (workItem.status === "needs_review") return "Review files and apply locally only when ready.";
+  if (workItem.status === "queued" || workItem.status === "running") {
+    return "The local checkout is unchanged while the sandbox works.";
+  }
+  if (workItem.status === "failed") return "Open files/logs to inspect the remote run before retrying.";
+  return "Cloud changes stay remote until an explicit apply or pull action.";
+}
+
+function cloudWorkBoundaryChips(
+  workItem: CloudWorkItem,
+  detail: CloudWorkItemDetail | null,
+): string[] {
+  const chips = [workItem.status.replace(/_/g, " ")];
+  if (workItem.sourceRef) chips.push(workItem.sourceRef);
+  if (workItem.latestSandboxId) chips.push("sandbox");
+  if (workItem.latestTaskRunId) chips.push("task run");
+  if (detail?.activity.length) chips.push(`${detail.activity.length} log${detail.activity.length === 1 ? "" : "s"}`);
+  if (workItem.status === "needs_review") chips.push("patch only");
+  chips.push("local unchanged");
+  return chips;
 }
 
 function CloudCreatePlanReview({
@@ -343,6 +430,8 @@ export function CloudWorkView({
   onHandleBackground,
   onCancelCreatePlan,
   onCancelTask,
+  localProjectName,
+  onApplyLocalPatch,
   onShowFiles,
 }: CloudWorkViewProps) {
   const [homePrompt, setHomePrompt] = useState("");
@@ -497,6 +586,14 @@ export function CloudWorkView({
                 </button>
               )}
             </div>
+            <CloudWorkBoundaryStrip
+              workItem={selectedWorkItem}
+              detail={detail}
+              actionBusy={actionBusy}
+              localProjectName={localProjectName}
+              onApplyLocalPatch={onApplyLocalPatch}
+              onShowFiles={onShowFiles}
+            />
             {createPipelineRequest ? (
               <CloudCreatePlanReview
                 request={createPipelineRequest}

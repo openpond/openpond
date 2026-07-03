@@ -177,6 +177,8 @@ export const LocalProjectSandboxProjectLinkSchema = z.object({
   projectName: z.string().nullable().optional().default(null),
   sourceRepoUrl: z.string().nullable().optional().default(null),
   defaultBranch: z.string().nullable().optional().default(null),
+  lastUploadedCommit: z.string().nullable().optional().default(null),
+  lastUploadTransport: z.enum(["git_head", "snapshot", "api_source_upload"]).nullable().optional().default(null),
   manifestPath: z.string().nullable().optional().default(null),
   manifestHash: z.string().nullable().optional().default(null),
   syncedAt: z.string().nullable().optional().default(null),

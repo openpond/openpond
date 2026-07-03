@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -14,10 +13,12 @@ import {
   CreatePipelineRequestSchema,
   CreatePipelineSnapshotSchema,
   CreateCloudWorkItemRequestSchema,
+  ApplyCloudWorkItemLocalPatchRequestSchema,
   ListCloudWorkItemsRequestSchema,
   OpenCloudWorkItemRequestSchema,
   PatchSidebarAppPreferenceRequestSchema,
   PatchSessionRequestSchema,
+  PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
   SaveOpenPondAccountRequestSchema,
   SendCloudWorkItemMessageRequestSchema,
@@ -54,6 +55,7 @@ import {
   type Session,
   type SidebarAppPreference,
   type SidebarAppPreferences,
+  type WorkspaceState,
 } from "@openpond/contracts";
 import {
   CodexAppServerClient,
@@ -71,6 +73,7 @@ import {
   commitActiveProfileChanges,
   emptyProfileState,
   hostedPublishStatusFromPayload,
+  buildHostedRunIdempotencyKey,
   hostedRunStatusFromRunSummary,
   hostedRunSummaryFromPayload,
   hostedSourceCheckStatusFromPayload,
@@ -149,10 +152,17 @@ import {
   findLocalProject,
   inferLocalProjectOpenPondLinks,
   listLocalProjects,
+  localProjectStateWorkspace,
+  localProjectWorkspacePaths,
   updateLocalProjectAgentSetup,
 } from "../workspace/local-projects.js";
-import { pushLocalProjectSourceToGit } from "../workspace/local-project-source-upload.js";
+import {
+  collectLocalProjectSourceUploadBundle,
+  previewLocalProjectSourceUpload,
+  pushLocalProjectSourceToGit,
+} from "../workspace/local-project-source-upload.js";
 import { createServerWorkspacePayloads } from "../workspace/server-workspace-payloads.js";
+import { loadWorkspaceStateAtPath, runWorkspaceCommand } from "../workspace/workspaces.js";
 
 type OpenPondOrganizationSummary = {
   teamId: string;
@@ -460,39 +470,6 @@ function parseHostedSourceDispatch(value: string | null): "request_only" | "codi
   if (!value) return null;
   if (value === "request_only" || value === "coding_core") return value;
   throw new Error("hostedSourceDispatch must be one of request_only, coding_core.");
-}
-
-function buildProfileHostedRunIdempotencyKey(input: {
-  input: Record<string, unknown>;
-  localHead: string;
-  hostedHead?: string | null;
-  hostedRunAgentId: string;
-  hostedRunInput: Record<string, unknown>;
-}): string {
-  const explicit = stringValue(input.input.hostedRunIdempotencyKey);
-  if (explicit) return explicit;
-  const sourceHead = input.hostedHead || "unknown-source";
-  const inputHash = hashStableJson(input.hostedRunInput).slice(0, 16);
-  const base = `profile-push-run:${input.localHead}:${sourceHead}:${input.hostedRunAgentId}:${inputHash}`;
-  return booleanValue(input.input.hostedRunRetry)
-    ? `${base}:retry:${randomUUID()}`
-    : base;
-}
-
-function hashStableJson(value: unknown): string {
-  return createHash("sha256").update(stableJsonStringify(value)).digest("hex");
-}
-
-function stableJsonStringify(value: unknown): string {
-  if (value === undefined) return "undefined";
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
-  }
-  return `{${Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
-    .join(",")}}`;
 }
 
 function stringArrayValue(value: unknown): string[] {
@@ -1219,6 +1196,56 @@ export function createServerPayloads(deps: {
     bootstrapPayload,
   });
 
+  async function previewLocalProjectCloudSourcePayload(
+    projectId: string,
+    payload: unknown = {},
+  ): Promise<{
+    localProject: LocalProject;
+    preview: {
+      rootPath: string;
+      headCommit: string | null;
+      branch: string;
+      targetProjectId: string | null;
+      targetProjectName: string;
+      fileCount: number;
+      byteCount: number;
+      skippedCount: number;
+      initializedEmptyProject: boolean;
+    };
+  }> {
+    const input = PreviewLocalProjectCloudSourceRequestSchema.parse(payload);
+    const localProject = await findLocalProject(store, projectId);
+    if (!localProject) throw new Error("Project workspace not found");
+
+    const linkedProject = localProject.linkedSandboxProject ?? null;
+    const branch =
+      input.branch?.trim() ||
+      linkedProject?.defaultBranch?.trim() ||
+      "main";
+    const targetProjectName =
+      linkedProject?.projectName?.trim() ||
+      localProject.name;
+    const fallbackReadme = `# ${targetProjectName}\n\nUploaded from OpenPond Desktop.\n`;
+    const preview = await previewLocalProjectSourceUpload(localProject);
+
+    return {
+      localProject,
+      preview: {
+        rootPath: preview.rootPath,
+        headCommit: preview.headCommit,
+        branch,
+        targetProjectId: linkedProject?.projectId ?? null,
+        targetProjectName,
+        fileCount: preview.initializedEmptyProject ? 1 : preview.fileCount,
+        byteCount: preview.initializedEmptyProject
+          ? Buffer.byteLength(fallbackReadme, "utf8")
+          : preview.byteCount,
+        skippedCount: preview.skippedCount,
+        initializedEmptyProject: preview.initializedEmptyProject,
+      },
+    };
+  }
+
   async function uploadLocalProjectCloudSourcePayload(
     projectId: string,
     payload: unknown,
@@ -1229,10 +1256,12 @@ export function createServerPayloads(deps: {
     upload: {
       rootPath: string;
       branch: string;
+      headCommit: string | null;
       fileCount: number;
       byteCount: number;
       skippedCount: number;
       initializedEmptyProject: boolean;
+      transport?: "git_head" | "snapshot" | "api_source_upload";
     };
   }> {
     const input = UploadLocalProjectCloudSourceRequestSchema.parse(payload);
@@ -1292,20 +1321,18 @@ export function createServerPayloads(deps: {
     const apiKey = accountContext.token?.trim();
     if (!apiKey) throw new Error("OpenPond account API key is required to push source.");
 
-    const gitPush = await pushLocalProjectSourceToGit(localProject, {
+    const commitMessage = `Upload ${localProject.name} from OpenPond Desktop`;
+    const uploadResult = await uploadLocalProjectCloudSource({
+      localProject,
+      targetProjectId,
+      teamId: input.teamId,
       repoUrl,
       apiKey,
       branch,
-      commitMessage: `Upload ${localProject.name} from OpenPond Desktop`,
+      commitMessage,
       fallbackReadme,
     });
-    const syncPayload = asRecord(
-      await sandboxRequestPayload({
-        type: "project_sync",
-        projectId: targetProjectId,
-        payload: { teamId: input.teamId },
-      }).catch(() => gitPayload),
-    );
+    const syncPayload = uploadResult.syncPayload;
     const uploadedProjectRecord = asRecord(syncPayload.project);
     const projectRecord =
       Object.keys(uploadedProjectRecord).length > 0
@@ -1326,7 +1353,9 @@ export function createServerPayloads(deps: {
         projectSlug: project.slug,
         projectName: project.name,
         sourceRepoUrl: repoUrl,
-        defaultBranch: project.defaultBranch ?? stringValue(repo.defaultBranch) ?? gitPush.branch,
+        defaultBranch: project.defaultBranch ?? stringValue(repo.defaultBranch) ?? uploadResult.branch,
+        lastUploadedCommit: uploadResult.headCommit,
+        lastUploadTransport: uploadResult.transport,
         manifestPath: project.manifestPath,
         manifestHash: project.manifestHash,
         syncedAt: project.syncedAt ?? now(),
@@ -1339,12 +1368,14 @@ export function createServerPayloads(deps: {
       localProject: updatedLocalProject,
       bootstrap: await bootstrapPayload({ forceOpenPond: true }),
       upload: {
-        rootPath: gitPush.rootPath,
-        branch: gitPush.branch,
-        fileCount: gitPush.fileCount,
-        byteCount: gitPush.byteCount,
-        skippedCount: gitPush.skipped.length,
-        initializedEmptyProject: gitPush.initializedEmptyProject,
+        rootPath: uploadResult.rootPath,
+        branch: uploadResult.branch,
+        headCommit: uploadResult.headCommit,
+        fileCount: uploadResult.fileCount,
+        byteCount: uploadResult.byteCount,
+        skippedCount: uploadResult.skippedCount,
+        initializedEmptyProject: uploadResult.initializedEmptyProject,
+        transport: uploadResult.transport,
       },
     };
   }
@@ -1434,6 +1465,10 @@ export function createServerPayloads(deps: {
     const {
       createPipelineRequest,
       createPipeline,
+      localProjectId,
+      localProjectName,
+      localWorkspacePath,
+      requestedExecutionTarget,
       ...workItemInput
     } = input;
     const response = asRecord(
@@ -1444,6 +1479,10 @@ export function createServerPayloads(deps: {
           ...workItemInput,
           metadata: {
             source: "openpond_app_cloud",
+            ...(requestedExecutionTarget ? { requestedExecutionTarget } : {}),
+            ...(localProjectId ? { localProjectId } : {}),
+            ...(localProjectName ? { localProjectName } : {}),
+            ...(localWorkspacePath ? { localWorkspacePath } : {}),
             ...createPipelineMetadata({
               request: createPipelineRequest ?? null,
               snapshot: createPipeline ?? null,
@@ -1608,6 +1647,170 @@ export function createServerPayloads(deps: {
       activity: response.activity ? normalizeCloudWorkItemActivity(response.activity) ?? undefined : undefined,
       resumed: response.resumed === true,
     };
+  }
+
+  async function applyCloudWorkItemLocalPatchPayload(
+    workItemId: string,
+    payload: unknown,
+  ): Promise<{
+    workItem: CloudWorkItem;
+    localProject: LocalProject;
+    workspaceState: WorkspaceState;
+    patch: {
+      sandboxId: string;
+      filename: string | null;
+      bytes: number;
+      applied: true;
+      fileCount: number;
+    };
+  }> {
+    const input = ApplyCloudWorkItemLocalPatchRequestSchema.parse(payload);
+    const detail = await getCloudWorkItemPayload(workItemId, { teamId: input.teamId });
+    const workItem = detail.workItem;
+    if (workItem.teamId !== input.teamId) {
+      throw new Error("Cloud work item does not belong to the requested team.");
+    }
+    const localProject = await linkedLocalProjectForCloudWorkItem(
+      workItem,
+      input.localProjectId ?? null,
+    );
+    const sandboxId =
+      input.sandboxId?.trim() ||
+      workItem.latestSandboxId ||
+      latestRuntimeSessionSandboxId(detail) ||
+      null;
+    if (!sandboxId) {
+      throw new Error("No reviewed Cloud sandbox is available for this work item.");
+    }
+
+    const workspaceOptions = {
+      clone: false,
+      allowPlainFolder: true,
+      linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null,
+    };
+    const workspaceState = await loadWorkspaceStateAtPath(
+      localProjectWorkspacePaths(localProject),
+      localProjectStateWorkspace(localProject),
+      workspaceOptions,
+    );
+    await assertApplyableLocalWorkspace(workspaceState);
+
+    const patchResponse = asRecord(
+      await sandboxRequestPayload({
+        type: "git_export_patch",
+        sandboxId,
+        payload: {
+          ...(input.baseRef ? { baseRef: input.baseRef } : {}),
+        },
+      }),
+    );
+    const patchRecord = nonEmptyRecord(patchResponse.patch) ?? patchResponse;
+    if (patchRecord.isRepo === false) {
+      throw new Error("Cloud sandbox is not a Git repository.");
+    }
+    const patchText = typeof patchRecord.patch === "string" ? patchRecord.patch : "";
+    if (!patchText.trim() || patchRecord.empty === true) {
+      throw new Error("Cloud patch is empty. There are no changes to apply locally.");
+    }
+
+    const check = await runWorkspaceCommand(
+      "git",
+      ["apply", "--check", "--whitespace=nowarn", "-"],
+      workspaceState.repoPath,
+      {},
+      patchText,
+    );
+    if (check.code !== 0) {
+      throw new Error(
+        check.stderr.trim() ||
+          check.stdout.trim() ||
+          "Cloud patch does not apply cleanly to the local checkout.",
+      );
+    }
+    const apply = await runWorkspaceCommand(
+      "git",
+      ["apply", "--whitespace=nowarn", "-"],
+      workspaceState.repoPath,
+      {},
+      patchText,
+    );
+    if (apply.code !== 0) {
+      throw new Error(
+        apply.stderr.trim() ||
+          apply.stdout.trim() ||
+          "Unable to apply Cloud patch to the local checkout.",
+      );
+    }
+
+    const nextWorkspaceState = await loadWorkspaceStateAtPath(
+      localProjectWorkspacePaths(localProject),
+      localProjectStateWorkspace(localProject),
+      workspaceOptions,
+    );
+    return {
+      workItem,
+      localProject,
+      workspaceState: nextWorkspaceState,
+      patch: {
+        sandboxId,
+        filename: stringValue(patchRecord.filename),
+        bytes:
+          typeof patchRecord.bytes === "number"
+            ? patchRecord.bytes
+            : Buffer.byteLength(patchText, "utf8"),
+        applied: true,
+        fileCount: countPatchFiles(patchText),
+      },
+    };
+  }
+
+  async function linkedLocalProjectForCloudWorkItem(
+    workItem: CloudWorkItem,
+    localProjectId: string | null,
+  ): Promise<LocalProject> {
+    const projects = localProjectId
+      ? [await findLocalProject(store, localProjectId)]
+      : await listLocalProjects(store);
+    const localProject = projects.find((project): project is LocalProject => {
+      if (!project) return false;
+      const linked = project.linkedSandboxProject;
+      return linked?.teamId === workItem.teamId && linked.projectId === workItem.projectId;
+    });
+    if (!localProject) {
+      throw new Error("No linked local checkout exists for this Cloud Project.");
+    }
+    return localProject;
+  }
+
+  function latestRuntimeSessionSandboxId(detail: CloudWorkItemDetail): string | null {
+    return detail.runtimeSessions.find((session) => session.sandboxId)?.sandboxId ?? null;
+  }
+
+  async function assertApplyableLocalWorkspace(workspaceState: WorkspaceState): Promise<void> {
+    if (!workspaceState.initialized) {
+      throw new Error(workspaceState.error || "Local checkout is not initialized.");
+    }
+    const repoCheck = await runWorkspaceCommand(
+      "git",
+      ["rev-parse", "--is-inside-work-tree"],
+      workspaceState.repoPath,
+    );
+    if (repoCheck.code !== 0 || repoCheck.stdout.trim() !== "true") {
+      throw new Error("Local checkout must be a Git repository before applying a Cloud patch.");
+    }
+    if (workspaceState.dirty) {
+      throw new Error("Commit or discard local changes before applying a Cloud patch.");
+    }
+  }
+
+  function countPatchFiles(patchText: string): number {
+    const paths = new Set<string>();
+    for (const line of patchText.split("\n")) {
+      const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line.trim());
+      if (!match) continue;
+      paths.add(match[2]!);
+    }
+    return paths.size;
   }
 
   async function currentSidebarScope(): Promise<string> {
@@ -2019,12 +2222,15 @@ export function createServerPayloads(deps: {
       const hostedRunStartedAt = new Date().toISOString();
       const hostedRunInput = nonEmptyRecord(input.hostedRunInput)
         ?? { prompt: "hello", channel: "openpond_chat" };
-      const hostedRunIdempotencyKey = buildProfileHostedRunIdempotencyKey({
-        input,
+      const hostedRunTargetProjectId = stringValue(input.hostedRunTargetProjectId);
+      const hostedRunIdempotencyKey = buildHostedRunIdempotencyKey({
+        explicitKey: stringValue(input.hostedRunIdempotencyKey),
+        retry: booleanValue(input.hostedRunRetry) ?? false,
         localHead: profile.git.head,
-        hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
-        hostedRunAgentId,
-        hostedRunInput,
+        sourceHead: stringValue(pushedSourceUpload?.sourceCommitSha),
+        runtimeAgentId: hostedRunAgentId,
+        targetProjectId: hostedRunTargetProjectId,
+        input: hostedRunInput,
       });
       await saveProfilePushStatus({
         ...pushStatus,
@@ -2040,10 +2246,13 @@ export function createServerPayloads(deps: {
             agentId: hostedRunAgentId,
             payload: {
               teamId,
+              ...(hostedRunTargetProjectId ? { targetProjectId: hostedRunTargetProjectId } : {}),
+              ...(hostedRunTargetProjectId ? { targetProject: { id: hostedRunTargetProjectId } } : {}),
               idempotencyKey: hostedRunIdempotencyKey,
               input: hostedRunInput,
               metadata: {
                 source: "openpond_profile_push_run",
+                targetProjectId: hostedRunTargetProjectId ?? null,
                 localHead: profile.git.head,
                 hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
                 hostedRunIdempotencyKey,
@@ -2229,6 +2438,7 @@ export function createServerPayloads(deps: {
     sendCodexHistoryTurnPayload,
     interruptCodexHistoryTurnPayload,
     ...workspacePayloads,
+    previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
     listCloudWorkItemsPayload,
     getCloudWorkItemPayload,
@@ -2237,6 +2447,7 @@ export function createServerPayloads(deps: {
     handleCloudWorkItemBackgroundPayload,
     cancelCloudWorkItemTaskPayload,
     openCloudWorkItemPayload,
+    applyCloudWorkItemLocalPatchPayload,
     patchSidebarAppPreference,
     reorderSidebarApps,
     refreshOpenPondPayload,
@@ -2270,6 +2481,99 @@ function slugifyInternalRepoSegment(value: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
   return slug || "project";
+}
+
+type LocalProjectCloudSourceUploadResult = {
+  rootPath: string;
+  branch: string;
+  headCommit: string | null;
+  fileCount: number;
+  byteCount: number;
+  skippedCount: number;
+  initializedEmptyProject: boolean;
+  transport: "git_head" | "snapshot" | "api_source_upload";
+  syncPayload: Record<string, unknown>;
+};
+
+async function uploadLocalProjectCloudSource(input: {
+  localProject: LocalProject;
+  targetProjectId: string;
+  teamId: string;
+  repoUrl: string;
+  apiKey: string;
+  branch: string;
+  commitMessage: string;
+  fallbackReadme: string;
+}): Promise<LocalProjectCloudSourceUploadResult> {
+  try {
+    const gitPush = await pushLocalProjectSourceToGit(input.localProject, {
+      repoUrl: input.repoUrl,
+      apiKey: input.apiKey,
+      branch: input.branch,
+      commitMessage: input.commitMessage,
+      fallbackReadme: input.fallbackReadme,
+    });
+    const syncPayload = asRecord(
+      await sandboxRequestPayload({
+        type: "project_sync",
+        projectId: input.targetProjectId,
+        payload: { teamId: input.teamId },
+      }).catch(() => ({})),
+    );
+    return {
+      rootPath: gitPush.rootPath,
+      branch: gitPush.branch,
+      headCommit: gitPush.headCommit,
+      fileCount: gitPush.fileCount,
+      byteCount: gitPush.byteCount,
+      skippedCount: gitPush.skipped.length,
+      initializedEmptyProject: gitPush.initializedEmptyProject,
+      transport: gitPush.transport,
+      syncPayload,
+    };
+  } catch {
+    const bundle = await collectLocalProjectSourceUploadBundle(input.localProject);
+    const initializedEmptyProject = bundle.entries.length === 0;
+    const entries = initializedEmptyProject
+      ? [
+          {
+            path: "README.md",
+            type: "file" as const,
+            contentsBase64: Buffer.from(input.fallbackReadme, "utf8").toString("base64"),
+          },
+        ]
+      : bundle.entries;
+    const byteCount = initializedEmptyProject
+      ? Buffer.byteLength(input.fallbackReadme, "utf8")
+      : bundle.totalBytes;
+    const uploadPayload = asRecord(
+      await sandboxRequestPayload({
+        type: "project_source_upload",
+        projectId: input.targetProjectId,
+        payload: {
+          teamId: input.teamId,
+          entries,
+          branch: input.branch,
+          commitMessage: input.commitMessage,
+          metadata: {
+            source: "openpond-app-local-project-cloud-setup",
+            transport: "api_source_upload",
+          },
+        },
+      }),
+    );
+    return {
+      rootPath: bundle.rootPath,
+      branch: input.branch,
+      headCommit: bundle.headCommit,
+      fileCount: entries.length,
+      byteCount,
+      skippedCount: bundle.skipped.length,
+      initializedEmptyProject,
+      transport: "api_source_upload",
+      syncPayload: uploadPayload,
+    };
+  }
 }
 
 async function sandboxProjectRecordOrFallback(input: {

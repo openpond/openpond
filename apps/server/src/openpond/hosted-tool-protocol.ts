@@ -16,10 +16,16 @@ type RequiredArg = {
   description: string;
 };
 
+export type HostedToolInstructionMode = "full_text_fallback" | "resource_text_fallback" | "none";
+
 export type WorkspaceToolValidationIssue = {
   path: string;
   message: string;
   expected: string;
+};
+
+export type ProfileSkillReadRequest = {
+  name: string;
 };
 
 const REQUIRED_ARGS_BY_ACTION: Partial<Record<WorkspaceToolName, RequiredArg[]>> = {
@@ -139,7 +145,7 @@ export const HOSTED_WORKSPACE_TOOL_PROTOCOL = [
   "Workspace tools are available through a strict text protocol.",
   "When you need to inspect or change the app workspace, respond with exactly one fenced block labelled openpond_tool and no other prose.",
   "The block must contain JSON: {\"action\":\"read_files\",\"args\":{\"paths\":[\"package.json\"]}}.",
-  "Available actions: create_sandbox_template_scaffold, resource_search, resource_read, workspace_status, list_files, read_files, search_files, preview_write_files, preview_write_file, preview_edit_file, preview_delete_file, write_files, write_file, edit_file, delete_file, validate_sandbox_template, build_sandbox_template, run_sandbox_template, git_init, git_status, git_fetch, git_commit, git_push, publish_openpond_repo, sandbox_create, sandbox_templates, sandbox_template_launch, sandbox_status, sandbox_list_files, sandbox_read_file, sandbox_search_files, sandbox_upload_file, sandbox_write_file, sandbox_edit_file, sandbox_delete_file, sandbox_mkdir, sandbox_move_file, sandbox_exec, sandbox_git_status, sandbox_git_diff, sandbox_git_export_patch, sandbox_git_branch, sandbox_git_commit, sandbox_git_pull, sandbox_git_push, sandbox_preserve_source, sandbox_promote_source, sandbox_run_action, sandbox_open_port, sandbox_snapshot_catalog, sandbox_snapshot_create, sandbox_snapshot_update, sandbox_snapshot_validate, sandbox_snapshot_publish, sandbox_replays, sandbox_replay_start, sandbox_replay_get, sandbox_replay_logs, sandbox_replay_artifacts, sandbox_replay_cancel, sandbox_logs, sandbox_receipts, sandbox_stop.",
+  "Available actions: create_sandbox_template_scaffold, resource_search, resource_read, workspace_status, list_files, read_files, search_files, preview_write_files, preview_write_file, preview_edit_file, preview_delete_file, write_files, write_file, edit_file, delete_file, validate_sandbox_template, build_sandbox_template, run_sandbox_template, git_init, git_status, git_diff, git_fetch, git_commit, git_push, publish_openpond_repo, sandbox_create, sandbox_templates, sandbox_template_launch, sandbox_status, sandbox_list_files, sandbox_read_file, sandbox_search_files, sandbox_upload_file, sandbox_write_file, sandbox_edit_file, sandbox_delete_file, sandbox_mkdir, sandbox_move_file, sandbox_exec, sandbox_git_status, sandbox_git_diff, sandbox_git_export_patch, sandbox_git_branch, sandbox_git_commit, sandbox_git_pull, sandbox_git_push, sandbox_preserve_source, sandbox_promote_source, sandbox_run_action, sandbox_open_port, sandbox_snapshot_catalog, sandbox_snapshot_create, sandbox_snapshot_update, sandbox_snapshot_validate, sandbox_snapshot_publish, sandbox_replays, sandbox_replay_start, sandbox_replay_get, sandbox_replay_logs, sandbox_replay_artifacts, sandbox_replay_cancel, sandbox_logs, sandbox_receipts, sandbox_stop.",
   "Required args: resource_search {scope, query}; resource_read {ref}; read_files {paths}; search_files {query}; write_file/preview_write_file {path, content}; write_files/preview_write_files {files}; edit_file/preview_edit_file {path, oldText, newText}; delete_file/preview_delete_file {path}; git_commit {message}; run_sandbox_template {optional mode/target/params/uploads/sandboxId}; sandbox_create {optional repo/teamId/projectId/agentId/command/visibility/resources/budget/quotas/metadata/runtime/workflowMode/runtimeProfileId/runtimeBaseBranch/runtimePromotionPolicy/attachToSession}; sandbox_templates {optional teamId/projectId/q/name/version/tag/useCase}; sandbox_template_launch {snapshotId or templateName or useCase, optional teamId/projectId/version/visibility/resources/budget/quotas/metadata/attachToSession}; sandbox_read_file {path, optional sandboxId}; sandbox_search_files {query, optional sandboxId}; sandbox_upload_file {path, contentsBase64, optional sandboxId}; sandbox_write_file {path, content, optional sandboxId}; sandbox_edit_file {path, oldText, newText, optional sandboxId}; sandbox_delete_file {path, optional recursive/sandboxId}; sandbox_mkdir {path, optional recursive/sandboxId}; sandbox_move_file {fromPath, toPath, optional overwrite/sandboxId}; sandbox_exec {command, optional sandboxId}; sandbox_git_export_patch {optional baseRef/sandboxId}; sandbox_git_branch {branch, optional create/startPoint/sandboxId}; sandbox_git_commit {message, optional all/paths/sandboxId}; sandbox_preserve_source {optional message/runtimeId/sandboxId}; sandbox_promote_source {optional expectedTargetSha/runtimeId/sandboxId}; sandbox_run_action {actionName, optional sandboxId/projectId/agentId/input}; sandbox_open_port {port, optional sandboxId}; sandbox_snapshot_create {name, optional sandboxId/template/replay}; sandbox_snapshot_update/validate/publish {snapshotId, optional sandboxId}; sandbox_replay_start {snapshotId, optional teamId/projectId/entrypoint/params/budget/artifactPaths}; sandbox_replay_get/logs/artifacts/cancel {replayId}.",
   "Prefer resource_search with scope workspace to find candidate files, then resource_read on returned refs to inspect stable, metadata-rich resources with explicit truncation. Use read_files only when you already know exact paths and need raw file contents.",
   "For edit_file and sandbox_edit_file, oldText must exactly match existing file text. For targeted edits, include enough surrounding context for oldText to match exactly once; multi-match edits fail unless args.replaceAll is true. If you are not certain, call read_files or sandbox_read_file first.",
@@ -155,6 +161,23 @@ export const HOSTED_WORKSPACE_TOOL_PROTOCOL = [
   "After a tool result is returned, either request the next tool the same way or answer the user normally.",
 ].join("\n");
 
+export const HOSTED_RESOURCE_TOOL_FALLBACK_PROTOCOL = [
+  "Workspace resource tools are available through a narrow text fallback protocol.",
+  "Prefer native function tools when they are available. Use this fallback only if native tool calling fails or is unavailable in the current model turn.",
+  "When you need to inspect the app workspace through the fallback, respond with exactly one fenced block labelled openpond_tool and no other prose.",
+  "The block must contain JSON such as {\"action\":\"resource_search\",\"args\":{\"scope\":\"workspace\",\"query\":\"package.json\"}}.",
+  "Available fallback actions: resource_search, resource_read.",
+  "Required args: resource_search {scope, query}; resource_read {ref}.",
+  "Use resource_search first to find stable refs, then resource_read on returned refs. Do not use broad legacy actions such as list_files, read_files, search_files, sandbox_read_file, or sandbox_search_files in this fallback mode.",
+  "After a resource result is returned, either request another resource_search/resource_read fallback call or answer the user normally.",
+].join("\n");
+
+export function hostedToolProtocolForInstructionMode(mode: HostedToolInstructionMode): string | null {
+  if (mode === "none") return null;
+  if (mode === "resource_text_fallback") return HOSTED_RESOURCE_TOOL_FALLBACK_PROTOCOL;
+  return HOSTED_WORKSPACE_TOOL_PROTOCOL;
+}
+
 function truncate(value: string): string {
   if (value.length <= MAX_TOOL_RESULT_CHARS) return value;
   return `${value.slice(0, MAX_TOOL_RESULT_CHARS)}\n\n[tool result truncated]`;
@@ -168,19 +191,8 @@ function parseToolPayload(raw: string): WorkspaceToolRequest[] {
     return [];
   }
 
-  const candidates: unknown[] =
-    Array.isArray(parsed)
-      ? parsed
-      : parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>).tools)
-        ? ((parsed as Record<string, unknown>).tools as unknown[])
-        : [parsed];
-
-  const requests: WorkspaceToolRequest[] = [];
-  for (const candidate of candidates) {
-    const result = WorkspaceToolRequestSchema.safeParse(candidate);
-    if (result.success) requests.push(result.data);
-  }
-  return requests;
+  const result = WorkspaceToolRequestSchema.safeParse(parsed);
+  return result.success ? [result.data] : [];
 }
 
 export function extractWorkspaceToolRequests(text: string): WorkspaceToolRequest[] {
@@ -195,19 +207,41 @@ export function extractWorkspaceToolRequests(text: string): WorkspaceToolRequest
     }
   };
 
-  for (const match of text.matchAll(/```(?:openpond_tool|openpond-tools|openpond_tool_call|json)\s*([\s\S]*?)```/gi)) {
-    add(parseToolPayload(match[1] ?? ""));
-  }
-  for (const match of text.matchAll(/<openpond_tool>([\s\S]*?)<\/openpond_tool>/gi)) {
-    add(parseToolPayload(match[1] ?? ""));
-  }
-  for (const match of text.matchAll(/<json>([\s\S]*?)<\/json>/gi)) {
+  for (const match of text.matchAll(/```openpond_tool\s*([\s\S]*?)```/gi)) {
     add(parseToolPayload(match[1] ?? ""));
   }
 
-  const trimmed = text.trim();
-  if (requests.length === 0 && (trimmed.startsWith("{") || trimmed.startsWith("["))) {
-    add(parseToolPayload(trimmed));
+  return requests;
+}
+
+function parseProfileSkillReadPayload(raw: string): ProfileSkillReadRequest[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    return [];
+  }
+
+  const requests: ProfileSkillReadRequest[] = [];
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return requests;
+  const name = (parsed as Record<string, unknown>).name;
+  if (typeof name === "string" && name.trim()) requests.push({ name: name.trim() });
+  return requests;
+}
+
+export function extractProfileSkillReadRequests(text: string): ProfileSkillReadRequest[] {
+  const requests: ProfileSkillReadRequest[] = [];
+  const seen = new Set<string>();
+  const add = (items: ProfileSkillReadRequest[]) => {
+    for (const item of items) {
+      if (seen.has(item.name)) continue;
+      seen.add(item.name);
+      requests.push(item);
+    }
+  };
+
+  for (const match of text.matchAll(/```openpond_skill\s*([\s\S]*?)```/gi)) {
+    add(parseProfileSkillReadPayload(match[1] ?? ""));
   }
 
   return requests;

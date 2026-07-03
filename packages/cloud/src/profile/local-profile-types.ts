@@ -13,6 +13,19 @@ export type OpenPondProfileAgent = {
   enabled: boolean;
 };
 
+export type OpenPondProfileSkill = {
+  name: string;
+  description: string;
+  path: string;
+  scope: "profile";
+  enabled: boolean;
+  sourcePath: string;
+  charCount: number;
+  sourceHash: string;
+  validationStatus: "valid" | "warning" | "error";
+  validationMessages: string[];
+};
+
 export type OpenPondProfileGitFileChange = {
   path: string;
   originalPath?: string | null;
@@ -87,10 +100,18 @@ export type OpenPondProfileCatalogState = {
   error: string | null;
 };
 
+export type OpenPondProfileSkillCatalogState = {
+  skillCount: number;
+  generatedAt: string | null;
+  stale: boolean;
+  error: string | null;
+};
+
 export type OpenPondProfileDiffSummary = {
   changedAgents: string[];
   newAgents: string[];
   deletedAgents: string[];
+  changedSkills: string[];
   changedActions: string[];
   changedExtensions: string[];
   setupChanges: string[];
@@ -138,8 +159,10 @@ export type OpenPondProfileState = {
   sourcePath: string | null;
   manifestPath: string | null;
   agents: OpenPondProfileAgent[];
+  skills: OpenPondProfileSkill[];
   git: OpenPondProfileGitState | null;
   catalog: OpenPondProfileCatalogState;
+  skillCatalog: OpenPondProfileSkillCatalogState;
   actionCatalog: OpenPondProfileActionCatalogEntry[];
   sourceSetupRequirements: Record<string, unknown>[];
   setupGate: OpenPondProfileSetupGate;
@@ -156,6 +179,15 @@ export function emptyProfileCatalogState(error: string | null = null): OpenPondP
     generatedAt: null,
     manifestPath: null,
     registryPath: null,
+    stale: true,
+    error,
+  };
+}
+
+export function emptyProfileSkillCatalogState(error: string | null = null): OpenPondProfileSkillCatalogState {
+  return {
+    skillCount: 0,
+    generatedAt: null,
     stale: true,
     error,
   };
@@ -178,6 +210,7 @@ export function emptyProfileDiffSummary(): OpenPondProfileDiffSummary {
     changedAgents: [],
     newAgents: [],
     deletedAgents: [],
+    changedSkills: [],
     changedActions: [],
     changedExtensions: [],
     setupChanges: [],

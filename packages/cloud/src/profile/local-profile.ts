@@ -17,6 +17,7 @@ import {
   emptyProfileDiffSummary,
   emptyProfileSetupGate,
   emptyProfileSummary,
+  emptyProfileSkillCatalogState,
   type OpenPondProfileActionCatalogEntry,
   type OpenPondProfileAgent,
   type OpenPondProfileCatalogState,
@@ -26,11 +27,14 @@ import {
   type OpenPondProfileHostedBinding,
   type OpenPondProfileSetupGate,
   type OpenPondProfileSetupRequirement,
+  type OpenPondProfileSkill,
+  type OpenPondProfileSkillCatalogState,
   type OpenPondProfileState,
   type OpenPondProfileSummary,
 } from "./local-profile-types.js";
 import { loadProfileActionCatalog } from "./profile-catalog.js";
 import { loadProfileActionCatalogForSources } from "./profile-catalog.js";
+import { loadProfileSkills } from "./profile-skills.js";
 import {
   assertOpenPondProfileActionReady,
   buildOpenPondProfileSetupGate,
@@ -70,6 +74,8 @@ export type {
   OpenPondProfileHostedBinding,
   OpenPondProfileSetupGate,
   OpenPondProfileSetupRequirement,
+  OpenPondProfileSkill,
+  OpenPondProfileSkillCatalogState,
   OpenPondProfileState,
   OpenPondProfileSummary,
 } from "./local-profile-types.js";
@@ -164,8 +170,10 @@ export function emptyProfileState(error: string | null = null): OpenPondProfileS
     sourcePath: null,
     manifestPath: null,
     agents: [],
+    skills: [],
     git: null,
     catalog: emptyProfileCatalogState(error),
+    skillCatalog: emptyProfileSkillCatalogState(error),
     actionCatalog: [],
     sourceSetupRequirements: [],
     setupGate: emptyProfileSetupGate(),
@@ -220,7 +228,7 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
     const manifest = await readProfileManifest(active.repoPath);
     const sourcePath = profileSourcePath(manifest, active.repoPath, active.profile);
     const agents = await listProfileAgents(manifest, active.profile);
-    const [git, catalogResult] = await Promise.all([
+    const [git, catalogResult, skillResult] = await Promise.all([
       loadProfileGitState(active.repoPath),
       loadProfileActionCatalogForSources(
         profileCatalogSources({
@@ -230,6 +238,7 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
           agents,
         }),
       ),
+      loadProfileSkills(sourcePath),
     ]);
     const hosted = hostedBindingFromConfig(active);
     const diff = summarizeProfileDiff(git, active.profile);
@@ -254,8 +263,10 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
       sourcePath,
       manifestPath: path.join(active.repoPath, PROFILE_REPO_MANIFEST),
       agents,
+      skills: skillResult.skills,
       git,
       catalog: catalogResult.catalog,
+      skillCatalog: skillResult.skillCatalog,
       actionCatalog: catalogResult.actionCatalog,
       sourceSetupRequirements: catalogResult.sourceSetupRequirements,
       setupGate,
@@ -275,8 +286,10 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
       sourcePath: null,
       manifestPath: path.join(active.repoPath, PROFILE_REPO_MANIFEST),
       agents: [],
+      skills: [],
       git,
       catalog: emptyProfileCatalogState(errorMessage),
+      skillCatalog: emptyProfileSkillCatalogState(errorMessage),
       actionCatalog: [],
       sourceSetupRequirements: [],
       setupGate: emptyProfileSetupGate(),
@@ -526,7 +539,7 @@ async function ensureProfileSource(profileSourcePath: string, template: string, 
 
 async function ensureProfileScaffoldFiles(repoPath: string, profileSourcePath: string, profile: string): Promise<void> {
   await mkdir(path.join(repoPath, "profiles"), { recursive: true });
-  for (const dir of ["agents", "actions", "extensions", "prompts", "goals", "evals", "settings", "traces"]) {
+  for (const dir of ["agents", "skills", "actions", "extensions", "prompts", "goals", "evals", "settings", "traces"]) {
     await mkdir(path.join(profileSourcePath, dir), { recursive: true });
   }
   const profileManifestPath = path.join(profileSourcePath, PROFILE_MANIFEST);
@@ -771,6 +784,7 @@ function profileDirtyMessage(diff: OpenPondProfileDiffSummary): string {
   if (diff.changedAgents.length > 0) parts.push(`${diff.changedAgents.length} changed agent(s)`);
   if (diff.newAgents.length > 0) parts.push(`${diff.newAgents.length} new agent(s)`);
   if (diff.deletedAgents.length > 0) parts.push(`${diff.deletedAgents.length} deleted agent(s)`);
+  if (diff.changedSkills.length > 0) parts.push(`${diff.changedSkills.length} changed skill(s)`);
   if (diff.changedActions.length > 0) parts.push(`${diff.changedActions.length} changed action(s)`);
   if (diff.changedExtensions.length > 0) parts.push(`${diff.changedExtensions.length} changed extension(s)`);
   if (diff.setupChanges.length > 0) parts.push(`${diff.setupChanges.length} setup change(s)`);
@@ -806,6 +820,8 @@ function classifyProfileFileChange(
   } else if (firstSegment === "agents") {
     const agentId = relativePath.split("/")[1];
     if (agentId) addAgentChange(diff, agentId, file.category);
+  } else if (firstSegment === "skills") {
+    addUnique(diff.changedSkills, relativePath.split("/")[1] ?? relativePath);
   } else if (firstSegment === "actions") {
     addUnique(diff.changedActions, relativePath.split("/")[1] ?? relativePath);
   } else if (firstSegment === "extensions") {

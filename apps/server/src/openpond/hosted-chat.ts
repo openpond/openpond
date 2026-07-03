@@ -22,8 +22,11 @@ export function buildChatMessagesForProvider(
       content: [
         "Conversation summary from earlier turns:",
         compacted.summary,
+        compacted.preservedResourceRefs.length > 0
+          ? `Preserved resource refs:\n${compacted.preservedResourceRefs.map((ref) => `- ${ref}`).join("\n")}`
+          : null,
         "Use this as continuity context. Do not mention compaction unless asked.",
-      ].join("\n\n"),
+      ].filter(Boolean).join("\n\n"),
     });
   }
 
@@ -56,6 +59,7 @@ export function buildChatMessagesForProvider(
 type CompactionContext = {
   index: number;
   preservedFromEventId: string | null;
+  preservedResourceRefs: string[];
   summary: string;
 };
 
@@ -68,6 +72,7 @@ function latestCompactionContext(events: ProviderProjectionEvent[]): CompactionC
     return {
       index,
       preservedFromEventId: compactionPreservedFromEventId(item.data),
+      preservedResourceRefs: compactionPreservedResourceRefs(item.data),
       summary,
     };
   }
@@ -96,4 +101,11 @@ function compactionPreservedFromEventId(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const preservedFromEventId = (value as { preservedFromEventId?: unknown }).preservedFromEventId;
   return typeof preservedFromEventId === "string" && preservedFromEventId.trim() ? preservedFromEventId : null;
+}
+
+function compactionPreservedResourceRefs(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  const refs = (value as { preservedResourceRefs?: unknown }).preservedResourceRefs;
+  if (!Array.isArray(refs)) return [];
+  return refs.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }

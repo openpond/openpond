@@ -16,6 +16,19 @@ export const OpenPondProfileAgentSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const OpenPondProfileSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  path: z.string(),
+  scope: z.literal("profile"),
+  enabled: z.boolean(),
+  sourcePath: z.string(),
+  charCount: z.number(),
+  sourceHash: z.string(),
+  validationStatus: z.enum(["valid", "warning", "error"]),
+  validationMessages: z.array(z.string()),
+});
+
 export const OpenPondProfileGitFileChangeSchema = z.object({
   path: z.string(),
   originalPath: z.string().nullable().optional(),
@@ -48,6 +61,13 @@ export const OpenPondProfileCatalogStateSchema = z.object({
   error: z.string().nullable(),
 });
 
+export const OpenPondProfileSkillCatalogStateSchema = z.object({
+  skillCount: z.number(),
+  generatedAt: z.string().nullable(),
+  stale: z.boolean(),
+  error: z.string().nullable(),
+});
+
 export const OpenPondProfileSetupRequirementSchema = z.object({
   ref: z.string(),
   source: z.enum(["action_catalog", "source_upload_metadata"]),
@@ -73,6 +93,7 @@ export const OpenPondProfileDiffSummarySchema = z.object({
   changedAgents: z.array(z.string()),
   newAgents: z.array(z.string()),
   deletedAgents: z.array(z.string()),
+  changedSkills: z.array(z.string()).optional().default([]),
   changedActions: z.array(z.string()),
   changedExtensions: z.array(z.string()),
   setupChanges: z.array(z.string()),
@@ -202,8 +223,15 @@ export const OpenPondProfileStateSchema = z.object({
   sourcePath: z.string().nullable(),
   manifestPath: z.string().nullable(),
   agents: z.array(OpenPondProfileAgentSchema),
+  skills: z.array(OpenPondProfileSkillSchema).optional().default([]),
   git: OpenPondProfileGitStateSchema.nullable(),
   catalog: OpenPondProfileCatalogStateSchema,
+  skillCatalog: OpenPondProfileSkillCatalogStateSchema.optional().default({
+    skillCount: 0,
+    generatedAt: null,
+    stale: true,
+    error: null,
+  }),
   actionCatalog: z.array(OpenPondActionCatalogEntrySchema),
   sourceSetupRequirements: z.array(z.record(z.string(), z.unknown())),
   setupGate: OpenPondProfileSetupGateSchema,
@@ -216,9 +244,11 @@ export const OpenPondProfileStateSchema = z.object({
 
 export type LocalOpenPondProfileCheckStatus = z.infer<typeof LocalOpenPondProfileCheckStatusSchema>;
 export type OpenPondProfileAgent = z.infer<typeof OpenPondProfileAgentSchema>;
+export type OpenPondProfileSkill = z.infer<typeof OpenPondProfileSkillSchema>;
 export type OpenPondProfileGitFileChange = z.infer<typeof OpenPondProfileGitFileChangeSchema>;
 export type OpenPondProfileGitState = z.infer<typeof OpenPondProfileGitStateSchema>;
 export type OpenPondProfileCatalogState = z.infer<typeof OpenPondProfileCatalogStateSchema>;
+export type OpenPondProfileSkillCatalogState = z.infer<typeof OpenPondProfileSkillCatalogStateSchema>;
 export type OpenPondProfileSetupRequirement = z.infer<typeof OpenPondProfileSetupRequirementSchema>;
 export type OpenPondProfileSetupGate = z.infer<typeof OpenPondProfileSetupGateSchema>;
 export type OpenPondProfileDiffSummary = z.infer<typeof OpenPondProfileDiffSummarySchema>;
@@ -234,12 +264,19 @@ export function emptyOpenPondProfileState(): OpenPondProfileState {
     sourcePath: null,
     manifestPath: null,
     agents: [],
+    skills: [],
     git: null,
     catalog: {
       actionCount: 0,
       generatedAt: null,
       manifestPath: null,
       registryPath: null,
+      stale: true,
+      error: null,
+    },
+    skillCatalog: {
+      skillCount: 0,
+      generatedAt: null,
       stale: true,
       error: null,
     },
@@ -258,6 +295,7 @@ export function emptyOpenPondProfileState(): OpenPondProfileState {
       changedAgents: [],
       newAgents: [],
       deletedAgents: [],
+      changedSkills: [],
       changedActions: [],
       changedExtensions: [],
       setupChanges: [],

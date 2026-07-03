@@ -93,10 +93,25 @@ export type ActionArtifactPolicyDefinition = {
 };
 
 export type ActionSetupRequirementDefinition = {
-  kind: "channel" | "connection" | "integration" | "env" | "volume" | "schedule";
+  kind:
+    | "channel"
+    | "connection"
+    | "integration"
+    | "env"
+    | "volume"
+    | "schedule"
+    | "package"
+    | "python"
+    | "native_tool";
   name: string;
   required?: boolean;
   description?: string;
+  command?: string;
+  packageName?: string;
+  version?: string;
+  status?: string;
+  satisfied?: boolean;
+  ready?: boolean;
 };
 
 export type ActionMcpExportDefinition = {

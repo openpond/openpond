@@ -8,12 +8,14 @@ export function ProfileView({
   onPayload,
   onError,
   onToast,
+  onSkillCommand,
 }: {
   payload: BootstrapPayload | null;
   connection: ClientConnection | null;
   onPayload: (payload: BootstrapPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
+  onSkillCommand?: (command: string) => void;
 }) {
   return (
     <section className="profile-view" aria-label="Profile">
@@ -23,6 +25,7 @@ export function ProfileView({
         onPayload={onPayload}
         onError={onError}
         onToast={onToast}
+        onSkillCommand={onSkillCommand}
       />
     </section>
   );

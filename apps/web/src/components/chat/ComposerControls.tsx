@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CodexReasoningEffort } from "@openpond/contracts";
-import { Check, ChevronDown, Cloud, Folder, Plus } from "../icons";
+import { Check, ChevronDown, Cloud, Folder, Plus, UploadCloud } from "../icons";
 import { CODEX_MODEL_OPTIONS, CODEX_REASONING_EFFORT_OPTIONS } from "../../lib/app-models";
-import type { WorkspaceLocation, WorkspaceTargetState } from "../../lib/workspace-location";
-import { CloudMoveIcon } from "../common/CloudMoveIcon";
+import type {
+  WorkspaceTargetOptionState,
+  WorkspaceTargetState,
+  WorkspaceTargetValue,
+} from "../../lib/workspace-location";
 
 export type ComposerProjectTargetOptionKind =
   | "local"
@@ -157,35 +160,114 @@ function ProjectTargetIcon({
 
 export function WorkspaceActionControl({
   busy,
+  placement,
   state,
   onChange,
 }: {
   busy: boolean;
+  placement: "bottom" | "top";
   state: WorkspaceTargetState;
-  onChange: (value: WorkspaceLocation) => void;
+  onChange: (value: WorkspaceTargetValue) => void;
 }) {
-  const action = state.action;
-  const disabled = busy || action.disabled;
-  const iconOnly = action.value === "cloud";
-  const tooltip = action.disabled && action.disabledReason
-    ? action.disabledReason
-    : iconOnly
-      ? action.label
-      : `${action.label}: ${action.detail}`;
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const selectedIconKind = state.value === "cloud" || state.value === "queue_cloud" ? "cloud" : "local";
+  const tooltip = `Working in: ${state.label}. ${state.detail}`;
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   return (
-    <button
-      type="button"
-      className={`workspace-action-trigger ${action.value} ${iconOnly ? "icon-only" : ""}`}
-      disabled={disabled}
-      aria-label={action.label}
+    <div
+      className={`workspace-action-control ${placement === "top" ? "open-up" : ""}`}
       data-tooltip={tooltip}
-      onClick={() => onChange(action.value)}
+      ref={menuRef}
     >
-      {action.value === "cloud" ? <CloudMoveIcon size={14} /> : <Folder size={14} />}
-      {!iconOnly && <span>{action.label}</span>}
-    </button>
+      <button
+        type="button"
+        className={`workspace-action-trigger ${selectedIconKind} ${open ? "active" : ""}`}
+        disabled={busy}
+        aria-label="Working in"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <WorkspaceTargetIcon value={state.value} size={14} />
+        <span className="workspace-target-trigger-text">
+          <strong>Working in: {state.label}</strong>
+          <small>{state.detail}</small>
+        </span>
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="workspace-target-menu" role="menu" aria-label="Working in">
+          {state.options.map((option) => {
+            const selected = option.value === state.value;
+            const disabled = busy || state.busy || option.disabled;
+            const title = option.disabled && option.disabledReason
+              ? option.disabledReason
+              : `${option.label}: ${option.detail}`;
+            const statusText = workspaceTargetOptionStatusText(option);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                className={`workspace-target-option ${selected ? "selected" : ""} ${option.value}`}
+                disabled={disabled}
+                data-tooltip={title}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <WorkspaceTargetIcon value={option.value} size={14} />
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.detail}</small>
+                  {statusText ? <em>{statusText}</em> : null}
+                </span>
+                {selected && <Check size={14} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
+}
+
+export function workspaceTargetOptionStatusText(
+  option: Pick<WorkspaceTargetOptionState, "disabled" | "disabledReason" | "stateNote">,
+): string | null {
+  if (option.disabled && option.disabledReason) return option.disabledReason;
+  return option.stateNote ?? null;
+}
+
+function WorkspaceTargetIcon({
+  value,
+  size,
+}: {
+  value: WorkspaceTargetValue;
+  size: number;
+}) {
+  if (value === "cloud" || value === "queue_cloud") return <Cloud size={size} />;
+  if (value === "upload_cloud") return <UploadCloud size={size} />;
+  return <Folder size={size} />;
 }
 
 export function CodexModelReasoningMenu({

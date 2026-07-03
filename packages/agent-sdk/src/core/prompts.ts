@@ -8,6 +8,7 @@ import type {
   InstructionsDefinition,
   SkillDefinition,
 } from "../index";
+import { formatSkillMarkdown } from "../skills/format";
 import { ARTIFACT_SCHEMAS } from "./constants";
 import { writeText } from "./files";
 
@@ -86,9 +87,11 @@ async function compileSkill(
   const skillDir = path.join(artifactDir, "skills", safePathSegment(skill.name));
   const markdown = await resolveMarkdownSource(skill.markdown ?? skill.source, cwd);
   assertBoundedMarkdown(markdown, `Skill ${skill.name}`);
-  const body = skill.description
-    ? `---\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${markdown}`
-    : markdown;
+  const body = formatSkillMarkdown({
+    name: skill.name,
+    description: skill.description ?? null,
+    body: markdown,
+  });
   const artifactRef = path.join(skillDir, "SKILL.md");
   await writeText(cwd, artifactRef, ensureTrailingNewline(body));
 

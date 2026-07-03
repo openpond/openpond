@@ -459,6 +459,7 @@
 }
 
 .cloud-setup-progress,
+.cloud-setup-upload-preview,
 .cloud-setup-upload-result,
 .cloud-setup-error,
 .cloud-setup-next {
@@ -478,11 +479,13 @@
 }
 
 .cloud-setup-upload-result strong,
+.cloud-setup-upload-preview strong,
 .cloud-setup-next span {
   color: #f2f2f2;
   font-size: 13px;
 }
 
+.cloud-setup-upload-preview span,
 .cloud-setup-upload-result span {
   color: #9a9a9a;
   font-size: 12px;

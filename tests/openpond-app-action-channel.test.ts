@@ -146,6 +146,7 @@ describe("OpenPond App action channel", () => {
     expect(composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)).toEqual([
       "create",
       "edit",
+      "skill",
       "goal",
       "goal-remote",
       "goal-local",
@@ -163,6 +164,10 @@ describe("OpenPond App action channel", () => {
     expect(parseComposerSlashCommandPrompt("/create summarize files")).toEqual({
       command: "create",
       args: "summarize files",
+    });
+    expect(parseComposerSlashCommandPrompt("/skill create release-notes")).toEqual({
+      command: "skill",
+      args: "create release-notes",
     });
     expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toEqual({
       command: "goal-remote",

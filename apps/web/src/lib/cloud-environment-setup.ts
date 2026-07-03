@@ -23,6 +23,12 @@ export type CloudProjectCreateUrlInput = {
   source?: "github" | "template";
 };
 
+export type OpenPondBillingUrlInput = {
+  accountBaseUrl?: string | null;
+  organizationSlug?: string | null;
+  teamId?: string | null;
+};
+
 export function buildCloudEnvironmentCreateUrl(input: CloudEnvironmentCreateUrlInput): string {
   const url = new URL("/sandboxes", normalizeOpenPondWebBaseUrl(input.accountBaseUrl));
   url.searchParams.set("teamId", input.teamId);
@@ -51,6 +57,16 @@ export function buildCloudProjectCreateUrl(input: CloudProjectCreateUrlInput): s
 export function buildCloudTemplatesUrl(input: Pick<CloudProjectCreateUrlInput, "accountBaseUrl" | "teamId">): string {
   const url = new URL("/sandboxes/templates", normalizeOpenPondWebBaseUrl(input.accountBaseUrl));
   if (input.teamId?.trim()) url.searchParams.set("teamId", input.teamId.trim());
+  return url.toString();
+}
+
+export function buildOpenPondBillingUrl(input: OpenPondBillingUrlInput): string {
+  const organizationSlug = input.organizationSlug?.trim();
+  const path = organizationSlug
+    ? `/sandboxes/${encodeURIComponent(organizationSlug)}/billing`
+    : "/sandboxes/billing";
+  const url = new URL(path, normalizeOpenPondWebBaseUrl(input.accountBaseUrl));
+  if (!organizationSlug && input.teamId?.trim()) url.searchParams.set("teamId", input.teamId.trim());
   return url.toString();
 }
 

@@ -795,6 +795,13 @@
   font-size: 13px;
 }
 
+.settings-secondary.compact {
+  height: 28px;
+  border-radius: 8px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
 .settings-icon-button {
   width: 32px;
   height: 32px;

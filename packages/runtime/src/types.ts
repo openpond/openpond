@@ -3,6 +3,8 @@ import type {
   ConfiguredProfile,
   HostedChatMessage,
   HostedChatStreamDelta,
+  HostedChatTool,
+  HostedChatToolChoice,
   HostedModel,
   HostedProvider,
 } from "@openpond/cloud";
@@ -97,6 +99,8 @@ export type HostedProviderCatalogResult = {
 export type HostedChatTurnInput = {
   model?: string | null;
   messages: HostedChatMessage[];
+  tools?: HostedChatTool[];
+  toolChoice?: HostedChatToolChoice;
   requestId?: string;
   signal?: AbortSignal;
 };

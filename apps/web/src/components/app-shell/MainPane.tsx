@@ -9,6 +9,8 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, CircleAlert, DownloadCloud } from "../icons";
 import type {
@@ -30,13 +32,14 @@ import type {
   WorkspaceDiffSummary,
   WorkspaceKind,
   WorkspaceState,
+  TerminalScope,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import type { AppView, ChatMessage } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
-import type { WorkspaceLocation, WorkspaceTargetState } from "../../lib/workspace-location";
+import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import { Composer, type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
 import type { ComposerCreatePipelineRuntime } from "../chat/ComposerCreatePipelineStrip";
@@ -56,6 +59,7 @@ import {
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
+import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
 import type { WorkspaceDiffTabRequest } from "../workspace-diff/workspace-diff-panel-model";
 
 const WorkspaceDiffPanel = lazy(() =>
@@ -115,8 +119,10 @@ type MainPaneProps = {
   rightPanelTabRequest: WorkspaceDiffTabRequest | null;
   rightChatPanels: RightChatPanelView[];
   browserConversationId: string;
+  terminalScope: TerminalScope;
+  terminalTabs: TerminalTab[];
   terminalCwd: string | null;
-  pendingTerminalCommand: { id: number; command: string } | null;
+  pendingTerminalCommand: TerminalQueuedCommand | null;
   terminalOpen: boolean;
   insightsItems: InsightItem[];
   insightsRuns: InsightRun[];
@@ -133,6 +139,7 @@ type MainPaneProps = {
   cloudWorkItems: CloudWorkItem[];
   selectedCloudWorkItem: CloudWorkItem | null;
   cloudWorkItemDetail: CloudWorkItemDetail | null;
+  cloudWorkItemLocalProjectName: string | null;
   cloudLoading: boolean;
   cloudBusy: boolean;
   cloudError: string | null;
@@ -149,7 +156,7 @@ type MainPaneProps = {
   onOpenProviderSettings: () => void;
   changeDraftProvider: (provider: ChatProvider) => void;
   changeProjectTarget: (target: string) => void;
-  changeWorkspaceTarget: (target: WorkspaceLocation) => Promise<void>;
+  changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
   setDraftModel: (model: string) => void;
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
@@ -188,6 +195,7 @@ type MainPaneProps = {
   onShowRightChatPanel: () => void;
   onShowSummaryPanel: () => void;
   onAddRightChat: () => void;
+  onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
   onCloseRightChatPanel: (panelId: string) => void;
   onRightChatModelChange: (panelId: string, model: string) => void;
   onRightChatPromptChange: (panelId: string, prompt: string) => void;
@@ -203,12 +211,13 @@ type MainPaneProps = {
   onCloseTerminal: () => void;
   onOpenCloudHome: () => void;
   onSetupCloudProject: (projectId: string) => void;
-  onCreateCloudWork: (input: { projectId: string; prompt: string }) => Promise<boolean>;
+  onCreateCloudWork: (input: { projectId: string; prompt: string; select?: boolean }) => Promise<boolean>;
   onSelectCloudWorkItem: (workItem: CloudWorkItem) => void;
   onSendCloudWorkItemMessage: (message: string) => Promise<void>;
   onHandleCloudWorkItemBackground: (message: string | null) => Promise<void>;
   onCancelCloudWorkItemCreatePipeline: () => Promise<void>;
   onCancelCloudWorkItemTask: () => Promise<void>;
+  onApplyCloudWorkItemPatchLocally: () => Promise<void>;
   onLoadMoreChatHistory?: () => Promise<boolean>;
 };
 
@@ -242,6 +251,28 @@ function userMessageRows(element: HTMLElement): HTMLElement[] {
   return Array.from(element.querySelectorAll<HTMLElement>(".message-row.user")).filter(
     (row) => row.parentElement === element,
   );
+}
+
+function billingTargetForContext({
+  activeWorkspaceId,
+  cloudProjects,
+  selectedCloudWorkItem,
+}: {
+  activeWorkspaceId: string | null;
+  cloudProjects: CloudProject[];
+  selectedCloudWorkItem: CloudWorkItem | null;
+}): { organizationSlug: string | null; teamId: string | null } {
+  const selectedProject = cloudProjects.find((project) =>
+    project.id === activeWorkspaceId ||
+    project.id === selectedCloudWorkItem?.projectId ||
+    project.teamId === selectedCloudWorkItem?.teamId
+  );
+  const fallbackProject = cloudProjects.find((project) => project.organizationSlug || project.teamId);
+  const project = selectedProject ?? fallbackProject ?? null;
+  return {
+    organizationSlug: project?.organizationSlug ?? null,
+    teamId: project?.teamId ?? selectedCloudWorkItem?.teamId ?? null,
+  };
 }
 
 function messageScrollTop(element: HTMLElement, message: HTMLElement): number {
@@ -329,12 +360,13 @@ function cloudProjectIdFromComposerTarget(value: string): string | null {
 function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
   if (command.command === "create") return `/create ${command.args}`;
   if (command.command === "edit") return `/edit ${command.args}`;
+  if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
   if (command.command === "goal-local") return `Goal: ${command.args}`;
   return `Goal: ${command.args}`;
 }
 
 function isLocalComposerSlashCommand(command: ParsedComposerSlashCommand): boolean {
-  return command.command === "goal-local";
+  return command.command === "goal-local" || command.command === "skill";
 }
 
 export function shouldRunCreatePipelineCommandLocally(input: {
@@ -403,6 +435,8 @@ export function MainPane({
   rightPanelTabRequest,
   rightChatPanels,
   browserConversationId,
+  terminalScope,
+  terminalTabs,
   terminalCwd,
   pendingTerminalCommand,
   terminalOpen,
@@ -421,6 +455,7 @@ export function MainPane({
   cloudWorkItems,
   selectedCloudWorkItem,
   cloudWorkItemDetail,
+  cloudWorkItemLocalProjectName,
   cloudLoading,
   cloudBusy,
   cloudError,
@@ -461,6 +496,7 @@ export function MainPane({
   onShowRightChatPanel,
   onShowSummaryPanel,
   onAddRightChat,
+  onTerminalTabsChange,
   onCloseRightChatPanel,
   onRightChatModelChange,
   onRightChatPromptChange,
@@ -477,6 +513,7 @@ export function MainPane({
   onHandleCloudWorkItemBackground,
   onCancelCloudWorkItemCreatePipeline,
   onCancelCloudWorkItemTask,
+  onApplyCloudWorkItemPatchLocally,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
   const chatThreadRef = useRef<HTMLElement | null>(null);
@@ -519,6 +556,12 @@ export function MainPane({
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
   const showRightPanel = showDiffPanel || showBrowserPanel || showRightChatPanel;
   const rightPanelExpanded = showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
+  const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
+  const billingTarget = billingTargetForContext({
+    activeWorkspaceId,
+    cloudProjects,
+    selectedCloudWorkItem,
+  });
   const showThinkingIndicator =
     view === "chat" && turnRunning && !pendingApproval && shouldShowThinkingIndicator(chatMessages);
   const showChatThread = forceChatThread || chatMessages.length > 0 || showThinkingIndicator;
@@ -590,7 +633,7 @@ export function MainPane({
             }
             return true;
           }
-          if (!command.args) {
+          if (!command.args && command.command !== "skill") {
             showToast(`Add instructions after /${command.command}.`, "info");
             return false;
           }
@@ -1108,6 +1151,9 @@ export function MainPane({
       mentionApps={mentionApps}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
+      accountBaseUrl={accountBaseUrl}
+      billingOrganizationSlug={billingTarget.organizationSlug}
+      billingTeamId={billingTarget.teamId}
       showToast={showToast}
       workspaceTarget={workspaceTarget}
       onAddChat={onAddRightChat}
@@ -1136,6 +1182,9 @@ export function MainPane({
     <AppTerminalPanel
       open={terminalOpen}
       connection={connection}
+      scope={terminalScope}
+      tabs={terminalTabs}
+      onTabsChange={onTerminalTabsChange}
       cwd={terminalCwd}
       appId={activeWorkspaceAppId}
       workspaceName={workspaceName}
@@ -1164,6 +1213,9 @@ export function MainPane({
       onHandleBackground={onHandleCloudWorkItemBackground}
       onCancelCreatePlan={onCancelCloudWorkItemCreatePipeline}
       onCancelTask={onCancelCloudWorkItemTask}
+      localProjectName={cloudWorkItemLocalProjectName}
+      onApplyLocalPatch={onApplyCloudWorkItemPatchLocally}
+      onShowFiles={selectedCloudSandboxId ? onShowDiffPanel : undefined}
     />
   );
   return (
@@ -1202,6 +1254,11 @@ export function MainPane({
             onPayload={onPayload}
             onError={onError}
             onToast={showToast}
+            onSkillCommand={(command) => {
+              setPrompt(command);
+              setMentionedAppId(null);
+              setView("chat");
+            }}
           />
         </Suspense>
       ) : view === "insights" ? (
@@ -1244,6 +1301,9 @@ export function MainPane({
                 ) : (
                   <MessageRow
                     activeWorkspaceAppId={activeWorkspaceAppId}
+                    accountBaseUrl={accountBaseUrl}
+                    billingOrganizationSlug={billingTarget.organizationSlug}
+                    billingTeamId={billingTarget.teamId}
                     connection={connection}
                     key={row.id}
                     message={row.message}

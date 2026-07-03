@@ -10,6 +10,7 @@ import {
   type LocalOpenPondProfileCheckStatus,
   type LocalOpenPondProfilePushStatus,
 } from "../packages/cloud/src/config";
+import { emptyOpenPondProfileState } from "../packages/contracts/src";
 import {
   OpenPondProfileSetupRequiredError,
   assertOpenPondProfileActionReady,
@@ -25,6 +26,8 @@ import {
   runProfileCheck,
   runProfileSdkCommand,
 } from "../packages/cloud/src/profile/local-profile";
+import { runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
+import { PROFILE_SKILL_MAX_CHARS, loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
 
 describe("local profile control invariants", () => {
   test("repeat init preserves enabled agents on an existing profile manifest entry", () => {
@@ -291,6 +294,376 @@ describe("local profile control invariants", () => {
     expect(hostedRunStatusFromRunSummary(run)).toBe("passed");
   });
 
+  test("discovers profile skills from profile-native skills directory", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skills-"));
+    try {
+      const sourcePath = path.join(tempRoot, "profiles", "default");
+      await mkdir(path.join(sourcePath, "skills", "release-notes"), { recursive: true });
+      await writeFile(
+        path.join(sourcePath, "skills", "release-notes", "SKILL.md"),
+        [
+          "---",
+          "name: release-notes",
+          "description: Draft concise release notes from profile source changes.",
+          "---",
+          "",
+          "Write concise release notes grouped by user-facing capability.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await loadProfileSkills(sourcePath);
+      expect(result.skillCatalog).toMatchObject({
+        skillCount: 1,
+        stale: false,
+        error: null,
+      });
+      expect(result.skills[0]).toMatchObject({
+        name: "release-notes",
+        description: "Draft concise release notes from profile source changes.",
+        path: "skills/release-notes/SKILL.md",
+        scope: "profile",
+        enabled: true,
+        validationStatus: "valid",
+        validationMessages: [],
+      });
+      expect(result.skills[0]?.sourceHash).toMatch(/^[a-f0-9]{64}$/);
+
+      await expect(readProfileSkill({ profileSourcePath: sourcePath, name: "release-notes" })).resolves.toMatchObject({
+        name: "release-notes",
+        body: "Write concise release notes grouped by user-facing capability.",
+        path: "skills/release-notes/SKILL.md",
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("marks unsupported profile skill files invalid", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-invalid-"));
+    try {
+      const sourcePath = path.join(tempRoot, "profiles", "default");
+      await mkdir(path.join(sourcePath, "skills", "release-notes", "references"), { recursive: true });
+      await writeFile(
+        path.join(sourcePath, "skills", "release-notes", "SKILL.md"),
+        [
+          "---",
+          "name: release-notes",
+          "description: Draft release notes.",
+          "---",
+          "",
+          "Write release notes.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await loadProfileSkills(sourcePath);
+      expect(result.skills[0]).toMatchObject({
+        name: "release-notes",
+        enabled: false,
+        validationStatus: "error",
+      });
+      expect(result.skills[0]?.validationMessages.join("\n")).toContain("unsupported entry: references");
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("validates profile skill parser edge cases", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-edges-"));
+    try {
+      const sourcePath = path.join(tempRoot, "profiles", "default");
+      await mkdir(path.join(sourcePath, "skills", "missing-frontmatter"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "malformed-frontmatter"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "oversized"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "bad-name"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "duplicate-one"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "duplicate-two"), { recursive: true });
+      await writeFile(
+        path.join(sourcePath, "skills", "missing-frontmatter", "SKILL.md"),
+        "No frontmatter here.\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(sourcePath, "skills", "malformed-frontmatter", "SKILL.md"),
+        "---\nname: [unterminated\ndescription: Broken YAML\n---\n\nBroken.\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(sourcePath, "skills", "oversized", "SKILL.md"),
+        [
+          "---",
+          "name: oversized",
+          "description: Too large.",
+          "---",
+          "",
+          "x".repeat(PROFILE_SKILL_MAX_CHARS),
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        path.join(sourcePath, "skills", "bad-name", "SKILL.md"),
+        "---\nname: Bad Name\ndescription: Invalid name.\n---\n\nInvalid.\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(sourcePath, "skills", "duplicate-one", "SKILL.md"),
+        "---\nname: duplicate-skill\ndescription: Duplicate one.\n---\n\nOne.\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(sourcePath, "skills", "duplicate-two", "SKILL.md"),
+        "---\nname: duplicate-skill\ndescription: Duplicate two.\n---\n\nTwo.\n",
+        "utf8",
+      );
+
+      const result = await loadProfileSkills(sourcePath);
+      const messagesByPath = new Map(result.skills.map((skill) => [skill.path, skill.validationMessages.join("\n")]));
+
+      expect(messagesByPath.get("skills/missing-frontmatter/SKILL.md")).toContain("must start with YAML frontmatter");
+      expect(messagesByPath.get("skills/malformed-frontmatter/SKILL.md")).toContain("frontmatter is invalid YAML");
+      expect(messagesByPath.get("skills/oversized/SKILL.md")).toContain(`exceeds the limit of ${PROFILE_SKILL_MAX_CHARS}`);
+      expect(messagesByPath.get("skills/bad-name/SKILL.md")).toContain("Skill name must be lowercase kebab-case.");
+      expect(messagesByPath.get("skills/bad-name/SKILL.md")).toContain("Skill name must match its directory name");
+      expect(messagesByPath.get("skills/duplicate-one/SKILL.md")).toContain("Duplicate skill name: duplicate-skill");
+      expect(messagesByPath.get("skills/duplicate-two/SKILL.md")).toContain("Duplicate skill name: duplicate-skill");
+      expect(result.skills.every((skill) => skill.validationStatus === "error" && !skill.enabled)).toBe(true);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("profile state includes skills and skill diff changes", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-state-"));
+    const originalConfig = await loadGlobalConfig();
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      await initLocalProfileRepo({ repoPath, profile: "default" });
+      const sourcePath = path.join(repoPath, "profiles", "default");
+      await mkdir(path.join(sourcePath, "skills", "release-notes"), { recursive: true });
+      await writeFile(
+        path.join(sourcePath, "skills", "release-notes", "SKILL.md"),
+        [
+          "---",
+          "name: release-notes",
+          "description: Draft concise release notes from profile source changes.",
+          "---",
+          "",
+          "Write concise release notes grouped by user-facing capability.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const state = await loadLocalProfileRepo(repoPath, "default");
+      expect(state.skills).toHaveLength(1);
+      expect(state.skills[0]).toMatchObject({
+        name: "release-notes",
+        path: "skills/release-notes/SKILL.md",
+      });
+      expect(state.skillCatalog).toMatchObject({
+        skillCount: 1,
+        stale: false,
+        error: null,
+      });
+      expect(state.diff.changedSkills).toEqual(["release-notes"]);
+      expect(state.summary.message).toContain("skill");
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("profile skill command lists skills and routes create/edit through goals", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-command-"));
+    const originalConfig = await loadGlobalConfig();
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      await initLocalProfileRepo({ repoPath, profile: "default" });
+      const skillPath = path.join(repoPath, "profiles", "default", "skills", "release-notes", "SKILL.md");
+      await mkdir(path.dirname(skillPath), { recursive: true });
+      await writeFile(
+        skillPath,
+        [
+          "---",
+          "name: release-notes",
+          "description: Draft customer-facing release notes from merged changes.",
+          "---",
+          "",
+          "Draft concise release notes.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const created = await runProfileSkillCommandFromPrompt(
+        "/skill create support-handoff-summaries Draft support handoff summaries.",
+      );
+      expect(created).toMatchObject({
+        handled: false,
+        action: "goal",
+        workspaceCwd: repoPath,
+        goal: {
+          kind: "profile_skill_create",
+          operation: "create",
+          targetSkillName: "support-handoff-summaries",
+          targetSkillPath: "profiles/default/skills/support-handoff-summaries/SKILL.md",
+        },
+      });
+      expect(created?.prompt).toContain("Goal: Create a profile-backed skill named support-handoff-summaries");
+      expect(created?.prompt).toContain("Keep the skill package single-file: only SKILL.md.");
+
+      const list = await runProfileSkillCommandFromPrompt("/skill list");
+      expect(list).toMatchObject({
+        handled: true,
+        action: "list",
+      });
+      expect(list?.message).toContain("release-notes");
+
+      const updated = await runProfileSkillCommandFromPrompt(
+        "/skill edit release-notes Include QA verification notes when requested.",
+      );
+      expect(updated).toMatchObject({
+        handled: false,
+        action: "goal",
+        workspaceCwd: repoPath,
+        goal: {
+          kind: "profile_skill_edit",
+          operation: "edit",
+          targetSkillName: "release-notes",
+          targetSkillPath: "profiles/default/skills/release-notes/SKILL.md",
+        },
+        skill: {
+          name: "release-notes",
+        },
+      });
+      await expect(readFile(skillPath, "utf8")).resolves.not.toContain("Include QA verification notes when requested.");
+
+      const natural = await runProfileSkillCommandFromPrompt(
+        "create a skill that helps write launch checklists",
+      );
+      expect(natural).toBeNull();
+
+      const createMe = await runProfileSkillCommandFromPrompt(
+        "create me a skill to do support handoff summaries",
+      );
+      expect(createMe).toBeNull();
+
+      const structured = await runProfileSkillGoalCommand({
+        operation: "create",
+        objective: "Draft onboarding checklists.",
+        skillName: "onboarding-checklists",
+        source: "model_tool",
+      });
+      expect(structured).toMatchObject({
+        handled: false,
+        action: "goal",
+        workspaceCwd: repoPath,
+        goal: {
+          kind: "profile_skill_create",
+          operation: "create",
+          source: "model_tool",
+          targetSkillName: "onboarding-checklists",
+          targetSkillPath: "profiles/default/skills/onboarding-checklists/SKILL.md",
+        },
+      });
+      expect(structured?.prompt).toContain("Keep the skill package single-file: only SKILL.md.");
+
+      const inferredName = await runProfileSkillGoalCommand({
+        operation: "create",
+        objective: "Draft concise incident postmortems.",
+        source: "model_tool",
+      });
+      expect(inferredName).toMatchObject({
+        handled: false,
+        action: "goal",
+        workspaceCwd: repoPath,
+        goal: {
+          kind: "profile_skill_create",
+          operation: "create",
+          source: "model_tool",
+          requestedName: null,
+          targetSkillName: null,
+          targetSkillPath: null,
+        },
+      });
+      expect(inferredName?.prompt).toContain("Choose a concise lowercase kebab-case skill name");
+      expect(inferredName?.prompt).toContain("profiles/default/skills/<skill-name>/SKILL.md");
+
+      const structuredEdit = await runProfileSkillGoalCommand({
+        operation: "edit",
+        objective: "Include QA verification notes when requested.",
+        skillName: "release-notes",
+        source: "natural_language",
+      });
+      expect(structuredEdit).toMatchObject({
+        handled: false,
+        action: "goal",
+        workspaceCwd: repoPath,
+        goal: {
+          kind: "profile_skill_edit",
+          operation: "edit",
+          source: "natural_language",
+          targetSkillName: "release-notes",
+          targetSkillPath: "profiles/default/skills/release-notes/SKILL.md",
+        },
+        skill: {
+          name: "release-notes",
+        },
+      });
+
+      await expect(
+        runProfileSkillGoalCommand({
+          operation: "create",
+          objective: "Draft release notes.",
+          skillName: "release-notes",
+          source: "model_tool",
+        }),
+      ).rejects.toThrow("Profile skill release-notes already exists.");
+
+      await expect(
+        runProfileSkillGoalCommand({
+          operation: "edit",
+          objective: "Tighten the skill instructions.",
+          source: "model_tool",
+        }),
+      ).rejects.toThrow("Profile skill edit requires skillName.");
+
+      await expect(
+        runProfileSkillGoalCommand({
+          operation: "edit",
+          objective: "Tighten the skill instructions.",
+          skillName: "missing-skill",
+          source: "model_tool",
+        }),
+      ).rejects.toThrow("Profile skill not found: missing-skill");
+
+      await expect(
+        runProfileSkillGoalCommand({
+          operation: "create",
+          objective: "   ",
+          source: "model_tool",
+        }),
+      ).rejects.toThrow("Describe what the skill should help with.");
+
+      await expect(
+        runProfileSkillGoalCommand({
+          operation: "create",
+          objective: "Draft onboarding checklists.",
+          source: "model_tool",
+        }, {
+          loadProfileState: async () => emptyOpenPondProfileState(),
+        }),
+      ).rejects.toThrow("Profile skill creation requires an active local OpenPond profile.");
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("profile setup gate blocks required unresolved action setup", () => {
     const gate = buildOpenPondProfileSetupGate({
       actionCatalog: [
@@ -408,6 +781,47 @@ describe("local profile control invariants", () => {
     expect(() => assertOpenPondProfileActionReady("chat", gate)).not.toThrow();
   });
 
+  test("profile setup gate preserves action-scoped source upload metadata requirements", () => {
+    const gate = buildOpenPondProfileSetupGate({
+      actionCatalog: [
+        { id: "chat", setupRequirements: [] },
+        { id: "summarize", setupRequirements: [] },
+      ],
+      sourceSetupRequirements: [
+        {
+          actionId: "chat",
+          kind: "env",
+          name: "CHAT_TOKEN",
+          required: true,
+          status: "setup_required",
+        },
+        {
+          actionId: "summarize",
+          kind: "env",
+          name: "SUMMARY_TOKEN",
+          required: true,
+          status: "setup_required",
+        },
+      ],
+      actionId: "chat",
+    });
+
+    expect(gate).toMatchObject({
+      status: "setup_required",
+      requirementCount: 1,
+      blockingCount: 1,
+      blockingRequirements: [
+        {
+          source: "source_upload_metadata",
+          actionId: "chat",
+          kind: "env",
+          label: "CHAT_TOKEN",
+        },
+      ],
+    });
+    expect(gate.requirements.map((requirement) => requirement.label)).toEqual(["CHAT_TOKEN"]);
+  });
+
   test("profile setup gate treats required ready rows as non-blocking", () => {
     const gate = buildOpenPondProfileSetupGate({
       actionCatalog: [
@@ -492,6 +906,107 @@ describe("local profile control invariants", () => {
         },
       ],
     });
+  });
+
+  test("profile catalog hydrates action setup requirements from source-upload metadata sidecar", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-sidecar-"));
+    const originalConfig = await loadGlobalConfig();
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      const sourcePath = path.join(repoPath, "profiles", "default");
+      const agentPath = path.join(sourcePath, "agents", "invoice-agent");
+      await mkdir(path.join(agentPath, ".openpond"), { recursive: true });
+      await writeFile(
+        path.join(repoPath, "openpond-profile.json"),
+        JSON.stringify(
+          {
+            schema: "openpond.profileRepo.v1",
+            defaultProfile: "default",
+            profiles: {
+              default: {
+                path: "profiles/default",
+                defaultAgent: "invoice-agent",
+                enabledAgents: ["invoice-agent"],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      const actionPayload = {
+        schema: "openpond.agent.actionRegistry.v1",
+        actions: [
+          {
+            id: "check-pdf-converter-license",
+            label: "Check PDF converter license",
+            description: "Requires a PDF converter license secret.",
+          },
+        ],
+      };
+      await writeFile(
+        path.join(agentPath, ".openpond", "agent-manifest.json"),
+        JSON.stringify(actionPayload, null, 2),
+        "utf8",
+      );
+      await writeFile(
+        path.join(agentPath, ".openpond", "action-registry.json"),
+        JSON.stringify(actionPayload, null, 2),
+        "utf8",
+      );
+      await writeFile(
+        path.join(agentPath, ".openpond", "source-upload-metadata.json"),
+        JSON.stringify(
+          {
+            schema: "openpond.agent.source_upload.v1",
+            setupRequirements: [
+              {
+                actionId: "check-pdf-converter-license",
+                kind: "env",
+                name: "PDF_CONVERTER_LICENSE_KEY",
+                required: true,
+                secret: true,
+                status: "setup_required",
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const state = await loadLocalProfileRepo(repoPath, "default");
+      const action = state.actionCatalog.find((entry) => entry.id === "check-pdf-converter-license");
+      expect(action?.setupRequirements).toMatchObject([
+        {
+          source: "source_upload_metadata",
+          actionId: "check-pdf-converter-license",
+          kind: "env",
+          name: "PDF_CONVERTER_LICENSE_KEY",
+          required: true,
+          secret: true,
+          status: "setup_required",
+        },
+      ]);
+      expect(state.setupGate).toMatchObject({
+        status: "setup_required",
+        requirementCount: 1,
+        blockingCount: 1,
+        blockingRequirements: [
+          {
+            source: "source_upload_metadata",
+            actionId: "check-pdf-converter-license",
+            kind: "env",
+            label: "PDF_CONVERTER_LICENSE_KEY",
+          },
+        ],
+      });
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   test("profile run fails before SDK execution when required setup is unresolved", async () => {

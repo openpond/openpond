@@ -7,6 +7,48 @@ import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 describe("session store patches", () => {
+  test("creates normal local chat sessions visible in the default sidebar", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const store = new SqliteStore(storeDir);
+    const events: RuntimeEvent[] = [];
+
+    try {
+      const { createSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async (event: RuntimeEvent) => {
+          events.push(event);
+        },
+      });
+
+      const created = await createSession({
+        provider: "openai",
+        title: "Terminal chat",
+        cwd: "/tmp/project",
+      });
+      const stored = await store.getSession(created.id);
+
+      expect(created.hiddenFromDefaultSidebar).toBe(false);
+      expect(created.appId).toBeNull();
+      expect(created.workspaceKind).toBeUndefined();
+      expect(created.cwd).toBe("/tmp/project");
+      expect(stored?.hiddenFromDefaultSidebar).toBe(false);
+      expect(events[0]).toMatchObject({
+        sessionId: created.id,
+        name: "session.started",
+        source: "server",
+        data: {
+          provider: "openai",
+          appName: null,
+          cwd: "/tmp/project",
+        },
+      });
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("keeps updatedAt stable for sidebar-only patches", async () => {
     const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
     const store = new SqliteStore(storeDir);

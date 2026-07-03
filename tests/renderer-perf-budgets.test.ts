@@ -396,7 +396,7 @@ function sidebarProps(chatCount: number): SidebarProps {
     dragItem: null,
     pinnedRows: [],
     pinnedSessions: [],
-    visibleLocalProjectRows: localProjectRows,
+    visibleProjectRows: localProjectRows,
     localProjectRows,
     insightsSystemProjectHidden: true,
     cloudProjectRows: [],
@@ -482,7 +482,7 @@ function sidebarPropsWithExpandedProject(projectChildRowCount: number): SidebarP
   return {
     ...props,
     selectedProjectId: projectRows[0]?.id ?? null,
-    visibleLocalProjectRows: projectRows,
+    visibleProjectRows: projectRows,
     localProjectRows: projectRows,
     projectSessionRowsByProjectId,
     expandedProjectIds,
@@ -555,7 +555,7 @@ function SidebarDataProbe({ sessionCount, projectCount }: { sessionCount: number
   return createElement(
     "span",
     null,
-    `sidebar-data-probe projects=${data.localProjectRows.length};children=${projectChildCount};chats=${data.chatRows.length};grouping=bounded;active=${data.activeSessions.length};visible=${data.visibleLocalProjectRows.length};selected=grouped-session-0`,
+    `sidebar-data-probe projects=${data.localProjectRows.length};children=${projectChildCount};chats=${data.chatRows.length};grouping=bounded;active=${data.activeSessions.length};visible=${data.visibleProjectRows.length};selected=grouped-session-0`,
   );
 }
 

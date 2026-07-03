@@ -96,9 +96,58 @@ describe("bootstrap event window", () => {
       await rm(storeDir, { recursive: true, force: true });
     }
   }, 10_000);
+
+  test("pages omitted archived session history only for the requested session", async () => {
+    const storeDir = await mkdtemp(join(tmpdir(), "openpond-bootstrap-archived-event-window-"));
+    const archivedSession = sessionFixture("session-archived", { archived: true });
+    const activeSession = sessionFixture("session-active");
+    const store = new SqliteStore(storeDir);
+    await store.mutate((data) => {
+      data.sessions.push(archivedSession, activeSession);
+      for (let index = 1; index <= 10; index += 1) {
+        data.events.push(runtimeEvent(index, archivedSession.id, `archived-event-${index}`));
+      }
+      for (let index = 11; index <= 520; index += 1) {
+        data.events.push(runtimeEvent(index, activeSession.id, `active-event-${index}`));
+      }
+    });
+    await store.close();
+
+    const server = await createOpenPondServer({
+      port: 0,
+      storeDir,
+      silent: true,
+      version: "bootstrap-archived-event-window-test",
+    });
+
+    try {
+      const bootstrap = await api<BootstrapPayload>(
+        server.url,
+        server.token,
+        "/v1/bootstrap?ensureProfile=0",
+      );
+      expect(bootstrap.sessions.find((item) => item.id === archivedSession.id)?.archived).toBe(true);
+      expect(bootstrap.events.some((item) => item.sessionId === archivedSession.id)).toBe(false);
+      expect(bootstrap.eventWindow.hasMoreBefore).toBe(true);
+
+      const archivedPage = await api<RuntimeEventPagePayload>(
+        server.url,
+        server.token,
+        `/v1/events/page?sessionId=${encodeURIComponent(archivedSession.id)}&afterSequence=0&limit=20`,
+      );
+      expect(archivedPage.totalMatchingEvents).toBe(10);
+      expect(archivedPage.events.map((entry) => entry.event.id)).toEqual(
+        Array.from({ length: 10 }, (_, index) => `archived-event-${index + 1}`),
+      );
+      expect(archivedPage.events.every((entry) => entry.event.sessionId === archivedSession.id)).toBe(true);
+    } finally {
+      await server.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  }, 10_000);
 });
 
-function sessionFixture(id: string): Session {
+function sessionFixture(id: string, overrides: Partial<Session> = {}): Session {
   return {
     id,
     provider: "openpond",
@@ -119,12 +168,13 @@ function sessionFixture(id: string): Session {
     pinned: false,
     archived: false,
     order: 0,
+    ...overrides,
   };
 }
 
-function runtimeEvent(index: number, sessionId: string): RuntimeEvent {
+function runtimeEvent(index: number, sessionId: string, id = `event-${index}`): RuntimeEvent {
   return {
-    id: `event-${index}`,
+    id,
     sessionId,
     turnId: `turn-${Math.ceil(index / 10)}`,
     name: "assistant.delta",

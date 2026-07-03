@@ -68,7 +68,8 @@ function runCommand(
   command: string,
   args: string[],
   cwd: string,
-  extraEnv: NodeJS.ProcessEnv = {}
+  extraEnv: NodeJS.ProcessEnv = {},
+  stdin?: string
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
     const resolved = resolveWorkspaceCommand(command);
@@ -83,12 +84,15 @@ function runCommand(
         ...extraEnv,
         GIT_TERMINAL_PROMPT: "0",
       },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    if (stdin !== undefined) {
+      child.stdin?.end(stdin);
+    }
+    child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
     child.on("error", (error) => {
       resolve({ code: 1, stdout: "", stderr: error.message });
     });

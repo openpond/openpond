@@ -64,4 +64,141 @@ describe("OpenPond action catalog context", () => {
     expect(prompt).toContain('inputSchema: {"type":"object","properties":{"parcelId":{"type":"string"}},"required":["parcelId"]}');
     expect(prompt).toContain('outputSchema: {"type":"object","properties":{"status":{"type":"string"}}}');
   });
+
+  test("uses native action and narrow resource instructions in native-resource mode", async () => {
+    const helpers = createHostedTurnHelpers({
+      appendRuntimeEvent: async (_event: RuntimeEvent) => {},
+    });
+
+    const prompt = await helpers.hostedSystemPrompt(
+      "Base hosted prompt.",
+      "",
+      session,
+      {
+        toolInstructionMode: "resource_text_fallback",
+        actionCatalogInstructionMode: "native_tool",
+        openPondActionCatalog: [
+          {
+            id: "water.estimate",
+            label: "Run Water Estimate",
+            description: "Run the workflow directly.",
+            implementation: { type: "workflow", workflowId: "water-estimate" },
+          },
+        ],
+      },
+    );
+
+    expect(prompt).toContain("Available fallback actions: resource_search, resource_read.");
+    expect(prompt).toContain("- Use openpond_action_run only with an actionId from this catalog");
+    expect(prompt).toContain("- Use available native resource tools for inspection");
+    expect(prompt).not.toContain("Available actions: create_sandbox_template_scaffold");
+    expect(prompt).not.toContain("- Use sandbox_run_action only when an action is needed");
+    expect(prompt).not.toContain("- Use sandbox_status, sandbox_list_files");
+  });
+
+  test("adds bounded profile skill metadata without injecting bodies", async () => {
+    const helpers = createHostedTurnHelpers({
+      appendRuntimeEvent: async (_event: RuntimeEvent) => {},
+    });
+
+    const prompt = await helpers.hostedSystemPrompt(
+      "Base hosted prompt.",
+      "",
+      session,
+      {
+        profileSkillInstructionMode: "native_tool",
+        openPondProfileSkills: [
+          {
+            name: "release-notes",
+            description: "Draft concise release notes from merged user-facing changes.",
+            path: "skills/release-notes/SKILL.md",
+            scope: "profile",
+            enabled: true,
+            sourcePath: "/tmp/profile/profiles/default",
+            charCount: 200,
+            sourceHash: "a".repeat(64),
+            validationStatus: "valid",
+            validationMessages: [],
+          },
+        ],
+      },
+    );
+
+    expect(prompt).toContain("OpenPond profile skills:");
+    expect(prompt).toContain("- Load a profile skill before following it by calling profile_skill_read");
+    expect(prompt).toContain("- release-notes: Draft concise release notes from merged user-facing changes.");
+    expect(prompt).not.toContain("Identify user-facing changes first");
+  });
+
+  test("adds compact OpenPond capability index before profile skills", async () => {
+    const helpers = createHostedTurnHelpers({
+      appendRuntimeEvent: async (_event: RuntimeEvent) => {},
+    });
+
+    const prompt = await helpers.hostedSystemPrompt(
+      "Base hosted prompt.",
+      "",
+      session,
+      {
+        toolInstructionMode: "none",
+        profileSkillInstructionMode: "native_tool",
+        openPondProfileSkills: [
+          {
+            name: "release-notes",
+            description: "Draft concise release notes from merged user-facing changes.",
+            path: "skills/release-notes/SKILL.md",
+            scope: "profile",
+            enabled: true,
+            sourcePath: "/tmp/profile/profiles/default",
+            charCount: 200,
+            sourceHash: "a".repeat(64),
+            validationStatus: "valid",
+            validationMessages: [],
+          },
+        ],
+      },
+    );
+
+    expect(prompt).toContain("OpenPond capabilities:");
+    expect(prompt).toContain("- workspace_context: use resource_search and resource_read");
+    expect(prompt).toContain("- create_pipeline: create or edit source-backed agents and workflows");
+    expect(prompt).toContain("- profile_skill_goal: create or edit profile-backed single-file skills");
+    expect(prompt).toContain("- goal_control: start, restart, pause, resume, or stop OpenPond goals");
+    expect(prompt).toContain("- Capability names are not slash commands.");
+    expect(prompt.indexOf("OpenPond capabilities:")).toBeLessThan(prompt.indexOf("OpenPond profile skills:"));
+    expect(prompt).not.toContain("/create");
+    expect(prompt).not.toContain("/skill create");
+    expect(prompt).not.toContain("Identify user-facing changes first");
+  });
+
+  test("uses text fallback instructions and truncates large profile skill indexes", async () => {
+    const helpers = createHostedTurnHelpers({
+      appendRuntimeEvent: async (_event: RuntimeEvent) => {},
+    });
+
+    const prompt = await helpers.hostedSystemPrompt(
+      "Base hosted prompt.",
+      "",
+      session,
+      {
+        profileSkillInstructionMode: "text_fallback",
+        openPondProfileSkills: Array.from({ length: 80 }, (_item, index) => ({
+          name: `skill-${index}`,
+          description: `Use skill ${index} for a long profile workflow. ${"details ".repeat(40)}`,
+          path: `skills/skill-${index}/SKILL.md`,
+          scope: "profile" as const,
+          enabled: true,
+          sourcePath: "/tmp/profile/profiles/default",
+          charCount: 200,
+          sourceHash: "b".repeat(64),
+          validationStatus: "valid" as const,
+          validationMessages: [],
+        })),
+      },
+    );
+
+    expect(prompt).toContain("fenced block labelled openpond_skill");
+    expect(prompt).toContain('{"name":"release-notes"}');
+    expect(prompt).toContain("additional profile skill(s) omitted from this context budget");
+  });
 });

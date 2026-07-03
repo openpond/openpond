@@ -62,6 +62,18 @@ export type ActivityItem = {
   };
 };
 
+export type ChatSource = {
+  id: string;
+  title: string;
+  url: string;
+  sourceName: string | null;
+  snippet?: string | null;
+  provider?: string | null;
+  faviconUrl?: string | null;
+  publishedAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type ActionRunRef = {
   id: string;
   kind: "artifact" | "trace" | "eval" | "source" | "output";
@@ -127,10 +139,12 @@ export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "activity_group" | "error" | "status_divider";
   content?: string;
+  errorKind?: "opchat_quota_exceeded";
   attachments?: ChatAttachmentSummary[];
   timestamp: string;
   turnId?: string;
   activities?: ActivityItem[];
+  sources?: ChatSource[];
   changeSummary?: WorkspaceDiffSummary;
   statusKind?: "compaction";
   statusState?: "running" | "completed" | "failed";

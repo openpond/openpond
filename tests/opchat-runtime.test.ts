@@ -33,26 +33,26 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(resolveHostedChatApiBaseUrl(null, {}, "https://api.openpond.ai")).toBe(
       DEFAULT_OPENPOND_OPCHAT_API_BASE_URL,
     );
-    expect(resolveHostedChatApiBaseUrl(null, {}, "https://api-new.staging-api.openpond.ai")).toBe(
-      "https://api-new.staging-api.openpond.ai/opchat/v1",
+    expect(resolveHostedChatApiBaseUrl(null, {}, "https://api.qa.openpond.example")).toBe(
+      "https://api.qa.openpond.example/opchat/v1",
     );
     expect(
       resolveHostedChatApiBaseUrl(
-        { handle: "staging", chatApiBaseUrl: "https://api-new.staging-api.openpond.ai/v1/chat/completions" },
+        { handle: "qa", chatApiBaseUrl: "https://api.qa.openpond.example/v1/chat/completions" },
         {},
         "https://api.openpond.ai",
       ),
-    ).toBe("https://api-new.staging-api.openpond.ai/opchat/v1");
+    ).toBe("https://api.qa.openpond.example/opchat/v1");
     expect(
       resolveHostedChatApiBaseUrl(
         {
-          handle: "staging",
-          chatApiBaseUrl: "https://api-new.staging-api.openpond.ai/opchat/v1/chat/completions",
+          handle: "qa",
+          chatApiBaseUrl: "https://api.qa.openpond.example/opchat/v1/chat/completions",
         },
         {},
         "https://api.openpond.ai",
       ),
-    ).toBe("https://api-new.staging-api.openpond.ai/opchat/v1");
+    ).toBe("https://api.qa.openpond.example/opchat/v1");
   });
 
   test("lists models from /opchat/v1/models", async () => {
@@ -142,6 +142,77 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(deltas[0]).toMatchObject({ type: "text_delta", text: "hello" });
     expect(deltas[2]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
     expect(deltas[3]).toMatchObject({ type: "finish", finishReason: "stop" });
+  });
+
+  test("sends native tools to OpChat and streams tool call deltas", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = async (input, init) => {
+      requests.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return streamResponse([
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"resource_search","arguments":"{\\"query\\":\\"README\\"}"}}]},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    };
+
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "resource_search",
+          description: "Search workspace resources.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+            },
+            required: ["query"],
+          },
+        },
+      },
+    ] as const;
+    const deltas = [];
+    for await (const delta of streamOpChatChatCompletion({
+      apiBaseUrl: "https://api.example.test/opchat/v1",
+      token: "opk_test",
+      model: "openpond-chat",
+      messages: [{ role: "user", content: "find README" }],
+      tools: [...tools],
+      toolChoice: "auto",
+    })) {
+      deltas.push(delta);
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "https://api.example.test/opchat/v1/chat/completions",
+        body: {
+          model: "openpond-chat",
+          messages: [{ role: "user", content: "find README" }],
+          stream: true,
+          tools,
+          tool_choice: "auto",
+        },
+      },
+    ]);
+    expect(deltas).toHaveLength(2);
+    expect(deltas[0]).toMatchObject({
+      type: "tool_call_delta",
+      toolCalls: [
+        {
+          id: "call_1",
+          type: "function",
+          function: {
+            name: "resource_search",
+            arguments: '{"query":"README"}',
+          },
+        },
+      ],
+    });
+    expect(deltas[1]).toMatchObject({ type: "finish", finishReason: "tool_calls" });
   });
 
   test("shows OpenAI-style provider errors from OpChat failures", async () => {

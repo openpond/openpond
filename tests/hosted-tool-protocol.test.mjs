@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  extractProfileSkillReadRequests,
   extractWorkspaceToolRequests,
   formatWorkspaceToolValidationErrorForModel,
   formatWorkspaceToolResultForModel,
@@ -20,30 +21,45 @@ describe("hosted workspace tool protocol", () => {
     assert.equal(requests[0].source, "chat_action");
   });
 
-  test("extracts array and wrapped tool requests", () => {
-    const requests = extractWorkspaceToolRequests(
-      '<openpond_tool>{"tools":[{"action":"list_files"},{"action":"search_files","args":{"query":"schema"}}]}</openpond_tool>'
-    );
+  test("rejects legacy and generic workspace fallback shapes", () => {
+    const examples = [
+      '<openpond_tool>{"action":"list_files"}</openpond_tool>',
+      '<json>{"action":"sandbox_read_file","args":{"path":"README.md"}}</json>',
+      '```openpond-tools\n{"action":"list_files"}\n```',
+      '```openpond_tool_call\n{"action":"list_files"}\n```',
+      '```json\n{"action":"list_files"}\n```',
+      '{"action":"list_files"}',
+      '```openpond_tool\n[{"action":"list_files"}]\n```',
+      '```openpond_tool\n{"tools":[{"action":"list_files"}]}\n```',
+    ];
 
-    assert.deepEqual(
-      requests.map((request) => request.action),
-      ["list_files", "search_files"]
-    );
+    for (const example of examples) {
+      assert.deepEqual(extractWorkspaceToolRequests(example), []);
+    }
   });
 
-  test("extracts valid tool requests from provider json tags", () => {
-    const requests = extractWorkspaceToolRequests(
-      '<json>\n{"action":"sandbox_read_file","args":{"path":"README.md"}}\n</json>'
+  test("extracts profile skill read fallback requests", () => {
+    const requests = extractProfileSkillReadRequests(
+      '```openpond_skill\n{"name":"release-notes"}\n```'
     );
 
     assert.equal(requests.length, 1);
-    assert.equal(requests[0].action, "sandbox_read_file");
-    assert.deepEqual(requests[0].args, { path: "README.md" });
+    assert.equal(requests[0].name, "release-notes");
   });
 
-  test("ignores ordinary JSON that is not a workspace tool request", () => {
-    const requests = extractWorkspaceToolRequests('```json\n{"ok":true,"message":"done"}\n```');
-    assert.equal(requests.length, 0);
+  test("rejects legacy and wrapped profile skill fallback shapes", () => {
+    const examples = [
+      '<openpond_skill>{"name":"release-notes"}</openpond_skill>',
+      '```openpond-skill\n{"name":"release-notes"}\n```',
+      '```openpond_skill_read\n{"name":"release-notes"}\n```',
+      '```profile_skill_read\n{"name":"release-notes"}\n```',
+      '```openpond_skill\n[{"name":"release-notes"}]\n```',
+      '```openpond_skill\n{"skills":[{"name":"release-notes"}]}\n```',
+    ];
+
+    for (const example of examples) {
+      assert.deepEqual(extractProfileSkillReadRequests(example), []);
+    }
   });
 
   test("formats tool results for follow-up model turns", () => {
@@ -69,7 +85,7 @@ describe("hosted workspace tool protocol", () => {
       data: {
         branch: "master",
         upstream: "origin/master",
-        remoteUrl: "https://staging.openpond.ai/example.git",
+        remoteUrl: "https://git.qa.example/example.git",
         workspace: {
           repoPath: "/tmp/openpond/repo",
           workspacePath: "/tmp/openpond",
@@ -79,7 +95,7 @@ describe("hosted workspace tool protocol", () => {
     });
 
     assert.match(output, /tools\/prompt-agent\.ts/);
-    assert.doesNotMatch(output, /staging\.openpond\.ai/);
+    assert.doesNotMatch(output, /git\.qa\.example/);
     assert.doesNotMatch(output, /repoPath/);
     assert.doesNotMatch(output, /workspacePath/);
   });

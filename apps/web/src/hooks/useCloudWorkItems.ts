@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import type { BootstrapPayload, CloudProject, CloudWorkItem, CloudWorkItemDetail } from "@openpond/contracts";
+import type {
+  BootstrapPayload,
+  CloudProject,
+  CloudWorkItem,
+  CloudWorkItemDetail,
+  LocalProject,
+  WorkspaceState,
+} from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import type { ShowAppToast } from "../app/app-state";
 import { projectSelectionKey, type AppView } from "../lib/app-models";
@@ -22,6 +29,7 @@ type UseCloudWorkItemsInput = {
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
   setView: Dispatch<SetStateAction<AppView>>;
   setError: Dispatch<SetStateAction<string | null>>;
+  rememberWorkspaceState: (state: WorkspaceState) => void;
   showToast: ShowAppToast;
 };
 
@@ -35,6 +43,7 @@ export function useCloudWorkItems({
   setSelectedSessionId,
   setView,
   setError,
+  rememberWorkspaceState,
   showToast,
 }: UseCloudWorkItemsInput) {
   const [cloudWorkItems, setCloudWorkItems] = useState<CloudWorkItem[]>([]);
@@ -48,6 +57,18 @@ export function useCloudWorkItems({
     () => cloudWorkItems.find((workItem) => workItem.id === selectedCloudWorkItemId) ?? null,
     [cloudWorkItems, selectedCloudWorkItemId],
   );
+  const selectedCloudWorkItemLocalProject = useMemo<LocalProject | null>(() => {
+    if (!selectedCloudWorkItem) return null;
+    return (
+      bootstrap?.localProjects.find((project) => {
+        const linked = project.linkedSandboxProject;
+        return (
+          linked?.teamId === selectedCloudWorkItem.teamId &&
+          linked.projectId === selectedCloudWorkItem.projectId
+        );
+      }) ?? null
+    );
+  }, [bootstrap?.localProjects, selectedCloudWorkItem]);
 
   useEffect(() => {
     if (!connection || cloudProjectIdsByTeam.size === 0) {
@@ -150,7 +171,17 @@ export function useCloudWorkItems({
   );
 
   const createCloudWork = useCallback(
-    async (input: { projectId: string; prompt: string }) => {
+    async (input: {
+      projectId: string;
+      prompt: string;
+      select?: boolean;
+      localProjectId?: string | null;
+      localProjectName?: string | null;
+      localWorkspacePath?: string | null;
+      sourceRef?: string | null;
+      baseSha?: string | null;
+      requestedExecutionTarget?: "queue_cloud" | "cloud_workspace" | "cloud_home" | null;
+    }) => {
       if (!connection) {
         setCloudError("OpenPond App server is not connected.");
         return false;
@@ -184,11 +215,12 @@ export function useCloudWorkItems({
       const sourceRef =
         createPipelineRequest?.adapter.kind === "hosted"
           ? createPipelineRequest.adapter.sourceRef
-          : project.defaultBranch ?? null;
+          : input.sourceRef ?? project.defaultBranch ?? null;
       const baseSha =
         createPipelineRequest?.adapter.kind === "hosted"
           ? createPipelineRequest.adapter.baseSha
-          : null;
+          : input.baseSha ?? null;
+      const shouldSelectWorkItem = input.select ?? true;
       setCloudBusy(true);
       setCloudError(null);
       try {
@@ -199,16 +231,22 @@ export function useCloudWorkItems({
           initialMessage: input.prompt,
           sourceRef,
           baseSha,
+          localProjectId: input.localProjectId ?? null,
+          localProjectName: input.localProjectName ?? null,
+          localWorkspacePath: input.localWorkspacePath ?? null,
+          requestedExecutionTarget: input.requestedExecutionTarget ?? null,
           createPipelineRequest,
           createPipeline,
         });
         setCloudWorkItemDetail(detail);
         setCloudWorkItems((current) => [detail.workItem, ...current.filter((item) => item.id !== detail.workItem.id)]);
-        setSelectedCloudWorkItemId(detail.workItem.id);
-        setSelectedAppId(null);
-        setSelectedProjectId(projectSelectionKey("cloud", project.id));
-        setSelectedSessionId(null);
-        setView("cloud");
+        if (shouldSelectWorkItem) {
+          setSelectedCloudWorkItemId(detail.workItem.id);
+          setSelectedAppId(null);
+          setSelectedProjectId(projectSelectionKey("cloud", project.id));
+          setSelectedSessionId(null);
+          setView("cloud");
+        }
         if (createPipelineRequest) {
           showToast("Agent plan is ready for review.", "info");
           return true;
@@ -216,7 +254,8 @@ export function useCloudWorkItems({
         await api.handleCloudWorkItemInBackground(connection, detail.workItem.id, {
           teamId: project.teamId,
           prompt: input.prompt,
-          sourceRef: project.defaultBranch ?? null,
+          sourceRef,
+          baseSha,
           branchPolicy: { mode: "patch_only" },
           budget: { maxDurationSeconds: 1800 },
         });
@@ -388,6 +427,69 @@ export function useCloudWorkItems({
     [connection, refreshSelectedCloudWorkItem, selectedCloudWorkItem, setError, showToast],
   );
 
+  const applyCloudWorkItemPatchLocally = useCallback(async () => {
+    if (!connection || !selectedCloudWorkItem) return;
+    const workItem = cloudWorkItemDetail?.workItem ?? selectedCloudWorkItem;
+    if (!selectedCloudWorkItemLocalProject) {
+      const message = "No linked local checkout exists for this Cloud Project.";
+      setCloudError(message);
+      setError(message);
+      return;
+    }
+    const sandboxId = workItem.latestSandboxId ?? null;
+    if (!sandboxId) {
+      const message = "No reviewed Cloud sandbox is available for this work item.";
+      setCloudError(message);
+      setError(message);
+      return;
+    }
+    const confirmed = window.confirm(
+      `Apply the reviewed Cloud patch to ${selectedCloudWorkItemLocalProject.name}? Your local checkout must be clean.`,
+    );
+    if (!confirmed) return;
+    setCloudBusy(true);
+    setCloudError(null);
+    try {
+      const response = await api.applyCloudWorkItemLocalPatch(connection, workItem.id, {
+        teamId: workItem.teamId,
+        localProjectId: selectedCloudWorkItemLocalProject.id,
+        sandboxId,
+      });
+      rememberWorkspaceState(response.workspaceState);
+      setCloudWorkItems((current) =>
+        current.map((item) => (item.id === response.workItem.id ? response.workItem : item)),
+      );
+      setCloudWorkItemDetail((current) =>
+        current
+          ? {
+              ...current,
+              workItem: response.workItem,
+            }
+          : current,
+      );
+      showToast(
+        `Applied Cloud patch to ${response.localProject.name} (${response.patch.fileCount} file${
+          response.patch.fileCount === 1 ? "" : "s"
+        }).`,
+        "success",
+      );
+    } catch (applyError) {
+      const message = applyError instanceof Error ? applyError.message : String(applyError);
+      setCloudError(message);
+      setError(message);
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [
+    cloudWorkItemDetail,
+    connection,
+    rememberWorkspaceState,
+    selectedCloudWorkItem,
+    selectedCloudWorkItemLocalProject,
+    setError,
+    showToast,
+  ]);
+
   const cancelCloudWorkItemCreatePipeline = useCallback(
     async () => {
       if (!connection || !selectedCloudWorkItem) return;
@@ -450,8 +552,8 @@ export function useCloudWorkItems({
     },
     [
       cancelCloudWorkItemTask,
-      cloudWorkItemDetail,
-      connection,
+    cloudWorkItemDetail,
+    connection,
       selectedCloudWorkItem,
       setError,
       showToast,
@@ -466,6 +568,8 @@ export function useCloudWorkItems({
     cloudWorkItems,
     selectedCloudWorkItem,
     selectedCloudWorkItemId,
+    selectedCloudWorkItemLocalProject,
+    applyCloudWorkItemPatchLocally,
     cancelCloudWorkItemCreatePipeline,
     cancelCloudWorkItemTask,
     createCloudWork,

@@ -208,6 +208,8 @@ export type SandboxAgentRun = {
 export type SandboxAgentRunInput = {
   teamId: string;
   idempotencyKey?: string | null;
+  targetProjectId?: string | null;
+  targetProject?: { id: string } | null;
   triggerType?: SandboxAgentTriggerType;
   entrypoint?: SandboxAgentSelectedEntrypoint | null;
   input?: Record<string, unknown>;

@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { HostedChatStreamDelta, HostedChatUsage, HostedModel, HostedProvider } from "@openpond/cloud";
+import type {
+  HostedChatStreamDelta,
+  HostedChatTool,
+  HostedChatToolCall,
+  HostedChatToolChoice,
+  HostedChatUsage,
+  HostedModel,
+  HostedProvider,
+} from "@openpond/cloud";
 import type {
   HostedChatModel,
   HostedChatModelsResult,
@@ -175,6 +183,8 @@ export async function* streamOpenPondHostedChatTurn(
     token: context.token,
     model: input.model || DEFAULT_OPENPOND_CHAT_MODEL,
     messages: input.messages,
+    tools: input.tools,
+    toolChoice: input.toolChoice,
     requestId: input.requestId,
     signal: input.signal,
   });
@@ -240,11 +250,7 @@ export async function* streamOpChatChatCompletion(
   const response = await fetch(opChatEndpointUrl(options.apiBaseUrl, "chat/completions"), {
     method: "POST",
     headers: opChatHeaders(options.token, "text/event-stream", options.requestId),
-    body: JSON.stringify({
-      model: options.model,
-      messages: options.messages,
-      stream: true,
-    }),
+    body: JSON.stringify(buildOpChatBody(options)),
     signal: options.signal,
   });
   if (!response.ok || !response.body) {
@@ -260,6 +266,26 @@ export async function* streamOpChatChatCompletion(
       yield delta;
     }
   }
+}
+
+function buildOpChatBody(options: {
+  model: string;
+  messages: HostedChatTurnInput["messages"];
+  tools?: HostedChatTool[];
+  toolChoice?: HostedChatToolChoice;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: options.model,
+    messages: options.messages,
+    stream: true,
+  };
+  if (options.tools) {
+    body.tools = options.tools;
+  }
+  if (options.toolChoice !== undefined) {
+    body.tool_choice = options.toolChoice;
+  }
+  return body;
 }
 
 function opChatEndpointUrl(
@@ -370,10 +396,20 @@ function streamDeltasFromChunk(raw: unknown): HostedChatStreamDelta[] {
         raw,
       });
     }
+    const toolCalls = parseToolCalls(delta.tool_calls);
+    if (toolCalls.length > 0) {
+      deltas.push({ type: "tool_call_delta", toolCalls, raw });
+    }
     const finishReason = stringValue(choiceRecord.finish_reason);
     if (finishReason) deltas.push({ type: "finish", finishReason, raw });
   }
   return deltas;
+}
+
+function parseToolCalls(value: unknown): HostedChatToolCall[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is HostedChatToolCall => Boolean(item) && typeof item === "object")
+    : [];
 }
 
 function parseUsage(raw: unknown): HostedChatUsage | null {

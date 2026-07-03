@@ -1,17 +1,19 @@
 import type { LocalProject, Session, WorkspaceKind } from "@openpond/contracts";
 
 export type WorkspaceLocation = "local" | "cloud";
+export type WorkspaceTargetValue = WorkspaceLocation | "queue_cloud" | "upload_cloud";
 
 export type WorkspaceTargetOptionState = {
-  value: WorkspaceLocation;
+  value: WorkspaceTargetValue;
   label: string;
   detail: string;
+  stateNote?: string | null;
   disabled: boolean;
   disabledReason?: string | null;
 };
 
 export type WorkspaceTargetState = {
-  value: WorkspaceLocation;
+  value: WorkspaceTargetValue;
   label: string;
   detail: string;
   options: WorkspaceTargetOptionState[];

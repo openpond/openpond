@@ -11,7 +11,22 @@ export type CloudSetupDialogState = {
   projectUrl: string | null;
   setupUrl: string | null;
   branch: string | null;
+  preview?: {
+    rootPath: string;
+    branch: string;
+    headCommit: string | null;
+    targetProjectId: string | null;
+    targetProjectName: string;
+    fileCount: number;
+    byteCount: number;
+    skippedCount: number;
+    initializedEmptyProject: boolean;
+  } | null;
+  previewLoading?: boolean;
+  previewError?: string | null;
   upload?: {
+    branch: string;
+    headCommit: string | null;
     fileCount: number;
     byteCount: number;
     skippedCount: number;
@@ -38,6 +53,7 @@ export function CloudSetupDialog({
   const ready = state.status === "ready";
   const errored = state.status === "error";
   const isCloudProject = state.projectKind === "cloud";
+  const preview = state.preview ?? null;
 
   return (
     <div className="git-dialog-backdrop" role="presentation">
@@ -80,9 +96,52 @@ export function CloudSetupDialog({
           </div>
           <div className="git-dialog-row">
             <span>Branch</span>
-            <strong>{state.branch ?? "main"}</strong>
+            <strong>{preview?.branch ?? state.branch ?? "main"}</strong>
           </div>
+          {!isCloudProject && (
+            <div className="git-dialog-row">
+              <span>Cloud project</span>
+              <strong>{preview?.targetProjectId ?? state.cloudProjectId ?? "New on upload"}</strong>
+            </div>
+          )}
         </div>
+
+        {!ready && !isCloudProject && (
+          <div className="cloud-setup-upload-preview" role="status" aria-live="polite">
+            {state.previewLoading ? (
+              <>
+                <strong>Calculating upload preview</strong>
+                <span>Checking tracked and unignored files before anything is pushed.</span>
+              </>
+            ) : state.previewError ? (
+              <>
+                <strong>Preview unavailable</strong>
+                <span>{state.previewError}</span>
+              </>
+            ) : preview ? (
+              <>
+                <strong>
+                  {preview.initializedEmptyProject
+                    ? "Will initialize an empty project"
+                    : `Will upload ${preview.fileCount} files`}
+                </strong>
+                <span>
+                  {uploadSummaryDetails({
+                    byteCount: preview.byteCount,
+                    skippedCount: preview.skippedCount,
+                    headCommit: preview.headCommit,
+                    targetProjectName: preview.targetProjectName,
+                  })}
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>Upload preview pending</strong>
+                <span>File count, byte count, and skipped files will appear here before upload.</span>
+              </>
+            )}
+          </div>
+        )}
 
         {busy && (
           <div className="cloud-setup-progress" role="status" aria-live="polite">
@@ -99,8 +158,12 @@ export function CloudSetupDialog({
                 : `Uploaded ${state.upload.fileCount} files`}
             </strong>
             <span>
-              {formatBytes(state.upload.byteCount)}
-              {state.upload.skippedCount > 0 ? ` · ${state.upload.skippedCount} skipped` : ""}
+              {uploadSummaryDetails({
+                byteCount: state.upload.byteCount,
+                skippedCount: state.upload.skippedCount,
+                headCommit: state.upload.headCommit,
+                targetProjectName: state.upload.branch,
+              })}
             </span>
           </div>
         )}
@@ -169,4 +232,27 @@ function formatBytes(value: number): string {
   if (value < 1024) return `${Math.round(value)} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function uploadSummaryDetails({
+  byteCount,
+  skippedCount,
+  headCommit,
+  targetProjectName,
+}: {
+  byteCount: number;
+  skippedCount: number;
+  headCommit: string | null;
+  targetProjectName: string;
+}): string {
+  const details = [formatBytes(byteCount), `${skippedCount} skipped`];
+  const sourceRef = shortCommit(headCommit);
+  if (sourceRef) details.push(`local ${sourceRef}`);
+  details.push(targetProjectName);
+  return details.join(" · ");
+}
+
+function shortCommit(value: string | null): string | null {
+  const commit = value?.trim();
+  return commit ? commit.slice(0, 7) : null;
 }

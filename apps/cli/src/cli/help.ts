@@ -20,7 +20,7 @@ export function printHelp(): void {
   console.log("  openpond profile hosted --team-id <id> [--json]");
   console.log("  openpond profile ensure-hosted --team-id <id> [--env staging] [--json]");
   console.log("  openpond profile check [--kind inspect|build|validate|eval|all]");
-  console.log("  openpond profile push --team-id <id> [--hosted-source-checks] [--hosted-source-dispatch request_only|coding_core] [--publish-hosted-source] [--hosted-source-agent-id <id>|--hosted-run-agent-id <id>] [--hosted-source-project-id <id>] [--hosted-run-input <json>] [--hosted-run-conversation-id <id>] [--hosted-run-retry|--hosted-run-idempotency-key <key>]");
+  console.log("  openpond profile push --team-id <id> [--hosted-source-checks] [--hosted-source-dispatch request_only|coding_core] [--publish-hosted-source] [--hosted-source-agent-id <id>|--hosted-run-agent-id <id>] [--hosted-source-project-id <id>] [--hosted-run-target-project-id <projectId>] [--hosted-run-input <json>] [--hosted-run-conversation-id <id>] [--hosted-run-retry|--hosted-run-idempotency-key <key>]");
   console.log("  openpond agents list [--json]");
   console.log("  openpond inspect|build|validate|eval [--json]");
   console.log("  openpond run <action> [--input <json>] [--json]");
@@ -140,10 +140,10 @@ export function printHelp(): void {
     "  openpond agent bind-source <agentId> --team-id <id> --source-mode latest_source|published_snapshot|auto [--published-snapshot-id <id>]"
   );
   console.log(
-    "  openpond agent run <agentId> --team-id <id> [--conversation-id <id>] [--idempotency-key <key>] [--input <json>] [--require-published-snapshot true]"
+    "  openpond agent run <agentId> --team-id <id> [--conversation-id <id>] [--idempotency-key <key>] [--target-project-id <projectId>] [--input <json>] [--require-published-snapshot true]"
   );
   console.log(
-    "  openpond agent run-test <agentId> --team-id <id> [--conversation-id <id>] [--input <json>] [--allow-latest-source true]"
+    "  openpond agent run-test <agentId> --team-id <id> [--conversation-id <id>] [--target-project-id <projectId>] [--input <json>] [--allow-latest-source true]"
   );
   console.log(
     "  openpond agent source deploy-plan <agentId> --team-id <id>"

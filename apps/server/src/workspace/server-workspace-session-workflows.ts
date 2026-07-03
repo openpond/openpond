@@ -44,7 +44,11 @@ export function createWorkspaceSessionWorkflows(deps: {
         await loadWorkspaceStateAtPath(
           localProjectWorkspacePaths(project),
           localProjectStateWorkspace(project),
-          { clone: false, allowPlainFolder: true }
+          {
+            clone: false,
+            allowPlainFolder: true,
+            linkedSourceHeadCommit: project.linkedSandboxProject?.lastUploadedCommit ?? null,
+          }
         )
       );
       if (!state.initialized) throw new Error(state.error || "Workspace is not initialized");

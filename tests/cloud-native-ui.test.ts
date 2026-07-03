@@ -13,7 +13,10 @@ import type {
 import { emptyOpenPondProfileState } from "@openpond/contracts";
 
 import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
+import { CloudSetupDialog } from "../apps/web/src/components/workspace/CloudSetupDialog";
+import { useSidebarData } from "../apps/web/src/hooks/useSidebarData";
 import { buildInitialCreatePipelineSnapshot } from "../apps/web/src/lib/create-pipeline-request";
+import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import {
   nextSidebarChatVisibleCount,
   previousSidebarChatVisibleCount,
@@ -240,14 +243,15 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     archivedChatsOpen: false,
     projectsExpanded: false,
     cloudProjectsExpanded: false,
-    sectionMenuOpen: "cloud",
+    sectionMenuOpen: null,
     dragItem: null,
     pinnedRows: [],
     pinnedSessions: [],
-    visibleLocalProjectRows: localProjectRows,
+    visibleProjectRows: [...localProjectRows, ...cloudProjectRows],
     localProjectRows,
     insightsSystemProjectHidden: true,
     cloudProjectRows,
+    workspaceStates: {},
     cloudWorkItemsByProjectId: {
       [cloudProjectKey]: [workItem],
     },
@@ -321,34 +325,90 @@ function cloudProjectSidebarRows(projects: CloudProject[]): SidebarProjectItem[]
 }
 
 describe("Cloud native UI", () => {
-  test("renders Cloud Projects as project folders with grouped work items", () => {
-    const markup = renderToStaticMarkup(createElement(SidebarSectionList, sidebarProps()));
-    const localProjectsIndex = markup.indexOf(">Local Projects<");
-    const cloudProjectsIndex = markup.indexOf(">Cloud Projects<");
+  test("renders linked local and Cloud projects as one project row with hosted work", () => {
+    const cloud = cloudProject({ name: "Shared Repo" });
+    const local = localProject({
+      name: "Shared Repo",
+      linkedSandboxProject: {
+        teamId: cloud.teamId,
+        projectId: cloud.id,
+        projectSlug: cloud.slug,
+        projectName: cloud.name,
+        sourceRepoUrl: null,
+        defaultBranch: cloud.defaultBranch,
+        manifestPath: null,
+        manifestHash: null,
+        syncedAt: NOW,
+        linkedAt: NOW,
+      },
+    });
+    const workItem = cloudWorkItem({ projectId: cloud.id, title: "Hosted follow-up" });
+    const localProjectKey = projectSelectionKey("local", local.id);
+
+    function LinkedProjectSidebarProbe() {
+      const data = useSidebarData({
+        localProjects: [local],
+        cloudProjects: [cloud],
+        cloudWorkItems: [workItem],
+        sessions: [],
+        runtimeIndexes: buildRuntimeIndexes([], []),
+        appPreferences: {},
+        selectedSessionId: null,
+        archivedChatsOpen: false,
+        projectsExpanded: true,
+        chatRowsVisibleCount: SIDEBAR_SECTION_LIMIT,
+      });
+
+      return createElement(SidebarSectionList, sidebarProps({
+        selectedProjectId: localProjectKey,
+        selectedCloudWorkItemId: null,
+        sectionMenuOpen: null,
+        visibleProjectRows: data.visibleProjectRows,
+        localProjectRows: data.localProjectRows,
+        cloudProjectRows: data.cloudProjectRows,
+        cloudWorkItemsByProjectId: data.cloudWorkItemsByProjectId,
+        projectSessionRowsByProjectId: data.projectSessionRowsByProjectId,
+        sidebarProjectIdBySessionId: data.sidebarProjectIdBySessionId,
+        chatRows: [],
+        visibleChatRows: [],
+        expandedProjectIds: new Set([localProjectKey]),
+      }));
+    }
+
+    const markup = renderToStaticMarkup(createElement(LinkedProjectSidebarProbe));
+
+    expect(markup.match(/row-label">Shared Repo/g)?.length).toBe(1);
+    expect(markup).toContain("Local + Cloud");
+    expect(markup).toContain("project-kind-icon local linked-cloud");
+    expect(markup).toContain("project-kind-icon-cloud-badge");
+    expect(markup).toContain("Hosted follow-up");
+    expect(markup).not.toContain(">Cloud Projects<");
+  });
+
+  test("renders local and Cloud projects in one Projects section with grouped work items", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({ sectionMenuOpen: "projects" })),
+    );
+    const projectsIndex = markup.indexOf(">Projects<");
     const chatsIndex = markup.indexOf(">Chats<");
 
-    expect(localProjectsIndex).toBeGreaterThan(-1);
-    expect(cloudProjectsIndex).toBeGreaterThan(localProjectsIndex);
+    expect(projectsIndex).toBeGreaterThan(-1);
     expect(chatsIndex).toBeGreaterThan(-1);
-    expect(chatsIndex).toBeGreaterThan(cloudProjectsIndex);
-    const localProjectsSection = markup.slice(localProjectsIndex, cloudProjectsIndex);
-    const cloudProjectsSection = markup.slice(cloudProjectsIndex, chatsIndex);
-    expect(localProjectsSection).not.toContain("Cloud Repo");
-    expect(markup.slice(cloudProjectsIndex, chatsIndex)).toContain("Cloud Repo");
-    expect(markup).toContain('class="section-title-link"><span>Cloud Projects</span>');
-    expect(markup).toContain("Cloud Repo");
-    expect(markup).toContain("New task");
+    expect(chatsIndex).toBeGreaterThan(projectsIndex);
+    const projectsSection = markup.slice(projectsIndex, chatsIndex);
+    expect(markup).not.toContain(">Cloud Projects<");
+    expect(markup).toContain("New Cloud task");
     expect(markup).toContain("New Cloud Project");
     expect(markup).toContain("Create environment");
-    expect(localProjectsSection).toContain('row-label">Local Repo</span><span class="sidebar-project-caret"');
-    expect(localProjectsSection).toContain("lucide-chevron-right");
-    expect(cloudProjectsSection).toContain('row-label">Cloud Repo</span><span class="sidebar-project-caret"');
-    expect(cloudProjectsSection).toContain("lucide-chevron-down");
-    expect(localProjectsSection.indexOf('aria-label="More project actions"')).toBeGreaterThan(
-      localProjectsSection.indexOf('aria-label="Pin project"'),
+    expect(projectsSection).toContain('row-label">Local Repo</span><span class="row-label-detail">Local</span>');
+    expect(projectsSection).toContain('row-label">Cloud Repo</span><span class="row-label-detail">Cloud / main</span>');
+    expect(projectsSection).toContain('class="sidebar-project-caret"');
+    expect(projectsSection).toContain("lucide-chevron-down");
+    expect(projectsSection.indexOf('aria-label="More project actions"')).toBeGreaterThan(
+      projectsSection.indexOf('aria-label="Pin project"'),
     );
-    expect(localProjectsSection.indexOf('data-tooltip="New chat"')).toBeGreaterThan(
-      localProjectsSection.indexOf('aria-label="More project actions"'),
+    expect(projectsSection.indexOf('data-tooltip="New chat"')).toBeGreaterThan(
+      projectsSection.indexOf('aria-label="More project actions"'),
     );
     expect(markup).toContain("Implement Cloud follow-up");
     expect(markup).not.toContain("Open project chat");
@@ -359,7 +419,6 @@ describe("Cloud native UI", () => {
     expect(markup).toContain('data-tooltip="Open in right panel"');
     expect(markup).toContain("actions-3");
     expect(markup).not.toContain("All tasks");
-    expect(markup).not.toContain("Use existing");
     expect(markup).not.toContain("Start from GitHub repo");
     expect(markup).not.toContain("Start from template");
     expect(markup).not.toContain("Upload/link local project");
@@ -379,7 +438,7 @@ describe("Cloud native UI", () => {
       ),
     );
 
-    expect(hiddenMarkup).toContain('aria-label="Local Projects options"');
+    expect(hiddenMarkup).toContain('aria-label="Projects options"');
     expect(hiddenMarkup).toContain("Show Insights folder");
     expect(visibleMarkup).toContain("Hide Insights folder");
   });
@@ -427,7 +486,7 @@ describe("Cloud native UI", () => {
         sidebarProps({
           selectedProjectId: projectId,
           localProjectRows,
-          visibleLocalProjectRows: localProjectRows,
+          visibleProjectRows: localProjectRows,
           cloudProjectRows: [],
           cloudWorkItemsByProjectId: {},
           expandedProjectIds: new Set([projectId]),
@@ -478,7 +537,7 @@ describe("Cloud native UI", () => {
         selectedProjectId: null,
         selectedCloudWorkItemId: null,
         localProjectRows,
-        visibleLocalProjectRows: localProjectRows,
+        visibleProjectRows: [...localProjectRows, ...cloudProjectRows],
         cloudProjectRows,
         cloudWorkItemsByProjectId: {},
         expandedProjectIds: new Set([localProjectRows[0]!.id]),
@@ -496,23 +555,22 @@ describe("Cloud native UI", () => {
     expect(sidebarProjectClickAction({ view: "apps", selectedSessionId: null })).toBe("toggle_project");
   });
 
-  test("keeps Cloud project actions mounted while the Cloud Projects body is collapsed", () => {
+  test("keeps Cloud project actions in the Projects add menu", () => {
     const markup = renderToStaticMarkup(
-      createElement(SidebarSectionList, sidebarProps({ cloudProjectsCollapsed: true, sectionMenuOpen: "cloud" })),
+      createElement(SidebarSectionList, sidebarProps({ sectionMenuOpen: "projects" })),
     );
-    const cloudProjectsIndex = markup.indexOf(">Cloud Projects<");
+    const projectsIndex = markup.indexOf(">Projects<");
     const chatsIndex = markup.indexOf(">Chats<");
-    const cloudSection = markup.slice(cloudProjectsIndex, chatsIndex);
+    const projectsSection = markup.slice(projectsIndex, chatsIndex);
 
-    expect(cloudProjectsIndex).toBeGreaterThan(-1);
-    expect(cloudSection).toContain("New Cloud Project");
-    expect(cloudSection).toContain("New task");
-    expect(cloudSection).toContain("Create environment");
-    expect(cloudSection).not.toContain("Cloud Repo");
-    expect(cloudSection).not.toContain("Implement Cloud follow-up");
+    expect(projectsIndex).toBeGreaterThan(-1);
+    expect(projectsSection).toContain("New Cloud Project");
+    expect(projectsSection).toContain("New Cloud task");
+    expect(projectsSection).toContain("Create environment");
+    expect(markup).not.toContain(">Cloud Projects<");
   });
 
-  test("keeps Local Projects and Cloud Projects Show more independent", () => {
+  test("paginates the unified Projects section", () => {
     const localProjects = Array.from({ length: 6 }, (_, index) =>
       localProject({
         id: `local_project_${index + 1}`,
@@ -527,55 +585,43 @@ describe("Cloud native UI", () => {
     );
     const localProjectRows = localProjectSidebarRows(localProjects);
     const cloudProjectRows = cloudProjectSidebarRows(cloudProjects);
+    const projectRows = [...localProjectRows, ...cloudProjectRows].sort((left, right) => {
+      if (left.order !== right.order) return left.order - right.order;
+      return left.project.name.localeCompare(right.project.name);
+    });
 
     const collapsedMarkup = renderToStaticMarkup(
       createElement(SidebarSectionList, sidebarProps({
         selectedProjectId: null,
         selectedCloudWorkItemId: null,
         localProjectRows,
-        visibleLocalProjectRows: localProjectRows.slice(0, 5),
+        visibleProjectRows: projectRows.slice(0, 5),
         cloudProjectRows,
         cloudWorkItemsByProjectId: {},
         expandedProjectIds: new Set(),
       })),
     );
-    expect(collapsedMarkup).toContain("Local Repo 5");
+    expect(collapsedMarkup).toContain("Cloud Repo 3");
+    expect(collapsedMarkup).not.toContain("Local Repo 4");
+    expect(collapsedMarkup).not.toContain("Cloud Repo 4");
     expect(collapsedMarkup).not.toContain("Local Repo 6");
-    expect(collapsedMarkup).toContain("Cloud Repo 5");
     expect(collapsedMarkup).not.toContain("Cloud Repo 6");
-    expect(collapsedMarkup.match(/Show more/g)?.length).toBe(2);
+    expect(collapsedMarkup.match(/Show more/g)?.length).toBe(1);
 
-    const localExpandedMarkup = renderToStaticMarkup(
+    const expandedMarkup = renderToStaticMarkup(
       createElement(SidebarSectionList, sidebarProps({
         selectedProjectId: null,
         selectedCloudWorkItemId: null,
         projectsExpanded: true,
-        cloudProjectsExpanded: false,
         localProjectRows,
-        visibleLocalProjectRows: localProjectRows,
+        visibleProjectRows: projectRows,
         cloudProjectRows,
         cloudWorkItemsByProjectId: {},
         expandedProjectIds: new Set(),
       })),
     );
-    expect(localExpandedMarkup).toContain("Local Repo 6");
-    expect(localExpandedMarkup).not.toContain("Cloud Repo 6");
-
-    const cloudExpandedMarkup = renderToStaticMarkup(
-      createElement(SidebarSectionList, sidebarProps({
-        selectedProjectId: null,
-        selectedCloudWorkItemId: null,
-        projectsExpanded: false,
-        cloudProjectsExpanded: true,
-        localProjectRows,
-        visibleLocalProjectRows: localProjectRows.slice(0, 5),
-        cloudProjectRows,
-        cloudWorkItemsByProjectId: {},
-        expandedProjectIds: new Set(),
-      })),
-    );
-    expect(cloudExpandedMarkup).not.toContain("Local Repo 6");
-    expect(cloudExpandedMarkup).toContain("Cloud Repo 6");
+    expect(expandedMarkup).toContain("Local Repo 6");
+    expect(expandedMarkup).toContain("Cloud Repo 6");
   });
 
   test("reveals Cloud work items only when the stable cloud project key is expanded", () => {
@@ -608,6 +654,7 @@ describe("Cloud native UI", () => {
     );
     expect(stableKeyMarkup).toContain("Cloud Repo");
     expect(stableKeyMarkup).toContain("Implement Cloud follow-up");
+    expect(stableKeyMarkup).toContain("running / main / sandbox ready / task running");
   });
 
   test("renders Cloud thread with native chat classes and no web-only header actions", () => {
@@ -643,6 +690,11 @@ describe("Cloud native UI", () => {
     expect(markup).toContain('class="cloud-thread-inline-nav"');
     expect(markup).toContain('class="cloud-message user"');
     expect(markup).toContain('class="cloud-message assistant"');
+    expect(markup).toContain("Running in Cloud");
+    expect(markup).toContain("The local checkout is unchanged while the sandbox works.");
+    expect(markup).toContain("1 log");
+    expect(markup).toContain("task run");
+    expect(markup).toContain("local unchanged");
     expect(markup).toContain('class="cloud-thread-composer"');
     expect(markup).toContain(">Files<");
     expect(markup).toContain("Stop task");
@@ -651,6 +703,67 @@ describe("Cloud native UI", () => {
     expect(markup).not.toContain(">Archive<");
     expect(markup).not.toContain(">Share<");
     expect(markup).not.toContain("Open in cloud");
+  });
+
+  test("renders explicit local apply state for reviewed Cloud patches", () => {
+    const workItem = cloudWorkItem({ status: "needs_review" });
+    const enabledMarkup = renderToStaticMarkup(
+      createElement(CloudWorkView, {
+        projects: [cloudProject()],
+        workItems: [workItem],
+        selectedWorkItem: workItem,
+        detail: cloudWorkItemDetail(workItem),
+        loading: false,
+        actionBusy: false,
+        connection: null,
+        error: null,
+        model: "openpond-chat",
+        showToast: noop,
+        onBack: noop,
+        onModelChange: noop,
+        onSetupCloudProject: noop,
+        onCreateWork: async () => undefined,
+        onSelectWorkItem: noop,
+        onSendMessage: async () => undefined,
+        onHandleBackground: async () => undefined,
+        onCancelCreatePlan: async () => undefined,
+        onCancelTask: async () => undefined,
+        localProjectName: "Local Repo",
+        onApplyLocalPatch: async () => undefined,
+        onShowFiles: noop,
+      }),
+    );
+    const disabledMarkup = renderToStaticMarkup(
+      createElement(CloudWorkView, {
+        projects: [cloudProject()],
+        workItems: [workItem],
+        selectedWorkItem: workItem,
+        detail: cloudWorkItemDetail(workItem),
+        loading: false,
+        actionBusy: false,
+        connection: null,
+        error: null,
+        model: "openpond-chat",
+        showToast: noop,
+        onBack: noop,
+        onModelChange: noop,
+        onSetupCloudProject: noop,
+        onCreateWork: async () => undefined,
+        onSelectWorkItem: noop,
+        onSendMessage: async () => undefined,
+        onHandleBackground: async () => undefined,
+        onCancelCreatePlan: async () => undefined,
+        onCancelTask: async () => undefined,
+        onShowFiles: noop,
+      }),
+    );
+
+    expect(enabledMarkup).toContain("Cloud patch ready");
+    expect(enabledMarkup).toContain("Apply locally");
+    expect(enabledMarkup).toContain("Apply to Local Repo");
+    expect(enabledMarkup).toContain(">Files<");
+    expect(disabledMarkup).toContain("No local checkout");
+    expect(disabledMarkup).toContain("disabled");
   });
 
   test("renders hosted create pipeline plan review in Cloud thread", () => {
@@ -821,5 +934,47 @@ describe("Cloud native UI", () => {
     expect(css).toContain("background: #2b2b2b;");
     expect(css).not.toContain(".cloud-thread-topbar");
     expect(css).toContain(".cloud-message.assistant");
+  });
+
+  test("renders local-to-cloud upload preview before source upload", () => {
+    const markup = renderToStaticMarkup(
+      createElement(CloudSetupDialog, {
+        state: {
+          status: "confirm",
+          localProjectId: "local_project_1",
+          cloudProjectId: "cloud_project_1",
+          teamId: "team_1",
+          projectName: "Invoice Workspace",
+          projectKind: "local",
+          projectUrl: null,
+          setupUrl: null,
+          branch: "main",
+          preview: {
+            rootPath: "/workspace/invoice",
+            branch: "main",
+            headCommit: "abc1234567890abcdef",
+            targetProjectId: "cloud_project_1",
+            targetProjectName: "Invoice Workspace",
+            fileCount: 2,
+            byteCount: 2849,
+            skippedCount: 1,
+            initializedEmptyProject: false,
+          },
+          previewLoading: false,
+          previewError: null,
+          upload: null,
+          error: null,
+        },
+        onClose: noop,
+        onStart: noop,
+      }),
+    );
+
+    expect(markup).toContain("Will upload 2 files");
+    expect(markup).toContain("3 KB");
+    expect(markup).toContain("1 skipped");
+    expect(markup).toContain("local abc1234");
+    expect(markup).toContain("cloud_project_1");
+    expect(markup).toContain("main");
   });
 });

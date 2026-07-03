@@ -23,14 +23,26 @@ export type LocalProjectSourceUploadSkippedFile = {
 
 export type LocalProjectSourceUploadBundle = {
   rootPath: string;
+  headCommit: string | null;
   entries: LocalProjectSourceUploadEntry[];
   totalBytes: number;
+  skipped: LocalProjectSourceUploadSkippedFile[];
+};
+
+export type LocalProjectSourceUploadPreview = {
+  rootPath: string;
+  headCommit: string | null;
+  fileCount: number;
+  byteCount: number;
+  skippedCount: number;
+  initializedEmptyProject: boolean;
   skipped: LocalProjectSourceUploadSkippedFile[];
 };
 
 export type LocalProjectSourceGitPushResult = {
   rootPath: string;
   branch: string;
+  headCommit: string | null;
   fileCount: number;
   byteCount: number;
   skipped: LocalProjectSourceUploadSkippedFile[];
@@ -59,6 +71,7 @@ export async function collectLocalProjectSourceUploadBundle(
   project: LocalProject,
 ): Promise<LocalProjectSourceUploadBundle> {
   const selection = await selectLocalProjectSourceFiles(project);
+  const headCommit = await readGitHeadCommit(selection.rootPath);
   const entries: LocalProjectSourceUploadEntry[] = [];
   for (const file of selection.files) {
     entries.push({
@@ -70,8 +83,25 @@ export async function collectLocalProjectSourceUploadBundle(
 
   return {
     rootPath: selection.rootPath,
+    headCommit,
     entries,
     totalBytes: selection.totalBytes,
+    skipped: selection.skipped,
+  };
+}
+
+export async function previewLocalProjectSourceUpload(
+  project: LocalProject,
+): Promise<LocalProjectSourceUploadPreview> {
+  const selection = await selectLocalProjectSourceFiles(project);
+  const headCommit = await readGitHeadCommit(selection.rootPath);
+  return {
+    rootPath: selection.rootPath,
+    headCommit,
+    fileCount: selection.files.length,
+    byteCount: selection.totalBytes,
+    skippedCount: selection.skipped.length,
+    initializedEmptyProject: selection.files.length === 0,
     skipped: selection.skipped,
   };
 }
@@ -88,6 +118,7 @@ export async function pushLocalProjectSourceToGit(
 ): Promise<LocalProjectSourceGitPushResult> {
   const branch = normalizeGitBranchName(input.branch);
   const selection = await selectLocalProjectSourceFiles(project);
+  const headCommit = await readGitHeadCommit(selection.rootPath);
   if (
     project.repoPath &&
     selection.files.length > 0 &&
@@ -103,6 +134,7 @@ export async function pushLocalProjectSourceToGit(
       return {
         rootPath: selection.rootPath,
         branch,
+        headCommit,
         fileCount: selection.files.length,
         byteCount: selection.totalBytes,
         skipped: selection.skipped,
@@ -140,6 +172,7 @@ export async function pushLocalProjectSourceToGit(
     return {
       rootPath: selection.rootPath,
       branch,
+      headCommit,
       fileCount: initializedEmptyProject ? 1 : selection.files.length,
       byteCount: initializedEmptyProject
         ? Buffer.byteLength(input.fallbackReadme, "utf8")
@@ -159,7 +192,7 @@ async function selectLocalProjectSourceFiles(
   const rootPath = project.repoPath ?? project.workspacePath;
   const candidatePaths = project.repoPath
     ? await gitVisibleProjectFiles(rootPath)
-    : await listPlainWorkspaceFiles(rootPath);
+    : await listLocalProjectSourceUploadFiles(rootPath);
   const files: LocalProjectSourceSelectedFile[] = [];
   const skipped: LocalProjectSourceUploadSkippedFile[] = [];
   let totalBytes = 0;
@@ -174,7 +207,7 @@ async function selectLocalProjectSourceFiles(
       skipped.push({ path: candidatePath, reason: "invalid_path" });
       continue;
     }
-    if (isGeneratedWorkspacePath(normalizedPath)) {
+    if (isGeneratedWorkspacePath(normalizedPath) && !isAllowedGeneratedSourceUploadPath(normalizedPath)) {
       skipped.push({ path: normalizedPath, reason: "generated" });
       continue;
     }
@@ -213,6 +246,55 @@ async function selectLocalProjectSourceFiles(
   return { rootPath, files, totalBytes, skipped };
 }
 
+async function listLocalProjectSourceUploadFiles(rootPath: string): Promise<string[]> {
+  const files = await listPlainWorkspaceFiles(rootPath);
+  const generatedSkillFiles = await listGeneratedSkillSourceUploadFiles(rootPath);
+  return Array.from(new Set([...files, ...generatedSkillFiles])).sort((left, right) => left.localeCompare(right));
+}
+
+async function listGeneratedSkillSourceUploadFiles(rootPath: string): Promise<string[]> {
+  const files: string[] = [];
+  const skillsRoot = path.join(rootPath, ".openpond", "skills");
+
+  async function visit(relativeDir: string): Promise<void> {
+    const absoluteDir = path.join(rootPath, relativeDir);
+    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+    try {
+      entries = await fs.readdir(absoluteDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const relativePath = path.join(relativeDir, entry.name).replace(/\\/g, "/");
+      const normalizedPath = normalizeWorkspaceFilePath(relativePath);
+      if (!normalizedPath) continue;
+      if (entry.isDirectory()) {
+        await visit(normalizedPath);
+        continue;
+      }
+      if (entry.isFile() && isAllowedGeneratedSourceUploadPath(normalizedPath)) {
+        files.push(normalizedPath);
+      }
+    }
+  }
+
+  await visit(path.relative(rootPath, skillsRoot).replace(/\\/g, "/"));
+  return files;
+}
+
+function isAllowedGeneratedSourceUploadPath(filePath: string): boolean {
+  const normalizedPath = normalizeWorkspaceFilePath(filePath);
+  if (!normalizedPath) return false;
+  const parts = normalizedPath.split("/");
+  const openPondIndex = parts.indexOf(".openpond");
+  return (
+    openPondIndex >= 0 &&
+    parts[openPondIndex + 1] === "skills" &&
+    parts.length > openPondIndex + 3
+  );
+}
+
 async function gitVisibleProjectFiles(rootPath: string): Promise<string[]> {
   const result = await runWorkspaceCommand(
     "git",
@@ -249,6 +331,11 @@ async function gitRepoHasCleanHead(rootPath: string): Promise<boolean> {
   if (head.code !== 0) return false;
   const status = await runWorkspaceCommand("git", ["status", "--porcelain=v1"], rootPath);
   return status.code === 0 && status.stdout.trim().length === 0;
+}
+
+async function readGitHeadCommit(rootPath: string): Promise<string | null> {
+  const head = await runWorkspaceCommand("git", ["rev-parse", "--verify", "HEAD"], rootPath);
+  return head.code === 0 ? head.stdout.trim() || null : null;
 }
 
 async function copySelectedFilesToSnapshot(

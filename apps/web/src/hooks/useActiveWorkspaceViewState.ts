@@ -7,10 +7,16 @@ import type {
   LocalProject,
   OpenPondApp,
   Session,
+  WorkspaceState,
   WorkspaceKind,
 } from "@openpond/contracts";
 import type { ComposerProjectTargetState } from "../components/chat/Composer";
 import { normalizeChatModel, normalizePreferences } from "../lib/app-models";
+import {
+  cloudWorkspaceStateNote,
+  localWorkspaceStateNote,
+  uploadSyncStateNote,
+} from "../lib/project-workflow-state";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import {
   cloudProjectLabel,
@@ -181,11 +187,11 @@ export function useWorkspaceTargetState({
   bootstrap,
   busy,
   cloudLinked,
-  cloudTargetName,
-  localTargetName,
   selectedCloudProject,
   selectedProject,
   selectedSession,
+  pendingWorkspaceTarget,
+  workspaceStates,
   workspaceBusy,
 }: {
   accountPending: boolean;
@@ -194,11 +200,11 @@ export function useWorkspaceTargetState({
   bootstrap: BootstrapPayload | null;
   busy: boolean;
   cloudLinked: boolean;
-  cloudTargetName: string;
-  localTargetName: string;
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
   selectedSession: Session | null;
+  pendingWorkspaceTarget: "queue_cloud" | null;
+  workspaceStates: Record<string, WorkspaceState>;
   workspaceBusy: boolean;
 }) {
   const projectTarget = useMemo<ComposerProjectTargetState>(() => {
@@ -245,67 +251,96 @@ export function useWorkspaceTargetState({
     };
   }, [bootstrap?.cloudProjects, bootstrap?.localProjects, busy, selectedCloudProject, selectedProject, workspaceBusy]);
   const cloudSetupAvailable = Boolean(cloudLinked || selectedProject);
-  const cloudOptionDetail = accountPending
-    ? "Checking OpenPond account..."
-    : accountSignedOut
-      ? "Add an OpenPond account to use Cloud"
-      : selectedProject
-        ? cloudLinked
-          ? `Upload source to OpenPond Git for ${cloudTargetName}`
-          : "Upload source to OpenPond Git, then configure Cloud"
-        : cloudLinked
-          ? cloudTargetName
-          : "Select a Project before Cloud coding";
+  const selectedLocalWorkspaceState = selectedProject ? workspaceStates[selectedProject.id] ?? null : null;
+  const localStateNote = localWorkspaceStateNote(selectedLocalWorkspaceState, {
+    branch: selectedProject?.linkedSandboxProject?.defaultBranch ?? null,
+    path: selectedProject?.workspacePath ?? selectedSession?.cwd ?? null,
+    linkedCloudSourceKnown: selectedProject?.linkedSandboxProject?.projectId
+      ? Boolean(selectedProject.linkedSandboxProject.lastUploadedCommit) || !selectedLocalWorkspaceState?.headCommit
+      : true,
+  });
+  const cloudStateNote = cloudWorkspaceStateNote(
+    selectedProject,
+    selectedCloudProject,
+    selectedLocalWorkspaceState,
+  );
+  const uploadStateNote = uploadSyncStateNote(selectedProject, selectedLocalWorkspaceState);
   const workspaceTarget = useMemo<WorkspaceTargetState>(
     () => {
       const localOption = {
         value: "local" as const,
-        label: "Local",
-        detail: selectedProject?.workspacePath ?? selectedSession?.cwd ?? "Use files on this machine",
+        label: "Local checkout",
+        detail: "Use files on this machine. Best for fast chat and local edits.",
+        stateNote: localStateNote,
         disabled: !selectedProject && activeWorkspaceLocation !== "local",
         disabledReason: "No linked local workspace.",
       };
+      const queueOption = {
+        value: "queue_cloud" as const,
+        label: "Queue cloud work item",
+        detail: "Run the next task in a hosted sandbox. Keeps this chat local.",
+        stateNote: cloudLinked ? `will use ${cloudStateNote}` : "upload required",
+        disabled: accountPending || accountSignedOut || !cloudLinked,
+        disabledReason: accountSignedOut
+          ? "Add an OpenPond account before queueing Cloud work."
+          : "Upload/sync this Project to Cloud before queueing work.",
+      };
       const cloudOption = {
         value: "cloud" as const,
-        label: "Cloud",
-        detail: cloudOptionDetail,
+        label: "Cloud workspace",
+        detail: "Chat inside the hosted sandbox. Best for cloud-only files, dependencies, or handoff.",
+        stateNote: cloudStateNote,
         disabled: accountPending || accountSignedOut || !cloudSetupAvailable,
         disabledReason: accountSignedOut
           ? "Add an OpenPond account before using Cloud."
           : "Select a Project before Cloud coding.",
       };
+      const uploadOption = {
+        value: "upload_cloud" as const,
+        label: "Upload/sync to cloud",
+        detail: "Push local source to OpenPond Git before cloud work.",
+        stateNote: uploadStateNote,
+        disabled: accountPending || accountSignedOut || !selectedProject,
+        disabledReason: accountSignedOut
+          ? "Add an OpenPond account before uploading source."
+          : "Select a local Project before uploading source.",
+      };
       const actionTarget = activeWorkspaceLocation === "cloud" ? "local" : "cloud";
       const actionOption = actionTarget === "local" ? localOption : cloudOption;
+      const selectedOption =
+        pendingWorkspaceTarget === "queue_cloud"
+          ? queueOption
+          : activeWorkspaceLocation === "cloud"
+            ? cloudOption
+            : localOption;
       return {
-        value: activeWorkspaceLocation,
-        label: activeWorkspaceLocation === "cloud" ? "Cloud" : "Local",
-        detail:
-          activeWorkspaceLocation === "cloud"
-            ? cloudTargetName
-            : selectedProject?.workspacePath ?? selectedSession?.cwd ?? localTargetName,
+        value: selectedOption.value,
+        label: selectedOption.label,
+        detail: selectedOption.stateNote || selectedOption.detail,
         busy: workspaceBusy,
         action: {
           ...actionOption,
           label:
             actionTarget === "cloud"
-              ? "Move to Cloud"
+              ? "Cloud workspace"
               : selectedProject
-                ? "Open Local"
-                : "Clone Locally",
+                ? "Local checkout"
+                : "Check out locally",
         },
-        options: [localOption, cloudOption],
+        options: [localOption, queueOption, cloudOption, uploadOption],
       };
     },
     [
       activeWorkspaceLocation,
       accountPending,
       accountSignedOut,
-      cloudOptionDetail,
+      cloudLinked,
       cloudSetupAvailable,
-      cloudTargetName,
-      localTargetName,
+      cloudStateNote,
+      localStateNote,
+      pendingWorkspaceTarget,
       selectedProject,
-      selectedSession?.cwd,
+      uploadStateNote,
       workspaceBusy,
     ],
   );

@@ -1,7 +1,8 @@
 import type { Dispatch, DragEvent, PointerEvent, SetStateAction } from "react";
-import type { AccountState, BootstrapPayload, CloudWorkItem, OpenPondApp, Session } from "@openpond/contracts";
+import type { AccountState, BootstrapPayload, CloudWorkItem, OpenPondApp, Session, WorkspaceState } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView, PinnedSidebarItem, SettingsSection, SidebarDragItem, SidebarProjectItem } from "../../lib/app-models";
+import type { TerminalScopeSummary } from "../terminal/terminal-state";
 
 export type SidebarProps = {
   view: AppView;
@@ -22,13 +23,15 @@ export type SidebarProps = {
   dragItem: SidebarDragItem | null;
   pinnedRows: PinnedSidebarItem[];
   pinnedSessions: Session[];
-  visibleLocalProjectRows: SidebarProjectItem[];
+  visibleProjectRows: SidebarProjectItem[];
   localProjectRows: SidebarProjectItem[];
   insightsSystemProjectHidden: boolean | null;
   cloudProjectRows: SidebarProjectItem[];
+  workspaceStates: Record<string, WorkspaceState>;
   cloudWorkItemsByProjectId: Record<string, CloudWorkItem[]>;
   projectSessionRowsByProjectId: Record<string, Session[]>;
   sidebarProjectIdBySessionId: Record<string, string>;
+  terminalSummaries: Record<string, TerminalScopeSummary>;
   runningSessionIds: ReadonlySet<string>;
   visibleChatRows: Session[];
   chatRows: Session[];

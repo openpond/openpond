@@ -5,6 +5,7 @@ import type {
   CloudWorkItemDetail,
   CloudWorkItemMessage,
   LocalProject,
+  WorkspaceState,
 } from "@openpond/contracts";
 
 export type VoiceTranscriptionStatus = {
@@ -43,6 +44,23 @@ export type LocalProjectCloudSourceUploadResponse = {
   upload: {
     rootPath: string;
     branch: string;
+    headCommit: string | null;
+    fileCount: number;
+    byteCount: number;
+    skippedCount: number;
+    initializedEmptyProject: boolean;
+    transport?: "git_head" | "snapshot" | "api_source_upload";
+  };
+};
+
+export type LocalProjectCloudSourcePreviewResponse = {
+  localProject: LocalProject;
+  preview: {
+    rootPath: string;
+    branch: string;
+    headCommit: string | null;
+    targetProjectId: string | null;
+    targetProjectName: string;
     fileCount: number;
     byteCount: number;
     skippedCount: number;
@@ -65,6 +83,19 @@ export type CloudWorkItemOpenCloudResponse = {
   session?: CloudWorkItemDetail["runtimeSessions"][number];
   activity?: CloudWorkItemDetail["activity"][number];
   resumed?: boolean;
+};
+
+export type CloudWorkItemApplyLocalPatchResponse = {
+  workItem: CloudWorkItem;
+  localProject: LocalProject;
+  workspaceState: WorkspaceState;
+  patch: {
+    sandboxId: string;
+    filename: string | null;
+    bytes: number;
+    applied: true;
+    fileCount: number;
+  };
 };
 
 export type CloudWorkItemCancelTaskResponse = {

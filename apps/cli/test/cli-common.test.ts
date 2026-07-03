@@ -122,6 +122,8 @@ describe("CLI common parsing", () => {
       "retry-key-1",
       "--hosted-run-conversation-id",
       "session_hosted_1",
+      "--hosted-run-target-project-id",
+      "workspace_project_1",
       "--conversation-id",
       "session_alias_1",
     ]);
@@ -136,6 +138,7 @@ describe("CLI common parsing", () => {
     expect(parsed.options.hostedRunRetry).toBe("true");
     expect(parsed.options.hostedRunIdempotencyKey).toBe("retry-key-1");
     expect(parsed.options.hostedRunConversationId).toBe("session_hosted_1");
+    expect(parsed.options.hostedRunTargetProjectId).toBe("workspace_project_1");
     expect(parsed.options.conversationId).toBe("session_alias_1");
   });
 });

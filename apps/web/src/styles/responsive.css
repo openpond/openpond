@@ -126,13 +126,19 @@
     justify-content: flex-start;
   }
 
-  .profile-agent-table-head {
+  .profile-agent-table-head,
+  .profile-skill-table-head {
     display: none;
   }
 
-  .profile-agent-row {
+  .profile-agent-row,
+  .profile-skill-row {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .profile-skill-actions {
+    justify-content: flex-start;
   }
 
   .remote-access-peer-row {

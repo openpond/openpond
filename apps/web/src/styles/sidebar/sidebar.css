@@ -76,8 +76,8 @@
 
 .sidebar-nav {
   display: grid;
-  gap: 3px;
-  padding: 6px 14px 18px;
+  gap: 1px;
+  padding: 4px 14px 14px;
 }
 
 .nav-command {
@@ -86,7 +86,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 31px;
+  min-height: 28px;
   border: 0;
   border-radius: 13px;
   background: transparent;
@@ -467,6 +467,7 @@
 }
 
 .sidebar-project-row .row-label {
+  flex: 1 1 auto;
   color: var(--text);
 }
 
@@ -479,6 +480,11 @@
   white-space: nowrap;
   color: #7f7f7f;
   font-size: 12px;
+}
+
+.sidebar-project-row .row-label-detail {
+  flex: 0 0 auto;
+  max-width: 112px;
 }
 
 .sidebar-row-icon,
@@ -546,6 +552,16 @@
   height: 24px;
 }
 
+.row-meta-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  transition: opacity 120ms ease;
+}
+
 .sidebar-row.actions-3 .row-meta {
   width: 78px;
   min-width: 78px;
@@ -557,9 +573,43 @@
 }
 
 .row-meta time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #8a8a8a;
   font-size: 12px;
   transition: opacity 120ms ease;
+}
+
+.sidebar-terminal-indicator {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: #858585;
+}
+
+.sidebar-terminal-indicator.idle {
+  color: #9a9a9a;
+}
+
+.sidebar-terminal-indicator.unknown {
+  color: #7f8794;
+}
+
+.sidebar-terminal-indicator.running {
+  color: #f5c451;
+  animation: sidebar-terminal-running-blink 1.05s ease-in-out infinite;
+}
+
+.sidebar-terminal-indicator.success {
+  color: #49d17f;
+}
+
+.sidebar-terminal-indicator.failed {
+  color: #ff706a;
 }
 
 .sidebar-running-dot {
@@ -622,9 +672,20 @@
   }
 }
 
+@keyframes sidebar-terminal-running-blink {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sidebar-running-dot,
-  .sidebar-running-dot::after {
+  .sidebar-running-dot::after,
+  .sidebar-terminal-indicator.running {
     animation: none;
   }
 }
@@ -723,6 +784,12 @@
 .sidebar-row:hover .row-meta time,
 .sidebar-row:focus-within .row-meta time,
 .sidebar-row.project-menu-open .row-meta time {
+  opacity: 0;
+}
+
+.sidebar-row:hover .row-meta .sidebar-terminal-indicator,
+.sidebar-row:focus-within .row-meta .sidebar-terminal-indicator,
+.sidebar-row.project-menu-open .row-meta .sidebar-terminal-indicator {
   opacity: 0;
 }
 
