@@ -194,6 +194,7 @@ export function toAccountState(input: {
       return {
         handle: candidate.handle,
         baseUrl: candidateBaseUrl,
+        apiBaseUrl: normalizeBaseUrl(candidate.apiBaseUrl),
         chatApiBaseUrl: normalizeBaseUrl(candidate.chatApiBaseUrl),
         environment: deriveEnvironment(candidateDisplayBaseUrl, candidate.environment),
         isActive: activeProfile ? profileMatchesSelector(candidate, activeProfile) : false,

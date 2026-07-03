@@ -340,3 +340,17 @@ export const SaveOpenPondAccountRequestSchema = z.object({
 });
 
 export type SaveOpenPondAccountRequest = z.infer<typeof SaveOpenPondAccountRequestSchema>;
+
+export const UpdateOpenPondAccountConfigRequestSchema = z.object({
+  handle: z.string().min(1),
+  currentBaseUrl: z.string().nullable().optional(),
+  baseUrl: z.string().nullable().optional(),
+  apiBaseUrl: z.string().nullable().optional(),
+  chatApiBaseUrl: z.string().nullable().optional(),
+  environment: z.string().nullable().optional(),
+  setActive: z.boolean().optional(),
+});
+
+export type UpdateOpenPondAccountConfigRequest = z.infer<
+  typeof UpdateOpenPondAccountConfigRequestSchema
+>;

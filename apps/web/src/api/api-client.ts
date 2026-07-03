@@ -2,6 +2,7 @@ export type ClientConnection = {
   serverUrl: string;
   token: string;
   platform: string;
+  arch?: string;
 };
 
 export type ConnectionBase = Pick<ClientConnection, "serverUrl" | "token">;

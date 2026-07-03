@@ -46,6 +46,34 @@
   opacity: 0.42;
 }
 
+.sidebar-update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+  border: 0;
+  border-radius: 999px;
+  background: #06b6d4;
+  color: #fff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sidebar-update-pill:hover {
+  background: #0891b2;
+  color: #fff;
+}
+
+.sidebar-update-pill svg {
+  flex: 0 0 auto;
+}
+
 .sidebar-nav {
   display: grid;
   gap: 3px;

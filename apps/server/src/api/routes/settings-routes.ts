@@ -8,6 +8,7 @@ export async function handleSettingsRoutes({ deps, request, requestUrl, response
     refreshOpenPondPayload,
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
+    updateOpenPondAccountConfigPayload,
     voiceTranscriptionStatusPayload,
     transcribeVoicePayload,
     updateAppPreferencesPayload,
@@ -42,6 +43,10 @@ export async function handleSettingsRoutes({ deps, request, requestUrl, response
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/openpond/accounts/login") {
     sendJson(response, 200, await saveOpenPondAccountPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "PATCH" && requestUrl.pathname === "/v1/openpond/accounts/config") {
+    sendJson(response, 200, await updateOpenPondAccountConfigPayload(await readJson(request)));
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/audio/transcriptions/status") {

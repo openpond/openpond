@@ -33,6 +33,9 @@ export type SidebarProps = {
   visibleChatRows: Session[];
   chatRows: Session[];
   expandedProjectIds: ReadonlySet<string>;
+  currentVersion?: string | null;
+  platform?: string | null;
+  arch?: string | null;
   onSidebarResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
   setSidebarOpen: Dispatch<SetStateAction<boolean>>;
   setView: Dispatch<SetStateAction<AppView>>;

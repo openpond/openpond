@@ -34,6 +34,7 @@ type ServerConnection = {
   serverUrl: string;
   token: string;
   platform: string;
+  arch: string;
 };
 
 type ServerHealth = {
@@ -160,7 +161,7 @@ async function ensureServer(): Promise<ServerConnection> {
   if (shouldReuseExistingServer) {
     desktopLogger().info("reusing existing server", { serverUrl: existingUrl });
     serverProcessSampler.stop();
-    connection = { serverUrl: existingUrl, token: existingToken, platform: process.platform };
+    connection = { serverUrl: existingUrl, token: existingToken, platform: process.platform, arch: process.arch };
     return connection;
   }
 
@@ -210,7 +211,7 @@ async function ensureServer(): Promise<ServerConnection> {
     serverProcessSampler.stop();
     throw error;
   }
-  connection = { serverUrl, token, platform: process.platform };
+  connection = { serverUrl, token, platform: process.platform, arch: process.arch };
   return connection;
 }
 

@@ -37,6 +37,7 @@ import type {
   SidebarAppPreference,
   SidebarAppPreferences,
   SwitchOpenPondAccountRequest,
+  UpdateOpenPondAccountConfigRequest,
   ListCloudWorkItemsRequest,
   OpenCloudWorkItemRequest,
   SendCloudWorkItemMessageRequest,
@@ -203,6 +204,11 @@ export const api = {
   saveOpenPondAccount: (connection: ClientConnection, input: SaveOpenPondAccountRequest) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/login", {
       method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateOpenPondAccountConfig: (connection: ClientConnection, input: UpdateOpenPondAccountConfigRequest) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/config", {
+      method: "PATCH",
       body: JSON.stringify(input),
     }),
   savePreferences: (connection: ClientConnection, input: UpdateAppPreferencesRequest) =>

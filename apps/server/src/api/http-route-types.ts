@@ -48,6 +48,7 @@ export type HttpRouteDeps = {
   interruptCodexHistoryTurnPayload: (sessionId: string) => Promise<unknown>;
   switchOpenPondPayload: (payload: unknown) => Promise<unknown>;
   saveOpenPondAccountPayload: (payload: unknown) => Promise<unknown>;
+  updateOpenPondAccountConfigPayload: (payload: unknown) => Promise<unknown>;
   profileCurrentPayload: () => Promise<unknown>;
   profileCatalogPayload: () => Promise<unknown>;
   profileInitPayload: (payload: unknown) => Promise<unknown>;

@@ -112,3 +112,13 @@ export type SaveOpenPondAccountInput = {
   environment?: string | null;
   setActive?: boolean;
 };
+
+export type UpdateOpenPondAccountConfigInput = {
+  handle: string;
+  currentBaseUrl?: string | null;
+  baseUrl?: string | null;
+  apiBaseUrl?: string | null;
+  chatApiBaseUrl?: string | null;
+  environment?: string | null;
+  setActive?: boolean;
+};

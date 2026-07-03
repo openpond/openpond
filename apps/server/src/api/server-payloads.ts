@@ -24,6 +24,7 @@ import {
   SendTurnRequestSchema,
   SessionSchema,
   SwitchOpenPondAccountRequestSchema,
+  UpdateOpenPondAccountConfigRequestSchema,
   UpdateAppPreferencesRequestSchema,
   UploadLocalProjectCloudSourceRequestSchema,
   UpdatePersonalizationRequestSchema,
@@ -63,6 +64,7 @@ import {
   loadOpenPondApps,
   saveOpenPondAccount,
   switchOpenPondAccount,
+  updateOpenPondAccountConfig,
 } from "@openpond/runtime";
 import {
   collectProfileSourceUploadEntries,
@@ -1702,6 +1704,29 @@ export function createServerPayloads(deps: {
     return bootstrapPayload({ forceOpenPond: true });
   }
 
+  async function updateOpenPondAccountConfigPayload(payload: unknown): Promise<BootstrapPayload> {
+    const input = UpdateOpenPondAccountConfigRequestSchema.parse(payload);
+    await updateOpenPondAccountConfig({
+      handle: input.handle,
+      currentBaseUrl: input.currentBaseUrl ?? undefined,
+      baseUrl: input.baseUrl,
+      apiBaseUrl: input.apiBaseUrl,
+      chatApiBaseUrl: input.chatApiBaseUrl,
+      environment: input.environment,
+      setActive: input.setActive,
+    });
+    await appendRuntimeEvent(
+      event({
+        name: "diagnostic",
+        source: "server",
+        action: "openpond.account.config",
+        status: "completed",
+        output: `Updated OpenPond account config for ${input.handle}.`,
+      })
+    );
+    return bootstrapPayload({ forceOpenPond: true });
+  }
+
   async function profileCurrentPayload() {
     return loadOpenPondProfileState();
   }
@@ -2218,6 +2243,7 @@ export function createServerPayloads(deps: {
     loadMoreOpenPondAppsPayload,
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
+    updateOpenPondAccountConfigPayload,
     profileCurrentPayload,
     profileCatalogPayload,
     profileInitPayload,

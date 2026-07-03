@@ -70,6 +70,7 @@ type OpenPondConnection = {
   serverUrl: string;
   token: string;
   platform: string;
+  arch?: string;
 };
 
 type OpenPondLogLine = {

@@ -320,6 +320,68 @@
   gap: 8px;
 }
 
+.account-env-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 12px;
+  background: #242424;
+  color: #bdbdbd;
+  padding: 0 9px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.account-env-toggle-switch {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 999px;
+  background: #505050;
+}
+
+.account-env-toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  transition: transform 120ms ease;
+}
+
+.account-env-toggle.active {
+  background: rgba(58, 163, 255, 0.14);
+  color: #9fceff;
+}
+
+.account-env-toggle.active .account-env-toggle-switch {
+  background: #3e9df5;
+}
+
+.account-env-toggle.active .account-env-toggle-switch::after {
+  transform: translateX(10px);
+}
+
+.account-env-toggle:hover:not(:disabled),
+.account-env-toggle:focus-visible {
+  background: #363636;
+  outline: 0;
+}
+
+.account-env-toggle.active:hover:not(:disabled),
+.account-env-toggle.active:focus-visible {
+  background: rgba(58, 163, 255, 0.22);
+}
+
+.account-env-toggle:disabled {
+  opacity: 0.5;
+}
+
 .active-pill,
 .account-state {
   display: inline-flex;

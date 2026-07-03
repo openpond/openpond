@@ -1,10 +1,14 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { BootstrapPayload } from "@openpond/contracts";
+import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 import { ExternalLink, KeyRound, Plus, RefreshCw } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
+import {
+  AccountEndpointDialog,
+  type AccountEndpointUpdate,
+} from "./AccountEndpointDialog";
 import type { DropdownOption } from "../../lib/app-models";
 import { normalizeOpenPondOrganization } from "../../lib/cloud-project-utils";
 import {
@@ -34,6 +38,7 @@ type AccountSettingsSectionProps = {
 };
 
 const OPENPOND_API_KEYS_URL = "https://openpond.ai/settings/api-keys";
+type AccountRow = AccountState["accounts"][number];
 
 export function AccountSettingsSection({
   payload,
@@ -61,6 +66,8 @@ export function AccountSettingsSection({
   const [organizationsError, setOrganizationsError] = useState<string | null>(null);
   const [savingDefaultTeamId, setSavingDefaultTeamId] = useState<string | null>(null);
   const [pendingDefaultTeamId, setPendingDefaultTeamId] = useState<string | null>(null);
+  const [endpointDialogAccount, setEndpointDialogAccount] = useState<AccountRow | null>(null);
+  const [savingEndpointKey, setSavingEndpointKey] = useState<string | null>(null);
   const activeCandidate = accounts.find((candidate) => candidate.isActive) ?? accounts[0] ?? null;
   const defaultTeamId = payload?.preferences.defaultTeamId?.trim() || null;
   const visibleDefaultTeamId = pendingDefaultTeamId ?? defaultTeamId;
@@ -87,7 +94,7 @@ export function AccountSettingsSection({
       : signedOut
         ? "Cloud projects, hosted agents, wallet, and team defaults are disabled until you sign in."
         : "Checking account status.";
-  const showAccountList = accounts.length > 1;
+  const showAccountList = accounts.length > 0;
   const formTitle = signedOut ? "Sign in to OpenPond" : authError ? "Reconnect account" : "Add or update account";
   const formDescription = signedOut
     ? "Paste an OpenPond API key to connect this desktop app."
@@ -125,6 +132,8 @@ export function AccountSettingsSection({
     Boolean(savingDefaultTeamId) ||
     Boolean(organizationsError) ||
     activeOrganizations.length === 0;
+  const endpointDialogKey = endpointDialogAccount ? accountListKey(endpointDialogAccount) : null;
+  const endpointDialogBusy = Boolean(endpointDialogKey && savingEndpointKey === endpointDialogKey);
 
   useEffect(() => {
     if (!connection || !organizationCacheKey) {
@@ -209,6 +218,32 @@ export function AccountSettingsSection({
       onError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setSavingDefaultTeamId(null);
+    }
+  }
+
+  async function updateAccountEndpoints(input: AccountEndpointUpdate) {
+    if (!connection || !endpointDialogAccount) throw new Error("OpenPond server connection is not ready.");
+    const endpointKey = accountListKey(endpointDialogAccount);
+    setSavingEndpointKey(endpointKey);
+    onError(null);
+    try {
+      const nextPayload = await api.updateOpenPondAccountConfig(connection, {
+        handle: input.handle,
+        currentBaseUrl: input.currentBaseUrl,
+        baseUrl: input.baseUrl,
+        apiBaseUrl: input.apiBaseUrl,
+        chatApiBaseUrl: null,
+        environment: "staging",
+        setActive: endpointDialogAccount.isActive,
+      });
+      onPayload(nextPayload);
+      onToast?.("Account endpoints updated", "success");
+      setEndpointDialogAccount(null);
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : String(caught));
+      throw caught;
+    } finally {
+      setSavingEndpointKey(null);
     }
   }
 
@@ -319,8 +354,10 @@ export function AccountSettingsSection({
         const candidateHandle = candidate.handle?.trim() || "";
         const candidateLabel = firstPresentText(candidate.displayLabel, candidate.handle, "Unknown account");
         const candidateEmail = candidate.email?.trim() || null;
+        const candidateHasEnvironment = isCustomAccountEnvironment(candidate.environment);
+        const candidateKey = accountListKey(candidate);
         return (
-          <div className="account-row" key={`${candidateHandle || candidateLabel}-${candidate.baseUrl ?? "default"}`}>
+          <div className="account-row" key={candidateKey}>
             <AccountAvatar handle={candidateLabel} image={candidate.avatarUrl ?? null} />
             <div className="account-details">
               <strong>{candidateLabel}</strong>
@@ -329,9 +366,20 @@ export function AccountSettingsSection({
                   {candidateEmail}
                 </span>
               ) : null}
-              <span>{candidate.environment ?? "production"}</span>
+              <span>{accountEnvironmentLabel(candidate.environment ?? "production")}</span>
             </div>
             <div className="account-row-actions">
+              <button
+                className={`account-env-toggle ${candidateHasEnvironment ? "active" : ""}`}
+                disabled={!connection || saving || Boolean(savingEndpointKey) || !candidateHandle}
+                type="button"
+                aria-pressed={candidateHasEnvironment}
+                title="Configure environment endpoints"
+                onClick={() => setEndpointDialogAccount(candidate)}
+              >
+                <span className="account-env-toggle-switch" aria-hidden="true" />
+                <span>Environment</span>
+              </button>
               {candidate.isActive ? (
                 <span className="active-pill">Active</span>
               ) : (
@@ -380,8 +428,22 @@ export function AccountSettingsSection({
         <strong>{payload.appsMeta.lastRefreshError}</strong>
       </div>
     )}
+    {endpointDialogAccount ? (
+      <AccountEndpointDialog
+        account={endpointDialogAccount}
+        busy={endpointDialogBusy}
+        onClose={() => {
+          if (!endpointDialogBusy) setEndpointDialogAccount(null);
+        }}
+        onSave={updateAccountEndpoints}
+      />
+    ) : null}
   </section>
   );
+}
+
+function accountListKey(account: AccountRow): string {
+  return `${account.handle.trim().toLowerCase()}|${account.baseUrl ?? "default"}`;
 }
 
 function firstPresentText(...values: Array<string | null | undefined>): string {
@@ -393,6 +455,12 @@ function firstPresentText(...values: Array<string | null | undefined>): string {
 }
 
 function accountEnvironmentLabel(value: string): string {
-  if (!value) return "Production";
-  return value.slice(0, 1).toUpperCase() + value.slice(1);
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "production") return "Production";
+  return "Environment";
+}
+
+function isCustomAccountEnvironment(value?: string | null): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(normalized && normalized !== "production");
 }

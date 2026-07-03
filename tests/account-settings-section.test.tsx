@@ -112,6 +112,7 @@ describe("AccountSettingsSection", () => {
           {
             handle: "ada",
             baseUrl: "https://openpond.ai",
+            apiBaseUrl: "https://api.openpond.ai",
             chatApiBaseUrl: "https://opchat.openpond.ai",
             environment: "production",
             isActive: true,
@@ -125,8 +126,41 @@ describe("AccountSettingsSection", () => {
     );
 
     expect(html).toContain("Ada Lovelace");
+    expect(html).toContain("OpenPond accounts");
+    expect(html).toContain("Environment");
     expect(html).toContain("Add or update account");
     expect(html).toContain(">Save account<");
     expect(html).not.toContain("Connect this app to your OpenPond account");
+  });
+
+  test("does not render endpoint URLs in the account row", () => {
+    const html = renderAccountSettings(
+      accountState({
+        state: "signed_in",
+        activeProfile: { handle: "qa", baseUrl: "https://staging.openpond.ai" },
+        label: "QA User",
+        environment: "staging",
+        accounts: [
+          {
+            handle: "qa",
+            baseUrl: "https://staging.openpond.ai",
+            apiBaseUrl: "https://api-new.staging-api.openpond.ai",
+            chatApiBaseUrl: null,
+            environment: "staging",
+            isActive: true,
+            authHealth: "signed_in",
+            displayLabel: "QA User",
+            email: null,
+            avatarUrl: null,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain("QA User");
+    expect(html).toContain("Environment");
+    expect(html).not.toContain(">staging<");
+    expect(html).not.toContain("https://staging.openpond.ai");
+    expect(html).not.toContain("https://api-new.staging-api.openpond.ai");
   });
 });

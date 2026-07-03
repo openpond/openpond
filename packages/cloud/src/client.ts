@@ -315,6 +315,7 @@ export {
 export type {
   ActiveProfileSelector,
   ConfiguredProfile,
+  LocalConfig,
   SaveProfileApiKeyInput,
   SetActiveProfileOptions,
 } from "./config.js";

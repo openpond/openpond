@@ -99,6 +99,7 @@ export const AccountStateSchema = z.object({
     z.object({
       handle: z.string(),
       baseUrl: z.string().nullable(),
+      apiBaseUrl: z.string().nullable().optional().default(null),
       chatApiBaseUrl: z.string().nullable().optional(),
       environment: z.string().nullable(),
       isActive: z.boolean(),

@@ -13,6 +13,7 @@ export type {
   RuntimeLocalConfig,
   RuntimeLocalSession,
   SaveOpenPondAccountInput,
+  UpdateOpenPondAccountConfigInput,
 } from "./types.js";
 export { loadOpenPondAccountContext, switchOpenPondAccount } from "./account-context.js";
 export { createOpenPondRepoApp, loadOpenPondApps } from "./apps.js";
@@ -25,6 +26,7 @@ export {
   streamOpenPondHostedChatTurn,
 } from "./chat.js";
 export { saveOpenPondAccount } from "./save-account.js";
+export { updateOpenPondAccountConfig } from "./update-account-config.js";
 export {
   deleteOpenPondSchedule,
   deployOpenPondApp,
