@@ -1,7 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
+
+export type SaveEnvironmentAccountInput = {
+  apiKey: string;
+  handle?: string | null;
+  baseUrl: string;
+  apiBaseUrl: string;
+  environment?: string | null;
+};
 
 export function useAccountSettings({
   connection,
@@ -15,6 +23,10 @@ export function useAccountSettings({
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [refreshingAccounts, setRefreshingAccounts] = useState(false);
+
+  useEffect(() => {
+    if (!connection) setApiKey("");
+  }, [connection]);
 
   async function switchAccount(handleValue: string, baseUrlValue?: string | null) {
     if (!connection) return;
@@ -52,6 +64,31 @@ export function useAccountSettings({
     }
   }
 
+  async function saveEnvironmentAccount(input: SaveEnvironmentAccountInput) {
+    if (!connection || !input.apiKey.trim()) return;
+    setSaving(true);
+    onError(null);
+    try {
+      const handle = input.handle?.trim();
+      const environment = input.environment?.trim();
+      await api.saveOpenPondAccount(connection, {
+        apiKey: input.apiKey.trim(),
+        handle: handle || undefined,
+        baseUrl: input.baseUrl,
+        apiBaseUrl: input.apiBaseUrl,
+        environment: environment || "custom",
+        setActive: true,
+      });
+      onPayload(await api.savePreferences(connection, { defaultTeamId: null }));
+      setApiKey("");
+    } catch (saveError) {
+      onError(saveError instanceof Error ? saveError.message : String(saveError));
+      throw saveError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function refreshAccounts() {
     if (!connection) return;
     setRefreshingAccounts(true);
@@ -71,6 +108,7 @@ export function useAccountSettings({
     saving,
     refreshAccounts,
     saveAccount,
+    saveEnvironmentAccount,
     setApiKey,
     switchAccount,
   };

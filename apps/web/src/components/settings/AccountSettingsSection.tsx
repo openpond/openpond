@@ -9,6 +9,7 @@ import {
   AccountEndpointDialog,
   type AccountEndpointUpdate,
 } from "./AccountEndpointDialog";
+import type { SaveEnvironmentAccountInput } from "./useAccountSettings";
 import type { DropdownOption } from "../../lib/app-models";
 import { normalizeOpenPondOrganization } from "../../lib/cloud-project-utils";
 import {
@@ -30,6 +31,7 @@ type AccountSettingsSectionProps = {
   refreshingAccounts: boolean;
   setApiKey: Dispatch<SetStateAction<string>>;
   saveAccount: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  saveEnvironmentAccount: (input: SaveEnvironmentAccountInput) => Promise<void>;
   refreshAccounts: () => Promise<void>;
   switchAccount: (handleValue: string, baseUrlValue?: string | null) => Promise<void>;
   onPayload: (payload: BootstrapPayload) => void;
@@ -37,8 +39,8 @@ type AccountSettingsSectionProps = {
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
 
-const OPENPOND_API_KEYS_URL = "https://openpond.ai/settings/api-keys";
 type AccountRow = AccountState["accounts"][number];
+const DEFAULT_OPENPOND_API_KEYS_URL = "https://openpond.ai/settings/api-keys";
 
 export function AccountSettingsSection({
   payload,
@@ -48,6 +50,7 @@ export function AccountSettingsSection({
   refreshingAccounts,
   setApiKey,
   saveAccount,
+  saveEnvironmentAccount,
   refreshAccounts,
   switchAccount,
   onPayload,
@@ -62,11 +65,13 @@ export function AccountSettingsSection({
   const accountEmail = account?.email?.trim() || null;
   const accounts = account?.accounts ?? [];
   const [organizations, setOrganizations] = useState<OpenPondOrganization[]>([]);
-  const [organizationsLoading, setOrganizationsLoading] = useState(false);
+  const [, setOrganizationsLoading] = useState(false);
   const [organizationsError, setOrganizationsError] = useState<string | null>(null);
   const [savingDefaultTeamId, setSavingDefaultTeamId] = useState<string | null>(null);
   const [pendingDefaultTeamId, setPendingDefaultTeamId] = useState<string | null>(null);
   const [endpointDialogAccount, setEndpointDialogAccount] = useState<AccountRow | null>(null);
+  const [environmentConnectEnabled, setEnvironmentConnectEnabled] = useState(false);
+  const [environmentConnectDialogOpen, setEnvironmentConnectDialogOpen] = useState(false);
   const [savingEndpointKey, setSavingEndpointKey] = useState<string | null>(null);
   const activeCandidate = accounts.find((candidate) => candidate.isActive) ?? accounts[0] ?? null;
   const defaultTeamId = payload?.preferences.defaultTeamId?.trim() || null;
@@ -134,6 +139,7 @@ export function AccountSettingsSection({
     activeOrganizations.length === 0;
   const endpointDialogKey = endpointDialogAccount ? accountListKey(endpointDialogAccount) : null;
   const endpointDialogBusy = Boolean(endpointDialogKey && savingEndpointKey === endpointDialogKey);
+  const apiKeysUrl = accountApiKeysUrl(activeCandidate?.baseUrl ?? account?.baseUrl);
 
   useEffect(() => {
     if (!connection || !organizationCacheKey) {
@@ -221,6 +227,27 @@ export function AccountSettingsSection({
     }
   }
 
+  function submitAccountForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (environmentConnectEnabled) {
+      setEnvironmentConnectDialogOpen(true);
+      return;
+    }
+    void saveAccount(event);
+  }
+
+  async function saveEnvironmentConnect(input: AccountEndpointUpdate) {
+    await saveEnvironmentAccount({
+      apiKey: input.apiKey ?? "",
+      handle: input.handle,
+      baseUrl: input.baseUrl,
+      apiBaseUrl: input.apiBaseUrl,
+      environment: customEnvironmentName(input.environment),
+    });
+    setEnvironmentConnectDialogOpen(false);
+    setEnvironmentConnectEnabled(false);
+  }
+
   async function updateAccountEndpoints(input: AccountEndpointUpdate) {
     if (!connection || !endpointDialogAccount) throw new Error("OpenPond server connection is not ready.");
     const endpointKey = accountListKey(endpointDialogAccount);
@@ -228,12 +255,12 @@ export function AccountSettingsSection({
     onError(null);
     try {
       const nextPayload = await api.updateOpenPondAccountConfig(connection, {
-        handle: input.handle,
+        handle: input.handle ?? endpointDialogAccount.handle,
         currentBaseUrl: input.currentBaseUrl,
         baseUrl: input.baseUrl,
         apiBaseUrl: input.apiBaseUrl,
         chatApiBaseUrl: null,
-        environment: "staging",
+        environment: customEnvironmentName(input.environment),
         setActive: endpointDialogAccount.isActive,
       });
       onPayload(nextPayload);
@@ -300,7 +327,7 @@ export function AccountSettingsSection({
       </div>
     </div>
 
-    <form className="account-login-form" onSubmit={(event) => void saveAccount(event)}>
+    <form className="account-login-form" onSubmit={submitAccountForm}>
       {(signedOut || authError) ? (
         <div className="account-signin-panel">
           <KeyRound size={18} />
@@ -314,7 +341,7 @@ export function AccountSettingsSection({
           </div>
           <a
             className="settings-secondary account-api-key-link"
-            href={OPENPOND_API_KEYS_URL}
+            href={apiKeysUrl}
             rel="noreferrer"
             target="_blank"
           >
@@ -337,8 +364,21 @@ export function AccountSettingsSection({
             type="password"
           />
         </label>
+        <div className="account-environment-field">
+          <span>Environment</span>
+          <button
+            className={`account-env-toggle account-form-env-toggle ${environmentConnectEnabled ? "active" : ""}`}
+            disabled={saving}
+            type="button"
+            aria-pressed={environmentConnectEnabled}
+            onClick={() => setEnvironmentConnectEnabled((enabled) => !enabled)}
+          >
+            <span className="account-env-toggle-switch" aria-hidden="true" />
+            <span>Environment</span>
+          </button>
+        </div>
       </div>
-      <button className="settings-primary" disabled={saving || !apiKey.trim()}>
+      <button className="settings-primary" disabled={saving || (!environmentConnectEnabled && !apiKey.trim())}>
         <Plus size={15} />
         <span>{saving ? "Saving" : submitLabel}</span>
       </button>
@@ -438,6 +478,18 @@ export function AccountSettingsSection({
         onSave={updateAccountEndpoints}
       />
     ) : null}
+    {environmentConnectDialogOpen ? (
+      <AccountEndpointDialog
+        account={activeCandidate}
+        busy={saving}
+        initialApiKey={apiKey}
+        mode="connect"
+        onClose={() => {
+          if (!saving) setEnvironmentConnectDialogOpen(false);
+        }}
+        onSave={saveEnvironmentConnect}
+      />
+    ) : null}
   </section>
   );
 }
@@ -458,6 +510,24 @@ function accountEnvironmentLabel(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!normalized || normalized === "production") return "Production";
   return "Environment";
+}
+
+function accountApiKeysUrl(baseUrl?: string | null): string {
+  const trimmed = baseUrl?.trim().replace(/\/+$/, "");
+  if (!trimmed) return DEFAULT_OPENPOND_API_KEYS_URL;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return DEFAULT_OPENPOND_API_KEYS_URL;
+    return `${trimmed}/settings/api-keys`;
+  } catch {
+    return DEFAULT_OPENPOND_API_KEYS_URL;
+  }
+}
+
+function customEnvironmentName(value?: string | null): string {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "production") return "custom";
+  return trimmed;
 }
 
 function isCustomAccountEnvironment(value?: string | null): boolean {

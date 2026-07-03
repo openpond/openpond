@@ -944,6 +944,47 @@ describe("BYOK turn runner dispatch", () => {
     }
   });
 
+  test("allows native profile skill goals that explicitly exclude agent-style files", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-negated-agent-terms-"));
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      const profileSourcePath = path.join(repoPath, "profiles", "default");
+      await mkdir(profileSourcePath, { recursive: true });
+      const harness = createNativeProfileSkillGoalHarness({
+        repoPath,
+        profileSourcePath,
+        toolArgs: {
+          operation: "create",
+          objective: "Create a single SKILL.md tone-check skill with no scripts and no setup files.",
+          skillName: "tone-check",
+          source: "model_tool",
+        },
+      });
+
+      const turn = await harness.runner.sendTurn("session_1", {
+        prompt: "create me a profile skill with no scripts or setup files",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      });
+
+      expect(turn.status).toBe("completed");
+      expect(harness.sessions.get("session_1")?.cwd).toBe(repoPath);
+      const completed = harness.events.find(
+        (event) => event.name === "tool.completed" && event.action === "openpond_profile_skill_goal",
+      );
+      expect(completed).toMatchObject({
+        status: "completed",
+      });
+      expect((completed?.data as any)?.result).toMatchObject({
+        operation: "create",
+        targetSkillName: "tone-check",
+        targetSkillPath: "profiles/default/skills/tone-check/SKILL.md",
+        status: "queued",
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("restarts the current OpenPond goal through native goal control", async () => {
     const harness = createNativeGoalControlHarness({
       sessionOverrides: {

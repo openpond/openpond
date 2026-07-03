@@ -83,6 +83,34 @@ export function mergeSessionListPreservingLocalSidebarState(
   });
 }
 
+export function mergeBootstrapSessionListPreservingLocalState(
+  current: Session[],
+  incoming: Session[],
+  recentLocalSidebarChangeTimes?: SessionSidebarStateChangeTimes,
+  now = Date.now(),
+): Session[] {
+  const incomingIds = new Set(incoming.map((session) => session.id));
+  const preservedCurrentSessions = current.filter(
+    (session) => !incomingIds.has(session.id) && shouldPreserveMissingBootstrapSession(session, incoming),
+  );
+  return [
+    ...preservedCurrentSessions,
+    ...mergeSessionListPreservingLocalSidebarState(
+      current,
+      incoming,
+      recentLocalSidebarChangeTimes,
+      now,
+    ),
+  ];
+}
+
+export function shouldPreserveMissingBootstrapSession(session: Session, incoming: Session[]): boolean {
+  const sessionUpdatedAt = Date.parse(session.updatedAt);
+  if (!Number.isFinite(sessionUpdatedAt)) return false;
+  const newestIncomingUpdatedAt = latestSessionUpdatedAt(incoming);
+  return newestIncomingUpdatedAt === null || sessionUpdatedAt >= newestIncomingUpdatedAt;
+}
+
 export function recordSessionSidebarStateChanges(
   changeTimes: SessionSidebarStateChangeTimes,
   previous: Session[],
@@ -103,6 +131,16 @@ function isNewerIso(left: string, right: string): boolean {
   const leftMs = Date.parse(left);
   const rightMs = Date.parse(right);
   return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs > rightMs;
+}
+
+function latestSessionUpdatedAt(sessions: Session[]): number | null {
+  let latest: number | null = null;
+  for (const session of sessions) {
+    const updatedAt = Date.parse(session.updatedAt);
+    if (!Number.isFinite(updatedAt)) continue;
+    latest = latest === null ? updatedAt : Math.max(latest, updatedAt);
+  }
+  return latest;
 }
 
 function mergeRecentLocalSessionSidebarState(

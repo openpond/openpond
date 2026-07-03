@@ -30,10 +30,13 @@ import {
   type SidebarAppPreferenceChangeTimes,
 } from "../lib/sidebar-preference-state";
 import {
+  mergeBootstrapSessionListPreservingLocalState,
   mergeSessionListPreservingLocalSidebarState,
   recordSessionSidebarStateChanges,
+  shouldPreserveMissingBootstrapSession,
   type SessionSidebarStateChangeTimes,
 } from "../lib/session-state";
+import { mergeBootstrapRuntimeEvents } from "../lib/runtime-event-lists";
 import {
   appStartupState,
   type AppStartupStageId,
@@ -76,6 +79,9 @@ export function useAppBootstrap(params: {
   const appPreferenceChangeTimesRef = useRef<SidebarAppPreferenceChangeTimes>({});
   const sessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
   const codexHistorySessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
+  const sessionsRef = useRef<Session[]>([]);
+  const codexHistorySessionsRef = useRef<Session[]>([]);
+  const bootstrapServerIdRef = useRef<string | null>(null);
   const codexPreferenceSyncKeyRef = useRef<string | null>(null);
   const defaultTeamSyncKeyRef = useRef<string | null>(null);
   const latestDefaultTeamIdRef = useRef("");
@@ -100,6 +106,7 @@ export function useAppBootstrap(params: {
     setSessionsState((current) => {
       const next = typeof action === "function" ? action(current) : action;
       recordSessionSidebarStateChanges(sessionSidebarChangeTimesRef.current, current, next);
+      sessionsRef.current = next;
       return next;
     });
   }, []);
@@ -108,6 +115,7 @@ export function useAppBootstrap(params: {
     setCodexHistorySessionsState((current) => {
       const next = typeof action === "function" ? action(current) : action;
       recordSessionSidebarStateChanges(codexHistorySessionSidebarChangeTimesRef.current, current, next);
+      codexHistorySessionsRef.current = next;
       return next;
     });
   }, []);
@@ -139,23 +147,36 @@ export function useAppBootstrap(params: {
 
   const applyBootstrapPayload = useCallback(
     (payload: BootstrapPayload) => {
+      const previousServerId = bootstrapServerIdRef.current;
+      const sameServer = !previousServerId || previousServerId === payload.server.id;
+      bootstrapServerIdRef.current = payload.server.id;
       latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
-      setEvents(payload.events);
-      setSessionsState((current) =>
-        mergeSessionListPreservingLocalSidebarState(
-          current,
-          payload.sessions,
-          sessionSidebarChangeTimesRef.current,
-        ),
-      );
-      setCodexHistorySessionsState((current) =>
-        mergeSessionListPreservingLocalSidebarState(
+      setEvents((current) => (sameServer ? mergeBootstrapRuntimeEvents(payload.events, current) : payload.events));
+      setSessionsState((current) => {
+        const next = sameServer
+          ? mergeBootstrapSessionListPreservingLocalState(
+              current,
+              payload.sessions,
+              sessionSidebarChangeTimesRef.current,
+            )
+          : mergeSessionListPreservingLocalSidebarState(
+              current,
+              payload.sessions,
+              sessionSidebarChangeTimesRef.current,
+            );
+        sessionsRef.current = next;
+        return next;
+      });
+      setCodexHistorySessionsState((current) => {
+        const next = mergeSessionListPreservingLocalSidebarState(
           current,
           payload.codexHistorySessions ?? [],
           codexHistorySessionSidebarChangeTimesRef.current,
-        ),
-      );
+        );
+        codexHistorySessionsRef.current = next;
+        return next;
+      });
       setApprovals(payload.approvals);
       setAppPreferencesState((current) =>
         mergeSidebarAppPreferencesPreservingRecentLocal(
@@ -178,14 +199,21 @@ export function useAppBootstrap(params: {
         if ((payload.cloudProjects ?? []).some((project) => project.id === current)) return projectSelectionKey("cloud", current);
         return null;
       });
-      setSelectedSessionId((current) =>
-        current &&
-        [...payload.sessions, ...(payload.codexHistorySessions ?? [])].some(
-          (session) => session.id === current && !session.archived
-        )
+      setSelectedSessionId((current) => {
+        if (!current) return null;
+        const incomingSessions = [...payload.sessions, ...(payload.codexHistorySessions ?? [])];
+        if (incomingSessions.some((session) => session.id === current && !session.archived)) return current;
+        if (!sameServer) return null;
+        const existingSession =
+          sessionsRef.current.find((session) => session.id === current) ??
+          codexHistorySessionsRef.current.find((session) => session.id === current) ??
+          null;
+        return existingSession &&
+          !existingSession.archived &&
+          shouldPreserveMissingBootstrapSession(existingSession, incomingSessions)
           ? current
-          : null
-      );
+          : null;
+      });
     },
     [setSelectedAppId, setSelectedProjectId, setSelectedSessionId]
   );

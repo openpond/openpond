@@ -875,23 +875,33 @@ export function createTurnRunner(deps: {
   function profileSkillAgentRequirementReason(value: string): string | null {
     const normalized = value.toLowerCase();
     const unsupported = [
-      "script",
-      "reference file",
-      "references/",
-      "asset",
-      "tool dependency",
-      "mcp",
-      "setup file",
-      "setup command",
-      "eval",
-      "external system",
-      "webhook",
-      "api integration",
+      { label: "script", pattern: /\bscripts?\b/g },
+      { label: "reference file", pattern: /\breference\s+files?\b/g },
+      { label: "references/", pattern: /\breferences\//g },
+      { label: "asset", pattern: /\bassets?\b/g },
+      { label: "tool dependency", pattern: /\btool\s+dependencies?\b/g },
+      { label: "mcp", pattern: /\bmcp\b/g },
+      { label: "setup file", pattern: /\bsetup\s+files?\b/g },
+      { label: "setup command", pattern: /\bsetup\s+commands?\b/g },
+      { label: "eval", pattern: /\bevals?\b/g },
+      { label: "external system", pattern: /\bexternal\s+systems?\b/g },
+      { label: "webhook", pattern: /\bwebhooks?\b/g },
+      { label: "api integration", pattern: /\bapi\s+integrations?\b/g },
     ];
-    const match = unsupported.find((item) => normalized.includes(item));
-    return match
-      ? `Profile skills are single-file instructions and cannot include ${match}.`
-      : null;
+    for (const item of unsupported) {
+      item.pattern.lastIndex = 0;
+      for (const match of normalized.matchAll(item.pattern)) {
+        if (!isNegatedProfileSkillRequirement(normalized, match.index ?? 0)) {
+          return `Profile skills are single-file instructions and cannot include ${item.label}.`;
+        }
+      }
+    }
+    return null;
+  }
+
+  function isNegatedProfileSkillRequirement(value: string, matchIndex: number): boolean {
+    const prefix = value.slice(Math.max(0, matchIndex - 36), matchIndex);
+    return /\b(?:no|not|without|exclude|excluding|avoid|avoiding|never|cannot|can't|do not|don't)\s+(?:any\s+)?(?:extra\s+|additional\s+)?$/.test(prefix);
   }
 
   async function startGoalControlFromModelTool(

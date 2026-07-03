@@ -1,20 +1,25 @@
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 import type { AccountState } from "@openpond/contracts";
-import { Save, SlidersHorizontal, X } from "../icons";
+import { KeyRound, Save, SlidersHorizontal, X } from "../icons";
 
 type AccountRow = AccountState["accounts"][number];
+type AccountEndpointDialogMode = "update" | "connect";
 
 export type AccountEndpointUpdate = {
-  handle: string;
+  handle?: string;
   currentBaseUrl: string | null;
   baseUrl: string;
   apiBaseUrl: string;
+  apiKey?: string;
+  environment?: string | null;
 };
 
 type AccountEndpointDialogProps = {
-  account: AccountRow;
+  account?: AccountRow | null;
   busy: boolean;
+  initialApiKey?: string;
+  mode?: AccountEndpointDialogMode;
   onClose: () => void;
   onSave: (input: AccountEndpointUpdate) => Promise<void>;
 };
@@ -36,23 +41,33 @@ function normalizeRequiredUrl(label: string, value: string): string {
 export function AccountEndpointDialog({
   account,
   busy,
+  initialApiKey = "",
+  mode = "update",
   onClose,
   onSave,
 }: AccountEndpointDialogProps) {
   const titleId = useId();
-  const [baseUrl, setBaseUrl] = useState(account.baseUrl ?? "");
-  const [apiBaseUrl, setApiBaseUrl] = useState(account.apiBaseUrl ?? "");
+  const connectMode = mode === "connect";
+  const [apiKey, setApiKey] = useState(initialApiKey);
+  const [baseUrl, setBaseUrl] = useState(account?.baseUrl ?? "");
+  const [apiBaseUrl, setApiBaseUrl] = useState(account?.apiBaseUrl ?? "");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBaseUrl(account.baseUrl ?? "");
-    setApiBaseUrl(account.apiBaseUrl ?? "");
+    setApiKey(initialApiKey);
+    setBaseUrl(account?.baseUrl ?? "");
+    setApiBaseUrl(account?.apiBaseUrl ?? "");
     setError(null);
-  }, [account.baseUrl, account.apiBaseUrl, account.handle]);
+  }, [account?.apiBaseUrl, account?.baseUrl, account?.handle, initialApiKey]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    const trimmedApiKey = apiKey.trim();
+    if (connectMode && !trimmedApiKey) {
+      setError("API key is required.");
+      return;
+    }
     let normalizedBaseUrl: string;
     let normalizedApiBaseUrl: string;
     try {
@@ -65,10 +80,12 @@ export function AccountEndpointDialog({
 
     try {
       await onSave({
-        handle: account.handle,
-        currentBaseUrl: account.baseUrl ?? null,
+        handle: account?.handle,
+        currentBaseUrl: account?.baseUrl ?? null,
         baseUrl: normalizedBaseUrl,
         apiBaseUrl: normalizedApiBaseUrl,
+        apiKey: connectMode ? trimmedApiKey : undefined,
+        environment: account?.environment ?? null,
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -101,13 +118,26 @@ export function AccountEndpointDialog({
           <X size={16} />
         </button>
         <div className="git-dialog-icon">
-          <SlidersHorizontal size={18} />
+          {connectMode ? <KeyRound size={18} /> : <SlidersHorizontal size={18} />}
         </div>
-        <h2 id={titleId}>Environment endpoints</h2>
+        <h2 id={titleId}>{connectMode ? "Environment account" : "Environment endpoints"}</h2>
+        {connectMode ? (
+          <label className="git-dialog-field">
+            <span>API key</span>
+            <input
+              autoFocus
+              disabled={busy}
+              placeholder="opk_..."
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+          </label>
+        ) : null}
         <label className="git-dialog-field">
           <span>Base URL</span>
           <input
-            autoFocus
+            autoFocus={!connectMode}
             disabled={busy}
             inputMode="url"
             value={baseUrl}
@@ -130,7 +160,7 @@ export function AccountEndpointDialog({
           </button>
           <button className="git-dialog-primary" disabled={busy} type="submit">
             <Save size={14} />
-            <span>{busy ? "Saving" : "Update account"}</span>
+            <span>{busy ? "Saving" : connectMode ? "Connect account" : "Update account"}</span>
           </button>
         </div>
       </form>

@@ -27,6 +27,7 @@
 .account-list-heading small,
 .account-details span,
 .account-form-grid label span,
+.account-environment-field > span,
 .product-row span,
 .settings-footnote span,
 .empty-account-list span {
@@ -473,7 +474,8 @@
   padding: 14px 16px 12px;
 }
 
-.account-form-grid label {
+.account-form-grid label,
+.account-environment-field {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -494,6 +496,12 @@
 
 .account-form-grid input:focus {
   border-color: rgba(58, 163, 255, 0.45);
+}
+
+.account-form-env-toggle {
+  justify-self: start;
+  min-height: 34px;
+  border-radius: 17px;
 }
 
 .provider-settings-grid {

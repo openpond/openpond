@@ -16,6 +16,7 @@ import { AppSplash } from "./components/splash/AppSplash";
 import type { CloudSetupDialogState } from "./components/workspace/CloudSetupDialog";
 import { normalizeChatModel, SIDEBAR_SECTION_LIMIT, type SidebarProjectItem } from "./lib/app-models";
 import { buildCachedChatMessages } from "./lib/chat-messages";
+import { mergeRuntimeEventLists } from "./lib/runtime-event-lists";
 import {
   cachedCodexHistoryThreadPayload,
   CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT,
@@ -1933,19 +1934,6 @@ export function App() {
       }}
     />
   );
-}
-
-function mergeRuntimeEventLists(first: RuntimeEvent[], second: RuntimeEvent[]): RuntimeEvent[] {
-  if (first.length === 0) return second;
-  if (second.length === 0) return first;
-  const seen = new Set<string>();
-  const merged: RuntimeEvent[] = [];
-  for (const event of [...first, ...second]) {
-    if (seen.has(event.id)) continue;
-    seen.add(event.id);
-    merged.push(event);
-  }
-  return merged;
 }
 
 function oldestRuntimeEventSequence(events: RuntimeEvent[]): number | null {

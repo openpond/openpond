@@ -3,6 +3,7 @@ import { createElement, type FormEvent, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 
+import { AccountEndpointDialog } from "../apps/web/src/components/settings/AccountEndpointDialog";
 import { AccountSettingsSection } from "../apps/web/src/components/settings/AccountSettingsSection";
 
 const NOW = "2026-07-02T12:00:00.000Z";
@@ -76,6 +77,7 @@ function renderAccountSettings(account: AccountState): string {
       refreshingAccounts: false,
       setApiKey: (_value: SetStateAction<string>) => undefined,
       saveAccount: async (_event: FormEvent<HTMLFormElement>) => undefined,
+      saveEnvironmentAccount: async () => undefined,
       refreshAccounts: async () => undefined,
       switchAccount: async () => undefined,
       onPayload: () => undefined,
@@ -95,9 +97,12 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("Cloud projects, hosted agents, wallet, and team defaults are disabled until you sign in.");
     expect(html).toContain("https://openpond.ai/settings/api-keys");
     expect(html).toContain(">Create key<");
+    expect(html).toContain("Environment");
+    expect(html).toContain('aria-pressed="false"');
     expect(html).toContain(">Sign in<");
-    expect(html).not.toContain(">Production<");
     expect(html).not.toContain("No accounts found");
+    expect(html).not.toContain(">Production<");
+    expect(html).not.toContain(">Staging<");
   });
 
   test("keeps the update-account flow for signed-in users", () => {
@@ -162,5 +167,64 @@ describe("AccountSettingsSection", () => {
     expect(html).not.toContain(">qa<");
     expect(html).not.toContain("https://qa.openpond.example");
     expect(html).not.toContain("https://api.qa.openpond.example");
+  });
+
+  test("renders the environment connect dialog with api key and account endpoints", () => {
+    const html = renderToStaticMarkup(
+      createElement(AccountEndpointDialog, {
+        account: {
+          handle: "qa",
+          baseUrl: "https://qa.openpond.example",
+          apiBaseUrl: "https://api.qa.openpond.example",
+          chatApiBaseUrl: null,
+          environment: "qa",
+          isActive: true,
+          authHealth: "auth_error",
+          displayLabel: "QA User",
+          email: null,
+          avatarUrl: null,
+        },
+        busy: false,
+        initialApiKey: "opk_test",
+        mode: "connect",
+        onClose: () => undefined,
+        onSave: async () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Environment account");
+    expect(html).toContain("API key");
+    expect(html).toContain('value="opk_test"');
+    expect(html).toContain('value="https://qa.openpond.example"');
+    expect(html).toContain('value="https://api.qa.openpond.example"');
+    expect(html).toContain("Connect account");
+  });
+
+  test("keeps the endpoint update dialog focused on endpoints only", () => {
+    const html = renderToStaticMarkup(
+      createElement(AccountEndpointDialog, {
+        account: {
+          handle: "qa",
+          baseUrl: "https://qa.openpond.example",
+          apiBaseUrl: "https://api.qa.openpond.example",
+          chatApiBaseUrl: null,
+          environment: "qa",
+          isActive: true,
+          authHealth: "signed_in",
+          displayLabel: "QA User",
+          email: null,
+          avatarUrl: null,
+        },
+        busy: false,
+        onClose: () => undefined,
+        onSave: async () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Environment endpoints");
+    expect(html).toContain("Base URL");
+    expect(html).toContain("API base URL");
+    expect(html).toContain("Update account");
+    expect(html).not.toContain("API key");
   });
 });

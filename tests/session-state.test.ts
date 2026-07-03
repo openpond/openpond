@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@openpond/contracts";
 import {
+  mergeBootstrapSessionListPreservingLocalState,
   mergeSessionListPreservingLocalSidebarState,
   recordSessionSidebarStateChanges,
   RECENT_LOCAL_SESSION_SIDEBAR_STATE_TTL_MS,
@@ -100,6 +101,35 @@ describe("session state merging", () => {
         order: 1,
         status: "idle",
       },
+    ]);
+  });
+
+  test("keeps a newer local session when a stale bootstrap list arrives", () => {
+    const current = [
+      session({ id: "session_new", codexThreadId: null, updatedAt: newer, title: "New chat" }),
+      session({ id: "session_old", codexThreadId: "thread_old", updatedAt: older }),
+    ];
+    const incoming = [
+      session({ id: "session_old", codexThreadId: "thread_old", updatedAt: older }),
+    ];
+
+    expect(mergeBootstrapSessionListPreservingLocalState(current, incoming)).toEqual([
+      current[0],
+      incoming[0],
+    ]);
+  });
+
+  test("drops missing current sessions that are older than the bootstrap list", () => {
+    const current = [
+      session({ id: "session_missing", codexThreadId: "thread_missing", updatedAt: older }),
+      session({ id: "session_live", codexThreadId: "thread_live", updatedAt: older }),
+    ];
+    const incoming = [
+      session({ id: "session_live", codexThreadId: "thread_live", updatedAt: newer }),
+    ];
+
+    expect(mergeBootstrapSessionListPreservingLocalState(current, incoming)).toEqual([
+      incoming[0],
     ]);
   });
 
