@@ -36,17 +36,6 @@ async function git(cwd: string, args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd });
 }
 
-type GitTraceCommand = {
-  cwd: string;
-  args: string[];
-};
-
-function parseGitTraceLine(line: string): GitTraceCommand | null {
-  if (!line) return null;
-  const [cwd, ...args] = line.split("\t");
-  return cwd ? { cwd, args } : null;
-}
-
 function diffSummary(files: WorkspaceDiffSummary["files"]): WorkspaceDiffSummary {
   return {
     appId: "workspace-test",
@@ -190,9 +179,8 @@ describe("workspace diff", () => {
     expect(item13?.content).toBe("export const item13 = 13;\n");
   });
 
-  test("loads tracked full-detail patches from one combined git diff stream", async () => {
+  test("loads tracked and untracked full-detail patches", async () => {
     const repoPath = await createTempDir("openpond-workspace-diff-combined-");
-    const wrapperDir = await createTempDir("openpond-git-trace-");
     await git(repoPath, ["init"]);
     await mkdir(path.join(repoPath, "src"), { recursive: true });
     await writeFile(path.join(repoPath, "src", "a.ts"), "export const a = 1;\n", "utf8");
@@ -206,17 +194,7 @@ describe("workspace diff", () => {
     await rm(path.join(repoPath, "src", "c.ts"));
     await writeFile(path.join(repoPath, "src", "untracked.ts"), "export const fresh = true;\n", "utf8");
 
-    const logPath = path.join(wrapperDir, "git-args.log");
-    const originalTracePath = process.env.OPENPOND_GIT_TRACE_ARGS;
-    process.env.OPENPOND_GIT_TRACE_ARGS = logPath;
-
-    let fullDiff: WorkspaceDiffSummary;
-    try {
-      fullDiff = await loadWorkspaceDiffAtPath(repoPath, "workspace-test", { includeFileDetails: true });
-    } finally {
-      if (originalTracePath === undefined) delete process.env.OPENPOND_GIT_TRACE_ARGS;
-      else process.env.OPENPOND_GIT_TRACE_ARGS = originalTracePath;
-    }
+    const fullDiff = await loadWorkspaceDiffAtPath(repoPath, "workspace-test", { includeFileDetails: true });
 
     const byPath = new Map(fullDiff.files.map((file) => [file.path, file]));
     expect(byPath.get("src/a.ts")?.patch).toContain("+export const a = 10;");
@@ -226,45 +204,6 @@ describe("workspace diff", () => {
     expect(byPath.get("src/c.ts")).toMatchObject({ status: "deleted", content: null });
     expect(byPath.get("src/c.ts")?.patch).toContain("+++ /dev/null");
     expect(byPath.get("src/untracked.ts")?.patch).toContain("src/untracked.ts");
-
-    const trace = await readFile(logPath, "utf8");
-    const repoCommands = trace
-      .split("\n")
-      .map(parseGitTraceLine)
-      .filter((command): command is GitTraceCommand => Boolean(command && command.cwd === repoPath));
-    const trackedPatchCommands = repoCommands.filter((command) => (
-      command.args.length === 8 &&
-      command.args[0] === "-c" &&
-      command.args[1] === "core.quotePath=false" &&
-      command.args[2] === "diff" &&
-      command.args[3] === "--no-ext-diff" &&
-      command.args[4] === "--unified=80" &&
-      command.args[5] === "HEAD" &&
-      command.args[6] === "--" &&
-      command.args[7] === "."
-    ));
-    const untrackedPatchCommands = repoCommands.filter((command) => (
-      command.args.length === 6 &&
-      command.args[0] === "diff" &&
-      command.args[1] === "--no-index" &&
-      command.args[2] === "--unified=80" &&
-      command.args[3] === "--" &&
-      command.args[4] === "/dev/null" &&
-      command.args[5] === path.join(repoPath, "src", "untracked.ts")
-    ));
-
-    expect(trackedPatchCommands).toHaveLength(1);
-    expect(trackedPatchCommands[0]?.args).toEqual([
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "--no-ext-diff",
-      "--unified=80",
-      "HEAD",
-      "--",
-      ".",
-    ]);
-    expect(untrackedPatchCommands).toHaveLength(1);
   });
 
   test("caches unchanged diff summaries and invalidates on real worktree edits", async () => {

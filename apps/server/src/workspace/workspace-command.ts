@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { accessSync, appendFileSync, constants, existsSync, promises as fs } from "node:fs";
+import { accessSync, constants, existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
 export type CommandResult = {
@@ -76,7 +76,6 @@ function runCommand(
       resolve({ code: 1, stdout: "", stderr: resolved.error });
       return;
     }
-    traceWorkspaceCommand(command, args, cwd);
     const child = spawn(resolved.command, args, {
       cwd,
       env: {
@@ -104,16 +103,6 @@ function runCommand(
 }
 
 export { runCommand as runWorkspaceCommand };
-
-function traceWorkspaceCommand(command: string, args: string[], cwd: string): void {
-  const tracePath = process.env.OPENPOND_GIT_TRACE_ARGS;
-  if (command !== "git" || !tracePath) return;
-  try {
-    appendFileSync(tracePath, `${[cwd, ...args].join("\t")}\n`, "utf8");
-  } catch {
-    // Tracing is only used by tests and diagnostics; never fail workspace commands for it.
-  }
-}
 
 export function isMacOSGitDeveloperToolsMissing(value: string | null | undefined): boolean {
   return Boolean(value && value.includes(MACOS_GIT_MISSING_DEVELOPER_TOOLS_ERROR.slice(0, 80)));
