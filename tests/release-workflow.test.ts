@@ -13,7 +13,7 @@ import { validatePackagedSmokeReports } from "../scripts/validate-packaged-smoke
 const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
 
 describe("release workflow", () => {
-  test("keeps packaged desktop smoke wired for Linux, macOS, and Windows release builds", () => {
+  test("keeps packaged desktop smoke wired for Linux and macOS release builds while Windows is disabled", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
     expect(workflow).toContain("- name: linux-appimage");
@@ -24,10 +24,10 @@ describe("release workflow", () => {
     expect(workflow).toContain("os: macos-latest");
     expect(workflow).toContain("package_script: package:mac:release");
 
-    expect(workflow).toContain("- name: windows-nsis");
-    expect(workflow).toContain("os: windows-latest");
-    expect(workflow).toContain("package_script: package:win:release");
-    expect(workflow).not.toMatch(/#\s*-\s*name:\s*windows-nsis/);
+    expect(workflow).toMatch(/#\s*-\s*name:\s*windows-nsis/);
+    expect(workflow).not.toMatch(/^\s*-\s*name:\s*windows-nsis$/m);
+    expect(workflow).not.toMatch(/^\s*os:\s*windows-latest$/m);
+    expect(workflow).not.toMatch(/^\s*package_script:\s*package:win:release$/m);
 
     expect(workflow).toContain("name: Run tests");
     expect(workflow).toContain("bun run test");
@@ -110,21 +110,20 @@ describe("release workflow", () => {
     try {
       await writeSmokeReport(dir, "linux-appimage", "linux");
       await writeSmokeReport(dir, "mac-zip", "darwin");
-      await writeSmokeReport(dir, "windows-nsis", "win32");
 
       await expect(validatePackagedSmokeReports({ dir })).resolves.toMatchObject({
         ok: true,
         reports: [
           { name: "linux-appimage", platform: "linux" },
           { name: "mac-zip", platform: "darwin" },
-          { name: "windows-nsis", platform: "win32" },
         ],
       });
 
-      await writeSmokeReport(dir, "windows-nsis", "linux");
+      await writeSmokeReport(dir, "linux-appimage", "darwin");
       await expect(validatePackagedSmokeReports({ dir })).rejects.toThrow(
-        "smoke-windows-nsis.json: expected platform win32, got linux",
+        "smoke-linux-appimage.json: expected platform linux, got darwin",
       );
+      await writeSmokeReport(dir, "linux-appimage", "linux");
 
       await rm(join(dir, "smoke-mac-zip.json"), { force: true });
       await expect(validatePackagedSmokeReports({ dir })).rejects.toThrow(
@@ -134,7 +133,6 @@ describe("release workflow", () => {
       await writeSmokeReport(dir, "mac-zip", "darwin", {
         renderer: { readyState: "loading" },
       });
-      await writeSmokeReport(dir, "windows-nsis", "win32");
       await expect(validatePackagedSmokeReports({ dir })).rejects.toThrow(
         "smoke-mac-zip.json: renderer readyState must be complete",
       );

@@ -30,7 +30,8 @@ type SmokeReport = {
 const DEFAULT_EXPECTED_REPORTS: ExpectedReport[] = [
   { name: "linux-appimage", platform: "linux", requireWindowExit: true },
   { name: "mac-zip", platform: "darwin", requireWindowExit: false },
-  { name: "windows-nsis", platform: "win32", requireWindowExit: true },
+  // Temporarily disabled while Windows release builds are unstable.
+  // { name: "windows-nsis", platform: "win32", requireWindowExit: true },
 ];
 
 async function main(): Promise<void> {

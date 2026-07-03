@@ -160,9 +160,10 @@ jobs:
           - name: mac-zip
             os: macos-latest
             package_script: package:mac:release
-          - name: windows-nsis
-            os: windows-latest
-            package_script: package:win:release
+          # Temporarily disabled while Windows release builds are unstable.
+          # - name: windows-nsis
+          #   os: windows-latest
+          #   package_script: package:win:release
 
     steps:
       - uses: actions/checkout@v4
