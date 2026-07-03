@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer, type Server } from "node:http";
+import { readdirSync } from "node:fs";
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -288,11 +289,26 @@ export function packagedAppCandidates(
       path.join(root, "release", "win-arm64-unpacked", "openpond nightly.exe"),
     ];
   }
+  const linuxAppImages = existingFiles(path.join(root, "release"))
+    .filter((file) => file.endsWith(".AppImage"))
+    .sort((left, right) => left.localeCompare(right))
+    .map((file) => path.join(root, "release", file));
   return [
     path.join(root, "release", "linux-unpacked", "openpond"),
     path.join(root, "release", "linux-unpacked", "openpond nightly"),
+    ...linuxAppImages,
     path.join(root, "release", "openpond-0.0.1.AppImage"),
   ];
+}
+
+function existingFiles(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
 }
 
 export function launchTargetForPath(

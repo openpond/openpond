@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -84,6 +84,25 @@ describe("release workflow", () => {
       join(root, "release", "linux-unpacked", "openpond nightly"),
       join(root, "release", "openpond-0.0.1.AppImage"),
     ]);
+  });
+
+  test("packaged smoke resolver discovers release-versioned Linux AppImages", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openpond-release-candidates-"));
+    try {
+      await mkdir(join(root, "release"), { recursive: true });
+      await writeFile(join(root, "release", "openpond-nightly-0.0.5-nightly.20260702.1-linux-x64.AppImage"), "");
+      await writeFile(join(root, "release", "openpond-0.1.0-linux-x64.AppImage"), "");
+
+      expect(packagedAppCandidates(root, "linux")).toEqual([
+        join(root, "release", "linux-unpacked", "openpond"),
+        join(root, "release", "linux-unpacked", "openpond nightly"),
+        join(root, "release", "openpond-0.1.0-linux-x64.AppImage"),
+        join(root, "release", "openpond-nightly-0.0.5-nightly.20260702.1-linux-x64.AppImage"),
+        join(root, "release", "openpond-0.0.1.AppImage"),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("validates packaged smoke report artifacts before release publishing", async () => {

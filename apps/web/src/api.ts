@@ -83,6 +83,10 @@ type ProviderModelsResponse = {
   providers: ProviderSettings;
 };
 
+type CodexHistoryTurnInterruptResponse =
+  | { interrupted: true }
+  | { interrupted: false; reason: "no_active_openpond_turn" | "turn_not_ready" };
+
 export type RuntimeEventPagePayload = {
   events: Array<{ sequence: number; event: RuntimeEvent }>;
   sessionId: string | null;
@@ -398,7 +402,7 @@ export const api = {
       },
     ),
   interruptCodexHistoryTurn: (connection: ClientConnection, sessionId: string) =>
-    apiFetch<{ interrupted: boolean }>(
+    apiFetch<CodexHistoryTurnInterruptResponse>(
       connection,
       `/v1/codex-history/${encodeURIComponent(sessionId)}/turns/interrupt`,
       {

@@ -24,10 +24,11 @@ async function createTempDir(prefix: string): Promise<string> {
 
 async function createFakeLspServer(): Promise<{ command: string; logPath: string }> {
   const dir = await createTempDir("openpond-fake-lsp-");
-  const command = path.join(dir, "fake-lsp.cjs");
+  const scriptPath = path.join(dir, "fake-lsp.cjs");
+  const command = process.platform === "win32" ? path.join(dir, "fake-lsp.cmd") : scriptPath;
   const logPath = path.join(dir, "fake-lsp.log");
   await writeFile(
-    command,
+    scriptPath,
     `#!/usr/bin/env node
 const fs = require("node:fs");
 const logPath = process.env.OPENPOND_FAKE_LSP_LOG;
@@ -117,6 +118,10 @@ process.on("exit", () => log("exit " + process.pid));
 `,
     "utf8",
   );
+  if (process.platform === "win32") {
+    await writeFile(command, `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`, "utf8");
+  }
+  await chmod(scriptPath, 0o755);
   await chmod(command, 0o755);
   return { command, logPath };
 }
@@ -255,9 +260,11 @@ describe("workspace LSP manager lifecycle", () => {
 
   test("caps active clients, captures bounded stderr, and evicts idle real LSP subprocesses", async () => {
     const { command, logPath } = await createFakeLspServer();
+    let nowMs = 1_000;
     const manager = new WorkspaceLspManager({
-      idleTimeoutMs: 140,
+      idleTimeoutMs: 1_000,
       maxClients: 2,
+      nowMs: () => nowMs,
       stderrMaxChars: 96,
     });
     const originalLogPath = process.env.OPENPOND_FAKE_LSP_LOG;
@@ -271,6 +278,7 @@ describe("workspace LSP manager lifecycle", () => {
       ]);
 
       const first = await touchTypescriptFile(manager, repos[0]!, command);
+      nowMs += 100;
       await touchTypescriptFile(manager, repos[1]!, command);
       let status = manager.runtimeStatus();
 
@@ -279,12 +287,13 @@ describe("workspace LSP manager lifecycle", () => {
       expect(status.clients[0]?.stderrTail.length).toBeLessThanOrEqual(96);
       expect(status.clients[0]?.stderrTail).toContain("fake stderr");
 
+      nowMs += 100;
       await touchTypescriptFile(manager, repos[2]!, command);
       status = manager.runtimeStatus();
       expect(status.clients).toHaveLength(2);
       await waitForLogCount(logPath, /^sigterm /, 1);
 
-      await new Promise((resolve) => setTimeout(resolve, 180));
+      nowMs += 2_000;
       expect(manager.runtimeStatus().clients).toHaveLength(0);
       await waitForLogCount(logPath, /^sigterm /, 3);
     } finally {

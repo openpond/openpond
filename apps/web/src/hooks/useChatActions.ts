@@ -625,7 +625,19 @@ export function useChatActions({
       try {
         const result = await api.interruptCodexHistoryTurn(connection, activeSessionId);
         if (!result.interrupted) {
-          setError("This Codex history turn was not started by OpenPond, so it cannot be interrupted here.");
+          if (result.reason === "no_active_openpond_turn") {
+            const payload = await api.codexHistoryThread(connection, activeSessionId, { tail: true });
+            const session = { ...payload.session, status: "idle" as const };
+            if (selectedSession?.id === activeSessionId) setCodexHistoryEvents(payload.events);
+            setCodexHistorySessions((current) =>
+              upsertSessionPreservingLocalSidebarState(current, session),
+            );
+            setError(
+              "OpenPond no longer has a live interrupt handle for this Codex history turn. The chat was marked idle so you can send again.",
+            );
+            return true;
+          }
+          setError("This Codex history turn is still starting. Try stopping it again in a moment.");
           return false;
         }
         const payload = await api.codexHistoryThread(connection, activeSessionId, { tail: true });
@@ -638,7 +650,7 @@ export function useChatActions({
         const message = stopError instanceof Error ? stopError.message : String(stopError);
         setError(
           message === "Not found"
-            ? "This Codex history turn cannot be interrupted from OpenPond. It may have been started by a separate raw Codex process."
+            ? "OpenPond could not find this Codex history session, so it cannot interrupt it here."
             : message,
         );
         return false;

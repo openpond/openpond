@@ -189,6 +189,9 @@ type ActiveCodexHistoryTurn = {
   threadId: string;
   turnId: string | null;
 };
+type CodexHistoryTurnInterruptResponse =
+  | { interrupted: true }
+  | { interrupted: false; reason: "no_active_openpond_turn" | "turn_not_ready" };
 const CLOUD_PROJECT_CACHE_TYPE = "openpond.cloudProjects";
 const BOOTSTRAP_EVENT_WINDOW_LIMIT = 500;
 const BOOTSTRAP_DIAGNOSTIC_LIMIT = 50;
@@ -1173,12 +1176,15 @@ export function createServerPayloads(deps: {
     }
   }
 
-  async function interruptCodexHistoryTurnPayload(sessionId: string): Promise<unknown> {
+  async function interruptCodexHistoryTurnPayload(sessionId: string): Promise<CodexHistoryTurnInterruptResponse> {
     const activeTurn = activeCodexHistoryTurns.get(sessionId);
-    if (!activeTurn) return { interrupted: false };
+    if (!activeTurn) return { interrupted: false, reason: "no_active_openpond_turn" };
     activeTurn.interrupted = true;
     await activeTurn.ready;
-    if (!activeTurn.turnId || !activeTurn.completion) return { interrupted: false };
+    if (!activeTurn.turnId || !activeTurn.completion) {
+      await activeTurn.client.stop().catch(() => undefined);
+      return { interrupted: false, reason: "turn_not_ready" };
+    }
     await activeTurn.client.interruptTurn({
       threadId: activeTurn.threadId,
       turnId: activeTurn.turnId,

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -34,34 +34,6 @@ async function createTempDir(prefix: string): Promise<string> {
 
 async function git(cwd: string, args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd });
-}
-
-async function resolveGitBinary(): Promise<string> {
-  const result = await execFileAsync("bash", ["-lc", "command -v git"]);
-  return String(result.stdout).trim();
-}
-
-async function installGitTraceWrapper(wrapperDir: string): Promise<{ logPath: string; wrapperPath: string }> {
-  const wrapperPath = path.join(wrapperDir, "git");
-  const logPath = path.join(wrapperDir, "git-args.log");
-  await writeFile(
-    wrapperPath,
-    [
-      "#!/usr/bin/env bash",
-      "if [[ -n \"${OPENPOND_GIT_TRACE_ARGS:-}\" ]]; then",
-      "  {",
-      "    printf '%s' \"$PWD\"",
-      "    for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done",
-      "    printf '\\n'",
-      "  } >> \"$OPENPOND_GIT_TRACE_ARGS\"",
-      "fi",
-      "exec \"$OPENPOND_REAL_GIT\" \"$@\"",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  await chmod(wrapperPath, 0o755);
-  return { logPath, wrapperPath };
 }
 
 type GitTraceCommand = {
@@ -234,25 +206,16 @@ describe("workspace diff", () => {
     await rm(path.join(repoPath, "src", "c.ts"));
     await writeFile(path.join(repoPath, "src", "untracked.ts"), "export const fresh = true;\n", "utf8");
 
-    const realGit = await resolveGitBinary();
-    const { logPath } = await installGitTraceWrapper(wrapperDir);
-    const originalPath = process.env.PATH;
+    const logPath = path.join(wrapperDir, "git-args.log");
     const originalTracePath = process.env.OPENPOND_GIT_TRACE_ARGS;
-    const originalRealGit = process.env.OPENPOND_REAL_GIT;
-    process.env.PATH = `${wrapperDir}${path.delimiter}${originalPath ?? ""}`;
     process.env.OPENPOND_GIT_TRACE_ARGS = logPath;
-    process.env.OPENPOND_REAL_GIT = realGit;
 
     let fullDiff: WorkspaceDiffSummary;
     try {
       fullDiff = await loadWorkspaceDiffAtPath(repoPath, "workspace-test", { includeFileDetails: true });
     } finally {
-      if (originalPath === undefined) delete process.env.PATH;
-      else process.env.PATH = originalPath;
       if (originalTracePath === undefined) delete process.env.OPENPOND_GIT_TRACE_ARGS;
       else process.env.OPENPOND_GIT_TRACE_ARGS = originalTracePath;
-      if (originalRealGit === undefined) delete process.env.OPENPOND_REAL_GIT;
-      else process.env.OPENPOND_REAL_GIT = originalRealGit;
     }
 
     const byPath = new Map(fullDiff.files.map((file) => [file.path, file]));
