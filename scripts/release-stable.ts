@@ -12,6 +12,7 @@ type PackageJson = {
 
 const versionedPackageFiles = [
   "package.json",
+  "apps/cli/package.json",
   "apps/desktop/package.json",
   "apps/server/package.json",
   "apps/terminal/package.json",
@@ -99,6 +100,54 @@ async function writeServerVersion(root: string, version: string, dryRun: boolean
   await writeFile(serverPath, updated);
 }
 
+async function writeCliPackageLockVersion(root: string, version: string, dryRun: boolean): Promise<void> {
+  const lockFile = "apps/cli/package-lock.json";
+  const lockPath = path.join(root, lockFile);
+  const packageLock = JSON.parse(await readFile(lockPath, "utf8")) as {
+    version?: string;
+    packages?: Record<string, { version?: string }>;
+  };
+  packageLock.version = version;
+  if (packageLock.packages?.[""]) {
+    packageLock.packages[""].version = version;
+  }
+  if (dryRun) {
+    console.log(`[dry-run] update ${lockFile} root package version -> ${version}`);
+    return;
+  }
+  await writeFile(lockPath, `${JSON.stringify(packageLock, null, 2)}\n`);
+}
+
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function writeBunLockWorkspaceVersions(root: string, version: string, dryRun: boolean): Promise<void> {
+  const lockFile = "bun.lock";
+  const lockPath = path.join(root, lockFile);
+  let source = await readFile(lockPath, "utf8");
+  const workspacePaths = versionedPackageFiles
+    .map((file) => path.dirname(file))
+    .filter((dirname) => dirname !== ".");
+
+  for (const workspacePath of workspacePaths) {
+    const sectionPattern = new RegExp(
+      `    "${escapeRegExp(workspacePath)}": \\{[\\s\\S]*?\\n    \\},`
+    );
+    const section = source.match(sectionPattern)?.[0];
+    if (!section) fail(`Could not find ${workspacePath} in ${lockFile}.`);
+    const updatedSection = section.replace(/"version": "[^"]+"/, `"version": "${version}"`);
+    if (updatedSection === section) fail(`Could not update ${workspacePath} version in ${lockFile}.`);
+    source = source.replace(section, updatedSection);
+  }
+
+  if (dryRun) {
+    console.log(`[dry-run] update ${lockFile} workspace versions -> ${version}`);
+    return;
+  }
+  await writeFile(lockPath, source);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const dryRun = process.argv.includes("--dry-run");
@@ -146,13 +195,19 @@ if (version !== currentVersion) {
   for (const file of versionedPackageFiles) {
     await writePackage(root, file, version, dryRun);
   }
+  await writeCliPackageLockVersion(root, version, dryRun);
   await writeServerVersion(root, version, dryRun);
   run("bun", ["install", "--lockfile-only", "--save-text-lockfile"], dryRun);
+  await writeBunLockWorkspaceVersions(root, version, dryRun);
   if (!skipChecks) {
     run("bun", ["run", "typecheck"], dryRun);
     run("bun", ["run", "test"], dryRun);
   }
-  run("git", ["add", ...versionedPackageFiles, "apps/server/src/constants.ts", "bun.lock"], dryRun);
+  run(
+    "git",
+    ["add", ...versionedPackageFiles, "apps/cli/package-lock.json", "apps/server/src/constants.ts", "bun.lock"],
+    dryRun
+  );
   run("git", ["commit", "-m", `chore: release ${tag}`], dryRun);
   run("git", ["push", "origin", branch], dryRun);
 } else if (!skipChecks) {

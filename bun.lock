@@ -25,7 +25,7 @@
     },
     "apps/cli": {
       "name": "openpond",
-      "version": "0.0.1",
+      "version": "0.0.6",
       "bin": {
         "openpond-code": "dist/cli.js",
         "openpond": "dist/cli.js",
@@ -45,14 +45,14 @@
     },
     "apps/desktop": {
       "name": "@openpond/desktop",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "dependencies": {
         "electron": "^39.2.7",
       },
     },
     "apps/server": {
       "name": "@openpond/local-server",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "bin": {
         "openpond-app-server": "./dist/index.js",
       },
@@ -71,7 +71,7 @@
     },
     "apps/terminal": {
       "name": "@openpond/terminal",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "bin": {
         "openpond-app": "./dist/index.js",
       },
@@ -81,7 +81,7 @@
     },
     "apps/web": {
       "name": "@openpond/web",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "dependencies": {
         "@openpond/contracts": "workspace:*",
         "@xterm/addon-fit": "^0.11.0",
@@ -121,11 +121,11 @@
     },
     "packages/codex-provider": {
       "name": "@openpond/codex-provider",
-      "version": "0.0.5",
+      "version": "0.0.6",
     },
     "packages/contracts": {
       "name": "@openpond/contracts",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "dependencies": {
         "@openpond/cloud": "workspace:*",
         "zod": "^4.1.13",
@@ -133,7 +133,7 @@
     },
     "packages/runtime": {
       "name": "@openpond/runtime",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "dependencies": {
         "@openpond/cloud": "workspace:*",
         "@openpond/contracts": "workspace:*",
