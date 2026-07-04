@@ -9,7 +9,7 @@ Use OpenPond Cloud when you need remote dependencies, long-running work, cloud-o
 - Local project: the repo or folder you are working in from the desktop app, CLI, or TUI.
 - OpenPond Project: the cloud-side record that points at source metadata and an `openpond.yaml` manifest.
 - Agent: the runnable unit created from a synced Project or SDK-generated manifest.
-- Hosted sandbox runtime: the cloud workspace for a run, chat, replay, or source-editing session.
+- Hosted workspace: the cloud environment for a run, chat, replay, or source-editing session.
 - Source ref: the git-backed checkpoint that keeps changes preservable and reviewable.
 
 ## Local To Cloud Flow
@@ -19,7 +19,7 @@ Use OpenPond Cloud when you need remote dependencies, long-running work, cloud-o
 3. Connect the project to an OpenPond Project.
 4. Sync the manifest and source metadata.
 5. Create or attach an Agent.
-6. Start a hosted sandbox runtime for chat, an action run, a goal, or a replay.
+6. Start hosted execution for chat, an action run, a goal, or a replay.
 7. Preserve the hosted source when the work is useful.
 8. Promote or merge the preserved source only when you are ready.
 
@@ -28,7 +28,7 @@ The local repo remains the place you understand and review the work. OpenPond Cl
 ## What OpenPond Cloud Provides
 
 - Hosted shell and file operations for cloud workspaces.
-- Hosted sandbox actions from `openpond.yaml` and Agent SDK artifacts.
+- Hosted actions from `openpond.yaml` and Agent SDK artifacts.
 - Logs, receipts, artifacts, and runtime status.
 - Source preservation before publishing or promotion.
 - Snapshot and replay flows for reproducible runs.

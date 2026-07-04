@@ -40,7 +40,7 @@ openpond deploy watch <handle>/<repo> --branch main
 openpond template status <handle>/<repo>
 openpond template branches <handle>/<repo>
 openpond template update <handle>/<repo> --env production
-openpond repo create --name my-repo --path . [--sandbox]
+openpond repo create --name my-repo --path .
 openpond repo push --path . --branch main
 openpond apps list [--handle <handle>] [--refresh] [--json]
 openpond apps tools
@@ -76,7 +76,7 @@ Command reference:
 - `openpond template status <handle>/<repo>`: check whether a template update is available.
 - `openpond template branches <handle>/<repo>`: list available template branches.
 - `openpond template update <handle>/<repo> [--env preview|production]`: deploy the latest template commit.
-- `openpond repo create --name <name> [--path <dir>] [--empty|--opentool] [--sandbox] [--deploy-on-push]`: create an OpenPond repo and attach the git remote.
+- `openpond repo create --name <name> [--path <dir>] [--empty|--opentool] [--deploy-on-push]`: create an OpenPond repo and attach the git remote.
 - `openpond repo push [--path <dir>] [--branch <branch>]`: push the current git branch using a tokenized remote (non-interactive, restores origin after push).
 - `openpond apps list [--handle <handle>] [--refresh] [--json]`: list apps for your account, optionally filtered by handle.
 - `openpond apps tools`: list tools for your account (public API).

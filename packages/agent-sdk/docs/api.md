@@ -17,7 +17,7 @@ OpenPond agent projects should import from public package subpaths only. Do not 
 
 ## Runtime And Checks
 
-- `openpond-agent-sdk/runtime`: local execution harness helpers such as `inspectActions`, `runAction`, `runChatAction`, `runEval`, `executeAction`, `createRunState`, `createEvalContext`, and `writeTrace`.
+- `openpond-agent-sdk/runtime`: local execution helpers such as `inspectActions`, `runAction`, `runChatAction`, `runEval`, `executeAction`, `createRunState`, `createEvalContext`, and `writeTrace`.
 - `openpond-agent-sdk/eval`: eval definition helpers.
 - `openpond-agent-sdk/tracing`: trace artifact helpers.
 - `openpond-agent-sdk/validator`: `validateAgentProject`, `formatValidationReport`, and `writeValidationReport`.

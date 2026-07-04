@@ -1,6 +1,6 @@
 # Tracing And Evals
 
-The local runtime harness records structured events and artifacts into trace JSONL.
+The local runtime runner records structured events and artifacts into trace JSONL.
 
 ## Trace Helpers
 

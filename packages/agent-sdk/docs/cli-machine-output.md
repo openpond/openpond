@@ -7,8 +7,8 @@ Machine-readable command output is part of the platform contract. Use `--json` w
 - Writes: `.openpond/agent-inspect.json`
 - Prints: inspect JSON
 - Exit code: nonzero on source load errors
-- Stable consumers: `openpond-code`, coding-core policy discovery, web/app projections, publish checks
-- Required shape: pinned in `test/fixtures/openpond-code/inspect-shape.json`
+- Stable consumers: source-edit policy discovery, web/app projections, publish checks
+- Required shape: pinned by the inspect-shape fixture
 
 ## `openpond-agent validate --json`
 
@@ -33,7 +33,7 @@ Warnings are allowed to block publish only when the platform chooses to enforce 
 - Writes: trace JSONL files and `.openpond/artifact-index.json`
 - Prints: action result JSON
 - Exit code: nonzero on source load, validation, missing action, timeout, cancellation, or action failure
-- Stable consumers: local smoke tests and sandbox runtime bridge
+- Stable consumers: local smoke tests and hosted runtime bridge
 
 ## `openpond-agent traces --json`
 

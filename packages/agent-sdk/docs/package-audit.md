@@ -26,7 +26,7 @@ That command proves:
 
 - Build output and declaration files are generated before checks run.
 - TypeScript source typechecks without platform-only imports.
-- Focused tests cover public primitives, source loading modes, channel harness behavior, runtime spans, artifact schemas, validation issue codes, pilot examples, `openpond-code` inspect shape, and negative validation examples.
+- Focused tests cover public primitives, source loading modes, channel behavior, runtime spans, artifact schemas, validation issue codes, pilot examples, inspect shape, and negative validation examples.
 - The example matrix runs inspect, build, validate, eval, run, and traces for all pilots and compares repeated build output for deterministic generated artifacts.
 - The packed-install check imports every public subpath from the packed package, runs the installed CLI, verifies custom `--out-dir`, initializes templates, and runs all pilots from the packed dependency.
 - Hygiene rejects example-specific package identity, private SDK imports from examples, populated hand-authored `src/actions` wrappers, missing docs, missing tests, large files, missing generated artifacts, and real secret patterns.
@@ -34,6 +34,6 @@ That command proves:
 
 ## Current Verdict
 
-The package is generic enough for the next platform phase when `bun run check` passes from `/home/glu/Projects/all/openpond-agent-sdk`.
+The package is generic enough for the next platform phase when `bun run check` passes from the Agent SDK package root.
 
 Remaining non-SDK work stays platform-owned: integration lease selection, secret storage, volume provisioning, schedule enablement, run history, draft source refs, publish transactions, UI projections, and staging deployment.

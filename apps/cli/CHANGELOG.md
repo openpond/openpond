@@ -4,15 +4,15 @@
 
 ### Patch Changes
 
-- 812a6dc: fixed env and added mroe sandbox stuff
+- 812a6dc: Fix env handling and add more hosted-workspace support.
 
 ## 0.5.2
 
 ### Patch Changes
 
-- 9f9094a: Remove managed database declarations from the sandbox template and sandbox create/fork request contracts. Templates should use durable volumes with SQLite or files for structured sandbox state.
+- 9f9094a: Remove managed database declarations from the hosted workspace template and create/fork request contracts. Templates should use durable volumes with SQLite or files for structured workspace state.
 
-  Add `openpond sandbox-template start` so template authors can validate the current manifest, sync the local repo through OpenPond Git, create a sandbox with declared resources and volumes, upload declared file inputs, and run the selected start/action/service command with replay params.
+  Add template startup validation so template authors can validate the current manifest, sync the local repo through OpenPond Git, create a hosted workspace with declared resources and volumes, upload declared file inputs, and run the selected start/action/service command with replay params.
 
 ## 0.5.1
 
@@ -24,7 +24,7 @@
 
 ### Minor Changes
 
-- 74a6833: added sandboxes
+- 74a6833: Add hosted workspaces.
 
 ## 0.4.0
 
@@ -61,7 +61,7 @@
 ### Patch Changes
 
 - 32ae02a: api base url
-- 32ae02a: Add profile-specific API base URL config and remove hardcoded non-production endpoint mappings from the CLI/runtime bundle.
+- 32ae02a: Add profile-specific API base URL config and remove hardcoded environment endpoint mappings from the CLI/runtime bundle.
 
 ## 0.3.0
 

@@ -66,14 +66,14 @@ bun run agent-sdk:check     # SDK build, tests, examples, hygiene, and pack chec
 
 ```text
 apps/
-  cli/       # openpond/op/openpond-code command and TUI entrypoint
+  cli/       # openpond/op command and TUI entrypoint
   desktop/   # Electron shell
   server/    # local app-layer daemon
   terminal/  # server-attached terminal UI
   web/       # shared renderer for desktop and browser mode
 packages/
   agent-sdk/       # TypeScript-first agent SDK, templates, examples, evals
-  cloud/           # cloud profile and sandbox-facing helpers
+  cloud/           # cloud profile and hosted-workspace helpers
   codex-provider/  # Codex provider integration
   contracts/       # shared runtime, app, profile, and workspace contracts
   runtime/         # chat/runtime primitives
@@ -111,4 +111,4 @@ Coverage badges should be added only after coverage is collected and uploaded by
 
 ## Publishing Notes
 
-The CLI package lives in `apps/cli` and is configured as the public npm package `openpond` with the `openpond`, `op`, and `openpond-code` binaries. The npm badge above is marked unpublished until the package is available in the public registry.
+The CLI package lives in `apps/cli` and is configured as the public npm package `openpond` with the `openpond` and `op` binaries. The npm badge above is marked unpublished until the package is available in the public registry.

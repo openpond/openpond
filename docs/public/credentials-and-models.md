@@ -21,7 +21,7 @@ Examples include:
 
 - Google Drive or document access.
 - Twitter/X or social account access.
-- Slack, model providers, databases, and internal APIs.
+- Slack, model providers, databases, and private APIs.
 - Project-specific env vars and secret refs.
 
 The exact providers available depend on the configured OpenPond environment and installed connectors.
@@ -32,7 +32,7 @@ Local use should not require login. Local credentials stay in local settings, lo
 
 ## Cloud Boundary
 
-Cloud features such as OpenPond Cloud, cross-device sync, shared credentials, and hosted runs require cloud bindings. Hosted sandboxes receive credential access through explicit secret refs or integration leases, and those values should stay redacted from source, logs, artifacts, and chat output.
+Cloud features such as OpenPond Cloud, cross-device sync, shared credentials, and hosted runs require cloud bindings. Hosted runs receive credential access through explicit secret refs or integration leases, and those values should stay redacted from source, logs, artifacts, and chat output.
 
 ## Agent Source Boundary
 
@@ -51,4 +51,4 @@ Platform-owned bindings:
 - The raw API key.
 - The provisioned volume id.
 - The enabled schedule row.
-- The hosted sandbox runtime id.
+- The hosted run id.

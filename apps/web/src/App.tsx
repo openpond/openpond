@@ -52,6 +52,7 @@ import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
 import type { WorkspaceDiffTabRequest } from "./components/workspace-diff/workspace-diff-panel-model";
 import {
   isCloudWorkspaceKind,
+  type WorkspaceTargetValue,
 } from "./lib/workspace-location";
 import { queuedCloudWorkSubmission } from "./lib/queued-cloud-work";
 import {
@@ -884,6 +885,10 @@ export function App() {
     Boolean(selectedProject?.sandboxTemplate?.detected) &&
     !selectedProject?.linkedOpenPondApp?.appId;
   const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<"queue_cloud" | null>(null);
+  const [pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget] = useState<{
+    projectId: string;
+    target: WorkspaceTargetValue;
+  } | null>(null);
   const { projectTarget, workspaceTarget } = useWorkspaceTargetState({
     accountPending,
     accountSignedOut,
@@ -1182,6 +1187,30 @@ export function App() {
     },
     [changeWorkspaceTargetBase, selectedCloudProject?.id, selectedProject?.linkedSandboxProject?.projectId, showToast],
   );
+  const switchProjectWorkspaceTarget = useCallback(
+    (projectId: string, target: WorkspaceTargetValue) => {
+      setSelectedAppId(null);
+      setSelectedProjectId(projectId);
+      setSelectedSessionId(null);
+      setView("chat");
+      expandProject(projectId);
+      setPendingSidebarWorkspaceTarget({ projectId, target });
+    },
+    [expandProject, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView],
+  );
+  useEffect(() => {
+    if (!pendingSidebarWorkspaceTarget) return;
+    if (
+      view !== "chat" ||
+      selectedProjectId !== pendingSidebarWorkspaceTarget.projectId ||
+      selectedSessionId !== null
+    ) {
+      return;
+    }
+    const target = pendingSidebarWorkspaceTarget.target;
+    setPendingSidebarWorkspaceTarget(null);
+    void changeWorkspaceTarget(target);
+  }, [changeWorkspaceTarget, pendingSidebarWorkspaceTarget, selectedProjectId, selectedSessionId, view]);
   const sendPromptFromMainComposer = useCallback(
     async (
       attachments: ChatAttachment[] = [],
@@ -1697,6 +1726,7 @@ export function App() {
         },
         startCloudProjectFromScratch: openCloudProjectDialog,
         moveProjectToCloud,
+        switchProjectWorkspaceTarget,
         removeProject: (project) => void removeProject(project),
         toggleInsightsSystemProjectVisibility: () => void toggleInsightsSystemProjectVisibility(),
         toggleProjectPinned,

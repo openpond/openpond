@@ -24,6 +24,7 @@ import { cloudWorkspaceStateNote, localWorkspaceStateNote } from "../../lib/proj
 import { CloudMoveIcon } from "../common/CloudMoveIcon";
 import { ProjectKindIcon } from "../common/ProjectKindIcon";
 import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
+import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
@@ -247,11 +248,13 @@ export function SidebarProjectRow({
   selected,
   expanded = false,
   workspaceState,
+  cloudWorkItems = [],
   placeholder,
   terminalIndicator,
   onSelect,
   onNewChat,
   onMoveToCloud,
+  onWorkspaceTargetSelect,
   onToggleSystemVisibility,
   onTogglePin,
   onRemove,
@@ -266,11 +269,13 @@ export function SidebarProjectRow({
   selected: boolean;
   expanded?: boolean;
   workspaceState?: WorkspaceState | null;
+  cloudWorkItems?: CloudWorkItem[];
   placeholder?: boolean;
   terminalIndicator?: SidebarTerminalIndicator | null;
   onSelect: () => void;
   onNewChat: () => void;
   onMoveToCloud?: () => void;
+  onWorkspaceTargetSelect?: (target: WorkspaceTargetValue) => void;
   onToggleSystemVisibility?: () => void;
   onTogglePin: () => void;
   onRemove: () => void;
@@ -373,6 +378,8 @@ export function SidebarProjectRow({
         kind={kind}
         project={project}
         workspaceState={workspaceState}
+        cloudWorkItems={cloudWorkItems}
+        onWorkspaceTargetSelect={onWorkspaceTargetSelect}
         style={locationsStyle}
       />
       {menuOpen && (
@@ -476,8 +483,11 @@ type ProjectLocationRow = {
   label: string;
   value: string;
   detail?: string | null;
-  tone?: "local" | "cloud" | "git";
+  tone?: "local" | "cloud" | "git" | "attention" | "running";
   icon: ReactNode;
+  actionTarget?: WorkspaceTargetValue;
+  disabled?: boolean;
+  disabledReason?: string | null;
 };
 
 type ProjectLocationsPopoverStyle = CSSProperties & {
@@ -489,30 +499,67 @@ function SidebarProjectLocationsPopover({
   kind,
   project,
   workspaceState,
+  cloudWorkItems,
+  onWorkspaceTargetSelect,
   style,
 }: {
   kind: "local" | "cloud";
   project: LocalProject | CloudProject;
   workspaceState?: WorkspaceState | null;
+  cloudWorkItems?: CloudWorkItem[];
+  onWorkspaceTargetSelect?: (target: WorkspaceTargetValue) => void;
   style?: ProjectLocationsPopoverStyle;
 }) {
-  const rows = projectLocationRows(kind, project, workspaceState);
+  const rows = projectLocationRows(kind, project, workspaceState, cloudWorkItems ?? []);
   return (
     <aside className="sidebar-project-locations-popover" aria-label={`${project.name} locations`} style={style}>
       <div className="sidebar-project-locations-title">{project.name}</div>
       <div className="sidebar-project-location-list">
-        {rows.map((row) => (
-          <div key={row.key} className="sidebar-project-location-row">
-            <span className={["sidebar-project-location-icon", row.tone ?? ""].filter(Boolean).join(" ")} aria-hidden="true">
-              {row.icon}
-            </span>
-            <span className="sidebar-project-location-copy">
-              <span className="sidebar-project-location-label">{row.label}</span>
-              <span className="sidebar-project-location-value">{row.value}</span>
-              {row.detail ? <span className="sidebar-project-location-detail">{row.detail}</span> : null}
-            </span>
-          </div>
-        ))}
+        {rows.map((row) => {
+          const className = [
+            "sidebar-project-location-row",
+            row.tone ?? "",
+            row.actionTarget ? "clickable" : "",
+          ].filter(Boolean).join(" ");
+          const content = (
+            <>
+              <span className={["sidebar-project-location-icon", row.tone ?? ""].filter(Boolean).join(" ")} aria-hidden="true">
+                {row.icon}
+              </span>
+              <span className="sidebar-project-location-copy">
+                <span className="sidebar-project-location-label">{row.label}</span>
+                <span className="sidebar-project-location-value">{row.value}</span>
+                {row.detail ? <span className="sidebar-project-location-detail">{row.detail}</span> : null}
+              </span>
+            </>
+          );
+
+          if (row.actionTarget) {
+            return (
+              <button
+                key={row.key}
+                type="button"
+                className={className}
+                data-workspace-target={row.actionTarget}
+                disabled={row.disabled || !onWorkspaceTargetSelect}
+                title={row.disabledReason ?? undefined}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (row.disabled) return;
+                  onWorkspaceTargetSelect?.(row.actionTarget!);
+                }}
+              >
+                {content}
+              </button>
+            );
+          }
+
+          return (
+            <div key={row.key} className={className}>
+              {content}
+            </div>
+          );
+        })}
       </div>
     </aside>
   );
@@ -522,84 +569,145 @@ function projectLocationRows(
   kind: "local" | "cloud",
   project: LocalProject | CloudProject,
   workspaceState?: WorkspaceState | null,
+  cloudWorkItems: CloudWorkItem[] = [],
 ): ProjectLocationRow[] {
-  if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject);
-  return localProjectLocationRows(project as LocalProject, workspaceState);
+  if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject, cloudWorkItems);
+  return localProjectLocationRows(project as LocalProject, workspaceState, cloudWorkItems);
 }
 
 function localProjectLocationRows(
   project: LocalProject,
   workspaceState?: WorkspaceState | null,
+  cloudWorkItems: CloudWorkItem[] = [],
 ): ProjectLocationRow[] {
+  const localRepoNote = localRepoStatusNote(project, workspaceState);
+  const localAttention = workspaceHasUnstagedChanges(workspaceState);
+  const linkedCloudProject = project.linkedSandboxProject;
+  const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
+  const cloudRepoNote = cloudWorkspaceStateNote(project, null, workspaceState);
+  const cloudLinked = Boolean(linkedCloudProject?.projectId || project.linkedOpenPondApp?.appId);
   const rows: ProjectLocationRow[] = [
     {
       key: "local",
-      label: project.source === "git" ? "Local Git" : "Local Folder",
-      value: project.workspacePath || project.path,
+      label: "Local Status",
+      value: localWorkspaceStatus(workspaceState),
+      detail: "Click to use the local checkout",
       tone: "local",
       icon: project.source === "git" ? <FolderGit2 size={13} /> : <Folder size={13} />,
+      actionTarget: "local",
+    },
+    {
+      key: "cloud",
+      label: "Cloud Status",
+      value: cloudStatus?.value ?? (cloudLinked ? "Ready" : "Not connected"),
+      detail: cloudStatus?.detail ?? (cloudLinked ? "Click to use the Cloud workspace" : "Click to upload/sync this project"),
+      tone: cloudStatus?.tone ?? (cloudLinked ? "cloud" : "attention"),
+      icon: <Cloud size={13} />,
+      actionTarget: cloudLinked ? "cloud" : "upload_cloud",
+    },
+    {
+      key: "local-repo",
+      label: "Local Repo",
+      value: localRepoNote,
+      detail: localAttention ? "Unstaged local changes" : null,
+      tone: localAttention ? "attention" : "git",
+      icon: <GitBranch size={13} />,
+    },
+    {
+      key: "cloud-repo",
+      label: "Cloud Repo",
+      value: cloudLinked ? cloudRepoNote : "Upload required",
+      detail: cloudLinked ? cloudProjectStatusDetail(project) : "No Cloud workspace yet",
+      tone: cloudStatus?.tone === "running" ? "running" : cloudRepoNeedsAttention(cloudRepoNote, cloudLinked) ? "attention" : "cloud",
+      icon: <Cloud size={13} />,
     },
   ];
-
-  const linkedCloudProject = project.linkedSandboxProject;
-  if (linkedCloudProject?.projectId) {
-    rows.push({
-      key: "cloud",
-      label: "Cloud Project",
-      value: linkedCloudProject.projectName ?? linkedCloudProject.projectSlug ?? linkedCloudProject.projectId,
-      detail: cloudWorkspaceStateNote(project, null, workspaceState),
-      tone: "cloud",
-      icon: <Cloud size={13} />,
-    });
-  } else if (project.linkedOpenPondApp?.appId) {
-    rows.push({
-      key: "openpond-app",
-      label: "OpenPond App",
-      value: project.linkedOpenPondApp.appName,
-      detail: project.linkedOpenPondApp.defaultBranch ? `branch ${project.linkedOpenPondApp.defaultBranch}` : null,
-      tone: "cloud",
-      icon: <Cloud size={13} />,
-    });
-  }
-
-  if (workspaceState) {
-    rows.push({
-      key: "state",
-      label: workspaceState.initialized ? "Repo State" : "Workspace State",
-      value: localWorkspaceStateNote(workspaceState, {
-        branch: project.linkedSandboxProject?.defaultBranch ?? null,
-        path: project.workspacePath,
-        linkedCloudSourceKnown: project.linkedSandboxProject?.projectId
-          ? Boolean(project.linkedSandboxProject.lastUploadedCommit) || !workspaceState.headCommit
-          : true,
-      }),
-      tone: "git",
-      icon: <GitBranch size={13} />,
-    });
-  }
 
   return rows;
 }
 
-function cloudProjectLocationRows(project: CloudProject): ProjectLocationRow[] {
+function cloudProjectLocationRows(project: CloudProject, cloudWorkItems: CloudWorkItem[] = []): ProjectLocationRow[] {
+  const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
+  const cloudRepoNote = cloudProjectRepoStatus(project);
   return [
     {
       key: "cloud",
-      label: "Cloud Project",
-      value: project.organizationName ? `${project.organizationName} / ${project.name}` : project.name,
-      detail: project.slug ?? null,
-      tone: "cloud",
+      label: "Cloud Status",
+      value: cloudStatus?.value ?? "Ready",
+      detail: cloudStatus?.detail ?? "Click to use the Cloud workspace",
+      tone: cloudStatus?.tone ?? "cloud",
       icon: <Cloud size={13} />,
+      actionTarget: "cloud",
     },
     {
       key: "branch",
-      label: "Cloud Branch",
-      value: project.defaultBranch ?? "main",
-      detail: project.syncedAt ? "setup ready" : "needs setup",
-      tone: "git",
+      label: "Cloud Repo",
+      value: cloudRepoNote,
+      detail: project.organizationName ? `${project.organizationName} / ${project.name}` : project.name,
+      tone: cloudRepoNeedsAttention(cloudRepoNote, true) ? "attention" : "git",
       icon: <GitBranch size={13} />,
     },
   ];
+}
+
+function localWorkspaceStatus(state: WorkspaceState | null | undefined): string {
+  if (!state) return "Available";
+  if (state.error) return "Status unavailable";
+  if (!state.initialized) return "Not checked out";
+  if (workspaceHasUnstagedChanges(state)) return "Local changes";
+  return "Ready";
+}
+
+function localRepoStatusNote(project: LocalProject, state: WorkspaceState | null | undefined): string {
+  if (!state) return "Status not loaded";
+  return localWorkspaceStateNote(state, {
+    branch: project.linkedSandboxProject?.defaultBranch ?? null,
+    linkedCloudSourceKnown: project.linkedSandboxProject?.projectId
+      ? Boolean(project.linkedSandboxProject.lastUploadedCommit) || !state.headCommit
+      : true,
+  });
+}
+
+function workspaceHasUnstagedChanges(state: WorkspaceState | null | undefined): boolean {
+  return Boolean(state?.dirty || (state?.changedFilesCount ?? 0) > 0 || (state?.untrackedFilesCount ?? 0) > 0);
+}
+
+function cloudProjectStatusDetail(project: LocalProject): string | null {
+  const linked = project.linkedSandboxProject;
+  if (linked?.projectName) return linked.projectName;
+  if (linked?.projectSlug) return linked.projectSlug;
+  if (linked?.projectId) return linked.projectId;
+  if (project.linkedOpenPondApp?.appName) return project.linkedOpenPondApp.appName;
+  return null;
+}
+
+function cloudProjectRepoStatus(project: CloudProject): string {
+  return `${project.defaultBranch ?? "main"} / ${project.syncedAt ? "setup ready" : "needs setup"}`;
+}
+
+function cloudRepoNeedsAttention(note: string, linked: boolean): boolean {
+  if (!linked) return true;
+  return /\b(required|needs|dirty|diverged|behind|unavailable|failed|unknown)\b/i.test(note);
+}
+
+function cloudWorkItemsStatus(workItems: CloudWorkItem[]): { value: string; detail: string | null; tone: "running" | "attention" | "cloud" } | null {
+  const active = workItems.filter((item) => item.status === "queued" || item.status === "running");
+  if (active.length > 0) {
+    const running = active.filter((item) => item.status === "running").length;
+    const queued = active.length - running;
+    const value = running > 0
+      ? `${running} running${queued > 0 ? ` / ${queued} queued` : ""}`
+      : `${queued} queued`;
+    return { value, detail: active[0]?.title ?? null, tone: "running" };
+  }
+
+  const review = workItems.find((item) => item.status === "needs_review");
+  if (review) return { value: "Review ready", detail: review.title, tone: "attention" };
+
+  const failed = workItems.find((item) => item.status === "failed");
+  if (failed) return { value: "Cloud work failed", detail: failed.title, tone: "attention" };
+
+  return null;
 }
 
 function SidebarProjectMoreButton({

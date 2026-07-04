@@ -3,6 +3,7 @@ import type { AccountState, BootstrapPayload, CloudWorkItem, OpenPondApp, Sessio
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView, PinnedSidebarItem, SettingsSection, SidebarDragItem, SidebarProjectItem } from "../../lib/app-models";
 import type { TerminalScopeSummary } from "../terminal/terminal-state";
+import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 
 export type SidebarProps = {
   view: AppView;
@@ -65,6 +66,7 @@ export type SidebarProps = {
   startProjectFromScratch: () => void;
   startCloudProjectFromScratch: () => void;
   moveProjectToCloud: (item: SidebarProjectItem) => void;
+  switchProjectWorkspaceTarget: (projectId: string, target: WorkspaceTargetValue) => void;
   removeProject: (item: SidebarProjectItem) => void;
   toggleInsightsSystemProjectVisibility: () => void;
   toggleProjectPinned: (item: SidebarProjectItem) => void;

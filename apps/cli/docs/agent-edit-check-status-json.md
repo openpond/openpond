@@ -2,7 +2,7 @@
 
 `openpond agent edit check-status <workItemId> --team-id <id>` and `openpond agent source check-status <workItemId> --team-id <id>` print JSON. `--json` is accepted for command-line consistency; the output shape is JSON either way.
 
-The response is a compact projection for Builder Chat and source-check UI. It must not include raw sandbox process output, full runtime events, full work-item metadata, raw trace JSONL, raw eval result payloads, or secret values.
+The response is a compact projection for Builder Chat and source-check UI. It must not include raw hosted-process output, full runtime events, full work-item metadata, raw trace JSONL, raw eval result payloads, or secret values.
 
 ## Top-Level Shape
 
@@ -14,7 +14,7 @@ The response is a compact projection for Builder Chat and source-check UI. It mu
 }
 ```
 
-- `workItem`: compact work-item summary with ids, status, ownership refs, latest task/runtime/sandbox refs, source refs, and timestamps.
+- `workItem`: compact work-item summary with ids, status, ownership refs, latest task/runtime refs, source refs, and timestamps.
 - `activity`: bounded compact activity entries. Activity payloads may contain compact setup, policy, check, trace, eval, patch, draft, or publish refs.
 - `sourceCheckStatus`: normalized status object. The API should provide this field directly. If an older API omits it, the OpenPond CLI derives the same compact shape from `workItem` and `activity`.
 
@@ -26,7 +26,6 @@ Stable fields:
 - `workItemStatus`: current compact work-item status.
 - `latestTaskRunId`: latest coding-task run id, when known.
 - `latestRuntimeId`: latest runtime id, when known.
-- `latestSandboxId`: latest sandbox id, when known.
 - `sourceMaterialization`: compact source checkout/materialization status, including source ref or commit SHA when available.
 - `sourceUploadMetadata`: compact source-upload contract for SDK-backed projects. Expected fields include `sourceTreeMode`, `commands`, `generatedManifestPath`, `synthesizedOpenPondYaml`, `openPondYamlMode`, `uploadMetadataPath`, `uploadMetadataHash`, `artifactHashes`, `dependencySetup`, and redacted setup-output refs. This field must not include raw setup stdout/stderr or secret values.
 - `setup`: dependency setup status for SDK-backed edits. Expected fields include `status`, `passed`, `message`, `command`, `exitCode`, `commands`, `expectedBinaryPath`, and `dependencyPackages`.
@@ -40,12 +39,12 @@ Stable fields:
 - `traceArtifactRefs`: trace artifact refs, not trace payloads.
 - `evalResultArtifactRefs`: eval result artifact refs, not eval payloads.
 - `validatorArtifactRefs`: validator report artifact refs.
-- `patchArtifactRef`: patch artifact ref returned by coding-core, when present.
+- `patchArtifactRef`: patch artifact ref returned by the source-check run, when present.
 - `draftSourceRef`: draft source ref, when present.
 - `finalResultState`: latest terminal or review state for the source-check run.
 - `publishBlockers`: compact publish blockers such as missing setup, stale source, stale manifest, failed checks, or missing source commit SHA.
 
-Future harness/rootfs fields should be added under `sourceCheckStatus` or a nested compact object with task-run id, runtime id, rootfs object version, harness bundle hash, and mismatch warnings. Clients should preserve unknown fields.
+Future source-check execution fields should be added under `sourceCheckStatus` or a nested compact object with task-run id, runtime id, source snapshot version, check bundle hash, and mismatch warnings. Clients should preserve unknown fields.
 
 ## Example
 
@@ -56,7 +55,6 @@ Future harness/rootfs fields should be added under `sourceCheckStatus` or a nest
     "workItemStatus": "needs_review",
     "latestTaskRunId": "task_run_test",
     "latestRuntimeId": "runtime_test",
-    "latestSandboxId": "sandbox_test",
     "sourceMaterialization": {
       "status": "completed",
       "sourceCommitSha": "source_sha_test"

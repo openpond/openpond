@@ -10,7 +10,7 @@ The SDK owns source authoring, local inspection, generated runtime artifacts, va
 - Local validation issue codes and UI-safe summaries.
 - Local trace JSONL and eval result schemas.
 - Channel adapter contracts: normalize input and render response.
-- Editable policy declaration for coding-core discovery.
+- Editable policy declaration for source-edit discovery.
 
 ## Platform-Owned
 
@@ -19,7 +19,7 @@ The SDK owns source authoring, local inspection, generated runtime artifacts, va
 - Volume selection, provisioning, attachment, and runtime mounting.
 - Schedule enablement, scheduler sync, and schedule delivery auth.
 - draft source refs, preserved source checkpoints, live source refs, and publish promotion.
-- Sandbox runtime provisioning, `SandboxAgent` binding, and run history.
+- Hosted runtime provisioning, agent binding, and run history.
 - Durable conversations, Builder Chat, coding work items, trace/eval artifact refs, and UI projections.
 
 ## Boundary Contract
@@ -45,7 +45,7 @@ Source must not store the selected Slack connection id, raw secret value, provis
 | `volumes[]` | selected or provisioned volume ref | deploy/publish blocked when required |
 | `schedules[]` | disabled schedule row, later enabled by user | schedule remains disabled until setup is complete |
 | `channels[]` | channel install/bot binding and delivery auth | channel disabled or setup warning |
-| `editable.requiredChecks` | coding-core validation commands | edit cannot publish without passing checks |
+| `editable.requiredChecks` | source-edit validation commands | edit cannot publish without passing checks |
 
 ## Tests
 

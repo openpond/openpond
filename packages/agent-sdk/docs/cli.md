@@ -19,11 +19,11 @@ Every command accepts `--cwd <project>`. Artifact-producing commands accept `--o
 ## Command Roles
 
 - `init`: copies a packaged template.
-- `inspect --json`: emits normalized source/project/action/setup/editable metadata for coding-core, web, app, and publish flows.
+- `inspect --json`: emits normalized source/project/action/setup/editable metadata for source-edit checks, web, app, and publish flows.
 - `build`: writes deterministic `.openpond` artifacts, runtime manifest preview, action registry, runtime bridge, prompt artifacts, validator report, and artifact index.
 - `validate`: checks source layout, source-of-truth mode, channels, integrations, schedules, intents, workflows, tools, eval declarations, env/secrets, volumes, instructions, skills, editable policy, and secret leakage.
-- `eval`: runs source-defined evals through the local runtime harness and writes eval/trace artifacts.
-- `run <action>`: runs one local action through the runtime harness and writes a trace artifact.
+- `eval`: runs source-defined evals through the local runtime runner and writes eval/trace artifacts.
+- `run <action>`: runs one local action through the runtime runner and writes a trace artifact.
 - `traces`: lists trace JSONL artifacts.
 
 The main OpenPond CLI can delegate `openpond agent inspect|build|validate|eval|run` to this project-local binary.

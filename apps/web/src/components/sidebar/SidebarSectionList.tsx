@@ -109,6 +109,7 @@ export function SidebarSectionList({
   startPinnedDrag,
   startCloudProjectFromScratch,
   startProjectFromScratch,
+  switchProjectWorkspaceTarget,
   toggleInsightsSystemProjectVisibility,
   toggleProjectPinned,
   toggleSystemProjectVisibility,
@@ -325,11 +326,13 @@ export function SidebarSectionList({
                   selected={view === "chat" && selectedProjectId === row.id && !selectedSessionId}
                   expanded={expandedProjectIds.has(row.id)}
                   workspaceState={row.item.kind === "local" ? workspaceStates[row.item.project.id] ?? null : null}
+                  cloudWorkItems={cloudWorkItemsByProjectId[row.item.id] ?? []}
                   placeholder={isDraggedRow}
                   terminalIndicator={terminalIndicatorForProject(row.item.id)}
                   onSelect={() => selectProjectRow(row.item)}
                   onNewChat={() => beginProjectChat(row.item)}
                   onMoveToCloud={row.item.kind === "local" ? () => moveProjectToCloud(row.item) : undefined}
+                  onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(row.item.id, target)}
                   onTogglePin={() => toggleProjectPinned(row.item)}
                   onToggleSystemVisibility={row.item.kind === "local" && row.item.project.systemKind ? () => toggleSystemProjectVisibility(row.item) : undefined}
                   onRemove={() => removeProject(row.item)}
@@ -504,10 +507,12 @@ export function SidebarSectionList({
               selected={view === "chat" && selectedProjectId === item.id && !selectedSessionId}
               expanded={expandedProjectIds.has(item.id)}
               workspaceState={item.kind === "local" ? workspaceStates[item.project.id] ?? null : null}
+              cloudWorkItems={cloudWorkItemsByProjectId[item.id] ?? []}
               terminalIndicator={terminalIndicatorForProject(item.id)}
               onSelect={() => selectProjectRow(item)}
               onNewChat={() => beginProjectChat(item)}
               onMoveToCloud={item.kind === "local" ? () => moveProjectToCloud(item) : undefined}
+              onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(item.id, target)}
               onTogglePin={() => toggleProjectPinned(item)}
               onToggleSystemVisibility={item.kind === "local" && item.project.systemKind ? () => toggleSystemProjectVisibility(item) : undefined}
               onRemove={() => removeProject(item)}

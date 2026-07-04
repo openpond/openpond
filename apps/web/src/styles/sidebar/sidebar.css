@@ -574,6 +574,27 @@
   align-items: start;
   gap: 7px;
   min-width: 0;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 2px;
+  text-align: left;
+}
+
+button.sidebar-project-location-row {
+  cursor: pointer;
+}
+
+button.sidebar-project-location-row:hover:not(:disabled),
+button.sidebar-project-location-row:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+button.sidebar-project-location-row:disabled {
+  cursor: default;
+  opacity: 0.62;
 }
 
 .sidebar-project-location-icon {
@@ -594,6 +615,14 @@
 
 .sidebar-project-location-icon.git {
   color: #a7d4a0;
+}
+
+.sidebar-project-location-icon.attention {
+  color: #f1c75d;
+}
+
+.sidebar-project-location-icon.running {
+  color: #49d17f;
 }
 
 .sidebar-project-location-copy {
@@ -619,6 +648,14 @@
 
 .sidebar-project-location-detail {
   color: #858585;
+}
+
+.sidebar-project-location-row.attention .sidebar-project-location-value {
+  color: #f1c75d;
+}
+
+.sidebar-project-location-row.running .sidebar-project-location-value {
+  color: #60d98d;
 }
 
 .sidebar-row-icon,

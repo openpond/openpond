@@ -2,7 +2,7 @@
 
 The OpenPond Agent SDK turns agents into TypeScript projects. The SDK owns source authoring, local inspection, generated runtime artifacts, validation, local action runs, traces, evals, and edit policy.
 
-OpenPond Cloud owns platform bindings such as integration leases, secret refs, volume provisioning, sandbox runtimes, source promotion, run history, and durable cloud conversations.
+OpenPond Cloud owns platform bindings such as integration leases, secret refs, volume provisioning, hosted execution, source promotion, run history, and durable cloud conversations.
 
 ## Create An Agent
 
@@ -78,4 +78,4 @@ The `editable.ts` policy tells OpenPond Builder Chat and coding workflows which 
 
 ## Public Runtime Surface
 
-Actions are the public runtime surface. Workflows, local agents, remote-agent refs, tools, channels, integrations, and schedules stay behind those actions so web UI, chat, MCP, evals, and sandbox runs can all call the same action catalog.
+Actions are the public runtime surface. Workflows, local agents, remote-agent refs, tools, channels, integrations, and schedules stay behind those actions so web UI, chat, MCP, evals, and hosted runs can all call the same action catalog.

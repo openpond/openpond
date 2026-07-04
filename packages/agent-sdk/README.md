@@ -1,6 +1,6 @@
 # OpenPond Agent SDK
 
-This folder is the local TypeScript-first agent SDK fixture for the sandbox working doc. It is intentionally not published to npm yet, but it is executable locally and should stay clean enough to become a public repository.
+This folder is the local TypeScript-first Agent SDK package. It is intentionally not published to npm yet, but it is executable locally and should stay clean enough to become a public repository.
 
 The package name is:
 
@@ -90,9 +90,9 @@ actions/* = SDK-native runtime entrypoints
 agents/* and remote-agents/* = implementation details behind actions
 editable.ts = source-authored policy for Builder Chat / coding tasks
 workflows/* = actual business flows
-tools/* and connections/* = internal capabilities consumed by actions
+tools/* and connections/* = private implementation capabilities consumed by actions
 evals/* = repeatable tests for behavior
-agent-inspect.json = coding-core discovery contract after source materialization
+agent-inspect.json = source inspection contract after source materialization
 ```
 
 ## Local Commands
@@ -120,11 +120,11 @@ bun run agent:validate
 bun run agent:eval
 ```
 
-The commands load the selected example's `agent/agent.ts`, generate `.openpond/*` artifacts, validate the source contract, run one local action, and run the SDK evals through a local stub runtime that records trace JSONL. Platform-only responsibilities such as sandbox provisioning, integration leases, volume mounting, source promotion, and publish transactions stay outside this package.
+The commands load the selected example's `agent/agent.ts`, generate `.openpond/*` artifacts, validate the source contract, run one local action, and run the SDK evals through a local stub runtime that records trace JSONL. Platform-only responsibilities such as hosted execution, integration leases, volume mounting, source promotion, and publish transactions stay outside this package.
 
 ## Public Exports
 
-The package is split into public subpaths so user projects do not import private internals:
+The package is split into public subpaths so user projects do not import private implementation modules:
 
 ```text
 openpond-agent-sdk
