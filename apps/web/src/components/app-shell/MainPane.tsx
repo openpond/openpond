@@ -190,7 +190,6 @@ type MainPaneProps = {
   onToggleDiffPanelExpanded: () => void;
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
-  onShowGoalSidebarTab: () => void;
   onShowReviewPanel: () => void;
   onShowRightChatPanel: () => void;
   onShowSummaryPanel: () => void;
@@ -491,7 +490,6 @@ export function MainPane({
   onToggleDiffPanelExpanded,
   onShowDiffPanel,
   onShowBrowserPanel,
-  onShowGoalSidebarTab,
   onShowReviewPanel,
   onShowRightChatPanel,
   onShowSummaryPanel,
@@ -1384,7 +1382,6 @@ export function MainPane({
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
-                onOpenGoalDetails={onShowGoalSidebarTab}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}
@@ -1439,7 +1436,6 @@ export function MainPane({
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
-                onOpenGoalDetails={onShowGoalSidebarTab}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}

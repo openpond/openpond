@@ -473,7 +473,6 @@ function RightChatPane({
           onCodexReasoningEffortChange={onCodexReasoningEffortChange}
           onPromptChange={onPromptChange}
           onMentionAppSelect={undefined}
-          onOpenGoalDetails={undefined}
           showToast={showToast}
           onSubmit={onSubmit}
           onStop={onStop}

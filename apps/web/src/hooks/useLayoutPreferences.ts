@@ -4,8 +4,11 @@ import { api, type ClientConnection } from "../api";
 import { normalizePreferences } from "../lib/app-models";
 import { DEFAULT_DIFF_PANEL_WIDTH, DEFAULT_SIDEBAR_WIDTH, clampDiffPanelWidth, clampSidebarWidth } from "../lib/layout";
 import {
+  mergeLayoutWidthPreferencePreservingRecentLocal,
   mergeSidebarSectionsCollapsedPreservingRecentLocal,
+  recordLayoutWidthPreferenceChange,
   recordSidebarSectionPreferenceChanges,
+  type LayoutWidthPreferenceChange,
   type SidebarSectionPreferenceChangeTimes,
 } from "../lib/sidebar-preference-state";
 
@@ -35,6 +38,8 @@ export function useLayoutPreferences({
   );
   const sidebarSectionsCollapsedRef = useRef(sidebarSectionsCollapsed);
   const sidebarSectionChangeTimesRef = useRef<SidebarSectionPreferenceChangeTimes>({});
+  const sidebarWidthChangeRef = useRef<LayoutWidthPreferenceChange | null>(null);
+  const diffPanelWidthChangeRef = useRef<LayoutWidthPreferenceChange | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [diffPanelWidth, setDiffPanelWidth] = useState(DEFAULT_DIFF_PANEL_WIDTH);
@@ -48,12 +53,18 @@ export function useLayoutPreferences({
 
   useEffect(() => {
     if (sidebarResizing) return;
-    setSidebarWidth(clampSidebarWidth(normalizePreferences(preferences).sidebarWidth));
+    const incoming = clampSidebarWidth(normalizePreferences(preferences).sidebarWidth);
+    const next = mergeLayoutWidthPreferencePreservingRecentLocal(incoming, sidebarWidthChangeRef.current);
+    sidebarWidthChangeRef.current = next.localChange;
+    setSidebarWidth(next.value);
   }, [preferences, sidebarResizing]);
 
   useEffect(() => {
     if (diffPanelResizing) return;
-    setDiffPanelWidth(clampDiffPanelWidth(normalizePreferences(preferences).diffPanelWidth));
+    const incoming = clampDiffPanelWidth(normalizePreferences(preferences).diffPanelWidth);
+    const next = mergeLayoutWidthPreferencePreservingRecentLocal(incoming, diffPanelWidthChangeRef.current);
+    diffPanelWidthChangeRef.current = next.localChange;
+    setDiffPanelWidth(next.value);
   }, [diffPanelResizing, preferences]);
 
   useEffect(() => {
@@ -160,7 +171,10 @@ export function useLayoutPreferences({
       function onPointerUp() {
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
-        void persistSidebarWidth(latestWidth).finally(() => setSidebarResizing(false));
+        const localChange = recordLayoutWidthPreferenceChange(startWidth, latestWidth);
+        if (localChange) sidebarWidthChangeRef.current = localChange;
+        setSidebarResizing(false);
+        void persistSidebarWidth(latestWidth);
       }
 
       window.addEventListener("pointermove", onPointerMove);
@@ -186,7 +200,10 @@ export function useLayoutPreferences({
       function onPointerUp() {
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
-        void persistDiffPanelWidth(latestWidth).finally(() => setDiffPanelResizing(false));
+        const localChange = recordLayoutWidthPreferenceChange(startWidth, latestWidth);
+        if (localChange) diffPanelWidthChangeRef.current = localChange;
+        setDiffPanelResizing(false);
+        void persistDiffPanelWidth(latestWidth);
       }
 
       window.addEventListener("pointermove", onPointerMove);

@@ -11,7 +11,7 @@ It is designed to surface:
 
 ## Local First
 
-Insights can run against local OpenPond activity without making login a prerequisite for the desktop app. Cloud-backed projects and Sandboxes can add hosted run context when the user chooses to sign in.
+Insights can run against local OpenPond activity without making login a prerequisite for the desktop app. OpenPond Cloud projects and hosted sandbox runs can add cloud context when the user chooses to sign in.
 
 ## Evidence Based
 

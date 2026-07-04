@@ -2,10 +2,15 @@ import type { SidebarAppPreference, SidebarAppPreferences, SidebarSectionsCollap
 
 export const RECENT_LOCAL_SIDEBAR_APP_PREFERENCE_TTL_MS = 60_000;
 export const RECENT_LOCAL_SIDEBAR_SECTION_PREFERENCE_TTL_MS = 60_000;
+export const RECENT_LOCAL_LAYOUT_WIDTH_PREFERENCE_TTL_MS = 60_000;
 
 export type SidebarAppPreferenceChangeTimes = Record<string, number>;
 type SidebarSectionKey = keyof SidebarSectionsCollapsed;
 export type SidebarSectionPreferenceChangeTimes = Partial<Record<SidebarSectionKey, number>>;
+export type LayoutWidthPreferenceChange = {
+  value: number;
+  changedAt: number;
+};
 
 const SIDEBAR_SECTION_KEYS: SidebarSectionKey[] = ["pinned", "projects", "cloudProjects", "chats"];
 
@@ -74,6 +79,27 @@ export function mergeSidebarSectionsCollapsedPreservingRecentLocal(
     merged[key] = current[key];
   }
   return sameSidebarSectionsCollapsed(current, merged) ? current : merged;
+}
+
+export function recordLayoutWidthPreferenceChange(
+  previous: number,
+  next: number,
+  changedAt = Date.now(),
+): LayoutWidthPreferenceChange | null {
+  return previous === next ? null : { value: next, changedAt };
+}
+
+export function mergeLayoutWidthPreferencePreservingRecentLocal(
+  incoming: number,
+  localChange: LayoutWidthPreferenceChange | null,
+  now = Date.now(),
+): { value: number; localChange: LayoutWidthPreferenceChange | null } {
+  if (!localChange) return { value: incoming, localChange: null };
+  if (incoming === localChange.value) return { value: incoming, localChange: null };
+  if (now - localChange.changedAt > RECENT_LOCAL_LAYOUT_WIDTH_PREFERENCE_TTL_MS) {
+    return { value: incoming, localChange: null };
+  }
+  return { value: localChange.value, localChange };
 }
 
 function preferenceIds(previous: SidebarAppPreferences, next: SidebarAppPreferences): Set<string> {

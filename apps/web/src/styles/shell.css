@@ -79,7 +79,6 @@
   border-left: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   border-top-left-radius: 13px;
-  border-bottom-left-radius: 13px;
   background: var(--bg);
 }
 
@@ -96,7 +95,6 @@
   border-bottom: 1px solid transparent;
   border-left: 1px solid transparent;
   border-top-left-radius: 13px;
-  border-bottom-left-radius: 13px;
   transition: border-color 120ms ease;
 }
 

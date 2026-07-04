@@ -32,7 +32,7 @@ Local use should not require login. Local credentials stay in local settings, lo
 
 ## Cloud Boundary
 
-Cloud features such as OpenPond Sandboxes, cross-device sync, shared credentials, and hosted runs require cloud bindings. A Sandbox receives credential access through explicit secret refs or integration leases, and those values should stay redacted from source, logs, artifacts, and chat output.
+Cloud features such as OpenPond Cloud, cross-device sync, shared credentials, and hosted runs require cloud bindings. Hosted sandboxes receive credential access through explicit secret refs or integration leases, and those values should stay redacted from source, logs, artifacts, and chat output.
 
 ## Agent Source Boundary
 
@@ -51,4 +51,4 @@ Platform-owned bindings:
 - The raw API key.
 - The provisioned volume id.
 - The enabled schedule row.
-- The Sandbox runtime id.
+- The hosted sandbox runtime id.

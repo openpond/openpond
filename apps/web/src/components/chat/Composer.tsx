@@ -97,7 +97,6 @@ type ComposerProps = {
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
   onPromptChange: (value: string) => void;
   onMentionAppSelect?: (appId: string | null) => void;
-  onOpenGoalDetails?: () => void;
   showToast: ShowAppToast;
   onSubmit: (
     attachments?: ChatAttachment[],
@@ -252,7 +251,6 @@ export function Composer({
   onCodexReasoningEffortChange,
   onPromptChange,
   onMentionAppSelect,
-  onOpenGoalDetails,
   showToast,
   onSubmit,
   onStop,
@@ -752,7 +750,6 @@ export function Composer({
           detailsOpen={goalDetailsOpen}
           goalRuntime={goalRuntime}
           objectiveId={goalDetailsId}
-          onOpenDetails={onOpenGoalDetails}
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}

@@ -34,7 +34,7 @@ A durable agent should include:
 3. Run inspect, build, validate, and eval.
 4. Commit the agent source.
 5. Connect to an OpenPond Project only when you want cloud sync or hosted execution.
-6. Run in an OpenPond Sandbox when you need cloud dependencies, handoff, replay, or durable cloud state.
+6. Run in OpenPond Cloud when you need cloud dependencies, handoff, replay, or durable cloud state.
 
 This keeps the user in control of the source while still allowing the agent to move into hosted infrastructure when that is useful.
 
@@ -46,6 +46,6 @@ Edits should preserve the durable contract:
 - Regenerate artifacts.
 - Run required checks.
 - Review the git diff.
-- Preserve or promote cloud source only after the local or Sandbox result is understood.
+- Preserve or promote cloud source only after the local or OpenPond Cloud result is understood.
 
 When a chat-driven edit is useful, the result should become code and tests, not just a hidden transcript state.

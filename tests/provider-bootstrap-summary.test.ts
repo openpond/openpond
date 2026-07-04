@@ -50,8 +50,10 @@ describe("provider bootstrap summaries", () => {
           server.token,
           "/v1/providers",
         );
+        const fullProvider = fullProviderSettings.statuses.openrouter;
+        expect(fullProvider?.modelIds.length).toBeGreaterThan(0);
         expect(fullProviderSettings.modelCaches.openrouter?.models.length).toBe(
-          bootstrapProvider?.modelIds.length,
+          fullProvider?.modelIds.length,
         );
         expect(JSON.stringify(bootstrap.providers).length).toBeLessThan(
           JSON.stringify(fullProviderSettings).length,
@@ -64,8 +66,9 @@ describe("provider bootstrap summaries", () => {
         }>(server.url, server.token, "/v1/providers/openrouter/models?limit=500");
         expect(loadedModels.providerId).toBe("openrouter");
         expect(loadedModels.models.length).toBeGreaterThan(0);
+        const loadedProvider = loadedModels.providers.statuses.openrouter;
         expect(loadedModels.providers.modelCaches.openrouter?.models.length).toBe(
-          bootstrapProvider?.modelIds.length,
+          loadedProvider?.modelIds.length,
         );
       } finally {
         await server.close();

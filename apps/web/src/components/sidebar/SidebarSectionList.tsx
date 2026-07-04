@@ -14,7 +14,7 @@ import {
 } from "../icons";
 import type { AppView, SidebarProjectItem } from "../../lib/app-models";
 import { SIDEBAR_CHAT_PAGE_SIZE, SIDEBAR_SECTION_LIMIT } from "../../lib/app-models";
-import { sidebarTerminalIndicator, terminalScopeKey } from "../terminal/terminal-state";
+import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
 import {
   SidebarCloudWorkItemRow,
@@ -24,6 +24,8 @@ import {
   SidebarSessionRow,
   SidebarShowMoreButton,
 } from "./SidebarRows";
+
+const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
 
 export type SidebarProjectClickAction = "select_draft_project" | "toggle_project";
 
@@ -94,7 +96,7 @@ export function SidebarSectionList({
   selectedProjectId,
   selectedSessionId,
   sidebarProjectIdBySessionId,
-  terminalSummaries,
+  terminalSummaries = EMPTY_TERMINAL_SUMMARIES,
   setArchivedChatsOpen,
   setChatRowsVisibleCount,
   setProjectsExpanded,

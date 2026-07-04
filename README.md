@@ -11,9 +11,9 @@
 
 ## What Is This?
 
-OpenPond brings frontier-grade agent orchestration to any model.
+OpenPond brings frontier-grade agent orchestration to any model combined with seamless toggle between local & cloud environments.
 
-Control goals and build durable, git-backed agents from local chat, run them in a desktop app, CLI, or TUI, and move seamlessly into OpenPond Sandboxes when work needs cloud compute.
+Control goals and build durable, git-backed agents from local chat, run them in a desktop app, CLI, or TUI, and move seamlessly into OpenPond Cloud when work needs cloud compute.
 
 No login required for local work. BYOK for any model. First-class Codex support. Open source agent infrastructure you can inspect, edit, and own.
 
@@ -24,11 +24,11 @@ OpenPond aims to deliver these capabilities inside the familiar chat-based devel
 | Feature | Docs |
 | --- | --- |
 | Create durable agents in one command from any chat conversation while keeping ownership of the git-backed agent code. | [Creating durable agents](docs/public/creating-agents.md), [Agent SDK](docs/public/agent-sdk.md) |
-| Move between local projects and cloud execution with OpenPond Sandboxes. | [OpenPond Sandboxes](docs/public/sandboxes.md) |
+| Move between local projects and cloud execution with OpenPond Cloud. | [OpenPond Cloud](docs/public/cloud.md) |
 | Inject credentials from Google Drive, Twitter/X, and other connectors across local and cloud runs. | [Credentials and models](docs/public/credentials-and-models.md) |
 | Track chat logs, runs, errors, and follow-ups with the Continuous Insights Agent. | [Continuous Insights](docs/public/continuous-insights.md) |
 | Chat with any model via BYOK, with first-class support for OpenAI Codex. | [Credentials and models](docs/public/credentials-and-models.md) |
-| Work locally without login; sign in only for optional cloud features like Sandboxes and sync. | [Docs index](docs/public/README.md) |
+| Work locally without login; sign in only for optional cloud features like OpenPond Cloud and sync. | [Docs index](docs/public/README.md) |
 | Build one-off composable goals and tasks with open source goal management. | [Goals](docs/public/goals.md) |
 
 ## Quick Start

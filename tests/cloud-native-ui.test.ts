@@ -378,7 +378,12 @@ describe("Cloud native UI", () => {
     const markup = renderToStaticMarkup(createElement(LinkedProjectSidebarProbe));
 
     expect(markup.match(/row-label">Shared Repo/g)?.length).toBe(1);
-    expect(markup).toContain("Local + Cloud");
+    expect(markup).not.toContain("Local + Cloud");
+    expect(markup).toContain('aria-label="Shared Repo locations"');
+    expect(markup).toContain("Local Git");
+    expect(markup).toContain("/workspace/local-repo");
+    expect(markup).toContain("Cloud Project");
+    expect(markup).toContain("main / setup ready");
     expect(markup).toContain("project-kind-icon local linked-cloud");
     expect(markup).toContain("project-kind-icon-cloud-badge");
     expect(markup).toContain("Hosted follow-up");
@@ -400,8 +405,17 @@ describe("Cloud native UI", () => {
     expect(markup).toContain("New Cloud task");
     expect(markup).toContain("New Cloud Project");
     expect(markup).toContain("Create environment");
-    expect(projectsSection).toContain('row-label">Local Repo</span><span class="row-label-detail">Local</span>');
-    expect(projectsSection).toContain('row-label">Cloud Repo</span><span class="row-label-detail">Cloud / main</span>');
+    expect(projectsSection).toContain('row-label">Local Repo</span><span class="sidebar-project-caret"');
+    expect(projectsSection).toContain('row-label">Cloud Repo</span><span class="sidebar-project-caret"');
+    expect(projectsSection).not.toContain('row-label-detail">Local</span>');
+    expect(projectsSection).not.toContain('row-label-detail">Cloud / main</span>');
+    expect(projectsSection).toContain('aria-label="Local Repo locations"');
+    expect(projectsSection).toContain('aria-label="Cloud Repo locations"');
+    expect(projectsSection).toContain("Local Git");
+    expect(projectsSection).toContain("Cloud Project");
+    expect(projectsSection).not.toContain("GitHub Source");
+    expect(projectsSection).not.toContain("Cloud Source");
+    expect(projectsSection).toContain("Cloud Branch");
     expect(projectsSection).toContain('class="sidebar-project-caret"');
     expect(projectsSection).toContain("lucide-chevron-down");
     expect(projectsSection.indexOf('aria-label="More project actions"')).toBeGreaterThan(

@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { CloudProject, CloudWorkItem, LocalProject, Session, WorkspaceState } from "@openpond/contracts";
 import {
   Archive,
@@ -7,6 +7,9 @@ import {
   ChevronRight,
   Cloud,
   EyeOff,
+  Folder,
+  FolderGit2,
+  GitBranch,
   MessageSquare,
   MoreHorizontal,
   PanelRight,
@@ -17,12 +20,14 @@ import {
   X,
 } from "../icons";
 import { relativeAge } from "../../lib/chat-messages";
-import { projectCapabilityNote } from "../../lib/project-workflow-state";
+import { cloudWorkspaceStateNote, localWorkspaceStateNote } from "../../lib/project-workflow-state";
 import { CloudMoveIcon } from "../common/CloudMoveIcon";
 import { ProjectKindIcon } from "../common/ProjectKindIcon";
 import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
+const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
+const PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE = 260;
 
 function syncedRunningPulseStyle(): CSSProperties {
   return {
@@ -275,88 +280,120 @@ export function SidebarProjectRow({
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const rowShellRef = useRef<HTMLDivElement | null>(null);
+  const [locationsStyle, setLocationsStyle] = useState<ProjectLocationsPopoverStyle>({});
   const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onToggleSystemVisibility) || Boolean(onRemove);
   const linkedCloud = kind === "local" && Boolean((project as LocalProject).linkedSandboxProject?.projectId);
+  const updateLocationsPosition = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = rowShellRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const maxLeft = Math.max(12, window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12);
+    const maxTop = Math.max(12, window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE);
+    const left = Math.max(12, Math.min(rect.right + 10, maxLeft));
+    const top = Math.max(12, Math.min(rect.top - 4, maxTop));
+    const nextStyle: ProjectLocationsPopoverStyle = {
+      "--sidebar-project-locations-left": `${Math.round(left)}px`,
+      "--sidebar-project-locations-top": `${Math.round(top)}px`,
+    };
+
+    setLocationsStyle((current) => {
+      if (
+        current["--sidebar-project-locations-left"] === nextStyle["--sidebar-project-locations-left"] &&
+        current["--sidebar-project-locations-top"] === nextStyle["--sidebar-project-locations-top"]
+      ) {
+        return current;
+      }
+      return nextStyle;
+    });
+  }, []);
+  const handleSelect = useCallback(() => {
+    updateLocationsPosition();
+    onSelect();
+  }, [onSelect, updateLocationsPosition]);
 
   function closeMenu() {
     setMenuOpen(false);
   }
 
   return (
-    <>
-    <SidebarInteractiveRow
-      selected={selected}
-      placeholder={placeholder}
-      className={["sidebar-project-row", menuOpen ? "project-menu-open" : ""].filter(Boolean).join(" ")}
-      ariaExpanded={expanded}
-      onSelect={onSelect}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+    <div
+      ref={rowShellRef}
+      className={["sidebar-project-row-shell", menuOpen ? "project-menu-open" : ""].filter(Boolean).join(" ")}
+      onFocusCapture={updateLocationsPosition}
+      onPointerEnter={updateLocationsPosition}
     >
-      <ProjectKindIcon
-        kind={kind}
-        agentSdk={Boolean(project.agentSdk?.detected)}
-        linkedCloud={linkedCloud}
-        open={kind === "local" && expanded}
-        className="sidebar-row-icon"
-        baseSize={15}
-      />
-      <span className="row-label-shell">
-        <span className="row-label">{project.name}</span>
-        <span className="row-label-detail">
-          {projectCapabilityNote({
-            kind,
-            localProject: kind === "local" ? project as LocalProject : null,
-            cloudProject: kind === "cloud" ? project as CloudProject : null,
-            workspaceState,
-          })}
+      <SidebarInteractiveRow
+        selected={selected}
+        placeholder={placeholder}
+        className={["sidebar-project-row", menuOpen ? "project-menu-open" : ""].filter(Boolean).join(" ")}
+        ariaExpanded={expanded}
+        onSelect={handleSelect}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
+        <ProjectKindIcon
+          kind={kind}
+          agentSdk={Boolean(project.agentSdk?.detected)}
+          linkedCloud={linkedCloud}
+          open={kind === "local" && expanded}
+          className="sidebar-row-icon"
+          baseSize={15}
+        />
+        <span className="row-label-shell">
+          <span className="row-label">{project.name}</span>
+          <span className="sidebar-project-caret" aria-hidden="true">
+            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </span>
         </span>
-        <span className="sidebar-project-caret" aria-hidden="true">
-          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        </span>
-      </span>
-      <div className="row-meta">
-        <span className="row-meta-status">
-          {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
-          <time>{projectRowMeta(project, kind)}</time>
-        </span>
-        <div className="sidebar-row-actions">
-          <SidebarRowAction label={pinned ? "Unpin project" : "Pin project"} onClick={onTogglePin}>
-            {pinned ? <PinOff size={13} /> : <Pin size={13} />}
-          </SidebarRowAction>
-          {hasMenuActions && (
-            <SidebarProjectMoreButton
-              open={menuOpen}
-              onToggleOpen={() => setMenuOpen((open) => !open)}
-            />
-          )}
-          <SidebarRowAction label="New chat" onClick={onNewChat}>
-            <SquarePen size={13} />
-          </SidebarRowAction>
+        <div className="row-meta">
+          <span className="row-meta-status">
+            {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
+          </span>
+          <div className="sidebar-row-actions">
+            <SidebarRowAction label={pinned ? "Unpin project" : "Pin project"} onClick={onTogglePin}>
+              {pinned ? <PinOff size={13} /> : <Pin size={13} />}
+            </SidebarRowAction>
+            {hasMenuActions && (
+              <SidebarProjectMoreButton
+                open={menuOpen}
+                onToggleOpen={() => setMenuOpen((open) => !open)}
+              />
+            )}
+            <SidebarRowAction label="New chat" onClick={onNewChat}>
+              <SquarePen size={13} />
+            </SidebarRowAction>
+          </div>
         </div>
-      </div>
-    </SidebarInteractiveRow>
-    {menuOpen && (
-      <SidebarProjectMenuPopover
-        onClose={closeMenu}
-        onMoveToCloud={onMoveToCloud ? () => {
-          closeMenu();
-          onMoveToCloud();
-        } : undefined}
-        onToggleSystemVisibility={onToggleSystemVisibility ? () => {
-          closeMenu();
-          onToggleSystemVisibility();
-        } : undefined}
-        systemHidden={Boolean("hiddenFromDefaultSidebar" in project && project.hiddenFromDefaultSidebar)}
-        onRemove={() => {
-          closeMenu();
-          onRemove();
-        }}
+      </SidebarInteractiveRow>
+      <SidebarProjectLocationsPopover
+        kind={kind}
+        project={project}
+        workspaceState={workspaceState}
+        style={locationsStyle}
       />
-    )}
-    </>
+      {menuOpen && (
+        <SidebarProjectMenuPopover
+          onClose={closeMenu}
+          onMoveToCloud={onMoveToCloud ? () => {
+            closeMenu();
+            onMoveToCloud();
+          } : undefined}
+          onToggleSystemVisibility={onToggleSystemVisibility ? () => {
+            closeMenu();
+            onToggleSystemVisibility();
+          } : undefined}
+          systemHidden={Boolean("hiddenFromDefaultSidebar" in project && project.hiddenFromDefaultSidebar)}
+          onRemove={() => {
+            closeMenu();
+            onRemove();
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -434,20 +471,135 @@ function statusLabelForSidebar(status: CloudWorkItem["status"]): string {
   return status.replace(/_/g, " ");
 }
 
-function projectRowMeta(project: LocalProject | CloudProject, kind: "local" | "cloud"): string {
-  if (kind === "cloud") {
-    const cloudProject = project as CloudProject;
-    return sourceTypeLabel(cloudProject.sourceType);
-  }
-  const localProject = project as LocalProject;
-  return localProject.linkedOpenPondApp ? "OpenPond" : localProject.source === "git" ? "Git" : "Folder";
+type ProjectLocationRow = {
+  key: string;
+  label: string;
+  value: string;
+  detail?: string | null;
+  tone?: "local" | "cloud" | "git";
+  icon: ReactNode;
+};
+
+type ProjectLocationsPopoverStyle = CSSProperties & {
+  "--sidebar-project-locations-left"?: string;
+  "--sidebar-project-locations-top"?: string;
+};
+
+function SidebarProjectLocationsPopover({
+  kind,
+  project,
+  workspaceState,
+  style,
+}: {
+  kind: "local" | "cloud";
+  project: LocalProject | CloudProject;
+  workspaceState?: WorkspaceState | null;
+  style?: ProjectLocationsPopoverStyle;
+}) {
+  const rows = projectLocationRows(kind, project, workspaceState);
+  return (
+    <aside className="sidebar-project-locations-popover" aria-label={`${project.name} locations`} style={style}>
+      <div className="sidebar-project-locations-title">{project.name}</div>
+      <div className="sidebar-project-location-list">
+        {rows.map((row) => (
+          <div key={row.key} className="sidebar-project-location-row">
+            <span className={["sidebar-project-location-icon", row.tone ?? ""].filter(Boolean).join(" ")} aria-hidden="true">
+              {row.icon}
+            </span>
+            <span className="sidebar-project-location-copy">
+              <span className="sidebar-project-location-label">{row.label}</span>
+              <span className="sidebar-project-location-value">{row.value}</span>
+              {row.detail ? <span className="sidebar-project-location-detail">{row.detail}</span> : null}
+            </span>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
 }
 
-function sourceTypeLabel(sourceType: CloudProject["sourceType"]): string {
-  if (sourceType === "github_repo") return "GitHub";
-  if (sourceType === "internal_repo") return "Cloud";
-  if (sourceType === "template") return "Template";
-  return "Cloud";
+function projectLocationRows(
+  kind: "local" | "cloud",
+  project: LocalProject | CloudProject,
+  workspaceState?: WorkspaceState | null,
+): ProjectLocationRow[] {
+  if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject);
+  return localProjectLocationRows(project as LocalProject, workspaceState);
+}
+
+function localProjectLocationRows(
+  project: LocalProject,
+  workspaceState?: WorkspaceState | null,
+): ProjectLocationRow[] {
+  const rows: ProjectLocationRow[] = [
+    {
+      key: "local",
+      label: project.source === "git" ? "Local Git" : "Local Folder",
+      value: project.workspacePath || project.path,
+      tone: "local",
+      icon: project.source === "git" ? <FolderGit2 size={13} /> : <Folder size={13} />,
+    },
+  ];
+
+  const linkedCloudProject = project.linkedSandboxProject;
+  if (linkedCloudProject?.projectId) {
+    rows.push({
+      key: "cloud",
+      label: "Cloud Project",
+      value: linkedCloudProject.projectName ?? linkedCloudProject.projectSlug ?? linkedCloudProject.projectId,
+      detail: cloudWorkspaceStateNote(project, null, workspaceState),
+      tone: "cloud",
+      icon: <Cloud size={13} />,
+    });
+  } else if (project.linkedOpenPondApp?.appId) {
+    rows.push({
+      key: "openpond-app",
+      label: "OpenPond App",
+      value: project.linkedOpenPondApp.appName,
+      detail: project.linkedOpenPondApp.defaultBranch ? `branch ${project.linkedOpenPondApp.defaultBranch}` : null,
+      tone: "cloud",
+      icon: <Cloud size={13} />,
+    });
+  }
+
+  if (workspaceState) {
+    rows.push({
+      key: "state",
+      label: workspaceState.initialized ? "Repo State" : "Workspace State",
+      value: localWorkspaceStateNote(workspaceState, {
+        branch: project.linkedSandboxProject?.defaultBranch ?? null,
+        path: project.workspacePath,
+        linkedCloudSourceKnown: project.linkedSandboxProject?.projectId
+          ? Boolean(project.linkedSandboxProject.lastUploadedCommit) || !workspaceState.headCommit
+          : true,
+      }),
+      tone: "git",
+      icon: <GitBranch size={13} />,
+    });
+  }
+
+  return rows;
+}
+
+function cloudProjectLocationRows(project: CloudProject): ProjectLocationRow[] {
+  return [
+    {
+      key: "cloud",
+      label: "Cloud Project",
+      value: project.organizationName ? `${project.organizationName} / ${project.name}` : project.name,
+      detail: project.slug ?? null,
+      tone: "cloud",
+      icon: <Cloud size={13} />,
+    },
+    {
+      key: "branch",
+      label: "Cloud Branch",
+      value: project.defaultBranch ?? "main",
+      detail: project.syncedAt ? "setup ready" : "needs setup",
+      tone: "git",
+      icon: <GitBranch size={13} />,
+    },
+  ];
 }
 
 function SidebarProjectMoreButton({

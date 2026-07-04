@@ -37,9 +37,9 @@ Goals are control-plane state, not prompt decoration. The runtime owns lifecycle
 
 ## Local And Cloud
 
-Goals work as part of the local-first app experience. A goal can operate on local projects, Codex-backed sessions, OpenPond-hosted chat, and Sandbox workspaces depending on the selected provider and workspace.
+Goals work as part of the local-first app experience. A goal can operate on local projects, Codex-backed sessions, OpenPond-hosted chat, and OpenPond Cloud workspaces depending on the selected provider and workspace.
 
-OpenPond Sandboxes are useful for goals that need cloud dependencies, long-running execution, replayable state, or source preservation. Local goals remain useful when the task only needs the user's machine and repo.
+OpenPond Cloud is useful for goals that need cloud dependencies, long-running execution, replayable state, or source preservation. Local goals remain useful when the task only needs the user's machine and repo.
 
 ## Budgeting And Safety
 

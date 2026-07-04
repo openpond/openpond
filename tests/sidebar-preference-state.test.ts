@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { SidebarAppPreferences } from "@openpond/contracts";
 import {
+  mergeLayoutWidthPreferencePreservingRecentLocal,
   mergeSidebarAppPreferencesPreservingRecentLocal,
   mergeSidebarSectionsCollapsedPreservingRecentLocal,
+  RECENT_LOCAL_LAYOUT_WIDTH_PREFERENCE_TTL_MS,
   RECENT_LOCAL_SIDEBAR_APP_PREFERENCE_TTL_MS,
   RECENT_LOCAL_SIDEBAR_SECTION_PREFERENCE_TTL_MS,
+  recordLayoutWidthPreferenceChange,
   recordSidebarAppPreferenceChanges,
   recordSidebarSectionPreferenceChanges,
   type SidebarAppPreferenceChangeTimes,
@@ -128,5 +131,40 @@ describe("sidebar section collapsed state merging", () => {
       mergeSidebarSectionsCollapsedPreservingRecentLocal(current, current, changeTimes, 1_050),
     ).toBe(current);
     expect(changeTimes).toEqual({});
+  });
+});
+
+describe("layout width preference state merging", () => {
+  test("keeps a recent local width when stale bootstrap preferences arrive", () => {
+    const localChange = recordLayoutWidthPreferenceChange(332, 420, 1_000);
+
+    expect(mergeLayoutWidthPreferencePreservingRecentLocal(332, localChange, 1_050)).toEqual({
+      value: 420,
+      localChange,
+    });
+  });
+
+  test("clears the local width marker when incoming preferences catch up", () => {
+    const localChange = recordLayoutWidthPreferenceChange(332, 420, 1_000);
+
+    expect(mergeLayoutWidthPreferencePreservingRecentLocal(420, localChange, 1_050)).toEqual({
+      value: 420,
+      localChange: null,
+    });
+  });
+
+  test("accepts incoming widths after the local freshness window expires", () => {
+    const localChange = recordLayoutWidthPreferenceChange(332, 420, 1_000);
+
+    expect(
+      mergeLayoutWidthPreferencePreservingRecentLocal(
+        332,
+        localChange,
+        1_000 + RECENT_LOCAL_LAYOUT_WIDTH_PREFERENCE_TTL_MS + 1,
+      ),
+    ).toEqual({
+      value: 332,
+      localChange: null,
+    });
   });
 });
