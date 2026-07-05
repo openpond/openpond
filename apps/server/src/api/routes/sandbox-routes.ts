@@ -539,7 +539,7 @@ export async function handleSandboxRoutes({ deps, request, requestUrl, response 
     }
   }
   const sandboxActionMatch =
-    /^\/v1\/sandboxes\/([^/]+)\/(exec|ports|stop|receipts|logs|billing)$/.exec(
+    /^\/v1\/sandboxes\/([^/]+)\/(exec|ports|stop|receipts|logs|billing|preserve-source)$/.exec(
       requestUrl.pathname,
     );
   if (sandboxActionMatch) {
@@ -575,6 +575,28 @@ export async function handleSandboxRoutes({ deps, request, requestUrl, response 
           failOnUnpreservedChanges:
             requestUrl.searchParams.get("failOnUnpreservedChanges") === "true" ||
             requestUrl.searchParams.get("failOnUnpreservedChanges") === "1",
+        }),
+      );
+      return true;
+    }
+    if (request.method === "POST" && action === "preserve-source") {
+      const sandboxRecord = asRecord(
+        asRecord(await sandboxPayload({ type: "get", sandboxId })).sandbox,
+      );
+      const runtimeId = typeof sandboxRecord.runtimeId === "string" ? sandboxRecord.runtimeId.trim() : "";
+      if (!runtimeId) {
+        throw new Error("Active sandbox is not attached to a sandbox runtime.");
+      }
+      sendJson(
+        response,
+        200,
+        await sandboxPayload({
+          type: "sandbox_runtime_preserve_source",
+          runtimeId,
+          payload: {
+            ...asRecord(await readJson(request)),
+            sandboxId,
+          },
         }),
       );
       return true;
@@ -1052,4 +1074,10 @@ export async function handleSandboxRoutes({ deps, request, requestUrl, response 
     }
   }
   return false;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

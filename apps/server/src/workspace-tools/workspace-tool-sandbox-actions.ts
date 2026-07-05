@@ -111,6 +111,20 @@ const SANDBOX_ACTIONS_WITHOUT_ACTIVE_SANDBOX = new Set<WorkspaceToolRequest["act
   "sandbox_schedule_create",
 ]);
 
+const SANDBOX_SOURCE_MUTATION_ACTIONS = new Set<SandboxToolAction>([
+  "sandbox_upload_file",
+  "sandbox_write_file",
+  "sandbox_edit_file",
+  "sandbox_delete_file",
+  "sandbox_mkdir",
+  "sandbox_move_file",
+  "sandbox_exec",
+  "sandbox_git_branch",
+  "sandbox_git_commit",
+  "sandbox_git_pull",
+  "sandbox_run_action",
+]);
+
 const SANDBOX_CREATE_REQUEST_ID_METADATA_KEY = "openpondAppCreateRequestId";
 const SANDBOX_CHAT_DEFAULT_RUNTIME_METADATA_KEY = "openpondAppDefaultRuntime";
 const SANDBOX_CREATE_REQUEST_TIMEOUT_MS = 30_000;
@@ -542,6 +556,20 @@ export async function handleSandboxWorkspaceToolAction(input: {
     }
   }
 
+  const sourcePreservation = await maybePreserveSandboxSourceAfterMutation({
+    action,
+    args,
+    result,
+    session: input.session,
+    sandboxId: sandboxIdFromResultOrActive(result, sandboxId),
+  });
+  if (sourcePreservation) {
+    result = {
+      ...asRecord(result),
+      sourcePreservation,
+    };
+  }
+
   return {
     ok: true,
     action,
@@ -549,6 +577,112 @@ export async function handleSandboxWorkspaceToolAction(input: {
     output: summarizeSandboxToolResult(action, result, { attached: attachToSession }),
     data: result,
   };
+}
+
+type SandboxSourcePreservationResult = {
+  attempted: true;
+  ok: boolean;
+  triggerAction: SandboxToolAction;
+  sandboxId: string;
+  runtimeId: string | null;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  preserved?: boolean;
+  preservedSha?: string | null;
+  message?: string | null;
+  error?: string;
+};
+
+async function maybePreserveSandboxSourceAfterMutation(input: {
+  action: SandboxToolAction;
+  args: Record<string, unknown>;
+  result: unknown;
+  session: Session;
+  sandboxId: string;
+}): Promise<SandboxSourcePreservationResult | null> {
+  if (!SANDBOX_SOURCE_MUTATION_ACTIONS.has(input.action)) return null;
+  if (booleanArg(input.args, "autoPreserveSource") === false) return null;
+  if (!input.sandboxId) return null;
+
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
+  let runtimeId: string | null = null;
+  try {
+    runtimeId = await resolveSandboxRuntimeId({
+      args: input.args,
+      sandboxId: input.sandboxId,
+    });
+    const payload = asRecord(
+      await sandboxRequestPayload({
+        type: "sandbox_runtime_preserve_source",
+        runtimeId,
+        payload: {
+          sandboxId: input.sandboxId,
+          message: autoPreserveMessage(input.action),
+          teamId: resolveSandboxSourcePreserveTeamId({
+            args: input.args,
+            session: input.session,
+            result: input.result,
+          }),
+        },
+      }),
+    );
+    const completedAtMs = Date.now();
+    return {
+      attempted: true,
+      ok: true,
+      triggerAction: input.action,
+      sandboxId: input.sandboxId,
+      runtimeId,
+      startedAt,
+      completedAt: new Date(completedAtMs).toISOString(),
+      durationMs: completedAtMs - startedAtMs,
+      preserved: payload.preserved === true,
+      preservedSha: typeof payload.preservedSha === "string" ? payload.preservedSha : null,
+      message: typeof payload.message === "string" ? payload.message : null,
+    };
+  } catch (error) {
+    const completedAtMs = Date.now();
+    return {
+      attempted: true,
+      ok: false,
+      triggerAction: input.action,
+      sandboxId: input.sandboxId,
+      runtimeId,
+      startedAt,
+      completedAt: new Date(completedAtMs).toISOString(),
+      durationMs: completedAtMs - startedAtMs,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export function isSandboxSourceMutationAction(action: WorkspaceToolRequest["action"]): boolean {
+  return SANDBOX_SOURCE_MUTATION_ACTIONS.has(action as SandboxToolAction);
+}
+
+function autoPreserveMessage(action: SandboxToolAction): string {
+  if (action === "sandbox_exec") return "Auto-preserve source after sandbox command";
+  if (action === "sandbox_git_branch") return "Auto-preserve source after sandbox git branch change";
+  if (action === "sandbox_git_commit") return "Auto-preserve source after sandbox git commit";
+  if (action === "sandbox_git_pull") return "Auto-preserve source after sandbox git pull";
+  if (action === "sandbox_run_action") return "Auto-preserve source after sandbox action";
+  return "Auto-preserve source after sandbox file mutation";
+}
+
+export function resolveSandboxSourcePreserveTeamId(input: {
+  args: Record<string, unknown>;
+  session: Pick<Session, "cloudTeamId">;
+  result: unknown;
+}): string {
+  const sessionTeamId = typeof input.session.cloudTeamId === "string" ? input.session.cloudTeamId : "";
+  return stringArg(input.args, "teamId", "") || sessionTeamId || sandboxTeamIdFromResult(input.result);
+}
+
+function sandboxTeamIdFromResult(result: unknown): string {
+  const teamId = asRecord(asRecord(result).sandbox).teamId;
+  return typeof teamId === "string" ? teamId : "";
 }
 
 async function editSandboxFile(input: {
@@ -755,6 +889,7 @@ export function summarizeSandboxToolResult(
   options: { attached?: boolean } = {},
 ): string {
   const payload = asRecord(result);
+  const appendPreservation = (message: string) => appendSandboxPreservationSummary(message, payload);
   if (action === "sandbox_create" || action === "sandbox_template_launch") {
     const sandbox = asRecord(payload.sandbox);
     const id = typeof sandbox.id === "string" ? sandbox.id : "sandbox";
@@ -835,7 +970,7 @@ export function summarizeSandboxToolResult(
     const command = asRecord(payload.command);
     const status = typeof command.status === "string" ? command.status : "completed";
     const output = typeof command.output === "string" ? command.output.trim() : "";
-    return output ? `Command ${status}\n\n${output}` : `Command ${status}`;
+    return appendPreservation(output ? `Command ${status}\n\n${output}` : `Command ${status}`);
   }
   if (action === "sandbox_run_action") {
     const createdSandbox = asRecord(payload.createdSandbox);
@@ -850,7 +985,7 @@ export function summarizeSandboxToolResult(
     const actionSummary = output
       ? `Action ${actionName} ${status}\n\n${output}`
       : `Action ${actionName} ${status}`;
-    return `${prefix}${actionSummary}`;
+    return appendPreservation(`${prefix}${actionSummary}`);
   }
   if (action === "sandbox_list_files") {
     const files = Array.isArray(payload.files) ? payload.files.length : 0;
@@ -863,37 +998,37 @@ export function summarizeSandboxToolResult(
   if (action === "sandbox_upload_file") {
     const file = asRecord(payload.file);
     const path = typeof file.path === "string" ? file.path : "file";
-    return `Uploaded ${path}.`;
+    return appendPreservation(`Uploaded ${path}.`);
   }
   if (action === "sandbox_write_file") {
     const file = asRecord(payload.file);
     const path = typeof file.path === "string" ? file.path : "file";
-    return `Wrote ${path}.`;
+    return appendPreservation(`Wrote ${path}.`);
   }
   if (action === "sandbox_edit_file") {
     const edit = asRecord(payload.edit);
     const path = typeof edit.path === "string" ? edit.path : "file";
     const replacements =
       typeof edit.replacements === "number" ? edit.replacements : 0;
-    return `Edited ${path} with ${replacements} replacement${replacements === 1 ? "" : "s"}.`;
+    return appendPreservation(`Edited ${path} with ${replacements} replacement${replacements === 1 ? "" : "s"}.`);
   }
   if (action === "sandbox_delete_file") {
     const deleted = asRecord(payload.deleted);
     const path = typeof deleted.path === "string" ? deleted.path : "file";
-    return `Deleted ${path}.`;
+    return appendPreservation(`Deleted ${path}.`);
   }
   if (action === "sandbox_mkdir") {
     const directory = asRecord(payload.directory);
     const path = typeof directory.path === "string" ? directory.path : "directory";
-    return `Created directory ${path}.`;
+    return appendPreservation(`Created directory ${path}.`);
   }
   if (action === "sandbox_move_file") {
     const moved = asRecord(payload.moved);
     const fromPath = typeof moved.fromPath === "string" ? moved.fromPath : "";
     const toPath = typeof moved.toPath === "string" ? moved.toPath : "";
-    return fromPath && toPath
+    return appendPreservation(fromPath && toPath
       ? `Moved ${fromPath} to ${toPath}.`
-      : "Moved sandbox file.";
+      : "Moved sandbox file.");
   }
   if (action === "sandbox_git_status") {
     const status = asRecord(payload.status);
@@ -918,17 +1053,17 @@ export function summarizeSandboxToolResult(
   if (action === "sandbox_git_branch") {
     const branch = asRecord(payload.branch);
     const name = typeof branch.branch === "string" ? branch.branch : "branch";
-    return `Sandbox git branch is ${name}.`;
+    return appendPreservation(`Sandbox git branch is ${name}.`);
   }
   if (action === "sandbox_git_commit") {
     const commit = asRecord(payload.commit);
     const sha = typeof commit.commitHash === "string" ? commit.commitHash : "commit";
-    return `Committed sandbox changes at ${sha}.`;
+    return appendPreservation(`Committed sandbox changes at ${sha}.`);
   }
   if (action === "sandbox_git_pull") {
     const operation = asRecord(payload.pull);
     const output = typeof operation.output === "string" ? operation.output.trim() : "";
-    return output ? `Sandbox git pull completed\n\n${output}` : "Sandbox git pull completed.";
+    return appendPreservation(output ? `Sandbox git pull completed\n\n${output}` : "Sandbox git pull completed.");
   }
   if (action === "sandbox_git_push") {
     const operation = asRecord(payload.push);
@@ -965,7 +1100,23 @@ export function summarizeSandboxToolResult(
     const state = typeof changes.state === "string" ? changes.state : "";
     return state ? `Stopped sandbox. Source change state: ${state}.` : "Stopped sandbox.";
   }
-  return "Read sandbox status.";
+  return appendSandboxPreservationSummary("Read sandbox status.", payload);
+}
+
+function appendSandboxPreservationSummary(message: string, payload: Record<string, unknown>): string {
+  const sourcePreservation = asRecord(payload.sourcePreservation);
+  if (sourcePreservation.attempted !== true) return message;
+  if (sourcePreservation.ok !== true) {
+    const error = typeof sourcePreservation.error === "string" ? sourcePreservation.error : "unknown error";
+    return `${message}\nCheckpoint not saved: ${error}`;
+  }
+  if (sourcePreservation.preserved !== true) {
+    return `${message}\nCheckpoint checked: no source changes needed preservation.`;
+  }
+  const sha = typeof sourcePreservation.preservedSha === "string" ? sourcePreservation.preservedSha : "";
+  return sha
+    ? `${message}\nCheckpoint saved: ${sha}.`
+    : `${message}\nCheckpoint saved.`;
 }
 
 export function sandboxChatDefaultRuntimeMetadata(input: {
@@ -1263,8 +1414,21 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function sandboxIdFromPayload(value: unknown): string {
-  const sandbox = asRecord(asRecord(value).sandbox);
-  return typeof sandbox.id === "string" ? sandbox.id : "";
+  const payload = asRecord(value);
+  const sandbox = asRecord(payload.sandbox);
+  const createdSandbox = asRecord(payload.createdSandbox);
+  if (typeof sandbox.id === "string") return sandbox.id;
+  if (typeof createdSandbox.id === "string") return createdSandbox.id;
+  return "";
+}
+
+function sandboxIdFromResultOrActive(value: unknown, fallback: string): string {
+  const sandboxId = sandboxIdFromPayload(value);
+  if (sandboxId) return sandboxId;
+  const payload = asRecord(value);
+  return typeof payload.sandboxId === "string" && payload.sandboxId
+    ? payload.sandboxId
+    : fallback;
 }
 
 function runtimeIdFromPayload(value: unknown): string {

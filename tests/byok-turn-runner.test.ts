@@ -1003,6 +1003,63 @@ describe("BYOK turn runner dispatch", () => {
     }
   });
 
+  test("fails closed for native profile skill goals in Hybrid sessions", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-hybrid-reject-"));
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      const profileSourcePath = path.join(repoPath, "profiles", "default");
+      await mkdir(profileSourcePath, { recursive: true });
+      const harness = createNativeProfileSkillGoalHarness({
+        repoPath,
+        profileSourcePath,
+        sessionOverrides: {
+          workspaceKind: "sandbox",
+          workspaceId: "sandbox_hybrid",
+          workspaceName: "Hybrid Sandbox",
+          cwd: null,
+          localProjectId: "local_project_1",
+          cloudProjectId: "cloud_project_1",
+          cloudTeamId: "team_1",
+          metadata: { workspaceTarget: "hybrid" },
+        },
+        toolArgs: {
+          operation: "create",
+          objective: "Draft support handoff summaries.",
+          skillName: "support-handoff-summaries",
+          source: "model_tool",
+        },
+      });
+
+      const turn = await harness.runner.sendTurn("session_1", {
+        prompt: "create me a skill for support handoff summaries",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      });
+
+      expect(turn.status).toBe("completed");
+      expect(harness.sessions.get("session_1")?.cwd).not.toBe(repoPath);
+      const completed = harness.events.find(
+        (event) => event.name === "tool.completed" && event.action === "openpond_profile_skill_goal",
+      );
+      expect(completed).toMatchObject({
+        status: "failed",
+      });
+      expect(completed?.output).toContain("Profile skill goals are local profile workspace actions");
+      expect(completed?.output).toContain("Working in Hybrid");
+      expect(harness.events.some(
+        (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
+      )).toBe(false);
+      expect(harness.streamInputs[1].messages).toContainEqual(
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "call_profile_skill_goal",
+          content: expect.stringContaining("\"ok\": false"),
+        }),
+      );
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("allows native profile skill goals that explicitly exclude agent-style files", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-negated-agent-terms-"));
     try {
@@ -1923,10 +1980,11 @@ function createNativeProfileSkillGoalHarness(input: {
   profileSourcePath: string;
   toolArgs: Record<string, unknown>;
   finalText?: string;
+  sessionOverrides?: Partial<Session>;
   usageByPass?: Record<number, unknown>;
 }) {
   const sessions = new Map<string, Session>([
-    ["session_1", baseSession({ title: "Profile skill native tool" })],
+    ["session_1", baseSession({ title: "Profile skill native tool", ...(input.sessionOverrides ?? {}) })],
   ]);
   const turns: Turn[] = [];
   const events: RuntimeEvent[] = [];

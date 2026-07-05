@@ -5,6 +5,7 @@ import type {
   WorkspaceState,
   WorkspaceToolRequest,
 } from "@openpond/contracts";
+import { resolveWorkspaceExecutionTarget } from "./workspace-execution-target.js";
 
 type ResolveWorkspaceCapabilitiesInput = {
   session: Session;
@@ -29,8 +30,9 @@ export function resolveWorkspaceCapabilities({
   localProject,
   state,
 }: ResolveWorkspaceCapabilitiesInput): WorkspaceCapabilities {
+  const target = resolveWorkspaceExecutionTarget({ session, localProject, state });
   const productKind = (() => {
-    if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") return "sandbox";
+    if (target.target === "sandbox") return "sandbox";
     if (localProject?.sandboxTemplate?.detected) return "sandbox_template";
     if (localProject?.source === "git" || localProject?.repoPath || isGitBackedWorkspaceState(state)) {
       return "generic_git";
@@ -74,7 +76,12 @@ export function workspaceToolBlockedMessage(input: WorkspaceToolRouteInput): str
       state: input.state,
     });
 
-  if (input.session.workspaceKind === "sandbox" || input.session.workspaceKind === "sandbox_template") {
+  const target = resolveWorkspaceExecutionTarget({
+    session: input.session,
+    localProject: input.localProject,
+    state: input.state,
+  });
+  if (target.target === "sandbox") {
     return isSandboxRuntimeAction(input.action) ? null : "Use sandbox_* workspace actions for sandbox workspaces.";
   }
 

@@ -55,6 +55,7 @@ export type ActivityItem = {
   controlKind?: "goal_context" | "turn_aborted";
   callId?: string;
   detail?: string;
+  meta?: string;
   state?: "running" | "completed" | "failed" | "pending";
   imagePreview?: {
     path: string;

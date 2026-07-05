@@ -96,6 +96,7 @@ export function WorkspaceDiffPanel({
       appId={appId}
       workspaceKind={workspaceKind}
       connection={connection}
+      runtimeEvents={runtimeEvents ?? []}
       diff={diff}
       editorPreferences={editorPreferences ?? null}
       loading={loading}
@@ -146,6 +147,7 @@ function hasWorkspaceFileDetail(file: WorkspaceDiffFile): boolean {
 
 function sourceStatusForDiff({
   changedFiles,
+  checkpointStatus,
   dirty,
   error,
   loading,
@@ -153,6 +155,7 @@ function sourceStatusForDiff({
   sourcePending,
 }: {
   changedFiles: number;
+  checkpointStatus: { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null;
   dirty: boolean;
   error: string | null;
   loading: boolean;
@@ -162,6 +165,8 @@ function sourceStatusForDiff({
   if (sourcePending) return { label: "sandbox pending", tone: "loading" };
   if (loading) return { label: "refreshing", tone: "loading" };
   if (error) return { label: "status unavailable", tone: "error" };
+  if (sandboxMode && checkpointStatus?.tone === "error") return checkpointStatus;
+  if (sandboxMode && checkpointStatus && !dirty && changedFiles === 0) return checkpointStatus;
   if (dirty || changedFiles > 0) {
     const count = Math.max(1, changedFiles);
     const noun = count === 1 ? "change" : "changes";
@@ -173,6 +178,29 @@ function sourceStatusForDiff({
   return { label: sandboxMode ? "sandbox clean" : "local clean", tone: "clean" };
 }
 
+function latestSandboxCheckpointStatus(
+  runtimeEvents: RuntimeEvent[],
+  sandboxId: string | null,
+): { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null {
+  if (!sandboxId) return null;
+  for (let index = runtimeEvents.length - 1; index >= 0; index -= 1) {
+    const item = runtimeEvents[index];
+    if (item?.name !== "workspace_action_result") continue;
+    const data = item.data && typeof item.data === "object" && !Array.isArray(item.data)
+      ? item.data as Record<string, unknown>
+      : null;
+    const preservation = data?.sourcePreservation && typeof data.sourcePreservation === "object" && !Array.isArray(data.sourcePreservation)
+      ? data.sourcePreservation as Record<string, unknown>
+      : null;
+    if (preservation?.attempted !== true) continue;
+    if (preservation.sandboxId !== sandboxId) continue;
+    if (preservation.ok !== true) return { label: "checkpoint failed", tone: "error" };
+    if (preservation.preserved === true) return { label: "checkpoint saved", tone: "clean" };
+    return { label: "checkpoint clean", tone: "clean" };
+  }
+  return null;
+}
+
 function folderPathAncestors(path: string): string[] {
   const parts = path.split("/").filter(Boolean);
   return parts.map((_, index) => parts.slice(0, index + 1).join("/"));
@@ -182,6 +210,7 @@ function WorkspaceDiffPanelInner({
   appId,
   workspaceKind,
   connection,
+  runtimeEvents,
   diff,
   editorPreferences,
   loading,
@@ -206,6 +235,7 @@ function WorkspaceDiffPanelInner({
   appId: string | null;
   workspaceKind: WorkspaceKind | null;
   connection: ClientConnection | null;
+  runtimeEvents: RuntimeEvent[];
   diff: WorkspaceDiffSummary | null;
   editorPreferences: WorkspaceEditorPreferences | null;
   loading: boolean;
@@ -329,6 +359,10 @@ function WorkspaceDiffPanelInner({
   );
 
   const displayDiff = sandboxMode ? sandboxDiff : diff;
+  const checkpointStatus = useMemo(
+    () => latestSandboxCheckpointStatus(runtimeEvents, sandboxId),
+    [runtimeEvents, sandboxId],
+  );
   const rawFiles = displayDiff?.files ?? EMPTY_WORKSPACE_DIFF_FILES;
   const currentDiffFiles = displayDiff?.files ?? EMPTY_WORKSPACE_DIFF_FILES;
   const currentDiffFileByPath = useMemo(
@@ -946,6 +980,7 @@ function WorkspaceDiffPanelInner({
   const panelError = sandboxMode ? sandboxError : workspaceError;
   const sourceStatus = sourceStatusForDiff({
     changedFiles: displayDiff?.filesChanged ?? files.length,
+    checkpointStatus,
     dirty: Boolean(displayDiff?.dirty),
     error: panelError,
     loading: panelLoading,

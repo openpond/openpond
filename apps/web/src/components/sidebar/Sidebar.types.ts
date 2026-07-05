@@ -63,6 +63,7 @@ export type SidebarProps = {
   createCloudEnvironment: () => void;
   selectCloudWorkItem: (workItem: CloudWorkItem) => void;
   addProjectFolder: () => void;
+  startExistingProjectFromPath: () => void;
   startProjectFromScratch: () => void;
   startCloudProjectFromScratch: () => void;
   moveProjectToCloud: (item: SidebarProjectItem) => void;

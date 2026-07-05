@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { LocalProject, Session } from "@openpond/contracts";
 import { resolveWorkspaceCapabilities, workspaceToolBlockedMessage } from "../apps/server/src/workspace/workspace-capabilities";
+import { resolveWorkspaceExecutionTarget } from "../apps/server/src/workspace/workspace-execution-target";
 
 const baseSession: Session = {
   id: "session_1",
@@ -71,5 +72,48 @@ describe("workspace capabilities", () => {
     expect(workspaceToolBlockedMessage({ action: "read_files", session })).toBe(
       "Use sandbox_* workspace actions for sandbox workspaces."
     );
+  });
+
+  test("resolves Hybrid sessions as sandbox execution targets", () => {
+    const session: Session = {
+      ...baseSession,
+      provider: "zai",
+      workspaceKind: "sandbox",
+      workspaceId: "sandbox_1",
+      workspaceName: "Hybrid workspace",
+      localProjectId: "project_1",
+      cloudProjectId: "cloud_project_1",
+      cloudTeamId: "team_1",
+      metadata: { workspaceTarget: "hybrid" },
+    };
+
+    expect(resolveWorkspaceExecutionTarget({ session })).toMatchObject({
+      target: "sandbox",
+      ready: true,
+      sandboxId: "sandbox_1",
+      localProjectId: "project_1",
+      cloudProjectId: "cloud_project_1",
+      cloudTeamId: "team_1",
+      hybrid: true,
+      reason: "sandbox_session",
+    });
+  });
+
+  test("resolves local project id only sessions as local targets", () => {
+    const session: Session = {
+      ...baseSession,
+      workspaceKind: undefined,
+      workspaceId: null,
+      cwd: null,
+      localProjectId: "local_project_1",
+    };
+
+    expect(resolveWorkspaceExecutionTarget({ session })).toMatchObject({
+      target: "local",
+      ready: true,
+      workspaceId: "local_project_1",
+      localProjectId: "local_project_1",
+      reason: "local_project_context",
+    });
   });
 });

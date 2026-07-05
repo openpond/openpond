@@ -900,6 +900,242 @@ describe("model-backed create pipeline planner", () => {
     expect(result.turn.createPipeline?.state).toBe("awaiting_plan_approval");
   });
 
+  test("native openpond_create_pipeline uses hosted target assumptions for Hybrid sessions", async () => {
+    const result = await runNativeCreatePipelineToolHarness({
+      sessionOverrides: {
+        provider: "openrouter",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+        workspaceKind: "sandbox",
+        workspaceId: "sandbox_hybrid",
+        workspaceName: "Hybrid Sandbox",
+        cwd: null,
+        localProjectId: "local_project_1",
+        cloudProjectId: "cloud_project_1",
+        cloudTeamId: "team_1",
+        metadata: { workspaceTarget: "hybrid" },
+      },
+      toolArgs: {
+        operation: "create",
+        objective: "Create a support triage agent.",
+      },
+    });
+
+    expect(result.turn.status).toBe("completed");
+    expect(result.plannerCalls).toHaveLength(1);
+    expect(result.plannerCalls[0].request).toMatchObject({
+      adapter: {
+        kind: "hosted",
+        teamId: "team_1",
+        projectId: "cloud_project_1",
+      },
+      context: {
+        targetRepoAssumptions: [
+          "hybrid sandbox: sandbox_hybrid",
+          "cloud project: cloud_project_1",
+          "local project: local_project_1",
+        ],
+      },
+    });
+  });
+
+  test("Hybrid hosted create approval fails closed instead of queuing local apply", async () => {
+    let session = baseSession({
+      workspaceKind: "sandbox",
+      workspaceId: "sandbox_hybrid",
+      workspaceName: "Hybrid Sandbox",
+      cwd: null,
+      localProjectId: "local_project_1",
+      cloudProjectId: "cloud_project_1",
+      cloudTeamId: "team_1",
+      metadata: { workspaceTarget: "hybrid" },
+    });
+    const request = hostedCreatePipelineRequest();
+    const snapshot = createPipelineSnapshotFromPlannerDecision({
+      request,
+      previousSnapshot: null,
+      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+      decision: {
+        schemaVersion: "openpond.createPipeline.plannerDecision.v1",
+        decision: "plan",
+        plan: {
+          agentId: "support-triage",
+          agentName: "Support Triage",
+          summary: "Create a hosted support triage agent.",
+          capturedContextSummary: "Hybrid Create Pipeline request.",
+          actionShape: {
+            mode: "chat",
+            label: "Chat only",
+            detail: "Expose support triage through chat.",
+            defaultActionKey: "chat",
+            directActionHint: null,
+            artifactPolicy: "Persist trace and run summary.",
+          },
+          sourcePlan: [
+            {
+              path: "agents/support-triage",
+              operation: "create",
+              reason: "Implement the hosted support triage agent.",
+            },
+          ],
+          requirements: [],
+          checks: [],
+        },
+      },
+    });
+    const turn = {
+      id: "turn_hybrid_create_approval",
+      sessionId: session.id,
+      status: "completed",
+      prompt: "Create a hosted support triage agent.",
+      provider: "openpond",
+      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+      createdAt: now,
+      updatedAt: now,
+      createPipelineRequest: request,
+      createPipeline: snapshot,
+      metadata: {
+        createPipelineRequest: request,
+        createPipeline: snapshot,
+      },
+    } as any;
+    const turns = [turn];
+    const events: any[] = [];
+    const approvals: any[] = [
+      {
+        id: snapshot.plan?.approvalId,
+        sessionId: session.id,
+        turnId: turn.id,
+        providerRequestId: snapshot.id,
+        kind: "create_plan",
+        title: "Approve create plan",
+        detail: "{}",
+        status: "pending",
+        createdAt: now,
+      },
+    ];
+    let queueCalls = 0;
+    let codexRuntimeCalls = 0;
+
+    const runner = createTurnRunner({
+      attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-hybrid-create-approval-")),
+      store: {
+        async snapshot() {
+          return { events, turns, approvals };
+        },
+        async getTurn(turnId: string) {
+          return turns.find((candidate) => candidate.id === turnId) ?? null;
+        },
+        async insertTurn(nextTurn: any) {
+          turns.push(nextTurn);
+        },
+        async updateTurn(turnId: string, updater: (current: any) => any) {
+          const index = turns.findIndex((candidate) => candidate.id === turnId);
+          if (index === -1) return null;
+          turns[index] = updater(turns[index]);
+          return turns[index];
+        },
+        async getApproval(approvalId: string) {
+          return approvals.find((candidate) => candidate.id === approvalId) ?? null;
+        },
+      },
+      upsertApproval: async (approval: any) => {
+        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        if (index === -1) approvals.push(approval);
+        else approvals[index] = approval;
+      },
+      getSession: async () => session,
+      updateSession: async (_sessionId: string, patch: Record<string, unknown>) => {
+        session = { ...session, ...patch };
+        return session;
+      },
+      completeTurn: async () => {
+        throw new Error("approval resolution should not complete turns");
+      },
+      failTurn: async () => {
+        throw new Error("approval resolution should not fail turns");
+      },
+      interruptTurn: async () => {
+        throw new Error("approval resolution should not interrupt turns");
+      },
+      defaultSessionCwd: () => "/tmp/openpond",
+      findOpenPondApp: async () => {
+        throw new Error("apps should not load for hosted create approval");
+      },
+      resolveSessionWorkspaceCwd: async () => null,
+      ensureCodexRuntime: async () => {
+        codexRuntimeCalls += 1;
+        throw new Error("hosted approval must not start a local Codex runtime");
+      },
+      appendWorkspaceDiffEvent: async () => undefined,
+      workspaceDiffBaseline: async () => null,
+      appendRuntimeEvent: async (event: any) => {
+        events.push(event);
+      },
+      executeWorkspaceTool: async () => {
+        throw new Error("workspace tools should not run for hosted create approval");
+      },
+      loadPersonalizationSoul: async () => "",
+      maybeCreateScaffoldForTurn: async (current) => current,
+      hostedSystemPrompt: async () => "System prompt",
+      appendAssistantText: async () => undefined,
+      appendHostedContextUsage: async () => undefined,
+      turnFollowUpQueue: {
+        enqueue() {
+          queueCalls += 1;
+          return { id: "unexpected" };
+        },
+      } as any,
+      maxHostedWorkspaceToolRounds: 1,
+      maxRepeatedInvalidToolRequests: 1,
+    });
+
+    const approval = await runner.resolveCreatePipelineApproval(snapshot.plan!.approvalId!, {
+      decision: "accept",
+    });
+
+    expect(approval?.status).toBe("accepted");
+    expect(queueCalls).toBe(0);
+    expect(codexRuntimeCalls).toBe(0);
+    expect(turns[0].createPipeline).toMatchObject({
+      state: "blocked",
+      blockedReason:
+        "Approved hosted Create plans from this chat require the Cloud work item background flow. No local source mutation was performed.",
+      plan: { status: "approved" },
+      metadata: {
+        createPipelineApproval: {
+          status: "blocked",
+          reason: "hosted_create_pipeline_apply_not_configured",
+          adapterKind: "hosted",
+          workspaceExecutionTarget: {
+            target: "sandbox",
+            workspaceKind: "sandbox",
+            workspaceId: "sandbox_hybrid",
+            sandboxId: "sandbox_hybrid",
+            cloudProjectId: "cloud_project_1",
+            localProjectId: "local_project_1",
+            hybrid: true,
+          },
+        },
+      },
+    });
+    expect(
+      events.some(
+        (event) =>
+          event.name === "create_pipeline.updated" &&
+          event.status === "failed" &&
+          event.data?.createPipeline?.state === "blocked",
+      ),
+    ).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.name === "approval.resolved" &&
+          event.status === "completed" &&
+          event.data?.status === "accepted",
+      ),
+    ).toBe(true);
+  });
+
   test("native openpond_create_pipeline edit fails without a selected or explicit target", async () => {
     const result = await runNativeCreatePipelineToolHarness({
       sessionOverrides: {
@@ -986,6 +1222,43 @@ function createPipelineRequest() {
     },
     metadata: { source: "web_composer_slash" },
     createdAt: now,
+  });
+}
+
+function hostedCreatePipelineRequest() {
+  const request = createPipelineRequest();
+  return CreatePipelineRequestSchema.parse({
+    ...request,
+    adapter: {
+      kind: "hosted",
+      sourceAuthority: "hosted_profile",
+      teamId: "team_1",
+      projectId: "cloud_project_1",
+      activeProfile: "default",
+      sourceRef: "source_ref_1",
+      baseSha: "base_sha_1",
+      workItemId: null,
+      confirmationPolicy: "always_require_plan_approval",
+    },
+    scope: {
+      ...request.scope,
+      projectId: "cloud_project_1",
+      targetProject: {
+        id: "cloud_project_1",
+        name: "Hybrid Project",
+        workspacePath: null,
+        sourceRef: "source_ref_1",
+        baseSha: "base_sha_1",
+      },
+    },
+    context: {
+      ...request.context,
+      targetRepoAssumptions: [
+        "hybrid sandbox: sandbox_hybrid",
+        "cloud project: cloud_project_1",
+        "local project: local_project_1",
+      ],
+    },
   });
 }
 

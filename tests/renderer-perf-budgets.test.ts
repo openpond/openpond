@@ -97,7 +97,8 @@ describe("renderer performance budgets", () => {
     );
 
     expect(diff.files).toHaveLength(200);
-    expect(result.html).toContain("src/module-0.ts");
+    expect(result.html).toContain("200 local changes");
+    expect(result.html).toContain("<span>src</span>");
   });
 
   test("keeps large settings and sidebar list renders bounded", () => {
@@ -430,6 +431,7 @@ function sidebarProps(chatCount: number): SidebarProps {
     createCloudEnvironment: noop,
     selectCloudWorkItem: noop,
     addProjectFolder: noop,
+    startExistingProjectFromPath: noop,
     startProjectFromScratch: noop,
     startCloudProjectFromScratch: noop,
     moveProjectToCloud: noop,

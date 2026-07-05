@@ -196,9 +196,13 @@ export function workspaceEnvironmentActionItems({
     },
     {
       icon: <Square size={14} />,
-      label: "Stop sandbox",
+      label: "Checkpoint and stop",
       disabled: workspaceBusyValue || !onWorkspaceToolAction,
-      onSelect: () => onWorkspaceToolAction?.("sandbox_stop"),
+      onSelect: async () => {
+        const preserveResult = await onWorkspaceToolAction?.("sandbox_preserve_source");
+        if (preserveResult?.ok === false) return;
+        await onWorkspaceToolAction?.("sandbox_stop");
+      },
     },
   ];
   const defaultSandboxItems: EnvironmentActionItem[] = [

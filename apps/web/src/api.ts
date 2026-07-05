@@ -17,6 +17,11 @@ import type {
   InsightsScanResponse,
   InsightsAskRequest,
   InsightsAskResponse,
+  LocalAgentSchedulesResponse,
+  LocalAgentScheduleRunsResponse,
+  LocalAgentScheduleRunResponse,
+  PatchLocalAgentScheduleRequest,
+  LocalAgentScheduleRunNowRequest,
   LocalProject,
   UpdateLocalProjectAgentSetupRequest,
   PatchSessionRequest,
@@ -212,6 +217,59 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  localAgentSchedules: (
+    connection: ClientConnection,
+    input: { localProjectId?: string | null } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (input.localProjectId) params.set("localProjectId", input.localProjectId);
+    const query = params.size ? `?${params.toString()}` : "";
+    return apiFetch<LocalAgentSchedulesResponse>(connection, `/v1/local-agent-schedules${query}`);
+  },
+  syncLocalAgentSchedules: (connection: ClientConnection) =>
+    apiFetch<LocalAgentSchedulesResponse>(connection, "/v1/local-agent-schedules/sync", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  patchLocalAgentSchedule: (
+    connection: ClientConnection,
+    scheduleId: string,
+    input: PatchLocalAgentScheduleRequest,
+  ) =>
+    apiFetch<{ schedule: LocalAgentSchedulesResponse["schedules"][number] }>(
+      connection,
+      `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      },
+    ),
+  runLocalAgentSchedule: (
+    connection: ClientConnection,
+    scheduleId: string,
+    input: LocalAgentScheduleRunNowRequest = {},
+  ) =>
+    apiFetch<LocalAgentScheduleRunResponse>(
+      connection,
+      `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}/run`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
+  localAgentScheduleRuns: (
+    connection: ClientConnection,
+    scheduleId: string,
+    input: { limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (input.limit !== undefined) params.set("limit", String(input.limit));
+    const query = params.size ? `?${params.toString()}` : "";
+    return apiFetch<LocalAgentScheduleRunsResponse>(
+      connection,
+      `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}/runs${query}`,
+    );
+  },
   refreshOpenPond: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/apps/refresh", {
       method: "POST",

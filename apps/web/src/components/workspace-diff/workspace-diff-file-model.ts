@@ -30,6 +30,9 @@ export async function saveSandboxFile(
   content: string,
 ): Promise<WorkspaceDiffFile> {
   const result = await api.sandboxUploadFile(connection, sandboxId, { path, contents: content });
+  await api.preserveSandboxSource(connection, sandboxId, {
+    message: "Auto-preserve source after right sidebar save",
+  });
   return {
     path: result.file.path,
     status: "M",

@@ -14,6 +14,7 @@ import {
   readSandboxAgentsFromMemory,
 } from "../../lib/sandbox-agent-memory";
 import type { SandboxAgent } from "../../lib/sandbox-types";
+import { LocalAgentSchedulesPanel } from "./LocalAgentSchedulesPanel";
 
 const AGENT_REFRESH_INTERVAL_MS = 5000;
 
@@ -155,38 +156,58 @@ export function SandboxAgentCreatorView({
     };
   }, [connection, selectedTeamId]);
 
-  if (!connection || !organizationCacheKey) {
+  if (!connection) {
     return (
       <section className="agent-create-view">
         <div className="agent-create-empty">
-          <p>Sign in to an OpenPond account before viewing agents.</p>
-          <button type="button" onClick={onOpenSettings}>
-            Sign in
-          </button>
+          <p>Connect to the local OpenPond server before viewing agents.</p>
         </div>
       </section>
     );
   }
 
+  const showHostedAgents = Boolean(organizationCacheKey);
+
   return (
     <section className="agent-create-view" aria-label="Agents">
-      {error ? <div className="agent-create-error">{error}</div> : null}
+      <LocalAgentSchedulesPanel connection={connection} />
 
-      {loadingInitialAgents ? (
-        <div className="agent-create-loading" aria-label="Loading agents" role="status">
-          <span />
+      <section className="agent-hosted-section" aria-label="Hosted agents">
+        <div className="agent-section-header">
+          <div>
+            <span>Hosted agents</span>
+            <strong>{showHostedAgents ? agents.length : "Sign in"}</strong>
+          </div>
         </div>
-      ) : !selectedTeamId || (agents.length === 0 && !agentsLoading) ? (
-        <div className="agent-create-empty">
-          <p>No agents yet.</p>
-        </div>
-      ) : (
-        <div className="agent-card-grid" aria-busy={agentsLoading}>
-          {agents.map((agent) => (
-            <AgentCard agent={agent} key={agent.id} />
-          ))}
-        </div>
-      )}
+        {!showHostedAgents ? (
+          <div className="agent-create-empty">
+            <p>Sign in to an OpenPond account before viewing hosted agents.</p>
+            <button type="button" onClick={onOpenSettings}>
+              Sign in
+            </button>
+          </div>
+        ) : (
+          <>
+            {error ? <div className="agent-create-error">{error}</div> : null}
+
+            {loadingInitialAgents ? (
+              <div className="agent-create-loading" aria-label="Loading agents" role="status">
+                <span />
+              </div>
+            ) : !selectedTeamId || (agents.length === 0 && !agentsLoading) ? (
+              <div className="agent-create-empty">
+                <p>No hosted agents yet.</p>
+              </div>
+            ) : (
+              <div className="agent-card-grid" aria-busy={agentsLoading}>
+                {agents.map((agent) => (
+                  <AgentCard agent={agent} key={agent.id} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </section>
   );
 }

@@ -16,6 +16,7 @@
 @import "./styles/insights/insights.css";
 @import "./styles/wallet/wallet.css";
 @import "./styles/apps/apps.css";
+@import "./styles/agents/create-agent.css";
 @import "./styles/get-started/get-started.css";
 @import "./styles/cloud/cloud-work.css";
 @import "./styles/chat/chat.css";

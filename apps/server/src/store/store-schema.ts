@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 7;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 8;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -174,4 +174,40 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     payload TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS local_agent_schedules (
+    id TEXT PRIMARY KEY,
+    local_project_id TEXT NOT NULL,
+    schedule_name TEXT NOT NULL,
+    enabled INTEGER NOT NULL,
+    next_run_at TEXT,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS local_agent_schedules_project_name_idx
+    ON local_agent_schedules(local_project_id, schedule_name);
+
+  CREATE INDEX IF NOT EXISTS local_agent_schedules_due_idx
+    ON local_agent_schedules(enabled, next_run_at);
+
+  CREATE TABLE IF NOT EXISTS local_agent_schedule_runs (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL,
+    local_project_id TEXT NOT NULL,
+    schedule_name TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS local_agent_schedule_runs_schedule_time_idx
+    ON local_agent_schedule_runs(schedule_id, scheduled_for, trigger);
+
+  CREATE INDEX IF NOT EXISTS local_agent_schedule_runs_schedule_idx
+    ON local_agent_schedule_runs(schedule_id, created_at DESC);
 `;

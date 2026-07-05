@@ -284,6 +284,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     createCloudEnvironment: noop,
     selectCloudWorkItem: noop,
     addProjectFolder: noop,
+    startExistingProjectFromPath: noop,
     startProjectFromScratch: noop,
     startCloudProjectFromScratch: noop,
     moveProjectToCloud: noop,
@@ -438,6 +439,7 @@ describe("Cloud native UI", () => {
     expect(markup).not.toContain(">Cloud Projects<");
     expect(markup).toContain("New Cloud task");
     expect(markup).toContain("New Cloud Project");
+    expect(markup).toContain("Use existing folder path");
     expect(markup).toContain("Create environment");
     expect(projectsSection).toContain('row-label">Local Repo</span><span class="sidebar-project-caret"');
     expect(projectsSection).toContain('row-label">Cloud Repo</span><span class="sidebar-project-caret"');

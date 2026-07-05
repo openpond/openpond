@@ -20,6 +20,7 @@ import {
   type ResourceSearchResult,
 } from "./resources.js";
 import type { WebSearchExecutor, WebSearchResult, WebSearchResultItem } from "./web-search.js";
+import { isSandboxExecutionTarget, resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 
 export type ToolVisibilityContext = {
   session: Session;
@@ -95,7 +96,8 @@ export function createResourceModelToolDefinitions(deps: {
     context.session.workspaceKind === "sandbox_template" ||
     Boolean(deps.runtimeEvents?.length);
   const activeSandboxEnabled = (context: ToolVisibilityContext) =>
-    context.session.workspaceKind === "sandbox" && Boolean(context.session.workspaceId);
+    isSandboxExecutionTarget(resolveWorkspaceExecutionTarget({ session: context.session })) &&
+    Boolean(context.session.workspaceId);
 
   return [
     {
@@ -149,7 +151,8 @@ export function createResourceModelToolDefinitions(deps: {
           });
           return resourceSearchResultToModelToolResult(context.callId, result);
         }
-        if (scope === "sandbox") {
+        const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
+        if (scope === "sandbox" || (scope === "workspace" && isSandboxExecutionTarget(executionTarget))) {
           const result = await deps.executeWorkspaceTool(
             context.session.id,
             {
@@ -245,9 +248,11 @@ export function createResourceModelToolDefinitions(deps: {
           });
           return resourceReadResultToModelToolResult(context.callId, resource);
         }
-        if (ref.startsWith("sandbox:file:") || ref.startsWith("sandbox:dir:")) {
+        const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
+        const sandboxRef = sandboxResourceRefForExecutionTarget(ref, executionTarget);
+        if (sandboxRef) {
           const resource = await readSandboxResourceViaWorkspaceTool({
-            ref,
+            ref: sandboxRef,
             executeWorkspaceTool: deps.executeWorkspaceTool,
             session: context.session,
             turnId: context.turnId,
@@ -677,6 +682,14 @@ export function createOpenPondActionModelToolDefinitions(deps: {
         }
         const implementation = asRecord(action.implementation);
         if (implementation?.type === "openpond-profile-action") {
+          const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
+          if (isSandboxExecutionTarget(executionTarget)) {
+            return failedActionToolResult(
+              context.callId,
+              "openpond_action_run",
+              `Action ${actionId} is a local profile action and cannot run while Working in Hybrid or sandbox. Use a sandbox action for hosted workspace work, or switch Working in to Local before running this profile action.`,
+            );
+          }
           if (!deps.executeProfileAction) {
             return failedActionToolResult(
               context.callId,
@@ -964,7 +977,8 @@ async function readGitResourceViaWorkspaceTool(input: {
   turnId: string;
   workspaceDiffBaseline: WorkspaceDiffSummary | null;
 }): Promise<ResourceReadResult> {
-  const sandboxMode = input.session.workspaceKind === "sandbox" || input.session.workspaceKind === "sandbox_template";
+  const executionTarget = resolveWorkspaceExecutionTarget({ session: input.session });
+  const sandboxMode = isSandboxExecutionTarget(executionTarget);
   const action = gitResourceWorkspaceAction(input.ref, sandboxMode);
   const result = await input.executeWorkspaceTool(
     input.session.id,
@@ -989,9 +1003,9 @@ async function readGitResourceViaWorkspaceTool(input: {
       metadata: {
         action: action.name,
         ok: result.ok,
-        changedFileRefs: gitChangedFileRefs(result.data),
+        changedFileRefs: gitChangedFileRefs(result.data, sandboxMode),
       },
-      relatedRefs: gitChangedFileRefs(result.data),
+      relatedRefs: gitChangedFileRefs(result.data, sandboxMode),
       truncation: {
         truncated: false,
         originalBytes: Buffer.byteLength(content, "utf8"),
@@ -1033,7 +1047,18 @@ function gitResourceWorkspaceAction(ref: string, sandboxMode: boolean): { name: 
   throw new Error(`Unsupported git resource ref: ${ref}`);
 }
 
-function gitChangedFileRefs(value: unknown): string[] {
+function sandboxResourceRefForExecutionTarget(
+  ref: string,
+  target: ReturnType<typeof resolveWorkspaceExecutionTarget>,
+): string | null {
+  if (ref.startsWith("sandbox:file:") || ref.startsWith("sandbox:dir:")) return ref;
+  if (!isSandboxExecutionTarget(target)) return null;
+  if (ref.startsWith("workspace:file:")) return `sandbox:file:${ref.slice("workspace:file:".length)}`;
+  if (ref.startsWith("workspace:dir:")) return `sandbox:dir:${ref.slice("workspace:dir:".length)}`;
+  return null;
+}
+
+function gitChangedFileRefs(value: unknown, sandboxMode = false): string[] {
   const record = asRecord(value);
   const status = asRecord(record?.status);
   const files: unknown[] = Array.isArray(record?.files)
@@ -1045,7 +1070,7 @@ function gitChangedFileRefs(value: unknown): string[] {
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
     .map((item) => stringValue(item.path))
     .filter((item): item is string => Boolean(item))
-    .map((filePath) => `workspace:file:${filePath}`);
+    .map((filePath) => `${sandboxMode ? "sandbox" : "workspace"}:file:${filePath}`);
 }
 
 function gitDiffText(value: unknown): string | null {

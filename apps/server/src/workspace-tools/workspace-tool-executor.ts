@@ -14,15 +14,70 @@ import { handleSandboxWorkspaceToolAction } from "./workspace-tool-sandbox-actio
 import type { WorkspaceToolExecutorDeps } from "./workspace-tool-executor-types.js";
 import { event, textFromUnknown } from "../utils.js";
 import { resolveWorkspaceCapabilities, workspaceToolBlockedMessage } from "../workspace/workspace-capabilities.js";
+import {
+  resolveWorkspaceExecutionTarget,
+  type WorkspaceExecutionTarget,
+} from "../workspace/workspace-execution-target.js";
 
 export type { WorkspaceToolExecutorDeps } from "./workspace-tool-executor-types.js";
 
-function dataWithWorkspaceToolCallId(data: unknown, workspaceToolCallId: string): Record<string, unknown> {
+function dataWithWorkspaceToolCallId(
+  data: unknown,
+  workspaceToolCallId: string,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
   if (data && typeof data === "object" && !Array.isArray(data)) {
-    return { ...(data as Record<string, unknown>), workspaceToolCallId };
+    return { ...(data as Record<string, unknown>), ...extra, workspaceToolCallId };
   }
-  if (data === undefined) return { workspaceToolCallId };
-  return { value: data, workspaceToolCallId };
+  if (data === undefined) return { ...extra, workspaceToolCallId };
+  return { value: data, ...extra, workspaceToolCallId };
+}
+
+function workspaceToolTiming(input: { startedAtMs: number; completedAtMs?: number }): Record<string, unknown> {
+  const startedAt = new Date(input.startedAtMs).toISOString();
+  if (typeof input.completedAtMs !== "number") return { startedAt };
+  return {
+    startedAt,
+    completedAt: new Date(input.completedAtMs).toISOString(),
+    durationMs: Math.max(0, input.completedAtMs - input.startedAtMs),
+  };
+}
+
+function workspaceExecutionTargetData(target: WorkspaceExecutionTarget): Record<string, unknown> {
+  if (target.target === "sandbox") {
+    return {
+      target: target.target,
+      ready: target.ready,
+      workspaceKind: target.workspaceKind,
+      workspaceId: target.workspaceId,
+      workspaceName: target.workspaceName,
+      sandboxId: target.sandboxId,
+      cloudProjectId: target.cloudProjectId,
+      cloudTeamId: target.cloudTeamId,
+      localProjectId: target.localProjectId,
+      hybrid: target.hybrid,
+      reason: target.reason,
+    };
+  }
+  if (target.target === "local") {
+    return {
+      target: target.target,
+      ready: target.ready,
+      workspaceKind: target.workspaceKind,
+      workspaceId: target.workspaceId,
+      workspaceName: target.workspaceName,
+      localProjectId: target.localProjectId,
+      reason: target.reason,
+    };
+  }
+  return {
+    target: target.target,
+    ready: target.ready,
+    workspaceKind: target.workspaceKind,
+    workspaceId: target.workspaceId,
+    workspaceName: target.workspaceName,
+    reason: target.reason,
+  };
 }
 
 export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
@@ -107,7 +162,9 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
         appId: startedAppId,
         args: input.args,
         status: "started",
-        data: dataWithWorkspaceToolCallId(undefined, workspaceToolCallId),
+        data: dataWithWorkspaceToolCallId(undefined, workspaceToolCallId, {
+          workspaceToolTiming: workspaceToolTiming({ startedAtMs: workspaceToolStartedAt }),
+        }),
       })
     );
     const reportWorkspaceProgress = async (progress: {
@@ -126,17 +183,21 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           appId: startedAppId,
           status: progress.status ?? "pending",
           output: progress.output,
-          data: dataWithWorkspaceToolCallId(progress.data, workspaceToolCallId),
+          data: dataWithWorkspaceToolCallId(progress.data, workspaceToolCallId, {
+            workspaceToolTiming: workspaceToolTiming({ startedAtMs: workspaceToolStartedAt }),
+          }),
         })
       );
     };
   
+    let executionTarget: WorkspaceExecutionTarget | null = null;
     try {
       let result: WorkspaceToolResult;
       const localProject =
         session.workspaceKind === "local_project" && session.workspaceId
           ? await findLocalWorkspace(session.workspaceId)
           : null;
+      executionTarget = resolveWorkspaceExecutionTarget({ session, localProject });
       const capabilities = resolveWorkspaceCapabilities({ session, localProject });
       const blockedMessage = workspaceToolBlockedMessage({
         action: input.action,
@@ -193,6 +254,16 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
         }
       }
   
+      const resultSession = await getSession(sessionId).catch(() => session);
+      const resultLocalProject =
+        resultSession.workspaceKind === "local_project" && resultSession.workspaceId
+          ? await findLocalWorkspace(resultSession.workspaceId).catch(() => localProject)
+          : null;
+      const resultExecutionTarget = resolveWorkspaceExecutionTarget({
+        session: resultSession,
+        localProject: resultLocalProject,
+      });
+      const workspaceToolCompletedAt = Date.now();
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -204,7 +275,13 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           status: result.ok ? "completed" : "failed",
           output: result.output,
           error: result.ok ? undefined : result.output,
-          data: dataWithWorkspaceToolCallId(result.data, workspaceToolCallId),
+          data: dataWithWorkspaceToolCallId(result.data, workspaceToolCallId, {
+            workspaceExecutionTarget: workspaceExecutionTargetData(resultExecutionTarget),
+            workspaceToolTiming: workspaceToolTiming({
+              startedAtMs: workspaceToolStartedAt,
+              completedAtMs: workspaceToolCompletedAt,
+            }),
+          }),
         })
       );
       if (
@@ -256,6 +333,7 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
         appId: startedAppId,
         output: message,
       });
+      const workspaceToolCompletedAt = Date.now();
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -267,7 +345,13 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           status: "failed",
           output: message,
           error: message,
-          data: dataWithWorkspaceToolCallId(undefined, workspaceToolCallId),
+          data: dataWithWorkspaceToolCallId(undefined, workspaceToolCallId, {
+            ...(executionTarget ? { workspaceExecutionTarget: workspaceExecutionTargetData(executionTarget) } : {}),
+            workspaceToolTiming: workspaceToolTiming({
+              startedAtMs: workspaceToolStartedAt,
+              completedAtMs: workspaceToolCompletedAt,
+            }),
+          }),
         })
       );
       logger.warn("workspace tool call finished", {

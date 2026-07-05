@@ -112,6 +112,27 @@ describe("OpenPond goal control facade", () => {
     expect(result.mode).toBe("remote");
     expect(result.goal.mode).toBe("remote");
   });
+
+  test("resolves remote mode from Hybrid workspace metadata", () => {
+    const result = runOpenPondGoalControl({
+      session: baseSession({
+        workspaceKind: "sandbox",
+        workspaceId: "sandbox_hybrid",
+        metadata: { workspaceTarget: "hybrid" },
+      }),
+      events: [],
+      request: {
+        action: "start",
+        objective: "Run the Hybrid goal.",
+        mode: "auto",
+        reason: "User asked for Hybrid work.",
+      },
+      now: "2026-07-03T10:00:00.000Z",
+    });
+
+    expect(result.mode).toBe("remote");
+    expect(result.goal.mode).toBe("remote");
+  });
 });
 
 function threadGoalEvent(goal: Record<string, unknown>): RuntimeEvent {

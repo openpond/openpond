@@ -7,6 +7,7 @@
     "@openpond/codex-provider": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/runtime": "workspace:*",
+    "cron-parser": "^5.6.1",
     "node-pty": "^1.1.0",
     "sqlite3": "^6.0.1",
     "ws": "^8.20.1"

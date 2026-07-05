@@ -1,0 +1,13 @@
+{
+  "name": "local-schedule-writer-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openpond-agent-sdk": "file:../.."
+  },
+  "scripts": {
+    "inspect": "openpond-agent inspect --json",
+    "run:tick": "openpond-agent run write-tick --json"
+  }
+}

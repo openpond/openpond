@@ -3,6 +3,7 @@ import { handleCoreRoutes } from "./core-routes.js";
 import { handleDesktopBrowserRoutes } from "./desktop-browser-routes.js";
 import { handleEventRoutes } from "./event-routes.js";
 import { handleInsightsRoutes } from "./insights-routes.js";
+import { handleLocalAgentScheduleRoutes } from "./local-agent-schedule-routes.js";
 import { handleOrganizationRoutes } from "./organization-routes.js";
 import { handleProjectCloudRoutes } from "./project-cloud-routes.js";
 import { handleSandboxRoutes } from "./sandbox-routes.js";
@@ -14,6 +15,7 @@ import { handleWorkspaceRoutes } from "./workspace-routes.js";
 export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "events", handle: handleEventRoutes },
   { id: "insights", handle: handleInsightsRoutes },
+  { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
   { id: "usage", handle: handleUsageRoutes },
   { id: "core", handle: handleCoreRoutes },
   { id: "desktop-browser", handle: handleDesktopBrowserRoutes },

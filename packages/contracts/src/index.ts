@@ -21,3 +21,4 @@ export * from "./create-pipeline.js";
 export * from "./insights.js";
 export * from "./goal-status.js";
 export * from "./usage.js";
+export * from "./local-agent-schedules.js";

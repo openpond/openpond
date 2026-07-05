@@ -1547,6 +1547,12 @@
   word-break: break-word;
 }
 
+.activity-detail-meta {
+  color: #777;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .activity-image-preview {
   display: block;
   width: 112px;

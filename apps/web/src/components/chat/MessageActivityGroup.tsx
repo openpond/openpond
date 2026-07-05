@@ -113,6 +113,7 @@ function ActivityDetailRow({
         {activity.detail && (
           <pre className="activity-detail-output">{compactActivityOutput(activity.detail)}</pre>
         )}
+        {activity.meta && <small className="activity-detail-meta">{activity.meta}</small>}
         {activity.imagePreview && imageSrc && (
           <button
             type="button"

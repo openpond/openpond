@@ -173,6 +173,51 @@ describe("model tool registry", () => {
     expect(result.contentText).toContain("sandbox:file:/workspace/app/src/index.ts");
   });
 
+  test("maps workspace resource search to sandbox search under sandbox execution target", async () => {
+    const payloads: unknown[] = [];
+    const definitions = createResourceModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        payloads.push(payload);
+        return {
+          ok: true,
+          action: "sandbox_search_files",
+          output: "Found 1 sandbox file match.",
+          data: {
+            matches: [{ path: "README.md", line: 1, text: "Hybrid README" }],
+          },
+        };
+      },
+    });
+    const tool = definitions.find((definition) => definition.name === "resource_search");
+    if (!tool) throw new Error("resource_search missing");
+
+    const result = await tool.execute({
+      session: baseSession({
+        workspaceKind: "sandbox",
+        workspaceId: "sandbox_1",
+        metadata: { workspaceTarget: "hybrid" },
+      }),
+      turnId: "turn_1",
+      provider: "openrouter",
+      model: "test/model",
+      callId: "call_1",
+      args: { scope: "workspace", query: "README" },
+      signal: new AbortController().signal,
+      workspaceDiffBaseline: null,
+      mentionedApps: [],
+      userPrompt: "find readme",
+    });
+
+    expect(payloads).toEqual([
+      {
+        action: "sandbox_search_files",
+        args: { query: "README" },
+        source: "chat_action",
+      },
+    ]);
+    expect(result.contentText).toContain("sandbox:file:README.md");
+  });
+
   test("maps sandbox file resource reads through sandbox_read_file", async () => {
     const payloads: unknown[] = [];
     const definitions = createResourceModelToolDefinitions({
@@ -216,6 +261,55 @@ describe("model tool registry", () => {
     ]);
     expect(result.contentText).toContain("# Sandbox README");
     expect(result.contentText).toContain("sandbox:file:/workspace/app/README.md");
+  });
+
+  test("maps workspace file refs to sandbox reads under sandbox execution target", async () => {
+    const payloads: unknown[] = [];
+    const definitions = createResourceModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        payloads.push(payload);
+        return {
+          ok: true,
+          action: "sandbox_read_file",
+          output: "Read file.",
+          data: {
+            file: {
+              path: "README.md",
+              content: "# Hybrid README\n",
+            },
+          },
+        };
+      },
+    });
+    const tool = definitions.find((definition) => definition.name === "resource_read");
+    if (!tool) throw new Error("resource_read missing");
+
+    const result = await tool.execute({
+      session: baseSession({
+        workspaceKind: "sandbox",
+        workspaceId: "sandbox_1",
+        metadata: { workspaceTarget: "hybrid" },
+      }),
+      turnId: "turn_1",
+      provider: "openrouter",
+      model: "test/model",
+      callId: "call_1",
+      args: { ref: "workspace:file:README.md" },
+      signal: new AbortController().signal,
+      workspaceDiffBaseline: null,
+      mentionedApps: [],
+      userPrompt: "read readme",
+    });
+
+    expect(payloads).toEqual([
+      {
+        action: "sandbox_read_file",
+        args: { path: "README.md" },
+        source: "chat_action",
+      },
+    ]);
+    expect(result.contentText).toContain("# Hybrid README");
+    expect(result.contentText).toContain("sandbox:file:README.md");
   });
 
   test("maps sandbox native write and edit tools through sandbox workspace actions", async () => {
@@ -436,6 +530,39 @@ describe("model tool registry", () => {
     ]);
   });
 
+  test("maps git changed-file refs to sandbox refs for sandbox sessions", async () => {
+    const definitions = createResourceModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => ({
+        ok: true,
+        action: (payload as any).action,
+        output: "Sandbox git status has 1 changed file.",
+        data: {
+          status: {
+            files: [{ path: "README.md", status: "M" }],
+          },
+        },
+      }),
+    });
+    const read = definitions.find((definition) => definition.name === "resource_read");
+    if (!read) throw new Error("resource_read missing");
+
+    const result = await read.execute({
+      session: baseSession({ workspaceKind: "sandbox", workspaceId: "sandbox_1" }),
+      turnId: "turn_1",
+      provider: "openrouter",
+      model: "test/model",
+      callId: "call_status",
+      args: { ref: "git:status:working-tree" },
+      signal: new AbortController().signal,
+      workspaceDiffBaseline: null,
+      mentionedApps: [],
+      userPrompt: "show git status",
+    });
+
+    expect(result.contentText).toContain("sandbox:file:README.md");
+    expect(result.contentText).not.toContain("workspace:file:README.md");
+  });
+
   test("maps goal-context resources through current-session runtime events", async () => {
     const definitions = createResourceModelToolDefinitions({
       runtimeEvents: [
@@ -578,7 +705,14 @@ describe("model tool registry", () => {
     const run = definitions.find((definition) => definition.name === "openpond_action_run");
     if (!run) throw new Error("openpond_action_run missing");
 
-    const result = await run.execute(actionContext({ actionId: "profile.chat", input: { prompt: "hello" } }));
+    const result = await run.execute({
+      ...actionContext({ actionId: "profile.chat", input: { prompt: "hello" } }),
+      session: baseSession({
+        workspaceKind: "local_project",
+        workspaceId: "local_project_1",
+        cwd: "/tmp/profile-workspace",
+      }),
+    });
 
     expect(result.ok).toBe(true);
     expect(result.contentText).toContain("Ran profile action chat");
@@ -600,6 +734,48 @@ describe("model tool registry", () => {
         },
       },
     ]);
+  });
+
+  test("fails closed for profile actions in Hybrid sessions", async () => {
+    let profileActionCalled = false;
+    const definitions = createOpenPondActionModelToolDefinitions({
+      actionCatalog: [
+        {
+          id: "profile.chat",
+          label: "Profile Chat",
+          implementation: { type: "openpond-profile-action", actionId: "chat" },
+        },
+      ],
+      executeWorkspaceTool: async () => {
+        throw new Error("profile actions should not use sandbox_run_action");
+      },
+      executeProfileAction: async () => {
+        profileActionCalled = true;
+        throw new Error("profile action should not run in Hybrid");
+      },
+    });
+    const run = definitions.find((definition) => definition.name === "openpond_action_run");
+    if (!run) throw new Error("openpond_action_run missing");
+
+    const result = await run.execute(
+      actionContext(
+        {
+          actionId: "profile.chat",
+          input: { prompt: "hello" },
+        },
+        {
+          metadata: { workspaceTarget: "hybrid" },
+          localProjectId: "local_project_1",
+          cloudProjectId: "cloud_project_1",
+          cloudTeamId: "team_1",
+        },
+      ),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.contentText).toContain("local profile action");
+    expect(result.contentText).toContain("Working in Hybrid");
+    expect(profileActionCalled).toBe(false);
   });
 
   test("reads connected app integration instructions through scoped model tool", async () => {
@@ -1013,9 +1189,9 @@ function xConnectedAppContext(): ResolvedConnectedAppContext {
   };
 }
 
-function actionContext(args: Record<string, unknown>) {
+function actionContext(args: Record<string, unknown>, sessionOverrides: Partial<Session> = {}) {
   return {
-    session: baseSession({ workspaceKind: "sandbox", workspaceId: "sandbox_1" }),
+    session: baseSession({ workspaceKind: "sandbox", workspaceId: "sandbox_1", ...sessionOverrides }),
     turnId: "turn_1",
     provider: "openrouter" as const,
     model: "test/model",

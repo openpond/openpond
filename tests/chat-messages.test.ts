@@ -673,6 +673,47 @@ describe("chat message projection", () => {
     expect(html).not.toContain(".openpond/traces/run-chat-123.jsonl");
   });
 
+  test("projects workspace timing and checkpoint metadata into activity details", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "workspace_result",
+        name: "workspace_action_result",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        source: "chat_action",
+        action: "sandbox_edit_file",
+        status: "completed",
+        output: "Edited README.md with 1 replacement.\nCheckpoint saved: abcdef1234567890.",
+        data: {
+          workspaceToolCallId: "workspace_call_1",
+          workspaceToolTiming: {
+            startedAt: "2026-07-05T10:00:00.000Z",
+            completedAt: "2026-07-05T10:00:01.250Z",
+            durationMs: 1250,
+          },
+          workspaceExecutionTarget: {
+            target: "sandbox",
+            sandboxId: "sandbox_hybrid_1234567890",
+            hybrid: true,
+          },
+          sourcePreservation: {
+            attempted: true,
+            ok: true,
+            preserved: true,
+            sandboxId: "sandbox_hybrid_1234567890",
+            preservedSha: "abcdef1234567890",
+          },
+        },
+      }),
+    ]);
+
+    expect(messages[0]?.role).toBe("activity_group");
+    expect(messages[0]?.activities?.[0]).toMatchObject({
+      label: "Edited sandbox file",
+      meta: "1.3 s · Hybrid sandbox sandbo...7890 · checkpoint abcdef123456",
+    });
+  });
+
   test("renders pending profile action runs as normal assistant messages", () => {
     const messages = buildChatMessages([
       runtimeEvent({

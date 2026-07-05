@@ -143,6 +143,14 @@ import {
   type SandboxScopeInput,
 } from "../api-client";
 
+export type SandboxSourcePreserveResponse = {
+  preserved: boolean;
+  preservedSha: string | null;
+  runtime?: unknown;
+  patch?: unknown;
+  account?: unknown;
+};
+
 export const sandboxFileApi = {
   sandboxFiles: (
     connection: ClientConnection,
@@ -166,6 +174,19 @@ export const sandboxFileApi = {
     apiFetch<SandboxFileUploadResponse>(
       connection,
       `/v1/sandboxes/${encodeURIComponent(sandboxId)}/files`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
+  preserveSandboxSource: (
+    connection: ClientConnection,
+    sandboxId: string,
+    input: { message?: string } = {},
+  ) =>
+    apiFetch<SandboxSourcePreserveResponse>(
+      connection,
+      `/v1/sandboxes/${encodeURIComponent(sandboxId)}/preserve-source`,
       {
         method: "POST",
         body: JSON.stringify(input),

@@ -1019,6 +1019,12 @@ export function App() {
       setError(error instanceof Error ? error.message : String(error));
     }
   }, [applyBootstrapPayload, connection, setError]);
+  const openExistingProjectPathDialog = useCallback(() => {
+    setNewProjectMode("existing-local");
+    setNewProjectName("");
+    setNewProjectPath("");
+    setNewProjectDialogOpen(true);
+  }, [setNewProjectDialogOpen, setNewProjectMode, setNewProjectName, setNewProjectPath]);
   const {
     addProjectFolder,
     addProjectFolderPath,
@@ -1031,12 +1037,7 @@ export function App() {
     sessions,
     selectedProjectId,
     confirmProjectAction,
-    openExistingProjectDialog: () => {
-      setNewProjectMode("existing-local");
-      setNewProjectName("");
-      setNewProjectPath("");
-      setNewProjectDialogOpen(true);
-    },
+    openExistingProjectDialog: openExistingProjectPathDialog,
     applyBootstrapPayload,
     expandProject,
     revealProjectsSection,
@@ -1888,6 +1889,7 @@ export function App() {
         createCloudEnvironment: createCloudEnvironmentFromSidebar,
         selectCloudWorkItem,
         addProjectFolder: () => void addProjectFolder(),
+        startExistingProjectFromPath: openExistingProjectPathDialog,
         startProjectFromScratch: () => {
           setNewProjectMode("local");
           setNewProjectName("");

@@ -108,6 +108,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const imagePreview = activityImagePreview(item);
   const kind = commandActivityKind(item);
   const controlKind = controlActivityKind(item);
+  const meta = activityMeta(item);
   return {
     id: item.id,
     label: activityLabel(item),
@@ -117,6 +118,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(controlKind ? { kind: "control" as const, controlKind } : {}),
     ...(kind ? { callId: activityCallId(item) ?? undefined } : {}),
     ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
+    ...(meta ? { meta } : {}),
     state: activityState(item),
     ...(imagePreview ? { imagePreview } : {}),
   };
@@ -437,6 +439,52 @@ function commandFromJsonString(value: string | null): string | null {
 function activityCallId(item: RuntimeEvent): string | null {
   const data = asRecord(item.data);
   return stringValue(data, ["callId", "call_id", "id", "itemId", "item_id"]);
+}
+
+function activityMeta(item: RuntimeEvent): string | null {
+  const data = asRecord(item.data);
+  if (!data) return null;
+  const facts: string[] = [];
+  const timing = asRecord(data.workspaceToolTiming);
+  const durationMs = typeof timing?.durationMs === "number" ? timing.durationMs : null;
+  if (durationMs !== null) facts.push(formatDuration(durationMs));
+  const target = asRecord(data.workspaceExecutionTarget);
+  const targetKind = stringValue(target, ["target"]);
+  if (targetKind === "sandbox") {
+    const hybrid = target?.hybrid === true;
+    const sandboxId = stringValue(target, ["sandboxId", "workspaceId"]);
+    facts.push(`${hybrid ? "Hybrid " : ""}sandbox${sandboxId ? ` ${shortId(sandboxId)}` : ""}`);
+  } else if (targetKind === "local") {
+    facts.push("local workspace");
+  }
+  const preservation = asRecord(data.sourcePreservation);
+  if (preservation?.attempted === true) {
+    if (preservation.ok !== true) {
+      facts.push("checkpoint failed");
+    } else if (preservation.preserved === true) {
+      const sha = stringValue(preservation, ["preservedSha"]);
+      facts.push(sha ? `checkpoint ${shortSha(sha)}` : "checkpoint saved");
+    } else {
+      facts.push("checkpoint clean");
+    }
+  }
+  return facts.length > 0 ? facts.join(" · ") : null;
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${Math.max(0, Math.round(durationMs))} ms`;
+  if (durationMs < 10_000) return `${(durationMs / 1000).toFixed(1)} s`;
+  return `${Math.round(durationMs / 1000)} s`;
+}
+
+function shortSha(value: string): string {
+  return value.length > 12 ? value.slice(0, 12) : value;
+}
+
+function shortId(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 14) return normalized;
+  return `${normalized.slice(0, 6)}...${normalized.slice(-4)}`;
 }
 
 function cleanCommandOutput(value: string): string {

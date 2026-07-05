@@ -5,6 +5,7 @@ import {
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
+import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 
 export type OpenPondGoalControlAction = "start" | "restart" | "pause" | "resume" | "stop";
 export type OpenPondGoalControlMode = "local" | "remote" | "auto";
@@ -234,16 +235,9 @@ function resolveGoalControlMode(input: {
   if (input.requestedMode === "local" || input.requestedMode === "remote") return input.requestedMode;
   const goalMode = stringValue(input.targetGoal?.mode);
   if (goalMode === "local" || goalMode === "remote") return goalMode;
-  if (
-    input.session.workspaceKind === "sandbox" ||
-    input.session.workspaceKind === "sandbox_template" ||
-    input.session.workspaceKind === "sandbox_app"
-  ) {
-    return "remote";
-  }
-  if (input.session.workspaceKind === "local_project" || input.session.cwd || input.session.localProjectId) {
-    return "local";
-  }
+  const executionTarget = resolveWorkspaceExecutionTarget({ session: input.session });
+  if (executionTarget.target === "sandbox") return "remote";
+  if (executionTarget.target === "local") return "local";
   if (input.session.cloudProjectId || input.session.cloudTeamId) return "remote";
   throw new Error("OpenPond goal control needs a local or remote workspace context. Ask which execution mode to use.");
 }

@@ -96,6 +96,7 @@ export function SidebarSectionList({
   selectedProjectId,
   selectedSessionId,
   sidebarProjectIdBySessionId,
+  startExistingProjectFromPath,
   terminalSummaries = EMPTY_TERMINAL_SUMMARIES,
   setArchivedChatsOpen,
   setChatRowsVisibleCount,
@@ -427,6 +428,17 @@ export function SidebarSectionList({
                   >
                     <FolderOpen size={13} />
                     <span>Use existing folder</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setSectionMenuOpen(null);
+                      startExistingProjectFromPath();
+                    }}
+                  >
+                    <FolderOpen size={13} />
+                    <span>Use existing folder path</span>
                   </button>
                   <button
                     type="button"

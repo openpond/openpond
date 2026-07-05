@@ -1,11 +1,45 @@
 .agent-create-view {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 22px;
   width: min(1120px, calc(100% - 72px));
   min-width: 0;
   justify-self: center;
   padding: 28px 0;
+}
+
+.agent-schedule-section,
+.agent-hosted-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.agent-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.agent-section-header div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-section-header span {
+  color: #f4f4f4;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.agent-section-header strong {
+  color: #8f8f8f;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .agent-card-grid {
@@ -14,10 +48,18 @@
   gap: 12px;
 }
 
+.agent-card-grid.schedule-grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
 .agent-create-loading {
   display: grid;
   place-items: center;
   min-height: min(420px, calc(100vh - 220px));
+}
+
+.agent-create-loading.compact {
+  min-height: 144px;
 }
 
 .agent-create-loading span {
@@ -86,6 +128,84 @@
   line-height: 1.45;
 }
 
+.schedule-card {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  min-height: 246px;
+  aspect-ratio: auto;
+}
+
+.schedule-card-meta {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+
+.schedule-card-meta div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.schedule-card-meta dt,
+.schedule-card-meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.schedule-card-meta dt {
+  color: #777;
+}
+
+.schedule-card-meta dd {
+  color: #c7c7c7;
+}
+
+.schedule-card-error {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffb4a8;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.agent-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #111;
+  color: #eeeeee;
+  padding: 0;
+}
+
+.agent-icon-button:hover:not(:disabled) {
+  background: #232323;
+}
+
+.agent-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .agent-create-error,
 .agent-create-empty {
   min-width: 0;
@@ -138,5 +258,9 @@
 
   .agent-card-grid {
     grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  }
+
+  .agent-card-grid.schedule-grid {
+    grid-template-columns: 1fr;
   }
 }

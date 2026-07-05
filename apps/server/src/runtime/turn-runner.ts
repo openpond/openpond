@@ -131,6 +131,7 @@ import {
 } from "./create-pipeline-planner.js";
 import { startProviderRequestUsageRecorder } from "./model-usage-recorder.js";
 import { requiresWorkspaceToolForPrompt } from "./workspace-tool-requirements.js";
+import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 
 type HostedToolLoopDelta = {
   text?: string;
@@ -763,7 +764,9 @@ export function createTurnRunner(deps: {
     source: "natural_language" | "model_tool";
   }): CreatePipelineRequest {
     const createdAt = now();
+    const executionTarget = resolveWorkspaceExecutionTarget({ session: input.session });
     const localProfileLoaded =
+      executionTarget.target !== "sandbox" &&
       input.profile?.mode === "local" &&
       Boolean(input.profile.repoPath) &&
       Boolean(input.profile.sourcePath);
@@ -829,7 +832,7 @@ export function createTurnRunner(deps: {
         attachments: [],
         apps: capturedCreatePipelineApps(input.mentionedApps, input.session),
         tools: [],
-        targetRepoAssumptions: input.session.cwd ? [`workspace: ${input.session.cwd}`] : [],
+        targetRepoAssumptions: createPipelineTargetRepoAssumptions(input.session),
       },
       targetAgent: {
         agentId: input.targetAgentId,
@@ -869,6 +872,20 @@ export function createTurnRunner(deps: {
     return [...byId.values()];
   }
 
+  function createPipelineTargetRepoAssumptions(session: Session): string[] {
+    const target = resolveWorkspaceExecutionTarget({ session });
+    if (target.target === "sandbox") {
+      return [
+        `${target.hybrid ? "hybrid sandbox" : "sandbox"}: ${target.sandboxId ?? "pending"}`,
+        ...(target.cloudProjectId ? [`cloud project: ${target.cloudProjectId}`] : []),
+        ...(target.localProjectId ? [`local project: ${target.localProjectId}`] : []),
+      ];
+    }
+    if (target.target === "local" && target.cwd) return [`workspace: ${target.cwd}`];
+    if (target.target === "local" && target.localProjectId) return [`local project: ${target.localProjectId}`];
+    return [];
+  }
+
   function createPipelineToolNextStep(snapshot: CreatePipelineSnapshot): string {
     if (snapshot.state === "awaiting_questions") {
       return "Create Pipeline is waiting for user answers before planning can continue.";
@@ -891,6 +908,12 @@ export function createTurnRunner(deps: {
   ): Promise<OpenPondProfileSkillGoalToolResult> {
     if (!executeProfileSkillGoal) {
       throw new Error("Profile skill goal execution is not configured for this turn.");
+    }
+    const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
+    if (executionTarget.target === "sandbox") {
+      throw new Error(
+        "Profile skill goals are local profile workspace actions and are not supported while Working in Hybrid or sandbox. Use Create Pipeline for hosted agent/workflow changes, or switch Working in to Local before creating or editing profile skills.",
+      );
     }
     const objective = input.objective.trim();
     if (!objective) throw new Error("objective is required");
@@ -2925,8 +2948,8 @@ export function createTurnRunner(deps: {
     }
     const session = await getSession(approval.sessionId);
     const nextSnapshot = createPlanDecisionSnapshot(turn.createPipeline, input.decision);
-    const shouldQueueLocalCreateApply = shouldApplyLocalCreatePipelineAsync(nextSnapshot);
-    const effectiveSnapshot = nextSnapshot;
+    const effectiveSnapshot = createPlanExecutionSnapshotForApprovedAdapter(nextSnapshot, session);
+    const shouldQueueLocalCreateApply = shouldApplyLocalCreatePipelineAsync(effectiveSnapshot);
     const result = await updateStoredTurn(turn.id, (current) => {
       if (current.sessionId !== approval.sessionId) throw new Error("Turn not found");
       return {
@@ -3406,6 +3429,79 @@ function createPlanDecisionSnapshot(
     blockedReason,
     updatedAt: timestamp,
   });
+}
+
+function createPlanExecutionSnapshotForApprovedAdapter(
+  snapshot: CreatePipelineSnapshot,
+  session: Session,
+): CreatePipelineSnapshot {
+  if (
+    snapshot.state !== "applying_source" ||
+    snapshot.plan?.status !== "approved" ||
+    snapshot.request.adapter.kind === "local"
+  ) {
+    return snapshot;
+  }
+  const target = resolveWorkspaceExecutionTarget({ session });
+  const adapterKind = snapshot.request.adapter.kind;
+  const reason =
+    adapterKind === "hosted"
+      ? "Approved hosted Create plans from this chat require the Cloud work item background flow. No local source mutation was performed."
+      : "Approved promote-to-hosted Create plans require an explicit Cloud promotion flow. No local source mutation was performed.";
+  return CreatePipelineSnapshotSchema.parse({
+    ...snapshot,
+    state: "blocked",
+    blockedReason: reason,
+    metadata: {
+      ...snapshot.metadata,
+      createPipelineApproval: {
+        status: "blocked",
+        reason:
+          adapterKind === "hosted"
+            ? "hosted_create_pipeline_apply_not_configured"
+            : "promote_local_to_hosted_apply_not_configured",
+        adapterKind,
+        workspaceExecutionTarget: createPipelineExecutionTargetMetadata(target),
+      },
+    },
+    updatedAt: now(),
+  });
+}
+
+function createPipelineExecutionTargetMetadata(
+  target: ReturnType<typeof resolveWorkspaceExecutionTarget>,
+): Record<string, unknown> {
+  if (target.target === "sandbox") {
+    return {
+      target: target.target,
+      ready: target.ready,
+      workspaceKind: target.workspaceKind,
+      workspaceId: target.workspaceId,
+      sandboxId: target.sandboxId,
+      cloudProjectId: target.cloudProjectId,
+      localProjectId: target.localProjectId,
+      hybrid: target.hybrid,
+      reason: target.reason,
+    };
+  }
+  if (target.target === "local") {
+    return {
+      target: target.target,
+      ready: target.ready,
+      workspaceKind: target.workspaceKind,
+      workspaceId: target.workspaceId,
+      localProjectId: target.localProjectId,
+      cwd: target.cwd,
+      reason: target.reason,
+    };
+  }
+  return {
+    target: target.target,
+    ready: target.ready,
+    workspaceKind: target.workspaceKind,
+    workspaceId: target.workspaceId,
+    reason: target.reason,
+  };
 }
 
 function createPipelineRuntimeEventStatus(
