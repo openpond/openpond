@@ -10,7 +10,7 @@
 </div>
 
 
-The OpenPond agentic harness brings frontier-grade agent orchestration to open source models. Connect to our bespoke cloud and try **Hybrid Mode**, which lets you use your LLM subscriptions with our hosted sandbox.
+The OpenPond agentic harness brings frontier-grade agent orchestration to open source models. Connect to [OpenPond Cloud](docs/public/cloud.md), which lets you use your LLM subscriptions while your environment and code stay in hosted sandboxes.
 
 Control goals and build durable, git-backed agents from local chat, run them in a desktop app, CLI, or TUI, and move seamlessly into OpenPond Cloud when work needs cloud compute.
 
