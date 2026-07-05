@@ -545,8 +545,6 @@ type AppIconId =
   | "google"
   | "slack"
   | "microsoft_teams"
-  | "notion"
-  | "linear"
   | "mcp"
   | "web";
 
@@ -560,8 +558,6 @@ const CONNECTED_APP_TILES: AppIconTileModel[] = [
   { id: "google", label: "Google Drive" },
   { id: "slack", label: "Slack" },
   { id: "microsoft_teams", label: "Microsoft Teams" },
-  { id: "notion", label: "Notion" },
-  { id: "linear", label: "Linear" },
   { id: "mcp", label: "MCP" },
 ];
 
@@ -593,10 +589,6 @@ function iconSrcForApp(appId: AppIconId): string {
       return "/connected-apps/slack.svg";
     case "microsoft_teams":
       return "/connected-apps/microsoft.svg";
-    case "notion":
-      return "/connected-apps/notion.svg";
-    case "linear":
-      return "/connected-apps/linear.svg";
     case "web":
       return "/openpond-icon.png";
     case "mcp":

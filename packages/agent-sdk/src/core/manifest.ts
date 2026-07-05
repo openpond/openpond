@@ -13,6 +13,7 @@ import type {
   AgentProjectDefinition,
 } from "../index";
 import { ARTIFACT_DIR, ARTIFACT_SCHEMAS, DEFAULT_AGENT_CONFIG, OPENPOND_MANIFEST, SDK_SCHEMA_VERSION, traceDir } from "./constants";
+import { isConnectedIntegrationProvider } from "./connected-integrations";
 import { pathExists } from "./files";
 import type { CompiledPromptArtifacts } from "./prompts";
 import {
@@ -366,20 +367,11 @@ export function createRuntimeManifest(project: AgentProjectDefinition) {
 }
 
 function runtimeIntegrations(integrations: AgentProjectDefinition["integrations"] = []) {
-  const supportedLeaseProviders = new Set([
-    "google",
-    "slack",
-    "github",
-    "microsoft_teams",
-    "x",
-    "notion",
-    "linear",
-  ]);
   return {
     requiredLeases: integrations
       .filter(
         (integration) =>
-          integration.required === true && supportedLeaseProviders.has(integration.provider),
+          integration.required === true && isConnectedIntegrationProvider(integration.provider),
       )
       .map((integration) => ({
         provider: integration.provider,

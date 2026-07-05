@@ -1,21 +1,26 @@
-.workspace-diff-summary-view {
-  display: grid;
-  align-content: start;
-  gap: 12px;
+.workspace-diff-files-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
-  overflow: auto;
-  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
   scrollbar-width: thin;
 }
 
-.workspace-file-tree-card,
-.workspace-diff-summary-card {
+.workspace-diff-files-view {
+  padding: 0;
+}
+
+.workspace-file-tree-view {
   display: grid;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
-  background: #181818;
+  grid-template-rows: 36px auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 .workspace-file-tree-header {
@@ -37,11 +42,9 @@
 
 .workspace-file-tree {
   display: grid;
-  max-height: 320px;
-  overflow: auto;
-  padding: 5px;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
-  scrollbar-width: thin;
+  min-height: 0;
+  overflow: visible;
+  padding: 4px 6px 10px;
 }
 
 .workspace-file-tree-node {
@@ -55,11 +58,10 @@
   gap: 7px;
   min-height: 28px;
   border: 0;
-  border-left: 2px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: #cfcfcf;
-  padding-right: 7px;
+  padding-right: 6px;
   text-align: left;
   font-size: 13px;
 }
@@ -73,11 +75,6 @@
   color: #a9a9a9;
 }
 
-.workspace-file-tree-row.file.changed {
-  border-left-color: #3fd27f;
-  background: rgba(63, 210, 127, 0.055);
-}
-
 .workspace-file-tree-row span {
   min-width: 0;
   overflow: hidden;
@@ -89,45 +86,6 @@
   display: inline-flex;
   gap: 4px;
   font-size: 12px;
-}
-
-.workspace-diff-summary-header,
-.workspace-diff-summary-files button {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 11px;
-}
-
-.workspace-diff-summary-header {
-  color: #f1f1f1;
-  font-size: 13px;
-}
-
-.workspace-diff-summary-files {
-  display: grid;
-}
-
-.workspace-diff-summary-files button {
-  border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  background: transparent;
-  color: #f1f1f1;
-  text-align: left;
-  font-size: 13px;
-}
-
-.workspace-diff-summary-files button:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.workspace-diff-summary-files button > span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .workspace-diff-counts {

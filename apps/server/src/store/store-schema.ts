@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 6;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 7;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -91,6 +91,49 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS insight_items_fingerprint_idx
     ON insight_items(fingerprint);
+
+  CREATE TABLE IF NOT EXISTS model_usage_records (
+    id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL UNIQUE,
+    request_ordinal INTEGER NOT NULL,
+    session_id TEXT,
+    turn_id TEXT,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    route TEXT NOT NULL,
+    source TEXT NOT NULL,
+    request_kind TEXT NOT NULL,
+    visibility TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    duration_ms INTEGER,
+    first_token_ms INTEGER,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER,
+    error_type TEXT,
+    error_message TEXT,
+    attribution_json TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS model_usage_started_at_idx
+    ON model_usage_records(started_at);
+
+  CREATE INDEX IF NOT EXISTS model_usage_provider_model_started_idx
+    ON model_usage_records(provider, model, started_at);
+
+  CREATE INDEX IF NOT EXISTS model_usage_session_turn_ordinal_idx
+    ON model_usage_records(session_id, turn_id, request_ordinal);
+
+  CREATE INDEX IF NOT EXISTS model_usage_request_kind_started_idx
+    ON model_usage_records(request_kind, started_at);
+
+  CREATE INDEX IF NOT EXISTS model_usage_visibility_started_idx
+    ON model_usage_records(visibility, started_at);
+
+  CREATE INDEX IF NOT EXISTS model_usage_status_started_idx
+    ON model_usage_records(status, started_at);
 
   CREATE TABLE IF NOT EXISTS projection_session_shells (
     id TEXT PRIMARY KEY,

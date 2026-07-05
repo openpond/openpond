@@ -6,22 +6,29 @@ import {
   actionMentionDetail,
   actionMentionLabel,
 } from "../../lib/action-mentions";
+import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 
 export type ComposerMentionMenuItem =
   | { kind: "app"; app: OpenPondApp }
+  | { kind: "connected-app"; app: ConnectedAppMentionOption }
   | { kind: "action"; action: SandboxActionCatalogEntry };
 
 function mentionMenuItemKey(item: ComposerMentionMenuItem): string {
-  return item.kind === "app" ? `app:${item.app.id}` : `action:${item.action.id}`;
+  if (item.kind === "app") return `app:${item.app.id}`;
+  if (item.kind === "connected-app") return `connected-app:${item.app.provider}`;
+  return `action:${item.action.id}`;
 }
 
 function mentionMenuItemLabel(item: ComposerMentionMenuItem): string {
-  return item.kind === "app" ? item.app.name : actionMentionLabel(item.action);
+  if (item.kind === "app") return item.app.name;
+  if (item.kind === "connected-app") return item.app.label;
+  return actionMentionLabel(item.action);
 }
 
 function mentionMenuItemDetail(item: ComposerMentionMenuItem): string {
   if (item.kind === "action") return actionMentionDetail(item.action);
+  if (item.kind === "connected-app") return item.app.detail;
   const actionNames = item.app.sandboxActionRegistry?.actions.map((action) => action.name) ?? [];
   return actionNames.length > 0
     ? `Actions: ${actionNames.slice(0, 4).join(", ")}${actionNames.length > 4 ? ` +${actionNames.length - 4}` : ""}`
@@ -32,7 +39,26 @@ function mentionMenuItemDetail(item: ComposerMentionMenuItem): string {
 
 function mentionMenuIcon(item: ComposerMentionMenuItem) {
   if (item.kind === "app") return <AtSign size={14} />;
+  if (item.kind === "connected-app") {
+    return (
+      <img
+        alt=""
+        className="composer-provider-mention-icon"
+        draggable={false}
+        src={connectedAppProviderIconSrc(item.app.provider)}
+      />
+    );
+  }
   return item.action.implementation?.type === "openpond-agent" ? <Bot size={14} /> : <Workflow size={14} />;
+}
+
+function connectedAppProviderIconSrc(provider: ConnectedAppMentionOption["provider"]): string {
+  if (provider === "slack") return "/connected-apps/slack.svg";
+  if (provider === "microsoft_teams") return "/connected-apps/microsoft.svg";
+  if (provider === "github") return "/connected-apps/github.svg";
+  if (provider === "google") return "/connected-apps/google.svg";
+  if (provider === "x") return "/connected-apps/x.svg";
+  return "/connected-apps/openpond-mcp.svg";
 }
 
 export function ComposerMentionMenu({

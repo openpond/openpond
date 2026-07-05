@@ -119,6 +119,29 @@ describe("sidebar session project inference", () => {
     ).toBeNull();
   });
 
+  test("keeps Hybrid sandbox sessions under the local project inferred from cwd", () => {
+    const projects = [project({ id: "project_1" })];
+    const cloudIds = new Set(["cloud_project_1"]);
+    const input = session({
+      provider: "zai",
+      workspaceKind: "sandbox",
+      workspaceId: "sandbox_1",
+      cloudProjectId: "cloud_project_1",
+      cwd: "/tmp/project",
+      metadata: { workspaceTarget: "hybrid" },
+    });
+
+    expect(isSidebarCloudWorkSession(input, cloudIds)).toBe(false);
+    expect(
+      sidebarProjectIdForSession(
+        input,
+        new Set(projects.map((item) => item.id)),
+        buildSidebarProjectPathIndex(projects),
+        cloudIds,
+      ),
+    ).toBe("project_1");
+  });
+
   test("matches Windows project paths case-insensitively", () => {
     const projects = [
       project({

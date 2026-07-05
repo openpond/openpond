@@ -4,11 +4,13 @@ OpenPond is local-first agentic infrastructure with optional cloud hosting. The 
 
 Start here:
 
-- [OpenPond Cloud](cloud.md): hosted runtime workspaces for cloud execution, handoff, source preservation, and replayable runs.
+- [OpenPond Cloud](cloud.md): hosted runtime workspaces, Hybrid sandbox edits, handoff, source preservation, and replayable runs.
+- [OpenPond Git](openpond-git.md): git-backed source ownership, managed workspaces, commits, sync, and cloud handoff.
 - [OpenPond Agent SDK](agent-sdk.md): TypeScript source, generated artifacts, validation, evals, traces, and edit policy for durable agents.
 - [Creating durable agents](creating-agents.md): how chat conversations, templates, and existing repos become owned agent code.
 - [Goals](goals.md): durable goal state, continuation, budgets, and task orchestration.
-- [Credentials and models](credentials-and-models.md): BYOK model access, Codex support, connector credentials, and local/cloud secret boundaries.
+- [Model access](model-access.md): OpenPond Chat hosted models, BYOK in desktop, Codex support, and open source model orchestration.
+- [OpenPond Connect](openpond-connect.md): OAuth and third-party provider connections through the OpenPond website.
 - [Continuous Insights](continuous-insights.md): background analysis of chat logs, runs, errors, and follow-ups.
 
 ## Principles

@@ -60,7 +60,7 @@ describe("project workflow state labels", () => {
           untrackedFilesCount: 4,
         }),
       ),
-    ).toBe("1 commit / 2 changed files / 4 untracked skipped");
+    ).toBe("upload required / 1 commit / 2 changed files / 4 untracked skipped");
   });
 
   test("labels linked local projects as local and cloud capable", () => {

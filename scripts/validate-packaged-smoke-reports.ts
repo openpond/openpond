@@ -19,6 +19,19 @@ type SmokeReport = {
   };
   browser?: {
     tabCount?: unknown;
+    inputProof?: {
+      snapshotTargetCount?: unknown;
+      snapshotIdPresent?: unknown;
+      screenshotAvailable?: unknown;
+      moveOk?: unknown;
+      clickOk?: unknown;
+      typeOk?: unknown;
+      keyOk?: unknown;
+      clicked?: unknown;
+      submitted?: unknown;
+      typedLength?: unknown;
+      cursorOverlay?: unknown;
+    };
     attachedAfterClose?: unknown;
   };
   shutdown?: {
@@ -86,6 +99,7 @@ function validateSmokeReport(report: SmokeReport, expected: ExpectedReport, file
   if (typeof report.browser?.tabCount !== "number" || report.browser.tabCount < 1) {
     throw new Error(`${file}: browser tabCount must be at least 1`);
   }
+  validateBrowserInputProof(report.browser.inputProof, file);
   if (report.browser?.attachedAfterClose !== 0) {
     throw new Error(`${file}: browser attachedAfterClose must be 0`);
   }
@@ -97,6 +111,31 @@ function validateSmokeReport(report: SmokeReport, expected: ExpectedReport, file
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
       throw new Error(`${file}: timings.${key} must be a finite non-negative number`);
     }
+  }
+}
+
+function validateBrowserInputProof(inputProof: SmokeReport["browser"]["inputProof"], file: string): void {
+  if (!inputProof || typeof inputProof !== "object") {
+    throw new Error(`${file}: browser.inputProof is required`);
+  }
+  if (typeof inputProof.snapshotTargetCount !== "number" || inputProof.snapshotTargetCount < 2) {
+    throw new Error(`${file}: browser.inputProof.snapshotTargetCount must be at least 2`);
+  }
+  for (const key of [
+    "snapshotIdPresent",
+    "screenshotAvailable",
+    "moveOk",
+    "clickOk",
+    "typeOk",
+    "keyOk",
+    "clicked",
+    "submitted",
+    "cursorOverlay",
+  ] as const) {
+    if (inputProof[key] !== true) throw new Error(`${file}: browser.inputProof.${key} must be true`);
+  }
+  if (typeof inputProof.typedLength !== "number" || inputProof.typedLength <= 0) {
+    throw new Error(`${file}: browser.inputProof.typedLength must be positive`);
   }
 }
 

@@ -11,8 +11,11 @@ import type {
   SidebarAppPreference,
   SidebarAppPreferences,
   Turn,
+  ModelUsageRecord,
+  ModelUsageStatus,
+  ModelUsageVisibility,
 } from "@openpond/contracts";
-import { ContextUsageSnapshotSchema } from "@openpond/contracts";
+import { ContextUsageSnapshotSchema, ModelUsageRecordSchema } from "@openpond/contracts";
 import type {
   CacheEntry,
   CacheEntryRow,
@@ -64,6 +67,31 @@ type InsightItemRow = {
   updated_at: string;
   resolved_at: string | null;
   dismissed_at: string | null;
+};
+
+type ModelUsageRecordRow = {
+  id: string;
+  request_id: string;
+  request_ordinal: number;
+  session_id: string | null;
+  turn_id: string | null;
+  provider: string;
+  model: string;
+  route: string;
+  source: string;
+  request_kind: string;
+  visibility: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  first_token_ms: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  error_type: string | null;
+  error_message: string | null;
+  attribution_json: string;
 };
 
 type ThreadDetailProjectionRow = PayloadRow & {
@@ -364,6 +392,135 @@ export class SqliteStore {
       sequence: row.sequence,
       event: runtimeEventWithSequence(row.payload, row.sequence),
     }));
+  }
+
+  async upsertModelUsageRecord(record: ModelUsageRecord): Promise<ModelUsageRecord> {
+    await this.ready;
+    const parsed = ModelUsageRecordSchema.parse(record);
+    const write = this.writeQueue.then(async () => {
+      await this.run(
+        `INSERT INTO model_usage_records (
+           id,
+           request_id,
+           request_ordinal,
+           session_id,
+           turn_id,
+           provider,
+           model,
+           route,
+           source,
+           request_kind,
+           visibility,
+           status,
+           started_at,
+           completed_at,
+           duration_ms,
+           first_token_ms,
+           prompt_tokens,
+           completion_tokens,
+           total_tokens,
+           error_type,
+           error_message,
+           attribution_json
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(request_id)
+         DO UPDATE SET
+           id = excluded.id,
+           request_ordinal = excluded.request_ordinal,
+           session_id = excluded.session_id,
+           turn_id = excluded.turn_id,
+           provider = excluded.provider,
+           model = excluded.model,
+           route = excluded.route,
+           source = excluded.source,
+           request_kind = excluded.request_kind,
+           visibility = excluded.visibility,
+           status = excluded.status,
+           started_at = excluded.started_at,
+           completed_at = excluded.completed_at,
+           duration_ms = excluded.duration_ms,
+           first_token_ms = excluded.first_token_ms,
+           prompt_tokens = excluded.prompt_tokens,
+           completion_tokens = excluded.completion_tokens,
+           total_tokens = excluded.total_tokens,
+           error_type = excluded.error_type,
+           error_message = excluded.error_message,
+           attribution_json = excluded.attribution_json`,
+        modelUsageRecordParams(parsed),
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return (await this.getModelUsageRecordByRequestId(parsed.requestId)) ?? parsed;
+  }
+
+  async getModelUsageRecordByRequestId(requestId: string): Promise<ModelUsageRecord | null> {
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<ModelUsageRecordRow>(
+      "SELECT * FROM model_usage_records WHERE request_id = ?",
+      [requestId],
+    );
+    return row ? modelUsageRecordFromRow(row) : null;
+  }
+
+  async listModelUsageRecords(query: {
+    sessionId?: string | null;
+    turnId?: string | null;
+    startedAtFrom?: string | null;
+    startedAtTo?: string | null;
+    visibility?: ModelUsageVisibility | "all" | null;
+    status?: ModelUsageStatus | "missing" | "all" | null;
+    limit?: number;
+  } = {}): Promise<ModelUsageRecord[]> {
+    await this.ready;
+    await this.writeQueue;
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (query.sessionId) {
+      where.push("session_id = ?");
+      params.push(query.sessionId);
+    }
+    if (query.turnId) {
+      where.push("turn_id = ?");
+      params.push(query.turnId);
+    }
+    if (query.startedAtFrom) {
+      where.push("started_at >= ?");
+      params.push(query.startedAtFrom);
+    }
+    if (query.startedAtTo) {
+      where.push("started_at <= ?");
+      params.push(query.startedAtTo);
+    }
+    if (query.visibility && query.visibility !== "all") {
+      where.push("visibility = ?");
+      params.push(query.visibility);
+    }
+    if (query.status && query.status !== "all") {
+      if (query.status === "missing") {
+        where.push("source = ?");
+        params.push("missing");
+      } else {
+        where.push("status = ?");
+        params.push(query.status);
+      }
+    }
+    const limitSql = query.limit === undefined
+      ? ""
+      : "LIMIT ?";
+    if (query.limit !== undefined) {
+      params.push(Math.max(1, Math.min(10_000, Math.trunc(query.limit))));
+    }
+    const rows = await this.all<ModelUsageRecordRow>(
+      `SELECT * FROM model_usage_records
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY started_at DESC, request_ordinal DESC
+       ${limitSql}`,
+      params,
+    );
+    return rows.map(modelUsageRecordFromRow);
   }
 
   async latestContextUsageForTurn(sessionId: string, turnId: string): Promise<ContextUsageSnapshot | null> {
@@ -1116,6 +1273,53 @@ export class SqliteStore {
     await this.addColumnIfMissing("insight_items", "last_run_turn_id", "TEXT");
   }
 
+  async createModelUsageTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS model_usage_records (
+        id TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL UNIQUE,
+        request_ordinal INTEGER NOT NULL,
+        session_id TEXT,
+        turn_id TEXT,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        route TEXT NOT NULL,
+        source TEXT NOT NULL,
+        request_kind TEXT NOT NULL,
+        visibility TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        duration_ms INTEGER,
+        first_token_ms INTEGER,
+        prompt_tokens INTEGER,
+        completion_tokens INTEGER,
+        total_tokens INTEGER,
+        error_type TEXT,
+        error_message TEXT,
+        attribution_json TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS model_usage_started_at_idx
+        ON model_usage_records(started_at);
+
+      CREATE INDEX IF NOT EXISTS model_usage_provider_model_started_idx
+        ON model_usage_records(provider, model, started_at);
+
+      CREATE INDEX IF NOT EXISTS model_usage_session_turn_ordinal_idx
+        ON model_usage_records(session_id, turn_id, request_ordinal);
+
+      CREATE INDEX IF NOT EXISTS model_usage_request_kind_started_idx
+        ON model_usage_records(request_kind, started_at);
+
+      CREATE INDEX IF NOT EXISTS model_usage_visibility_started_idx
+        ON model_usage_records(visibility, started_at);
+
+      CREATE INDEX IF NOT EXISTS model_usage_status_started_idx
+        ON model_usage_records(status, started_at);
+    `);
+  }
+
   private async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
     const rows = await this.all<TableInfoRow>(`PRAGMA table_info(${table})`);
     if (rows.some((row) => row.name === column)) return;
@@ -1442,6 +1646,10 @@ const SQLITE_MIGRATIONS: Migration[] = [
     version: 6,
     run: (store) => store.createInsightRunLinkColumns(),
   },
+  {
+    version: 7,
+    run: (store) => store.createModelUsageTables(),
+  },
 ];
 
 function insightItemFromRow(row: InsightItemRow): InsightItem {
@@ -1485,6 +1693,60 @@ function insightItemParams(item: InsightItem): unknown[] {
     item.updatedAt,
     item.resolvedAt,
     item.dismissedAt,
+  ];
+}
+
+function modelUsageRecordFromRow(row: ModelUsageRecordRow): ModelUsageRecord {
+  return ModelUsageRecordSchema.parse({
+    id: row.id,
+    requestId: row.request_id,
+    requestOrdinal: row.request_ordinal,
+    sessionId: row.session_id,
+    turnId: row.turn_id,
+    provider: row.provider,
+    model: row.model,
+    route: row.route,
+    source: row.source,
+    requestKind: row.request_kind,
+    visibility: row.visibility,
+    status: row.status,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    durationMs: row.duration_ms,
+    firstTokenMs: row.first_token_ms,
+    promptTokens: row.prompt_tokens,
+    completionTokens: row.completion_tokens,
+    totalTokens: row.total_tokens,
+    errorType: row.error_type,
+    errorMessage: row.error_message,
+    attribution: JSON.parse(row.attribution_json) as unknown,
+  });
+}
+
+function modelUsageRecordParams(record: ModelUsageRecord): unknown[] {
+  return [
+    record.id,
+    record.requestId,
+    record.requestOrdinal,
+    record.sessionId,
+    record.turnId,
+    record.provider,
+    record.model,
+    record.route,
+    record.source,
+    record.requestKind,
+    record.visibility,
+    record.status,
+    record.startedAt,
+    record.completedAt,
+    record.durationMs,
+    record.firstTokenMs,
+    record.promptTokens,
+    record.completionTokens,
+    record.totalTokens,
+    record.errorType,
+    record.errorMessage,
+    JSON.stringify(record.attribution),
   ];
 }
 

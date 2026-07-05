@@ -136,6 +136,15 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       continue;
     }
 
+    if (item.name === "assistant.reasoning.delta") {
+      if (item.turnId && createPipelineTurnIds.has(item.turnId)) {
+        appendCreatePipelineDebugActivity(messages, item);
+        continue;
+      }
+      appendActivityMessage(messages, item);
+      continue;
+    }
+
     if (item.name === "turn.failed") {
       const content = item.error ?? "Turn failed";
       const errorKind = classifyChatError(content, item.data);

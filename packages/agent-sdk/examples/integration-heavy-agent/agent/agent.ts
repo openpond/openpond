@@ -10,7 +10,7 @@ import {
 import { defineChannel } from "openpond-agent-sdk/channels";
 import { defineEval } from "openpond-agent-sdk/eval";
 import { defineInstructions } from "openpond-agent-sdk/instructions";
-import { defineIntegration, integration } from "openpond-agent-sdk/integrations";
+import { integration } from "openpond-agent-sdk/integrations";
 import { schedule } from "openpond-agent-sdk/schedules";
 import { defineSkill } from "openpond-agent-sdk/skills";
 
@@ -52,10 +52,9 @@ export default defineAgentProject({
     }),
   ],
   integrations: [
-    integration.slack({ required: true, capabilities: ["slack.message.send"] }),
+    integration.slack({ required: true, capabilities: ["slack.message.ingest"] }),
     integration.opchat({ required: true, scopes: ["opchat:chat:create"] }),
-    defineIntegration({
-      provider: "github",
+    integration.github({
       required: false,
       capabilities: ["github.issue.read"],
     }),
@@ -88,7 +87,7 @@ export default defineAgentProject({
       id: "slack",
       target: { action: "chat" },
       requiredConnections: ["slack"],
-      capabilities: ["slack.message.send"],
+      capabilities: ["slack.message.ingest"],
       normalizeEvent: (event) => ({ prompt: String(event.text ?? ""), channel: "slack" }),
       renderResponse: (result) => ({ text: result.text, artifactRefs: result.artifactRefs }),
     }),

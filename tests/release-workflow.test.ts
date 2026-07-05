@@ -155,6 +155,19 @@ async function writeSmokeReport(
     server: { health: "openpond-app-server" },
     browser: {
       tabCount: 1,
+      inputProof: {
+        snapshotTargetCount: 2,
+        snapshotIdPresent: true,
+        screenshotAvailable: true,
+        moveOk: true,
+        clickOk: true,
+        typeOk: true,
+        keyOk: true,
+        clicked: true,
+        submitted: true,
+        typedLength: 18,
+        cursorOverlay: true,
+      },
       attachedAfterClose: 0,
     },
     shutdown: {

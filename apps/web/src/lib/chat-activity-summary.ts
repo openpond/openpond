@@ -8,6 +8,7 @@ export type ActivityGroupSummaryKind =
   | "image"
   | "list"
   | "read"
+  | "reasoning"
   | "search"
   | "web";
 
@@ -24,6 +25,7 @@ type ActivityCounters = {
   listedFiles: number;
   readFileCount: number;
   readFiles: Set<string>;
+  reasoningCount: number;
   runCount: number;
   searchedCode: number;
   testsOrChecks: number;
@@ -93,6 +95,7 @@ function emptyCounters(): ActivityCounters {
     listedFiles: 0,
     readFileCount: 0,
     readFiles: new Set<string>(),
+    reasoningCount: 0,
     runCount: 0,
     searchedCode: 0,
     testsOrChecks: 0,
@@ -114,6 +117,10 @@ function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem
   const label = activity.label.toLowerCase();
   if (activity.controlKind) {
     counters.controlCount += 1;
+    return;
+  }
+  if (label === "reasoning") {
+    counters.reasoningCount += 1;
     return;
   }
   if (label.includes("approval")) {
@@ -227,6 +234,7 @@ function primaryClauses(counters: ActivityCounters): string[] {
   if (counters.testsOrChecks > 0) clauses.push(counters.testsOrChecks === 1 ? "ran checks" : `ran ${counters.testsOrChecks} checks`);
   if (counters.webSearches > 0) clauses.push("searched web");
   if (counters.imageCount > 0) clauses.push(countClause("read", counters.imageCount, "image"));
+  if (counters.reasoningCount > 0) clauses.push("reasoned");
   if (counters.approvals > 0) clauses.push("requested approval");
   if (clauses.length === 0 && counters.controlCount > 0) clauses.push("updated context");
   return clauses;
@@ -244,6 +252,7 @@ function summaryKind(
   if (counters.listedFiles > 0) activeKinds.push("list");
   if (counters.webSearches > 0) activeKinds.push("web");
   if (counters.imageCount > 0) activeKinds.push("image");
+  if (counters.reasoningCount > 0) activeKinds.push("reasoning");
   if (counters.approvals > 0) activeKinds.push("approval");
   if (counters.controlCount > 0) activeKinds.push("control");
   if (counters.testsOrChecks > 0 || runClause) activeKinds.push("command");

@@ -32,7 +32,7 @@ A durable agent should include:
 1. Start local.
 2. Create or generate the Agent SDK project.
 3. Run inspect, build, validate, and eval.
-4. Commit the agent source.
+4. Commit the agent source with local Git, GitHub, or [OpenPond Git](openpond-git.md).
 5. Connect to an OpenPond Project only when you want cloud sync or hosted execution.
 6. Run in OpenPond Cloud when you need cloud dependencies, handoff, replay, or durable cloud state.
 

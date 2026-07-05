@@ -4,7 +4,7 @@ export default defineChannel({
   id: "slack",
   target: { action: "chat" },
   requiredConnections: ["slack"],
-  capabilities: ["slack.message.read", "slack.message.send", "slack.file.read", "slack.file.write"],
+  capabilities: ["slack.message.ingest"],
   normalizeEvent(event) {
     return {
       prompt: String(event.text ?? ""),

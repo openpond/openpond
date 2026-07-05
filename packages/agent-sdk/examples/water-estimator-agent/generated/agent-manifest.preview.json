@@ -329,10 +329,7 @@
         "microsoft_teams"
       ],
       "capabilities": [
-        "microsoft_teams.message.read",
-        "microsoft_teams.message.send",
-        "microsoft_teams.drive.file.download",
-        "microsoft_teams.channel.file.upload"
+        "microsoft_teams.message.ingest"
       ],
       "enabledByDefault": false
     },
@@ -343,10 +340,7 @@
         "slack"
       ],
       "capabilities": [
-        "slack.message.read",
-        "slack.message.send",
-        "slack.file.read",
-        "slack.file.write"
+        "slack.message.ingest"
       ],
       "enabledByDefault": false
     },
@@ -575,20 +569,14 @@
       "provider": "microsoft_teams",
       "required": false,
       "capabilities": [
-        "microsoft_teams.message.read",
-        "microsoft_teams.message.send",
-        "microsoft_teams.drive.file.download",
-        "microsoft_teams.channel.file.upload"
+        "microsoft_teams.message.ingest"
       ]
     },
     {
       "provider": "slack",
       "required": false,
       "capabilities": [
-        "slack.message.read",
-        "slack.message.send",
-        "slack.file.read",
-        "slack.file.write"
+        "slack.message.ingest"
       ]
     }
   ],

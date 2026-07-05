@@ -34,6 +34,7 @@ type UseSidebarDataInput = {
   runtimeIndexes: RuntimeIndexes;
   appPreferences: SidebarAppPreferences;
   selectedSessionId: string | null;
+  selectedProjectId: string | null;
   archivedChatsOpen: boolean;
   projectsExpanded: boolean;
   chatRowsVisibleCount: number;
@@ -47,6 +48,7 @@ export function useSidebarData({
   runtimeIndexes,
   appPreferences,
   selectedSessionId,
+  selectedProjectId,
   archivedChatsOpen,
   projectsExpanded,
   chatRowsVisibleCount,
@@ -188,8 +190,8 @@ export function useSidebarData({
   );
   const pinnedProjects = useMemo(() => projectRows.filter((item) => item.pinned), [projectRows]);
   const visibleProjectRows = useMemo(
-    () => (projectsExpanded ? projectRows : projectRows.slice(0, SIDEBAR_SECTION_LIMIT)),
-    [projectRows, projectsExpanded]
+    () => visibleSidebarProjectRows(projectRows, projectsExpanded, selectedProjectId),
+    [projectRows, projectsExpanded, selectedProjectId]
   );
   const cloudWorkItemsByProjectId = useMemo(() => {
     const rows: Record<string, CloudWorkItem[]> = {};
@@ -276,6 +278,7 @@ export function useSidebarData({
     sidebarProjectIdBySessionId,
     chatRows,
     visibleChatRows,
+    sessionEvents,
     chatMessages,
     contextUsage,
     goalRuntime,
@@ -290,4 +293,22 @@ function isVisibleActiveSidebarSession(session: Session, visibleLocalProjectIds:
 function sortSidebarProjectRows(left: SidebarProjectItem, right: SidebarProjectItem): number {
   if (left.order !== right.order) return left.order - right.order;
   return left.project.name.localeCompare(right.project.name);
+}
+
+export function visibleSidebarProjectRows(
+  projectRows: SidebarProjectItem[],
+  projectsExpanded: boolean,
+  selectedProjectId: string | null,
+): SidebarProjectItem[] {
+  if (projectsExpanded || projectRows.length <= SIDEBAR_SECTION_LIMIT) return projectRows;
+
+  const visibleRows = projectRows.slice(0, SIDEBAR_SECTION_LIMIT);
+  if (!selectedProjectId || visibleRows.some((item) => item.id === selectedProjectId)) {
+    return visibleRows;
+  }
+
+  const selectedProject = projectRows.find((item) => item.id === selectedProjectId);
+  if (!selectedProject) return visibleRows;
+
+  return [...visibleRows.slice(0, SIDEBAR_SECTION_LIMIT - 1), selectedProject];
 }

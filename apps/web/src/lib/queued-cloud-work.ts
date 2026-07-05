@@ -1,5 +1,5 @@
 export type QueuedCloudWorkSubmissionInput = {
-  pendingWorkspaceTarget: "queue_cloud" | null;
+  pendingWorkspaceTarget: "queue_cloud" | "hybrid" | null;
   actionSelected: boolean;
   promptOverrideProvided: boolean;
   attachmentCount: number;

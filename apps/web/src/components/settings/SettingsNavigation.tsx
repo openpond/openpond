@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Bot,
+  ChartColumnStacked,
   Code2,
   CreditCard,
   MessageSquare,
@@ -27,6 +28,7 @@ const SETTINGS_NAVIGATION_ITEMS: SettingsNavigationItem[] = [
   { section: "editor", label: "Editor", Icon: Code2 },
   { section: "providers", label: "Providers", Icon: MessageSquare },
   { section: "remote", label: "Remote", Icon: RadioTower },
+  { section: "usage", label: "Usage", Icon: ChartColumnStacked },
   { section: "personalization", label: "Personalization", Icon: SquarePen },
   { section: "diagnostics", label: "Diagnostics", Icon: ScrollText },
 ];

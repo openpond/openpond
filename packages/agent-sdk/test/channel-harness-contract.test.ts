@@ -37,7 +37,7 @@ const project = defineAgentProject({
     defineIntegration({
       provider: "slack",
       required: false,
-      capabilities: ["slack.message.send"],
+      capabilities: ["slack.message.ingest"],
     }),
   ],
   channels: [
@@ -52,7 +52,7 @@ const project = defineAgentProject({
       id: "slack",
       target: { action: "chat" },
       requiredConnections: ["slack"],
-      capabilities: ["slack.message.send"],
+      capabilities: ["slack.message.ingest"],
       normalizeEvent: (event) => ({
         prompt: String(event.text ?? ""),
         channel: "slack",
@@ -65,7 +65,7 @@ const project = defineAgentProject({
       id: "microsoft_teams",
       target: { action: "chat" },
       requiredConnections: ["microsoft_teams"],
-      capabilities: ["teams.message.send"],
+      capabilities: ["microsoft_teams.message.ingest"],
       normalizeEvent: (event) => ({
         prompt: String(event.text ?? ""),
         channel: "microsoft_teams",

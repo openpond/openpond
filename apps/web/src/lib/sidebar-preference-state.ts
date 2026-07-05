@@ -95,10 +95,10 @@ export function mergeLayoutWidthPreferencePreservingRecentLocal(
   now = Date.now(),
 ): { value: number; localChange: LayoutWidthPreferenceChange | null } {
   if (!localChange) return { value: incoming, localChange: null };
-  if (incoming === localChange.value) return { value: incoming, localChange: null };
   if (now - localChange.changedAt > RECENT_LOCAL_LAYOUT_WIDTH_PREFERENCE_TTL_MS) {
     return { value: incoming, localChange: null };
   }
+  if (incoming === localChange.value) return { value: incoming, localChange };
   return { value: localChange.value, localChange };
 }
 

@@ -43,6 +43,7 @@ export type SettingsSection =
   | "editor"
   | "providers"
   | "remote"
+  | "usage"
   | "personalization"
   | "diagnostics";
 export type ActivityItem = {
@@ -180,6 +181,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     abandonedGoals: true,
     userCorrections: true,
     unresolvedConversations: true,
+    usageAnomalies: true,
   },
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,

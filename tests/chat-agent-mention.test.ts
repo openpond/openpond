@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test";
 
-import { resolveMentionedChatApp } from "../apps/web/src/hooks/useChatActions";
+import {
+  buildConnectedAppStatusRows,
+  SendTurnRequestSchema,
+} from "@openpond/contracts";
+import { resolveMentionedChatApp } from "../apps/web/src/lib/chat-app-mentions";
 import {
   actionMentionMatchesForQuery,
   resolveMentionedAction,
 } from "../apps/web/src/lib/action-mentions";
+import {
+  connectedAppMentionMatchesForQuery,
+  connectedAppMentionOptionsFromStatusRows,
+  resolveMentionedConnectedApps,
+} from "../apps/web/src/lib/connected-app-mentions";
 
 const apps = [
   {
@@ -78,5 +87,71 @@ describe("profile action mention resolution", () => {
     };
 
     expect(resolveMentionedAction("@support summarize open issues", [supportAction, billingSupportAction])).toBeNull();
+  });
+});
+
+describe("connected app mention resolution", () => {
+  test("builds mention options only from connected integration rows", () => {
+    const options = connectedAppMentionOptionsFromStatusRows(
+      buildConnectedAppStatusRows({
+        connections: [
+          {
+            id: "conn_google",
+            provider: "google",
+            providerAccountName: "Docs User",
+            providerWorkspaceName: "Drive",
+            status: "active",
+          },
+          {
+            id: "conn_teams",
+            provider: "microsoft_teams",
+            providerAccountName: "Teams User",
+            providerWorkspaceName: "Water Ops",
+            status: "active",
+          },
+          {
+            id: "conn_x",
+            provider: "x",
+            providerAccountName: "Social User",
+            status: "active",
+          },
+        ],
+      }),
+    );
+
+    expect(options.map((option) => option.provider)).toEqual(["google", "x"]);
+    expect(options.find((option) => option.provider === "microsoft_teams")).toBeUndefined();
+    expect(options.find((option) => option.provider === "google")?.ref).toMatchObject({
+      kind: "integration",
+      provider: "google",
+      appIds: ["google"],
+      setupSurfaces: ["oauth_connector"],
+      connectionIds: ["conn_google"],
+    });
+  });
+
+  test("matches provider aliases and resolves structured turn refs", () => {
+    const options = connectedAppMentionOptionsFromStatusRows(
+      buildConnectedAppStatusRows({
+        connections: [
+          { id: "conn_google", provider: "google", status: "active" },
+          { id: "conn_x", provider: "x", status: "active" },
+        ],
+      }),
+    );
+
+    expect(connectedAppMentionMatchesForQuery(options, "drive").map((option) => option.provider)).toEqual([
+      "google",
+    ]);
+    expect(connectedAppMentionMatchesForQuery(options, "twitter").map((option) => option.provider)).toEqual(["x"]);
+
+    const refs = resolveMentionedConnectedApps("Use @drive and @twitter for this", options)
+      .map((option) => option.ref);
+
+    expect(refs.map((ref) => ref.provider)).toEqual(["google", "x"]);
+    expect(SendTurnRequestSchema.parse({
+      prompt: "Use @drive and @twitter for this",
+      mentionedConnectedApps: refs,
+    }).mentionedConnectedApps).toEqual(refs);
   });
 });

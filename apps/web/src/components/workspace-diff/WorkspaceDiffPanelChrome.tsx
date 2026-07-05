@@ -1,11 +1,11 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
 import {
-  AlignLeft,
   BookOpenText,
   CircleAlert,
   CircleCheck,
   Columns2,
   FileText,
+  FolderOpen,
   Globe2,
   LoaderCircle,
   Maximize2,
@@ -16,13 +16,12 @@ import {
   Redo2,
   Save,
   Search,
-  SquareCode,
   Undo2,
   X,
 } from "../icons";
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
-import type { DiffTab, WorkspaceDiffSideChatTab } from "./workspace-diff-panel-model";
+import type { DiffTab, WorkspaceDiffSideChatTab, WorkspaceFileSourceSwitcher } from "./workspace-diff-panel-model";
 
 export function WorkspaceDiffTabs({
   addMenuOpen,
@@ -31,26 +30,25 @@ export function WorkspaceDiffTabs({
   dirtyFilePaths,
   openFiles,
   goalDetailsAvailable,
-  reviewOpen,
   searchOpen,
   searchQuery,
   selectedPath,
   sideChatTabs = [],
+  sourceStatus,
+  sourceSwitcher,
   visibleTab,
   onCloseFileTab,
-  onCloseReviewTab,
   onCloseSideChat,
   onCloseSearch,
   onOpenFile,
   onOpenBrowser,
-  onOpenReviewTab,
   onOpenSearch,
   onOpenSideChat,
   onSearchQueryChange,
   onSelectFile,
+  onSelectFiles,
   onSelectGoal,
   onSelectSideChat,
-  onSelectSummary,
   onToggleAddMenu,
   onToggleExpanded,
 }: {
@@ -60,26 +58,25 @@ export function WorkspaceDiffTabs({
   dirtyFilePaths: ReadonlySet<string>;
   openFiles: WorkspaceDiffFile[];
   goalDetailsAvailable: boolean;
-  reviewOpen: boolean;
   searchOpen: boolean;
   searchQuery: string;
   selectedPath: string | null;
   sideChatTabs?: WorkspaceDiffSideChatTab[];
+  sourceStatus?: { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null;
+  sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   visibleTab: DiffTab;
   onCloseFileTab: (path: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onCloseReviewTab: (event: MouseEvent<HTMLButtonElement>) => void;
   onCloseSideChat?: (panelId: string) => void;
   onCloseSearch: () => void;
   onOpenFile: (path: string) => void;
   onOpenBrowser: () => void;
-  onOpenReviewTab: () => void;
   onOpenSearch: () => void;
   onOpenSideChat?: () => void;
   onSearchQueryChange: (value: string) => void;
   onSelectFile: (path: string) => void;
+  onSelectFiles: () => void;
   onSelectGoal: () => void;
   onSelectSideChat?: (panelId: string) => void;
-  onSelectSummary: () => void;
   onToggleAddMenu: () => void;
   onToggleExpanded: () => void;
 }) {
@@ -131,13 +128,13 @@ export function WorkspaceDiffTabs({
         ) : null}
         <button
           type="button"
-          className={`workspace-diff-tab ${visibleTab === "summary" ? "active" : ""}`}
+          className={`workspace-diff-tab ${visibleTab === "files" ? "active" : ""}`}
           role="tab"
-          aria-selected={visibleTab === "summary"}
-          onClick={onSelectSummary}
+          aria-selected={visibleTab === "files"}
+          onClick={onSelectFiles}
         >
-          <AlignLeft size={14} />
-          <span>Summary</span>
+          <FolderOpen size={14} />
+          <span>Files</span>
         </button>
         {openFiles.map((file) => (
           <div
@@ -166,23 +163,6 @@ export function WorkspaceDiffTabs({
             </button>
           </div>
         ))}
-        {reviewOpen && (
-          <div className={`workspace-diff-tab review ${visibleTab === "review" ? "active" : ""}`}>
-            <button
-              type="button"
-              className="workspace-diff-tab-main"
-              role="tab"
-              aria-selected={visibleTab === "review"}
-              onClick={onOpenReviewTab}
-            >
-              <SquareCode className="workspace-diff-tab-icon" size={14} />
-              <span>Review</span>
-            </button>
-            <button type="button" className="workspace-diff-tab-close" title="Close Review" onClick={onCloseReviewTab}>
-              <X size={12} />
-            </button>
-          </div>
-        )}
         {sideChatTabs.map((chat) => (
           <div className="workspace-diff-tab right-chat-tab" key={chat.id}>
             <button
@@ -230,6 +210,11 @@ export function WorkspaceDiffTabs({
                   <kbd />
                 </button>
               ) : null}
+              <button type="button" role="menuitem" onClick={onSelectFiles}>
+                <FolderOpen size={14} />
+                <span>Files</span>
+                <kbd />
+              </button>
               <button type="button" role="menuitem" onClick={onOpenSearch}>
                 <Search size={14} />
                 <span>Open file</span>
@@ -240,13 +225,6 @@ export function WorkspaceDiffTabs({
                 <span>Browser</span>
                 <kbd>Ctrl+I</kbd>
               </button>
-              {!reviewOpen && (
-                <button type="button" role="menuitem" onClick={onOpenReviewTab}>
-                  <SquareCode size={14} />
-                  <span>Review</span>
-                  <kbd />
-                </button>
-              )}
             </div>
           )}
           {searchOpen && (
@@ -274,11 +252,35 @@ export function WorkspaceDiffTabs({
           )}
         </div>
       </div>
+      {sourceSwitcher || sourceStatus ? (
+        <div className="workspace-diff-source-bar" aria-label="Workspace source">
+          {sourceSwitcher ? (
+            <div className="workspace-diff-source-toggle" role="group" aria-label="File source">
+              {sourceSwitcher.options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={sourceSwitcher.value === option.value ? "active" : ""}
+                  aria-pressed={sourceSwitcher.value === option.value}
+                  onClick={() => sourceSwitcher.onChange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {sourceStatus ? (
+            <span className={`workspace-diff-source-status ${sourceStatus.tone}`}>
+              {sourceStatus.label}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <button
         type="button"
         className="diff-icon-button"
-        title={expanded ? "Restore review panel" : "Expand review panel"}
-        aria-label={expanded ? "Restore review panel" : "Expand review panel"}
+        title={expanded ? "Restore files panel" : "Expand files panel"}
+        aria-label={expanded ? "Restore files panel" : "Expand files panel"}
         onClick={onToggleExpanded}
       >
         {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -298,7 +300,6 @@ export function WorkspaceDiffToolbar({
   loadFullFiles,
   menuOpen,
   renderMarkdown,
-  reviewFileMode,
   showEditorCommandBar,
   showRenderMarkdownToggle,
   splitView,
@@ -316,7 +317,6 @@ export function WorkspaceDiffToolbar({
   onToggleLoadFullFiles,
   onToggleMenu,
   onToggleRenderMarkdown,
-  onToggleReviewFileMode,
   onToggleSplitView,
   onToggleWordDiffs,
   onToggleWordWrap,
@@ -331,7 +331,6 @@ export function WorkspaceDiffToolbar({
   loadFullFiles: boolean;
   menuOpen: boolean;
   renderMarkdown: boolean;
-  reviewFileMode: boolean;
   showEditorCommandBar: boolean;
   showRenderMarkdownToggle: boolean;
   splitView: boolean;
@@ -349,7 +348,6 @@ export function WorkspaceDiffToolbar({
   onToggleLoadFullFiles: () => void;
   onToggleMenu: (open?: boolean) => void;
   onToggleRenderMarkdown: () => void;
-  onToggleReviewFileMode: () => void;
   onToggleSplitView: () => void;
   onToggleWordDiffs: () => void;
   onToggleWordWrap: () => void;
@@ -375,7 +373,6 @@ export function WorkspaceDiffToolbar({
               hideWhiteSpace={hideWhiteSpace}
               loadFullFiles={loadFullFiles}
               renderMarkdown={renderMarkdown}
-              reviewFileMode={reviewFileMode}
               wordDiffs={wordDiffs}
               wordWrap={wordWrap}
               onClose={() => onToggleMenu(false)}
@@ -386,7 +383,6 @@ export function WorkspaceDiffToolbar({
               onToggleHideWhiteSpace={onToggleHideWhiteSpace}
               onToggleLoadFullFiles={onToggleLoadFullFiles}
               onToggleRenderMarkdown={onToggleRenderMarkdown}
-              onToggleReviewFileMode={onToggleReviewFileMode}
               onToggleWordDiffs={onToggleWordDiffs}
               onToggleWordWrap={onToggleWordWrap}
             />

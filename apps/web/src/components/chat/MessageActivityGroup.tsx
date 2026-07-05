@@ -6,6 +6,7 @@ import {
   Globe2,
   ImageIcon,
   ListFilter,
+  Lightbulb,
   Search,
   SquarePen,
   SquareTerminal,
@@ -212,6 +213,7 @@ function activitySummaryIcon(kind: ActivityGroupSummaryKind): LucideIcon {
   if (kind === "image") return ImageIcon;
   if (kind === "list") return ListFilter;
   if (kind === "read") return FileText;
+  if (kind === "reasoning") return Lightbulb;
   if (kind === "search") return Search;
   if (kind === "web") return Globe2;
   return SquareTerminal;

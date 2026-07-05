@@ -52,7 +52,7 @@ export default defineAgentProject({
     }),
   ],
   integrations: [
-    integration.slack({ required: true, capabilities: ["slack.message.send"] }),
+    integration.slack({ required: true, capabilities: ["slack.message.ingest"] }),
     integration.opchat({ required: true, scopes: ["opchat:chat:create"] }),
     defineIntegration({
       provider: "github",
@@ -88,7 +88,7 @@ export default defineAgentProject({
       id: "slack",
       target: { action: "chat" },
       requiredConnections: ["slack"],
-      capabilities: ["slack.message.send"],
+      capabilities: ["slack.message.ingest"],
       normalizeEvent: (event) => ({ prompt: String(event.text ?? ""), channel: "slack" }),
       renderResponse: (result) => ({ text: result.text, artifactRefs: result.artifactRefs }),
     }),

@@ -4,7 +4,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import type { CreatePipelineRequest, CreatePipelineSnapshot, LocalProject } from "@openpond/contracts";
+import type {
+  CreatePipelineRequest,
+  CreatePipelineSnapshot,
+  LocalProject,
+  UsageRequestAttribution,
+} from "@openpond/contracts";
 import {
   assertCreatePipelineBackgroundApproved,
   createServerPayloads,
@@ -341,6 +346,213 @@ describe("Cloud work item chat", () => {
       localProjectName: "Local Repo",
       localWorkspacePath: "/workspace/local-repo",
     });
+  });
+
+  test("preserves Cloud command usage attribution without creating local usage rows", async () => {
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+
+    const storeDir = await mkdtemp(join(tmpdir(), "openpond-cloud-usage-linkage-store-"));
+    tempRoots.push(storeDir);
+    const store = new SqliteStore(storeDir);
+    const request = createPipelineRequest();
+    const approved = createPipelineSnapshot(request, {
+      state: "applying_source",
+      planStatus: "approved",
+    });
+    const slashAttribution: UsageRequestAttribution = {
+      surface: "chat",
+      workflowKind: "slash_command",
+      commandName: "/create",
+      commandSource: "prompt_parse",
+    };
+    const backgroundAttribution: UsageRequestAttribution = {
+      surface: "create_pipeline",
+      workflowKind: "planner",
+      createPipelineRequestId: request.id,
+      commandName: "/create",
+      commandSource: "api",
+    };
+    const requests: Array<{
+      body: Record<string, unknown>;
+      method: string | undefined;
+      pathname: string;
+    }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      requests.push({
+        body,
+        method: init?.method,
+        pathname: url.pathname,
+      });
+      if (url.pathname === "/v1/projects/cloud_project_1/work-items") {
+        return Response.json({
+          workItem: {
+            id: "work_item_attributed",
+            teamId: "team_1",
+            projectId: "cloud_project_1",
+            conversationId: "conversation_1",
+            title: String(body.title),
+            status: "queued",
+            sourceRef: body.sourceRef ?? null,
+            baseSha: body.baseSha ?? null,
+            latestRuntimeId: null,
+            latestSandboxId: null,
+            latestTaskRunId: null,
+            assignedAgentId: null,
+            createdAt: "2026-06-17T00:00:00.000Z",
+            updatedAt: "2026-06-17T00:00:00.000Z",
+            archivedAt: null,
+            metadata: body.metadata ?? {},
+          },
+        });
+      }
+      if (url.pathname === "/v1/work-items/work_item_attributed/messages") {
+        return Response.json({
+          message: {
+            id: "message_system_link",
+            workItemId: "work_item_attributed",
+            teamId: "team_1",
+            projectId: "cloud_project_1",
+            conversationId: "conversation_1",
+            role: body.role ?? "system",
+            body: body.body ?? "Cloud message",
+            createdByUserId: null,
+            createdAt: "2026-06-17T00:00:00.000Z",
+            metadata: body.metadata ?? {},
+          },
+          userMessage: {
+            id: "message_user",
+            workItemId: "work_item_attributed",
+            teamId: "team_1",
+            projectId: "cloud_project_1",
+            conversationId: "conversation_1",
+            role: "user",
+            body: body.message ?? "Cloud message",
+            createdByUserId: "user_1",
+            createdAt: "2026-06-17T00:00:00.000Z",
+            metadata: body.metadata ?? {},
+          },
+          assistantMessage: {
+            id: "message_assistant",
+            workItemId: "work_item_attributed",
+            teamId: "team_1",
+            projectId: "cloud_project_1",
+            conversationId: "conversation_1",
+            role: "assistant",
+            body: "Cloud accepted the message.",
+            createdByUserId: null,
+            createdAt: "2026-06-17T00:00:01.000Z",
+            metadata: body.metadata ?? {},
+          },
+        });
+      }
+      if (url.pathname === "/v1/work-items/work_item_attributed/chat") {
+        return Response.json({
+          userMessage: {
+            id: "message_user_chat",
+            workItemId: "work_item_attributed",
+            teamId: "team_1",
+            projectId: "cloud_project_1",
+            conversationId: "conversation_1",
+            role: "user",
+            body: body.message,
+            createdByUserId: "user_1",
+            createdAt: "2026-06-17T00:00:00.000Z",
+            metadata: body.metadata ?? {},
+          },
+          assistantMessage: {
+            id: "message_assistant_chat",
+            workItemId: "work_item_attributed",
+            teamId: "team_1",
+            projectId: "cloud_project_1",
+            conversationId: "conversation_1",
+            role: "assistant",
+            body: "Cloud accepted the revision.",
+            createdByUserId: null,
+            createdAt: "2026-06-17T00:00:01.000Z",
+            metadata: body.metadata ?? {},
+          },
+        });
+      }
+      if (url.pathname === "/v1/work-items/work_item_attributed/handle-background") {
+        return Response.json({ ok: true });
+      }
+      return Response.json({ error: `Unexpected request: ${url.pathname}` }, { status: 500 });
+    };
+
+    try {
+      const payloads = createServerPayloads({
+        store,
+        storeDir,
+        providersFilePath: join(storeDir, "providers.json"),
+        serverId: "server_test",
+        host: "127.0.0.1",
+        getActualPort: () => 0,
+        startedAt: "2026-06-17T00:00:00.000Z",
+        version: "test",
+        runtimeVersion: "test",
+        getCodexStatus: () => ({
+          available: false,
+          binaryPath: null,
+          version: null,
+          authHealth: "unknown",
+          account: null,
+          appServer: { status: "idle", lastError: null },
+        }),
+        appendRuntimeEvent: async () => undefined,
+        isClosing: () => false,
+      });
+
+      await payloads.createCloudWorkItemPayload({
+        teamId: "team_1",
+        projectId: "cloud_project_1",
+        title: "Cloud create usage linkage",
+        initialMessage: "/create Cloud support agent",
+        sourceRef: "main",
+        baseSha: "abc123",
+        createPipelineRequest: request,
+        createPipeline: approved,
+        usageAttribution: slashAttribution,
+      });
+      await payloads.sendCloudWorkItemMessagePayload("work_item_attributed", {
+        teamId: "team_1",
+        message: "Revise plan: narrow the workflow",
+        createPipelineRequest: request,
+        createPipeline: approved,
+        usageAttribution: backgroundAttribution,
+      });
+      await payloads.handleCloudWorkItemBackgroundPayload("work_item_attributed", {
+        teamId: "team_1",
+        prompt: "Apply approved create plan",
+        createPipelineRequest: request,
+        createPipeline: approved,
+        usageAttribution: backgroundAttribution,
+        payload: { createPipelineDecision: "approved" },
+      });
+
+      const createRequest = requests.find((candidate) => candidate.pathname === "/v1/projects/cloud_project_1/work-items");
+      expect((createRequest?.body.metadata as any)?.usageAttribution).toMatchObject(slashAttribution);
+      const hiddenLinkRequest = requests.find(
+        (candidate) =>
+          candidate.pathname === "/v1/work-items/work_item_attributed/messages" &&
+          (candidate.body.metadata as any)?.source === "openpond_app_cloud_create_pipeline_link",
+      );
+      expect((hiddenLinkRequest?.body.metadata as any)?.usageAttribution).toMatchObject(slashAttribution);
+      const chatRequest = requests.find((candidate) => candidate.pathname === "/v1/work-items/work_item_attributed/chat");
+      expect((chatRequest?.body.metadata as any)?.usageAttribution).toMatchObject(backgroundAttribution);
+      const backgroundRequest = requests.find((candidate) => candidate.pathname === "/v1/work-items/work_item_attributed/handle-background");
+      expect(backgroundRequest?.body.usageAttribution).toMatchObject(backgroundAttribution);
+      expect((backgroundRequest?.body.payload as any)?.usageAttribution).toMatchObject(backgroundAttribution);
+      expect((backgroundRequest?.body.payload as any)?.createPipelineRequest).toMatchObject({
+        id: request.id,
+        command: request.command,
+      });
+      await expect(store.listModelUsageRecords({})).resolves.toHaveLength(0);
+    } finally {
+      await store.close();
+    }
   });
 
   test("applies reviewed Cloud patches only through an explicitly linked clean local checkout", async () => {

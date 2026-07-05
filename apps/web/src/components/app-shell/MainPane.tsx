@@ -29,6 +29,8 @@ import type {
   Approval,
   OpenPondApp,
   ResolveApprovalRequest,
+  RuntimeEvent,
+  UsageRequestAttribution,
   WorkspaceDiffSummary,
   WorkspaceKind,
   WorkspaceState,
@@ -56,11 +58,16 @@ import {
   type ComposerSlashCommand,
   type ParsedComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
+import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
+import {
+  resolveRightSidebarFileSource,
+  type RightSidebarFileSource,
+} from "../../lib/right-sidebar-file-source";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
-import type { WorkspaceDiffTabRequest } from "../workspace-diff/workspace-diff-panel-model";
+import type { WorkspaceDiffTabRequest, WorkspaceFileSourceSwitcher } from "../workspace-diff/workspace-diff-panel-model";
 
 const WorkspaceDiffPanel = lazy(() =>
   import("../workspace-diff/WorkspaceDiffPanel").then((module) => ({ default: module.WorkspaceDiffPanel })),
@@ -87,11 +94,15 @@ const InsightsView = lazy(() =>
 type MainPaneProps = {
   view: AppView;
   bootstrap: BootstrapPayload | null;
+  runtimeEvents: RuntimeEvent[];
   chatMessages: ChatMessage[];
   contextWindowStatus: ContextWindowStatus;
   goalRuntime: GoalRuntimeStatus | null;
   prompt: string;
+  steerAutoDispatchBlocked: boolean;
+  steerAutoDispatchReady: boolean;
   mentionApps: OpenPondApp[];
+  connectedAppMentions: ConnectedAppMentionOption[];
   selectedMentionAppId: string | null;
   busy: boolean;
   turnRunning: boolean;
@@ -157,6 +168,7 @@ type MainPaneProps = {
   changeDraftProvider: (provider: ChatProvider) => void;
   changeProjectTarget: (target: string) => void;
   changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
+  setDraftProvider: (provider: ChatProvider) => void;
   setDraftModel: (model: string) => void;
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
@@ -182,7 +194,7 @@ type MainPaneProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     promptOverride?: string,
-    options?: { displayPrompt?: string },
+    options?: { clearPrompt?: () => void; displayPrompt?: string; usageAttribution?: UsageRequestAttribution },
   ) => Promise<boolean>;
   stopTurn: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
@@ -190,9 +202,9 @@ type MainPaneProps = {
   onToggleDiffPanelExpanded: () => void;
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
-  onShowReviewPanel: () => void;
+  onShowGoalSidebarTab: () => void;
+  onShowFilesPanel: () => void;
   onShowRightChatPanel: () => void;
-  onShowSummaryPanel: () => void;
   onAddRightChat: () => void;
   onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
   onCloseRightChatPanel: (panelId: string) => void;
@@ -204,6 +216,7 @@ type MainPaneProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     command?: ComposerSlashCommand | null,
+    options?: ComposerSubmitOptions,
   ) => Promise<boolean>;
   onStopRightChat: (sessionId: string | null) => Promise<boolean>;
   onCloseRightPanel: () => void;
@@ -360,12 +373,25 @@ function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
   if (command.command === "create") return `/create ${command.args}`;
   if (command.command === "edit") return `/edit ${command.args}`;
   if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
+  if (command.command === "sync-cloud") return command.args ? `/sync-cloud ${command.args}` : "/sync-cloud";
   if (command.command === "goal-local") return `Goal: ${command.args}`;
   return `Goal: ${command.args}`;
 }
 
+function usageAttributionForComposerSlashCommand(
+  command: ParsedComposerSlashCommand,
+  commandSource: UsageRequestAttribution["commandSource"],
+): UsageRequestAttribution {
+  return {
+    surface: "chat",
+    workflowKind: "slash_command",
+    commandName: `/${command.command}`,
+    commandSource,
+  };
+}
+
 function isLocalComposerSlashCommand(command: ParsedComposerSlashCommand): boolean {
-  return command.command === "goal-local" || command.command === "skill";
+  return command.command === "goal-local" || command.command === "skill" || command.command === "sync-cloud";
 }
 
 export function shouldRunCreatePipelineCommandLocally(input: {
@@ -402,11 +428,15 @@ function cloudWorkItemSandboxId(
 export function MainPane({
   view,
   bootstrap,
+  runtimeEvents,
   chatMessages,
   contextWindowStatus,
   goalRuntime,
   prompt,
+  steerAutoDispatchBlocked,
+  steerAutoDispatchReady,
   mentionApps,
+  connectedAppMentions,
   selectedMentionAppId,
   busy,
   turnRunning,
@@ -472,6 +502,7 @@ export function MainPane({
   changeDraftProvider,
   changeProjectTarget,
   changeWorkspaceTarget,
+  setDraftProvider,
   setDraftModel,
   changeCodexPermissionMode,
   changeCodexReasoningEffort,
@@ -490,9 +521,8 @@ export function MainPane({
   onToggleDiffPanelExpanded,
   onShowDiffPanel,
   onShowBrowserPanel,
-  onShowReviewPanel,
+  onShowFilesPanel,
   onShowRightChatPanel,
-  onShowSummaryPanel,
   onAddRightChat,
   onTerminalTabsChange,
   onCloseRightChatPanel,
@@ -532,6 +562,7 @@ export function MainPane({
     EMPTY_USER_MESSAGE_NAVIGATION,
   );
   const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{ id: number; path: string } | null>(null);
+  const [rightSidebarSourceOverride, setRightSidebarSourceOverride] = useState<RightSidebarFileSource | null>(null);
   const selectedCloudSandboxId = useMemo(
     () => cloudWorkItemSandboxId(selectedCloudWorkItem, cloudWorkItemDetail),
     [cloudWorkItemDetail, selectedCloudWorkItem],
@@ -545,6 +576,47 @@ export function MainPane({
     Boolean(selectedCloudWorkItem);
   const showEmptyRightChatFallbackPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
+  const chatSandboxId = isCloudWorkspaceKind(activeWorkspaceKind) ? activeWorkspaceId : null;
+  const rightSidebarSandboxId = showCloudDiffPanel ? selectedCloudSandboxId : chatSandboxId;
+  const rightSidebarSandboxSourceAvailable =
+    Boolean(rightSidebarSandboxId) ||
+    showCloudDiffPanel ||
+    workspaceTarget.value === "cloud" ||
+    workspaceTarget.value === "hybrid";
+  const rightSidebarSourceState = useMemo(
+    () =>
+      resolveRightSidebarFileSource({
+        workspaceTarget: showCloudDiffPanel ? "cloud" : workspaceTarget.value,
+        localWorkspaceId: showCloudDiffPanel ? null : activeWorkspaceAppId,
+        sandboxSourceAvailable: rightSidebarSandboxSourceAvailable,
+        sandboxWorkspaceId: rightSidebarSandboxId,
+        override: rightSidebarSourceOverride,
+      }),
+    [
+      activeWorkspaceAppId,
+      rightSidebarSandboxSourceAvailable,
+      rightSidebarSandboxId,
+      rightSidebarSourceOverride,
+      showCloudDiffPanel,
+      workspaceTarget.value,
+    ],
+  );
+  const rightSidebarSource = rightSidebarSourceState.source;
+  const rightSidebarUsesSandbox = rightSidebarSource === "sandbox";
+  const rightSidebarSourceSwitcher = useMemo<WorkspaceFileSourceSwitcher | null>(
+    () =>
+      rightSidebarSource && rightSidebarSourceState.options.length > 1
+        ? {
+          value: rightSidebarSource,
+          options: rightSidebarSourceState.options,
+          onChange: setRightSidebarSourceOverride,
+        }
+        : null,
+    [rightSidebarSource, rightSidebarSourceState.options],
+  );
+  useEffect(() => {
+    setRightSidebarSourceOverride(null);
+  }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, showCloudDiffPanel, workspaceTarget.value]);
   const showDiffPanel =
     (view === "chat" || showCloudDiffPanel) &&
     diffPanelOpen &&
@@ -599,18 +671,23 @@ export function MainPane({
       selectedCommand: ComposerSlashCommand | null = null,
       options: ComposerSubmitOptions = {},
     ) => {
+      const promptForSubmit = options.promptOverride ?? prompt;
+      const clearMainPrompt = () => {
+        if (options.preservePrompt) return;
+        setPrompt("");
+        setMentionedAppId(null);
+      };
       if (!action) {
         const command = selectedCommand
-          ? { command: selectedCommand.id, args: prompt.trim() }
-          : parseComposerSlashCommandPrompt(prompt);
+          ? { command: selectedCommand.id, args: promptForSubmit.trim() }
+          : parseComposerSlashCommandPrompt(promptForSubmit);
         if (command) {
           if (command.command === "insights") {
             if (attachments.length > 0) {
               showToast("/insights does not accept attachments.", "error");
               return false;
             }
-            setPrompt("");
-            setMentionedAppId(null);
+            clearMainPrompt();
             if (command.args.trim()) {
               const payload = await onAskInsightsQuestion(command.args.trim());
               const sessionId = insightsSystemSessionId(payload);
@@ -631,7 +708,7 @@ export function MainPane({
             }
             return true;
           }
-          if (!command.args && command.command !== "skill") {
+          if (!command.args && command.command !== "skill" && command.command !== "sync-cloud") {
             showToast(`Add instructions after /${command.command}.`, "info");
             return false;
           }
@@ -648,7 +725,13 @@ export function MainPane({
               view,
             })
           ) {
-            return sendPrompt([], null, promptForAppSlashCommand(command));
+            return sendPrompt([], null, promptForAppSlashCommand(command), {
+              clearPrompt: options.preservePrompt ? () => undefined : undefined,
+              usageAttribution: usageAttributionForComposerSlashCommand(
+                command,
+                selectedCommand ? "composer_selection" : "prompt_parse",
+              ),
+            });
           }
           if (!slashCommandCloudProjectId) {
             setView("cloud");
@@ -660,13 +743,13 @@ export function MainPane({
             prompt: promptForAppSlashCommand(command),
           });
           if (created) {
-            setPrompt("");
-            setMentionedAppId(null);
+            clearMainPrompt();
           }
           return created;
         }
       }
-      return sendPrompt(attachments, action, undefined, {
+      return sendPrompt(attachments, action, options.promptOverride, {
+        clearPrompt: options.preservePrompt ? () => undefined : undefined,
         displayPrompt: options.displayPrompt,
       });
     },
@@ -686,6 +769,13 @@ export function MainPane({
       slashCommandCloudProjectId,
       view,
     ],
+  );
+  const changeMainComposerModel = useCallback(
+    (model: string) => {
+      setDraftProvider(activeProvider);
+      setDraftModel(model);
+    },
+    [activeProvider, setDraftModel, setDraftProvider],
   );
   const chatTimelineRows = useMemo(
     () => buildChatTimelineRows(chatMessages, { showThinkingIndicator }),
@@ -1088,19 +1178,21 @@ export function MainPane({
   const workspaceStatusLoading = workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
   const diffPanel = showDiffPanel ? (
     <WorkspaceDiffPanel
-      appId={showCloudDiffPanel ? null : activeWorkspaceAppId}
-      workspaceId={showCloudDiffPanel ? selectedCloudSandboxId : activeWorkspaceId}
-      workspaceKind={showCloudDiffPanel ? null : activeWorkspaceKind}
+      appId={rightSidebarUsesSandbox ? null : activeWorkspaceAppId}
+      workspaceId={rightSidebarUsesSandbox ? rightSidebarSandboxId : activeWorkspaceAppId}
+      workspaceKind={rightSidebarUsesSandbox ? null : "local_project"}
       connection={connection}
-      diff={showCloudDiffPanel ? null : workspaceDiff}
+      runtimeEvents={runtimeEvents}
+      diff={rightSidebarUsesSandbox ? null : workspaceDiff}
       editorPreferences={bootstrap?.preferences.editor ?? null}
-      loading={showCloudDiffPanel ? cloudLoading : diffBusy || workspaceStatusLoading}
+      loading={rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
       openFileRequest={openDiffFileRequest}
       sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
+      sourceSwitcher={rightSidebarSourceSwitcher}
       tabRequest={rightPanelTabRequest}
-      workspaceName={showCloudDiffPanel ? selectedCloudWorkItem?.title ?? "Cloud environment" : workspaceName}
-      workspaceInitialized={showCloudDiffPanel ? Boolean(selectedCloudSandboxId) : Boolean(workspaceState?.initialized)}
-      workspaceError={showCloudDiffPanel ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
+      workspaceName={rightSidebarUsesSandbox ? selectedCloudWorkItem?.title ?? "Sandbox" : workspaceName}
+      workspaceInitialized={rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
+      workspaceError={rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
       onRefresh={() => void refreshWorkspaceDiff()}
@@ -1122,10 +1214,10 @@ export function MainPane({
         goalRuntime,
       }}
       sandboxFileSource={
-        showCloudDiffPanel
+        rightSidebarUsesSandbox
           ? {
-            sandboxId: selectedCloudSandboxId,
-            emptyMessage: "No cloud environment filesystem yet.",
+            sandboxId: rightSidebarSandboxId,
+            emptyMessage: "No sandbox filesystem yet.",
           }
           : null
       }
@@ -1146,6 +1238,7 @@ export function MainPane({
       codexPermissionMode={codexPermissionMode}
       codexReasoningEffort={codexReasoningEffort}
       connection={connection}
+      connectedAppMentions={connectedAppMentions}
       mentionApps={mentionApps}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
@@ -1167,8 +1260,7 @@ export function MainPane({
       onProjectTargetChange={changeProjectTarget}
       onResolveApproval={resolveApproval}
       onResizeStart={onDiffPanelResizeStart}
-      onSelectReview={onShowReviewPanel}
-      onSelectSummary={onShowSummaryPanel}
+      onSelectFiles={onShowFilesPanel}
       onShowBrowserPanel={onShowBrowserPanel}
       onStop={onStopRightChat}
       onSubmit={onSubmitRightChat}
@@ -1203,7 +1295,7 @@ export function MainPane({
       onBack={onOpenCloudHome}
       connection={connection}
       showToast={showToast}
-      onModelChange={setDraftModel}
+      onModelChange={changeMainComposerModel}
       onSetupCloudProject={onSetupCloudProject}
       onCreateWork={onCreateCloudWork}
       onSelectWorkItem={onSelectCloudWorkItem}
@@ -1213,7 +1305,7 @@ export function MainPane({
       onCancelTask={onCancelCloudWorkItemTask}
       localProjectName={cloudWorkItemLocalProjectName}
       onApplyLocalPatch={onApplyCloudWorkItemPatchLocally}
-      onShowFiles={selectedCloudSandboxId ? onShowDiffPanel : undefined}
+      onShowFiles={selectedCloudSandboxId ? onShowFilesPanel : undefined}
     />
   );
   return (
@@ -1226,6 +1318,7 @@ export function MainPane({
         <Suspense fallback={null}>
           <AppsView
             account={bootstrap?.account ?? null}
+            connection={connection}
             defaultTeamId={bootstrap?.preferences.defaultTeamId ?? null}
             onToast={showToast}
           />
@@ -1357,12 +1450,15 @@ export function MainPane({
                 mode="dock"
                 prompt={prompt}
                 mentionApps={mentionApps}
+                connectedAppMentions={connectedAppMentions}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
                 createPipelineRuntime={createPipelineRuntime}
                 busy={turnRunning}
                 running={turnRunning}
+                steerAutoDispatchBlocked={steerAutoDispatchBlocked || Boolean(pendingApproval)}
+                steerAutoDispatchReady={steerAutoDispatchReady && !pendingApproval}
                 showProjectFooter={false}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
@@ -1377,7 +1473,7 @@ export function MainPane({
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
-                onModelChange={setDraftModel}
+                onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onPromptChange={setPrompt}
@@ -1412,12 +1508,15 @@ export function MainPane({
                 mode="start"
                 prompt={prompt}
                 mentionApps={mentionApps}
+                connectedAppMentions={connectedAppMentions}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
                 createPipelineRuntime={createPipelineRuntime}
                 busy={turnRunning}
                 running={turnRunning}
+                steerAutoDispatchBlocked={steerAutoDispatchBlocked || Boolean(pendingApproval)}
+                steerAutoDispatchReady={steerAutoDispatchReady && !pendingApproval}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
@@ -1431,7 +1530,7 @@ export function MainPane({
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
-                onModelChange={setDraftModel}
+                onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onPromptChange={setPrompt}

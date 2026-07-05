@@ -7,6 +7,7 @@ import {
   type AppPreferences,
   type CreatePipelineRequest,
   type CreatePipelineSnapshot,
+  type ModelUsageRecord,
   type RuntimeEvent,
   type Turn,
 } from "@openpond/contracts";
@@ -338,6 +339,7 @@ describe("Insights goal loop", () => {
       await appendToolFailureEvidence(harness, "source_session_tools");
       await appendRepeatedCorrectionEvidence(harness, "source_session_corrections");
       await appendAbandonedGoalEvidence(harness, "source_session_goal");
+      await appendUsageSpikeEvidence(harness);
       await harness.store.insertTurn(turnFixture({
         id: "failed_turn_1",
         sessionId: "source_session_failed",
@@ -361,6 +363,7 @@ describe("Insights goal loop", () => {
       expect(sources).toContain("abandoned_goal");
       expect(sources).toContain("stuck_turn");
       expect(sources).toContain("unresolved_conversation");
+      expect(sources).toContain("usage_anomaly");
       expect(response.runs[0]?.evidenceSources).toEqual(
         expect.arrayContaining([
           "tool_failure",
@@ -368,6 +371,7 @@ describe("Insights goal loop", () => {
           "abandoned_goal",
           "stuck_turn",
           "unresolved_conversation",
+          "usage_anomaly",
         ]),
       );
 
@@ -376,6 +380,14 @@ describe("Insights goal loop", () => {
       expect(toolOnly.items[0]?.payload.evidenceSource).toBe("tool_failure");
       expect(toolOnly.runs).toHaveLength(1);
       expect(toolOnly.runs[0]?.trigger).toBe("manual");
+      const usageOnly = await harness.service.list({ evidenceSource: "usage_anomaly", runTrigger: "manual" });
+      expect(usageOnly.items).toHaveLength(1);
+      expect(usageOnly.items[0]?.payload).toMatchObject({
+        detector: "usage-anomaly",
+        anomalyKind: "model_usage_spike",
+        provider: "openrouter",
+        visibility: "user_facing",
+      });
 
       const failedRuns = await harness.service.list({ runStatus: "failed" });
       expect(failedRuns.runs).toHaveLength(0);
@@ -396,6 +408,7 @@ describe("Insights goal loop", () => {
             abandonedGoals: false,
             userCorrections: false,
             unresolvedConversations: false,
+            usageAnomalies: false,
           },
         }),
       );
@@ -616,6 +629,105 @@ async function appendAbandonedGoalEvidence(
       },
     },
   });
+}
+
+async function appendUsageSpikeEvidence(
+  harness: ReturnType<typeof createInsightsHarness>,
+): Promise<void> {
+  const anchorMs = Date.now();
+  for (let index = 0; index < 3; index += 1) {
+    await harness.store.upsertModelUsageRecord(usageRecord({
+      requestId: `usage_baseline_${index}`,
+      startedAt: new Date(anchorMs - (index + 2) * 24 * 60 * 60 * 1000).toISOString(),
+      totalTokens: 1000,
+    }));
+  }
+  await harness.store.upsertModelUsageRecord(usageRecord({
+    requestId: "usage_current_spike",
+    startedAt: new Date(anchorMs - 60 * 60 * 1000).toISOString(),
+    totalTokens: 6200,
+  }));
+  await harness.store.upsertModelUsageRecord(usageRecord({
+    requestId: "usage_insights_self",
+    sessionId: "insights_self_session",
+    turnId: "insights_self_turn",
+    startedAt: new Date(anchorMs - 30 * 60 * 1000).toISOString(),
+    requestKind: "insights_scan",
+    visibility: "system",
+    totalTokens: 200_000,
+    attribution: {
+      ...usageRecord().attribution,
+      surface: "insights",
+      workflowKind: "scan",
+      sessionId: "insights_self_session",
+      turnId: "insights_self_turn",
+      insightRunId: "insights_self_run",
+    },
+  }));
+}
+
+function usageRecord(patch: Partial<ModelUsageRecord> = {}): ModelUsageRecord {
+  return {
+    id: `record_${patch.requestId ?? "usage_default"}`,
+    requestId: "usage_default",
+    requestOrdinal: 0,
+    sessionId: "source_session_usage",
+    turnId: "source_turn_usage",
+    provider: "openrouter",
+    model: "anthropic/claude-sonnet-4",
+    route: "local_byok",
+    source: "provider_usage",
+    requestKind: "chat_turn",
+    visibility: "user_facing",
+    status: "completed",
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    durationMs: 1000,
+    firstTokenMs: 100,
+    promptTokens: null,
+    completionTokens: null,
+    totalTokens: 1000,
+    errorType: null,
+    errorMessage: null,
+    attribution: {
+      surface: "chat",
+      workflowKind: "direct_chat",
+      sessionId: patch.sessionId ?? "source_session_usage",
+      turnId: patch.turnId ?? "source_turn_usage",
+      insightRunId: null,
+      goalId: null,
+      createPipelineRequestId: null,
+      createPipelineId: null,
+      commandName: null,
+      commandSource: null,
+      appId: null,
+      workspaceKind: "local_project",
+      workspaceId: "project_usage",
+      localProjectId: "project_usage",
+      cloudProjectId: null,
+      sourceEventSequence: null,
+    },
+    ...patch,
+    attribution: {
+      surface: "chat",
+      workflowKind: "direct_chat",
+      sessionId: patch.sessionId ?? "source_session_usage",
+      turnId: patch.turnId ?? "source_turn_usage",
+      insightRunId: null,
+      goalId: null,
+      createPipelineRequestId: null,
+      createPipelineId: null,
+      commandName: null,
+      commandSource: null,
+      appId: null,
+      workspaceKind: "local_project",
+      workspaceId: "project_usage",
+      localProjectId: "project_usage",
+      cloudProjectId: null,
+      sourceEventSequence: null,
+      ...(patch.attribution ?? {}),
+    },
+  };
 }
 
 function turnFixture(input: {

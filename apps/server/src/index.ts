@@ -11,12 +11,16 @@ import {
   type InsightStatus,
   type InsightsListResponse,
   type InsightsScanResponse,
+  type ModelUsageRecord,
   type RuntimeEvent,
   type ServerStatus,
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import { loadOpenPondProfileState, readProfileSkill, runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "@openpond/cloud";
-import { getBundledRuntimeVersion } from "@openpond/runtime";
+import {
+  getBundledRuntimeVersion,
+  streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
+} from "@openpond/runtime";
 import { DEFAULT_HOST, DEFAULT_PORT, VERSION } from "./constants.js";
 import { runOpenPondServerCli } from "./cli.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
@@ -51,26 +55,33 @@ import {
   runtimeEventPageRequestFromUrl,
   runtimeEventsPagePayloadFromEntries,
 } from "./api/event-page.js";
+import { usageRecordsPayload, usageSummaryPayload } from "./api/usage-payloads.js";
 import { readProvidersFile } from "./openpond/provider-settings.js";
 import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
 import { readProviderSecrets } from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
 import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
+import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { isCodexHistorySessionId } from "./codex-history.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
+import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { readChatAttachmentImageFile } from "./chat-attachments.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
 import { organizationRequestPayload } from "./openpond/organizations.js";
-import { sandboxRequestPayload } from "./openpond/sandboxes.js";
+import {
+  listSandboxIntegrationConnections,
+  sandboxRequestPayload,
+} from "./openpond/sandboxes.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createInsightsService } from "./insights/create-edit-insights.js";
 import { createInsightsBackgroundLoop } from "./insights/insights-background-loop.js";
+import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
@@ -86,7 +97,10 @@ export async function createOpenPondServer(
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
   const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds);
+  const streamOpenPondHostedChatTurn =
+    options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn;
   const executeWebSearch = createWebSearchExecutorFromEnv();
+  const executeConnectedAppTool = createCloudConnectedAppToolExecutor();
   const attachmentRootDir = path.join(storeDir, "attachments");
   const logger = createLogger({
     channel: "server",
@@ -109,8 +123,9 @@ export async function createOpenPondServer(
     createRuntimeEventBus({
       logger,
       store,
-    });
+  });
   const workQueues = createServerWorkQueues(logger);
+  const browserControlQueue = createBrowserControlQueue();
   const codexSessions = new Map<string, RuntimeCodexSession>();
   const workspaceLocks = new Map<string, Promise<unknown>>();
   let actualPort = port;
@@ -217,17 +232,18 @@ export async function createOpenPondServer(
     reorderSidebarApps,
     refreshOpenPondPayload,
     loadMoreOpenPondAppsPayload,
-	      switchOpenPondPayload,
-	      saveOpenPondAccountPayload,
-	      updateOpenPondAccountConfigPayload,
-	      profileCurrentPayload,
-	      profileCatalogPayload,
-	      profileInitPayload,
-	      profileLoadPayload,
-	      profileCheckPayload,
-	      profileCommitPayload,
-	      profilePushPayload,
-	      profileRunPayload,
+    switchOpenPondPayload,
+    saveOpenPondAccountPayload,
+    updateOpenPondAccountConfigPayload,
+    profileCurrentPayload,
+    profileCatalogPayload,
+    profileInitPayload,
+    profileLoadPayload,
+    profileCheckPayload,
+    profileCommitPayload,
+    profilePushPayload,
+    profileRunPayload,
+    recordPreflightTurnFailure,
     waitForOpenPondRefresh,
   } = createServerPayloads({
     attachmentRootDir,
@@ -372,6 +388,9 @@ export async function createOpenPondServer(
     executeProfileSkillCommand: ({ prompt }) => runProfileSkillCommandFromPrompt(prompt),
     executeProfileSkillGoal: (input) => runProfileSkillGoalCommand(input),
     executeWebSearch: executeWebSearch ?? undefined,
+    executeConnectedAppTool,
+    browserToolExecutor: browserControlQueue.executor,
+    listIntegrationConnections: listSandboxIntegrationConnections,
     loadPersonalizationSoul: async () => (await loadPersonalizationSettings(store, storeDir)).soul,
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
@@ -390,14 +409,18 @@ export async function createOpenPondServer(
         requestId: input.requestId,
         signal: input.signal,
       })) {
-        if (delta.type === "text_delta" || delta.type === "reasoning_delta") {
+        if (delta.type === "text_delta") {
           yield { text: delta.text, raw: delta.raw };
+        }
+        if (delta.type === "reasoning_delta") {
+          yield { reasoningText: delta.text, raw: delta.raw };
         }
         if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls, raw: delta.raw };
         if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
         if (delta.type === "finish") yield { finishReason: delta.finishReason, raw: delta.raw };
       }
     },
+    streamOpenPondHostedChatTurn,
     turnFollowUpQueue: workQueues.turnFollowUp,
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
@@ -485,6 +508,93 @@ export async function createOpenPondServer(
     );
   }
 
+  async function safeUpsertModelUsageRecord(record: ModelUsageRecord): Promise<void> {
+    try {
+      await store.upsertModelUsageRecord(record);
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: record.sessionId ?? undefined,
+          turnId: record.turnId ?? undefined,
+          name: "diagnostic",
+          source: "server",
+          status: "failed",
+          output: error instanceof Error ? error.message : "Failed to persist model usage record.",
+          data: {
+            kind: "model_usage_record_failed",
+            requestId: record.requestId,
+            provider: record.provider,
+            model: record.model,
+          },
+        }),
+      ).catch(() => undefined);
+    }
+  }
+
+  async function runRecordedManualHostedContextCompaction(input: {
+    session: Awaited<ReturnType<typeof getSession>>;
+    events: RuntimeEvent[];
+    provider: "openpond";
+    model: string | null;
+    requestId: string;
+  }) {
+    const usageState: {
+      recorder: Awaited<ReturnType<typeof startProviderRequestUsageRecorder>> | null;
+      finalized: boolean;
+    } = { recorder: null, finalized: false };
+
+    async function failUsageRecorder(error: unknown): Promise<void> {
+      if (!usageState.recorder || usageState.finalized) return;
+      usageState.finalized = true;
+      await usageState.recorder.fail(
+        error,
+        error instanceof Error && error.name === "AbortError" ? "interrupted" : "failed",
+      );
+    }
+
+    try {
+      const result = await runHostedContextCompaction({
+        session: input.session,
+        events: input.events,
+        provider: input.provider,
+        model: input.model,
+        streamOpenPondHostedChatTurn: async function* (streamInput) {
+          usageState.recorder = await startProviderRequestUsageRecorder({
+            session: input.session,
+            turn: null,
+            provider: input.provider,
+            model: streamInput.model ?? input.model ?? "unknown",
+            requestId: input.requestId,
+            requestOrdinal: 0,
+            requestKind: "context_compaction",
+            upsert: safeUpsertModelUsageRecord,
+          });
+          try {
+            for await (const delta of streamOpenPondHostedChatTurn(streamInput)) {
+              if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
+              if (delta.type === "reasoning_delta" && delta.text) {
+                usageState.recorder.observeDelta({ reasoningText: delta.text });
+              }
+              if (delta.type === "usage") usageState.recorder.observeDelta({ usage: delta.usage });
+              yield delta;
+            }
+          } catch (error) {
+            await failUsageRecorder(error);
+            throw error;
+          }
+        },
+      });
+      if (usageState.recorder && !usageState.finalized) {
+        usageState.finalized = true;
+        await usageState.recorder.complete();
+      }
+      return result;
+    } catch (error) {
+      await failUsageRecorder(error);
+      throw error;
+    }
+  }
+
   async function compactSession(sessionId: string, payload: unknown): Promise<unknown> {
     const input = CompactSessionRequestSchema.parse(payload ?? {});
     const session = await getSession(sessionId);
@@ -495,22 +605,21 @@ export async function createOpenPondServer(
     const priorEvents = (await store.snapshot()).events.filter(
       (item) => item.sessionId === sessionId,
     );
-    await appendRuntimeEvent(
-      event({
-        sessionId,
-        name: "session.compaction.started",
-        source: "server",
-        appId: session.appId,
-        status: "started",
-        output: "Compacting conversation context",
-        data: {
-          version: 1,
-          provider: session.provider,
-          model: input.model ?? null,
-          reason: input.reason,
-        },
-      }),
-    );
+    const startedEvent = event({
+      sessionId,
+      name: "session.compaction.started",
+      source: "server",
+      appId: session.appId,
+      status: "started",
+      output: "Compacting conversation context",
+      data: {
+        version: 1,
+        provider: session.provider,
+        model: input.model ?? null,
+        reason: input.reason,
+      },
+    });
+    await appendRuntimeEvent(startedEvent);
 
     try {
       if (session.provider === "codex") {
@@ -543,11 +652,12 @@ export async function createOpenPondServer(
       if (!provider)
         throw new Error(`Context compaction is not supported for ${session.provider}.`);
       const model = input.model ?? null;
-      const result = await runHostedContextCompaction({
+      const result = await runRecordedManualHostedContextCompaction({
         session,
         events: priorEvents,
         provider,
         model,
+        requestId: `${session.id}:context-compaction:${startedEvent.id}`,
       });
       const completedEvent = event({
         sessionId,
@@ -607,6 +717,14 @@ export async function createOpenPondServer(
       ...rows,
       request,
     });
+  }
+
+  async function usageSummaryRoutePayload(requestUrl: URL): Promise<unknown> {
+    return usageSummaryPayload({ requestUrl, store });
+  }
+
+  async function usageRecordsRoutePayload(requestUrl: URL): Promise<unknown> {
+    return usageRecordsPayload({ requestUrl, store });
   }
 
   async function listInsightsPayload(requestUrl: URL): Promise<unknown> {
@@ -696,6 +814,8 @@ export async function createOpenPondServer(
       refreshCodexStatus,
       bootstrapPayload,
       eventPagePayload,
+      usageSummaryPayload: usageSummaryRoutePayload,
+      usageRecordsPayload: usageRecordsRoutePayload,
       listInsightsPayload,
       runInsightsScanPayload,
       askInsightsPayload,
@@ -779,9 +899,14 @@ export async function createOpenPondServer(
       disableRemoteAccessPayload: remoteAccess.disable,
       voiceTranscriptionStatusPayload: voiceTranscription.status,
       transcribeVoicePayload: voiceTranscription.transcribe,
+      browserControlRegister: browserControlQueue.registerDesktopExecutor,
+      browserControlNext: browserControlQueue.claimNext,
+      browserControlComplete: browserControlQueue.completeRequest,
+      browserControlStatus: browserControlQueue.status,
       createSession,
       patchSession: patchSessionPayload,
       sendTurn,
+      recordPreflightTurnFailure,
       updateTurnCreatePipeline,
       interruptSessionTurn,
       compactSession,
@@ -820,6 +945,7 @@ export async function createOpenPondServer(
       logger.info("server closing", { serverId });
       closing = true;
       insightsBackgroundLoop.stop();
+      browserControlQueue.close();
       await closeEventSubscribers();
       terminalWebSockets.close();
       await waitForOpenPondRefresh();
@@ -859,7 +985,8 @@ function isInsightEvidenceSourceFilter(value: string | null): value is
   | "tool_failure"
   | "abandoned_goal"
   | "user_correction"
-  | "unresolved_conversation" {
+  | "unresolved_conversation"
+  | "usage_anomaly" {
   return (
     value === "all" ||
     value === "create_edit" ||
@@ -867,7 +994,8 @@ function isInsightEvidenceSourceFilter(value: string | null): value is
     value === "tool_failure" ||
     value === "abandoned_goal" ||
     value === "user_correction" ||
-    value === "unresolved_conversation"
+    value === "unresolved_conversation" ||
+    value === "usage_anomaly"
   );
 }
 

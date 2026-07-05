@@ -6,6 +6,7 @@ import { normalizeChatModel, projectSelectionKey } from "../lib/app-models";
 
 export function useProjectTargetActions({
   addProjectFolder,
+  addProjectFolderPath,
   appDispatch,
   busy,
   cloudProjectById,
@@ -16,6 +17,7 @@ export function useProjectTargetActions({
   newProjectBusy,
   newProjectMode,
   newProjectName,
+  newProjectPath,
   projectTargetValue,
   setDiffPanelOpen,
   setDraftModel,
@@ -24,10 +26,12 @@ export function useProjectTargetActions({
   setNewProjectBusy,
   setNewProjectDialogOpen,
   setNewProjectName,
+  setNewProjectPath,
   showToast,
   workspaceBusy,
 }: {
   addProjectFolder: () => void | Promise<void>;
+  addProjectFolderPath: (path: string) => Promise<unknown>;
   appDispatch: Dispatch<AppAction>;
   busy: boolean;
   cloudProjectById: Map<string, CloudProject>;
@@ -38,6 +42,7 @@ export function useProjectTargetActions({
   newProjectBusy: boolean;
   newProjectMode: NewProjectMode;
   newProjectName: string;
+  newProjectPath: string;
   projectTargetValue: string;
   setDiffPanelOpen: Dispatch<SetStateAction<boolean>>;
   setDraftModel: Dispatch<SetStateAction<string>>;
@@ -46,6 +51,7 @@ export function useProjectTargetActions({
   setNewProjectBusy: Dispatch<SetStateAction<boolean>>;
   setNewProjectDialogOpen: Dispatch<SetStateAction<boolean>>;
   setNewProjectName: Dispatch<SetStateAction<string>>;
+  setNewProjectPath: Dispatch<SetStateAction<string>>;
   showToast: ShowAppToast;
   workspaceBusy: boolean;
 }) {
@@ -115,29 +121,37 @@ export function useProjectTargetActions({
 
   const submitNewProjectDialog = useCallback(async () => {
     const projectName = newProjectName.trim();
-    if (!projectName || newProjectBusy) return;
+    const projectPath = newProjectPath.trim();
+    if (newProjectBusy) return;
+    if (newProjectMode === "existing-local" ? !projectPath : !projectName) return;
     setNewProjectBusy(true);
     try {
       const created =
         newProjectMode === "cloud"
           ? await createCloudProjectFromScratch(projectName)
+          : newProjectMode === "existing-local"
+            ? await addProjectFolderPath(projectPath)
           : await createProjectFromScratch(projectName);
       if (created) {
         setNewProjectDialogOpen(false);
         setNewProjectName("");
+        setNewProjectPath("");
       }
     } finally {
       setNewProjectBusy(false);
     }
   }, [
+    addProjectFolderPath,
     createCloudProjectFromScratch,
     createProjectFromScratch,
     newProjectBusy,
     newProjectMode,
     newProjectName,
+    newProjectPath,
     setNewProjectBusy,
     setNewProjectDialogOpen,
     setNewProjectName,
+    setNewProjectPath,
   ]);
 
   return {

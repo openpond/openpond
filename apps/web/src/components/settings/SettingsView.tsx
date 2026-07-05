@@ -12,6 +12,7 @@ import { ProfileSettingsSection } from "./ProfileSettingsSection";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { RemoteAccessSettingsSection } from "./RemoteAccessSettingsSection";
 import { SettingsNavigation } from "./SettingsNavigation";
+import { UsageSettingsSection } from "./UsageSettingsSection";
 import { WalletView } from "../wallet/WalletView";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
@@ -29,6 +30,7 @@ export function SettingsView({
   onError,
   onToast,
   onBack,
+  onOpenSourceSession,
   initialSection = "account",
 }: {
   payload: BootstrapPayload | null;
@@ -37,6 +39,7 @@ export function SettingsView({
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onBack: () => void;
+  onOpenSourceSession?: (sessionId: string) => void;
   initialSection?: SettingsSection;
 }) {
   const [section, setSection] = useState<SettingsSection>(initialSection);
@@ -127,6 +130,13 @@ export function SettingsView({
           <EditorSettingsSection preferences={preferences} {...editorSettings} />
         ) : section === "remote" ? (
           <RemoteAccessSettingsSection {...remoteAccessSettings} />
+        ) : section === "usage" ? (
+          <UsageSettingsSection
+            connection={connection}
+            enabled={section === "usage"}
+            onError={onError}
+            onOpenSourceSession={onOpenSourceSession}
+          />
         ) : section === "personalization" ? (
           <PersonalizationSettingsSection {...personalizationSettings} />
         ) : (

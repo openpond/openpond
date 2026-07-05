@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -18,6 +19,7 @@ import {
   OpenCloudWorkItemRequestSchema,
   PatchSidebarAppPreferenceRequestSchema,
   PatchSessionRequestSchema,
+  RecordPreflightTurnFailureRequestSchema,
   PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
   SaveOpenPondAccountRequestSchema,
@@ -55,6 +57,7 @@ import {
   type Session,
   type SidebarAppPreference,
   type SidebarAppPreferences,
+  type UsageRequestAttribution,
   type WorkspaceState,
 } from "@openpond/contracts";
 import {
@@ -569,6 +572,7 @@ export function createServerPayloads(deps: {
   };
   const providerDiagnostics = new ProviderDiagnosticsTracker();
   const activeCodexHistoryTurns = new Map<string, ActiveCodexHistoryTurn>();
+  let appPreferencesUpdateQueue: Promise<void> = Promise.resolve();
 
   async function loadAppPreferences(): Promise<AppPreferences> {
     const entry = await store.getCacheEntry<unknown>(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY);
@@ -625,12 +629,17 @@ export function createServerPayloads(deps: {
 
   async function updateAppPreferencesPayload(payload: unknown): Promise<BootstrapPayload> {
     const input = UpdateAppPreferencesRequestSchema.parse(payload);
-    const current = await loadAppPreferences();
-    const next = normalizeAppPreferences({ ...current, ...input });
-    await store.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, next);
-    if (hasObjectKey(payload, "goalStorageLocation")) {
-      await saveGlobalConfig({ goalStorageLocation: next.goalStorageLocation });
-    }
+    const syncGoalStorageLocation = hasObjectKey(payload, "goalStorageLocation");
+    const update = appPreferencesUpdateQueue.then(async () => {
+      const current = await loadAppPreferences();
+      const next = normalizeAppPreferences({ ...current, ...input });
+      await store.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, next);
+      if (syncGoalStorageLocation) {
+        await saveGlobalConfig({ goalStorageLocation: next.goalStorageLocation });
+      }
+    });
+    appPreferencesUpdateQueue = update.catch(() => undefined);
+    await update;
     return bootstrapPayload();
   }
 
@@ -1155,6 +1164,54 @@ export function createServerPayloads(deps: {
     }
   }
 
+  async function recordPreflightTurnFailure(
+    sessionId: string,
+    payload: unknown,
+  ): Promise<BootstrapPayload> {
+    const input = RecordPreflightTurnFailureRequestSchema.parse(payload);
+    const session = await store.getSession(sessionId);
+    if (!session) throw new Error("Session not found");
+    const turnId = `preflight_${randomUUID()}`;
+    await store.updateSession(sessionId, (current) => ({
+      ...current,
+      status: "failed",
+      updatedAt: now(),
+    }));
+    await appendRuntimeEvent(
+      event({
+        sessionId,
+        turnId,
+        name: "turn.started",
+        source: "chat_action",
+        appId: session.appId,
+        status: "started",
+        args: {
+          prompt: input.prompt,
+          preflight: {
+            target: input.target,
+          },
+        },
+      }),
+    );
+    await appendRuntimeEvent(
+      event({
+        sessionId,
+        turnId,
+        name: "turn.failed",
+        source: "server",
+        appId: session.appId,
+        status: "failed",
+        error: input.error,
+        data: {
+          preflight: {
+            target: input.target,
+          },
+        },
+      }),
+    );
+    return bootstrapPayload({ forceOpenPond: false });
+  }
+
   async function interruptCodexHistoryTurnPayload(sessionId: string): Promise<CodexHistoryTurnInterruptResponse> {
     const activeTurn = activeCodexHistoryTurns.get(sessionId);
     if (!activeTurn) return { interrupted: false, reason: "no_active_openpond_turn" };
@@ -1280,94 +1337,107 @@ export function createServerPayloads(deps: {
       input.projectName?.trim() ||
       linkedProject?.projectName?.trim() ||
       localProject.name;
-    const internalRepoPath =
-      linkedProject?.sourceRepoUrl?.trim() || internalRepoPathForLocalProject(localProject);
-    const fallbackReadme = `# ${projectName}\n\nUploaded from OpenPond Desktop.\n`;
-    const initialProjectRecord = linkedProject?.projectId
-      ? await sandboxProjectRecordOrFallback({
-          projectId: linkedProject.projectId,
-          teamId: input.teamId,
-          fallback: {
-            id: linkedProject.projectId,
-            teamId: input.teamId,
-            name: projectName,
-            slug: linkedProject.projectSlug,
-            sourceType: "internal_repo",
-            internalRepoPath,
-            defaultBranch: branch,
-          },
-        })
-      : await upsertInternalSandboxProject({
-          teamId: input.teamId,
-          projectName,
-          branch,
-          internalRepoPath,
-          localProjectId: localProject.id,
-        });
-    const targetProjectId = stringValue(initialProjectRecord.id);
-    if (!targetProjectId) throw new Error("OpenPond Cloud Project was created without an id.");
-
-    const gitPayload = asRecord(
-      await sandboxRequestPayload({
-        type: "project_git",
-        projectId: targetProjectId,
-        payload: { teamId: input.teamId },
-      }),
-    );
-    const repo = asRecord(gitPayload.repo);
-    const repoUrl = stringValue(repo.repoUrl);
-    if (!repoUrl) throw new Error("OpenPond Cloud Project did not return a Git remote URL.");
-    const accountContext = await loadOpenPondAccountContext();
-    const apiKey = accountContext.token?.trim();
-    if (!apiKey) throw new Error("OpenPond account API key is required to push source.");
-
-    const commitMessage = `Upload ${localProject.name} from OpenPond Desktop`;
-    const uploadResult = await uploadLocalProjectCloudSource({
-      localProject,
-      targetProjectId,
-      teamId: input.teamId,
-      repoUrl,
-      apiKey,
-      branch,
-      commitMessage,
-      fallbackReadme,
-    });
-    const syncPayload = uploadResult.syncPayload;
-    const uploadedProjectRecord = asRecord(syncPayload.project);
-    const projectRecord =
-      Object.keys(uploadedProjectRecord).length > 0
-        ? uploadedProjectRecord
-        : Object.keys(asRecord(gitPayload.project)).length > 0
-          ? asRecord(gitPayload.project)
-          : initialProjectRecord;
-    const project = cloudProjectFromSandboxRecord(
-      { ...projectRecord, teamId: input.teamId },
-      input.teamId,
-      projectName,
-      branch,
-    );
-    const updatedLocalProject = await updateLocalProjectAgentSetup(store, localProject.id, {
-      linkedSandboxProject: {
+    const chatContext = input.chatSessionId
+      ? {
+          sessionId: input.chatSessionId,
+          turnId: `cloud_source_upload_${randomUUID()}`,
+          displayPrompt: input.displayPrompt?.trim() || `/sync-cloud ${localProject.name}`,
+        }
+      : null;
+    if (chatContext) {
+      await beginCloudSourceUploadChatOperation({
+        branch,
+        chatContext,
+        localProject,
+        projectName,
         teamId: input.teamId,
-        projectId: project.id,
-        projectSlug: project.slug,
-        projectName: project.name,
-        sourceRepoUrl: repoUrl,
-        defaultBranch: project.defaultBranch ?? stringValue(repo.defaultBranch) ?? uploadResult.branch,
-        lastUploadedCommit: uploadResult.headCommit,
-        lastUploadTransport: uploadResult.transport,
-        manifestPath: project.manifestPath,
-        manifestHash: project.manifestHash,
-        syncedAt: project.syncedAt ?? now(),
-        linkedAt: linkedProject?.linkedAt ?? now(),
-      },
-    });
+      });
+    }
 
-    return {
-      project,
-      localProject: updatedLocalProject,
-      bootstrap: await bootstrapPayload({ forceOpenPond: true }),
-      upload: {
+    try {
+      const internalRepoPath =
+        linkedProject?.sourceRepoUrl?.trim() || internalRepoPathForLocalProject(localProject);
+      const fallbackReadme = `# ${projectName}\n\nUploaded from OpenPond Desktop.\n`;
+      const initialProjectRecord = linkedProject?.projectId
+        ? await sandboxProjectRecordOrFallback({
+            projectId: linkedProject.projectId,
+            teamId: input.teamId,
+            fallback: {
+              id: linkedProject.projectId,
+              teamId: input.teamId,
+              name: projectName,
+              slug: linkedProject.projectSlug,
+              sourceType: "internal_repo",
+              internalRepoPath,
+              defaultBranch: branch,
+            },
+          })
+        : await upsertInternalSandboxProject({
+            teamId: input.teamId,
+            projectName,
+            branch,
+            internalRepoPath,
+            localProjectId: localProject.id,
+          });
+      const targetProjectId = stringValue(initialProjectRecord.id);
+      if (!targetProjectId) throw new Error("OpenPond Cloud Project was created without an id.");
+
+      const gitPayload = asRecord(
+        await sandboxRequestPayload({
+          type: "project_git",
+          projectId: targetProjectId,
+          payload: { teamId: input.teamId },
+        }),
+      );
+      const repo = asRecord(gitPayload.repo);
+      const repoUrl = stringValue(repo.repoUrl);
+      if (!repoUrl) throw new Error("OpenPond Cloud Project did not return a Git remote URL.");
+      const accountContext = await loadOpenPondAccountContext();
+      const apiKey = accountContext.token?.trim();
+      if (!apiKey) throw new Error("OpenPond account API key is required to push source.");
+
+      const commitMessage = `Upload ${localProject.name} from OpenPond Desktop`;
+      const uploadResult = await uploadLocalProjectCloudSource({
+        localProject,
+        targetProjectId,
+        teamId: input.teamId,
+        repoUrl,
+        apiKey,
+        branch,
+        commitMessage,
+        fallbackReadme,
+      });
+      const syncPayload = uploadResult.syncPayload;
+      const uploadedProjectRecord = asRecord(syncPayload.project);
+      const projectRecord =
+        Object.keys(uploadedProjectRecord).length > 0
+          ? uploadedProjectRecord
+          : Object.keys(asRecord(gitPayload.project)).length > 0
+            ? asRecord(gitPayload.project)
+            : initialProjectRecord;
+      const project = cloudProjectFromSandboxRecord(
+        { ...projectRecord, teamId: input.teamId },
+        input.teamId,
+        projectName,
+        branch,
+      );
+      const updatedLocalProject = await updateLocalProjectAgentSetup(store, localProject.id, {
+        linkedSandboxProject: {
+          teamId: input.teamId,
+          projectId: project.id,
+          projectSlug: project.slug,
+          projectName: project.name,
+          sourceRepoUrl: repoUrl,
+          defaultBranch: project.defaultBranch ?? stringValue(repo.defaultBranch) ?? uploadResult.branch,
+          lastUploadedCommit: uploadResult.headCommit,
+          lastUploadTransport: uploadResult.transport,
+          manifestPath: project.manifestPath,
+          manifestHash: project.manifestHash,
+          syncedAt: project.syncedAt ?? now(),
+          linkedAt: linkedProject?.linkedAt ?? now(),
+        },
+      });
+      const upload = {
         rootPath: uploadResult.rootPath,
         branch: uploadResult.branch,
         headCommit: uploadResult.headCommit,
@@ -1376,8 +1446,216 @@ export function createServerPayloads(deps: {
         skippedCount: uploadResult.skippedCount,
         initializedEmptyProject: uploadResult.initializedEmptyProject,
         transport: uploadResult.transport,
-      },
+      };
+      if (chatContext) {
+        await completeCloudSourceUploadChatOperation({
+          chatContext,
+          localProject,
+          project,
+          upload,
+        });
+      }
+      return {
+        project,
+        localProject: updatedLocalProject,
+        bootstrap: await bootstrapPayload({ forceOpenPond: true }),
+        upload,
+      };
+    } catch (error) {
+      if (chatContext) {
+        await failCloudSourceUploadChatOperation({
+          chatContext,
+          error,
+          localProject,
+        });
+      }
+      throw error;
+    }
+  }
+
+  type CloudSourceUploadChatContext = {
+    displayPrompt: string;
+    sessionId: string;
+    turnId: string;
+  };
+
+  async function updateCloudSourceUploadChatSession(
+    sessionId: string,
+    patch: Partial<Session>,
+  ): Promise<Session> {
+    const updated = await store.updateSession(sessionId, (session) => ({
+      ...session,
+      ...patch,
+      updatedAt: now(),
+    }));
+    if (!updated) throw new Error("Upload chat session not found.");
+    return updated;
+  }
+
+  async function beginCloudSourceUploadChatOperation(input: {
+    branch: string;
+    chatContext: CloudSourceUploadChatContext;
+    localProject: LocalProject;
+    projectName: string;
+    teamId: string;
+  }): Promise<void> {
+    const session = await updateCloudSourceUploadChatSession(input.chatContext.sessionId, {
+      status: "active",
+      title: `Sync ${input.localProject.name} to Cloud`,
+    });
+    await appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: input.chatContext.turnId,
+        name: "turn.started",
+        source: "chat_action",
+        appId: session.appId,
+        args: {
+          prompt: input.chatContext.displayPrompt,
+          command: "/sync-cloud",
+        },
+      }),
+    );
+    await appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: input.chatContext.turnId,
+        name: "workspace_action",
+        source: "chat_action",
+        action: "upload_cloud_source",
+        appId: session.appId,
+        status: "started",
+        output: `Uploading ${input.localProject.name} to OpenPond Git on ${input.branch}.`,
+        args: {
+          branch: input.branch,
+          localProjectId: input.localProject.id,
+          projectName: input.projectName,
+          teamId: input.teamId,
+        },
+      }),
+    );
+  }
+
+  async function completeCloudSourceUploadChatOperation(input: {
+    chatContext: CloudSourceUploadChatContext;
+    localProject: LocalProject;
+    project: CloudProject;
+    upload: {
+      branch: string;
+      byteCount: number;
+      fileCount: number;
+      headCommit: string | null;
+      initializedEmptyProject: boolean;
+      skippedCount: number;
+      transport?: "git_head" | "snapshot" | "api_source_upload";
     };
+  }): Promise<void> {
+    const session = await updateCloudSourceUploadChatSession(input.chatContext.sessionId, {
+      cloudProjectId: input.project.id,
+      cloudTeamId: input.project.teamId,
+      status: "idle",
+    });
+    await appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: input.chatContext.turnId,
+        name: "workspace_action_result",
+        source: "chat_action",
+        action: "upload_cloud_source",
+        appId: session.appId,
+        status: "completed",
+        output: cloudSourceUploadSummary({
+          branch: input.upload.branch,
+          byteCount: input.upload.byteCount,
+          cloudProjectId: input.project.id,
+          fileCount: input.upload.fileCount,
+          headCommit: input.upload.headCommit,
+          skippedCount: input.upload.skippedCount,
+        }),
+        data: {
+          cloudSourceUpload: true,
+          localProject: {
+            id: input.localProject.id,
+            name: input.localProject.name,
+            path: input.localProject.workspacePath,
+          },
+          cloudProject: {
+            id: input.project.id,
+            name: input.project.name,
+            teamId: input.project.teamId,
+            defaultBranch: input.project.defaultBranch,
+          },
+          upload: input.upload,
+        },
+      }),
+    );
+    await appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: input.chatContext.turnId,
+        name: "turn.completed",
+        source: "chat_action",
+        appId: session.appId,
+        status: "completed",
+      }),
+    );
+  }
+
+  async function failCloudSourceUploadChatOperation(input: {
+    chatContext: CloudSourceUploadChatContext;
+    error: unknown;
+    localProject: LocalProject;
+  }): Promise<void> {
+    const message = input.error instanceof Error ? input.error.message : String(input.error);
+    const session = await updateCloudSourceUploadChatSession(input.chatContext.sessionId, {
+      status: "failed",
+    });
+    await appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: input.chatContext.turnId,
+        name: "workspace_action_result",
+        source: "chat_action",
+        action: "upload_cloud_source",
+        appId: session.appId,
+        status: "failed",
+        output: `Upload failed for ${input.localProject.name}.`,
+        error: message,
+      }),
+    );
+    await appendRuntimeEvent(
+      event({
+        sessionId: session.id,
+        turnId: input.chatContext.turnId,
+        name: "turn.failed",
+        source: "chat_action",
+        appId: session.appId,
+        status: "failed",
+        error: message,
+      }),
+    );
+  }
+
+  function cloudSourceUploadSummary(input: {
+    branch: string;
+    byteCount: number;
+    cloudProjectId: string;
+    fileCount: number;
+    headCommit: string | null;
+    skippedCount: number;
+  }): string {
+    const commit = input.headCommit ? `local ${input.headCommit.slice(0, 7)}` : "no local commit";
+    return [
+      `Uploaded ${input.fileCount} file${input.fileCount === 1 ? "" : "s"} to OpenPond Git.`,
+      `${formatByteCount(input.byteCount)} · ${input.skippedCount} skipped · ${commit} · ${input.branch}`,
+      `Cloud project ${input.cloudProjectId} is ready for Hybrid or Cloud workspace use.`,
+    ].join("\n");
+  }
+
+  function formatByteCount(value: number): string {
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   async function listCloudWorkItemsPayload(payload: unknown): Promise<{ workItems: CloudWorkItem[] }> {
@@ -1469,6 +1747,7 @@ export function createServerPayloads(deps: {
       localProjectName,
       localWorkspacePath,
       requestedExecutionTarget,
+      usageAttribution,
       ...workItemInput
     } = input;
     const response = asRecord(
@@ -1483,6 +1762,7 @@ export function createServerPayloads(deps: {
             ...(localProjectId ? { localProjectId } : {}),
             ...(localProjectName ? { localProjectName } : {}),
             ...(localWorkspacePath ? { localWorkspacePath } : {}),
+            ...usageAttributionMetadata(usageAttribution ?? null),
             ...createPipelineMetadata({
               request: createPipelineRequest ?? null,
               snapshot: createPipeline ?? null,
@@ -1508,6 +1788,7 @@ export function createServerPayloads(deps: {
           metadata: {
             source: "openpond_app_cloud_create_pipeline_link",
             hidden: true,
+            ...usageAttributionMetadata(usageAttribution ?? null),
             ...createPipelineMetadata(linkedCreatePipeline),
           },
         },
@@ -1550,6 +1831,7 @@ export function createServerPayloads(deps: {
           message: input.message,
           metadata: {
             source: "openpond_app_cloud_thread",
+            ...usageAttributionMetadata(input.usageAttribution ?? null),
             ...createPipelineMetadata({
               request: input.createPipelineRequest ?? null,
               snapshot: input.createPipeline ?? null,
@@ -1572,6 +1854,7 @@ export function createServerPayloads(deps: {
     const {
       createPipelineRequest,
       createPipeline,
+      usageAttribution,
       payload: requestPayload,
       ...backgroundInput
     } = input;
@@ -1589,10 +1872,12 @@ export function createServerPayloads(deps: {
       workItemId,
       payload: {
         ...backgroundInput,
+        ...(usageAttribution ? { usageAttribution } : {}),
         branchPolicy: input.branchPolicy ?? { mode: "patch_only" },
         payload: {
           source: "openpond_app_cloud_thread",
           ...(requestPayload ?? {}),
+          ...usageAttributionMetadata(usageAttribution ?? null),
           ...createPipelineMetadata({
             request: createPipelineRequest ?? null,
             snapshot: createPipeline ?? null,
@@ -2436,6 +2721,7 @@ export function createServerPayloads(deps: {
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,
     sendCodexHistoryTurnPayload,
+    recordPreflightTurnFailure,
     interruptCodexHistoryTurnPayload,
     ...workspacePayloads,
     previewLocalProjectCloudSourcePayload,
@@ -2687,6 +2973,12 @@ function createPipelineMetadata(input: {
     ...(input.request ? { createPipelineRequest: input.request } : {}),
     ...(input.snapshot ? { createPipeline: input.snapshot } : {}),
   };
+}
+
+function usageAttributionMetadata(
+  usageAttribution: UsageRequestAttribution | null,
+): Record<string, unknown> {
+  return usageAttribution ? { usageAttribution } : {};
 }
 
 function linkCreatePipelineToWorkItem(input: {

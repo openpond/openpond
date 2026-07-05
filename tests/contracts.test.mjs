@@ -10,6 +10,7 @@ import {
   CreateSessionRequestSchema,
   ChatProviderSchema,
   ChatModelRefSchema,
+  ModelUsageRecordSchema,
   ProviderCredentialWriteRequestSchema,
   ProviderSettingsSchema,
   RuntimeEventNameSchema,
@@ -36,6 +37,82 @@ describe("contracts", () => {
       }).modelRef,
       { providerId: "openrouter", modelId: "anthropic/claude-sonnet-4" },
     );
+    assert.deepEqual(
+      SendTurnRequestSchema.parse({
+        prompt: "/skill summarize this thread",
+        usageAttribution: {
+          surface: "chat",
+          workflowKind: "slash_command",
+          commandName: "/skill",
+          commandSource: "composer_selection",
+        },
+      }).usageAttribution,
+      {
+        surface: "chat",
+        workflowKind: "slash_command",
+        commandName: "/skill",
+        commandSource: "composer_selection",
+      },
+    );
+  });
+
+  test("model usage records validate normalized token usage without raw provider payloads", () => {
+    const now = new Date().toISOString();
+    const record = ModelUsageRecordSchema.parse({
+      id: "usage_1",
+      requestId: "request_1",
+      requestOrdinal: 0,
+      sessionId: "session_1",
+      turnId: "turn_1",
+      provider: "openai",
+      model: "gpt-4.1",
+      route: "local_byok",
+      source: "provider_usage",
+      requestKind: "chat_turn",
+      visibility: "user_facing",
+      status: "completed",
+      startedAt: now,
+      completedAt: now,
+      durationMs: 1200,
+      firstTokenMs: 180,
+      promptTokens: 1000,
+      completionTokens: 250,
+      totalTokens: 1250,
+      errorType: null,
+      errorMessage: null,
+      attribution: {
+        surface: "chat",
+        workflowKind: "direct_chat",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        insightRunId: null,
+        goalId: null,
+        createPipelineRequestId: null,
+        createPipelineId: null,
+        commandName: null,
+        commandSource: null,
+        appId: null,
+        workspaceKind: "local_project",
+        workspaceId: "project_1",
+        localProjectId: "project_1",
+        cloudProjectId: null,
+        sourceEventSequence: null,
+      },
+    });
+    assert.equal(record.totalTokens, 1250);
+    assert.equal(record.attribution.workspaceKind, "local_project");
+    assert.equal("rawUsage" in record, false);
+    const started = ModelUsageRecordSchema.parse({
+      ...record,
+      requestId: "request_started",
+      status: "started",
+      completedAt: null,
+      durationMs: null,
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+    });
+    assert.equal(started.status, "started");
   });
 
   test("provider contracts validate local BYOK surface without raw bootstrap secrets", () => {
@@ -66,6 +143,7 @@ describe("contracts", () => {
     assert.equal(RuntimeEventNameSchema.parse("session.compaction.completed"), "session.compaction.completed");
     assert.equal(RuntimeEventNameSchema.parse("session.compaction.failed"), "session.compaction.failed");
     assert.equal(RuntimeEventNameSchema.parse("create_pipeline.updated"), "create_pipeline.updated");
+    assert.equal(RuntimeEventNameSchema.parse("assistant.reasoning.delta"), "assistant.reasoning.delta");
     const snapshot = ContextUsageSnapshotSchema.parse({
       provider: "openpond",
       model: "openpond-chat",

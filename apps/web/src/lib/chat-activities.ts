@@ -2,6 +2,10 @@ import type { RuntimeEvent } from "@openpond/contracts";
 import type { ActivityItem, ChatMessage } from "./app-models";
 import { isWorkspaceImagePath, workspaceFileName } from "./workspace-images";
 import { asRecord, findLast, parseMaybeJson, stringValue } from "./chat-message-utils";
+import {
+  connectedAppToolActivityContent,
+  connectedAppToolActivityLabel,
+} from "./connected-app-provider-activity";
 
 export { activityGroupSummary, summarizeActivityGroup } from "./chat-activity-summary";
 
@@ -29,7 +33,7 @@ export function appendActivityToList(
   activity = activityFromEvent(item),
 ): ActivityItem[] {
   const next = [...activities];
-  if (mergeAssistantDeltaActivity(next, item, activity)) return next;
+  if (mergeStreamedTextActivity(next, item, activity)) return next;
   if (mergeCommandActivity(next, item, activity)) return next;
   return [...next, activity];
 }
@@ -143,8 +147,8 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   return false;
 }
 
-function mergeAssistantDeltaActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
-  if (item.name !== "assistant.delta") return false;
+function mergeStreamedTextActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
+  if (item.name !== "assistant.delta" && item.name !== "assistant.reasoning.delta") return false;
   const previous = activities[activities.length - 1];
   if (!previous || previous.label !== activity.label || previous.kind || previous.controlKind) return false;
   previous.content = `${previous.content}${activity.content}`;
@@ -174,6 +178,7 @@ function activityState(item: RuntimeEvent): ActivityItem["state"] {
 }
 
 function activityLabel(item: RuntimeEvent): string {
+  if (item.name === "assistant.reasoning.delta") return "Reasoning";
   if (isCodexGoalContextEvent(item)) return "Goal context";
   if (item.name === "turn.interrupted") return "Turn aborted";
   if (isViewImageEvent(item) && item.name === "tool.started") return "Reading image";
@@ -188,6 +193,10 @@ function activityLabel(item: RuntimeEvent): string {
   if (item.action === "openpond_action_search" && item.name === "tool.completed") return "Searched actions";
   if (item.action === "openpond_action_run" && item.name === "tool.started") return "Running OpenPond action";
   if (item.action === "openpond_action_run" && item.name === "tool.completed") return "Ran OpenPond action";
+  const connectedAppLabel = connectedAppToolActivityLabel(item);
+  if (connectedAppLabel) return connectedAppLabel;
+  const browserLabel = browserToolActivityLabel(item);
+  if (browserLabel) return browserLabel;
   const capabilityLabel = capabilityToolActivityLabel(item);
   if (capabilityLabel) return capabilityLabel;
   if (item.name === "skill.selected") return "Selected skill";
@@ -229,6 +238,7 @@ const WORKSPACE_ACTIVITY_LABELS: Record<string, { started: string; completed: st
   git_commit: { started: "Committing changes", completed: "Committed changes", failed: "Commit failed" },
   git_push: { started: "Pushing changes", completed: "Pushed changes", failed: "Push failed" },
   publish_openpond_repo: { started: "Publishing to OpenPond", completed: "Published to OpenPond", failed: "Publish failed" },
+  upload_cloud_source: { started: "Uploading source", completed: "Uploaded source", failed: "Upload failed" },
   sandbox_create: { started: "Starting sandbox", completed: "Started sandbox", failed: "Sandbox start failed" },
   sandbox_status: { started: "Checking sandbox", completed: "Checked sandbox", failed: "Sandbox status failed" },
   sandbox_list_files: { started: "Listing sandbox files", completed: "Listed sandbox files", failed: "Sandbox file list failed" },
@@ -266,12 +276,17 @@ function workspaceActivityLabel(item: RuntimeEvent): string {
 }
 
 function activityContent(item: RuntimeEvent, imagePreview?: ActivityItem["imagePreview"]): string {
+  if (item.name === "assistant.reasoning.delta") return item.output ?? "";
   if (imagePreview) return imagePreview.path;
   const marker = codexControlMessage(item.output ?? "");
   if (marker) return marker.text;
   if (isCodexGoalContextEvent(item) || item.name === "turn.interrupted") return item.output ?? item.error ?? "";
+  const browserContent = browserToolActivityContent(item);
+  if (browserContent) return browserContent;
   const capabilityContent = capabilityToolActivityContent(item);
   if (capabilityContent) return capabilityContent;
+  const connectedAppContent = connectedAppToolActivityContent(item);
+  if (connectedAppContent) return connectedAppContent;
   const command = commandTextFromEvent(item);
   if (command) return command;
   if (item.name === "command.output") return cleanCommandOutput(item.output ?? "");
@@ -312,6 +327,45 @@ function capabilityToolActivityLabel(item: RuntimeEvent): string | null {
     return failed ? "Goal update failed" : "Updated goal";
   }
   return null;
+}
+
+function browserToolActivityLabel(item: RuntimeEvent): string | null {
+  if (item.name !== "tool.started" && item.name !== "tool.completed") return null;
+  const failed = item.status === "failed";
+  const completed = item.name === "tool.completed";
+  switch (item.action) {
+    case "openpond_browser_open":
+      return completed ? (failed ? "Browser open failed" : "Opened browser") : "Opening browser";
+    case "openpond_browser_snapshot":
+      return completed ? (failed ? "Browser capture failed" : "Captured browser") : "Capturing browser";
+    case "openpond_browser_move_cursor":
+      return completed ? (failed ? "Cursor move failed" : "Moved browser cursor") : "Moving browser cursor";
+    case "openpond_browser_click":
+      return completed ? (failed ? "Browser click failed" : "Clicked browser") : "Clicking browser";
+    case "openpond_browser_type":
+      return completed ? (failed ? "Browser typing failed" : "Typed in browser") : "Typing in browser";
+    case "openpond_browser_key":
+      return completed ? (failed ? "Browser key failed" : "Pressed browser key") : "Pressing browser key";
+    case "openpond_browser_scroll":
+      return completed ? (failed ? "Browser scroll failed" : "Scrolled browser") : "Scrolling browser";
+    default:
+      return null;
+  }
+}
+
+function browserToolActivityContent(item: RuntimeEvent): string | null {
+  if (!item.action?.startsWith("openpond_browser_")) return null;
+  const result = asRecord(asRecord(item.data)?.result);
+  const output = stringValue(result, ["output"]);
+  if (output) return output;
+  const parsedOutput = asRecord(parseMaybeJson(item.output ?? ""));
+  const parsedMessage = stringValue(parsedOutput, ["output"]);
+  if (parsedMessage) return parsedMessage;
+  const args = asRecord(item.args);
+  const url = stringValue(args, ["url"]);
+  if (url) return url;
+  if (item.action === "openpond_browser_type") return "Text redacted";
+  return item.error ?? item.output ?? item.action;
 }
 
 function capabilityToolActivityContent(item: RuntimeEvent): string | null {

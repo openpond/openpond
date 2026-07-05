@@ -115,7 +115,7 @@ Setup slots and inspect/deploy-plan projection:
 - Actions: `chat`, `draft-customer-reply`
 - Default entrypoint: `action:chat`
 - Channels: `openpond_chat`, `slack`
-- Integrations: `openpond_chat` required; `slack` optional with `slack.message.read` and `slack.message.send`
+- Integrations: `openpond_chat` required; `slack` optional with `slack.message.ingest`
 - Required env/secrets: none
 - Required volumes: none
 - Schedules: none
@@ -287,7 +287,7 @@ Safe Builder Chat edit scenario:
 Channel scenario:
 
 - OpenPond Chat targets `chat`.
-- Slack targets `chat`, requires `slack`, and needs `slack.message.send` before delivery.
+- Slack targets `chat`, requires `slack`, and needs `slack.message.ingest` for inbound context.
 - API, MCP, Teams, schedule, and manual action surfaces are intentionally represented elsewhere.
 - `weekday-summary` is the schedule surface and remains disabled until platform setup enables it.
 

@@ -88,6 +88,8 @@ function evidenceSourceLabel(source: string): string {
       return "Correction";
     case "unresolved_conversation":
       return "Unresolved";
+    case "usage_anomaly":
+      return "Usage";
     default:
       return source || "Evidence";
   }

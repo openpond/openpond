@@ -3,6 +3,7 @@ import type {
   SandboxRuntimeCreateInput,
   SandboxRuntimeSandboxCreateInput,
   OpenPondSandboxClient,
+  OpenPondOrganization,
   SandboxCreateInput,
   SandboxExecInput,
   SandboxFileDownloadInput,
@@ -11,6 +12,7 @@ import type {
   SandboxGitCommitInput,
   SandboxGitPullInput,
   SandboxGitPushInput,
+  SandboxIntegrationConnection,
   SandboxIntegrationConnectionLeaseInput,
   SandboxIntegrationConnectionStatusFilter,
   SandboxOpenPortInput,
@@ -27,11 +29,16 @@ import type {
   SandboxEnvVarInput,
 } from "@openpond/cloud";
 import {
+  buildConnectedAppStatusRows,
+  connectedAppBundleByProvider,
+  normalizeConnectedAppProviderFamilyId,
   SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
   SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
 } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
+
+type SandboxRuntimeIntegrationLease = NonNullable<SandboxCreateInput["integrationLeases"]>[number];
 
 export type SandboxRequestAction =
   | { type: "list"; payload?: unknown }
@@ -56,6 +63,7 @@ export type SandboxRequestAction =
   | { type: "template_build_logs"; buildId: string }
   | { type: "template_build_cancel"; buildId: string }
   | { type: "integration_connections"; payload: unknown }
+  | { type: "connected_app_status"; payload: unknown }
   | { type: "integration_leases"; sandboxId: string }
   | { type: "integration_attach"; sandboxId: string; payload: unknown }
   | { type: "integration_remove"; sandboxId: string; payload: unknown }
@@ -332,6 +340,29 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         ...(agentId ? { agentId } : {}),
         ...(status ? { status } : {}),
       })),
+      account,
+    };
+  }
+  if (action.type === "connected_app_status") {
+    const input = asRecord(action.payload);
+    const explicitTeamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
+    const projectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
+    const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
+    const status = normalizeIntegrationStatusFilter(input.status) ?? "all";
+    const query = {
+      ...(projectId ? { projectId } : {}),
+      ...(agentId ? { agentId } : {}),
+      status,
+    };
+    const result = explicitTeamId
+      ? await client.integrationConnections({
+        teamId: explicitTeamId,
+        ...query,
+      })
+      : await resolveImplicitConnectedAppStatusConnections(client, query);
+    return {
+      teamId: result.teamId,
+      apps: buildConnectedAppStatusRows({ connections: result.connections }),
       account,
     };
   }
@@ -1155,6 +1186,153 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   throw new Error(`Unsupported sandbox action: ${(action as { type: string }).type}`);
 }
 
+export async function listSandboxIntegrationConnections(input: {
+  teamId?: string;
+  projectId?: string;
+  agentId?: string;
+  status?: SandboxIntegrationConnectionStatusFilter;
+} = {}) {
+  const { client } = await resolveSandboxClient();
+  if (input.teamId) return client.integrationConnections(input);
+  return resolveImplicitConnectedAppStatusConnections(client, {
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+    ...(input.agentId ? { agentId: input.agentId } : {}),
+    status: input.status ?? "all",
+  });
+}
+
+type IntegrationConnectionsResult = Awaited<ReturnType<OpenPondSandboxClient["integrationConnections"]>>;
+type ConnectedAppStatusConnectionsResult = {
+  teamId: string | null;
+  connections: SandboxIntegrationConnection[];
+};
+
+export async function resolveImplicitConnectedAppStatusConnections(
+  client: OpenPondSandboxClient,
+  query: {
+    projectId?: string;
+    agentId?: string;
+    status: SandboxIntegrationConnectionStatusFilter;
+  },
+): Promise<ConnectedAppStatusConnectionsResult> {
+  const organizations = await client.listOrganizations().catch(() => {
+    throw new Error("Connected app status is unavailable because organizations could not be loaded.");
+  });
+  const teamIds = implicitConnectedAppStatusTeamIds(organizations);
+  const fallbackTeamId = selectImplicitConnectedAppStatusTeamId(organizations) || null;
+
+  if (teamIds.length === 0) {
+    return {
+      teamId: fallbackTeamId,
+      connections: [],
+    };
+  }
+
+  const results = await Promise.all(
+    teamIds.map((teamId) =>
+      client.integrationConnections({
+        teamId,
+        ...(query.projectId ? { projectId: query.projectId } : {}),
+        ...(query.agentId ? { agentId: query.agentId } : {}),
+        status: query.status,
+      }).catch(() => null),
+    ),
+  );
+  const successfulResults = successfulConnectedAppStatusConnectionResults(results);
+  return {
+    teamId:
+      fallbackTeamId ??
+      successfulResults.find((result) => result.teamId.trim())?.teamId.trim() ??
+      null,
+    connections: mergeConnectedAppStatusConnectionResults(successfulResults),
+  };
+}
+
+export function mergeConnectedAppStatusConnectionResults(
+  results: Array<{ connections?: SandboxIntegrationConnection[] | null }>,
+): SandboxIntegrationConnection[] {
+  const out: SandboxIntegrationConnection[] = [];
+  const seen = new Set<string>();
+  for (const result of results) {
+    for (const connection of result.connections ?? []) {
+      const key = connection.id.trim() || [
+        connection.teamId,
+        connection.provider,
+        connection.providerAccountId,
+      ].join(":");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(connection);
+    }
+  }
+  return out;
+}
+
+export function successfulConnectedAppStatusConnectionResults<T>(
+  results: Array<(T & { connections?: SandboxIntegrationConnection[] | null }) | null>,
+): T[] {
+  const successfulResults = results.filter((result): result is T & { connections?: SandboxIntegrationConnection[] | null } =>
+    result !== null,
+  );
+  const failedCount = results.length - successfulResults.length;
+  const successfulConnectionCount = successfulResults.reduce(
+    (count, result) => count + (result.connections?.length ?? 0),
+    0,
+  );
+  if (failedCount > 0 && successfulConnectionCount === 0) {
+    throw new Error("Connected app status is unavailable because one or more team integration connection lookups could not be loaded.");
+  }
+  return successfulResults;
+}
+
+export function selectImplicitConnectedAppStatusTeamId(
+  organizations: OpenPondOrganization[],
+): string {
+  const active = organizations.filter((organization) => organizationStatus(organization) === "active");
+  return (
+    organizationTeamId(active.find((organization) => organization.role === "owner")) ??
+    organizationTeamId(active.find((organization) => organization.role === "admin")) ??
+    organizationTeamId(active[0]) ??
+    ""
+  );
+}
+
+export function implicitConnectedAppStatusTeamIds(
+  organizations: OpenPondOrganization[],
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const organization of organizations) {
+    if (organizationStatus(organization) !== "active") continue;
+    const teamId = organizationTeamId(organization);
+    if (!teamId || seen.has(teamId)) continue;
+    seen.add(teamId);
+    out.push(teamId);
+  }
+  return out;
+}
+
+function organizationTeamId(
+  organization: OpenPondOrganization | undefined,
+): string | null {
+  if (!organization) return null;
+  const legacyId = (organization as unknown as { id?: unknown }).id;
+  const value =
+    typeof organization.teamId === "string"
+      ? organization.teamId
+      : typeof legacyId === "string"
+        ? legacyId
+        : "";
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function organizationStatus(
+  organization: OpenPondOrganization,
+): OpenPondOrganization["status"] {
+  return typeof organization.status === "string" ? organization.status : "active";
+}
+
 async function resolveSandboxClient(): Promise<ResolvedSandboxClient> {
   const configuredSandboxApiUrl = normalizeOptionalUrl(process.env.OPENPOND_SANDBOX_API_URL);
   const configuredSandboxApiKey = process.env.OPENPOND_SANDBOX_API_KEY?.trim();
@@ -1417,8 +1595,8 @@ export function normalizeCreateInput(payload: unknown): SandboxCreateInput {
   if (Array.isArray(input.volumes)) {
     out.volumes = input.volumes as SandboxCreateInput["volumes"];
   }
-  if (Array.isArray(input.integrationLeases)) {
-    out.integrationLeases = input.integrationLeases as SandboxCreateInput["integrationLeases"];
+  if ("integrationLeases" in input) {
+    out.integrationLeases = normalizeIntegrationLeaseRefsForRuntime(input.integrationLeases);
   }
   if (Array.isArray(input.integrationConnectionLeases)) {
     out.integrationConnectionLeases =
@@ -1444,8 +1622,12 @@ export function normalizeSandboxRuntimeCreateInput(
   if (typeof runtime.agentId === "string" && runtime.agentId.trim()) {
     (out as Record<string, unknown>).agentId = runtime.agentId.trim();
   }
-  if (typeof runtime.mode === "string" && runtime.mode.trim()) {
-    (out as Record<string, unknown>).mode = runtime.mode.trim();
+  if (typeof runtime.workflowMode === "string" && runtime.workflowMode.trim()) {
+    out.workflowMode =
+      runtime.workflowMode.trim() as SandboxRuntimeCreateInput["workflowMode"];
+  } else if (typeof runtime.mode === "string" && runtime.mode.trim()) {
+    out.workflowMode =
+      runtime.mode.trim() as SandboxRuntimeCreateInput["workflowMode"];
   }
   if (typeof runtime.baseBranch === "string" && runtime.baseBranch.trim()) {
     out.baseBranch = runtime.baseBranch.trim();
@@ -1467,6 +1649,13 @@ export function normalizeSandboxRuntimeCreateInput(
     runtime.dependencySnapshotId.trim()
   ) {
     out.dependencySnapshotId = runtime.dependencySnapshotId.trim();
+  }
+  if (
+    typeof runtime.runtimeProfileId === "string" &&
+    runtime.runtimeProfileId.trim()
+  ) {
+    out.runtimeProfileId =
+      runtime.runtimeProfileId.trim() as SandboxRuntimeCreateInput["runtimeProfileId"];
   }
   if (
     typeof runtime.promotionPolicy === "string" &&
@@ -1541,7 +1730,7 @@ function normalizeIntegrationStatusFilter(
   return undefined;
 }
 
-function normalizeIntegrationAttachInput(
+export function normalizeIntegrationAttachInput(
   payload: unknown,
 ): SandboxIntegrationConnectionLeaseInput {
   const input = asRecord(payload);
@@ -1553,25 +1742,110 @@ function normalizeIntegrationAttachInput(
   if (capabilities.length === 0) {
     throw new Error("Sandbox integration capabilities are required.");
   }
-  const scopes = normalizeStringArray(input.scopes);
-  const expiresAt = typeof input.expiresAt === "string" ? input.expiresAt.trim() : "";
-  const ttlSeconds = Number(input.ttlSeconds);
+  validateIntegrationCapabilitiesForProvider(input.provider, capabilities);
+  const scopes = normalizeOptionalStringArray(input.scopes, "Sandbox integration scopes");
+  const expiresAt = normalizeIntegrationExpiresAt(input.expiresAt);
+  const ttlSeconds = normalizeIntegrationTtlSeconds(input.ttlSeconds);
+  const resourcePolicy = normalizeIntegrationResourcePolicy(input.resourcePolicy);
   return {
     connectionId,
     capabilities,
     ...(scopes.length > 0 ? { scopes } : {}),
-    ...(input.resourcePolicy && typeof input.resourcePolicy === "object" && !Array.isArray(input.resourcePolicy)
-      ? { resourcePolicy: input.resourcePolicy as Record<string, unknown> }
-      : {}),
+    ...(resourcePolicy ? { resourcePolicy } : {}),
     ...(expiresAt ? { expiresAt } : {}),
-    ...(Number.isFinite(ttlSeconds) && ttlSeconds > 0
-      ? { ttlSeconds: Math.floor(ttlSeconds) }
-      : {}),
+    ...(ttlSeconds !== undefined ? { ttlSeconds } : {}),
     ...(typeof input.required === "boolean" ? { required: input.required } : {}),
   };
 }
 
-function normalizeIntegrationLeaseId(payload: unknown): string {
+function normalizeIntegrationLeaseRefsForRuntime(value: unknown): SandboxRuntimeIntegrationLease[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("Sandbox integration leases must be an array.");
+  }
+  return value.map((item) => normalizeIntegrationLeaseRefForRuntime(item));
+}
+
+function normalizeIntegrationLeaseRefForRuntime(value: unknown): SandboxRuntimeIntegrationLease {
+  const input = asRecord(value);
+  const leaseId = typeof input.leaseId === "string" ? input.leaseId.trim() : "";
+  if (!leaseId) {
+    throw new Error("Sandbox integration leaseId is required.");
+  }
+  if ("connectionId" in input) {
+    throw new Error("Sandbox integration leases must use leaseId/proxy refs, not connection ids.");
+  }
+  assertNoSensitiveIntegrationLeaseKeys(input);
+  const provider = normalizeLeaseableIntegrationProvider(input.provider);
+  const capabilities = normalizeStringArray(input.capabilities);
+  if (capabilities.length === 0) {
+    throw new Error("Sandbox integration lease capabilities are required.");
+  }
+  validateIntegrationCapabilitiesForProvider(provider, capabilities);
+  const scopes = normalizeOptionalStringArray(input.scopes, "Sandbox integration lease scopes");
+  const resourcePolicy = normalizeIntegrationResourcePolicy(input.resourcePolicy);
+  const expiresAt = normalizeIntegrationExpiresAt(input.expiresAt);
+  const proxyUrl = typeof input.proxyUrl === "string" ? input.proxyUrl.trim() : "";
+  return {
+    leaseId,
+    provider,
+    capabilities,
+    ...(scopes.length > 0 ? { scopes } : {}),
+    ...(resourcePolicy ? { resourcePolicy } : {}),
+    ...(expiresAt ? { expiresAt } : {}),
+    ...(proxyUrl ? { proxyUrl } : {}),
+    ...(typeof input.required === "boolean" ? { required: input.required } : {}),
+  };
+}
+
+function normalizeLeaseableIntegrationProvider(value: unknown): SandboxRuntimeIntegrationLease["provider"] {
+  if (typeof value !== "string") {
+    throw new Error("Sandbox integration lease provider is required.");
+  }
+  const provider = normalizeConnectedAppProviderFamilyId(value);
+  if (!provider) {
+    throw new Error(`Sandbox integration provider is not supported: ${value}`);
+  }
+  const bundle = connectedAppBundleByProvider(provider);
+  if (!bundle?.leasePolicy.leaseable) {
+    throw new Error(`Sandbox integration provider is not leaseable: ${provider}`);
+  }
+  return provider as SandboxRuntimeIntegrationLease["provider"];
+}
+
+function assertNoSensitiveIntegrationLeaseKeys(value: Record<string, unknown>): void {
+  for (const key of Object.keys(value)) {
+    if (isSensitivePolicyKey(key)) {
+      throw new Error("Sandbox integration leases must not include secrets or credentials.");
+    }
+  }
+}
+
+function validateIntegrationCapabilitiesForProvider(providerValue: unknown, capabilities: string[]): void {
+  if (providerValue === undefined || providerValue === null || providerValue === "") {
+    return;
+  }
+  if (typeof providerValue !== "string") {
+    throw new Error("Sandbox integration provider must be a string.");
+  }
+  const provider = normalizeConnectedAppProviderFamilyId(providerValue);
+  if (!provider) {
+    throw new Error(`Sandbox integration provider is not supported: ${providerValue}`);
+  }
+  const bundle = connectedAppBundleByProvider(provider);
+  if (!bundle?.leasePolicy.leaseable) {
+    throw new Error(`Sandbox integration provider is not leaseable: ${provider}`);
+  }
+  const allowedCapabilities = new Set(bundle.leasePolicy.allowedCapabilityIds);
+  const deniedCapabilities = capabilities.filter((capability) => !allowedCapabilities.has(capability));
+  if (deniedCapabilities.length > 0) {
+    throw new Error(
+      `Sandbox integration capabilities are not allowed for ${provider}: ${deniedCapabilities.join(", ")}`,
+    );
+  }
+}
+
+export function normalizeIntegrationLeaseId(payload: unknown): string {
   const input = asRecord(payload);
   const leaseId = typeof input.leaseId === "string" ? input.leaseId.trim() : "";
   if (!leaseId) {
@@ -1587,6 +1861,92 @@ function normalizeStringArray(value: unknown): string[] {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean);
+}
+
+function normalizeOptionalStringArray(value: unknown, label: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be an array of strings.`);
+  }
+  return value.map((item) => {
+    if (typeof item !== "string") {
+      throw new Error(`${label} must contain only strings.`);
+    }
+    const trimmed = item.trim();
+    if (!trimmed) {
+      throw new Error(`${label} must not contain empty values.`);
+    }
+    return trimmed;
+  });
+}
+
+function normalizeIntegrationTtlSeconds(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const ttlSeconds = Number(value);
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+    throw new Error("Sandbox integration ttlSeconds must be a positive number.");
+  }
+  return Math.max(1, Math.floor(ttlSeconds));
+}
+
+function normalizeIntegrationExpiresAt(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new Error("Sandbox integration expiresAt must be an ISO timestamp string.");
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) {
+    throw new Error("Sandbox integration expiresAt must be a valid ISO timestamp.");
+  }
+  return trimmed;
+}
+
+function normalizeIntegrationResourcePolicy(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Sandbox integration resourcePolicy must be an object.");
+  }
+  assertNoSensitiveResourcePolicyKeys(value, []);
+  const serialized = JSON.stringify(value);
+  if (serialized.length > 16 * 1024) {
+    throw new Error("Sandbox integration resourcePolicy is too large.");
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertNoSensitiveResourcePolicyKeys(value: unknown, path: string[]): void {
+  if (!value || typeof value !== "object") return;
+  if (path.length > 8) {
+    throw new Error("Sandbox integration resourcePolicy is too deeply nested.");
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoSensitiveResourcePolicyKeys(item, path);
+    return;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (isSensitivePolicyKey(key)) {
+      throw new Error("Sandbox integration resourcePolicy must not include secrets or credentials.");
+    }
+    assertNoSensitiveResourcePolicyKeys(child, [...path, key]);
+  }
+}
+
+function isSensitivePolicyKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return (
+    normalized.includes("accesstoken") ||
+    normalized.includes("refreshtoken") ||
+    normalized.includes("idtoken") ||
+    normalized.includes("oauth") ||
+    normalized.includes("bearer") ||
+    normalized.includes("authorization") ||
+    normalized.includes("cookie") ||
+    normalized.includes("secret") ||
+    normalized.includes("password") ||
+    normalized.includes("credential")
+  );
 }
 
 function normalizeExecInput(payload: unknown): SandboxExecInput {
@@ -1784,8 +2144,8 @@ function normalizeForkInput(payload: unknown): SandboxForkInput {
   if (Array.isArray(input.volumes)) {
     out.volumes = input.volumes as SandboxForkInput["volumes"];
   }
-  if (Array.isArray(input.integrationLeases)) {
-    out.integrationLeases = input.integrationLeases as SandboxForkInput["integrationLeases"];
+  if ("integrationLeases" in input) {
+    out.integrationLeases = normalizeIntegrationLeaseRefsForRuntime(input.integrationLeases);
   }
   if ("env" in input) {
     out.env = normalizeSandboxEnvRefsForApp(input.env) as SandboxForkInput["env"];

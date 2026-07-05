@@ -36,6 +36,8 @@ export type HttpRouteDeps = {
   refreshCodexStatus: () => Promise<unknown>;
   bootstrapPayload: (options?: { forceOpenPond?: boolean; ensureProfile?: boolean }) => Promise<BootstrapPayload>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
+  usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
+  usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;
   listInsightsPayload: (requestUrl: URL) => Promise<unknown>;
   runInsightsScanPayload: (requestUrl?: URL) => Promise<unknown>;
   askInsightsPayload: (payload: unknown) => Promise<unknown>;
@@ -105,9 +107,14 @@ export type HttpRouteDeps = {
   disableRemoteAccessPayload: () => Promise<unknown>;
   voiceTranscriptionStatusPayload: () => Promise<unknown>;
   transcribeVoicePayload: (payload: unknown) => Promise<unknown>;
+  browserControlRegister: (payload: unknown) => unknown;
+  browserControlNext: (request: IncomingMessage) => Promise<unknown>;
+  browserControlComplete: (request: IncomingMessage, requestId: string, payload: unknown) => unknown;
+  browserControlStatus: () => unknown;
   createSession: (payload: unknown) => Promise<unknown>;
   patchSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   sendTurn: (sessionId: string, payload: unknown) => Promise<unknown>;
+  recordPreflightTurnFailure: (sessionId: string, payload: unknown) => Promise<unknown>;
   updateTurnCreatePipeline: (
     sessionId: string,
     turnId: string,

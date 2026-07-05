@@ -64,6 +64,13 @@ const workspaceTarget: WorkspaceTargetState = {
     detail: "Use cloud workspace",
     disabled: false,
   },
+  uploadAction: {
+    value: "upload_cloud",
+    label: "Upload/sync to cloud",
+    detail: "Push local source to OpenPond Git.",
+    stateNote: "nothing to upload",
+    disabled: false,
+  },
   options: [
     {
       value: "local",
@@ -84,13 +91,6 @@ const workspaceTarget: WorkspaceTargetState = {
       label: "Cloud workspace",
       detail: "Chat inside the hosted sandbox.",
       stateNote: "main / setup ready",
-      disabled: false,
-    },
-    {
-      value: "upload_cloud",
-      label: "Upload/sync to cloud",
-      detail: "Push local source to OpenPond Git.",
-      stateNote: "nothing to upload",
       disabled: false,
     },
   ],
@@ -248,8 +248,10 @@ describe("composer slash behavior", () => {
 
     expect(markup).toContain('aria-label="Add photos and files"');
     expect(markup).toContain('class="composer-create-control"');
-    expect(markup).toContain('aria-label="Create agent"');
-    expect(markup).toContain(">Create</span>");
+    expect(markup).toContain('aria-label="Make Agent"');
+    expect(markup).toMatch(
+      /class="composer-create-control" aria-label="Make Agent"[^>]*><span>Make Agent<\/span><\/button>/,
+    );
   });
 
   test("plus menu lists connected apps as planning context", () => {
@@ -280,16 +282,20 @@ describe("composer slash behavior", () => {
         onOpenFilePicker: noop,
         onPlanningAppSelect: noop,
         onProviderChange: noop,
+        onQueueDraft: noop,
         onStop: noop,
         onToggleAddMenu: noop,
         onTranscript: noop,
         provider: "openpond",
         providerOptions: [{ value: "openpond", label: "OpenPond" }],
+        queueDraftDisabled: true,
+        queueDraftTooltip: "Queue steer draft",
         running: false,
         sendDisabled: false,
         sendTooltip: "Send",
         selectedMentionAppId: "app_alpha",
         showToast: noop,
+        steering: false,
       }),
     );
 
@@ -450,7 +456,10 @@ describe("composer slash behavior", () => {
 
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
     expect(markup).toContain('aria-label="Working in"');
-    expect(markup).toContain("Working in: Local checkout");
+    expect(markup).toContain('aria-label="Upload/sync to cloud"');
+    expect(markup).toContain("workspace-upload-trigger upload_cloud");
+    expect(markup).toContain("Local checkout");
+    expect(markup).not.toContain("Working in: Local checkout");
     expect(markup).not.toContain("<span>Move to Cloud</span>");
     expect(markup).not.toContain('data-tooltip="Provider"');
     expect(markup).toContain("Run Water Estimate");
@@ -504,8 +513,98 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="Working in"');
-    expect(markup).toContain("Working in: Local checkout");
+    expect(markup).toContain('aria-label="Upload/sync to cloud"');
+    expect(markup).toContain("Local checkout");
+    expect(markup).not.toContain("Working in: Local checkout");
     expect(markup).not.toMatch(/class="workspace-action-trigger[^"]*"[^>]* disabled=""/);
+  });
+
+  test("composer footer prompts for a project before showing workspace actions", () => {
+    const markup = renderToStaticMarkup(
+      createElement(Composer, {
+        mode: "start",
+        prompt: "",
+        mentionApps: [],
+        selectedMentionAppId: null,
+        contextWindowStatus,
+        goalRuntime: null,
+        agents: [],
+        projectAgents: [],
+        projectTarget: {
+          value: "none",
+          label: "No project",
+          detail: "General chat",
+          busy: false,
+          options: [
+            {
+              value: "none",
+              label: "Don't work in a project",
+              detail: "General chat without project files",
+              kind: "none",
+            },
+          ],
+        },
+        workspaceTarget,
+        codexPermissionMode: "default",
+        codexReasoningEffort: "medium",
+        onProviderChange: noop,
+        onProjectTargetChange: noop,
+        onWorkspaceTargetChange: noop,
+        onModelChange: noop,
+        onCodexPermissionModeChange: noop,
+        onCodexReasoningEffortChange: noop,
+        onPromptChange: noop,
+        onMentionAppSelect: noop,
+        showToast: noop,
+        onSubmit: async () => true,
+        onStop: noop,
+      }),
+    );
+
+    expect(markup).toContain("Select Project");
+    expect(markup).not.toContain('aria-label="Working in"');
+    expect(markup).not.toContain('aria-label="Upload/sync to cloud"');
+    expect(markup).not.toContain("workspace-upload-trigger");
+  });
+
+  test("working target trigger renders the hybrid target", () => {
+    const markup = renderToStaticMarkup(
+      createElement(Composer, {
+        mode: "start",
+        prompt: "",
+        mentionApps: [],
+        selectedMentionAppId: null,
+        contextWindowStatus,
+        goalRuntime: null,
+        agents: [],
+        projectAgents: [],
+        projectTarget,
+        workspaceTarget: {
+          ...workspaceTarget,
+          value: "hybrid",
+          label: "Hybrid",
+          detail: "main / setup ready",
+        },
+        codexPermissionMode: "default",
+        codexReasoningEffort: "medium",
+        onProviderChange: noop,
+        onProjectTargetChange: noop,
+        onWorkspaceTargetChange: noop,
+        onModelChange: noop,
+        onCodexPermissionModeChange: noop,
+        onCodexReasoningEffortChange: noop,
+        onPromptChange: noop,
+        onMentionAppSelect: noop,
+        showToast: noop,
+        onSubmit: async () => true,
+        onStop: noop,
+      }),
+    );
+
+    expect(markup).toContain("Hybrid");
+    expect(markup).not.toContain("Working in: Hybrid");
+    expect(markup).toContain("workspace-action-trigger hybrid");
+    expect(markup).toContain("workspace-target-hybrid-icon");
   });
 
   test("regular chat composer shows agents in the slash menu without selected project actions", () => {
@@ -731,6 +830,7 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("/goal Run a goal");
     expect(markup).toContain("/goal-remote Run a cloud goal");
     expect(markup).toContain("/goal-local Run a local goal");
+    expect(markup).toContain("/sync-cloud Upload/sync to Cloud");
     expect(markup).not.toContain("No agents or project actions available");
   });
 

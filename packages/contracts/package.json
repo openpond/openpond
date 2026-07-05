@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@openpond/cloud": "workspace:*",
+    "@openpond/connected-apps": "workspace:*",
     "zod": "^4.1.13"
   }
 }

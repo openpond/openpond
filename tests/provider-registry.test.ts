@@ -64,7 +64,7 @@ describe("local BYOK provider registry", () => {
     expect(settings.modelCaches.openrouter?.models.map((model) => model.id)).toContain(
       "moonshotai/kimi-k2",
     );
-    expect(settings.providers.zai?.baseUrl).toBe("https://open.bigmodel.cn/api/paas/v4");
+    expect(settings.providers.zai?.baseUrl).toBe("https://api.z.ai/api/coding/paas/v4");
     expect(settings.providers.zai?.defaultModel).toBe("glm-5.2");
     expect(settings.modelCaches.zai?.models.map((model) => model.id)).toEqual([
       "glm-5.2",
@@ -72,6 +72,23 @@ describe("local BYOK provider registry", () => {
       "glm-5",
       "glm-4.7",
     ]);
+  });
+
+  test("uses the Z.ai Coding Plan endpoint for old default base URLs", () => {
+    const settings = buildProviderSettings({
+      file: {
+        ...emptyProvidersFile(),
+        providers: {
+          zai: ProviderConfigSchema.parse({
+            enabled: true,
+            baseUrl: "https://api.z.ai/api/paas/v4",
+            defaultModel: "glm-5.2",
+          }),
+        },
+      },
+    });
+
+    expect(settings.providers.zai?.baseUrl).toBe("https://api.z.ai/api/coding/paas/v4");
   });
 
   test("merges manual model overrides into searchable provider model lists", () => {

@@ -4,12 +4,8 @@ export type SandboxRuntimeDriver = "simulated-firecracker" | "remote-firecracker
 
 export type SandboxIntegrationProvider =
   | "google"
-  | "slack"
   | "github"
-  | "microsoft_teams"
-  | "x"
-  | "notion"
-  | "linear";
+  | "x";
 
 export type SandboxIntegrationConnectionStatus = "active" | "revoked" | "error";
 

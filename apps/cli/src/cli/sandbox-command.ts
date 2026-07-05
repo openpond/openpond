@@ -25,6 +25,15 @@ import {
   waitForSandboxCreateReady,
 } from "./sandbox-helpers";
 
+function parseSandboxAsyncOption(
+  options: Record<string, string | boolean>
+): boolean {
+  return (
+    parseBooleanOption(options.async) ||
+    parseBooleanOption(options.respondAsync)
+  );
+}
+
 export async function runSandboxCommand(
   options: Record<string, string | boolean>,
   rest: string[]
@@ -484,13 +493,14 @@ export async function runSandboxCommand(
     const sandboxId = rest[1];
     if (!sandboxId) {
       throw new Error(
-        "usage: sandbox stop <sandboxId> [--fail-on-unpreserved-changes]"
+        "usage: sandbox stop <sandboxId> [--fail-on-unpreserved-changes] [--async]"
       );
     }
     const result = await client.stop(sandboxId, {
       failOnUnpreservedChanges: parseBooleanOption(
         options.failOnUnpreservedChanges
       ),
+      async: parseSandboxAsyncOption(options),
     });
     console.log(
       JSON.stringify(
@@ -528,13 +538,14 @@ export async function runSandboxCommand(
     const sandboxId = rest[1];
     if (!sandboxId) {
       throw new Error(
-        "usage: sandbox delete <sandboxId> [--fail-on-unpreserved-changes]"
+        "usage: sandbox delete <sandboxId> [--fail-on-unpreserved-changes] [--async]"
       );
     }
     const sandbox = await client.delete(sandboxId, {
       failOnUnpreservedChanges: parseBooleanOption(
         options.failOnUnpreservedChanges
       ),
+      async: parseSandboxAsyncOption(options),
     });
     console.log(
       JSON.stringify({ sandbox: summarizeSandbox(sandbox) }, null, 2)

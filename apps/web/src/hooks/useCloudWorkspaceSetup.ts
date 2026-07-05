@@ -49,6 +49,7 @@ export function useCloudWorkspaceSetup({
   setCloudSetupDialog,
   setDiffPanelOpen,
   setError,
+  setSessions,
   setWorkspaceBusy,
   showToast,
   visibleWorkspaceState,
@@ -74,6 +75,7 @@ export function useCloudWorkspaceSetup({
   setCloudSetupDialog: Dispatch<SetStateAction<CloudSetupDialogState | null>>;
   setDiffPanelOpen: Dispatch<SetStateAction<boolean>>;
   setError: Dispatch<SetStateAction<string | null>>;
+  setSessions: Dispatch<SetStateAction<Session[]>>;
   setWorkspaceBusy: Dispatch<SetStateAction<boolean>>;
   showToast: ShowAppToast;
   visibleWorkspaceState: WorkspaceState | null;
@@ -186,13 +188,32 @@ export function useCloudWorkspaceSetup({
           throw new Error(`You need owner or admin access to create projects in ${organization.displayName}.`);
         }
         const branch = dialog.branch || project.linkedSandboxProject?.defaultBranch || "main";
+        const projectKey = projectSelectionKey("local", project.id);
+        const syncSession = await api.createSession(connection, {
+          provider: "openpond",
+          appId: null,
+          appName: null,
+          workspaceKind: "local_project",
+          workspaceId: project.id,
+          workspaceName: project.name,
+          localProjectId: project.id,
+          cloudProjectId: project.linkedSandboxProject?.projectId ?? null,
+          cloudTeamId: project.linkedSandboxProject?.teamId ?? null,
+          cwd: project.workspacePath,
+          title: `Sync ${project.name} to Cloud`,
+        });
+        setSessions((current) => [syncSession, ...current]);
+        appDispatch({ type: "selectSession", sessionId: syncSession.id, projectId: projectKey });
+        expandProject(projectKey);
         const upload = await api.uploadLocalProjectCloudSource(connection, project.id, {
           teamId: organization.teamId,
           projectName: project.name,
           branch,
+          chatSessionId: syncSession.id,
+          displayPrompt: `/sync-cloud ${project.name}`,
         });
         applyBootstrapPayload(upload.bootstrap);
-        expandProject(projectSelectionKey("local", project.id));
+        expandProject(projectKey);
         expandProject(projectSelectionKey("cloud", upload.project.id));
         const setupUrl = buildCloudEnvironmentCreateUrl({
           accountBaseUrl,
@@ -234,6 +255,8 @@ export function useCloudWorkspaceSetup({
         showToast("Source uploaded to OpenPond Git. Cloud setup link is ready.", "success");
       } catch (targetError) {
         const message = targetError instanceof Error ? targetError.message : String(targetError);
+        const payload = connection ? await api.bootstrap(connection).catch(() => null) : null;
+        if (payload) applyBootstrapPayload(payload);
         setError(message);
         setCloudSetupDialog((current) =>
           current
@@ -250,6 +273,7 @@ export function useCloudWorkspaceSetup({
     },
     [
       accountBaseUrl,
+      appDispatch,
       applyBootstrapPayload,
       cloudSetupDialog,
       connection,
@@ -258,6 +282,7 @@ export function useCloudWorkspaceSetup({
       localProjectById,
       setCloudSetupDialog,
       setError,
+      setSessions,
       setWorkspaceBusy,
       showToast,
     ],

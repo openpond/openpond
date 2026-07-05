@@ -21,6 +21,7 @@ export const SessionSchema = z.object({
   localProjectId: z.string().nullable().optional(),
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable(),
   codexThreadId: z.string().nullable(),
   createdAt: z.string(),

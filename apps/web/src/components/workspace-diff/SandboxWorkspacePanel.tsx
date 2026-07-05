@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ExternalLink, FileText, LoaderCircle, Maximize2, Minimize2, RefreshCw } from "../icons";
+import {
+  ChevronDown,
+  ExternalLink,
+  FileText,
+  LoaderCircle,
+  Maximize2,
+  Minimize2,
+  Plug,
+  RefreshCw,
+  Trash2,
+} from "../icons";
+import {
+  connectedAppBundleByProvider,
+  normalizeConnectedAppProviderFamilyId,
+  type RuntimeEvent,
+} from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
+import { connectedAppProviderActivityRows } from "../../lib/connected-app-provider-activity";
 import type {
   SandboxFileEntry,
   SandboxGitDiff,
   SandboxGitStatus,
+  SandboxIntegrationConnection,
+  SandboxIntegrationLeaseRef,
   SandboxProcess,
   SandboxPtySession,
   SandboxRecord,
@@ -15,6 +33,7 @@ import type {
 type SandboxWorkspacePanelProps = {
   sandboxId: string;
   connection: ClientConnection | null;
+  runtimeEvents?: RuntimeEvent[];
   workspaceName: string | null;
   expanded: boolean;
   onOpenBrowserUrl?: (href: string, options?: { newTab?: boolean }) => void;
@@ -23,6 +42,7 @@ type SandboxWorkspacePanelProps = {
 };
 
 type BusyState = "overview" | "replay" | "artifacts" | null;
+type IntegrationBusyState = "load" | `attach:${string}` | `remove:${string}` | null;
 type FilePreviewState =
   | { status: "idle"; path: string | null; contents: string | null; message: string | null }
   | { status: "loading"; path: string; contents: null; message: null };
@@ -30,6 +50,7 @@ type FilePreviewState =
 export function SandboxWorkspacePanel({
   sandboxId,
   connection,
+  runtimeEvents = [],
   workspaceName,
   expanded,
   onOpenBrowserUrl,
@@ -37,6 +58,9 @@ export function SandboxWorkspacePanel({
   onToggleExpanded,
 }: SandboxWorkspacePanelProps) {
   const [sandbox, setSandbox] = useState<SandboxRecord | null>(null);
+  const [integrationConnections, setIntegrationConnections] = useState<SandboxIntegrationConnection[]>([]);
+  const [integrationBusy, setIntegrationBusy] = useState<IntegrationBusyState>(null);
+  const [integrationError, setIntegrationError] = useState<string | null>(null);
   const [replays, setReplays] = useState<SandboxReplayRecord[]>([]);
   const [selectedReplayId, setSelectedReplayId] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<SandboxReplayArtifact[]>([]);
@@ -75,6 +99,15 @@ export function SandboxWorkspacePanel({
     [sandbox?.projectId, sandbox?.teamId],
   );
   const sourceRows = useMemo(() => sandboxAccessRows(sandbox), [sandbox]);
+  const integrationLeases = sandbox?.integrationLeases ?? [];
+  const integrationConnectionsForPanel = useMemo(
+    () => integrationConnections.filter((item) => item.status === "active"),
+    [integrationConnections],
+  );
+  const providerActivityRows = useMemo(
+    () => connectedAppProviderActivityRows(runtimeEvents),
+    [runtimeEvents],
+  );
   const changedFileCount = useMemo(() => gitChangedFileCount(gitStatus), [gitStatus]);
 
   const refreshWorkspace = useCallback(
@@ -116,6 +149,78 @@ export function SandboxWorkspacePanel({
     [connection, sandboxId],
   );
 
+  const refreshIntegrations = useCallback(async () => {
+    if (!connection || !sandbox) return;
+    setIntegrationBusy("load");
+    setIntegrationError(null);
+    try {
+      const [connectionsResult, leasesResult] = await Promise.all([
+        api.integrationConnections(connection, {
+          teamId: sandbox.teamId,
+          ...(sandbox.projectId ? { projectId: sandbox.projectId } : {}),
+          status: "active",
+        }),
+        api.sandboxIntegrationLeases(connection, sandbox.id),
+      ]);
+      setIntegrationConnections(connectionsResult.connections);
+      setSandbox(leasesResult.sandbox);
+    } catch (loadError) {
+      setIntegrationError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setIntegrationBusy(null);
+    }
+  }, [connection, sandbox]);
+
+  const attachIntegrationConnection = useCallback(
+    async (integrationConnection: SandboxIntegrationConnection) => {
+      if (!connection || !sandbox) return;
+      const provider = normalizeConnectedAppProviderFamilyId(integrationConnection.provider);
+      const bundle = provider ? connectedAppBundleByProvider(provider) : null;
+      const capabilities = bundle?.leasePolicy.allowedCapabilityIds ?? [];
+      if (!provider || !bundle?.leasePolicy.leaseable || capabilities.length === 0) {
+        setIntegrationError(`${providerLabel(integrationConnection.provider)} cannot be attached to this sandbox.`);
+        return;
+      }
+      setIntegrationBusy(`attach:${integrationConnection.id}`);
+      setIntegrationError(null);
+      try {
+        const result = await api.attachSandboxIntegrationConnection(connection, sandbox.id, {
+          connectionId: integrationConnection.id,
+          provider: integrationConnection.provider,
+          capabilities,
+          ...(integrationConnection.scopes.length > 0 ? { scopes: integrationConnection.scopes } : {}),
+          ...(bundle.leasePolicy.defaultTtlSeconds
+            ? { ttlSeconds: bundle.leasePolicy.defaultTtlSeconds }
+            : {}),
+          required: false,
+        });
+        setSandbox(result.sandbox);
+      } catch (attachError) {
+        setIntegrationError(attachError instanceof Error ? attachError.message : String(attachError));
+      } finally {
+        setIntegrationBusy(null);
+      }
+    },
+    [connection, sandbox],
+  );
+
+  const removeIntegrationLease = useCallback(
+    async (leaseId: string) => {
+      if (!connection || !sandbox) return;
+      setIntegrationBusy(`remove:${leaseId}`);
+      setIntegrationError(null);
+      try {
+        const result = await api.removeSandboxIntegrationLease(connection, sandbox.id, leaseId);
+        setSandbox(result.sandbox);
+      } catch (removeError) {
+        setIntegrationError(removeError instanceof Error ? removeError.message : String(removeError));
+      } finally {
+        setIntegrationBusy(null);
+      }
+    },
+    [connection, sandbox],
+  );
+
   const applySelectedReplay = useCallback((replay: SandboxReplayRecord | null) => {
     selectedReplayIdRef.current = replay?.id ?? null;
     setSelectedReplayId(replay?.id ?? null);
@@ -137,10 +242,17 @@ export function SandboxWorkspacePanel({
     try {
       const sandboxResult = await api.sandbox(connection, sandboxId);
       const nextSandbox = sandboxResult.sandbox;
-      const replayResult = await api.sandboxReplays(connection, {
+      const scope = {
         teamId: nextSandbox.teamId,
         ...(nextSandbox.projectId ? { projectId: nextSandbox.projectId } : {}),
-      });
+      };
+      const [replayResult, connectionsResult] = await Promise.all([
+        api.sandboxReplays(connection, scope),
+        api.integrationConnections(connection, {
+          ...scope,
+          status: "active",
+        }),
+      ]);
       const matchingReplays = replayResult.replays
         .filter((replay) => replayMatchesSandbox(nextSandbox, replay))
         .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
@@ -149,6 +261,8 @@ export function SandboxWorkspacePanel({
         matchingReplays[0] ??
         null;
       setSandbox(nextSandbox);
+      setIntegrationConnections(connectionsResult.connections);
+      setIntegrationError(null);
       setReplays(matchingReplays);
       applySelectedReplay(selected);
       void refreshWorkspace(nextSandbox.id);
@@ -203,6 +317,9 @@ export function SandboxWorkspacePanel({
   useEffect(() => {
     selectedReplayIdRef.current = null;
     setSandbox(null);
+    setIntegrationConnections([]);
+    setIntegrationError(null);
+    setIntegrationBusy(null);
     setReplays([]);
     setFiles([]);
     setSelectedFilePath(null);
@@ -337,6 +454,122 @@ export function SandboxWorkspacePanel({
                   </div>
                 ))}
               </div>
+            </section>
+
+            <section className="sandbox-workspace-section">
+              <div className="sandbox-workspace-heading">
+                <h3>Integrations</h3>
+                <div className="sandbox-workspace-heading-actions">
+                  <span>{integrationLeases.length}</span>
+                  <button
+                    type="button"
+                    className="diff-icon-button"
+                    title="Refresh integrations"
+                    aria-label="Refresh integrations"
+                    disabled={integrationBusy !== null}
+                    onClick={() => void refreshIntegrations()}
+                  >
+                    {integrationBusy === "load" ? <LoaderCircle className="spinning" size={14} /> : <RefreshCw size={14} />}
+                  </button>
+                </div>
+              </div>
+              {integrationError && <div className="sandbox-workspace-error">{integrationError}</div>}
+              {integrationLeases.length > 0 ? (
+                <div className="sandbox-workspace-integration-list">
+                  {integrationLeases.map((lease) => (
+                    <div className="sandbox-workspace-integration-row" key={lease.leaseId}>
+                      <div className="sandbox-workspace-integration-main">
+                        <span>{providerLabel(lease.provider)}</span>
+                        <small>
+                          {lease.required ? "required" : "optional"} / {leaseExpiryLabel(lease)}
+                          {lease.proxyUrl ? " / proxy" : ""}
+                        </small>
+                      </div>
+                      <button
+                        type="button"
+                        className="diff-icon-button"
+                        title={`Revoke ${providerLabel(lease.provider)} lease`}
+                        aria-label={`Revoke ${providerLabel(lease.provider)} lease`}
+                        disabled={integrationBusy !== null}
+                        onClick={() => void removeIntegrationLease(lease.leaseId)}
+                      >
+                        {integrationBusy === `remove:${lease.leaseId}` ? (
+                          <LoaderCircle className="spinning" size={14} />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                      <div className="sandbox-workspace-chip-row">
+                        {lease.capabilities.slice(0, 5).map((capabilityId) => (
+                          <span key={capabilityId}>{capabilityLabel(lease.provider, capabilityId)}</span>
+                        ))}
+                        {lease.capabilities.length > 5 ? <span>+{lease.capabilities.length - 5}</span> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="sandbox-workspace-empty">No active integration leases.</p>
+              )}
+              {integrationConnectionsForPanel.length > 0 ? (
+                <div className="sandbox-workspace-integration-list">
+                  {integrationConnectionsForPanel.map((integrationConnection) => {
+                    const attached = integrationLeases.some((lease) => lease.provider === integrationConnection.provider);
+                    const bundle = connectedAppBundleForConnection(integrationConnection);
+                    const capabilityCount = bundle?.leasePolicy.allowedCapabilityIds.length ?? 0;
+                    return (
+                      <div className="sandbox-workspace-integration-row compact" key={integrationConnection.id}>
+                        <div className="sandbox-workspace-integration-main">
+                          <span>{connectionAccountLabel(integrationConnection)}</span>
+                          <small>{connectionDetail(integrationConnection, capabilityCount)}</small>
+                        </div>
+                        <button
+                          type="button"
+                          className="diff-icon-button"
+                          title={attached ? `${providerLabel(integrationConnection.provider)} already attached` : `Attach ${providerLabel(integrationConnection.provider)}`}
+                          aria-label={attached ? `${providerLabel(integrationConnection.provider)} already attached` : `Attach ${providerLabel(integrationConnection.provider)}`}
+                          disabled={attached || integrationBusy !== null || capabilityCount === 0}
+                          onClick={() => void attachIntegrationConnection(integrationConnection)}
+                        >
+                          {integrationBusy === `attach:${integrationConnection.id}` ? (
+                            <LoaderCircle className="spinning" size={14} />
+                          ) : (
+                            <Plug size={14} />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="sandbox-workspace-empty">No connected accounts available.</p>
+              )}
+            </section>
+
+            <section className="sandbox-workspace-section">
+              <div className="sandbox-workspace-heading">
+                <h3>Provider Activity</h3>
+                <span>{providerActivityRows.length}</span>
+              </div>
+              {providerActivityRows.length > 0 ? (
+                <div className="sandbox-workspace-integration-list">
+                  {providerActivityRows.map((row) => (
+                    <div className="sandbox-workspace-integration-row compact" key={row.id}>
+                      <div className="sandbox-workspace-integration-main">
+                        <span>{row.label}</span>
+                        <small>
+                          {row.state} / {formatDate(row.timestamp)}
+                        </small>
+                      </div>
+                      <div className="sandbox-workspace-chip-row">
+                        <span>{row.content}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="sandbox-workspace-empty">No connected provider activity in this chat.</p>
+              )}
             </section>
 
             <section className="sandbox-workspace-section">
@@ -637,6 +870,42 @@ function SandboxFilePreview({ preview }: { preview: FilePreviewState }) {
 function replayMatchesSandbox(sandbox: SandboxRecord, replay: SandboxReplayRecord): boolean {
   if (replay.sourceSandboxId === sandbox.id || replay.sandboxId === sandbox.id) return true;
   return Boolean(sandbox.snapshots?.some((snapshot) => snapshot.id === replay.snapshotId));
+}
+
+function connectedAppBundleForConnection(connection: SandboxIntegrationConnection) {
+  const provider = normalizeConnectedAppProviderFamilyId(connection.provider);
+  return provider ? connectedAppBundleByProvider(provider) : null;
+}
+
+function providerLabel(provider: string): string {
+  const normalized = normalizeConnectedAppProviderFamilyId(provider);
+  const bundle = normalized ? connectedAppBundleByProvider(normalized) : null;
+  if (bundle) return bundle.label;
+  if (provider === "microsoft_teams") return "Microsoft Teams";
+  return provider ? provider.replace(/_/g, " ") : "Integration";
+}
+
+function capabilityLabel(provider: string, capabilityId: string): string {
+  const normalized = normalizeConnectedAppProviderFamilyId(provider);
+  const bundle = normalized ? connectedAppBundleByProvider(normalized) : null;
+  return bundle?.capabilities.find((capability) => capability.id === capabilityId)?.label ?? capabilityId;
+}
+
+function leaseExpiryLabel(lease: SandboxIntegrationLeaseRef): string {
+  return lease.expiresAt ? `expires ${formatDate(lease.expiresAt)}` : "active";
+}
+
+function connectionAccountLabel(connection: SandboxIntegrationConnection): string {
+  const account = connection.providerAccountName?.trim();
+  return account ? `${providerLabel(connection.provider)} / ${account}` : providerLabel(connection.provider);
+}
+
+function connectionDetail(connection: SandboxIntegrationConnection, capabilityCount: number): string {
+  const parts: string[] = [];
+  if (connection.providerWorkspaceName) parts.push(connection.providerWorkspaceName);
+  parts.push(`${capabilityCount} lease ${capabilityCount === 1 ? "capability" : "capabilities"}`);
+  if (connection.scopes.length > 0) parts.push(`${connection.scopes.length} ${connection.scopes.length === 1 ? "scope" : "scopes"}`);
+  return parts.join(" / ");
 }
 
 function sandboxAccessRows(sandbox: SandboxRecord | null): Array<{ type: string; label: string; value: string }> {

@@ -5,11 +5,17 @@ import {
   useRef,
   type KeyboardEvent,
 } from "react";
+import {
+  detectConnectedAppMentionRanges,
+  type ConnectedAppMentionOption,
+  type ConnectedAppMentionRange,
+} from "../../lib/connected-app-mentions";
 import { detectComposerRepoLinks, type ComposerRepoLink } from "../../lib/composer-repo-links";
 import { resizeComposerTextarea } from "./ComposerLayout";
 
 const INLINE_TOKEN_SELECTOR = "[data-inline-token='true']";
 const INLINE_REPO_LINK_SELECTOR = "[data-inline-repo-link='true']";
+const INLINE_CONNECTED_APP_MENTION_SELECTOR = "[data-inline-connected-app-mention='true']";
 
 export type ComposerInlineToken = {
   icon: "bot" | "plus" | "workflow";
@@ -36,6 +42,10 @@ function isInlineToken(node: Node): node is HTMLElement {
 
 function isInlineRepoLink(node: Node): node is HTMLElement {
   return node instanceof HTMLElement && node.matches(INLINE_REPO_LINK_SELECTOR);
+}
+
+function isInlineConnectedAppMention(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && node.matches(INLINE_CONNECTED_APP_MENTION_SELECTOR);
 }
 
 function clampIndex(value: number, max: number): number {
@@ -74,6 +84,10 @@ function extractEditorState(root: HTMLElement): ExtractedEditorState {
       text += node.dataset.repoUrl ?? "";
       return;
     }
+    if (isInlineConnectedAppMention(node)) {
+      text += node.dataset.connectedMentionText ?? "";
+      return;
+    }
     if (isInlineToken(node)) {
       tokenAt = text.length;
       return;
@@ -92,6 +106,7 @@ function extractEditorState(root: HTMLElement): ExtractedEditorState {
 
 function viewLength(node: Node): number {
   if (isInlineRepoLink(node)) return node.dataset.repoUrl?.length ?? 0;
+  if (isInlineConnectedAppMention(node)) return node.dataset.connectedMentionText?.length ?? 0;
   if (isInlineToken(node)) return 1;
   if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
   if (node instanceof HTMLBRElement) return 0;
@@ -114,12 +129,15 @@ function selectionViewIndex(root: HTMLElement): number {
 
   function visit(node: Node) {
     if (found) return;
-    if ((isInlineToken(node) || isInlineRepoLink(node)) && node.contains(focusNode)) {
+    if (
+      (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) &&
+      node.contains(focusNode)
+    ) {
       if (node !== focusNode || focusOffset > 0) index += viewLength(node);
       found = true;
       return;
     }
-    if (isInlineToken(node) || isInlineRepoLink(node)) {
+    if (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) {
       index += viewLength(node);
       return;
     }
@@ -163,7 +181,7 @@ function setSelectionByViewIndex(root: HTMLElement, viewIndex: number) {
   }
 
   function visit(node: Node): boolean {
-    if (isInlineToken(node) || isInlineRepoLink(node)) {
+    if (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) {
       const length = viewLength(node);
       if (remaining <= 0) {
         placeBefore(node);
@@ -285,21 +303,111 @@ function createRepoLinkElement(link: ComposerRepoLink): HTMLElement {
   return chip;
 }
 
+function connectedAppIconSrc(provider: ConnectedAppMentionRange["provider"]): string {
+  if (provider === "slack") return "/connected-apps/slack.svg";
+  if (provider === "microsoft_teams") return "/connected-apps/microsoft.svg";
+  if (provider === "github") return "/connected-apps/github.svg";
+  if (provider === "google") return "/connected-apps/google.svg";
+  if (provider === "x") return "/connected-apps/x.svg";
+  return "/connected-apps/openpond-mcp.svg";
+}
+
+function createConnectedAppMentionElement(mention: ConnectedAppMentionRange): HTMLElement {
+  const chip = document.createElement("span");
+  chip.className = `composer-connected-app-mention ${mention.provider}`;
+  chip.contentEditable = "false";
+  chip.dataset.inlineConnectedAppMention = "true";
+  chip.dataset.connectedMentionText = mention.text;
+  chip.dataset.connectedMentionProvider = mention.provider;
+  chip.setAttribute("aria-label", `${mention.label} connected app mention ${mention.displayText}`);
+  chip.title = mention.detail;
+
+  const icon = document.createElement("img");
+  icon.className = "composer-connected-app-mention-icon";
+  icon.src = connectedAppIconSrc(mention.provider);
+  icon.alt = "";
+  icon.draggable = false;
+
+  const label = document.createElement("span");
+  label.className = "composer-connected-app-mention-label";
+  label.textContent = mention.displayText;
+
+  chip.append(icon, label);
+  return chip;
+}
+
 function repoLinksForPrompt(prompt: string, invocationTokenPosition: number | null): ComposerRepoLink[] {
   const links = detectComposerRepoLinks(prompt);
   if (invocationTokenPosition === null) return links;
   return links.filter((link) => invocationTokenPosition <= link.start || invocationTokenPosition >= link.end);
 }
 
-function repoLinksSignature(prompt: string, invocationTokenPosition: number | null): string {
-  return repoLinksForPrompt(prompt, invocationTokenPosition)
-    .map((link) => `${link.start}:${link.end}:${link.provider}:${link.label}:${link.url}`)
+function connectedAppMentionsForPrompt(
+  prompt: string,
+  options: ConnectedAppMentionOption[],
+  invocationTokenPosition: number | null,
+): ConnectedAppMentionRange[] {
+  const mentions = detectConnectedAppMentionRanges(prompt, options);
+  if (invocationTokenPosition === null) return mentions;
+  return mentions.filter((mention) => invocationTokenPosition <= mention.start || invocationTokenPosition >= mention.end);
+}
+
+type ComposerInlineVisualRange =
+  | { end: number; kind: "repo"; link: ComposerRepoLink; start: number }
+  | { end: number; kind: "connected-app"; mention: ConnectedAppMentionRange; start: number };
+
+function inlineVisualRanges(
+  prompt: string,
+  invocationTokenPosition: number | null,
+  connectedAppMentions: ConnectedAppMentionOption[],
+): ComposerInlineVisualRange[] {
+  const candidates: ComposerInlineVisualRange[] = [
+    ...repoLinksForPrompt(prompt, invocationTokenPosition).map((link) => ({
+      end: link.end,
+      kind: "repo" as const,
+      link,
+      start: link.start,
+    })),
+    ...connectedAppMentionsForPrompt(prompt, connectedAppMentions, invocationTokenPosition).map((mention) => ({
+      end: mention.end,
+      kind: "connected-app" as const,
+      mention,
+      start: mention.start,
+    })),
+  ].sort((left, right) => left.start - right.start || right.end - left.end);
+
+  const ranges: ComposerInlineVisualRange[] = [];
+  let cursor = 0;
+  for (const candidate of candidates) {
+    if (candidate.start < cursor) continue;
+    ranges.push(candidate);
+    cursor = candidate.end;
+  }
+  return ranges;
+}
+
+function inlineVisualSignature(
+  prompt: string,
+  invocationTokenPosition: number | null,
+  connectedAppMentions: ConnectedAppMentionOption[],
+): string {
+  return inlineVisualRanges(prompt, invocationTokenPosition, connectedAppMentions)
+    .map((range) =>
+      range.kind === "repo"
+        ? `${range.start}:${range.end}:repo:${range.link.provider}:${range.link.label}:${range.link.url}`
+        : `${range.start}:${range.end}:connected-app:${range.mention.provider}:${range.mention.text}:${range.mention.displayText}`,
+    )
     .join("|");
 }
 
-function rebuildEditorDom(root: HTMLElement, prompt: string, token: ComposerInlineToken | null) {
+function rebuildEditorDom(
+  root: HTMLElement,
+  prompt: string,
+  token: ComposerInlineToken | null,
+  connectedAppMentions: ConnectedAppMentionOption[],
+) {
   const position = tokenPosition(token, prompt);
-  const repoLinks = repoLinksForPrompt(prompt, position);
+  const visualRanges = inlineVisualRanges(prompt, position, connectedAppMentions);
   let tokenInserted = false;
 
   function appendText(value: string) {
@@ -320,16 +428,21 @@ function rebuildEditorDom(root: HTMLElement, prompt: string, token: ComposerInli
   root.replaceChildren();
 
   let cursor = 0;
-  for (const link of repoLinks) {
-    appendPromptRange(cursor, link.start);
-    root.append(createRepoLinkElement(link));
-    cursor = link.end;
+  for (const range of visualRanges) {
+    appendPromptRange(cursor, range.start);
+    if (range.kind === "repo") {
+      root.append(createRepoLinkElement(range.link));
+    } else {
+      root.append(createConnectedAppMentionElement(range.mention));
+    }
+    cursor = range.end;
   }
   appendPromptRange(cursor, prompt.length);
   if (token && !tokenInserted) root.append(createTokenElement(token));
 }
 
 export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
+  connectedAppMentions?: ConnectedAppMentionOption[];
   disabled: boolean;
   onCursorChange: (index: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -339,6 +452,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   prompt: string;
   token: ComposerInlineToken | null;
 }>(function ComposerInlineInput({
+  connectedAppMentions = [],
   disabled,
   onCursorChange,
   onKeyDown,
@@ -351,7 +465,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const nextViewSelectionRef = useRef<number | null>(null);
   const tokenSignature = token ? `${token.key}:${tokenPosition(token, prompt) ?? 0}` : "none";
-  const visualSignature = `${tokenSignature}|${repoLinksSignature(prompt, tokenPosition(token, prompt))}`;
+  const visualSignature = `${tokenSignature}|${inlineVisualSignature(prompt, tokenPosition(token, prompt), connectedAppMentions)}`;
   const previousVisualSignatureRef = useRef<string | null>(null);
   const isEmpty = prompt.length === 0 && !token;
 
@@ -384,13 +498,13 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       prompt === "" ||
       (document.activeElement !== root && (currentState.text !== prompt || currentState.tokenPosition !== tokenPosition(token, prompt)));
     if (shouldRebuild) {
-      rebuildEditorDom(root, prompt, token);
+      rebuildEditorDom(root, prompt, token, connectedAppMentions);
       root.dataset.empty = prompt.length === 0 && !token ? "true" : "false";
     }
     resizeComposerTextarea(root);
     if (document.activeElement !== root || nextViewSelectionRef.current === null) return;
     setSelectionByViewIndex(root, nextViewSelectionRef.current);
-  }, [prompt, token, visualSignature]);
+  }, [connectedAppMentions, prompt, token, visualSignature]);
 
   function syncFromDom() {
     const root = rootRef.current;

@@ -687,6 +687,10 @@ async function createSandboxFromToolArgs(params: {
     ...requestedRuntimeMetadata,
     requestId: createRequestId,
     defaultRuntime: markDefaultRuntime,
+    source:
+      typeof requestedRuntimeMetadata.source === "string" && requestedRuntimeMetadata.source.trim()
+        ? requestedRuntimeMetadata.source.trim()
+        : params.source,
     ...(projectId ? { projectId } : {}),
     ...(agentId ? { agentId } : {}),
   });
@@ -745,7 +749,7 @@ function mergeSandboxActionResultWithCreate(
   };
 }
 
-function summarizeSandboxToolResult(
+export function summarizeSandboxToolResult(
   action: SandboxToolAction,
   result: unknown,
   options: { attached?: boolean } = {},
@@ -759,10 +763,18 @@ function summarizeSandboxToolResult(
       recovery.reason === "gateway_timeout" || recovery.reason === "request_timeout";
     const state = typeof sandbox.state === "string" ? sandbox.state : "";
     const preview = asRecord(payload.preview);
-    const label = options.attached === false ? "Sandbox started" : "Active sandbox workspace";
+    const label =
+      options.attached === false
+        ? state === "running"
+          ? "Sandbox started"
+          : "Sandbox start requested"
+        : state === "running"
+          ? "Active sandbox workspace"
+          : "Sandbox workspace attached";
+    const stateSuffix = state && state !== "running" ? ` (${state})` : "";
     const message = typeof preview.url === "string"
-      ? `${label}: ${id}\nPreview: ${preview.url}`
-      : `${label}: ${id}`;
+      ? `${label}: ${id}${stateSuffix}\nPreview: ${preview.url}`
+      : `${label}: ${id}${stateSuffix}`;
     return recoveredFromTimeout
       ? `Sandbox create/resume timed out, then recovered ${id}${state ? ` in ${state} state` : ""}.\n${message}`
       : message;
@@ -962,9 +974,13 @@ export function sandboxChatDefaultRuntimeMetadata(input: {
   [key: string]: unknown;
 }): Record<string, unknown> {
   const { requestId, defaultRuntime, ...rest } = input;
+  const source =
+    typeof rest.source === "string" && rest.source.trim()
+      ? rest.source.trim()
+      : "openpond-app-sandbox-chat";
   const metadata: Record<string, unknown> = {
     ...rest,
-    source: "openpond-app-sandbox-chat",
+    source,
     [SANDBOX_CREATE_REQUEST_ID_METADATA_KEY]: requestId,
   };
   if (defaultRuntime) {

@@ -151,6 +151,7 @@ describe("OpenPond App action channel", () => {
       "goal-remote",
       "goal-local",
       "insights",
+      "sync-cloud",
     ]);
     expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual(["create"]);
     expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
@@ -176,6 +177,10 @@ describe("OpenPond App action channel", () => {
     expect(parseComposerSlashCommandPrompt("/goal-local summarize files")).toEqual({
       command: "goal-local",
       args: "summarize files",
+    });
+    expect(parseComposerSlashCommandPrompt("/sync-cloud")).toEqual({
+      command: "sync-cloud",
+      args: "",
     });
     expect(parseComposerSlashCommandPrompt("/unknown summarize files")).toBeNull();
   });
@@ -503,7 +508,7 @@ describe("OpenPond App action channel", () => {
     expect(detailsHtml).toContain("Show structured payload");
   });
 
-  test("renders Goal tracking inside the existing right sidebar before Summary", () => {
+  test("renders Goal tracking inside the existing right sidebar before Files", () => {
     const html = renderToStaticMarkup(
       createElement(WorkspaceDiffTabs, {
         addMenuOpen: false,
@@ -512,22 +517,19 @@ describe("OpenPond App action channel", () => {
         dirtyFilePaths: new Set<string>(),
         openFiles: [],
         goalDetailsAvailable: true,
-        reviewOpen: false,
         searchOpen: false,
         searchQuery: "",
         selectedPath: null,
         visibleTab: "goal",
         onCloseFileTab: () => undefined,
-        onCloseReviewTab: () => undefined,
         onCloseSearch: () => undefined,
         onOpenFile: () => undefined,
         onOpenBrowser: () => undefined,
-        onOpenReviewTab: () => undefined,
         onOpenSearch: () => undefined,
         onSearchQueryChange: () => undefined,
         onSelectFile: () => undefined,
+        onSelectFiles: () => undefined,
         onSelectGoal: () => undefined,
-        onSelectSummary: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
       }),
@@ -535,8 +537,10 @@ describe("OpenPond App action channel", () => {
 
     expect(html).toContain("Right sidebar views");
     expect(html).toContain(">Goal</span>");
-    expect(html).toContain(">Summary</span>");
-    expect(html.indexOf(">Goal</span>")).toBeLessThan(html.indexOf(">Summary</span>"));
+    expect(html).toContain(">Files</span>");
+    expect(html).not.toContain(">Summary</span>");
+    expect(html).not.toContain(">Changes</span>");
+    expect(html.indexOf(">Goal</span>")).toBeLessThan(html.indexOf(">Files</span>"));
   });
 
   test("renders New chat in the right sidebar add menu when side chats are available", () => {
@@ -548,30 +552,35 @@ describe("OpenPond App action channel", () => {
         dirtyFilePaths: new Set<string>(),
         openFiles: [],
         goalDetailsAvailable: false,
-        reviewOpen: true,
         searchOpen: false,
         searchQuery: "",
         selectedPath: null,
-        visibleTab: "summary",
+        visibleTab: "files",
         onCloseFileTab: () => undefined,
-        onCloseReviewTab: () => undefined,
         onCloseSearch: () => undefined,
         onOpenFile: () => undefined,
         onOpenBrowser: () => undefined,
-        onOpenReviewTab: () => undefined,
         onOpenSearch: () => undefined,
         onOpenSideChat: () => undefined,
         onSearchQueryChange: () => undefined,
         onSelectFile: () => undefined,
+        onSelectFiles: () => undefined,
         onSelectGoal: () => undefined,
-        onSelectSummary: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
       }),
     );
 
     expect(html).toContain(">New chat</span>");
-    expect(html.indexOf(">New chat</span>")).toBeLessThan(html.indexOf(">Open file</span>"));
+    expect(html).toContain(">Files</span>");
+    expect(html).toContain(">Open file</span>");
+    expect(html).toContain(">Browser</span>");
+    expect(html).not.toContain(">Changes</span>");
+    expect(html).not.toContain(">Review</span>");
+    const menuFilesIndex = html.lastIndexOf(">Files</span>");
+    expect(html.indexOf(">New chat</span>")).toBeLessThan(menuFilesIndex);
+    expect(menuFilesIndex).toBeLessThan(html.indexOf(">Open file</span>"));
+    expect(html.indexOf(">Open file</span>")).toBeLessThan(html.indexOf(">Browser</span>"));
   });
 
   test("renders open side-chat titles in the right sidebar tab row", () => {
@@ -583,26 +592,23 @@ describe("OpenPond App action channel", () => {
         dirtyFilePaths: new Set<string>(),
         openFiles: [],
         goalDetailsAvailable: false,
-        reviewOpen: true,
         searchOpen: false,
         searchQuery: "",
         selectedPath: null,
         sideChatTabs: [{ id: "right-chat-1", title: "New chat" }],
-        visibleTab: "summary",
+        visibleTab: "files",
         onCloseFileTab: () => undefined,
-        onCloseReviewTab: () => undefined,
         onCloseSearch: () => undefined,
         onCloseSideChat: () => undefined,
         onOpenFile: () => undefined,
         onOpenBrowser: () => undefined,
-        onOpenReviewTab: () => undefined,
         onOpenSearch: () => undefined,
         onOpenSideChat: () => undefined,
         onSearchQueryChange: () => undefined,
         onSelectFile: () => undefined,
+        onSelectFiles: () => undefined,
         onSelectGoal: () => undefined,
         onSelectSideChat: () => undefined,
-        onSelectSummary: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
       }),
@@ -611,7 +617,8 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("right-chat-tab");
     expect(html).toContain(">New chat</span>");
     expect(html).toContain("aria-label=\"Close New chat\"");
-    expect(html.indexOf(">Review</span>")).toBeLessThan(html.indexOf(">New chat</span>"));
+    expect(html.indexOf(">Files</span>")).toBeLessThan(html.indexOf(">New chat</span>"));
+    expect(html).not.toContain(">Review</span>");
   });
 
   test("keeps create pipeline commands local when a local profile is active", () => {

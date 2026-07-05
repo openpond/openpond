@@ -27,6 +27,7 @@ import type {
   ProviderSettings,
   ProviderValidationRequest,
   ReorderSidebarAppsRequest,
+  RecordPreflightTurnFailureRequest,
   ResolveApprovalRequest,
   RemoteAccessStatus,
   RemoteAccessToggleResponse,
@@ -48,6 +49,10 @@ import type {
   UpdateAppPreferencesRequest,
   UpdatePersonalizationRequest,
   UpdateProviderSettingsRequest,
+  UsageRecordsResponse,
+  UsageStatusFilter,
+  UsageSummaryResponse,
+  UsageVisibilityFilter,
   WorkspaceBranchRequest,
   WorkspaceDiffFile,
   WorkspaceDiffSummary,
@@ -123,6 +128,36 @@ export type {
 export const api = {
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  usage: (
+    connection: ClientConnection,
+    input: {
+      range?: "7d" | "30d" | "90d" | "all";
+      visibility?: UsageVisibilityFilter;
+      status?: UsageStatusFilter;
+    } = {},
+  ) => {
+    const params = usageSearchParams(input);
+    const query = params.size ? `?${params.toString()}` : "";
+    return apiFetch<UsageSummaryResponse>(connection, `/v1/usage${query}`);
+  },
+  usageRecords: (
+    connection: ClientConnection,
+    input: {
+      range?: "7d" | "30d" | "90d" | "all";
+      visibility?: UsageVisibilityFilter;
+      status?: UsageStatusFilter;
+      sessionId?: string | null;
+      turnId?: string | null;
+      limit?: number;
+    } = {},
+  ) => {
+    const params = usageSearchParams(input);
+    if (input.sessionId) params.set("sessionId", input.sessionId);
+    if (input.turnId) params.set("turnId", input.turnId);
+    if (input.limit !== undefined) params.set("limit", String(input.limit));
+    const query = params.size ? `?${params.toString()}` : "";
+    return apiFetch<UsageRecordsResponse>(connection, `/v1/usage/records${query}`);
+  },
   runtimeEventsPage: (
     connection: ClientConnection,
     input: { sessionId?: string | null; afterSequence?: number; beforeSequence?: number | null; limit?: number } = {},
@@ -703,6 +738,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  recordPreflightTurnFailure: (
+    connection: ClientConnection,
+    sessionId: string,
+    input: RecordPreflightTurnFailureRequest,
+  ) =>
+    apiFetch<BootstrapPayload>(connection, `/v1/sessions/${sessionId}/preflight-turns/failure`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   updateTurnCreatePipeline: (
     connection: ClientConnection,
     sessionId: string,
@@ -745,3 +789,15 @@ export const api = {
       body: JSON.stringify(input),
     }),
 };
+
+function usageSearchParams(input: {
+  range?: "7d" | "30d" | "90d" | "all";
+  visibility?: UsageVisibilityFilter;
+  status?: UsageStatusFilter;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  if (input.range) params.set("range", input.range);
+  if (input.visibility) params.set("visibility", input.visibility);
+  if (input.status) params.set("status", input.status);
+  return params;
+}

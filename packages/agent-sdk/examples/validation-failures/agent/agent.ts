@@ -38,7 +38,7 @@ export default defineAgentProject({
       id: "slack",
       target: { action: "chat" },
       requiredConnections: ["slack"],
-      capabilities: ["slack.message.send"],
+      capabilities: ["slack.message.ingest"],
       normalizeEvent: (event) => ({ prompt: String(event.text ?? ""), channel: "slack" }),
       renderResponse: (result) => ({ text: result.text }),
     }),

@@ -44,11 +44,8 @@ export type SandboxVolumeProvisionInput = {
 
 export type SandboxIntegrationProvider =
   | "google"
-  | "slack"
   | "github"
-  | "x"
-  | "notion"
-  | "linear";
+  | "x";
 
 export type SandboxIntegrationConnectionStatus = "active" | "revoked" | "error";
 

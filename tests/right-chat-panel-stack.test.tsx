@@ -14,25 +14,27 @@ const noopAsync = async () => undefined;
 const noopAsyncBoolean = async () => true;
 
 describe("Right chat panel stack", () => {
-  test("keeps Summary and Review in the right-sidebar chrome above side chats", () => {
+  test("keeps Files in the right-sidebar chrome above side chats", () => {
     const markup = renderRightChatStack({
       panels: [rightChatPanel("panel_top", "Top chat"), rightChatPanel("panel_bottom", "Bottom chat")],
     });
 
     expect(markup).toContain("right-chat-topbar");
-    expect(markup).toContain("Summary");
-    expect(markup).toContain("Review");
+    expect(markup).toContain("Files");
     expect(markup).toContain("right-chat-tab active");
     expect(markup).toContain("Top chat");
     expect(markup).toContain("Bottom chat");
     expect(markup).toContain("aria-label=\"Close Top chat\"");
-    expect(markup).toContain("aria-label=\"Add side chat\"");
+    expect(markup).toContain("aria-label=\"Add to right sidebar\"");
     expect(markup).toContain("right-chat-stack-body panes-2");
     expect(markup).toContain("right-chat-splitter");
     expect(markup).not.toContain("right-chat-empty");
     expect(markup).not.toContain("right-chat-pane-header");
     expect(markup).not.toContain("right-chat-status-dot");
     expect(markup).not.toContain("titlebar-add-menu");
+    expect(markup).not.toContain("Summary");
+    expect(markup).not.toContain("Changes");
+    expect(markup).not.toContain("Review");
   });
 
   test("keeps an idle side-chat composer editable while another chat is busy", () => {
@@ -53,16 +55,17 @@ describe("Right chat panel stack", () => {
 
     expect(markup.toLowerCase()).toContain('contenteditable="true"');
     expect(markup).toContain('aria-label="Stop response"');
-    expect(markup).not.toContain('aria-label="Interrupt and send"');
+    expect(markup).not.toContain('aria-label="Steer"');
   });
 
-  test("shows interrupt send for a running side-chat with a drafted follow-up", () => {
+  test("shows steer controls for a running side-chat with a drafted follow-up", () => {
     const markup = renderRightChatStack({
       panels: [{ ...rightChatPanel("panel_running", "Running chat"), prompt: "new idea", running: true }],
     });
 
     expect(markup.toLowerCase()).toContain('contenteditable="true"');
-    expect(markup).toContain('aria-label="Interrupt and send"');
+    expect(markup).toContain('aria-label="Steer"');
+    expect(markup).toContain('aria-label="Queue steer draft"');
     expect(markup).not.toContain('aria-label="Stop response"');
   });
 });
@@ -105,8 +108,7 @@ function renderRightChatStack({
       onProjectTargetChange: noop,
       onResolveApproval: noopAsync,
       onResizeStart: noop,
-      onSelectReview: noop,
-      onSelectSummary: noop,
+      onSelectFiles: noop,
       onShowBrowserPanel: noop,
       onStop: noopAsyncBoolean,
       onSubmit: async () => true,
@@ -129,6 +131,8 @@ function rightChatPanel(id: string, title: string): RightChatPanelView {
     goalRuntime: null,
     pendingApproval: null,
     running: false,
+    steerAutoDispatchBlocked: false,
+    steerAutoDispatchReady: false,
     workspaceRootPath: null,
     activeWorkspaceAppId: null,
   };

@@ -17,6 +17,18 @@ function readStoredConnection(storage: Storage): ConnectionBase | null {
   return serverUrl && token ? { serverUrl, token } : null;
 }
 
+function availableStorage(storage: Storage | undefined): Storage | null {
+  if (!storage) return null;
+  try {
+    const probeKey = "__openpond_storage_probe__";
+    storage.setItem(probeKey, "1");
+    storage.removeItem(probeKey);
+    return storage;
+  } catch {
+    return null;
+  }
+}
+
 function writeStoredConnection(storage: Storage, connection: ConnectionBase): void {
   storage.setItem(SERVER_URL_STORAGE_KEY, connection.serverUrl);
   storage.setItem(TOKEN_STORAGE_KEY, connection.token);
@@ -66,6 +78,11 @@ function addCandidate(candidates: ConnectionBase[], candidate: ConnectionBase | 
 
 function connectionCandidates(): ConnectionBase[] {
   const candidates: ConnectionBase[] = [];
+  const sessionStorage = availableStorage(window.sessionStorage);
+  const localStorage = availableStorage(window.localStorage);
+  const sameOrigin = sameOriginServerUrl();
+  const sameOriginToken =
+    sessionStorage?.getItem(TOKEN_STORAGE_KEY) ?? localStorage?.getItem(TOKEN_STORAGE_KEY);
   addCandidate(
     candidates,
     import.meta.env.VITE_OPENPOND_SERVER_URL && import.meta.env.VITE_OPENPOND_TOKEN
@@ -77,20 +94,15 @@ function connectionCandidates(): ConnectionBase[] {
   );
   addCandidate(
     candidates,
-    sameOriginServerUrl() &&
-      (window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ||
-        window.localStorage.getItem(TOKEN_STORAGE_KEY))
+    sameOrigin && sameOriginToken
       ? {
-          serverUrl: sameOriginServerUrl()!,
-          token:
-            window.sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ||
-            window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ||
-            "",
+          serverUrl: sameOrigin,
+          token: sameOriginToken.trim(),
         }
       : null,
   );
-  addCandidate(candidates, readStoredConnection(window.sessionStorage));
-  addCandidate(candidates, readStoredConnection(window.localStorage));
+  addCandidate(candidates, sessionStorage ? readStoredConnection(sessionStorage) : null);
+  addCandidate(candidates, localStorage ? readStoredConnection(localStorage) : null);
   return candidates;
 }
 
@@ -110,10 +122,12 @@ async function serverIsReachable(serverUrl: string): Promise<boolean> {
 
 export async function resolveConnection(): Promise<ClientConnection> {
   if (window.openpond) return window.openpond.getConnection();
+  const sessionStorage = availableStorage(window.sessionStorage);
+  const localStorage = availableStorage(window.localStorage);
   const devHashConnection = connectionFromDevHash();
   if (devHashConnection && (await serverIsReachable(devHashConnection.serverUrl))) {
-    writeStoredConnection(window.localStorage, devHashConnection);
-    writeStoredConnection(window.sessionStorage, devHashConnection);
+    if (localStorage) writeStoredConnection(localStorage, devHashConnection);
+    if (sessionStorage) writeStoredConnection(sessionStorage, devHashConnection);
     clearConnectionHash();
     return {
       ...devHashConnection,
@@ -122,8 +136,8 @@ export async function resolveConnection(): Promise<ClientConnection> {
   }
   const injectedConnection = connectionFromInjectedWebConfig();
   if (injectedConnection && (await serverIsReachable(injectedConnection.serverUrl))) {
-    writeStoredConnection(window.localStorage, injectedConnection);
-    writeStoredConnection(window.sessionStorage, injectedConnection);
+    if (localStorage) writeStoredConnection(localStorage, injectedConnection);
+    if (sessionStorage) writeStoredConnection(sessionStorage, injectedConnection);
     return {
       ...injectedConnection,
       platform: navigator.platform,
@@ -132,15 +146,15 @@ export async function resolveConnection(): Promise<ClientConnection> {
   const candidates = connectionCandidates();
   for (const candidate of candidates) {
     if (await serverIsReachable(candidate.serverUrl)) {
-      writeStoredConnection(window.localStorage, candidate);
-      writeStoredConnection(window.sessionStorage, candidate);
+      if (localStorage) writeStoredConnection(localStorage, candidate);
+      if (sessionStorage) writeStoredConnection(sessionStorage, candidate);
       return {
         ...candidate,
         platform: navigator.platform,
       };
     }
-    clearStoredConnection(window.sessionStorage, candidate);
-    clearStoredConnection(window.localStorage, candidate);
+    if (sessionStorage) clearStoredConnection(sessionStorage, candidate);
+    if (localStorage) clearStoredConnection(localStorage, candidate);
   }
   throw new Error(
     "No reachable OpenPond app server. Start `openpond ui` again and open the full printed URL.",

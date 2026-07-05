@@ -29,6 +29,11 @@ import {
 } from "../../lib/chat-app-mentions";
 import { actionMentionMatchesForQuery } from "../../lib/action-mentions";
 import {
+  connectedAppMentionMatchesForQuery,
+  connectedAppMentionText,
+  type ConnectedAppMentionOption,
+} from "../../lib/connected-app-mentions";
+import {
   composerActionCatalogLabel,
 } from "../../lib/composer-action-catalog";
 import {
@@ -46,6 +51,16 @@ import {
   ComposerCreatePipelineStrip,
   type ComposerCreatePipelineRuntime,
 } from "./ComposerCreatePipelineStrip";
+import { ComposerSteerQueue } from "./ComposerSteerQueue";
+import {
+  composerSteerDraftsAfterSubmit,
+  composerSteerEditTarget,
+  createComposerSteerDraft,
+  removeComposerSteerDraft,
+  shouldAutoDispatchComposerSteer,
+  updateComposerSteerDraft,
+  type ComposerSteerDraft,
+} from "./composer-steer-queue";
 import { slashMenuAnchorStyle } from "./ComposerLayout";
 import {
   ComposerInlineInput,
@@ -72,12 +87,16 @@ type ComposerProps = {
   prompt: string;
   composeNotice?: ComposerNotice | null;
   mentionApps?: OpenPondApp[];
+  connectedAppMentions?: ConnectedAppMentionOption[];
   selectedMentionAppId?: string | null;
   contextWindowStatus: ContextWindowStatus;
   goalRuntime?: GoalRuntimeStatus | null;
   createPipelineRuntime?: ComposerCreatePipelineRuntime | null;
   busy: boolean;
   running?: boolean;
+  initialSteerDrafts?: ComposerSteerDraft[];
+  steerAutoDispatchReady?: boolean;
+  steerAutoDispatchBlocked?: boolean;
   showProjectFooter?: boolean;
   connection: ClientConnection | null;
   providerSettings?: ProviderSettings | null;
@@ -109,6 +128,8 @@ type ComposerProps = {
 
 export type ComposerSubmitOptions = {
   displayPrompt?: string;
+  preservePrompt?: boolean;
+  promptOverride?: string;
 };
 
 export type ComposerNotice = {
@@ -226,12 +247,16 @@ export function Composer({
   prompt,
   composeNotice = null,
   mentionApps = [],
+  connectedAppMentions = [],
   selectedMentionAppId = null,
   contextWindowStatus,
   goalRuntime = null,
   createPipelineRuntime = null,
   busy,
   running = busy,
+  initialSteerDrafts = [],
+  steerAutoDispatchReady = false,
+  steerAutoDispatchBlocked = false,
   showProjectFooter = true,
   connection,
   providerSettings = null,
@@ -260,6 +285,9 @@ export function Composer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const submittingRef = useRef(false);
+  const previousRunningRef = useRef(running);
+  const autoDispatchWaitingForStartedTurnRef = useRef(false);
+  const suppressNextAutoDispatchRef = useRef(false);
   const [cursorIndex, setCursorIndex] = useState(prompt.length);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [actionIndex, setActionIndex] = useState(0);
@@ -273,6 +301,10 @@ export function Composer({
   const [selectedActionMentionText, setSelectedActionMentionText] = useState<string | null>(null);
   const [serializingAttachments, setSerializingAttachments] = useState(false);
   const [goalDetailsOpen, setGoalDetailsOpen] = useState(false);
+  const [steerDrafts, setSteerDrafts] = useState<ComposerSteerDraft[]>(() => initialSteerDrafts);
+  const [sendingSteerDraftId, setSendingSteerDraftId] = useState<string | null>(null);
+  const [editingSteerDraftId, setEditingSteerDraftId] = useState<string | null>(null);
+  const [editSteerDraftValue, setEditSteerDraftValue] = useState("");
   const {
     attachmentError,
     attachments,
@@ -330,10 +362,23 @@ export function Composer({
     }
     return null;
   }, [prompt.length, selectedAction, selectedCommand, selectedInvocationPosition]);
+  const steering = running && hasComposerInput;
   const sendDisabled = serializingAttachments || !hasComposerInput;
-  const sendTooltip = serializingAttachments ? "Preparing files" : running ? "Interrupt and send" : "Send";
+  const sendTooltip = serializingAttachments ? "Preparing files" : steering ? "Steer" : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = busy || serializingAttachments;
+  const queueDraftDisabled = !running ||
+    !prompt.trim() ||
+    attachments.length > 0 ||
+    Boolean(selectedAction || selectedCommand) ||
+    serializingAttachments;
+  const queueDraftTooltip = attachments.length > 0
+    ? "Queue supports text drafts"
+    : selectedAction || selectedCommand
+      ? "Queue plain text drafts"
+      : prompt.trim()
+        ? "Queue steer draft"
+        : "Type a draft to queue";
   const providerOptions = useMemo(
     () => {
       const options = providerOptionsFromSettings(providerSettings, { enabledOnly: true })
@@ -389,8 +434,10 @@ export function Composer({
       .map((app) => ({ kind: "app" as const, app }));
     const actionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
       .map((action) => ({ kind: "action" as const, action }));
-    return [...appMatches, ...actionMatches].slice(0, 8);
-  }, [actionCatalog, mentionApps, mentionContext]);
+    const connectedAppMatches = connectedAppMentionMatchesForQuery(connectedAppMentions, needle)
+      .map((app) => ({ kind: "connected-app" as const, app }));
+    return [...appMatches, ...connectedAppMatches, ...actionMatches].slice(0, 8);
+  }, [actionCatalog, connectedAppMentions, mentionApps, mentionContext]);
   const showMentionMenu = Boolean(!inputDisabled && mentionContext && mentionMatches.length > 0);
   const activeSlashContext = useMemo(
     () => activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
@@ -424,6 +471,11 @@ export function Composer({
   );
 
   const showGoalRuntime = Boolean(goalRuntime && !createPipelineRuntime);
+  const showWorkspaceFooterControls = projectTarget.value !== "none";
+  const editingSteerDraft = useMemo(
+    () => steerDrafts.find((draft) => draft.id === editingSteerDraftId) ?? null,
+    [editingSteerDraftId, steerDrafts],
+  );
 
   useLayoutEffect(() => {
     inputRef.current?.resize();
@@ -540,6 +592,19 @@ export function Composer({
     setSelectedActionMentionText(null);
   }
 
+  function clearComposerPrompt() {
+    clearSelectedInvocation();
+    onPromptChange("");
+    setCursorIndex(0);
+  }
+
+  async function stopCurrentTurn() {
+    suppressNextAutoDispatchRef.current = true;
+    const stopped = await onStop();
+    if (stopped === false) suppressNextAutoDispatchRef.current = false;
+    return stopped;
+  }
+
   function insertPlanningAppMention(app: OpenPondApp, range?: { end: number; start: number }) {
     const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
     const start = range ? Math.max(0, Math.min(range.start, prompt.length)) : cursor;
@@ -584,9 +649,33 @@ export function Composer({
     });
   }
 
+  function selectConnectedAppMention(app: ConnectedAppMentionOption) {
+    if (!mentionContext) return;
+    const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+    const start = Math.max(0, Math.min(mentionContext.start, prompt.length));
+    const end = Math.max(start, Math.min(cursor, prompt.length));
+    const before = prompt.slice(0, start);
+    const after = prompt.slice(end);
+    const prefix = before && !/\s$/.test(before) ? " " : "";
+    const suffix = after && !/^\s/.test(after) ? " " : "";
+    const nextMention = `${connectedAppMentionText(app)} `;
+    const inserted = `${prefix}${nextMention}${suffix}`;
+    const nextPrompt = `${before}${inserted}${after}`;
+    const nextCursor = before.length + inserted.length;
+    onPromptChange(nextPrompt);
+    setCursorIndex(nextCursor);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(nextCursor);
+    });
+  }
+
   function selectMentionItem(item: ComposerMentionMenuItem) {
     if (item.kind === "app") {
       selectMentionApp(item.app);
+      return;
+    }
+    if (item.kind === "connected-app") {
+      selectConnectedAppMention(item.app);
       return;
     }
     selectMentionAction(item.action);
@@ -666,6 +755,100 @@ export function Composer({
     insertPlanningAppMention(app);
   }
 
+  function queueCurrentSteerDraft() {
+    const value = prompt.trim();
+    if (!value || queueDraftDisabled) return;
+    setSteerDrafts((current) => [...current, createComposerSteerDraft(value)]);
+    clearComposerPrompt();
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(0);
+    });
+  }
+
+  async function submitQueuedSteerDraft(draftId: string, source: "auto" | "manual" = "manual"): Promise<boolean> {
+    if (submittingRef.current || sendingSteerDraftId) return false;
+    const draft = steerDrafts.find((candidate) => candidate.id === draftId);
+    if (!draft) return false;
+    submittingRef.current = true;
+    setSendingSteerDraftId(draftId);
+    setAttachmentError(null);
+    try {
+      if (running) {
+        const stopped = await onStop();
+        if (stopped === false) return false;
+      }
+      const sent = await onSubmit([], null, null, {
+        preservePrompt: true,
+        promptOverride: draft.prompt,
+      });
+      if (sent) {
+        if (source === "auto") autoDispatchWaitingForStartedTurnRef.current = true;
+      }
+      setSteerDrafts((current) => composerSteerDraftsAfterSubmit(current, draftId, sent));
+      return sent;
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      submittingRef.current = false;
+      setSendingSteerDraftId(null);
+    }
+  }
+
+  function deleteQueuedSteerDraft(draftId: string) {
+    if (sendingSteerDraftId === draftId) return;
+    if (editingSteerDraftId === draftId) {
+      setEditingSteerDraftId(null);
+      setEditSteerDraftValue("");
+    }
+    setSteerDrafts((current) => removeComposerSteerDraft(current, draftId));
+  }
+
+  function editQueuedSteerDraft(draft: ComposerSteerDraft) {
+    const editTarget = composerSteerEditTarget({
+      attachmentCount: attachments.length,
+      hasSelectedAction: Boolean(selectedActionId),
+      hasSelectedCommand: Boolean(selectedCommandId),
+      prompt,
+    });
+    if (editTarget === "load_composer") {
+      setSteerDrafts((current) => removeComposerSteerDraft(current, draft.id));
+      onPromptChange(draft.prompt);
+      setCursorIndex(draft.prompt.length);
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focusAtPromptIndex(draft.prompt.length);
+      });
+      return;
+    }
+    setEditingSteerDraftId(draft.id);
+    setEditSteerDraftValue(draft.prompt);
+  }
+
+  function cancelQueuedSteerEdit() {
+    setEditingSteerDraftId(null);
+    setEditSteerDraftValue("");
+  }
+
+  function saveQueuedSteerEdit() {
+    if (!editingSteerDraft || !editSteerDraftValue.trim()) return;
+    setSteerDrafts((current) =>
+      updateComposerSteerDraft(current, editingSteerDraft.id, editSteerDraftValue.trim())
+    );
+    cancelQueuedSteerEdit();
+  }
+
+  function replaceComposerWithQueuedSteerEdit() {
+    if (!editingSteerDraft || !editSteerDraftValue.trim()) return;
+    const nextPrompt = editSteerDraftValue.trim();
+    setSteerDrafts((current) => removeComposerSteerDraft(current, editingSteerDraft.id));
+    cancelQueuedSteerEdit();
+    onPromptChange(nextPrompt);
+    setCursorIndex(nextPrompt.length);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(nextPrompt.length);
+    });
+  }
+
   async function submitComposer() {
     if (submittingRef.current || sendDisabled) return;
     submittingRef.current = true;
@@ -704,6 +887,33 @@ export function Composer({
     }
   }
 
+  useEffect(() => {
+    if (running) {
+      autoDispatchWaitingForStartedTurnRef.current = false;
+      previousRunningRef.current = true;
+      return;
+    }
+    if (suppressNextAutoDispatchRef.current || steerAutoDispatchBlocked) {
+      suppressNextAutoDispatchRef.current = false;
+      previousRunningRef.current = false;
+      return;
+    }
+    if (previousRunningRef.current && !steerAutoDispatchReady) return;
+    const shouldDispatch = shouldAutoDispatchComposerSteer({
+      autoDispatchReady: steerAutoDispatchReady && !createPipelineRuntime,
+      hasQueuedDrafts: steerDrafts.length > 0,
+      running,
+      sending: Boolean(sendingSteerDraftId) || submittingRef.current,
+      waitingForStartedTurn: autoDispatchWaitingForStartedTurnRef.current,
+      wasRunning: previousRunningRef.current,
+    });
+    previousRunningRef.current = false;
+    if (!shouldDispatch) return;
+    const nextDraft = steerDrafts[0];
+    if (!nextDraft) return;
+    void submitQueuedSteerDraft(nextDraft.id, "auto");
+  }, [createPipelineRuntime, running, sendingSteerDraftId, steerAutoDispatchBlocked, steerAutoDispatchReady, steerDrafts]);
+
   function insertDictationTranscript(text: string) {
     const cursor = cursorIndex;
     const next = insertVoiceTranscript(prompt, text, cursor);
@@ -717,7 +927,7 @@ export function Composer({
   return (
     <form
       ref={composerRef}
-      className={`composer ${mode} ${createPipelineRuntime ? "has-create-runtime" : ""} ${showGoalRuntime ? "has-goal-runtime" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${selectedAction || selectedCommand ? "has-selected-action" : ""} ${attachmentError ? "has-attachment-error" : ""}`}
+      className={`composer ${mode} ${createPipelineRuntime ? "has-create-runtime" : ""} ${showGoalRuntime ? "has-goal-runtime" : ""} ${steering ? "is-steering" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${selectedAction || selectedCommand ? "has-selected-action" : ""} ${attachmentError ? "has-attachment-error" : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
         void submitComposer();
@@ -745,6 +955,21 @@ export function Composer({
       {createPipelineRuntime && (
         <ComposerCreatePipelineStrip runtime={createPipelineRuntime} />
       )}
+      <ComposerSteerQueue
+        drafts={steerDrafts}
+        editDraftValue={editSteerDraftValue}
+        editingDraft={editingSteerDraft}
+        sendingDraftId={sendingSteerDraftId}
+        onCancelEdit={cancelQueuedSteerEdit}
+        onDeleteDraft={deleteQueuedSteerDraft}
+        onEditDraft={editQueuedSteerDraft}
+        onEditDraftValueChange={setEditSteerDraftValue}
+        onReplaceComposerDraft={replaceComposerWithQueuedSteerEdit}
+        onSaveQueuedDraft={saveQueuedSteerEdit}
+        onSteerDraft={(draftId) => {
+          void submitQueuedSteerDraft(draftId);
+        }}
+      />
       {showGoalRuntime && goalRuntime && (
         <ComposerGoalStrip
           detailsOpen={goalDetailsOpen}
@@ -783,6 +1008,7 @@ export function Composer({
         >
           <ComposerInlineInput
             ref={inputRef}
+            connectedAppMentions={connectedAppMentions}
             disabled={inputDisabled}
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
@@ -904,16 +1130,20 @@ export function Composer({
           onPlanningAppSelect={selectPlanningAppFromAddMenu}
           onProviderChange={onProviderChange}
           onProviderSetupOpen={onProviderSetupOpen}
-          onStop={onStop}
+          onQueueDraft={queueCurrentSteerDraft}
+          onStop={stopCurrentTurn}
           onToggleAddMenu={() => setAddMenuOpen((open) => !open)}
           onTranscript={insertDictationTranscript}
           provider={provider}
           providerOptions={providerOptions}
+          queueDraftDisabled={queueDraftDisabled}
+          queueDraftTooltip={queueDraftTooltip}
           running={running && !hasComposerInput}
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           selectedMentionAppId={selectedMentionAppId}
           showToast={showToast}
+          steering={steering}
         />
       </div>
       {showProjectFooter && (
@@ -924,12 +1154,14 @@ export function Composer({
             state={projectTarget}
             onChange={onProjectTargetChange}
           />
-          <WorkspaceActionControl
-            busy={busy}
-            placement={dropdownPlacement}
-            state={workspaceTarget}
-            onChange={onWorkspaceTargetChange}
-          />
+          {showWorkspaceFooterControls ? (
+            <WorkspaceActionControl
+              busy={busy}
+              placement={dropdownPlacement}
+              state={workspaceTarget}
+              onChange={onWorkspaceTargetChange}
+            />
+          ) : null}
         </div>
       )}
     </form>

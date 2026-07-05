@@ -8,7 +8,7 @@ OpenPond agent projects should import from public package subpaths only. Do not 
 - `openpond-agent-sdk/channels`: `defineChannel`, `normalizeChannelEvent`, `renderChannelResponse`, `inspectChannelSetup`, and `listChannelSetups`.
 - `openpond-agent-sdk/instructions`: generated or markdown-backed root instruction definitions.
 - `openpond-agent-sdk/skills`: generated or markdown-backed skill package definitions.
-- `openpond-agent-sdk/integrations`: provider/capability and env/secret declarations.
+- `openpond-agent-sdk/integrations`: provider/capability and env/secret declarations, including `connectedIntegration`, `integration.google`, `integration.github`, and `integration.x` helpers backed by the shared connected-app bundle metadata. Slack and Microsoft Teams remain native ingestion/channel integrations, not OAuth lease helpers.
 - `openpond-agent-sdk/volumes`: source-declared volume requirements.
 - `openpond-agent-sdk/schedules`: source-declared cron/rate schedule requirements.
 - `openpond-agent-sdk/workflow`: workflow definitions that run inside normal action execution.

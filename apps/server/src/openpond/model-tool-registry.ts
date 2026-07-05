@@ -1,6 +1,7 @@
 import type { HostedChatTool } from "@openpond/cloud";
 import type {
   ChatProvider,
+  ConnectedAppProviderFamilyId,
   OpenPondActionCatalogEntry,
   OpenPondApp,
   OpenPondProfileSkill,
@@ -9,6 +10,7 @@ import type {
   WorkspaceDiffSummary,
   WorkspaceToolResult,
 } from "@openpond/contracts";
+import { connectedAppIntegrationSkillByProvider } from "@openpond/contracts";
 import { formatWorkspaceToolResultForModel } from "./hosted-tool-protocol.js";
 import type { NativeModelToolResult } from "./native-tool-calls.js";
 import {
@@ -56,6 +58,11 @@ export type ProfileSkillReadResult = {
   charCount: number;
 };
 
+export type ConnectedAppSkillToolSource = {
+  provider: ConnectedAppProviderFamilyId;
+  label: string;
+};
+
 export function enabledModelToolDefinitions(
   definitions: ModelToolDefinition[],
   context: ToolVisibilityContext,
@@ -87,6 +94,8 @@ export function createResourceModelToolDefinitions(deps: {
     context.session.workspaceKind === "sandbox" ||
     context.session.workspaceKind === "sandbox_template" ||
     Boolean(deps.runtimeEvents?.length);
+  const activeSandboxEnabled = (context: ToolVisibilityContext) =>
+    context.session.workspaceKind === "sandbox" && Boolean(context.session.workspaceId);
 
   return [
     {
@@ -271,6 +280,99 @@ export function createResourceModelToolDefinitions(deps: {
         return workspaceToolResultToModelToolResult(context.callId, "resource_read", result);
       },
     },
+    {
+      name: "sandbox_write_file",
+      description:
+        "Write or replace a UTF-8 text file in the active sandbox workspace. Read the file first when preserving existing content matters.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: {
+            type: "string",
+            minLength: 1,
+            description: "Sandbox workspace file path, for example README.md or src/index.ts.",
+          },
+          content: {
+            type: "string",
+            description: "Complete UTF-8 text content to write to the file.",
+          },
+        },
+        required: ["path", "content"],
+      },
+      enabled: activeSandboxEnabled,
+      execute: async (context) => {
+        const content = exactTextArg(context.args, "content", { allowEmpty: true });
+        const result = await deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_write_file",
+            args: {
+              path: stringArg(context.args, "path"),
+              content,
+            },
+            source: "chat_action",
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          },
+        );
+        return workspaceToolResultToModelToolResult(context.callId, "sandbox_write_file", result);
+      },
+    },
+    {
+      name: "sandbox_edit_file",
+      description:
+        "Edit a UTF-8 text file in the active sandbox workspace by exact string replacement. Use after reading the file so oldText matches exactly.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: {
+            type: "string",
+            minLength: 1,
+            description: "Sandbox workspace file path, for example README.md or src/index.ts.",
+          },
+          oldText: {
+            type: "string",
+            minLength: 1,
+            description: "Exact text to replace. Include enough surrounding context to match only the intended location.",
+          },
+          newText: {
+            type: "string",
+            description: "Replacement text. Use an empty string to delete the oldText block.",
+          },
+          replaceAll: {
+            type: "boolean",
+            description: "Set true only when every occurrence of oldText should be replaced.",
+          },
+        },
+        required: ["path", "oldText", "newText"],
+      },
+      enabled: activeSandboxEnabled,
+      execute: async (context) => {
+        const newText = exactTextArg(context.args, "newText", { allowEmpty: true });
+        const result = await deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_edit_file",
+            args: {
+              path: stringArg(context.args, "path"),
+              oldText: exactTextArg(context.args, "oldText"),
+              newText,
+              ...(typeof context.args.replaceAll === "boolean" ? { replaceAll: context.args.replaceAll } : {}),
+            },
+            source: "chat_action",
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          },
+        );
+        return workspaceToolResultToModelToolResult(context.callId, "sandbox_edit_file", result);
+      },
+    },
   ];
 }
 
@@ -424,6 +526,69 @@ export function createOpenPondProfileSkillModelToolDefinitions(deps: {
             2,
           ),
           data: { skill: loaded },
+        };
+      },
+    },
+  ];
+}
+
+export function createConnectedAppSkillModelToolDefinitions(deps: {
+  connectedApps: ConnectedAppSkillToolSource[];
+}): ModelToolDefinition[] {
+  const providers = Array.from(
+    new Map(deps.connectedApps.map((app) => [app.provider, app])).values(),
+  ).sort((left, right) => left.label.localeCompare(right.label));
+  if (providers.length === 0) return [];
+  const providerIds = providers.map((provider) => provider.provider);
+  return [
+    {
+      name: "connected_app_skill_read",
+      description:
+        "Read product-owned operating instructions for one server-validated connected app provider before using that provider's workflow.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          provider: {
+            type: "string",
+            enum: providerIds,
+            description: "Connected app provider id from the Connected apps available in this turn list.",
+          },
+        },
+        required: ["provider"],
+      },
+      execute: async (context) => {
+        const provider = stringArg(context.args, "provider") as ConnectedAppProviderFamilyId;
+        if (!providerIds.includes(provider)) {
+          return failedActionToolResult(
+            context.callId,
+            "connected_app_skill_read",
+            `Connected app provider ${provider} is not available in this turn.`,
+          );
+        }
+        const skill = connectedAppIntegrationSkillByProvider(provider);
+        if (!skill) {
+          return failedActionToolResult(
+            context.callId,
+            "connected_app_skill_read",
+            `Connected app instructions are not available for ${provider}.`,
+          );
+        }
+        return {
+          toolCallId: context.callId,
+          name: "connected_app_skill_read",
+          ok: true,
+          contentText: JSON.stringify(
+            {
+              ok: true,
+              action: "connected_app_skill_read",
+              output: `Loaded connected app instructions for ${skill.provider}.`,
+              data: { skill },
+            },
+            null,
+            2,
+          ),
+          data: { skill },
         };
       },
     },
@@ -1040,6 +1205,18 @@ function stringArg(args: Record<string, unknown>, key: string): string {
   const value = args[key];
   if (typeof value !== "string" || !value.trim()) throw new Error(`${key} is required`);
   return value.trim();
+}
+
+function exactTextArg(
+  args: Record<string, unknown>,
+  key: string,
+  options: { allowEmpty?: boolean } = {},
+): string {
+  const value = args[key];
+  if (typeof value !== "string" || (!options.allowEmpty && value.length === 0)) {
+    throw new Error(`${key} is required`);
+  }
+  return value;
 }
 
 function actionCatalogText(action: OpenPondActionCatalogEntry): string {

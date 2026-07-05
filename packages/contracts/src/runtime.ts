@@ -4,6 +4,7 @@ export const RuntimeEventNameSchema = z.enum([
   "session.started",
   "turn.started",
   "assistant.delta",
+  "assistant.reasoning.delta",
   "tool.started",
   "tool.completed",
   "skill.selected",

@@ -4,7 +4,16 @@ import type { ChatProvider, Session, WorkspaceKind } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import type { AppAction, AppToast } from "../app/app-state";
 import { normalizeChatModel, projectSelectionKey } from "../lib/app-models";
-import { isCloudWorkspaceKind } from "../lib/workspace-location";
+import { isCloudWorkspaceKind, isHybridWorkspaceSession } from "../lib/workspace-location";
+
+export function shouldForceCloudWorkspaceProviderOpenPond(session: Session | null | undefined): boolean {
+  return Boolean(
+    session &&
+      isCloudWorkspaceKind(session.workspaceKind) &&
+      !isHybridWorkspaceSession(session) &&
+      session.provider !== "openpond",
+  );
+}
 
 export function useAppShellEffects({
   activeWorkspaceId,
@@ -95,8 +104,7 @@ export function useAppShellEffects({
   }, [activeWorkspaceId, activeWorkspaceKind, setDiffPanelExpanded]);
 
   useEffect(() => {
-    if (!connection || !selectedSession || !isCloudWorkspaceKind(selectedSession.workspaceKind)) return;
-    if (selectedSession.provider === "openpond") return;
+    if (!connection || !selectedSession || !shouldForceCloudWorkspaceProviderOpenPond(selectedSession)) return;
     void api
       .patchSession(connection, selectedSession.id, { provider: "openpond" })
       .then((updated) => {

@@ -238,6 +238,22 @@ export async function handleSandboxRoutes({ deps, request, requestUrl, response 
     );
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/connected-apps/status") {
+    sendJson(
+      response,
+      200,
+      await sandboxPayload({
+        type: "connected_app_status",
+        payload: {
+          teamId: requestUrl.searchParams.get("teamId") ?? undefined,
+          projectId: requestUrl.searchParams.get("projectId") ?? undefined,
+          agentId: requestUrl.searchParams.get("agentId") ?? undefined,
+          status: requestUrl.searchParams.get("status") ?? "all",
+        },
+      }),
+    );
+    return true;
+  }
   const sandboxCatalogForkMatch = /^\/v1\/sandboxes\/snapshots\/([^/]+)\/fork$/.exec(
     requestUrl.pathname,
   );

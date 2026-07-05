@@ -26,7 +26,7 @@ export type ShowAppToast = (
 
 export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";
 
-export type NewProjectMode = "local" | "cloud";
+export type NewProjectMode = "local" | "cloud" | "existing-local";
 export type RightPanelMode = "changes" | "browser" | "goal" | "chat";
 export type RightChatPanel = {
   id: string;
@@ -66,6 +66,7 @@ export type AppState = {
   newProjectDialogOpen: boolean;
   newProjectMode: NewProjectMode;
   newProjectName: string;
+  newProjectPath: string;
   newProjectBusy: boolean;
   commitDialogOpen: boolean;
   commitMessage: string;
@@ -108,6 +109,7 @@ export const initialAppState: AppState = {
   newProjectDialogOpen: false,
   newProjectMode: "local",
   newProjectName: "",
+  newProjectPath: "",
   newProjectBusy: false,
   commitDialogOpen: false,
   commitMessage: "",
@@ -313,6 +315,7 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setNewProjectDialogOpen: fieldSetter(dispatch, "newProjectDialogOpen"),
     setNewProjectMode: fieldSetter(dispatch, "newProjectMode"),
     setNewProjectName: fieldSetter(dispatch, "newProjectName"),
+    setNewProjectPath: fieldSetter(dispatch, "newProjectPath"),
     setNewProjectBusy: fieldSetter(dispatch, "newProjectBusy"),
     setCommitDialogOpen: fieldSetter(dispatch, "commitDialogOpen"),
     setCommitMessage: fieldSetter(dispatch, "commitMessage"),

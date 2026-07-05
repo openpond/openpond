@@ -11,6 +11,13 @@ import {
   parseBrowserTabInput,
   parseBrowserUrlInput,
 } from "./desktop-browser-ipc-validation.js";
+import { parseBrowserHarnessRequest } from "./desktop-browser-harness-validation.js";
+import type {
+  BrowserHarnessOperation,
+  BrowserHarnessResult,
+  BrowserHarnessToolName,
+  ParsedBrowserHarnessRequest,
+} from "./desktop-browser-harness-types.js";
 import type {
   BrowserCommandResult,
 } from "./desktop-browser-types.js";
@@ -43,6 +50,28 @@ export function registerBrowserSidebarIpc(
     browserManager(event, getWindow).state(parseBrowserConversationInput(input).conversationId),
   );
   handleIpc("openpond:browser:diagnostics", (event) => browserManager(event, getWindow).diagnostics());
+  handleIpc("openpond:browser:snapshot", (event, input) =>
+    harnessCommand(event, getWindow, "snapshot", "openpond_browser_snapshot", input),
+  );
+  handleIpc("openpond:browser:moveCursor", (event, input) =>
+    harnessCommand(event, getWindow, "moveCursor", "openpond_browser_move_cursor", input),
+  );
+  handleIpc("openpond:browser:click", (event, input) =>
+    harnessCommand(event, getWindow, "click", "openpond_browser_click", input),
+  );
+  handleIpc("openpond:browser:typeText", (event, input) =>
+    harnessCommand(event, getWindow, "typeText", "openpond_browser_type", input),
+  );
+  handleIpc("openpond:browser:key", (event, input) =>
+    harnessCommand(event, getWindow, "pressKey", "openpond_browser_key", input),
+  );
+  handleIpc("openpond:browser:scroll", (event, input) =>
+    harnessCommand(event, getWindow, "scroll", "openpond_browser_scroll", input),
+  );
+}
+
+export function browserSidebarManagerForWindow(window: BrowserWindow): BrowserSidebarManager {
+  return managerFor(window);
 }
 
 async function command(
@@ -56,6 +85,68 @@ async function command(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+async function harnessCommand(
+  event: IpcMainInvokeEvent,
+  getWindow: () => BrowserWindow | null,
+  operation: BrowserHarnessOperation,
+  toolName: BrowserHarnessToolName,
+  input: unknown,
+): Promise<BrowserHarnessResult> {
+  try {
+    const request = parseBrowserHarnessRequest({
+      id: "browser_renderer_request",
+      operation,
+      toolName,
+      createdAt: new Date().toISOString(),
+      deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+      input: rendererHarnessInput(input),
+    });
+    return executeHarnessCommand(browserManager(event, getWindow), request);
+  } catch (error) {
+    return {
+      ok: false,
+      output: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function executeHarnessCommand(
+  manager: BrowserSidebarManager,
+  request: ParsedBrowserHarnessRequest,
+): Promise<BrowserHarnessResult> {
+  switch (request.operation) {
+    case "open":
+      return manager.harnessOpen(request.input);
+    case "snapshot":
+      return manager.harnessSnapshot(request.input);
+    case "moveCursor":
+      return manager.harnessMoveCursor(request.input);
+    case "click":
+      return manager.harnessClick(request.input);
+    case "typeText":
+      return manager.harnessTypeText(request.input);
+    case "pressKey":
+      return manager.harnessKey(request.input);
+    case "scroll":
+      return manager.harnessScroll(request.input);
+  }
+}
+
+function rendererHarnessInput(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Browser harness IPC payload must be an object.");
+  }
+  const record = input as Record<string, unknown>;
+  const { conversationId } = parseBrowserConversationInput(record);
+  return {
+    ...record,
+    conversationId,
+    sessionId: conversationId,
+    turnId: "renderer",
+    callId: "renderer",
+  };
 }
 
 function browserManager(event: IpcMainInvokeEvent, getWindow: () => BrowserWindow | null): BrowserSidebarManager {

@@ -171,6 +171,52 @@ describe("OpenPond action catalog context", () => {
     expect(prompt).not.toContain("Identify user-facing changes first");
   });
 
+  test("scopes Hybrid project edits to the hosted sandbox without removing Create Pipeline", async () => {
+    const helpers = createHostedTurnHelpers({
+      appendRuntimeEvent: async (_event: RuntimeEvent) => {},
+    });
+
+    const prompt = await helpers.hostedSystemPrompt(
+      "Base hosted prompt.",
+      "",
+      {
+        ...session,
+        id: "hybrid_session_1",
+        title: "Hybrid Project Chat",
+        workspaceId: "sandbox_1",
+        workspaceName: "Hybrid Repo",
+        localProjectId: "local_project_1",
+        cloudProjectId: "cloud_project_1",
+        cloudTeamId: "team_1",
+        metadata: { workspaceTarget: "hybrid" },
+      },
+      {
+        toolInstructionMode: "full_text_fallback",
+        actionCatalogInstructionMode: "native_tool",
+      },
+    );
+
+    expect(prompt).toContain("Hybrid workspace context:");
+    expect(prompt).toContain(
+      "Treat normal requests to inspect, edit, test, or diff project files as sandbox workspace work.",
+    );
+    expect(prompt).toContain(
+      "For file edits like README, source, config, or docs updates, inspect and change the active sandbox",
+    );
+    expect(prompt).toContain(
+      "Keep the user's local checkout unchanged unless the user explicitly asks to preserve, promote, apply, or export sandbox changes.",
+    );
+    expect(prompt).toContain(
+      "Create Pipeline remains appropriate only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+    );
+    expect(prompt).toContain("- create_pipeline: create or edit source-backed agents and workflows");
+    expect(prompt).toContain(
+      "Use create_pipeline only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+    );
+    expect(prompt).toContain("sandbox_read_file");
+    expect(prompt).toContain("sandbox_edit_file");
+  });
+
   test("uses text fallback instructions and truncates large profile skill indexes", async () => {
     const helpers = createHostedTurnHelpers({
       appendRuntimeEvent: async (_event: RuntimeEvent) => {},

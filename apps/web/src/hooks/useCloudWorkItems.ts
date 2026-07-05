@@ -5,12 +5,13 @@ import type {
   CloudWorkItem,
   CloudWorkItemDetail,
   LocalProject,
+  UsageRequestAttribution,
   WorkspaceState,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import type { ShowAppToast } from "../app/app-state";
 import { projectSelectionKey, type AppView } from "../lib/app-models";
-import { parseComposerSlashCommandPrompt } from "../lib/composer-slash-commands";
+import { parseComposerSlashCommandPrompt, type ParsedComposerSlashCommand } from "../lib/composer-slash-commands";
 import {
   approveCreatePipelineSnapshot,
   buildHostedCloudWorkCreatePipelineRequest,
@@ -212,6 +213,7 @@ export function useCloudWorkItems({
       const createPipeline = createPipelineRequest
         ? buildInitialCreatePipelineSnapshot(createPipelineRequest)
         : null;
+      const usageAttribution = cloudSlashUsageAttribution(parsed);
       const sourceRef =
         createPipelineRequest?.adapter.kind === "hosted"
           ? createPipelineRequest.adapter.sourceRef
@@ -237,6 +239,7 @@ export function useCloudWorkItems({
           requestedExecutionTarget: input.requestedExecutionTarget ?? null,
           createPipelineRequest,
           createPipeline,
+          usageAttribution,
         });
         setCloudWorkItemDetail(detail);
         setCloudWorkItems((current) => [detail.workItem, ...current.filter((item) => item.id !== detail.workItem.id)]);
@@ -258,6 +261,7 @@ export function useCloudWorkItems({
           baseSha,
           branchPolicy: { mode: "patch_only" },
           budget: { maxDurationSeconds: 1800 },
+          usageAttribution,
         });
         await refreshSelectedCloudWorkItem(detail.workItem);
         showToast("Cloud task started in the background.", "success");
@@ -312,6 +316,7 @@ export function useCloudWorkItems({
           message,
           createPipelineRequest: revision ? createPipelineRequest : undefined,
           createPipeline: revision ? revisedCreatePipeline : undefined,
+          usageAttribution: revision ? createPipelineUsageAttribution(createPipelineRequest) : undefined,
         });
         setCloudWorkItemDetail((current) =>
           current
@@ -365,6 +370,7 @@ export function useCloudWorkItems({
             currentCreatePipeline ?? buildInitialCreatePipelineSnapshot(createPipelineRequest),
           )
         : null;
+      const usageAttribution = createPipelineUsageAttribution(createPipelineRequest);
       setCloudBusy(true);
       setCloudError(null);
       try {
@@ -383,6 +389,7 @@ export function useCloudWorkItems({
           budget: { maxDurationSeconds: 1800 },
           createPipelineRequest,
           createPipeline: approvedCreatePipeline,
+          usageAttribution,
           payload: createPipelineRequest
             ? { createPipelineDecision: "approved", createPipelineState: "applying_source" }
             : undefined,
@@ -514,6 +521,7 @@ export function useCloudWorkItems({
           message: "Cancel create plan",
           createPipelineRequest,
           createPipeline: cancelledCreatePipeline,
+          usageAttribution: createPipelineUsageAttribution(createPipelineRequest),
         });
         setCloudWorkItemDetail((current) =>
           current
@@ -579,5 +587,31 @@ export function useCloudWorkItems({
     sendCloudWorkItemMessage,
     setCloudError,
     setSelectedCloudWorkItemId,
+  };
+}
+
+function cloudSlashUsageAttribution(
+  command: ParsedComposerSlashCommand | null,
+): UsageRequestAttribution | undefined {
+  return command
+    ? {
+        surface: "chat",
+        workflowKind: "slash_command",
+        commandName: `/${command.command}`,
+        commandSource: "prompt_parse",
+      }
+    : undefined;
+}
+
+function createPipelineUsageAttribution(
+  request: CloudWorkItem["createPipelineRequest"],
+): UsageRequestAttribution | undefined {
+  if (!request?.command) return undefined;
+  return {
+    surface: "create_pipeline",
+    workflowKind: "planner",
+    createPipelineRequestId: request.id,
+    commandName: request.command,
+    commandSource: "api",
   };
 }

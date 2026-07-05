@@ -23,6 +23,44 @@ import {
   ProviderValidationRequestSchema,
 } from "./providers.js";
 import { SidebarAppPreferenceSchema } from "./workspaces.js";
+import { UsageRequestAttributionSchema } from "./usage.js";
+
+const ConnectedAppProviderFamilyIdSchema = z.enum([
+  "slack",
+  "microsoft_teams",
+  "github",
+  "google",
+  "x",
+  "mcp",
+]);
+
+const ConnectedAppIdSchema = z.enum([
+  "slack",
+  "microsoft_teams",
+  "github",
+  "google",
+  "x",
+  "mcp",
+]);
+
+const ConnectedAppSetupSurfaceSchema = z.enum([
+  "native_bot",
+  "oauth_connector",
+  "mcp_endpoint",
+]);
+
+export const MentionedConnectedAppRefSchema = z
+  .object({
+    kind: z.literal("integration"),
+    provider: ConnectedAppProviderFamilyIdSchema,
+    appIds: z.array(ConnectedAppIdSchema).min(1).max(4),
+    setupSurfaces: z.array(ConnectedAppSetupSurfaceSchema).min(1).max(4),
+    connectionIds: z.array(z.string().trim().min(1)).max(8).optional(),
+    capabilities: z.array(z.string().trim().min(1)).max(64).optional(),
+  })
+  .strict();
+
+export type MentionedConnectedAppRef = z.infer<typeof MentionedConnectedAppRefSchema>;
 
 export const CHAT_ATTACHMENT_LIMITS = {
   maxAttachments: 10,
@@ -75,6 +113,7 @@ export const CreateSessionRequestSchema = z.object({
   localProjectId: z.string().nullable().optional(),
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
   title: z.string().optional(),
 });
@@ -85,6 +124,8 @@ export const UploadLocalProjectCloudSourceRequestSchema = z.object({
   teamId: z.string().trim().min(1),
   projectName: z.string().trim().min(1).max(120).optional(),
   branch: z.string().trim().min(1).max(120).optional(),
+  chatSessionId: z.string().trim().min(1).max(200).optional(),
+  displayPrompt: z.string().trim().min(1).max(2_000).optional(),
 });
 
 export type UploadLocalProjectCloudSourceRequest = z.infer<
@@ -125,6 +166,7 @@ export const CreateCloudWorkItemRequestSchema = z.object({
     .nullable(),
   createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
   createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
 });
 
 export type CreateCloudWorkItemRequest = z.infer<typeof CreateCloudWorkItemRequestSchema>;
@@ -134,6 +176,7 @@ export const SendCloudWorkItemMessageRequestSchema = z.object({
   message: z.string().trim().min(1).max(200_000),
   createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
   createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
 });
 
 export type SendCloudWorkItemMessageRequest = z.infer<
@@ -185,6 +228,7 @@ export const CloudWorkItemBackgroundRequestSchema = z.object({
     .nullable(),
   createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
   createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -242,10 +286,12 @@ export type ApplyCloudWorkItemLocalPatchRequest = z.infer<
 export const SendTurnRequestSchema = z.object({
   prompt: z.string().min(1),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
   cwd: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   modelRef: ChatModelRefSchema.optional(),
   mentionedAppIds: z.array(z.string().trim().min(1)).max(8).optional(),
+  mentionedConnectedApps: z.array(MentionedConnectedAppRefSchema).max(8).optional(),
   openPondActionCatalog: z.array(OpenPondActionCatalogEntrySchema).max(100).optional(),
   attachments: z.array(ChatAttachmentSchema).max(CHAT_ATTACHMENT_LIMITS.maxAttachments).optional(),
   createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
@@ -257,6 +303,16 @@ export const SendTurnRequestSchema = z.object({
 });
 
 export type SendTurnRequest = z.infer<typeof SendTurnRequestSchema>;
+
+export const RecordPreflightTurnFailureRequestSchema = z.object({
+  prompt: z.string().min(1),
+  error: z.string().min(1),
+  target: z.enum(["cloud_workspace", "hybrid_sandbox"]),
+});
+
+export type RecordPreflightTurnFailureRequest = z.infer<
+  typeof RecordPreflightTurnFailureRequestSchema
+>;
 
 export const UpdateTurnCreatePipelineRequestSchema = z.object({
   createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
@@ -290,6 +346,7 @@ export const PatchSessionRequestSchema = z.object({
   localProjectId: z.string().nullable().optional(),
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
 });
 

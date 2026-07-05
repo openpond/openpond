@@ -14,6 +14,7 @@ export { default as Ban } from "lucide-react/dist/esm/icons/ban.js";
 export { default as BookOpenText } from "lucide-react/dist/esm/icons/book-open-text.js";
 export { default as Bot } from "lucide-react/dist/esm/icons/bot.js";
 export { default as Boxes } from "lucide-react/dist/esm/icons/boxes.js";
+export { default as ChartColumnStacked } from "lucide-react/dist/esm/icons/chart-column-stacked.js";
 export { default as Check } from "lucide-react/dist/esm/icons/check.js";
 export { default as CheckCircle2 } from "lucide-react/dist/esm/icons/circle-check.js";
 export { default as ChevronDown } from "lucide-react/dist/esm/icons/chevron-down.js";

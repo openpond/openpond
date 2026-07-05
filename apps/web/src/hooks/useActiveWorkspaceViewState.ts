@@ -20,9 +20,11 @@ import {
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import {
   cloudProjectLabel,
+  isHybridWorkspaceSession,
   isCloudWorkspaceKind,
   isPendingCloudStartSession,
   type WorkspaceLocation,
+  type WorkspaceTargetOptionState,
   type WorkspaceTargetState,
 } from "../lib/workspace-location";
 
@@ -57,6 +59,7 @@ export function useActiveWorkspaceViewState({
   const selectedSessionCloudWorkspace = selectedSession
     ? isCloudWorkspaceKind(selectedSession.workspaceKind)
     : false;
+  const selectedSessionHybridWorkspace = isHybridWorkspaceSession(selectedSession);
   const selectedSessionPendingCloudStart = selectedSession
     ? isPendingCloudStartSession(selectedSession)
     : false;
@@ -95,7 +98,7 @@ export function useActiveWorkspaceViewState({
   const activeWorkspaceAppId = selectedCodexHistoryPending
     ? null
     : selectedSession
-      ? selectedSessionCloudWorkspace || selectedSessionPendingCloudStart
+      ? (selectedSessionCloudWorkspace && !selectedSessionHybridWorkspace) || selectedSessionPendingCloudStart
         ? null
         : selectedSessionProjectId
           ? selectedSessionProjectId
@@ -203,7 +206,7 @@ export function useWorkspaceTargetState({
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
   selectedSession: Session | null;
-  pendingWorkspaceTarget: "queue_cloud" | null;
+  pendingWorkspaceTarget: "queue_cloud" | "hybrid" | null;
   workspaceStates: Record<string, WorkspaceState>;
   workspaceBusy: boolean;
 }) {
@@ -229,8 +232,8 @@ export function useWorkspaceTargetState({
       [...localOptions, ...cloudOptions].find((option) => option.value === value) ?? null;
     return {
       value,
-      label: selectedOption?.label ?? "No project",
-      detail: selectedOption?.detail ?? "General chat",
+      label: selectedOption?.label ?? "Select Project",
+      detail: selectedOption?.detail ?? "Choose a project for local or cloud work",
       busy: workspaceBusy || busy,
       options: [
         ...localOptions,
@@ -251,6 +254,12 @@ export function useWorkspaceTargetState({
     };
   }, [bootstrap?.cloudProjects, bootstrap?.localProjects, busy, selectedCloudProject, selectedProject, workspaceBusy]);
   const cloudSetupAvailable = Boolean(cloudLinked || selectedProject);
+  const hybridLinked = Boolean(
+    selectedCloudProject?.id ||
+      selectedProject?.linkedSandboxProject?.projectId ||
+      selectedSession?.cloudProjectId ||
+      isHybridWorkspaceSession(selectedSession),
+  );
   const selectedLocalWorkspaceState = selectedProject ? workspaceStates[selectedProject.id] ?? null : null;
   const localStateNote = localWorkspaceStateNote(selectedLocalWorkspaceState, {
     branch: selectedProject?.linkedSandboxProject?.defaultBranch ?? null,
@@ -285,6 +294,16 @@ export function useWorkspaceTargetState({
           ? "Add an OpenPond account before queueing Cloud work."
           : "Upload/sync this Project to Cloud before queueing work.",
       };
+      const hybridOption = {
+        value: "hybrid" as const,
+        label: "Hybrid",
+        detail: "Use your selected model with hosted sandbox edits.",
+        stateNote: hybridLinked ? cloudStateNote : "upload required",
+        disabled: accountPending || accountSignedOut || !hybridLinked,
+        disabledReason: accountSignedOut
+          ? "Add an OpenPond account before using Hybrid."
+          : "Upload/sync this Project to Cloud before using Hybrid.",
+      };
       const cloudOption = {
         value: "cloud" as const,
         label: "Cloud workspace",
@@ -307,12 +326,12 @@ export function useWorkspaceTargetState({
       };
       const actionTarget = activeWorkspaceLocation === "cloud" ? "local" : "cloud";
       const actionOption = actionTarget === "local" ? localOption : cloudOption;
-      const selectedOption =
-        pendingWorkspaceTarget === "queue_cloud"
-          ? queueOption
-          : activeWorkspaceLocation === "cloud"
-            ? cloudOption
-            : localOption;
+      let selectedOption: WorkspaceTargetOptionState =
+        activeWorkspaceLocation === "cloud" ? cloudOption : localOption;
+      if (pendingWorkspaceTarget === "queue_cloud") selectedOption = queueOption;
+      if (isHybridWorkspaceSession(selectedSession) || pendingWorkspaceTarget === "hybrid") {
+        selectedOption = hybridOption;
+      }
       return {
         value: selectedOption.value,
         label: selectedOption.label,
@@ -327,7 +346,8 @@ export function useWorkspaceTargetState({
                 ? "Local checkout"
                 : "Check out locally",
         },
-        options: [localOption, queueOption, cloudOption, uploadOption],
+        uploadAction: uploadOption,
+        options: [localOption, hybridOption, queueOption, cloudOption],
       };
     },
     [
@@ -337,9 +357,11 @@ export function useWorkspaceTargetState({
       cloudLinked,
       cloudSetupAvailable,
       cloudStateNote,
+      hybridLinked,
       localStateNote,
       pendingWorkspaceTarget,
       selectedProject,
+      selectedSession,
       uploadStateNote,
       workspaceBusy,
     ],

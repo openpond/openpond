@@ -1,7 +1,7 @@
 import type { LocalProject, Session, WorkspaceKind } from "@openpond/contracts";
 
 export type WorkspaceLocation = "local" | "cloud";
-export type WorkspaceTargetValue = WorkspaceLocation | "queue_cloud" | "upload_cloud";
+export type WorkspaceTargetValue = WorkspaceLocation | "hybrid" | "queue_cloud" | "upload_cloud";
 
 export type WorkspaceTargetOptionState = {
   value: WorkspaceTargetValue;
@@ -17,6 +17,7 @@ export type WorkspaceTargetState = {
   label: string;
   detail: string;
   options: WorkspaceTargetOptionState[];
+  uploadAction?: WorkspaceTargetOptionState | null;
   action: WorkspaceTargetOptionState & {
     label: string;
   };
@@ -25,6 +26,19 @@ export type WorkspaceTargetState = {
 
 export function isCloudWorkspaceKind(kind: WorkspaceKind | null | undefined): boolean {
   return kind === "sandbox" || kind === "sandbox_template" || kind === "sandbox_app";
+}
+
+export function hybridWorkspaceSessionMetadata(
+  metadata: Record<string, unknown> | null | undefined = {},
+): Record<string, unknown> {
+  return {
+    ...metadata,
+    workspaceTarget: "hybrid",
+  };
+}
+
+export function isHybridWorkspaceSession(session: Session | null | undefined): boolean {
+  return session?.metadata?.workspaceTarget === "hybrid";
 }
 
 export function isPendingCloudStartSession(session: Session | null | undefined): boolean {

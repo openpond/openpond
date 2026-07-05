@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
-import type { ChatAttachment, RuntimeEvent, Session, WorkspaceState, TerminalScope } from "@openpond/contracts";
+import type {
+  ChatAttachment,
+  ConnectedAppStatusRow,
+  RuntimeEvent,
+  Session,
+  WorkspaceState,
+  TerminalScope,
+} from "@openpond/contracts";
+import { buildConnectedAppStatusRows } from "@openpond/contracts";
 import {
   appReducer,
   createAppSetters,
@@ -14,7 +22,12 @@ import { useProjectConfirmDialog } from "./components/app-shell/ProjectConfirmDi
 import { isDesktopShell, isMacPlatform } from "./components/app-shell/WindowControls";
 import { AppSplash } from "./components/splash/AppSplash";
 import type { CloudSetupDialogState } from "./components/workspace/CloudSetupDialog";
-import { normalizeChatModel, SIDEBAR_SECTION_LIMIT, type SidebarProjectItem } from "./lib/app-models";
+import {
+  modelRefForTurn,
+  normalizeChatModel,
+  SIDEBAR_SECTION_LIMIT,
+  type SidebarProjectItem,
+} from "./lib/app-models";
 import { buildCachedChatMessages } from "./lib/chat-messages";
 import { mergeRuntimeEventLists } from "./lib/runtime-event-lists";
 import {
@@ -51,10 +64,13 @@ import type { ComposerSlashCommand } from "./lib/composer-slash-commands";
 import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
 import type { WorkspaceDiffTabRequest } from "./components/workspace-diff/workspace-diff-panel-model";
 import {
+  hybridWorkspaceSessionMetadata,
   isCloudWorkspaceKind,
+  isHybridWorkspaceSession,
   type WorkspaceTargetValue,
 } from "./lib/workspace-location";
 import { queuedCloudWorkSubmission } from "./lib/queued-cloud-work";
+import { latestTurnCompletionState } from "./lib/turn-completion-state";
 import {
   useActiveWorkspaceViewState,
   useWorkspaceTargetState,
@@ -128,6 +144,9 @@ export function App() {
   const [pendingTerminalCommand, setPendingTerminalCommand] = useState<TerminalQueuedCommand | null>(null);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
   const [mentionedAppId, setMentionedAppId] = useState<string | null>(null);
+  const [connectedAppRows, setConnectedAppRows] = useState<ConnectedAppStatusRow[]>(() =>
+    buildConnectedAppStatusRows(),
+  );
   const [cloudSetupDialog, setCloudSetupDialog] = useState<CloudSetupDialogState | null>(null);
   const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(null);
   const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
@@ -173,6 +192,7 @@ export function App() {
     newProjectDialogOpen,
     newProjectMode,
     newProjectName,
+    newProjectPath,
     newProjectBusy,
     commitDialogOpen,
     commitMessage,
@@ -213,6 +233,7 @@ export function App() {
     setNewProjectDialogOpen,
     setNewProjectMode,
     setNewProjectName,
+    setNewProjectPath,
     setNewProjectBusy,
     setCommitDialogOpen,
     setCommitMessage,
@@ -248,6 +269,29 @@ export function App() {
     setSelectedProjectId,
     setSelectedSessionId,
   });
+  useEffect(() => {
+    let active = true;
+    if (!connection) {
+      setConnectedAppRows(buildConnectedAppStatusRows());
+      return () => {
+        active = false;
+      };
+    }
+    void api
+      .connectedAppStatus(connection, {
+        status: "all",
+      })
+      .then((payload) => {
+        if (active) setConnectedAppRows(payload.apps);
+      })
+      .catch((caught) => {
+        console.warn("Unable to load connected app mention status.", caught);
+        if (active) setConnectedAppRows(buildConnectedAppStatusRows());
+      });
+    return () => {
+      active = false;
+    };
+  }, [connection]);
   const insights = useInsights({ connection });
   useEffect(() => {
     const session = insights.systemSession;
@@ -283,9 +327,8 @@ export function App() {
     setError,
   });
   const revealProjectsSection = useCallback(() => {
-    setProjectsExpanded(true);
     if (projectsCollapsed) toggleProjectsCollapsed();
-  }, [projectsCollapsed, setProjectsExpanded, toggleProjectsCollapsed]);
+  }, [projectsCollapsed, toggleProjectsCollapsed]);
 
   const {
     cloudProjectById,
@@ -309,8 +352,9 @@ export function App() {
     sessions,
   });
   const runtimeIndexes = useRuntimeIndexes(events, approvals);
-  const { chatMentionApps, cloudProjectIdsByTeam, pendingApproval } = useAppConversationContext({
+  const { chatMentionApps, cloudProjectIdsByTeam, connectedAppMentions, pendingApproval } = useAppConversationContext({
     bootstrap,
+    connectedAppRows,
     mentionableSandboxApps,
     runtimeIndexes,
     selectedApp,
@@ -704,6 +748,7 @@ export function App() {
     sidebarProjectIdBySessionId,
     chatRows,
     visibleChatRows,
+    sessionEvents,
     chatMessages,
     contextUsage,
     goalRuntime,
@@ -715,6 +760,7 @@ export function App() {
     runtimeIndexes: selectedRuntimeIndexes,
     appPreferences,
     selectedSessionId,
+    selectedProjectId,
     archivedChatsOpen,
     projectsExpanded,
     chatRowsVisibleCount,
@@ -804,6 +850,14 @@ export function App() {
     selectedSessionId,
     sidebarSessions,
   });
+  const selectedTurnCompletionState = useMemo(
+    () => latestTurnCompletionState(sessionEvents),
+    [sessionEvents],
+  );
+  const selectedSteerAutoDispatchReady =
+    selectedTurnCompletionState === "completed" && !pendingApproval && !selectedSessionRunning;
+  const selectedSteerAutoDispatchBlocked =
+    Boolean(pendingApproval) || selectedTurnCompletionState === "blocked";
   const {
     dragItem,
     pinnedPreviewKeys,
@@ -884,7 +938,7 @@ export function App() {
     activeWorkspaceKind === "local_project" &&
     Boolean(selectedProject?.sandboxTemplate?.detected) &&
     !selectedProject?.linkedOpenPondApp?.appId;
-  const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<"queue_cloud" | null>(null);
+  const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<"queue_cloud" | "hybrid" | null>(null);
   const [pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget] = useState<{
     projectId: string;
     target: WorkspaceTargetValue;
@@ -918,7 +972,7 @@ export function App() {
   const browserConversationId =
     selectedSessionId ??
     `draft:${selectedProjectId ?? selectedAppId ?? selectedCloudProject?.id ?? "general"}`;
-  const openInsightsSession = useCallback((sessionId: string) => {
+  const openSessionInChat = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
     setSelectedAppId(null);
     setSelectedProjectId(null);
@@ -965,12 +1019,24 @@ export function App() {
       setError(error instanceof Error ? error.message : String(error));
     }
   }, [applyBootstrapPayload, connection, setError]);
-  const { addProjectFolder, createCloudProjectFromScratch, createProjectFromScratch, removeProject } = useProjectActions({
+  const {
+    addProjectFolder,
+    addProjectFolderPath,
+    createCloudProjectFromScratch,
+    createProjectFromScratch,
+    removeProject,
+  } = useProjectActions({
     connection,
     defaultTeamId: appDefaults.defaultTeamId,
     sessions,
     selectedProjectId,
     confirmProjectAction,
+    openExistingProjectDialog: () => {
+      setNewProjectMode("existing-local");
+      setNewProjectName("");
+      setNewProjectPath("");
+      setNewProjectDialogOpen(true);
+    },
     applyBootstrapPayload,
     expandProject,
     revealProjectsSection,
@@ -984,6 +1050,7 @@ export function App() {
   });
   const { changeProjectTarget, submitNewProjectDialog } = useProjectTargetActions({
     addProjectFolder,
+    addProjectFolderPath,
     appDispatch,
     busy,
     cloudProjectById,
@@ -994,6 +1061,7 @@ export function App() {
     newProjectBusy,
     newProjectMode,
     newProjectName,
+    newProjectPath,
     projectTargetValue: projectTarget.value,
     setDiffPanelOpen,
     setDraftModel,
@@ -1002,6 +1070,7 @@ export function App() {
     setNewProjectBusy,
     setNewProjectDialogOpen,
     setNewProjectName,
+    setNewProjectPath,
     showToast,
     workspaceBusy,
   });
@@ -1094,6 +1163,7 @@ export function App() {
     expandProject,
     prompt,
     apps: bootstrap?.apps ?? [],
+    connectedAppMentions,
     mentionedAppId,
     ensureCloudSessionReady,
     refreshWorkspace,
@@ -1106,6 +1176,7 @@ export function App() {
     selectedProjectLinkedOpenPondApp,
     selectedSession,
     sessions,
+    workspaceTarget: workspaceTarget.value,
     setDraftModel,
     setDraftProvider,
     setError,
@@ -1163,13 +1234,14 @@ export function App() {
     setCloudSetupDialog,
     setDiffPanelOpen,
     setError,
+    setSessions,
     setWorkspaceBusy,
     showToast,
     visibleWorkspaceState,
     workspaceBusy,
   });
   const changeWorkspaceTarget = useCallback(
-    async (target: "local" | "cloud" | "queue_cloud" | "upload_cloud") => {
+    async (target: WorkspaceTargetValue) => {
       if (target === "queue_cloud") {
         const linkedCloudProjectId =
           selectedCloudProject?.id ?? selectedProject?.linkedSandboxProject?.projectId ?? null;
@@ -1182,10 +1254,82 @@ export function App() {
         showToast("Next message will queue a Cloud work item and keep this chat local.", "info");
         return;
       }
+      if (target === "hybrid") {
+        const linkedCloudProjectId =
+          selectedCloudProject?.id ?? selectedProject?.linkedSandboxProject?.projectId ?? selectedSession?.cloudProjectId ?? null;
+        const linkedCloudTeamId =
+          selectedCloudProject?.teamId ?? selectedProject?.linkedSandboxProject?.teamId ?? selectedSession?.cloudTeamId ?? null;
+        if (accountPending) {
+          showToast("Checking OpenPond account. Try again in a moment.", "info");
+          return;
+        }
+        if (accountSignedOut) {
+          showToast("Add an OpenPond account before using Hybrid.", "error");
+          return;
+        }
+        if (!linkedCloudProjectId || !linkedCloudTeamId) {
+          setPendingWorkspaceTarget(null);
+          showToast("Upload/sync this Project to Cloud before using Hybrid.", "error");
+          return;
+        }
+        if (selectedSession && !isCodexHistorySessionId(selectedSession.id)) {
+          if (isHybridWorkspaceSession(selectedSession)) return;
+          if (!connection) {
+            showToast("OpenPond App server is not connected.", "error");
+            return;
+          }
+          const updated = await api.patchSession(connection, selectedSession.id, {
+            provider: draftProvider,
+            modelRef: modelRefForTurn(draftProvider, draftModel, bootstrap?.providers ?? null),
+            appId: null,
+            appName: null,
+            workspaceKind: "sandbox",
+            workspaceId: null,
+            workspaceName:
+              selectedCloudProject?.name ??
+              selectedProject?.linkedSandboxProject?.projectName ??
+              selectedProject?.name ??
+              selectedSession.workspaceName ??
+              "Hybrid workspace",
+            localProjectId: selectedProject?.id ?? selectedSession.localProjectId ?? null,
+            cloudProjectId: linkedCloudProjectId,
+            cloudTeamId: linkedCloudTeamId,
+            metadata: hybridWorkspaceSessionMetadata(selectedSession.metadata),
+            cwd: selectedProject?.workspacePath ?? selectedSession.cwd ?? null,
+          });
+          setSessions((current) => current.map((session) => (session.id === updated.id ? updated : session)));
+          setPendingWorkspaceTarget(null);
+          showToast("Hybrid will use your selected model with hosted sandbox edits.", "info");
+          return;
+        }
+        setPendingWorkspaceTarget("hybrid");
+        showToast("Next message will use Hybrid with a hosted sandbox.", "info");
+        return;
+      }
       setPendingWorkspaceTarget(null);
       await changeWorkspaceTargetBase(target);
     },
-    [changeWorkspaceTargetBase, selectedCloudProject?.id, selectedProject?.linkedSandboxProject?.projectId, showToast],
+    [
+      accountPending,
+      accountSignedOut,
+      bootstrap?.providers,
+      changeWorkspaceTargetBase,
+      connection,
+      draftModel,
+      draftProvider,
+      selectedCloudProject?.id,
+      selectedCloudProject?.name,
+      selectedCloudProject?.teamId,
+      selectedProject?.id,
+      selectedProject?.linkedSandboxProject?.projectId,
+      selectedProject?.linkedSandboxProject?.projectName,
+      selectedProject?.linkedSandboxProject?.teamId,
+      selectedProject?.name,
+      selectedProject?.workspacePath,
+      selectedSession,
+      setSessions,
+      showToast,
+    ],
   );
   const switchProjectWorkspaceTarget = useCallback(
     (projectId: string, target: WorkspaceTargetValue) => {
@@ -1218,6 +1362,7 @@ export function App() {
       promptOverride?: string,
       options: ComposerSubmitOptions = {},
     ) => {
+      const promptForSubmission = promptOverride ?? prompt;
       const queuedSubmission = queuedCloudWorkSubmission({
         pendingWorkspaceTarget,
         actionSelected: Boolean(action),
@@ -1233,7 +1378,7 @@ export function App() {
           visibleWorkspaceState?.currentBranch ??
           null,
         selectedProjectCloudBaseSha: selectedProject?.linkedSandboxProject?.lastUploadedCommit ?? null,
-        prompt,
+        prompt: promptForSubmission,
       });
       if (queuedSubmission.kind !== "not_queued") {
         if (queuedSubmission.kind === "attachments_unsupported") {
@@ -1248,13 +1393,18 @@ export function App() {
         if (queuedSubmission.kind === "empty_prompt") return false;
         const created = await createCloudWork(queuedSubmission.request);
         if (created) {
-          setPrompt("");
-          setMentionedAppId(null);
+          if (!options.preservePrompt) {
+            setPrompt("");
+            setMentionedAppId(null);
+          }
           setPendingWorkspaceTarget(null);
         }
         return created;
       }
-      return sendPrompt(attachments, action, promptOverride, options);
+      return sendPrompt(attachments, action, promptOverride, {
+        clearPrompt: options.preservePrompt ? () => undefined : undefined,
+        displayPrompt: options.displayPrompt,
+      });
     },
     [
       createCloudWork,
@@ -1353,7 +1503,7 @@ export function App() {
         setRightChatPanels((current) => current.filter((panel) => panel.id !== panelId));
       };
       if (closesLastPanel && rightPanelMode === "chat") {
-        showRightPanelDiffTab("summary");
+        showRightPanelDiffTab("files");
         if (typeof window === "undefined") {
           removePanel();
           return;
@@ -1375,14 +1525,25 @@ export function App() {
   );
   const updateRightChatModel = useCallback(
     (panelId: string, model: string) => {
+      const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
+      if (panel) {
+        setDraftProvider(panel.provider);
+        setDraftModel(model);
+      }
       setRightChatPanels((current) =>
         current.map((panel) => (panel.id === panelId ? { ...panel, model } : panel)),
       );
     },
-    [setRightChatPanels],
+    [rightChatPanels, setDraftModel, setDraftProvider, setRightChatPanels],
   );
   const updateRightChatProvider = useCallback(
     (panelId: string, provider: RightChatPanel["provider"]) => {
+      const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
+      const model = normalizeChatModel(provider, panel?.model, bootstrap?.providers ?? null);
+      if (panel) {
+        setDraftProvider(provider);
+        setDraftModel(model);
+      }
       setRightChatPanels((current) =>
         current.map((panel) =>
           panel.id === panelId
@@ -1395,7 +1556,7 @@ export function App() {
         ),
       );
     },
-    [bootstrap?.providers, setRightChatPanels],
+    [bootstrap?.providers, rightChatPanels, setDraftModel, setDraftProvider, setRightChatPanels],
   );
   const rightCodexHistorySessionKey = useMemo(() => {
     const seen = new Set<string>();
@@ -1462,6 +1623,9 @@ export function App() {
           )
         : runtimeEventsForSession(runtimeIndexes, panel.sessionId);
       const panelIndexes = isHistoryPanel ? buildRuntimeIndexes(panelEvents, []) : runtimeIndexes;
+      const panelPendingApproval = latestPendingApprovalForSession(panelIndexes, panel.sessionId);
+      const panelRunning = session ? runningSessionIds.has(session.id) : false;
+      const panelTurnCompletionState = latestTurnCompletionState(panelEvents);
       const contextWindowStatusForPanel = contextWindowStatusFromUsage({
         provider,
         snapshot: latestContextUsageForSession(panelIndexes, panel.sessionId),
@@ -1477,8 +1641,11 @@ export function App() {
         messages: buildCachedChatMessages(panelEvents),
         contextWindowStatus: contextWindowStatusForPanel,
         goalRuntime: latestGoalRuntimeForSession(panelIndexes, panel.sessionId),
-        pendingApproval: latestPendingApprovalForSession(panelIndexes, panel.sessionId),
-        running: session ? runningSessionIds.has(session.id) : false,
+        pendingApproval: panelPendingApproval,
+        running: panelRunning,
+        steerAutoDispatchBlocked: Boolean(panelPendingApproval) || panelTurnCompletionState === "blocked",
+        steerAutoDispatchReady:
+          panelTurnCompletionState === "completed" && !panelPendingApproval && !panelRunning,
         workspaceRootPath,
         activeWorkspaceAppId: activeWorkspaceAppIdForPanel,
       };
@@ -1502,15 +1669,16 @@ export function App() {
     ) => {
       const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
       if (!panel) return false;
+      const panelPromptForSubmit = options.promptOverride ?? panel.prompt;
       if (command?.id === "insights") {
         setView("insights");
-        updateRightChatPrompt(panelId, "");
+        if (!options.preservePrompt) updateRightChatPrompt(panelId, "");
         const payload = await insights.runScan();
         const activeCount = payload?.summary.activeCount ?? insights.summary?.activeCount ?? 0;
         showToast(`${activeCount} active insight${activeCount === 1 ? "" : "s"}.`, "info");
         return true;
       }
-      if (command && !panel.prompt.trim()) {
+      if (command && !panelPromptForSubmit.trim()) {
         showToast(`Add instructions after ${command.command}.`, "info");
         return false;
       }
@@ -1521,7 +1689,7 @@ export function App() {
       const session = panel.sessionId
         ? sidebarSessions.find((candidate) => candidate.id === panel.sessionId) ?? null
         : null;
-      const promptForTurn = command ? promptForRightChatCommand(command, panel.prompt) : panel.prompt;
+      const promptForTurn = command ? promptForRightChatCommand(command, panelPromptForSubmit) : panelPromptForSubmit;
       const sessionEvents = isCodexHistorySessionId(panel.sessionId)
         ? (
             (panel.sessionId ? rightChatHistoryEvents[panel.sessionId] : undefined) ??
@@ -1548,7 +1716,7 @@ export function App() {
         chatMessages: buildCachedChatMessages(sessionEvents),
         displayPrompt: options.displayPrompt,
         onCodexHistoryOptimisticEvent: appendRightCodexHistoryEvent,
-        clearPrompt: () => updateRightChatPrompt(panelId, ""),
+        clearPrompt: options.preservePrompt ? () => undefined : () => updateRightChatPrompt(panelId, ""),
         onSessionCreated: (createdSession) => {
           setRightChatPanels((current) =>
             current.map((candidate) =>
@@ -1600,6 +1768,7 @@ export function App() {
           onPayload: applyBootstrapPayload,
           onError: setError,
           onToast: showToast,
+          onOpenSourceSession: openSessionInChat,
           onBack: () => {
             setView("chat");
             setSidebarOpen(true);
@@ -1722,6 +1891,7 @@ export function App() {
         startProjectFromScratch: () => {
           setNewProjectMode("local");
           setNewProjectName("");
+          setNewProjectPath("");
           setNewProjectDialogOpen(true);
         },
         startCloudProjectFromScratch: openCloudProjectDialog,
@@ -1789,11 +1959,15 @@ export function App() {
       mainPane={{
         view,
         bootstrap,
+        runtimeEvents: sessionEvents,
         chatMessages,
         contextWindowStatus,
         goalRuntime,
         prompt,
+        steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
+        steerAutoDispatchReady: selectedSteerAutoDispatchReady,
         mentionApps: chatMentionApps,
+        connectedAppMentions,
         selectedMentionAppId: mentionedAppId,
         busy,
         turnRunning: selectedSessionRunning,
@@ -1836,7 +2010,7 @@ export function App() {
         onRunInsightsScan: insights.runScan,
         onAskInsightsQuestion: insights.askQuestion,
         onPatchInsightStatus: insights.patchStatus,
-        onOpenInsightsSession: openInsightsSession,
+        onOpenInsightsSession: openSessionInChat,
         cloudProjects: bootstrap?.cloudProjects ?? [],
         cloudWorkItems,
         selectedCloudWorkItem,
@@ -1851,10 +2025,9 @@ export function App() {
         onToggleDiffPanelExpanded: () => setDiffPanelExpanded((expanded) => !expanded),
         onShowDiffPanel: showChangesPanel,
         onShowBrowserPanel: showBrowserPanel,
+        onShowFilesPanel: () => showRightPanelDiffTab("files"),
         onShowGoalSidebarTab: showGoalSidebarTab,
-        onShowReviewPanel: () => showRightPanelDiffTab("review"),
         onShowRightChatPanel: showRightChatPanel,
-        onShowSummaryPanel: () => showRightPanelDiffTab("summary"),
         onAddRightChat: () => openRightChatPanel(null),
         onTerminalTabsChange: setTerminalTabs,
         onCloseRightChatPanel: closeRightChatPanel,
@@ -1889,6 +2062,7 @@ export function App() {
         changeDraftProvider,
         changeProjectTarget,
         changeWorkspaceTarget,
+        setDraftProvider,
         setDraftModel,
         changeCodexPermissionMode,
         changeCodexReasoningEffort,
@@ -1933,6 +2107,7 @@ export function App() {
         newProjectDirectory: appDefaults.defaultNewProjectDirectory,
         newProjectMode,
         newProjectName,
+        newProjectPath,
         projectRows: commandProjectRows,
         query,
         searchOpen,
@@ -1951,6 +2126,7 @@ export function App() {
         setCommitNextStep,
         setNewProjectDialogOpen,
         setNewProjectName,
+        setNewProjectPath,
         setPrompt,
         setQuery,
         setSearchOpen,

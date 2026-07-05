@@ -11,12 +11,8 @@ export const SANDBOX_TEMPLATE_BUILD_PLAN_KIND =
 
 const INTEGRATION_PROVIDERS = [
   "google",
-  "slack",
   "github",
-  "microsoft_teams",
   "x",
-  "notion",
-  "linear",
 ] as const;
 
 const RESERVED_PREVIEW_PORTS = new Set([

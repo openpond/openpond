@@ -10,7 +10,17 @@ Use OpenPond Cloud when you need remote dependencies, long-running work, cloud-o
 - OpenPond Project: the cloud-side record that points at source metadata and an `openpond.yaml` manifest.
 - Agent: the runnable unit created from a synced Project or SDK-generated manifest.
 - Hosted workspace: the cloud environment for a run, chat, replay, or source-editing session.
-- Source ref: the git-backed checkpoint that keeps changes preservable and reviewable.
+- Source ref: the git-backed checkpoint, managed through [OpenPond Git](openpond-git.md), that keeps changes preservable and reviewable.
+
+## Workspace Modes
+
+OpenPond separates the model you chat with from the place where code runs.
+
+- Local: chat and edits use the local checkout on your machine.
+- Cloud workspace: chat runs inside a hosted OpenPond workspace for cloud-only files, dependencies, handoff, or replayable work.
+- Hybrid: keep using the selected model provider, including OpenPond Chat or BYOK, but run file reads, edits, commands, git operations, and preservation against a hosted sandbox.
+
+Hybrid mode is for work that benefits from remote compute or dependencies while preserving the selected model path. Local credentials stay local, and sandbox changes remain remote until you explicitly export, apply, preserve, promote, or merge them.
 
 ## Local To Cloud Flow
 
@@ -34,11 +44,11 @@ The local repo remains the place you understand and review the work. OpenPond Cl
 - Snapshot and replay flows for reproducible runs.
 - Optional app/session attachment so a chat can continue inside the hosted workspace.
 
-## Credentials
+## OpenPond Connect
 
-Cloud credentials are injected as bindings or secret refs. Source code should declare what it needs, but it should not commit raw tokens, OAuth grants, cookies, or provider secrets.
+Third-party provider access is handled through [OpenPond Connect](openpond-connect.md). Source code should declare what it needs, but it should not commit raw tokens, OAuth grants, cookies, or provider secrets.
 
-The same principle applies locally: local secrets stay in local settings or environment-backed storage, and cloud secrets stay in OpenPond-controlled bindings.
+The same principle applies locally: connection state and capability metadata can be used by the app, while provider authorization happens through OpenPond Connect.
 
 ## Login Boundary
 

@@ -632,10 +632,10 @@ export const integration = {
   openpondChat(definition: Omit<IntegrationDefinition, "provider"> = {}) {
     return { provider: "openpond_chat", ...definition };
   },
-  microsoftTeams(definition: Omit<IntegrationDefinition, "provider">) {
+  microsoftTeams(definition: Omit<IntegrationDefinition, "provider"> = {}) {
     return { provider: "microsoft_teams", ...definition };
   },
-  slack(definition: Omit<IntegrationDefinition, "provider">) {
+  slack(definition: Omit<IntegrationDefinition, "provider"> = {}) {
     return { provider: "slack", ...definition };
   },
   opchat(definition: Omit<IntegrationDefinition, "provider">) {

@@ -9,13 +9,14 @@
   </p>
 </div>
 
-## What Is This?
 
-OpenPond brings frontier-grade agent orchestration to any model combined with seamless toggle between local & cloud environments.
+The OpenPond agentic harness brings frontier-grade agent orchestration to open source models. Connect to our bespoke cloud and try **Hybrid Mode**, which lets you use your LLM subscriptions with our hosted sandbox.
 
 Control goals and build durable, git-backed agents from local chat, run them in a desktop app, CLI, or TUI, and move seamlessly into OpenPond Cloud when work needs cloud compute.
 
-No login required for local work. BYOK for any model. First-class Codex support. Open source agent infrastructure you can inspect, edit, and own.
+Durable agents are especially good for non-technical teammates: use them in the desktop app, or deliver them in Slack or Microsoft Teams through OpenPond Web.
+
+No login required for local work. BYOK for any model. First-class Codex support.
 
 ## Features
 
@@ -23,11 +24,11 @@ OpenPond aims to deliver these capabilities inside the familiar chat-based devel
 
 | Feature | Docs |
 | --- | --- |
-| Create durable agents in one command from any chat conversation while keeping ownership of the git-backed agent code. | [Creating durable agents](docs/public/creating-agents.md), [Agent SDK](docs/public/agent-sdk.md) |
+| Create durable agents in one command from any chat conversation while keeping ownership of the git-backed agent code. | [Creating durable agents](docs/public/creating-agents.md), [Agent SDK](docs/public/agent-sdk.md), [OpenPond Git](docs/public/openpond-git.md) |
 | Move between local projects and cloud execution with OpenPond Cloud. | [OpenPond Cloud](docs/public/cloud.md) |
-| Inject credentials from Google Drive, Twitter/X, and other connectors across local and cloud runs. | [Credentials and models](docs/public/credentials-and-models.md) |
+| Connect Google Drive, Twitter/X, and other third-party providers through OpenPond Connect. | [OpenPond Connect](docs/public/openpond-connect.md) |
 | Track chat logs, runs, errors, and follow-ups with the Continuous Insights Agent. | [Continuous Insights](docs/public/continuous-insights.md) |
-| Chat with any model via BYOK, with first-class support for OpenAI Codex. | [Credentials and models](docs/public/credentials-and-models.md) |
+| Chat with hosted OpenPond models, BYOK providers in the desktop app, and first-class OpenAI Codex support. | [Model access](docs/public/model-access.md) |
 | Work locally without login; sign in only for optional cloud features like OpenPond Cloud and sync. | [Docs index](docs/public/README.md) |
 | Build one-off composable goals and tasks with open source goal management. | [Goals](docs/public/goals.md) |
 

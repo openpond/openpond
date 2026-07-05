@@ -49,6 +49,40 @@ describe("session store patches", () => {
     }
   });
 
+  test("persists session metadata through create and patch", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const store = new SqliteStore(storeDir);
+
+    try {
+      const { createSession, patchSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+      });
+
+      const created = await createSession({
+        provider: "codex",
+        workspaceKind: "sandbox",
+        workspaceId: null,
+        metadata: { workspaceTarget: "hybrid", source: "test" },
+        title: "Hybrid chat",
+      });
+      const stored = await store.getSession(created.id);
+
+      expect(created.metadata).toEqual({ workspaceTarget: "hybrid", source: "test" });
+      expect(stored?.metadata).toEqual({ workspaceTarget: "hybrid", source: "test" });
+
+      const patched = await patchSession(created.id, {
+        metadata: { workspaceTarget: "hybrid", source: "patched" },
+      });
+
+      expect(patched.metadata).toEqual({ workspaceTarget: "hybrid", source: "patched" });
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("keeps updatedAt stable for sidebar-only patches", async () => {
     const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
     const store = new SqliteStore(storeDir);

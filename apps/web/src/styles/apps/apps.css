@@ -68,6 +68,28 @@
   border-color: rgba(255, 255, 255, 0.24);
 }
 
+.connected-apps-status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #a4a4a4;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+
+.connected-apps-status-strip.ready span:last-child {
+  color: #64d790;
+}
+
+.connected-apps-status-strip.error span:first-child {
+  color: #ffb66d;
+}
+
 .connected-apps-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -201,10 +223,10 @@
 
 .connected-app-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 20px;
+  grid-template-columns: minmax(0, 1fr) max-content 20px;
   align-items: center;
   gap: 14px;
-  min-height: 72px;
+  min-height: 88px;
   min-width: 0;
   border: 0;
   border-radius: 8px;
@@ -280,7 +302,7 @@
 
 .connected-app-title strong,
 .connected-app-title span,
-.connected-app-copy > span:last-child {
+.connected-app-copy > span:nth-child(2) {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -295,11 +317,56 @@
   font-weight: 450;
 }
 
-.connected-app-copy > span:last-child {
+.connected-app-copy > span:nth-child(2) {
   margin-top: 3px;
   color: #777;
   font-size: 13px;
   line-height: 1.25;
+}
+
+.connected-app-capability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.connected-app-capability-row span,
+.connected-app-dialog-capabilities span {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #a7a7a7;
+  padding: 3px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.connected-app-status-pill {
+  min-width: 86px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #a9a9a9;
+  padding: 5px 9px;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.connected-app-status-pill.connected {
+  background: rgba(64, 201, 120, 0.13);
+  color: #72df9b;
+}
+
+.connected-app-status-pill.disconnected {
+  background: rgba(255, 255, 255, 0.04);
+  color: #9d9d9d;
 }
 
 .connected-apps-empty {
@@ -457,6 +524,12 @@
   line-height: 1.45;
 }
 
+.connected-app-dialog-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .connected-app-dialog-primary {
   gap: 7px;
   height: 38px;
@@ -481,6 +554,16 @@
   .connected-apps-hero,
   .connected-apps-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .connected-app-row {
+    grid-template-columns: minmax(0, 1fr) 20px;
+  }
+
+  .connected-app-status-pill {
+    grid-column: 1 / -1;
+    width: fit-content;
+    margin-left: 60px;
   }
 
   .connected-apps-context-card {

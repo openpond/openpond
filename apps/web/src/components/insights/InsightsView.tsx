@@ -177,6 +177,7 @@ const SOURCE_FILTER_OPTIONS: Array<{ value: InsightEvidenceSource | "all"; label
   { value: "abandoned_goal", label: "Goals" },
   { value: "user_correction", label: "Corrections" },
   { value: "unresolved_conversation", label: "Unresolved" },
+  { value: "usage_anomaly", label: "Usage" },
 ];
 
 const RUN_STATUS_FILTER_OPTIONS: Array<{ value: InsightRunStatus | "all"; label: string }> = [
@@ -426,7 +427,8 @@ function itemEvidenceSource(item: InsightItem): InsightEvidenceSource {
     value === "tool_failure" ||
     value === "abandoned_goal" ||
     value === "user_correction" ||
-    value === "unresolved_conversation"
+    value === "unresolved_conversation" ||
+    value === "usage_anomaly"
   ) {
     return value;
   }
@@ -439,6 +441,7 @@ function evidenceSourceLabel(source: InsightEvidenceSource): string {
   if (source === "abandoned_goal") return "Abandoned goal";
   if (source === "user_correction") return "Corrections";
   if (source === "unresolved_conversation") return "Unresolved chat";
+  if (source === "usage_anomaly") return "Usage";
   return "Create/edit";
 }
 

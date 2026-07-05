@@ -2,10 +2,14 @@ import { useMemo } from "react";
 import type {
   BootstrapPayload,
   CloudProject,
+  ConnectedAppStatusRow,
   LocalProject,
   OpenPondApp,
   Session,
 } from "@openpond/contracts";
+import {
+  connectedAppMentionOptionsFromStatusRows,
+} from "../lib/connected-app-mentions";
 import {
   latestPendingApprovalForSession,
   type RuntimeIndexes,
@@ -13,6 +17,7 @@ import {
 
 export function useAppConversationContext({
   bootstrap,
+  connectedAppRows,
   mentionableSandboxApps,
   runtimeIndexes,
   selectedApp,
@@ -22,6 +27,7 @@ export function useAppConversationContext({
   selectedSessionId,
 }: {
   bootstrap: BootstrapPayload | null;
+  connectedAppRows: ConnectedAppStatusRow[];
   mentionableSandboxApps: OpenPondApp[];
   runtimeIndexes: RuntimeIndexes;
   selectedApp: OpenPondApp | null;
@@ -39,8 +45,12 @@ export function useAppConversationContext({
     }
     return groups;
   }, [bootstrap?.cloudProjects]);
-  const chatMentionApps =
-    selectedSession || selectedApp || selectedProject || selectedCloudProject ? [] : mentionableSandboxApps;
+  const hasScopedConversationContext = Boolean(selectedSession || selectedApp || selectedProject || selectedCloudProject);
+  const chatMentionApps = hasScopedConversationContext ? [] : mentionableSandboxApps;
+  const connectedAppMentions = useMemo(
+    () => hasScopedConversationContext ? [] : connectedAppMentionOptionsFromStatusRows(connectedAppRows),
+    [connectedAppRows, hasScopedConversationContext],
+  );
   const pendingApproval = useMemo(() => {
     return latestPendingApprovalForSession(runtimeIndexes, selectedSessionId);
   }, [runtimeIndexes, selectedSessionId]);
@@ -48,6 +58,7 @@ export function useAppConversationContext({
   return {
     chatMentionApps,
     cloudProjectIdsByTeam,
+    connectedAppMentions,
     pendingApproval,
   };
 }

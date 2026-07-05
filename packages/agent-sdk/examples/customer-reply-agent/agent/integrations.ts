@@ -4,6 +4,6 @@ export const customerReplyIntegrations = [
   integration.openpondChat({ required: true }),
   integration.slack({
     required: false,
-    capabilities: ["slack.message.read", "slack.message.send"],
+    capabilities: ["slack.message.ingest"],
   }),
 ];

@@ -23,6 +23,7 @@ import type { ClientConnection } from "../../api";
 import type { RightChatPanel, ShowAppToast } from "../../app/app-state";
 import type { ChatMessage } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
+import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
@@ -35,7 +36,7 @@ import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import { Composer, type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
-import { AlignLeft, MessageSquare, Plus, SquareCode, X } from "../icons";
+import { FolderOpen, MessageSquare, Plus, X } from "../icons";
 
 export type RightChatPanelView = RightChatPanel & {
   session: Session | null;
@@ -45,6 +46,8 @@ export type RightChatPanelView = RightChatPanel & {
   goalRuntime: GoalRuntimeStatus | null;
   pendingApproval: Approval | null;
   running: boolean;
+  steerAutoDispatchBlocked: boolean;
+  steerAutoDispatchReady: boolean;
   workspaceRootPath: string | null;
   activeWorkspaceAppId: string | null;
 };
@@ -55,6 +58,7 @@ export function RightChatPanelStack({
   codexPermissionMode,
   codexReasoningEffort,
   connection,
+  connectedAppMentions,
   mentionApps,
   projectTarget,
   providerSettings,
@@ -76,8 +80,7 @@ export function RightChatPanelStack({
   onProjectTargetChange,
   onResolveApproval,
   onResizeStart,
-  onSelectReview,
-  onSelectSummary,
+  onSelectFiles,
   onShowBrowserPanel,
   onStop,
   onSubmit,
@@ -88,6 +91,7 @@ export function RightChatPanelStack({
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   connection: ClientConnection | null;
+  connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
@@ -112,17 +116,16 @@ export function RightChatPanelStack({
     decision: ResolveApprovalRequest["decision"],
   ) => Promise<void>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onSelectReview: () => void;
-  onSelectSummary: () => void;
+  onSelectFiles: () => void;
   onShowBrowserPanel: () => void;
   onStop: (sessionId: string | null) => Promise<boolean>;
-    onSubmit: (
-      panelId: string,
-      attachments?: ChatAttachment[],
-      action?: SandboxActionCatalogEntry | null,
-      command?: ComposerSlashCommand | null,
-      options?: ComposerSubmitOptions,
-    ) => Promise<boolean>;
+  onSubmit: (
+    panelId: string,
+    attachments?: ChatAttachment[],
+    action?: SandboxActionCatalogEntry | null,
+    command?: ComposerSlashCommand | null,
+    options?: ComposerSubmitOptions,
+  ) => Promise<boolean>;
   onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -184,20 +187,10 @@ export function RightChatPanelStack({
             className="workspace-diff-tab"
             role="tab"
             aria-selected={false}
-            onClick={onSelectSummary}
+            onClick={onSelectFiles}
           >
-            <AlignLeft size={14} />
-            <span>Summary</span>
-          </button>
-          <button
-            type="button"
-            className="workspace-diff-tab"
-            role="tab"
-            aria-selected={false}
-            onClick={onSelectReview}
-          >
-            <SquareCode className="workspace-diff-tab-icon" size={14} />
-            <span>Review</span>
+            <FolderOpen size={14} />
+            <span>Files</span>
           </button>
           {visiblePanels.map((panel) => (
             <div className="workspace-diff-tab right-chat-tab active" key={panel.id}>
@@ -228,8 +221,8 @@ export function RightChatPanelStack({
             <button
               type="button"
               className={`workspace-diff-add-tab ${addMenuOpen ? "active" : ""}`}
-              title="Add side chat"
-              aria-label="Add side chat"
+              title="Add to right sidebar"
+              aria-label="Add to right sidebar"
               aria-haspopup="menu"
               aria-expanded={addMenuOpen}
               onClick={() => setAddMenuOpen((open) => !open)}
@@ -249,6 +242,17 @@ export function RightChatPanelStack({
                   <MessageSquare size={13} />
                   <span>New chat</span>
                 </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    onSelectFiles();
+                  }}
+                >
+                  <FolderOpen size={13} />
+                  <span>Files</span>
+                </button>
               </div>
             ) : null}
           </div>
@@ -265,6 +269,7 @@ export function RightChatPanelStack({
             codexPermissionMode={codexPermissionMode}
             codexReasoningEffort={codexReasoningEffort}
             connection={connection}
+            connectedAppMentions={connectedAppMentions}
             key={panel.id}
             mentionApps={mentionApps}
             panel={panel}
@@ -287,7 +292,7 @@ export function RightChatPanelStack({
             onResolveApproval={onResolveApproval}
             onShowBrowserPanel={onShowBrowserPanel}
             onStop={() => onStop(panel.sessionId)}
-              onSubmit={(attachments, action, command, options) => onSubmit(panel.id, attachments, action, command, options)}
+            onSubmit={(attachments, action, command, options) => onSubmit(panel.id, attachments, action, command, options)}
             onWorkspaceTargetChange={onWorkspaceTargetChange}
           />
         ))}
@@ -311,6 +316,7 @@ function RightChatPane({
   codexPermissionMode,
   codexReasoningEffort,
   connection,
+  connectedAppMentions,
   mentionApps,
   projectTarget,
   providerSettings,
@@ -339,6 +345,7 @@ function RightChatPane({
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   connection: ClientConnection | null;
+  connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
@@ -448,12 +455,15 @@ function RightChatPane({
           mode="dock"
           prompt={panel.prompt}
           mentionApps={mentionApps}
+          connectedAppMentions={connectedAppMentions}
           selectedMentionAppId={null}
           contextWindowStatus={panel.contextWindowStatus}
           goalRuntime={panel.goalRuntime}
           createPipelineRuntime={null}
           busy={panel.running}
           running={panel.running}
+          steerAutoDispatchBlocked={panel.steerAutoDispatchBlocked}
+          steerAutoDispatchReady={panel.steerAutoDispatchReady}
           showProjectFooter={false}
           connection={connection}
           providerSettings={providerSettings}

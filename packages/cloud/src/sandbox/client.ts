@@ -1235,9 +1235,9 @@ export class OpenPondSandboxClient {
   }
 
   listOrganizations(): Promise<OpenPondOrganization[]> {
-    return this.requestApiRoot<OpenPondOrganizationsResponse>(
+    return this.requestApiRoot<OpenPondOrganizationsResponse & { teams?: OpenPondOrganization[] }>(
       "/organizations"
-    ).then((payload) => payload.organizations);
+    ).then((payload) => payload.organizations ?? payload.teams ?? []);
   }
 
   createOrganization(

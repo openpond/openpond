@@ -292,6 +292,7 @@ const INSIGHTS_EVIDENCE_SOURCE_OPTIONS: Array<{
   { key: "abandonedGoals", label: "Abandoned goals", description: "Goal loops left active too long." },
   { key: "userCorrections", label: "Corrections", description: "Repeated correction-style prompts." },
   { key: "unresolvedConversations", label: "Unresolved chats", description: "Long chats with unresolved recent work." },
+  { key: "usageAnomalies", label: "Usage", description: "Spikes, failures, missing usage, and latency changes." },
 ];
 
 function insightEvidenceSourcesEqual(

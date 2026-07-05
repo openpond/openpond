@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld("openpond", {
     setBounds: (payload: unknown) => ipcRenderer.invoke("openpond:browser:setBounds", payload),
     getState: (payload: unknown) => ipcRenderer.invoke("openpond:browser:getState", payload),
     diagnostics: () => ipcRenderer.invoke("openpond:browser:diagnostics"),
+    snapshot: (payload: unknown) => ipcRenderer.invoke("openpond:browser:snapshot", payload),
+    moveCursor: (payload: unknown) => ipcRenderer.invoke("openpond:browser:moveCursor", payload),
+    click: (payload: unknown) => ipcRenderer.invoke("openpond:browser:click", payload),
+    typeText: (payload: unknown) => ipcRenderer.invoke("openpond:browser:typeText", payload),
+    key: (payload: unknown) => ipcRenderer.invoke("openpond:browser:key", payload),
+    scroll: (payload: unknown) => ipcRenderer.invoke("openpond:browser:scroll", payload),
     onState: (callback: (state: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state);
       ipcRenderer.on("openpond:browser:state", listener);

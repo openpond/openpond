@@ -26,8 +26,10 @@ describe("OpenAI-compatible provider adapter", () => {
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
       return streamResponse([
-        'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{"reasoning_content":"thinking"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" z.ai"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"reasoning_content":"The user"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"reasoning_content":" says hello"},"finish_reason":null}]}\n\n',
         'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":9}}\n\n',
         "data: [DONE]\n\n",
       ]);
@@ -35,10 +37,10 @@ describe("OpenAI-compatible provider adapter", () => {
 
     const deltas = [];
     for await (const delta of streamOpenAiCompatibleChatCompletion({
-      ...providerState(),
-      providerId: "openrouter",
+      ...providerState("https://provider.example/v1", "zai"),
+      providerId: "zai",
       modelId: "test/model",
-      messages: [{ role: "user", content: "hello" }],
+      messages: [{ role: "user", content: "hello z.ai" }],
       requestId: "turn_1",
     })) {
       deltas.push(delta);
@@ -50,16 +52,24 @@ describe("OpenAI-compatible provider adapter", () => {
         authorization: "Bearer sk-test",
         body: {
           model: "test/model",
-          messages: [{ role: "user", content: "hello" }],
+          messages: [{ role: "user", content: "hello z.ai" }],
           stream: true,
         },
       },
     ]);
     expect(deltas.map((delta) => delta.type)).toEqual([
       "text_delta",
+      "text_delta",
+      "reasoning_delta",
       "reasoning_delta",
       "usage",
       "finish",
+    ]);
+    expect(deltas.slice(0, 4)).toMatchObject([
+      { type: "text_delta", text: "Hello" },
+      { type: "text_delta", text: " z.ai" },
+      { type: "reasoning_delta", text: "The user" },
+      { type: "reasoning_delta", text: " says hello" },
     ]);
   });
 
@@ -96,8 +106,8 @@ describe("OpenAI-compatible provider adapter", () => {
     ] as const;
     const deltas = [];
     for await (const delta of streamOpenAiCompatibleChatCompletion({
-      ...providerState(),
-      providerId: "openrouter",
+      ...providerState("https://provider.example/v1", "zai"),
+      providerId: "zai",
       modelId: "test/model",
       messages: [{ role: "user", content: "read README" }],
       tools: [...tools],
@@ -116,6 +126,7 @@ describe("OpenAI-compatible provider adapter", () => {
           messages: [{ role: "user", content: "read README" }],
           stream: true,
           tools,
+          tool_stream: true,
           tool_choice: "auto",
         },
       },
@@ -279,13 +290,40 @@ describe("OpenAI-compatible provider adapter", () => {
     }
     throw new Error("expected provider model discovery to fail");
   });
+
+  test("explains Z.ai Coding Plan endpoint requirements for balance errors", async () => {
+    globalThis.fetch = async () =>
+      jsonResponse(
+        {
+          error: {
+            code: "1113",
+            message: "Insufficient balance or no resource package. Please recharge.",
+          },
+        },
+        429,
+      );
+
+    await expect(async () => {
+      for await (const _delta of streamOpenAiCompatibleChatCompletion({
+        ...providerState("https://api.z.ai/api/paas/v4", "zai"),
+        providerId: "zai",
+        modelId: "glm-5.2",
+        messages: [{ role: "user", content: "hello z.ai" }],
+      })) {
+        // Drain.
+      }
+    }).toThrow(/Coding Plan subscriptions use https:\/\/api\.z\.ai\/api\/coding\/paas\/v4/);
+  });
 });
 
-function providerState(baseUrl = "https://provider.example/v1"): { settings: ReturnType<typeof buildProviderSettings>; secrets: ProviderSecrets } {
+function providerState(
+  baseUrl = "https://provider.example/v1",
+  providerId: "openrouter" | "zai" = "openrouter",
+): { settings: ReturnType<typeof buildProviderSettings>; secrets: ProviderSecrets } {
   const file: ProvidersFile = {
     version: 1,
     providers: {
-      openrouter: ProviderConfigSchema.parse({
+      [providerId]: ProviderConfigSchema.parse({
         enabled: true,
         baseUrl,
         defaultModel: "test/model",
@@ -296,7 +334,7 @@ function providerState(baseUrl = "https://provider.example/v1"): { settings: Ret
   const secrets: ProviderSecrets = {
     version: 1,
     providers: {
-      openrouter: {
+      [providerId]: {
         source: "local_secret",
         value: "sk-test",
         envVar: null,

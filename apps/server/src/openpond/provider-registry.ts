@@ -77,6 +77,12 @@ const VISION_REASONING_MODEL_CAPABILITIES: Partial<ProviderModelCapabilities> = 
   vision: true,
 };
 
+const ZAI_CODING_PLAN_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
+const ZAI_PREVIOUS_DEFAULT_BASE_URLS = new Set([
+  "https://api.z.ai/api/paas/v4",
+  "https://open.bigmodel.cn/api/paas/v4",
+]);
+
 const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
   {
     id: "openpond",
@@ -322,7 +328,7 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       toolCalling: true,
       reasoning: true,
     },
-    defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    defaultBaseUrl: ZAI_CODING_PLAN_BASE_URL,
     defaultModel: "glm-5.2",
     modelCacheSource: "curated",
     models: [
@@ -500,7 +506,7 @@ function serverPresetFromCatalogProvider(
     routing: parsed.routing,
     capabilities: parsed.capabilities,
     defaultEnabled: parsed.defaultEnabled,
-    defaultBaseUrl: parsed.defaultBaseUrl,
+    defaultBaseUrl: normalizeDefaultBaseUrlForProvider(parsed.id, parsed.defaultBaseUrl ?? null),
     defaultModel: parsed.defaultModel,
     modelCacheSource: parsed.modelCacheSource,
     models: parsed.models,
@@ -561,13 +567,26 @@ function providerConfigForPreset(
   preset: ServerProviderPreset,
   stored: ProviderConfig | undefined,
 ): ProviderConfig {
+  const storedBaseUrl = normalizeDefaultBaseUrlForProvider(preset.id, stored?.baseUrl ?? null);
+  const presetBaseUrl = normalizeDefaultBaseUrlForProvider(preset.id, preset.defaultBaseUrl ?? null);
   return ProviderConfigSchema.parse({
     enabled: stored?.enabled ?? preset.defaultEnabled ?? false,
-    baseUrl: stored?.baseUrl ?? preset.defaultBaseUrl ?? null,
+    baseUrl: storedBaseUrl ?? presetBaseUrl,
     defaultModel: stored?.defaultModel ?? preset.defaultModel ?? null,
     modelOverrides: stored?.modelOverrides ?? [],
     updatedAt: stored?.updatedAt ?? null,
   });
+}
+
+function normalizeDefaultBaseUrlForProvider(
+  providerId: ProviderId,
+  baseUrl: string | null,
+): string | null {
+  if (providerId !== "zai" || !baseUrl) return baseUrl;
+  const normalized = baseUrl.trim().replace(/\/+$/, "");
+  return ZAI_PREVIOUS_DEFAULT_BASE_URLS.has(normalized)
+    ? ZAI_CODING_PLAN_BASE_URL
+    : normalized;
 }
 
 function providerModelFromPreset(

@@ -13,14 +13,25 @@ import {
   ensureCloudWorkspaceRunning,
   type CloudWorkspaceReadyStatus,
 } from "../lib/cloud-workspace-lifecycle";
+import { isHybridWorkspaceSession } from "../lib/workspace-location";
 
-function cloudWorkspaceReadyMessage(status: CloudWorkspaceReadyStatus): string | null {
+export function cloudWorkspaceStartingMessage(session: Session): string {
+  return isHybridWorkspaceSession(session)
+    ? "Preparing Hybrid sandbox..."
+    : "Starting Cloud workspace...";
+}
+
+export function cloudWorkspaceReadyMessage(
+  status: CloudWorkspaceReadyStatus,
+  session: Session,
+): string | null {
   if (status === "already_running") return null;
-  if (status === "waited_for_creating") return "Cloud workspace is ready.";
-  if (status === "started") return "Started Cloud workspace.";
-  if (status === "resumed") return "Resumed Cloud workspace.";
-  if (status === "restored") return "Restored Cloud workspace.";
-  return "Recreated Cloud workspace.";
+  const target = isHybridWorkspaceSession(session) ? "Hybrid sandbox" : "Cloud workspace";
+  if (status === "waited_for_creating") return `${target} is ready.`;
+  if (status === "started") return `Started ${target}.`;
+  if (status === "resumed") return `Resumed ${target}.`;
+  if (status === "restored") return `Restored ${target}.`;
+  return `Recreated ${target}.`;
 }
 
 export function useCloudSessionReady({
@@ -48,7 +59,7 @@ export function useCloudSessionReady({
       const localProject =
         selectedProject ??
         (session.localProjectId ? (localProjectById.get(session.localProjectId) ?? null) : null);
-      if (!session.workspaceId) showToast("Starting Cloud workspace...", "info");
+      if (!session.workspaceId) showToast(cloudWorkspaceStartingMessage(session), "info");
       setWorkspaceBusy(true);
       try {
         const result = await ensureCloudWorkspaceRunning({
@@ -60,10 +71,12 @@ export function useCloudSessionReady({
           connection,
           localProject,
           session,
-          source: "openpond-app-cloud-chat-preflight",
+          source: isHybridWorkspaceSession(session)
+            ? "openpond-app-hybrid-chat-preflight"
+            : "openpond-app-cloud-chat-preflight",
         });
         if (result.bootstrap) applyBootstrapPayload(result.bootstrap);
-        const message = cloudWorkspaceReadyMessage(result.status);
+        const message = cloudWorkspaceReadyMessage(result.status, session);
         if (message) showToast(message, "success");
         return result.session;
       } finally {

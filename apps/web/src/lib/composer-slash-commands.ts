@@ -5,7 +5,8 @@ export type ComposerSlashCommandId =
   | "goal"
   | "goal-local"
   | "goal-remote"
-  | "insights";
+  | "insights"
+  | "sync-cloud";
 
 export type ComposerSlashCommand = {
   id: ComposerSlashCommandId;
@@ -61,6 +62,12 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/insights",
     label: "Open insights",
     description: "Scan agent flow health.",
+  },
+  {
+    id: "sync-cloud",
+    command: "/sync-cloud",
+    label: "Upload/sync to Cloud",
+    description: "Start a chat-visible source upload for the selected Project.",
   },
 ];
 

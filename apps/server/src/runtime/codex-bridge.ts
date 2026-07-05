@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import nodePath from "node:path";
 import {
   ContextUsageSnapshotSchema,
+  ModelUsageRecordSchema,
   ResolveApprovalRequestSchema,
+  type ContextUsageSnapshot,
   type Approval,
+  type ModelUsageRecord,
   type RuntimeEvent,
+  type Session,
+  type Turn,
 } from "@openpond/contracts";
 import {
   defaultServerRequestResult,
@@ -191,6 +196,12 @@ export function createCodexBridge(deps: {
       if (!usageSnapshot) return;
       usageEvent.data = usageSnapshot;
       await appendRuntimeEvent(usageEvent);
+      await appendCodexContextUsageRecord({
+        session,
+        turn,
+        usageEvent,
+        usageSnapshot,
+      });
       return;
     }
 
@@ -479,6 +490,87 @@ export function createCodexBridge(deps: {
     handleCodexServerRequest,
     mapCodexNotification,
   };
+
+  async function appendCodexContextUsageRecord(input: {
+    session: Session | undefined;
+    turn: Turn | undefined;
+    usageEvent: RuntimeEvent;
+    usageSnapshot: ContextUsageSnapshot;
+  }): Promise<void> {
+    const session = input.session;
+    if (!session || typeof store.upsertModelUsageRecord !== "function") return;
+    try {
+      await store.upsertModelUsageRecord(codexContextUsageRecord({ ...input, session }));
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: session.id,
+          turnId: input.turn?.id,
+          name: "diagnostic",
+          source: "server",
+          appId: session.appId,
+          status: "failed",
+          output: textFromUnknown(error) || "Failed to persist Codex context usage record.",
+          data: {
+            kind: "model_usage_record_failed",
+            provider: "codex",
+            source: "codex_context_usage",
+            usageEventId: input.usageEvent.id,
+          },
+        }),
+      );
+    }
+  }
+}
+
+function codexContextUsageRecord(input: {
+  session: Session;
+  turn: Turn | undefined;
+  usageEvent: RuntimeEvent;
+  usageSnapshot: ContextUsageSnapshot;
+}): ModelUsageRecord {
+  const timestamp = input.usageEvent.timestamp;
+  return ModelUsageRecordSchema.parse({
+    id: `codex_context_${input.usageEvent.id}`,
+    requestId: `codex:${input.session.id}:context:${input.usageEvent.id}`,
+    requestOrdinal: 0,
+    sessionId: input.session.id,
+    turnId: input.turn?.id ?? null,
+    provider: "codex",
+    model: input.usageSnapshot.model || "codex",
+    route: "codex_app_server",
+    source: "codex_context_usage",
+    requestKind: "codex_context",
+    visibility: "background",
+    status: "completed",
+    startedAt: timestamp,
+    completedAt: timestamp,
+    durationMs: 0,
+    firstTokenMs: null,
+    promptTokens: null,
+    completionTokens: null,
+    totalTokens: input.usageSnapshot.usedTokens,
+    errorType: null,
+    errorMessage: null,
+    attribution: {
+      surface: "system",
+      workflowKind: "other",
+      sessionId: input.session.id,
+      turnId: input.turn?.id ?? null,
+      insightRunId: null,
+      goalId: null,
+      createPipelineRequestId: null,
+      createPipelineId: null,
+      commandName: null,
+      commandSource: null,
+      appId: input.session.appId ?? null,
+      workspaceKind: input.session.workspaceKind ?? null,
+      workspaceId: input.session.workspaceId ?? null,
+      localProjectId: input.session.localProjectId ?? null,
+      cloudProjectId: input.session.cloudProjectId ?? null,
+      sourceEventSequence: input.usageEvent.sequence ?? null,
+    },
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -665,7 +757,7 @@ function recordValue(record: Record<string, unknown> | null | undefined, keys: s
   return null;
 }
 
-function codexContextUsageSnapshot(params: Record<string, unknown> | undefined, eventId: string): unknown | null {
+function codexContextUsageSnapshot(params: Record<string, unknown> | undefined, eventId: string): ContextUsageSnapshot | null {
   const usage = recordValue(params, ["tokenUsage", "token_usage", "usage"]);
   if (!usage) return null;
   const total = recordValue(usage, ["total", "totalTokenUsage", "total_token_usage"]) ?? usage;

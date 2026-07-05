@@ -6,6 +6,7 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     createSession,
     patchSession,
     sendTurn,
+    recordPreflightTurnFailure,
     updateTurnCreatePipeline,
     interruptSessionTurn,
     compactSession,
@@ -24,6 +25,19 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   const turnMatch = /^\/v1\/sessions\/([^/]+)\/turns$/.exec(requestUrl.pathname);
   if (request.method === "POST" && turnMatch) {
     sendJson(response, 202, await sendTurn(turnMatch[1]!, await readJson(request)));
+    return true;
+  }
+  const preflightFailureMatch =
+    /^\/v1\/sessions\/([^/]+)\/preflight-turns\/failure$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && preflightFailureMatch) {
+    sendJson(
+      response,
+      200,
+      await recordPreflightTurnFailure(
+        decodeURIComponent(preflightFailureMatch[1]!),
+        await readJson(request),
+      ),
+    );
     return true;
   }
   const turnCreatePipelineMatch =

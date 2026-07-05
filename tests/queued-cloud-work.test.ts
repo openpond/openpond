@@ -47,6 +47,16 @@ describe("queued Cloud work submission", () => {
     ).toEqual({ kind: "not_queued" });
     expect(
       queuedCloudWorkSubmission({
+        pendingWorkspaceTarget: "hybrid",
+        actionSelected: false,
+        promptOverrideProvided: false,
+        attachmentCount: 0,
+        selectedProjectCloudProjectId: "cloud_project_1",
+        prompt: "hybrid chat",
+      }),
+    ).toEqual({ kind: "not_queued" });
+    expect(
+      queuedCloudWorkSubmission({
         pendingWorkspaceTarget: "queue_cloud",
         actionSelected: true,
         promptOverrideProvided: false,

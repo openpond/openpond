@@ -14,6 +14,10 @@ import {
   hostedToolProtocolForInstructionMode,
   type HostedToolInstructionMode,
 } from "./hosted-tool-protocol.js";
+import {
+  buildConnectedAppIndexContext,
+  type ResolvedConnectedAppContext,
+} from "./connected-app-context.js";
 import { buildPersonalizedSystemPrompt } from "./personalization.js";
 import { event } from "../utils.js";
 
@@ -39,9 +43,11 @@ export type HostedTurnHelpers = {
       openPondActionCatalog?: OpenPondActionCatalogEntry[];
       openPondProfileSkills?: OpenPondProfileSkill[];
       loadedProfileSkills?: HostedProfileSkillBody[];
+      connectedApps?: ResolvedConnectedAppContext[];
       toolInstructionMode?: HostedToolInstructionMode;
       actionCatalogInstructionMode?: ActionCatalogInstructionMode;
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
+      browserControlAvailable?: boolean;
     }
   ): Promise<string>;
   appendAssistantText(session: Session, turnId: string, text: string): Promise<void>;
@@ -76,18 +82,23 @@ export function createHostedTurnHelpers(deps: {
       openPondActionCatalog?: OpenPondActionCatalogEntry[];
       openPondProfileSkills?: OpenPondProfileSkill[];
       loadedProfileSkills?: HostedProfileSkillBody[];
+      connectedApps?: ResolvedConnectedAppContext[];
       toolInstructionMode?: HostedToolInstructionMode;
       actionCatalogInstructionMode?: ActionCatalogInstructionMode;
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
+      browserControlAvailable?: boolean;
     } = {}
   ): Promise<string> {
+    const isHybridSession = isHybridWorkspaceSession(session);
     const workspaceContext =
       session.workspaceKind === "local_project"
           ? (await looksLikeSandboxTemplateRepo(session.cwd))
             ? buildLocalSandboxTemplateTurnContext(session.cwd, options.toolInstructionMode ?? "full_text_fallback")
             : buildLocalProjectTurnContext(session.cwd, options.toolInstructionMode ?? "full_text_fallback")
         : session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template"
-          ? buildSandboxTurnContext(session.workspaceId, session.workspaceName, options.toolInstructionMode ?? "full_text_fallback")
+          ? isHybridSession
+            ? buildHybridSandboxTurnContext(session.workspaceId, session.workspaceName, options.toolInstructionMode ?? "full_text_fallback")
+            : buildSandboxTurnContext(session.workspaceId, session.workspaceName, options.toolInstructionMode ?? "full_text_fallback")
           : buildGeneralWorkspaceTurnContext(session.cwd, options.toolInstructionMode ?? "full_text_fallback");
     const toolProtocol = hostedToolProtocolForInstructionMode(options.toolInstructionMode ?? "full_text_fallback");
     const actionCatalogContext = buildActionCatalogContext(
@@ -99,10 +110,22 @@ export function createHostedTurnHelpers(deps: {
       loadedSkills: options.loadedProfileSkills ?? [],
       mode: options.profileSkillInstructionMode ?? "none",
     });
-    const capabilityIndexContext = buildOpenPondCapabilityIndexContext();
+    const capabilityIndexContext = buildOpenPondCapabilityIndexContext({
+      browserControlAvailable: options.browserControlAvailable === true,
+      hybridWorkspace: isHybridSession,
+    });
+    const connectedAppContext = buildConnectedAppIndexContext(options.connectedApps ?? []);
     return buildPersonalizedSystemPrompt(
       personalizationSoul,
-      [basePrompt, toolProtocol, workspaceContext, capabilityIndexContext, actionCatalogContext, profileSkillContext]
+      [
+        basePrompt,
+        toolProtocol,
+        workspaceContext,
+        capabilityIndexContext,
+        connectedAppContext,
+        actionCatalogContext,
+        profileSkillContext,
+      ]
         .filter(Boolean)
         .join("\n\n")
     );
@@ -161,13 +184,25 @@ const PROFILE_SKILL_INDEX_BUDGET_CHARS = 6000;
 const PROFILE_SKILL_DESCRIPTION_MAX_CHARS = 280;
 const PROFILE_SKILL_BODY_MAX_CHARS = 80000;
 
-function buildOpenPondCapabilityIndexContext(): string {
+function buildOpenPondCapabilityIndexContext(
+  input: { browserControlAvailable?: boolean; hybridWorkspace?: boolean } = {},
+): string {
   return [
     "OpenPond capabilities:",
     "- workspace_context: use resource_search and resource_read for workspace, session, artifact, goal, sandbox, and git context.",
     "- create_pipeline: create or edit source-backed agents and workflows through Create Pipeline when the matching capability is available.",
+    ...(input.hybridWorkspace
+      ? [
+          "- In Hybrid workspace mode, ordinary project file edits are sandbox workspace work. Use create_pipeline only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+        ]
+      : []),
     "- profile_skill_goal: create or edit profile-backed single-file skills through the profile-skill goal workflow when the matching capability is available.",
     "- goal_control: start, restart, pause, resume, or stop OpenPond goals after resolving the current target goal and execution mode.",
+    ...(input.browserControlAvailable
+      ? [
+          "- browser_control: use openpond_browser_* native tools to open, snapshot, move the cursor, click, type, press keys, and scroll in the desktop in-app browser when visible browser interaction is needed.",
+        ]
+      : []),
     "- web_search: search current or external information when web search is available and the answer depends on current facts.",
     "- action_run: search and run scoped project or profile actions from the allowed action catalog.",
     "- profile_skill: load existing profile skills for reusable instruction workflows, not app-native controls or permissions.",
@@ -385,6 +420,22 @@ function buildSandboxTurnContext(
     .join("\n");
 }
 
+function buildHybridSandboxTurnContext(
+  sandboxId: string | null | undefined,
+  sandboxName: string | null | undefined,
+  toolInstructionMode: HostedToolInstructionMode,
+): string {
+  const context = buildSandboxTurnContext(sandboxId, sandboxName, toolInstructionMode);
+  const hybridRules = [
+    "Hybrid workspace context:",
+    "- The selected Project is backed by a hosted sandbox. Treat normal requests to inspect, edit, test, or diff project files as sandbox workspace work.",
+    "- For file edits like README, source, config, or docs updates, inspect and change the active sandbox using sandbox/resource/git tools; do not route those edits through goals or Create Pipeline.",
+    "- Keep the user's local checkout unchanged unless the user explicitly asks to preserve, promote, apply, or export sandbox changes.",
+    "- Create Pipeline remains appropriate only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+  ];
+  return [context, hybridRules.join("\n")].filter(Boolean).join("\n");
+}
+
 function buildGeneralWorkspaceTurnContext(
   workspacePath: string | null | undefined,
   toolInstructionMode: HostedToolInstructionMode,
@@ -407,6 +458,10 @@ function buildGeneralWorkspaceTurnContext(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function isHybridWorkspaceSession(session: Session): boolean {
+  return session.metadata?.workspaceTarget === "hybrid";
 }
 
 async function looksLikeSandboxTemplateRepo(repoPath?: string | null): Promise<boolean> {

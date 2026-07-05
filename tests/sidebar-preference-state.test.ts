@@ -144,12 +144,17 @@ describe("layout width preference state merging", () => {
     });
   });
 
-  test("clears the local width marker when incoming preferences catch up", () => {
+  test("keeps the local width marker after catch-up so late stale payloads cannot snap back", () => {
     const localChange = recordLayoutWidthPreferenceChange(332, 420, 1_000);
 
-    expect(mergeLayoutWidthPreferencePreservingRecentLocal(420, localChange, 1_050)).toEqual({
+    const caughtUp = mergeLayoutWidthPreferencePreservingRecentLocal(420, localChange, 1_050);
+    expect(caughtUp).toEqual({
       value: 420,
-      localChange: null,
+      localChange,
+    });
+    expect(mergeLayoutWidthPreferencePreservingRecentLocal(332, caughtUp.localChange, 1_100)).toEqual({
+      value: 420,
+      localChange,
     });
   });
 

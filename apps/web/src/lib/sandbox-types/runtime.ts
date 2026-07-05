@@ -183,6 +183,7 @@ export type SandboxIntegrationLeaseInput = {
 
 export type SandboxIntegrationConnectionLeaseInput = {
   connectionId: string;
+  provider?: SandboxIntegrationProvider;
   scopes?: string[];
   capabilities: string[];
   resourcePolicy?: Record<string, unknown>;

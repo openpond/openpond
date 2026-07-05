@@ -7,7 +7,7 @@ import type {
   WorkspaceState,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
-import type { AppAction } from "../../app/app-state";
+import type { AppAction, NewProjectMode } from "../../app/app-state";
 import { projectSelectionKey, type SidebarProjectItem } from "../../lib/app-models";
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 
@@ -31,6 +31,7 @@ export function AppSettingsRoute({
   onError,
   onToast,
   onBack,
+  onOpenSourceSession,
 }: Parameters<typeof SettingsView>[0]) {
   return (
     <Suspense fallback={null}>
@@ -42,6 +43,7 @@ export function AppSettingsRoute({
         onError={onError}
         onToast={onToast}
         onBack={onBack}
+        onOpenSourceSession={onOpenSourceSession}
       />
     </Suspense>
   );
@@ -64,6 +66,7 @@ export function AppLazyPanels({
   newProjectDirectory,
   newProjectMode,
   newProjectName,
+  newProjectPath,
   projectRows,
   query,
   searchOpen,
@@ -82,6 +85,7 @@ export function AppLazyPanels({
   setCommitNextStep,
   setNewProjectDialogOpen,
   setNewProjectName,
+  setNewProjectPath,
   setPrompt,
   setQuery,
   setSearchOpen,
@@ -103,8 +107,9 @@ export function AppLazyPanels({
   newProjectBusy: boolean;
   newProjectDialogOpen: boolean;
   newProjectDirectory: string;
-  newProjectMode: "local" | "cloud";
+  newProjectMode: NewProjectMode;
   newProjectName: string;
+  newProjectPath: string;
   projectRows: SidebarProjectItem[];
   query: string;
   searchOpen: boolean;
@@ -123,6 +128,7 @@ export function AppLazyPanels({
   setCommitNextStep: Dispatch<SetStateAction<CommitNextStep>>;
   setNewProjectDialogOpen: Dispatch<SetStateAction<boolean>>;
   setNewProjectName: Dispatch<SetStateAction<string>>;
+  setNewProjectPath: Dispatch<SetStateAction<string>>;
   setPrompt: Dispatch<SetStateAction<string>>;
   setQuery: Dispatch<SetStateAction<string>>;
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
@@ -175,9 +181,11 @@ export function AppLazyPanels({
             open={newProjectDialogOpen}
             mode={newProjectMode}
             name={newProjectName}
+            path={newProjectPath}
             directory={newProjectDirectory}
             busy={newProjectBusy}
             onNameChange={setNewProjectName}
+            onPathChange={setNewProjectPath}
             onClose={() => {
               if (!newProjectBusy) setNewProjectDialogOpen(false);
             }}

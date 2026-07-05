@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
 import { activityGroupSummary, buildChatMessages } from "../apps/web/src/lib/chat-messages";
+import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
 
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
   return {
@@ -27,6 +28,63 @@ function commandStarted(id: string, turnId: string, command: string): RuntimeEve
 }
 
 describe("chat message projection", () => {
+  test("renders assistant reasoning as streamed activity separate from answer content", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "hello z.ai" },
+      }),
+      runtimeEvent({
+        id: "reasoning_1",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "The user is greeting Z.ai.",
+      }),
+      runtimeEvent({
+        id: "reasoning_2",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: " It should answer briefly.",
+      }),
+      runtimeEvent({
+        id: "assistant_1",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "Hello z.ai",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
+    expect(messages[1]).toMatchObject({
+      role: "activity_group",
+      activities: [
+        {
+          label: "Reasoning",
+          content: "The user is greeting Z.ai. It should answer briefly.",
+        },
+      ],
+    });
+    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe("Reasoned");
+    expect(messages[2]).toMatchObject({
+      role: "assistant",
+      content: "Hello z.ai",
+    });
+
+    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    expect(html).toContain("Reasoned");
+    expect(html).not.toContain("Hello z.ai");
+
+    const assistantHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[2]! }));
+    expect(assistantHtml).toContain("Hello z.ai");
+    expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
+  });
+
   test("renders Insights scan prompts as compact evidence cards", () => {
     const evidenceItems = Array.from({ length: 6 }, (_, index) => ({
       evidenceSource: index % 2 === 0 ? "tool_failure" : "stuck_turn",
@@ -846,6 +904,147 @@ describe("chat message projection", () => {
       "User asked to restart this goal.",
       "OpenPond goal restarted.",
     ]);
+  });
+
+  test("projects browser tools as compact redacted activity rows", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "open the browser and type the token" },
+      }),
+      runtimeEvent({
+        id: "browser_open_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "openpond_browser_open",
+        status: "started",
+        args: { url: "https://example.com/login?[redacted]" },
+      }),
+      runtimeEvent({
+        id: "browser_open_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "openpond_browser_open",
+        status: "completed",
+        output: JSON.stringify({ ok: true, output: "Opened browser." }),
+        data: { result: { output: "Opened browser." } },
+      }),
+      runtimeEvent({
+        id: "browser_type_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "openpond_browser_type",
+        status: "started",
+        args: { text: "[redacted 18 chars]", snapshotId: "snap_1", targetRef: "input_1" },
+      }),
+      runtimeEvent({
+        id: "browser_type_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "openpond_browser_type",
+        status: "completed",
+        output: JSON.stringify({ ok: true, output: "Typed in browser." }),
+        data: { result: { output: "Typed in browser." } },
+      }),
+    ]);
+
+    expect(messages[1]?.role).toBe("activity_group");
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
+      "Opening browser",
+      "Opened browser",
+      "Typing in browser",
+      "Typed in browser",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
+      "https://example.com/login?[redacted]",
+      "Opened browser.",
+      "Text redacted",
+      "Typed in browser.",
+    ]);
+  });
+
+  test("projects connected app provider tools as redacted provider activity rows", () => {
+    const events = [
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "search X for recent mentions" },
+      }),
+      runtimeEvent({
+        id: "x_search_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "connected_app_search",
+        status: "started",
+        args: {
+          provider: "x",
+          operation: "x.search.posts",
+          query: "openpond",
+          capabilityIds: ["x.search.read"],
+          connectionId: "conn_should_not_render",
+          refreshToken: "token_should_not_render",
+        },
+      }),
+      runtimeEvent({
+        id: "x_search_completed",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "connected_app_search",
+        status: "completed",
+        output: "Search completed.",
+        data: {
+          result: {
+            provider: "x",
+            providerLabel: "X",
+            operation: "search",
+            capabilityIds: ["x.search.read"],
+            result: {
+              connectionId: "conn_should_not_render",
+              accessToken: "token_should_not_render",
+            },
+          },
+        },
+      }),
+    ];
+    const messages = buildChatMessages(events);
+
+    expect(messages[1]?.role).toBe("activity_group");
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
+      "X search",
+      "X search",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
+      "x.search.posts / 1 capability",
+      "search / 1 capability",
+    ]);
+
+    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    expect(html).toContain("X search");
+    expect(html).not.toContain("conn_should_not_render");
+    expect(html).not.toContain("token_should_not_render");
+
+    const providerRows = connectedAppProviderActivityRows(events);
+    expect(providerRows).toEqual([
+      {
+        id: "x_search_started",
+        label: "X search",
+        content: "x.search.posts / 1 capability",
+        timestamp: "2026-05-16T00:00:00.000Z",
+        state: "running",
+      },
+      {
+        id: "x_search_completed",
+        label: "X search",
+        content: "search / 1 capability",
+        timestamp: "2026-05-16T00:00:00.000Z",
+        state: "completed",
+      },
+    ]);
+    expect(JSON.stringify(providerRows)).not.toContain("conn_should_not_render");
+    expect(JSON.stringify(providerRows)).not.toContain("token_should_not_render");
   });
 
   test("projects Codex absolute image reads as local activity image previews", () => {

@@ -15,9 +15,68 @@ export const InsightEvidenceSourceSchema = z.enum([
   "abandoned_goal",
   "user_correction",
   "unresolved_conversation",
+  "usage_anomaly",
 ]);
 
 export const InsightPayloadSchema = z.record(z.string(), z.unknown()).default({});
+
+export const UsageAnomalyInsightKindSchema = z.enum([
+  "usage_spike",
+  "model_usage_spike",
+  "latency_regression",
+  "failure_cluster",
+  "missing_usage_frames",
+]);
+
+export const UsageAnomalyMetricSchema = z.enum([
+  "requests",
+  "total_tokens",
+  "p95_latency_ms",
+  "failed_requests",
+  "missing_usage_requests",
+]);
+
+export const UsageAnomalyInsightPayloadSchema = z.object({
+  detector: z.literal("usage-anomaly"),
+  evidenceSource: z.literal("usage_anomaly"),
+  evidenceKey: z.string().trim().min(1),
+  anomalyKind: UsageAnomalyInsightKindSchema,
+  metric: UsageAnomalyMetricSchema,
+  provider: z.string().trim().min(1).nullable(),
+  model: z.string().trim().min(1).nullable(),
+  visibility: z.string().trim().min(1),
+  current: z.object({
+    from: z.string().trim().min(1),
+    to: z.string().trim().min(1),
+    requests: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+    failedRequests: z.number().int().nonnegative(),
+    missingUsageRequests: z.number().int().nonnegative(),
+    p95LatencyMs: z.number().nonnegative().nullable(),
+  }),
+  baseline: z.object({
+    from: z.string().trim().min(1),
+    to: z.string().trim().min(1),
+    activeDays: z.number().int().nonnegative(),
+    medianRequests: z.number().nonnegative(),
+    medianTotalTokens: z.number().nonnegative(),
+    medianFailedRequests: z.number().nonnegative(),
+    medianMissingUsageRequests: z.number().nonnegative(),
+    medianP95LatencyMs: z.number().nonnegative().nullable(),
+  }),
+  ratio: z.number().nonnegative().nullable(),
+  absoluteFloor: z.number().nonnegative(),
+  drilldown: z.object({
+    startedAtFrom: z.string().trim().min(1),
+    startedAtTo: z.string().trim().min(1),
+    visibility: z.string().trim().min(1),
+    status: z.string().trim().min(1),
+    provider: z.string().trim().min(1).nullable(),
+    model: z.string().trim().min(1).nullable(),
+  }),
+  linkedSessionIds: z.array(z.string().trim().min(1)).default([]),
+  linkedCommandNames: z.array(z.string().trim().min(1)).default([]),
+});
 
 export const InsightItemSchema = z.object({
   id: z.string().trim().min(1),
@@ -105,6 +164,9 @@ export type InsightRunTrigger = z.infer<typeof InsightRunTriggerSchema>;
 export type InsightRunStatus = z.infer<typeof InsightRunStatusSchema>;
 export type InsightEvidenceSource = z.infer<typeof InsightEvidenceSourceSchema>;
 export type InsightPayload = z.infer<typeof InsightPayloadSchema>;
+export type UsageAnomalyInsightKind = z.infer<typeof UsageAnomalyInsightKindSchema>;
+export type UsageAnomalyMetric = z.infer<typeof UsageAnomalyMetricSchema>;
+export type UsageAnomalyInsightPayload = z.infer<typeof UsageAnomalyInsightPayloadSchema>;
 export type InsightItem = z.infer<typeof InsightItemSchema>;
 export type InsightRun = z.infer<typeof InsightRunSchema>;
 export type InsightSummary = z.infer<typeof InsightSummarySchema>;

@@ -2,7 +2,11 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { CreatePipelineRequestSchema, emptyOpenPondProfileState } from "@openpond/contracts";
+import {
+  CreatePipelineRequestSchema,
+  emptyOpenPondProfileState,
+  type ModelUsageRecord,
+} from "@openpond/contracts";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import {
   createPipelineSnapshotFromPlannerDecision,
@@ -328,6 +332,199 @@ describe("model-backed create pipeline planner", () => {
     expect(approvals).toHaveLength(1);
     expect(events.some((event) => event.name === "create_pipeline.updated" && event.output === "Create planner is preparing the plan.")).toBe(true);
     expect(events.some((event) => event.name === "turn.completed")).toBe(true);
+  });
+
+  test("server create turns record model-backed planner usage", async () => {
+    let session = baseSession({
+      appId: "app_create_usage",
+      appName: "Create Usage App",
+      workspaceKind: "local_project",
+      workspaceId: "workspace_create_usage",
+      workspaceName: "Create Usage Workspace",
+      localProjectId: "project_create_usage",
+      cloudProjectId: "cloud_project_create_usage",
+    });
+    const turns: any[] = [];
+    const events: any[] = [];
+    const approvals: any[] = [];
+    const usageRecords: ModelUsageRecord[] = [];
+    const request = createPipelineRequest();
+
+    const runner = createTurnRunner({
+      attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-planner-usage-")),
+      store: {
+        async snapshot() {
+          return { events, turns, approvals };
+        },
+        async getTurn(turnId: string) {
+          return turns.find((candidate) => candidate.id === turnId) ?? null;
+        },
+        async insertTurn(turn: any) {
+          turns.push(turn);
+        },
+        async updateTurn(turnId: string, updater: (turn: any) => any) {
+          const index = turns.findIndex((candidate) => candidate.id === turnId);
+          if (index === -1) return null;
+          turns[index] = updater(turns[index]);
+          return turns[index];
+        },
+        async getApproval(approvalId: string) {
+          return approvals.find((candidate) => candidate.id === approvalId) ?? null;
+        },
+        async upsertModelUsageRecord(record) {
+          const index = usageRecords.findIndex((candidate) => candidate.requestId === record.requestId);
+          if (index === -1) usageRecords.push(record);
+          else usageRecords[index] = record;
+          return record;
+        },
+      },
+      upsertApproval: async (approval: any) => {
+        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        if (index === -1) approvals.push(approval);
+        else approvals[index] = approval;
+      },
+      getSession: async () => session,
+      updateSession: async (_sessionId: string, patch: Record<string, unknown>) => {
+        session = { ...session, ...patch };
+        return session;
+      },
+      completeTurn: async (_sessionId: string, turnId: string, providerTurnId: string | null = null) => {
+        const turn = turns.find((candidate) => candidate.id === turnId);
+        Object.assign(turn, {
+          providerTurnId,
+          completedAt: "2026-07-01T00:00:01.000Z",
+          status: "completed",
+        });
+        session = { ...session, status: "idle" };
+        return turn;
+      },
+      failTurn: async (_session: any, turnId: string, message: string) => {
+        const turn = turns.find((candidate) => candidate.id === turnId);
+        Object.assign(turn, { status: "failed", error: message });
+        return turn;
+      },
+      interruptTurn: async (_session: any, turnId: string) => {
+        const turn = turns.find((candidate) => candidate.id === turnId);
+        Object.assign(turn, { status: "interrupted" });
+        return turn;
+      },
+      defaultSessionCwd: () => "/tmp/openpond",
+      findOpenPondApp: async () => {
+        throw new Error("apps should not load for create planning");
+      },
+      resolveSessionWorkspaceCwd: async () => null,
+      ensureCodexRuntime: async () => {
+        throw new Error("source runtime should not start before plan approval");
+      },
+      appendWorkspaceDiffEvent: async () => undefined,
+      workspaceDiffBaseline: async () => {
+        throw new Error("workspace diff should not run during create planning");
+      },
+      appendRuntimeEvent: async (event: any) => {
+        events.push(event);
+      },
+      executeWorkspaceTool: async () => {
+        throw new Error("workspace tools should not run during create planning");
+      },
+      loadPersonalizationSoul: async () => {
+        throw new Error("normal chat personalization should not load during create planning");
+      },
+      maybeCreateScaffoldForTurn: async () => {
+        throw new Error("normal chat scaffold should not run during create planning");
+      },
+      hostedSystemPrompt: async () => {
+        throw new Error("normal chat prompt should not build during create planning");
+      },
+      appendAssistantText: async () => undefined,
+      appendHostedContextUsage: async () => undefined,
+      streamOpenPondHostedChatTurn: async function* () {
+        yield {
+          type: "text_delta",
+          text: JSON.stringify({
+            schemaVersion: "openpond.createPipeline.plannerDecision.v1",
+            decision: "plan",
+            plan: {
+              agentId: "support-items",
+              agentName: "Support Items",
+              summary: "Create a model-planned support items agent.",
+              capturedContextSummary: "Direct slash command request.",
+              actionShape: {
+                mode: "chat",
+                label: "Chat only",
+                detail: "Expose through chat.",
+                defaultActionKey: "chat",
+                directActionHint: null,
+                artifactPolicy: "Persist trace and run summary.",
+              },
+              sourcePlan: [
+                {
+                  path: "agents/support-items",
+                  operation: "create",
+                  reason: "Implement the approved model-planned agent.",
+                },
+              ],
+              requirements: [],
+              checks: [],
+            },
+          }),
+          raw: {},
+        } as any;
+        yield {
+          type: "usage",
+          usage: { prompt_tokens: 101, completion_tokens: 23, total_tokens: 124 },
+          raw: {},
+        } as any;
+      },
+      turnFollowUpQueue: {
+        enqueue() {
+          return { id: "unused" };
+        },
+      } as any,
+      maxHostedWorkspaceToolRounds: 1,
+      maxRepeatedInvalidToolRequests: 1,
+    });
+
+    const turn = await runner.sendTurn("session_1", {
+      prompt: "/create Help me keep track of open customer support items.",
+      createPipelineRequest: request,
+      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(turn.createPipeline?.state).toBe("awaiting_plan_approval");
+    expect(usageRecords).toHaveLength(1);
+    expect(usageRecords[0]).toMatchObject({
+      requestId: `${turn.id}:create-planner`,
+      requestOrdinal: 0,
+      sessionId: "session_1",
+      turnId: turn.id,
+      provider: "openpond",
+      model: "openpond-chat",
+      route: "openpond_hosted",
+      source: "provider_usage",
+      requestKind: "create_pipeline_planner",
+      visibility: "background",
+      status: "completed",
+      promptTokens: 101,
+      completionTokens: 23,
+      totalTokens: 124,
+      attribution: {
+        surface: "create_pipeline",
+        workflowKind: "planner",
+        sessionId: "session_1",
+        turnId: turn.id,
+        createPipelineRequestId: request.id,
+        createPipelineId: turn.createPipeline?.id,
+        commandName: "/create",
+        commandSource: "prompt_parse",
+        appId: "app_create_usage",
+        workspaceKind: "local_project",
+        workspaceId: "workspace_create_usage",
+        localProjectId: "project_create_usage",
+        cloudProjectId: "cloud_project_create_usage",
+      },
+    });
+    expect(usageRecords[0]?.firstTokenMs).not.toBeNull();
   });
 
   test("server create turns persist a blocked create snapshot when planning fails", async () => {

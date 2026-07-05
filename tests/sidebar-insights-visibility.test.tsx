@@ -159,6 +159,7 @@ function SidebarDataProbe({
     runtimeIndexes: buildRuntimeIndexes([], []),
     appPreferences: {},
     selectedSessionId,
+    selectedProjectId: null,
     archivedChatsOpen: false,
     projectsExpanded: true,
     chatRowsVisibleCount: 10,

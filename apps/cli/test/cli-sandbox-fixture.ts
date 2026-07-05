@@ -22,6 +22,7 @@ export type CapturedRequest = {
   url: string;
   body: Record<string, unknown>;
   apiKey: string | null;
+  prefer: string | null;
 };
 
 const CLI_PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,6 +38,7 @@ export async function withSandboxApi(
       url: request.url ?? "",
       body,
       apiKey: request.headers["openpond-api-key"]?.toString() ?? null,
+      prefer: request.headers.prefer?.toString() ?? null,
     });
 
     if (request.url === "/v1/sandbox-secrets" && request.method === "GET") {

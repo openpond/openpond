@@ -121,6 +121,87 @@ type BrowserBoundsInput = BrowserConversationInput & {
   bounds: BrowserBounds | null;
 };
 
+type BrowserHarnessTargetInput = {
+  snapshotId?: string;
+  targetRef?: string;
+  x?: number;
+  y?: number;
+};
+
+type BrowserSnapshotInput = BrowserConversationInput & {
+  tabId?: string;
+  includeScreenshot?: boolean;
+  maxTargets?: number;
+};
+
+type BrowserMoveCursorInput = BrowserConversationInput & BrowserHarnessTargetInput & {
+  tabId?: string;
+  waitAfterMoveMs?: number;
+};
+
+type BrowserClickInput = BrowserConversationInput & BrowserHarnessTargetInput & {
+  tabId?: string;
+  button?: "left" | "middle" | "right";
+  clickCount?: 1 | 2;
+};
+
+type BrowserTypeTextInput = BrowserConversationInput & {
+  tabId?: string;
+  snapshotId?: string;
+  targetRef?: string;
+  text: string;
+};
+
+type BrowserKeyInput = BrowserConversationInput & {
+  tabId?: string;
+  key:
+    | "Enter"
+    | "Tab"
+    | "Escape"
+    | "Space"
+    | "Backspace"
+    | "Delete"
+    | "ArrowUp"
+    | "ArrowDown"
+    | "ArrowLeft"
+    | "ArrowRight"
+    | "Home"
+    | "End"
+    | "PageUp"
+    | "PageDown"
+    | "Ctrl+L"
+    | "Meta+L"
+    | "Ctrl+R"
+    | "Meta+R"
+    | "Ctrl+A"
+    | "Meta+A"
+    | "Ctrl+C"
+    | "Meta+C"
+    | "Ctrl+V"
+    | "Meta+V";
+};
+
+type BrowserScrollInput = BrowserConversationInput & BrowserHarnessTargetInput & {
+  tabId?: string;
+  deltaX?: number;
+  deltaY: number;
+};
+
+type BrowserHarnessResult = {
+  ok: boolean;
+  output: string;
+  data?: Record<string, unknown>;
+  metadata?: {
+    activeTabId?: string;
+    title?: string;
+    url?: string;
+    openTabIds?: string[];
+    cursor?: { x: number; y: number };
+    snapshotId?: string;
+    screenshot?: { tabId: string; url: string };
+  };
+};
+
 type BrowserTabState = {
   id: string;
   url: string;
@@ -181,6 +262,12 @@ interface Window {
       setBounds: (input: BrowserBoundsInput) => Promise<BrowserCommandResult>;
       getState: (input: BrowserConversationInput) => Promise<BrowserConversationState>;
       diagnostics: () => Promise<BrowserDiagnostics>;
+      snapshot: (input: BrowserSnapshotInput) => Promise<BrowserHarnessResult>;
+      moveCursor: (input: BrowserMoveCursorInput) => Promise<BrowserHarnessResult>;
+      click: (input: BrowserClickInput) => Promise<BrowserHarnessResult>;
+      typeText: (input: BrowserTypeTextInput) => Promise<BrowserHarnessResult>;
+      key: (input: BrowserKeyInput) => Promise<BrowserHarnessResult>;
+      scroll: (input: BrowserScrollInput) => Promise<BrowserHarnessResult>;
       onState: (callback: (state: BrowserConversationState) => void) => () => void;
     };
     retryStartup?: () => Promise<{ ok: boolean; error?: string }>;

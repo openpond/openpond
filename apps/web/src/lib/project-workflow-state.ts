@@ -76,6 +76,7 @@ export function uploadSyncStateNote(
 
   const items: string[] = [];
   const commitsToUpload = state.aheadOfLinkedSource > 0 ? state.aheadOfLinkedSource : state.ahead;
+  if (!localProject.linkedSandboxProject?.projectId) items.push("upload required");
   if (localProject.linkedSandboxProject?.projectId && state.headCommit && !localProject.linkedSandboxProject.lastUploadedCommit) {
     items.push("upload required");
   }

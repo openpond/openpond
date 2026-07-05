@@ -13,8 +13,10 @@ import type {
   OpenPondApp,
   RuntimeEvent,
   Session,
+  UsageRequestAttribution,
   WorkspaceState,
 } from "@openpond/contracts";
+import { DEFAULT_OPENPOND_CHAT_MODEL } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import {
   codexPermissionTurnInput,
@@ -30,6 +32,10 @@ import {
   resolveMentionedChatApp as resolveMentionedSandboxChatApp,
   sandboxMentionApps,
 } from "../lib/chat-app-mentions";
+import {
+  resolveMentionedConnectedApps,
+  type ConnectedAppMentionOption,
+} from "../lib/connected-app-mentions";
 import { resolveMentionedAction } from "../lib/action-mentions";
 import {
   answerCreatePipelineQuestionSnapshot,
@@ -47,7 +53,14 @@ import {
   openPondAgentSlashCommandInfo,
   openPondProfileActionInfo,
 } from "../lib/openpond-action-run";
+import {
+  buildHybridWorkspaceSessionRequest,
+  resolveHybridWorkspaceTarget,
+} from "../lib/hybrid-workspace-session";
 import { openPondActionProjectTarget } from "../lib/openpond-action-project";
+import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
+import { canManageOpenPondOrganization, type OpenPondOrganization } from "../lib/organization-types";
+import { implicitOrganization } from "../lib/project-agent-setup";
 import type {
   SandboxActionCatalogEntry,
   SandboxAgent,
@@ -58,7 +71,11 @@ import {
   readSandboxAgentsFromMemory,
 } from "../lib/sandbox-agent-memory";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
-import { isCloudWorkspaceKind } from "../lib/workspace-location";
+import {
+  isCloudWorkspaceKind,
+  isHybridWorkspaceSession,
+  type WorkspaceTargetValue,
+} from "../lib/workspace-location";
 
 type UseChatActionsInput = {
   applyBootstrapPayload: (payload: BootstrapPayload) => void;
@@ -73,6 +90,7 @@ type UseChatActionsInput = {
   bootstrap: BootstrapPayload | null;
   chatMessages: ChatMessage[];
   apps: OpenPondApp[];
+  connectedAppMentions: ConnectedAppMentionOption[];
   mentionedAppId: string | null;
   refreshWorkspace: (appId: string | null | undefined, ensure?: boolean) => Promise<WorkspaceState | null>;
   refreshWorkspaceDiff: (appId?: string | null | undefined) => Promise<unknown>;
@@ -84,6 +102,7 @@ type UseChatActionsInput = {
   selectedProjectLinkedOpenPondApp: LocalProjectOpenPondLink | null;
   selectedSession: Session | null;
   sessions: Session[];
+  workspaceTarget: WorkspaceTargetValue;
   setDraftModel: Dispatch<SetStateAction<string>>;
   setDraftProvider: Dispatch<SetStateAction<ChatProvider>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -116,6 +135,7 @@ type SendPromptOptions = {
   model?: string;
   chatMessages?: ChatMessage[];
   displayPrompt?: string;
+  usageAttribution?: UsageRequestAttribution;
 };
 
 function appendRuntimeEventIfMissing(events: RuntimeEvent[], event: RuntimeEvent): RuntimeEvent[] {
@@ -226,6 +246,7 @@ export function useChatActions({
   bootstrap,
   chatMessages,
   apps,
+  connectedAppMentions,
   mentionedAppId,
   refreshWorkspace,
   refreshWorkspaceDiff,
@@ -237,6 +258,7 @@ export function useChatActions({
   selectedProjectLinkedOpenPondApp,
   selectedSession,
   sessions,
+  workspaceTarget,
   setDraftModel,
   setDraftProvider,
   setError,
@@ -277,6 +299,86 @@ export function useChatActions({
     return agents.find((agent) => agent.projectId === projectId) ?? null;
   }
 
+  async function resolveSyncCloudOrganization(): Promise<OpenPondOrganization> {
+    if (!connection) throw new Error("OpenPond App server is not connected.");
+    if (bootstrap?.account.state !== "signed_in") {
+      throw new Error("Add an OpenPond account before syncing a Project to Cloud.");
+    }
+    const organizationPayload = await api.organizations(connection);
+    const organization = implicitOrganization(
+      organizationPayload.organizations
+        .map(normalizeOpenPondOrganization)
+        .filter((candidate): candidate is OpenPondOrganization => Boolean(candidate))
+        .filter((candidate) => candidate.status === "active"),
+      bootstrap?.preferences.defaultTeamId ?? null,
+    );
+    if (!organization) throw new Error("Add an OpenPond account before syncing a Project to Cloud.");
+    if (!canManageOpenPondOrganization(organization)) {
+      throw new Error(`You need owner or admin access to create projects in ${organization.displayName}.`);
+    }
+    return organization;
+  }
+
+  async function runSyncCloudCommand(input: {
+    clearPromptForTurn: () => void;
+    displayPrompt: string;
+    onSessionCreated?: (session: Session) => void;
+    selectSession: boolean;
+  }): Promise<boolean> {
+    if (!connection) return false;
+    const project = selectedProject;
+    if (!project) {
+      throw new Error("Select a local Project before using /sync-cloud.");
+    }
+    const organization = await resolveSyncCloudOrganization();
+    const branch = project.linkedSandboxProject?.defaultBranch?.trim() || "main";
+    const projectKey = projectSelectionKey("local", project.id);
+    const session = await api.createSession(connection, {
+      provider: "openpond",
+      modelRef: modelRefForTurn("openpond", DEFAULT_OPENPOND_CHAT_MODEL, providerSettings),
+      appId: null,
+      appName: null,
+      workspaceKind: "local_project",
+      workspaceId: project.id,
+      workspaceName: project.name,
+      localProjectId: project.id,
+      cloudProjectId: project.linkedSandboxProject?.projectId ?? null,
+      cloudTeamId: project.linkedSandboxProject?.teamId ?? null,
+      cwd: project.workspacePath,
+      title: `Sync ${project.name} to Cloud`,
+    });
+    setSessions((current) => [session, ...current]);
+    input.onSessionCreated?.(session);
+    if (input.selectSession) {
+      setSelectedSessionId(session.id);
+      setSelectedProjectId(projectKey);
+      setSelectedAppId(null);
+      setView("chat");
+      expandProject(projectKey);
+    }
+    input.clearPromptForTurn();
+    setWorkspaceBusy(true);
+    try {
+      const upload = await api.uploadLocalProjectCloudSource(connection, project.id, {
+        teamId: organization.teamId,
+        projectName: project.name,
+        branch,
+        chatSessionId: session.id,
+        displayPrompt: input.displayPrompt,
+      });
+      applyBootstrapPayload(upload.bootstrap);
+      expandProject(projectKey);
+      expandProject(projectSelectionKey("cloud", upload.project.id));
+      return true;
+    } catch (syncError) {
+      const payload = await api.bootstrap(connection).catch(() => null);
+      if (payload) applyBootstrapPayload(payload);
+      throw syncError;
+    } finally {
+      setWorkspaceBusy(false);
+    }
+  }
+
   async function sendPrompt(
     attachments: ChatAttachment[] = [],
     selectedAction: SandboxActionCatalogEntry | null = null,
@@ -295,6 +397,7 @@ export function useChatActions({
     const selectedProjectForTurn = explicitTurnContext ? null : selectedProject;
     const selectedCloudProjectForTurn = explicitTurnContext ? null : selectedCloudProject;
     const selectedProjectLinkedOpenPondAppForTurn = explicitTurnContext ? null : selectedProjectLinkedOpenPondApp;
+    const hybridTargetForTurn = !explicitTurnContext && workspaceTarget === "hybrid";
     const shouldSelectSession = options.selectSession ?? true;
     const turnChatMessages = options.chatMessages ?? chatMessages;
     const mentionedAppIdForTurn = options.session !== undefined ? null : mentionedAppId;
@@ -309,10 +412,29 @@ export function useChatActions({
       : resolveMentionedAction(value, selectedActionCatalog);
     const selectedActionForTurn = selectedAction ?? actionMentionResolution?.action ?? null;
     const actionPromptForRun = actionMentionResolution?.prompt || value;
+    const parsedSlashCommandForTurn = selectedActionForTurn ? null : parseComposerSlashCommandPrompt(value);
+    const usageAttributionForTurn = options.usageAttribution ?? (
+      parsedSlashCommandForTurn
+        ? {
+            surface: "chat" as const,
+            workflowKind: "slash_command" as const,
+            commandName: `/${parsedSlashCommandForTurn.command}`,
+            commandSource: "prompt_parse" as const,
+          }
+        : undefined
+    );
     setError(null);
     let turnSessionId: string | null = null;
     try {
-        if (selectedActionForTurn) {
+      if (!explicitTurnContext && parsedSlashCommandForTurn?.command === "sync-cloud") {
+        return await runSyncCloudCommand({
+          clearPromptForTurn,
+          displayPrompt: displayPromptForTurn,
+          onSessionCreated: options.onSessionCreated,
+          selectSession: shouldSelectSession,
+        });
+      }
+      if (selectedActionForTurn) {
           const selectedAgent = openPondAgentSlashCommandInfo(selectedActionForTurn);
           if (selectedAgent) {
             let session = selectedSessionForTurn;
@@ -501,25 +623,55 @@ export function useChatActions({
         : null;
       const mentionedSandboxApp =
         selectedMentionedSandboxApp ?? resolveMentionedSandboxChatApp(promptForTurn, sandboxMentionApps(apps));
+      const mentionedConnectedApps = resolveMentionedConnectedApps(promptForTurn, connectedAppMentions)
+        .map((option) => option.ref);
       if (!session) {
         const sessionAppId = selectedProjectLinkedOpenPondAppForTurn?.appId ?? selectedAppForTurn?.id ?? null;
         const sessionAppName = selectedProjectLinkedOpenPondAppForTurn?.appName ?? selectedAppForTurn?.name ?? null;
         const cloudProject = selectedCloudProjectForTurn;
-        const sessionProvider = cloudProject ? "openpond" : providerForTurn;
-        session = await api.createSession(connection, {
-          provider: sessionProvider,
-          modelRef: modelRefForTurn(sessionProvider, modelForTurnValue, providerSettings),
-          appId: sessionAppId,
-          appName: sessionAppName,
-          workspaceKind: cloudProject ? "sandbox" : selectedProjectForTurn ? "local_project" : selectedAppForTurn ? "sandbox_app" : undefined,
-          workspaceId: selectedProjectForTurn?.id ?? (selectedAppForTurn ? sessionAppId : undefined),
-          workspaceName: cloudProject?.name ?? selectedProjectForTurn?.name ?? sessionAppName,
-          localProjectId: selectedProjectForTurn?.id ?? null,
-          cloudProjectId: cloudProject?.id ?? selectedProjectForTurn?.linkedSandboxProject?.projectId ?? null,
-          cloudTeamId: cloudProject?.teamId ?? selectedProjectForTurn?.linkedSandboxProject?.teamId ?? null,
-          cwd: selectedProjectForTurn ? selectedProjectForTurn.workspacePath : null,
-          title: value.slice(0, 64),
-        });
+        const linkedSandboxProject = selectedProjectForTurn?.linkedSandboxProject ?? null;
+        const hybridWorkspaceTarget = hybridTargetForTurn
+          ? resolveHybridWorkspaceTarget({
+              selectedCloudProject: cloudProject,
+              selectedProject: selectedProjectForTurn,
+            })
+          : null;
+        if (hybridWorkspaceTarget?.kind === "missing_cloud_project") {
+          throw new Error(hybridWorkspaceTarget.message);
+        }
+        const useHybridWorkspace = hybridWorkspaceTarget?.kind === "ready";
+        const sessionProvider = useHybridWorkspace ? providerForTurn : cloudProject ? "openpond" : providerForTurn;
+        const sessionModelRef = modelRefForTurn(sessionProvider, modelForTurnValue, providerSettings);
+        session = await api.createSession(
+          connection,
+          useHybridWorkspace
+            ? buildHybridWorkspaceSessionRequest({
+                modelRef: sessionModelRef,
+                provider: sessionProvider,
+                target: hybridWorkspaceTarget,
+                title: value.slice(0, 64),
+              })
+            : {
+                provider: sessionProvider,
+                modelRef: sessionModelRef,
+                appId: sessionAppId,
+                appName: sessionAppName,
+                workspaceKind: cloudProject
+                  ? "sandbox"
+                  : selectedProjectForTurn
+                    ? "local_project"
+                    : selectedAppForTurn
+                      ? "sandbox_app"
+                      : undefined,
+                workspaceId: selectedProjectForTurn?.id ?? (selectedAppForTurn ? sessionAppId : undefined),
+                workspaceName: cloudProject?.name ?? selectedProjectForTurn?.name ?? sessionAppName,
+                localProjectId: selectedProjectForTurn?.id ?? null,
+                cloudProjectId: cloudProject?.id ?? linkedSandboxProject?.projectId ?? null,
+                cloudTeamId: cloudProject?.teamId ?? linkedSandboxProject?.teamId ?? null,
+                cwd: selectedProjectForTurn ? selectedProjectForTurn.workspacePath : null,
+                title: value.slice(0, 64),
+              },
+        );
         setSessions((current) => [session!, ...current]);
         options.onSessionCreated?.(session);
         if (shouldSelectSession) {
@@ -531,13 +683,26 @@ export function useChatActions({
           if (cloudProject) expandProject(projectSelectionKey("cloud", cloudProject.id));
         }
       }
-      if (isCloudWorkspaceKind(session.workspaceKind) && session.provider !== "openpond") {
+      if (isCloudWorkspaceKind(session.workspaceKind) && session.provider !== "openpond" && !isHybridWorkspaceSession(session)) {
         throw new Error("Cloud workspaces use OpenPond Chat. Switch to Local to use local providers.");
       }
       if (isCloudWorkspaceKind(session.workspaceKind) && ensureCloudSessionReady) {
-        session = await ensureCloudSessionReady(session);
+        try {
+          session = await ensureCloudSessionReady(session);
+        } catch (preflightError) {
+          const message = preflightError instanceof Error ? preflightError.message : String(preflightError);
+          await api
+            .recordPreflightTurnFailure(connection, session.id, {
+              prompt: value,
+              error: message,
+              target: isHybridWorkspaceSession(session) ? "hybrid_sandbox" : "cloud_workspace",
+            })
+            .then(applyBootstrapPayload)
+            .catch(() => undefined);
+          throw preflightError;
+        }
       }
-      const parsedCreatePipelineCommand = parseComposerSlashCommandPrompt(value);
+      const parsedCreatePipelineCommand = parsedSlashCommandForTurn;
       const createPipelineRequest = parsedCreatePipelineCommand
         ? buildComposerCreatePipelineRequest({
             parsed: parsedCreatePipelineCommand,
@@ -571,9 +736,11 @@ export function useChatActions({
         prompt: value,
         attachments: attachments.length > 0 ? attachments : undefined,
         mentionedAppIds: mentionedSandboxApp ? [mentionedSandboxApp.id] : undefined,
+        mentionedConnectedApps: mentionedConnectedApps.length > 0 ? mentionedConnectedApps : undefined,
         openPondActionCatalog:
           openPondActionCatalog.length > 0 ? openPondActionCatalog : undefined,
         createPipelineRequest,
+        usageAttribution: usageAttributionForTurn,
         model: modelForTurn(session.provider, modelForTurnValue, providerSettings),
         modelRef: modelRefForTurn(session.provider, modelForTurnValue, providerSettings),
         ...codexTurnPermissions,

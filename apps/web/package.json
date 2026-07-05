@@ -14,7 +14,9 @@
     "@xterm/xterm": "^6.0.0",
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "react-is": "^19.2.7",
+    "recharts": "^3.9.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",

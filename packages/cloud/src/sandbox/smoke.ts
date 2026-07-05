@@ -1,5 +1,6 @@
 import type { OpenPondSandboxClient } from "./client.js";
 import type {
+  SandboxReceipt,
   SandboxRecord,
   SandboxSmokeOptions,
   SandboxSmokeSummary,
@@ -186,7 +187,7 @@ export async function runSandboxSmoke(
         throw new Error("expected fork snapshot marker");
       }
       if (!options.keep) {
-        await client.delete(forked.id);
+        await deleteSandboxForSmoke(client, forked.id);
         forkDeleted = true;
       }
     }
@@ -208,18 +209,13 @@ export async function runSandboxSmoke(
       }
     }
 
-    const stopped = await client.stop(sandbox.id);
-    const readback = await client.get(sandbox.id);
-    const receipts = await client.receipts(sandbox.id);
-    if (stopped.sandbox.state !== "stopped" || readback.state !== "stopped") {
-      throw new Error("expected stopped sandbox");
-    }
-    if (receipts.length === 0) {
-      throw new Error("expected receipt readback");
-    }
+    const { sandbox: readback, receipts } = await stopSandboxForSmoke(
+      client,
+      sandbox.id
+    );
 
     if (!options.keep) {
-      await client.delete(sandbox.id);
+      await deleteSandboxForSmoke(client, sandbox.id);
       deleted = true;
     }
 
@@ -238,12 +234,111 @@ export async function runSandboxSmoke(
     };
   } finally {
     if (forkSandboxId && !options.keep && !forkDeleted) {
-      await client.delete(forkSandboxId).catch(() => undefined);
+      await cleanupSandboxBestEffort(client, forkSandboxId);
     }
     if (sandboxId && !options.keep && !deleted) {
-      await client.delete(sandboxId).catch(() => undefined);
+      await cleanupSandboxBestEffort(client, sandboxId);
     }
   }
+}
+
+async function stopSandboxForSmoke(
+  client: OpenPondSandboxClient,
+  sandboxId: string
+): Promise<{ sandbox: SandboxRecord; receipts: SandboxReceipt[] }> {
+  try {
+    await client.stop(sandboxId);
+  } catch {
+    await client.stop(sandboxId, { async: true });
+  }
+  const sandbox = await waitForSandboxState(
+    client,
+    sandboxId,
+    new Set(["stopped", "deleted"]),
+    "stop"
+  );
+  const receipts = await waitForReceipts(client, sandboxId);
+  if (receipts.length === 0) {
+    throw new Error("expected receipt readback");
+  }
+  return { sandbox, receipts };
+}
+
+async function deleteSandboxForSmoke(
+  client: OpenPondSandboxClient,
+  sandboxId: string
+): Promise<SandboxRecord> {
+  try {
+    const deleted = await client.delete(sandboxId);
+    if (deleted.state === "deleted") {
+      return deleted;
+    }
+    await client.delete(sandboxId, { async: true });
+  } catch {
+    await client.delete(sandboxId, { async: true });
+  }
+  return waitForSandboxState(
+    client,
+    sandboxId,
+    new Set(["deleted"]),
+    "delete"
+  );
+}
+
+async function cleanupSandboxBestEffort(
+  client: OpenPondSandboxClient,
+  sandboxId: string
+): Promise<void> {
+  try {
+    await deleteSandboxForSmoke(client, sandboxId);
+  } catch {
+    await client.delete(sandboxId, { async: true }).catch(() => undefined);
+  }
+}
+
+async function waitForSandboxState(
+  client: OpenPondSandboxClient,
+  sandboxId: string,
+  targetStates: Set<SandboxRecord["state"]>,
+  operation: "delete" | "stop"
+): Promise<SandboxRecord> {
+  const timeoutMs = 5 * 60_000;
+  const pollMs = 3_000;
+  const deadline = Date.now() + timeoutMs;
+  let latest = await client.get(sandboxId);
+  while (Date.now() < deadline) {
+    if (targetStates.has(latest.state)) {
+      return latest;
+    }
+    if (latest.state === "error") {
+      throw new Error(`sandbox ${operation} failed: ${sandboxId}`);
+    }
+    await sleep(pollMs);
+    latest = await client.get(sandboxId);
+  }
+  throw new Error(
+    `sandbox ${operation} did not reach ${[...targetStates].join(
+      "/"
+    )} before timeout: ${sandboxId} (${latest.state})`
+  );
+}
+
+async function waitForReceipts(
+  client: OpenPondSandboxClient,
+  sandboxId: string
+): Promise<SandboxReceipt[]> {
+  const timeoutMs = 2 * 60_000;
+  const pollMs = 3_000;
+  const deadline = Date.now() + timeoutMs;
+  let receipts = await client.receipts(sandboxId);
+  while (Date.now() < deadline) {
+    if (receipts.length > 0) {
+      return receipts;
+    }
+    await sleep(pollMs);
+    receipts = await client.receipts(sandboxId);
+  }
+  return receipts;
 }
 
 async function waitForCreateReady(

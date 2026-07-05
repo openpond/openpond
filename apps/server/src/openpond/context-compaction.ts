@@ -4,7 +4,7 @@ import {
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
-import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
+import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { HostedChatMessage } from "@openpond/cloud";
 import { formatPromptWithAttachmentContext } from "../chat-attachments.js";
 import { estimateHostedMessageTokens, hostedContextLimit, usableHostedContextLimit } from "./context-usage.js";
@@ -43,6 +43,7 @@ type HostedCompactionInput = {
   provider: HostedCompactionProvider;
   model?: string | null;
   signal?: AbortSignal;
+  streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
 };
 
 const HOSTED_AUTO_COMPACT_THRESHOLD_RATIO = 0.85;
@@ -180,6 +181,7 @@ async function streamCompactionSummary(input: HostedCompactionInput & {
 }): Promise<string> {
   let text = "";
   const requestId = `compact-${randomUUID()}`;
+  const streamOpenPondHostedChatTurn = input.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn;
   for await (const delta of streamOpenPondHostedChatTurn({
     model: input.model,
     messages: input.messages,

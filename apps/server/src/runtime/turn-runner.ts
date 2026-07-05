@@ -10,8 +10,12 @@ import {
   type Approval,
   type ChatModelRef,
   type ChatProvider,
+  type ConnectedAppConnectionLike,
+  type ConnectedAppIntegrationSkill,
   type CreatePipelineRequest,
   type CreatePipelineSnapshot,
+  type MentionedConnectedAppRef,
+  type ModelUsageRecord,
   type SendTurnRequest,
   type OpenPondActionCatalogEntry,
   type OpenPondApp,
@@ -20,6 +24,7 @@ import {
   type RuntimeEvent,
   type Session,
   type Turn,
+  type UsageRequestAttribution,
   type WorkspaceDiffSummary,
   type WorkspaceToolRequest,
   type WorkspaceToolResult,
@@ -29,7 +34,7 @@ import type {
   ProfileSkillCommandResult,
   ProfileSkillGoalCommandInput,
 } from "@openpond/cloud";
-import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
+import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
 import { HOSTED_CHAT_SYSTEM_PROMPT } from "../constants.js";
 import {
   assertCreatePipelineMutationApproved,
@@ -45,6 +50,7 @@ import {
 import {
   hostedAutoCompactionDecision,
   runHostedContextCompaction,
+  type HostedCompactionResult,
   type HostedCompactionProvider,
 } from "../openpond/context-compaction.js";
 import { buildChatMessagesForProvider } from "../openpond/hosted-chat.js";
@@ -65,8 +71,14 @@ import {
   type OpenPondProfileSkillGoalToolInput,
   type OpenPondProfileSkillGoalToolResult,
 } from "../openpond/capability-tool-registry.js";
+import {
+  createBrowserModelToolDefinitions,
+  redactBrowserToolArguments,
+  type BrowserHarnessToolExecutor,
+} from "../openpond/browser-tool-registry.js";
 import { runOpenPondGoalControl } from "../openpond/goal-control.js";
 import {
+  createConnectedAppSkillModelToolDefinitions,
   createOpenPondActionModelToolDefinitions,
   createOpenPondProfileSkillModelToolDefinitions,
   createResourceModelToolDefinitions,
@@ -77,10 +89,21 @@ import {
   type ModelToolDefinition,
   type ProfileSkillReadResult,
 } from "../openpond/model-tool-registry.js";
+import {
+  connectedAppProviderToolNames,
+  createConnectedAppProviderModelToolDefinitions,
+  isConnectedAppProviderToolName,
+  redactConnectedAppToolArguments,
+  type ConnectedAppToolExecutor,
+} from "../openpond/connected-app-tool-registry.js";
 import type {
   HostedProfileSkillBody,
   ProfileSkillInstructionMode,
 } from "../openpond/hosted-turn-helpers.js";
+import {
+  resolveMentionedConnectedAppContexts,
+  type ResolvedConnectedAppContext,
+} from "../openpond/connected-app-context.js";
 import {
   NativeToolCallAccumulator,
   assistantMessageForNativeToolCalls,
@@ -106,10 +129,12 @@ import {
   runModelBackedCreatePipelinePlanner,
   type CreatePipelinePlanner,
 } from "./create-pipeline-planner.js";
+import { startProviderRequestUsageRecorder } from "./model-usage-recorder.js";
 import { requiresWorkspaceToolForPrompt } from "./workspace-tool-requirements.js";
 
 type HostedToolLoopDelta = {
   text?: string;
+  reasoningText?: string;
   toolCalls?: HostedChatToolCall[];
   finishReason?: string | null;
   raw?: unknown;
@@ -282,6 +307,7 @@ export function createTurnRunner(deps: {
     insertTurn(turn: Turn): Promise<void>;
     updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
     getApproval(approvalId: string): Promise<Approval | null>;
+    upsertModelUsageRecord?(record: ModelUsageRecord): Promise<ModelUsageRecord>;
   };
   upsertApproval: (approval: Approval) => Promise<void>;
   getSession: (sessionId: string) => Promise<Session>;
@@ -333,6 +359,15 @@ export function createTurnRunner(deps: {
     input: ProfileSkillGoalCommandInput,
   ) => Promise<ProfileSkillCommandResult>;
   executeWebSearch?: WebSearchExecutor;
+  executeConnectedAppTool?: ConnectedAppToolExecutor;
+  browserToolExecutor?: BrowserHarnessToolExecutor;
+  listIntegrationConnections?: (input: {
+    teamId?: string;
+    status?: "active" | "revoked" | "error" | "all";
+  }) => Promise<{
+    teamId: string | null;
+    connections: ConnectedAppConnectionLike[];
+  }>;
   loadPersonalizationSoul: () => Promise<string>;
   maybeCreateScaffoldForTurn: (session: Session, turnId: string, prompt: string) => Promise<Session>;
   hostedSystemPrompt: (
@@ -344,9 +379,11 @@ export function createTurnRunner(deps: {
       openPondActionCatalog?: OpenPondActionCatalogEntry[];
       openPondProfileSkills?: OpenPondProfileSkill[];
       loadedProfileSkills?: HostedProfileSkillBody[];
+      connectedApps?: ResolvedConnectedAppContext[];
       toolInstructionMode?: HostedToolInstructionMode;
       actionCatalogInstructionMode?: "text_fallback" | "native_tool" | "none";
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
+      browserControlAvailable?: boolean;
     }
   ) => Promise<string>;
   appendAssistantText: (session: Session, turnId: string, text: string) => Promise<void>;
@@ -368,6 +405,7 @@ export function createTurnRunner(deps: {
     requestId: string;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
+  streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   runLocalCreatePipelineChecks?: (
     input: LocalCreatePipelineCheckInput,
   ) => Promise<LocalCreatePipelineCheckResult>;
@@ -400,12 +438,16 @@ export function createTurnRunner(deps: {
     executeProfileSkillCommand,
     executeProfileSkillGoal,
     executeWebSearch,
+    executeConnectedAppTool,
+    browserToolExecutor,
+    listIntegrationConnections,
     loadPersonalizationSoul,
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
     appendAssistantText,
     appendHostedContextUsage,
     streamLocalByokChatTurn,
+    streamOpenPondHostedChatTurn = defaultStreamOpenPondHostedChatTurn,
     runLocalCreatePipelineChecks,
     planCreatePipeline,
     turnFollowUpQueue,
@@ -426,6 +468,30 @@ export function createTurnRunner(deps: {
     if (signal.aborted) throw interruptedError();
   }
 
+  async function safeUpsertModelUsageRecord(record: ModelUsageRecord): Promise<void> {
+    if (!store.upsertModelUsageRecord) return;
+    try {
+      await store.upsertModelUsageRecord(record);
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: record.sessionId ?? undefined,
+          turnId: record.turnId ?? undefined,
+          name: "diagnostic",
+          source: "server",
+          status: "failed",
+          output: textFromUnknown(error) || "Failed to persist model usage record.",
+          data: {
+            kind: "model_usage_record_failed",
+            requestId: record.requestId,
+            provider: record.provider,
+            model: record.model,
+          },
+        }),
+      ).catch(() => undefined);
+    }
+  }
+
   function waitForInterrupt(signal: AbortSignal): Promise<never> {
     if (signal.aborted) return Promise.reject(interruptedError());
     return new Promise((_, reject) => {
@@ -439,6 +505,10 @@ export function createTurnRunner(deps: {
 
   function nativeToolsEnabledForProvider(provider: ChatProvider): boolean {
     return nativeToolTransportEnabledForProvider(hostedToolFlags, provider);
+  }
+
+  function browserControlAvailable(session: Session): boolean {
+    return browserToolExecutor?.available({ sessionId: session.id, conversationId: session.id }) ?? false;
   }
 
   function actionCatalogInstructionModeForProvider(
@@ -560,6 +630,7 @@ export function createTurnRunner(deps: {
     openPondActionCatalog: OpenPondActionCatalogEntry[],
     runtimeEvents: RuntimeEvent[],
     profileSkillRuntime: ProfileSkillRuntime,
+    connectedApps: ResolvedConnectedAppContext[],
   ): ModelToolDefinition[] {
     const definitions: ModelToolDefinition[] = [];
     definitions.push(
@@ -572,6 +643,7 @@ export function createTurnRunner(deps: {
           : {}),
       }),
     );
+    definitions.push(...createBrowserModelToolDefinitions(browserToolExecutor));
     if (hostedToolFlags.resourceTools) {
       definitions.push(...createResourceModelToolDefinitions({ executeWorkspaceTool, runtimeEvents }));
     }
@@ -586,6 +658,20 @@ export function createTurnRunner(deps: {
         }),
       );
     }
+    definitions.push(
+      ...createConnectedAppSkillModelToolDefinitions({
+        connectedApps: connectedApps.map((app) => ({
+          provider: app.provider,
+          label: app.label,
+        })),
+      }),
+    );
+    definitions.push(
+      ...createConnectedAppProviderModelToolDefinitions({
+        connectedApps,
+        executeConnectedAppTool,
+      }),
+    );
     if (hostedToolFlags.dynamicActionTools) {
       definitions.push(
         ...createOpenPondActionModelToolDefinitions({
@@ -968,6 +1054,7 @@ export function createTurnRunner(deps: {
     messages: HostedMessages;
     resourceEvents: RuntimeEvent[];
     mentionedApps: OpenPondApp[];
+    connectedApps: ResolvedConnectedAppContext[];
     openPondActionCatalog: OpenPondActionCatalogEntry[];
     profileSkillRuntime: ProfileSkillRuntime;
     userPrompt: string;
@@ -988,6 +1075,7 @@ export function createTurnRunner(deps: {
           params.openPondActionCatalog,
           params.resourceEvents,
           params.profileSkillRuntime,
+          params.connectedApps,
         ), {
           session,
           provider: params.provider,
@@ -1011,18 +1099,54 @@ export function createTurnRunner(deps: {
         });
       }
       let assistantText = "";
+      let reasoningText = "";
       let latestUsage: unknown;
       let finishReason: string | null | undefined;
       const nativeToolAccumulator = new NativeToolCallAccumulator();
-      for await (const delta of params.stream(
-        messages,
-        nativeTools.length > 0 ? { tools: nativeTools, toolChoice: "auto" } : undefined,
-      )) {
-        throwIfInterrupted(params.signal);
-        if (delta.usage) latestUsage = delta.usage;
-        if (delta.text) assistantText += delta.text;
-        if (delta.toolCalls) nativeToolAccumulator.append(delta.toolCalls);
-        if (delta.finishReason !== undefined) finishReason = delta.finishReason;
+      const usageRequestId = `${params.turn.id}:model:${index}`;
+      const usageRecorder = await startProviderRequestUsageRecorder({
+        session,
+        turn: params.turn,
+        provider: params.provider,
+        model: params.model,
+        requestId: usageRequestId,
+        requestOrdinal: index,
+        upsert: safeUpsertModelUsageRecord,
+      });
+      try {
+        for await (const delta of params.stream(
+          messages,
+          nativeTools.length > 0 ? { tools: nativeTools, toolChoice: "auto" } : undefined,
+        )) {
+          throwIfInterrupted(params.signal);
+          usageRecorder.observeDelta(delta);
+          if (delta.usage) latestUsage = delta.usage;
+          if (delta.text) assistantText += delta.text;
+          if (delta.reasoningText) reasoningText += delta.reasoningText;
+          if (delta.toolCalls) nativeToolAccumulator.append(delta.toolCalls);
+          if (delta.finishReason !== undefined) finishReason = delta.finishReason;
+        }
+      } catch (error) {
+        await usageRecorder.fail(
+          error,
+          params.signal.aborted || (error instanceof Error && error.name === "AbortError")
+            ? "interrupted"
+            : "failed",
+        );
+        throw error;
+      }
+      await usageRecorder.complete();
+      if (reasoningText) {
+        await appendRuntimeEvent(
+          event({
+            sessionId: session.id,
+            turnId: params.turn.id,
+            name: "assistant.reasoning.delta",
+            source: "provider",
+            appId: session.appId,
+            output: reasoningText,
+          }),
+        );
       }
 
       const nativeToolCalls = nativeToolAccumulator.completed();
@@ -1042,6 +1166,7 @@ export function createTurnRunner(deps: {
           toolCalls: nativeToolCalls,
         });
         workspaceToolResultCount += nativeResults.length;
+        await applyNativeToolUsageAttribution(params.turn, nativeResults);
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
         }
@@ -1326,13 +1451,19 @@ export function createTurnRunner(deps: {
           throw new Error(`Hosted native tool produced repeated invalid ${toolCall.name} arguments: ${message}`);
         }
         const result = invalidNativeToolArgumentsResult(toolCall, message);
-        await appendNativeToolStarted(params.session, params.turnId, toolCall, { argumentsJson: toolCall.argumentsJson });
+        await appendNativeToolStarted(
+          params.session,
+          params.turnId,
+          toolCall,
+          nativeToolInvalidArgumentsEventArgs(toolCall.name, toolCall.argumentsJson),
+        );
         await appendNativeToolCompleted(params.session, params.turnId, result);
         results.push(result);
         continue;
       }
 
       const profileSkillName = toolCall.name === "profile_skill_read" ? stringFromRecord(args, "name") : null;
+      const connectedAppSkillProvider = toolCall.name === "connected_app_skill_read" ? stringFromRecord(args, "provider") : null;
       if (profileSkillName) {
         await appendProfileSkillEvent({
           session: params.session,
@@ -1344,8 +1475,24 @@ export function createTurnRunner(deps: {
           source: "provider",
         });
       }
+      if (connectedAppSkillProvider) {
+        await appendConnectedAppSkillEvent({
+          session: params.session,
+          turnId: params.turnId,
+          eventName: "skill.selected",
+          status: "completed",
+          output: `Selected connected app instructions for ${connectedAppSkillProvider}.`,
+          provider: connectedAppSkillProvider,
+          source: "provider",
+        });
+      }
 
-      await appendNativeToolStarted(params.session, params.turnId, toolCall, args);
+      await appendNativeToolStarted(
+        params.session,
+        params.turnId,
+        toolCall,
+        nativeToolEventArgs(toolCall.name, args),
+      );
       try {
         const result = await definition.execute({
           session: params.session,
@@ -1375,6 +1522,21 @@ export function createTurnRunner(deps: {
             source: "provider",
           });
         }
+        if (connectedAppSkillProvider) {
+          const skill = connectedAppSkillFromNativeResult(result);
+          await appendConnectedAppSkillEvent({
+            session: params.session,
+            turnId: params.turnId,
+            eventName: result.ok ? "skill.loaded" : "skill.load_failed",
+            status: result.ok ? "completed" : "failed",
+            output: result.ok
+              ? `Loaded connected app instructions for ${connectedAppSkillProvider}.`
+              : result.contentText,
+            provider: connectedAppSkillProvider,
+            skill,
+            source: "provider",
+          });
+        }
         results.push(result);
       } catch (error) {
         const result = failedNativeToolResult(toolCall, textFromUnknown(error) || "Tool execution failed.");
@@ -1390,10 +1552,91 @@ export function createTurnRunner(deps: {
             source: "provider",
           });
         }
+        if (connectedAppSkillProvider) {
+          await appendConnectedAppSkillEvent({
+            session: params.session,
+            turnId: params.turnId,
+            eventName: "skill.load_failed",
+            status: "failed",
+            output: result.contentText,
+            provider: connectedAppSkillProvider,
+            source: "provider",
+          });
+        }
         results.push(result);
       }
     }
     return results;
+  }
+
+  async function applyNativeToolUsageAttribution(
+    turn: Turn,
+    results: NativeModelToolResult[],
+  ): Promise<void> {
+    const attribution = profileSkillGoalUsageAttribution(results);
+    if (!attribution) return;
+    const metadata = {
+      ...(turn.metadata ?? {}),
+      usageAttribution: attribution.usageAttribution,
+      threadGoal: {
+        ...threadGoalRecord(turn.metadata?.threadGoal),
+        ...attribution.threadGoal,
+      },
+    };
+    turn.metadata = metadata;
+    const updated = await updateStoredTurn(turn.id, (current) => ({
+      ...current,
+      metadata: {
+        ...(current.metadata ?? {}),
+        ...metadata,
+      },
+    }));
+    if (updated) Object.assign(turn, updated);
+  }
+
+  function profileSkillGoalUsageAttribution(
+    results: NativeModelToolResult[],
+  ): {
+    usageAttribution: UsageRequestAttribution;
+    threadGoal: Record<string, unknown>;
+  } | null {
+    for (const result of results) {
+      if (!result.ok || result.name !== "openpond_profile_skill_goal") continue;
+      if (!result.data || typeof result.data !== "object" || Array.isArray(result.data)) continue;
+      const data = result.data as Record<string, unknown>;
+      const goalId = stringFromRecord(data, "goalId");
+      if (!goalId) continue;
+      const operation = stringFromRecord(data, "operation");
+      const targetSkillName = stringFromRecord(data, "targetSkillName");
+      const targetSkillPath = stringFromRecord(data, "targetSkillPath");
+      const status = stringFromRecord(data, "status");
+      return {
+        usageAttribution: {
+          surface: "goal",
+          workflowKind: "goal_control",
+          goalId,
+          commandName: "/skill",
+          commandSource: "model_tool",
+        },
+        threadGoal: {
+          id: goalId,
+          provider: "openpond",
+          kind: operation === "edit" ? "profile_skill_edit" : "profile_skill_create",
+          source: "native_model_tool",
+          ...(operation ? { operation } : {}),
+          ...(targetSkillName ? { targetSkillName } : {}),
+          ...(targetSkillPath ? { targetSkillPath } : {}),
+          ...(status ? { status } : {}),
+        },
+      };
+    }
+    return null;
+  }
+
+  function threadGoalRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
   }
 
   async function readProfileSkillForModel(input: {
@@ -1525,6 +1768,42 @@ export function createTurnRunner(deps: {
     );
   }
 
+  async function appendConnectedAppSkillEvent(input: {
+    session: Session;
+    turnId: string;
+    eventName: "skill.selected" | "skill.loaded" | "skill.load_failed";
+    status: "completed" | "failed";
+    output: string;
+    provider: string;
+    skill?: ConnectedAppIntegrationSkill | null;
+    source: "provider" | "server";
+  }): Promise<void> {
+    await appendRuntimeEvent(
+      event({
+        sessionId: input.session.id,
+        turnId: input.turnId,
+        name: input.eventName,
+        source: input.source,
+        action: "connected_app_skill_read",
+        appId: input.session.appId,
+        status: input.status,
+        output: input.output,
+        error: input.status === "failed" ? input.output : undefined,
+        data: {
+          provider: input.provider,
+          skillName: input.skill?.name ?? `${input.provider}-connected-app`,
+          type: "connected_app_skill",
+          ...(input.skill
+            ? {
+                path: input.skill.path,
+                sourceHash: input.skill.sourceHash,
+              }
+            : {}),
+        },
+      }),
+    );
+  }
+
   function explicitProfileSkillNames(prompt: string): string[] {
     const names: string[] = [];
     const seen = new Set<string>();
@@ -1563,9 +1842,45 @@ export function createTurnRunner(deps: {
     return { name, description, body, path, sourceHash, charCount };
   }
 
+  function connectedAppSkillFromNativeResult(result: NativeModelToolResult): ConnectedAppIntegrationSkill | null {
+    const data = result.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+    const skill = (data as Record<string, unknown>).skill;
+    if (!skill || typeof skill !== "object" || Array.isArray(skill)) return null;
+    const record = skill as Record<string, unknown>;
+    const name = stringFromRecord(record, "name");
+    const description = stringFromRecord(record, "description");
+    const body = stringFromRecord(record, "body");
+    const path = stringFromRecord(record, "path");
+    const sourceHash = stringFromRecord(record, "sourceHash");
+    const provider = stringFromRecord(record, "provider");
+    const charCount = typeof record.charCount === "number" ? record.charCount : null;
+    if (!name || !description || !body || !path || !sourceHash || !provider || charCount === null) return null;
+    return {
+      name,
+      description,
+      body,
+      path,
+      sourceHash,
+      provider: provider as ConnectedAppIntegrationSkill["provider"],
+      charCount,
+    };
+  }
+
   function stringFromRecord(record: Record<string, unknown>, key: string): string | null {
     const value = record[key];
     return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  function nativeToolEventArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+    const browserArgs = redactBrowserToolArguments(toolName, args);
+    if (browserArgs !== args) return browserArgs;
+    return redactConnectedAppToolArguments(toolName, args);
+  }
+
+  function nativeToolInvalidArgumentsEventArgs(toolName: string, argumentsJson: string): Record<string, unknown> {
+    if (!isConnectedAppProviderToolName(toolName)) return { argumentsJson };
+    return { argumentsJson: "[redacted invalid connected app tool arguments]" };
   }
 
   async function appendNativeToolStarted(
@@ -1704,8 +2019,9 @@ export function createTurnRunner(deps: {
     await appendRuntimeEvent(startedEvent);
 
     try {
-      const result = await runHostedContextCompaction({
+      const result = await runRecordedHostedContextCompaction({
         session: params.session,
+        turn: params.turn,
         events: params.priorEvents,
         provider: params.provider,
         model: params.model,
@@ -1774,6 +2090,75 @@ export function createTurnRunner(deps: {
     }
   }
 
+  async function runRecordedHostedContextCompaction(input: {
+    session: Session;
+    turn: Turn;
+    events: RuntimeEvent[];
+    provider: HostedCompactionProvider;
+    model: string;
+    signal: AbortSignal;
+  }): Promise<HostedCompactionResult> {
+    const usageState: {
+      recorder: Awaited<ReturnType<typeof startProviderRequestUsageRecorder>> | null;
+      finalized: boolean;
+    } = { recorder: null, finalized: false };
+    const requestId = `${input.turn.id}:context-compaction:0`;
+
+    async function failUsageRecorder(error: unknown): Promise<void> {
+      if (!usageState.recorder || usageState.finalized) return;
+      usageState.finalized = true;
+      await usageState.recorder.fail(
+        error,
+        input.signal.aborted || (error instanceof Error && error.name === "AbortError")
+          ? "interrupted"
+          : "failed",
+      );
+    }
+
+    try {
+      const result = await runHostedContextCompaction({
+        session: input.session,
+        events: input.events,
+        provider: input.provider,
+        model: input.model,
+        signal: input.signal,
+        streamOpenPondHostedChatTurn: async function* (streamInput) {
+          usageState.recorder = await startProviderRequestUsageRecorder({
+            session: input.session,
+            turn: input.turn,
+            provider: input.provider,
+            model: streamInput.model ?? input.model,
+            requestId,
+            requestOrdinal: 0,
+            requestKind: "context_compaction",
+            upsert: safeUpsertModelUsageRecord,
+          });
+          try {
+            for await (const delta of streamOpenPondHostedChatTurn(streamInput)) {
+              if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
+              if (delta.type === "reasoning_delta" && delta.text) {
+                usageState.recorder.observeDelta({ reasoningText: delta.text });
+              }
+              if (delta.type === "usage") usageState.recorder.observeDelta({ usage: delta.usage });
+              yield delta;
+            }
+          } catch (error) {
+            await failUsageRecorder(error);
+            throw error;
+          }
+        },
+      });
+      if (usageState.recorder && !usageState.finalized) {
+        usageState.finalized = true;
+        await usageState.recorder.complete();
+      }
+      return result;
+    } catch (error) {
+      await failUsageRecorder(error);
+      throw error;
+    }
+  }
+
   async function interruptSessionTurn(sessionId: string): Promise<Turn> {
     const active = activeTurns.get(sessionId);
     const session = active?.session ?? (await getSession(sessionId));
@@ -1826,6 +2211,52 @@ export function createTurnRunner(deps: {
     return apps.filter((app): app is OpenPondApp => Boolean(app));
   }
 
+  async function connectedAppsForTurn(input: {
+    refs: MentionedConnectedAppRef[] | undefined;
+    session: Session;
+    turnId: string;
+  }): Promise<ResolvedConnectedAppContext[]> {
+    if (!listIntegrationConnections || !input.refs || input.refs.length === 0) return [];
+    try {
+      const result = await listIntegrationConnections({
+        ...(input.session.cloudTeamId ? { teamId: input.session.cloudTeamId } : {}),
+        status: "active",
+      });
+      const contexts = resolveMentionedConnectedAppContexts({
+        mentionedRefs: input.refs,
+        connections: result.connections,
+      });
+      return contexts.map((context) => ({
+        ...context,
+        toolNames: Array.from(
+          new Set([
+            ...context.toolNames,
+            "connected_app_skill_read",
+            ...connectedAppProviderToolNames(context),
+          ]),
+        ),
+      }));
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: input.session.id,
+          turnId: input.turnId,
+          name: "diagnostic",
+          source: "server",
+          appId: input.session.appId,
+          status: "failed",
+          output: "Connected app references could not be resolved for this turn.",
+          data: {
+            kind: "connected_app_resolution",
+            providerCount: input.refs.length,
+            error: textFromUnknown(error) || "Unknown connected app resolution error.",
+          },
+        }),
+      );
+      return [];
+    }
+  }
+
   async function sendTurn(sessionId: string, payload: unknown): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
     const existingTurn = (await activeInProgressTurn(sessionId)) ?? (await findInProgressTurn(sessionId));
@@ -1846,6 +2277,7 @@ export function createTurnRunner(deps: {
     const startedAt = now();
     const createPipelineMetadata = {
       ...(input.metadata ? input.metadata : {}),
+      ...(input.usageAttribution ? { usageAttribution: input.usageAttribution } : {}),
       ...(input.createPipelineRequest ? { createPipelineRequest: input.createPipelineRequest } : {}),
       ...(input.createPipeline ? { createPipeline: input.createPipeline } : {}),
     };
@@ -2104,6 +2536,11 @@ export function createTurnRunner(deps: {
       }
       const initialWorkspaceDiff = await workspaceDiffBaseline(session);
       const mentionedApps = await mentionedAppsForTurn(input.mentionedAppIds);
+      const connectedApps = await connectedAppsForTurn({
+        refs: input.mentionedConnectedApps,
+        session,
+        turnId: turn.id,
+      });
       session = await maybeCreateScaffoldForTurn(session, turn.id, providerPrompt);
       activeTurn.session = session;
       throwIfInterrupted(controller.signal);
@@ -2131,9 +2568,11 @@ export function createTurnRunner(deps: {
           openPondActionCatalog: input.openPondActionCatalog,
           openPondProfileSkills: profileSkillRuntime.skills,
           loadedProfileSkills,
+          connectedApps,
           toolInstructionMode: hostedToolInstructionModeForProvider(hostedToolFlags, "openpond"),
           actionCatalogInstructionMode: actionCatalogInstructionModeForProvider("openpond"),
           profileSkillInstructionMode: profileSkillInstructionModeForProvider("openpond", profileSkillRuntime),
+          browserControlAvailable: browserControlAvailable(session),
         });
         const hostedPriorEvents = await maybeAutoCompactHostedContext({
           session,
@@ -2154,6 +2593,7 @@ export function createTurnRunner(deps: {
           messages,
           resourceEvents: hostedPriorEvents,
           mentionedApps,
+          connectedApps,
           openPondActionCatalog: input.openPondActionCatalog ?? [],
           profileSkillRuntime,
           userPrompt: providerPrompt,
@@ -2169,6 +2609,7 @@ export function createTurnRunner(deps: {
               signal: controller.signal,
             })) {
               if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
+              if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
               if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls, raw: delta.raw };
               if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
               if (delta.type === "finish") yield { finishReason: delta.finishReason, raw: delta.raw };
@@ -2197,9 +2638,11 @@ export function createTurnRunner(deps: {
           openPondActionCatalog: input.openPondActionCatalog,
           openPondProfileSkills: profileSkillRuntime.skills,
           loadedProfileSkills,
+          connectedApps,
           toolInstructionMode: hostedToolInstructionModeForProvider(hostedToolFlags, session.provider),
           actionCatalogInstructionMode: actionCatalogInstructionModeForProvider(session.provider),
           profileSkillInstructionMode: profileSkillInstructionModeForProvider(session.provider, profileSkillRuntime),
+          browserControlAvailable: browserControlAvailable(session),
         });
         const messages = buildChatMessagesForProvider(priorEvents, providerPrompt, systemPrompt);
         session = await runHostedToolLoop({
@@ -2210,6 +2653,7 @@ export function createTurnRunner(deps: {
           messages,
           resourceEvents: priorEvents,
           mentionedApps,
+          connectedApps,
           openPondActionCatalog: input.openPondActionCatalog ?? [],
           profileSkillRuntime,
           userPrompt: providerPrompt,
@@ -2229,6 +2673,7 @@ export function createTurnRunner(deps: {
               signal: controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
+              if (delta.reasoningText) yield { reasoningText: delta.reasoningText, raw: delta.raw };
               if (delta.toolCalls) yield { toolCalls: delta.toolCalls, raw: delta.raw };
               if (delta.usage) yield { raw: delta.raw, usage: delta.usage };
               if (delta.finishReason !== undefined) yield { finishReason: delta.finishReason, raw: delta.raw };
@@ -2644,9 +3089,13 @@ export function createTurnRunner(deps: {
       (providerId === "openpond" ? DEFAULT_OPENPOND_CHAT_MODEL : null);
     if (providerId === "openpond") {
       const model = modelId || DEFAULT_OPENPOND_CHAT_MODEL;
-      return runModelBackedCreatePipelinePlanner({
+      return runRecordedModelBackedCreatePipelinePlanner({
+        session: input.session,
+        turn: input.turn,
         request: input.request,
         previousSnapshot: input.previousSnapshot ?? null,
+        provider: providerId,
+        model,
         modelRef: { providerId, modelId: model },
         requestId: `${input.turn.id}:create-planner`,
         signal: input.signal,
@@ -2667,9 +3116,13 @@ export function createTurnRunner(deps: {
       if (!modelId) {
         throw new Error(`Create planner requires a selected model for provider ${providerId}.`);
       }
-      return runModelBackedCreatePipelinePlanner({
+      return runRecordedModelBackedCreatePipelinePlanner({
+        session: input.session,
+        turn: input.turn,
         request: input.request,
         previousSnapshot: input.previousSnapshot ?? null,
+        provider: providerId,
+        model: modelId,
         modelRef: { providerId, modelId },
         requestId: `${input.turn.id}:create-planner`,
         signal: input.signal,
@@ -2684,6 +3137,78 @@ export function createTurnRunner(deps: {
       });
     }
     throw new Error("Create planner requires OpenPond Chat or a configured OpenAI-compatible provider.");
+  }
+
+  async function runRecordedModelBackedCreatePipelinePlanner(input: {
+    session: Session;
+    turn: Turn;
+    request: CreatePipelineRequest;
+    previousSnapshot: CreatePipelineSnapshot | null;
+    provider: ChatProvider;
+    model: string;
+    modelRef: ChatModelRef;
+    requestId: string;
+    signal: AbortSignal;
+    stream: Parameters<typeof runModelBackedCreatePipelinePlanner>[0]["stream"];
+  }): Promise<CreatePipelineSnapshot> {
+    const usageTurn = createUsageTurnForCreatePipelinePlanner({
+      turn: input.turn,
+      request: input.request,
+      previousSnapshot: input.previousSnapshot,
+    });
+    const usageRecorder = await startProviderRequestUsageRecorder({
+      session: input.session,
+      turn: usageTurn,
+      provider: input.provider,
+      model: input.model,
+      requestId: input.requestId,
+      requestOrdinal: 0,
+      requestKind: "create_pipeline_planner",
+      upsert: safeUpsertModelUsageRecord,
+    });
+    try {
+      const snapshot = await runModelBackedCreatePipelinePlanner({
+        request: input.request,
+        previousSnapshot: input.previousSnapshot,
+        modelRef: input.modelRef,
+        requestId: input.requestId,
+        signal: input.signal,
+        stream: async function* (messages) {
+          for await (const delta of input.stream(messages)) {
+            usageRecorder.observeDelta(delta);
+            yield delta;
+          }
+        },
+      });
+      usageTurn.createPipeline = snapshot;
+      await usageRecorder.complete();
+      return snapshot;
+    } catch (error) {
+      await usageRecorder.fail(
+        error,
+        input.signal.aborted || (error instanceof Error && error.name === "AbortError")
+          ? "interrupted"
+          : "failed",
+      );
+      throw error;
+    }
+  }
+
+  function createUsageTurnForCreatePipelinePlanner(input: {
+    turn: Turn;
+    request: CreatePipelineRequest;
+    previousSnapshot: CreatePipelineSnapshot | null;
+  }): Turn {
+    return {
+      ...input.turn,
+      createPipelineRequest: input.request,
+      createPipeline: input.previousSnapshot,
+      metadata: {
+        ...(input.turn.metadata ?? {}),
+        createPipelineRequest: input.request,
+        ...(input.previousSnapshot ? { createPipeline: input.previousSnapshot } : {}),
+      },
+    };
   }
 
   async function persistCreatePipelinePlanningFailure(input: {

@@ -233,6 +233,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         "stop",
         "sandbox_test",
         "--fail-on-unpreserved-changes",
+        "--async",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
@@ -241,6 +242,7 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         "delete",
         "sandbox_test",
         "--fail-on-unpreserved-changes",
+        "--respond-async",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
@@ -272,6 +274,8 @@ describe("sandbox runtime and lifecycle CLI scenarios", () => {
         sandboxId: "sandbox_test",
         message: "Preserve hosted changes",
       });
+      expect(requests[6]?.prefer).toBe("respond-async");
+      expect(requests[7]?.prefer).toBe("respond-async");
     });
   });
 

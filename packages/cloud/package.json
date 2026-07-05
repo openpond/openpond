@@ -88,6 +88,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@openpond/connected-apps": "workspace:*",
     "js-yaml": "^4.1.1",
     "openpond-agent-sdk": "workspace:*",
     "zod": "^4.1.13"

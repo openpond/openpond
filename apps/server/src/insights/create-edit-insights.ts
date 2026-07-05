@@ -22,6 +22,7 @@ import {
   type InsightsListResponse,
   type InsightsScanResponse,
   type InsightsAskResponse,
+  type ModelUsageRecord,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -38,9 +39,14 @@ import {
   withInsightsRunMetadata,
   type InsightsRunMetadata,
 } from "./insights-system.js";
+import {
+  detectUsageAnomalyInsights,
+  type UsageAnomalyInsightDetectorCandidate,
+} from "./usage-anomaly-insights.js";
 
 const MAX_INSIGHT_SUMMARY_CHARS = 360;
 const INSIGHTS_RUN_PROMPT_MAX_JSON_CHARS = 14_000;
+const USAGE_ANOMALY_SCAN_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 export type RuntimeEventEntry = {
   sequence: number;
@@ -168,7 +174,10 @@ export function createInsightsService(options: {
     );
     const latestSequence = await store.latestEventSequence();
     const afterSequence = scanOptions.force ? 0 : previousConsumedSequence;
-    const [eventWindow, pageRows, snapshot] = await Promise.all([
+    const usageStartedAtFrom = enabledSources.has("usage_anomaly")
+      ? new Date(Date.parse(timestamp) - USAGE_ANOMALY_SCAN_WINDOW_MS).toISOString()
+      : null;
+    const [eventWindow, pageRows, snapshot, usageRecords] = await Promise.all([
       store.recentRuntimeEventWindow(2_000),
       store.runtimeEventPageRows({
         sessionId: null,
@@ -177,12 +186,20 @@ export function createInsightsService(options: {
         limit: 2_000,
       }),
       store.snapshot(),
+      usageStartedAtFrom
+        ? store.listModelUsageRecords({
+            startedAtFrom: usageStartedAtFrom,
+            startedAtTo: timestamp,
+            limit: 10_000,
+          })
+        : Promise.resolve([] as ModelUsageRecord[]),
     ]);
     const entries = scanOptions.force ? eventWindow.entries : pageRows.entries;
     const candidates = collectInsightEvidence({
       entries,
       contextEntries: eventWindow.entries,
       turns: snapshot.turns,
+      usageRecords,
       enabledSources,
       timestamp,
     });
@@ -371,16 +388,19 @@ export function createInsightsService(options: {
     candidates: InsightEvidenceCandidate[];
   }): Promise<InsightsStructuredRunOutput> {
     const { candidates } = input;
-    const currentByPipelineId = new Map<string, Set<string>>();
+    const currentByEvidenceId = new Map<string, Set<string>>();
+    const currentEvidenceSources = new Set<InsightEvidenceSource>();
     const actions: InsightsStructuredRunOutput["actions"] = [];
     let upsertCount = 0;
     let noOpCount = 0;
     let resolveCount = 0;
 
     for (const candidate of candidates) {
-      const keep = currentByPipelineId.get(candidate.evidenceKey) ?? new Set<string>();
+      currentEvidenceSources.add(candidate.evidenceSource);
+      const evidenceId = evidenceIdentity(candidate.evidenceSource, candidate.evidenceKey);
+      const keep = currentByEvidenceId.get(evidenceId) ?? new Set<string>();
       if (candidate.keepFingerprint) keep.add(candidate.keepFingerprint);
-      currentByPipelineId.set(candidate.evidenceKey, keep);
+      currentByEvidenceId.set(evidenceId, keep);
       if (candidate.item) {
         upsertCount += 1;
         actions.push({
@@ -397,12 +417,14 @@ export function createInsightsService(options: {
       }
     }
 
-    if (currentByPipelineId.size > 0) {
+    if (currentByEvidenceId.size > 0) {
       const activeItems = await store.listInsights({ status: "active", limit: 500 });
       for (const item of activeItems) {
+        const evidenceSource = insightEvidenceSource(item) ?? "create_edit";
+        if (!currentEvidenceSources.has(evidenceSource)) continue;
         const evidenceKey = insightEvidenceKey(item);
         if (!evidenceKey) continue;
-        const keep = currentByPipelineId.get(evidenceKey);
+        const keep = currentByEvidenceId.get(evidenceIdentity(evidenceSource, evidenceKey));
         if (!keep || keep.has(item.fingerprint)) continue;
         resolveCount += 1;
         actions.push({
@@ -715,6 +737,7 @@ function collectInsightEvidence(input: {
   entries: RuntimeEventEntry[];
   contextEntries: RuntimeEventEntry[];
   turns: Turn[];
+  usageRecords: ModelUsageRecord[];
   enabledSources: Set<InsightEvidenceSource>;
   timestamp: string;
 }): InsightEvidenceCandidate[] {
@@ -741,6 +764,13 @@ function collectInsightEvidence(input: {
   if (input.enabledSources.has("unresolved_conversation")) {
     candidates.push(...detectLongRunningUnresolvedConversations(input.turns, input.timestamp));
   }
+  if (input.enabledSources.has("usage_anomaly")) {
+    candidates.push(
+      ...detectUsageAnomalyInsights(input.usageRecords, input.timestamp).map((candidate) =>
+        usageAnomalyEvidenceCandidate(candidate),
+      ),
+    );
+  }
   return candidates;
 }
 
@@ -749,6 +779,15 @@ function createEditEvidenceCandidate(candidate: CreateEditInsightDetectorCandida
     item: candidate.item ? withEvidencePayload(candidate.item, "create_edit", candidate.createPipelineId) : null,
     evidenceSource: "create_edit",
     evidenceKey: candidate.createPipelineId,
+    keepFingerprint: candidate.keepFingerprint,
+  };
+}
+
+function usageAnomalyEvidenceCandidate(candidate: UsageAnomalyInsightDetectorCandidate): InsightEvidenceCandidate {
+  return {
+    item: candidate.item,
+    evidenceSource: "usage_anomaly",
+    evidenceKey: candidate.evidenceKey,
     keepFingerprint: candidate.keepFingerprint,
   };
 }
@@ -1134,6 +1173,10 @@ function insightEvidenceSource(item: InsightItem): InsightEvidenceSource | null 
   return isInsightEvidenceSource(value) ? value : null;
 }
 
+function evidenceIdentity(source: InsightEvidenceSource, key: string): string {
+  return `${source}\u0000${key}`;
+}
+
 function enabledInsightEvidenceSources(preferences: AppPreferences): Set<InsightEvidenceSource> {
   const settings = InsightsEvidenceSourceSettingsSchema.parse(preferences.insightsEvidenceSources ?? {});
   const sources: InsightEvidenceSource[] = [];
@@ -1143,6 +1186,7 @@ function enabledInsightEvidenceSources(preferences: AppPreferences): Set<Insight
   if (settings.abandonedGoals) sources.push("abandoned_goal");
   if (settings.userCorrections) sources.push("user_correction");
   if (settings.unresolvedConversations) sources.push("unresolved_conversation");
+  if (settings.usageAnomalies) sources.push("usage_anomaly");
   return new Set(sources);
 }
 
@@ -1153,7 +1197,8 @@ function isInsightEvidenceSource(value: unknown): value is InsightEvidenceSource
     value === "tool_failure" ||
     value === "abandoned_goal" ||
     value === "user_correction" ||
-    value === "unresolved_conversation"
+    value === "unresolved_conversation" ||
+    value === "usage_anomaly"
   );
 }
 

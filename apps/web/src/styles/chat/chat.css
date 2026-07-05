@@ -790,10 +790,10 @@
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
   width: min(560px, 100%);
-  border: 1px solid rgba(255, 190, 92, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: #24211a;
-  color: #f6f1e7;
+  background: rgba(255, 255, 255, 0.035);
+  color: #f4f4f5;
   padding: 12px;
   line-height: 1.45;
 }
@@ -804,8 +804,8 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: rgba(255, 190, 92, 0.12);
-  color: #ffd28a;
+  background: rgba(255, 255, 255, 0.07);
+  color: #e5e5e5;
 }
 
 .quota-error-card-body {
@@ -815,14 +815,14 @@
 }
 
 .quota-error-card-body strong {
-  color: #fff7e8;
+  color: #ffffff;
   font-size: 13px;
   font-weight: 700;
 }
 
 .quota-error-card-body p {
   margin: 0;
-  color: #dacdb8;
+  color: #c9c9c9;
   font-size: 13px;
 }
 
@@ -833,10 +833,10 @@
   justify-self: start;
   gap: 6px;
   min-height: 30px;
-  border: 1px solid rgba(255, 210, 138, 0.34);
+  border: 1px solid #ffffff;
   border-radius: 6px;
-  background: rgba(255, 210, 138, 0.12);
-  color: #ffe0a6;
+  background: #ffffff;
+  color: #111111;
   padding: 0 10px;
   text-decoration: none;
   font-size: 12px;
@@ -845,8 +845,8 @@
 
 .quota-error-card-action:hover,
 .quota-error-card-action:focus-visible {
-  border-color: rgba(255, 210, 138, 0.54);
-  background: rgba(255, 210, 138, 0.18);
+  border-color: #f0f0f0;
+  background: #f0f0f0;
 }
 
 .assistant-message-footer {

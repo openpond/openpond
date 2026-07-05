@@ -544,6 +544,7 @@ function SidebarDataProbe({ sessionCount, projectCount }: { sessionCount: number
     runtimeIndexes: buildRuntimeIndexes([], []),
     appPreferences: {},
     selectedSessionId: "grouped-session-0",
+    selectedProjectId: null,
     archivedChatsOpen: false,
     projectsExpanded: true,
     chatRowsVisibleCount: sessionCount,

@@ -72,6 +72,23 @@ describe("server HTTP route table", () => {
           args: ["session-1", { prompt: "Hi" }],
         });
       await expect(
+        expectJsonRequest(origin, "POST", "/v1/sessions/session-1/preflight-turns/failure", 200, {
+          prompt: "Edit README",
+          error: "Cloud sandbox sandbox_1 is error.",
+          target: "hybrid_sandbox",
+        }),
+      ).resolves.toMatchObject({
+        name: "recordPreflightTurnFailure",
+        args: [
+          "session-1",
+          {
+            prompt: "Edit README",
+            error: "Cloud sandbox sandbox_1 is error.",
+            target: "hybrid_sandbox",
+          },
+        ],
+      });
+      await expect(
         expectJsonRequest(origin, "POST", "/v1/codex-history/codex_history_thread-1/turns/interrupt", 202),
       ).resolves.toMatchObject({
         name: "interruptCodexHistoryTurnPayload",
@@ -91,6 +108,7 @@ describe("server HTTP route table", () => {
         "patchInsightPayload",
         "restartWorkspaceLspPayload",
         "sendTurn",
+        "recordPreflightTurnFailure",
         "interruptCodexHistoryTurnPayload",
       ]);
     } finally {

@@ -9,7 +9,6 @@ import {
   EyeOff,
   Folder,
   FolderGit2,
-  GitBranch,
   MessageSquare,
   MoreHorizontal,
   PanelRight,
@@ -480,10 +479,8 @@ function statusLabelForSidebar(status: CloudWorkItem["status"]): string {
 
 type ProjectLocationRow = {
   key: string;
-  label: string;
   value: string;
-  detail?: string | null;
-  tone?: "local" | "cloud" | "git" | "attention" | "running";
+  tone?: "local" | "cloud" | "attention" | "running";
   icon: ReactNode;
   actionTarget?: WorkspaceTargetValue;
   disabled?: boolean;
@@ -512,7 +509,7 @@ function SidebarProjectLocationsPopover({
 }) {
   const rows = projectLocationRows(kind, project, workspaceState, cloudWorkItems ?? []);
   return (
-    <aside className="sidebar-project-locations-popover" aria-label={`${project.name} locations`} style={style}>
+    <aside className="sidebar-project-locations-popover" aria-label={`${project.name} status`} style={style}>
       <div className="sidebar-project-locations-title">{project.name}</div>
       <div className="sidebar-project-location-list">
         {rows.map((row) => {
@@ -523,13 +520,11 @@ function SidebarProjectLocationsPopover({
           ].filter(Boolean).join(" ");
           const content = (
             <>
-              <span className={["sidebar-project-location-icon", row.tone ?? ""].filter(Boolean).join(" ")} aria-hidden="true">
+              <span className={["sidebar-project-location-icon", row.key].filter(Boolean).join(" ")} aria-hidden="true">
                 {row.icon}
               </span>
               <span className="sidebar-project-location-copy">
-                <span className="sidebar-project-location-label">{row.label}</span>
-                <span className="sidebar-project-location-value">{row.value}</span>
-                {row.detail ? <span className="sidebar-project-location-detail">{row.detail}</span> : null}
+                <ProjectLocationValue value={row.value} />
               </span>
             </>
           );
@@ -565,6 +560,33 @@ function SidebarProjectLocationsPopover({
   );
 }
 
+function ProjectLocationValue({ value }: { value: string }) {
+  const parts = splitProjectLocationValue(value);
+  return (
+    <span className="sidebar-project-location-value" aria-label={value}>
+      {parts.branch ? (
+        <>
+          <span className="sidebar-project-location-branch">{parts.branch}</span>
+          <span className="sidebar-project-location-separator" aria-hidden="true">
+            /
+          </span>
+        </>
+      ) : null}
+      <span className="sidebar-project-location-status">{parts.status}</span>
+    </span>
+  );
+}
+
+function splitProjectLocationValue(value: string): { branch: string | null; status: string } {
+  const separator = " / ";
+  const separatorIndex = value.indexOf(separator);
+  if (separatorIndex === -1) return { branch: null, status: value };
+  return {
+    branch: value.slice(0, separatorIndex),
+    status: value.slice(separatorIndex + separator.length),
+  };
+}
+
 function projectLocationRows(
   kind: "local" | "cloud",
   project: LocalProject | CloudProject,
@@ -582,84 +604,44 @@ function localProjectLocationRows(
 ): ProjectLocationRow[] {
   const localRepoNote = localRepoStatusNote(project, workspaceState);
   const localAttention = workspaceHasUnstagedChanges(workspaceState);
-  const linkedCloudProject = project.linkedSandboxProject;
   const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
-  const cloudRepoNote = cloudWorkspaceStateNote(project, null, workspaceState);
-  const cloudLinked = Boolean(linkedCloudProject?.projectId || project.linkedOpenPondApp?.appId);
-  const rows: ProjectLocationRow[] = [
+  const cloudLinked = localProjectHasCloud(project);
+  return [
     {
       key: "local",
-      label: "Local Status",
-      value: localWorkspaceStatus(workspaceState),
-      detail: "Click to use the local checkout",
-      tone: "local",
+      value: localRepoNote,
+      tone: localAttention ? "attention" : "local",
       icon: project.source === "git" ? <FolderGit2 size={13} /> : <Folder size={13} />,
       actionTarget: "local",
     },
     {
       key: "cloud",
-      label: "Cloud Status",
-      value: cloudStatus?.value ?? (cloudLinked ? "Ready" : "Not connected"),
-      detail: cloudStatus?.detail ?? (cloudLinked ? "Click to use the Cloud workspace" : "Click to upload/sync this project"),
+      value: cloudLinked ? cloudProjectStatusValue(project, workspaceState, cloudStatus) : "not in cloud",
       tone: cloudStatus?.tone ?? (cloudLinked ? "cloud" : "attention"),
       icon: <Cloud size={13} />,
       actionTarget: cloudLinked ? "cloud" : "upload_cloud",
     },
-    {
-      key: "local-repo",
-      label: "Local Repo",
-      value: localRepoNote,
-      detail: localAttention ? "Unstaged local changes" : null,
-      tone: localAttention ? "attention" : "git",
-      icon: <GitBranch size={13} />,
-    },
-    {
-      key: "cloud-repo",
-      label: "Cloud Repo",
-      value: cloudLinked ? cloudRepoNote : "Upload required",
-      detail: cloudLinked ? cloudProjectStatusDetail(project) : "No Cloud workspace yet",
-      tone: cloudStatus?.tone === "running" ? "running" : cloudRepoNeedsAttention(cloudRepoNote, cloudLinked) ? "attention" : "cloud",
-      icon: <Cloud size={13} />,
-    },
   ];
-
-  return rows;
 }
 
 function cloudProjectLocationRows(project: CloudProject, cloudWorkItems: CloudWorkItem[] = []): ProjectLocationRow[] {
   const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
-  const cloudRepoNote = cloudProjectRepoStatus(project);
   return [
     {
       key: "cloud",
-      label: "Cloud Status",
-      value: cloudStatus?.value ?? "Ready",
-      detail: cloudStatus?.detail ?? "Click to use the Cloud workspace",
-      tone: cloudStatus?.tone ?? "cloud",
+      value: cloudProjectRowStatusValue(project, cloudStatus),
+      tone: cloudStatus?.tone ?? (project.syncedAt ? "cloud" : "attention"),
       icon: <Cloud size={13} />,
       actionTarget: "cloud",
-    },
-    {
-      key: "branch",
-      label: "Cloud Repo",
-      value: cloudRepoNote,
-      detail: project.organizationName ? `${project.organizationName} / ${project.name}` : project.name,
-      tone: cloudRepoNeedsAttention(cloudRepoNote, true) ? "attention" : "git",
-      icon: <GitBranch size={13} />,
     },
   ];
 }
 
-function localWorkspaceStatus(state: WorkspaceState | null | undefined): string {
-  if (!state) return "Available";
-  if (state.error) return "Status unavailable";
-  if (!state.initialized) return "Not checked out";
-  if (workspaceHasUnstagedChanges(state)) return "Local changes";
-  return "Ready";
-}
-
 function localRepoStatusNote(project: LocalProject, state: WorkspaceState | null | undefined): string {
-  if (!state) return "Status not loaded";
+  const fallbackBranch = localProjectBranch(project, state);
+  if (!state) return `${fallbackBranch} / available`;
+  if (state.error) return `${fallbackBranch} / status unavailable`;
+  if (!state.initialized) return `${fallbackBranch} / not checked out`;
   return localWorkspaceStateNote(state, {
     branch: project.linkedSandboxProject?.defaultBranch ?? null,
     linkedCloudSourceKnown: project.linkedSandboxProject?.projectId
@@ -672,25 +654,36 @@ function workspaceHasUnstagedChanges(state: WorkspaceState | null | undefined): 
   return Boolean(state?.dirty || (state?.changedFilesCount ?? 0) > 0 || (state?.untrackedFilesCount ?? 0) > 0);
 }
 
-function cloudProjectStatusDetail(project: LocalProject): string | null {
-  const linked = project.linkedSandboxProject;
-  if (linked?.projectName) return linked.projectName;
-  if (linked?.projectSlug) return linked.projectSlug;
-  if (linked?.projectId) return linked.projectId;
-  if (project.linkedOpenPondApp?.appName) return project.linkedOpenPondApp.appName;
-  return null;
+function localProjectBranch(project: LocalProject, state: WorkspaceState | null | undefined): string {
+  return state?.currentBranch ?? state?.defaultBranch ?? project.linkedSandboxProject?.defaultBranch ?? "local";
 }
 
-function cloudProjectRepoStatus(project: CloudProject): string {
-  return `${project.defaultBranch ?? "main"} / ${project.syncedAt ? "setup ready" : "needs setup"}`;
+function localProjectHasCloud(project: LocalProject): boolean {
+  return Boolean(project.linkedSandboxProject?.projectId || project.linkedOpenPondApp?.appId);
 }
 
-function cloudRepoNeedsAttention(note: string, linked: boolean): boolean {
-  if (!linked) return true;
-  return /\b(required|needs|dirty|diverged|behind|unavailable|failed|unknown)\b/i.test(note);
+function cloudProjectStatusValue(
+  project: LocalProject,
+  workspaceState: WorkspaceState | null | undefined,
+  workItemStatus: CloudWorkItemsStatus | null,
+): string {
+  const branch = project.linkedSandboxProject?.defaultBranch ?? workspaceState?.defaultBranch ?? "main";
+  if (workItemStatus) return `${branch} / ${workItemStatus.value}`;
+  return cloudWorkspaceStateNote(project, null, workspaceState);
 }
 
-function cloudWorkItemsStatus(workItems: CloudWorkItem[]): { value: string; detail: string | null; tone: "running" | "attention" | "cloud" } | null {
+function cloudProjectRowStatusValue(project: CloudProject, workItemStatus: CloudWorkItemsStatus | null): string {
+  const branch = project.defaultBranch ?? "main";
+  const status = workItemStatus?.value ?? (project.syncedAt ? "setup ready" : "needs setup");
+  return `${branch} / ${status}`;
+}
+
+type CloudWorkItemsStatus = {
+  value: string;
+  tone: "running" | "attention" | "cloud";
+};
+
+function cloudWorkItemsStatus(workItems: CloudWorkItem[]): CloudWorkItemsStatus | null {
   const active = workItems.filter((item) => item.status === "queued" || item.status === "running");
   if (active.length > 0) {
     const running = active.filter((item) => item.status === "running").length;
@@ -698,14 +691,14 @@ function cloudWorkItemsStatus(workItems: CloudWorkItem[]): { value: string; deta
     const value = running > 0
       ? `${running} running${queued > 0 ? ` / ${queued} queued` : ""}`
       : `${queued} queued`;
-    return { value, detail: active[0]?.title ?? null, tone: "running" };
+    return { value, tone: "running" };
   }
 
   const review = workItems.find((item) => item.status === "needs_review");
-  if (review) return { value: "Review ready", detail: review.title, tone: "attention" };
+  if (review) return { value: "review ready", tone: "attention" };
 
   const failed = workItems.find((item) => item.status === "failed");
-  if (failed) return { value: "Cloud work failed", detail: failed.title, tone: "attention" };
+  if (failed) return { value: "cloud work failed", tone: "attention" };
 
   return null;
 }

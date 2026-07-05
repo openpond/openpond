@@ -33,6 +33,7 @@ type UseProjectActionsInput = {
     confirmLabel: string;
     cancelLabel?: string;
   }) => Promise<boolean>;
+  openExistingProjectDialog: () => void;
   applyBootstrapPayload: (payload: BootstrapPayload) => void;
   expandProject: (projectId: string) => void;
   revealProjectsSection: () => void;
@@ -51,6 +52,7 @@ export function useProjectActions({
   sessions,
   selectedProjectId,
   confirmProjectAction,
+  openExistingProjectDialog,
   applyBootstrapPayload,
   expandProject,
   revealProjectsSection,
@@ -72,27 +74,35 @@ export function useProjectActions({
     expandProject(projectKey);
   }
 
-  async function addProjectFolder() {
-    if (!connection) return;
+  async function addProjectFolderPath(folderPath: string): Promise<boolean> {
+    if (!connection) return false;
     setError(null);
-    let folderPath: string | null = null;
-    if (window.openpond?.selectFolder) {
-      const result = await window.openpond.selectFolder();
-      if (result.canceled) return;
-      folderPath = result.path;
-    } else {
-      folderPath = window.prompt("Project folder path");
-    }
-    if (!folderPath?.trim()) return;
+    const trimmedPath = folderPath.trim();
+    if (!trimmedPath) return false;
     try {
-      const result = await api.createLocalProject(connection, { path: folderPath.trim() });
+      const result = await api.createLocalProject(connection, { path: trimmedPath });
       applyBootstrapPayload(result.bootstrap);
       openProject(result.project);
       showToast(result.created === false ? `Opened ${result.project.name}` : `Added ${result.project.name}`, "success");
+      return true;
     } catch (projectError) {
       setError(projectError instanceof Error ? projectError.message : String(projectError));
       showToast("Project folder could not be added", "error");
+      return false;
     }
+  }
+
+  async function addProjectFolder() {
+    if (!connection) return;
+    setError(null);
+    if (window.openpond?.selectFolder) {
+      const result = await window.openpond.selectFolder();
+      if (result.canceled) return;
+      if (!result.path) return;
+      await addProjectFolderPath(result.path);
+      return;
+    }
+    openExistingProjectDialog();
   }
 
   async function createProjectFromScratch(projectName: string): Promise<boolean> {
@@ -253,6 +263,7 @@ export function useProjectActions({
 
   return {
     addProjectFolder,
+    addProjectFolderPath,
     createCloudProjectFromScratch,
     createProjectFromScratch,
     removeProject,

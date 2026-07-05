@@ -280,10 +280,10 @@ export function printHelp(): void {
     "  openpond sandbox port <sandboxId> --port 4173 [--access private|public] [--auto-start] [--domain app.example.com] [--auth-token <token>|--auth-header <name> --auth-header-value <value>]"
   );
   console.log(
-    "  openpond sandbox stop <sandboxId> [--fail-on-unpreserved-changes]"
+    "  openpond sandbox stop <sandboxId> [--fail-on-unpreserved-changes] [--async]"
   );
   console.log(
-    "  openpond sandbox delete <sandboxId> [--fail-on-unpreserved-changes]"
+    "  openpond sandbox delete <sandboxId> [--fail-on-unpreserved-changes] [--async]"
   );
   console.log("  openpond sandbox receipts <sandboxId>");
   console.log("  openpond sandbox logs <sandboxId>");

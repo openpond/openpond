@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -29,6 +30,7 @@ import {
 } from "./desktop-diagnostics.js";
 import { showLoadError } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
+import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
 
 type ServerConnection = {
   serverUrl: string;
@@ -49,6 +51,9 @@ let serverProcess: ChildProcessWithoutNullStreams | null = null;
 let webProcess: ChildProcessWithoutNullStreams | null = null;
 let connection: ServerConnection | null = null;
 let ipcHandlersRegistered = false;
+let browserControlWorker: DesktopBrowserControlWorker | null = null;
+const browserControlExecutorToken = randomUUID();
+const browserControlInstanceId = `desktop_${randomUUID()}`;
 const localRequestTracker = new DesktopRequestTracker();
 const serverProcessSampler = new DesktopProcessTreeSampler();
 
@@ -147,6 +152,7 @@ async function ensureServer(): Promise<ServerConnection> {
     if (await health(connection.serverUrl)) return connection;
     connection = null;
     serverProcess = null;
+    stopBrowserControlWorker();
     serverProcessSampler.stop();
   }
   const serverPort = defaultServerPort();
@@ -199,6 +205,7 @@ async function ensureServer(): Promise<ServerConnection> {
     desktopLogger().warn("server process exited", { code, signal });
     serverProcess = null;
     connection = null;
+    stopBrowserControlWorker();
     serverProcessSampler.stop();
   });
   let serverUrl: string;
@@ -288,10 +295,33 @@ async function loadMainWindow(window: BrowserWindow): Promise<void> {
       await window.loadFile(path.join(process.resourcesPath, "web", "index.html"));
     }
     desktopLogger().info("main window loaded", { packaged: app.isPackaged });
+    ensureBrowserControlWorker(server);
   } catch (error) {
     desktopLogger().error("main window load failed", { error });
     await showLoadError(window, error);
   }
+}
+
+function ensureBrowserControlWorker(server: ServerConnection): void {
+  const next = {
+    serverUrl: server.serverUrl,
+    token: server.token,
+    executorToken: browserControlExecutorToken,
+  };
+  if (browserControlWorker?.matches(next)) return;
+  stopBrowserControlWorker();
+  browserControlWorker = new DesktopBrowserControlWorker({
+    ...next,
+    instanceId: browserControlInstanceId,
+    getWindow: () => mainWindow,
+    logger: desktopLogger(),
+  });
+  browserControlWorker.start();
+}
+
+function stopBrowserControlWorker(): void {
+  browserControlWorker?.stop();
+  browserControlWorker = null;
 }
 
 function registerIpcHandlers(): void {
@@ -440,6 +470,7 @@ async function createWindow(): Promise<void> {
   });
   mainWindow.on("closed", () => {
     mainWindow = null;
+    stopBrowserControlWorker();
   });
   mainWindow.webContents.on("preload-error", (_event, preloadPathValue, error) => {
     desktopLogger().error("preload failed", { preloadPath: preloadPathValue, error });
@@ -530,6 +561,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   desktopLogger().info("desktop app quitting");
+  stopBrowserControlWorker();
   serverProcessSampler.stop();
   serverProcess?.kill("SIGTERM");
   webProcess?.kill("SIGTERM");

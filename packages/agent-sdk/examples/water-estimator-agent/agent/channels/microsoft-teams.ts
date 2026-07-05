@@ -4,12 +4,7 @@ export default defineChannel({
   id: "microsoft_teams",
   target: { action: "chat" },
   requiredConnections: ["microsoft_teams"],
-  capabilities: [
-    "microsoft_teams.message.read",
-    "microsoft_teams.message.send",
-    "microsoft_teams.drive.file.download",
-    "microsoft_teams.channel.file.upload",
-  ],
+  capabilities: ["microsoft_teams.message.ingest"],
   normalizeEvent(event) {
     return {
       prompt: String(event.text ?? event.prompt ?? ""),

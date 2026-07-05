@@ -62,6 +62,18 @@ export function useBrowserSidebar(conversationId: string) {
     open,
     openExternal: () => (bridge && activeTabInput ? bridge.openExternal(activeTabInput) : Promise.resolve({ ok: false })),
     reload: () => (bridge && activeTabInput ? bridge.reload(activeTabInput) : Promise.resolve({ ok: false })),
+    snapshot: (input: Omit<BrowserSnapshotInput, "conversationId"> = {}) =>
+      bridge ? bridge.snapshot({ conversationId, ...input }) : Promise.resolve({ ok: false, output: "Desktop browser bridge unavailable." }),
+    moveCursor: (input: Omit<BrowserMoveCursorInput, "conversationId">) =>
+      bridge ? bridge.moveCursor({ conversationId, ...input }) : Promise.resolve({ ok: false, output: "Desktop browser bridge unavailable." }),
+    click: (input: Omit<BrowserClickInput, "conversationId">) =>
+      bridge ? bridge.click({ conversationId, ...input }) : Promise.resolve({ ok: false, output: "Desktop browser bridge unavailable." }),
+    typeText: (input: Omit<BrowserTypeTextInput, "conversationId">) =>
+      bridge ? bridge.typeText({ conversationId, ...input }) : Promise.resolve({ ok: false, output: "Desktop browser bridge unavailable." }),
+    key: (input: Omit<BrowserKeyInput, "conversationId">) =>
+      bridge ? bridge.key({ conversationId, ...input }) : Promise.resolve({ ok: false, output: "Desktop browser bridge unavailable." }),
+    scroll: (input: Omit<BrowserScrollInput, "conversationId">) =>
+      bridge ? bridge.scroll({ conversationId, ...input }) : Promise.resolve({ ok: false, output: "Desktop browser bridge unavailable." }),
     selectTab: (tabId: string) => (bridge ? bridge.selectTab({ conversationId, tabId }) : Promise.resolve({ ok: false })),
     setBounds: (bounds: BrowserBounds | null) =>
       bridge ? bridge.setBounds({ conversationId, bounds }) : Promise.resolve({ ok: false }),

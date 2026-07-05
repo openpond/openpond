@@ -1,13 +1,137 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createConnectedAppSkillModelToolDefinitions,
   createOpenPondActionModelToolDefinitions,
   createOpenPondProfileSkillModelToolDefinitions,
   createResourceModelToolDefinitions,
   createWebSearchModelToolDefinition,
 } from "../apps/server/src/openpond/model-tool-registry";
+import {
+  createBrowserModelToolDefinitions,
+  redactBrowserToolArguments,
+  type BrowserHarnessToolName,
+  type BrowserHarnessToolExecutor,
+} from "../apps/server/src/openpond/browser-tool-registry";
+import {
+  connectedAppProviderToolNames,
+  createConnectedAppProviderModelToolDefinitions,
+  redactConnectedAppToolArguments,
+} from "../apps/server/src/openpond/connected-app-tool-registry";
+import type { ResolvedConnectedAppContext } from "../apps/server/src/openpond/connected-app-context";
 import type { Session } from "../packages/contracts/src";
 
 describe("model tool registry", () => {
+  test("gates browser model tools on desktop executor availability", () => {
+    const availableExecutor = browserExecutor({ available: true });
+    const unavailableExecutor = browserExecutor({ available: false });
+    const none = createBrowserModelToolDefinitions(null);
+    const available = createBrowserModelToolDefinitions(availableExecutor);
+    const unavailable = createBrowserModelToolDefinitions(unavailableExecutor);
+
+    expect(none).toEqual([]);
+    expect(available.map((definition) => definition.name)).toEqual([
+      "openpond_browser_open",
+      "openpond_browser_snapshot",
+      "openpond_browser_move_cursor",
+      "openpond_browser_click",
+      "openpond_browser_type",
+      "openpond_browser_key",
+      "openpond_browser_scroll",
+    ]);
+    expect(
+      available.filter((definition) =>
+        definition.enabled?.({
+          session: baseSession(),
+          provider: "openrouter",
+          model: "test/model",
+          mentionedApps: [],
+        }) ?? true
+      ).map((definition) => definition.name),
+    ).toContain("openpond_browser_click");
+    expect(
+      unavailable.filter((definition) =>
+        definition.enabled?.({
+          session: baseSession(),
+          provider: "openrouter",
+          model: "test/model",
+          mentionedApps: [],
+        }) ?? true
+      ),
+    ).toEqual([]);
+  });
+
+  test("maps browser tool inputs through the harness executor and redacts sensitive args", async () => {
+    const calls: unknown[] = [];
+    const definitions = createBrowserModelToolDefinitions(browserExecutor({
+      available: true,
+      calls,
+    }));
+    const click = definitions.find((definition) => definition.name === "openpond_browser_click");
+    const type = definitions.find((definition) => definition.name === "openpond_browser_type");
+    if (!click || !type) throw new Error("browser tools missing");
+
+    const clickResult = await click.execute(actionContext({
+      snapshotId: "snap_1",
+      targetRef: "target_2",
+      button: "left",
+      clickCount: 1,
+    }));
+    const typeResult = await type.execute(actionContext({
+      snapshotId: "snap_1",
+      targetRef: "input_1",
+      text: "secret typed value",
+    }));
+
+    expect(clickResult.ok).toBe(true);
+    expect(typeResult.ok).toBe(true);
+    expect(calls).toEqual([
+      {
+        method: "click",
+        target: { kind: "ref", snapshotId: "snap_1", targetRef: "target_2" },
+        button: "left",
+        clickCount: 1,
+      },
+      {
+        method: "typeText",
+        target: { kind: "ref", snapshotId: "snap_1", targetRef: "input_1" },
+        textLength: 18,
+      },
+    ]);
+
+    expect(redactBrowserToolArguments("openpond_browser_type", {
+      text: "secret typed value",
+      snapshotId: "snap_1",
+      targetRef: "input_1",
+    })).toEqual({
+      text: "[redacted 18 chars]",
+      snapshotId: "snap_1",
+      targetRef: "input_1",
+    });
+    expect(redactBrowserToolArguments("openpond_browser_open", {
+      url: "https://example.com/path?token=secret#auth",
+    })).toEqual({
+      url: "https://example.com/path?[redacted]#[redacted]",
+    });
+  });
+
+  test("rejects malformed browser targets before they reach the executor", async () => {
+    const calls: unknown[] = [];
+    const definitions = createBrowserModelToolDefinitions(browserExecutor({
+      available: true,
+      calls,
+    }));
+    const click = definitions.find((definition) => definition.name === "openpond_browser_click");
+    if (!click) throw new Error("openpond_browser_click missing");
+
+    await expect(click.execute(actionContext({ targetRef: "target_without_snapshot" }))).rejects.toThrow(
+      "targetRef requires snapshotId",
+    );
+    await expect(click.execute(actionContext({ snapshotId: "snap_1", targetRef: "target_1", x: 10, y: 20 }))).rejects.toThrow(
+      "provide either targetRef/snapshotId or x/y",
+    );
+    expect(calls).toEqual([]);
+  });
+
   test("maps sandbox resource search through sandbox_search_files", async () => {
     const payloads: unknown[] = [];
     const definitions = createResourceModelToolDefinitions({
@@ -92,6 +216,66 @@ describe("model tool registry", () => {
     ]);
     expect(result.contentText).toContain("# Sandbox README");
     expect(result.contentText).toContain("sandbox:file:/workspace/app/README.md");
+  });
+
+  test("maps sandbox native write and edit tools through sandbox workspace actions", async () => {
+    const payloads: unknown[] = [];
+    const definitions = createResourceModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        payloads.push(payload);
+        const action = (payload as any).action;
+        return {
+          ok: true,
+          action,
+          output: action === "sandbox_edit_file" ? "Edited README.md with 1 replacement." : "Wrote README.md.",
+          data: action === "sandbox_edit_file"
+            ? { edit: { path: "README.md", replacements: 1, verified: true } }
+            : { file: { path: "README.md" } },
+        };
+      },
+    });
+    const write = definitions.find((definition) => definition.name === "sandbox_write_file");
+    const edit = definitions.find((definition) => definition.name === "sandbox_edit_file");
+    if (!write || !edit) throw new Error("sandbox write/edit tools missing");
+
+    expect(write.enabled?.({
+      session: baseSession({ workspaceKind: "sandbox", workspaceId: "sandbox_1" }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(true);
+    expect(write.enabled?.({
+      session: baseSession({ workspaceKind: "sandbox", workspaceId: null }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(false);
+
+    const writeResult = await write.execute(actionContext({
+      path: "README.md",
+      content: "# Updated\n",
+    }));
+    const editResult = await edit.execute(actionContext({
+      path: "README.md",
+      oldText: "# Old\n",
+      newText: "# New\n",
+      replaceAll: false,
+    }));
+
+    expect(payloads).toEqual([
+      {
+        action: "sandbox_write_file",
+        args: { path: "README.md", content: "# Updated\n" },
+        source: "chat_action",
+      },
+      {
+        action: "sandbox_edit_file",
+        args: { path: "README.md", oldText: "# Old\n", newText: "# New\n", replaceAll: false },
+        source: "chat_action",
+      },
+    ]);
+    expect(writeResult.contentText).toContain("Wrote README.md.");
+    expect(editResult.contentText).toContain("Edited README.md");
   });
 
   test("keeps binary sandbox file resources metadata-only", async () => {
@@ -418,6 +602,278 @@ describe("model tool registry", () => {
     ]);
   });
 
+  test("reads connected app integration instructions through scoped model tool", async () => {
+    const definitions = createConnectedAppSkillModelToolDefinitions({
+      connectedApps: [{ provider: "google", label: "Google" }],
+    });
+    const read = definitions.find((definition) => definition.name === "connected_app_skill_read");
+    if (!read) throw new Error("connected_app_skill_read missing");
+
+    const result = await read.execute(actionContext({ provider: "google" }));
+    const missing = await read.execute(actionContext({ provider: "x" }));
+
+    expect(result.ok).toBe(true);
+    expect(result.contentText).toContain("Google Connected App");
+    expect(result.contentText).toContain("server-provided connected app tools");
+    expect(result.contentText).not.toContain("refresh_token");
+    expect(result.data).toMatchObject({
+      skill: {
+        provider: "google",
+        name: "google-connected-app",
+        path: "integration_skills/google.md",
+      },
+    });
+    expect(missing.ok).toBe(false);
+    expect(missing.contentText).toContain("not available in this turn");
+  });
+
+  test("scopes connected app provider tools to resolved providers and capabilities", async () => {
+    const definitions = createConnectedAppProviderModelToolDefinitions({
+      connectedApps: [googleConnectedAppContext(), mcpConnectedAppContext()],
+    });
+    const search = definitions.find((definition) => definition.name === "connected_app_search");
+    const read = definitions.find((definition) => definition.name === "connected_app_read");
+    const write = definitions.find((definition) => definition.name === "connected_app_write");
+    if (!search || !read || !write) throw new Error("connected app provider tools missing");
+
+    expect(connectedAppProviderToolNames(googleConnectedAppContext())).toEqual([
+      "connected_app_search",
+      "connected_app_read",
+      "connected_app_write",
+    ]);
+    expect(connectedAppProviderToolNames(mcpConnectedAppContext())).toEqual([]);
+    expect((search.parameters as any).properties.provider.enum).toEqual(["google"]);
+
+    const missing = await search.execute(actionContext({ provider: "x", query: "mentions" }));
+    const deniedCapability = await search.execute(
+      actionContext({
+        provider: "google",
+        query: "budget",
+        capabilityIds: ["google.admin.secret"],
+      }),
+    );
+    const unavailable = await read.execute(actionContext({ provider: "google", ref: "google:file:1" }));
+
+    expect(missing.ok).toBe(false);
+    expect(missing.contentText).toContain("not available in this turn");
+    expect(deniedCapability.ok).toBe(false);
+    expect(deniedCapability.contentText).toContain("not authorized");
+    expect(unavailable.ok).toBe(false);
+    expect(unavailable.contentText).toContain("No provider API call was made");
+    expect(unavailable.contentText).not.toContain("conn_google");
+  });
+
+  test("redacts connected app provider tool arguments and executor results", async () => {
+    const executorRequests: unknown[] = [];
+    const definitions = createConnectedAppProviderModelToolDefinitions({
+      connectedApps: [googleConnectedAppContext()],
+      executeConnectedAppTool: async (request) => {
+        executorRequests.push(request);
+        return {
+          ok: true,
+          output: "Found 1 Drive result.",
+          data: {
+            items: [
+              {
+                ref: "google:file:budget",
+                title: "Budget",
+                accessToken: "provider-token",
+                connectionId: "conn_google",
+              },
+            ],
+          },
+        };
+      },
+    });
+    const search = definitions.find((definition) => definition.name === "connected_app_search");
+    if (!search) throw new Error("connected_app_search missing");
+
+    const result = await search.execute(
+      actionContext({
+        provider: "google",
+        query: "budget",
+        authorization: "Bearer provider-token",
+        capabilityIds: ["google.drive.file.read"],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executorRequests).toMatchObject([
+      {
+        provider: "google",
+        operation: "search",
+        connectionIds: ["conn_google"],
+        capabilityIds: ["google.drive.file.read"],
+        args: {
+          provider: "google",
+          query: "budget",
+          authorization: "[redacted]",
+        },
+      },
+    ]);
+    expect(result.contentText).toContain("Budget");
+    expect(result.contentText).not.toContain("provider-token");
+    expect(result.contentText).not.toContain("conn_google");
+    expect(JSON.stringify(result.data)).not.toContain("provider-token");
+    expect(JSON.stringify(result.data)).not.toContain("conn_google");
+    expect(redactConnectedAppToolArguments("connected_app_read", { refreshToken: "secret" })).toEqual({
+      refreshToken: "[redacted]",
+    });
+  });
+
+  test("surfaces provider HTTP errors from connected app tool calls", async () => {
+    const definitions = createConnectedAppProviderModelToolDefinitions({
+      connectedApps: [xConnectedAppContext()],
+      executeConnectedAppTool: async () => ({
+        ok: false,
+        output: "Connected app operation x.search.posts was denied.",
+        data: {
+          provider: "x",
+          operation: "search",
+          operationId: "x.search.posts",
+          capability: "x.tweets.search.recent",
+          status: "error",
+          result: {
+            detail: "credits depleted",
+            status: 402,
+            title: "Payment Required",
+            type: "https://api.x.com/2/problems/credits-depleted",
+          },
+          metadata: {
+            provider: "x",
+            httpStatus: 402,
+          },
+        },
+      }),
+    });
+    const search = definitions.find((definition) => definition.name === "connected_app_search");
+    if (!search) throw new Error("connected_app_search missing");
+
+    const result = await search.execute(
+      actionContext({
+        provider: "x",
+        query: "openpond",
+        operation: "x.search.posts",
+        capabilityIds: ["x.search.read"],
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.contentText).toContain("Connected app operation x.search.posts was denied.");
+    expect(result.contentText).toContain("Provider returned HTTP 402 Payment Required: credits depleted.");
+    expect(result.contentText).not.toContain("conn_x");
+  });
+
+  test("infers connected app capabilities from provider operation ids", async () => {
+    const executorRequests: unknown[] = [];
+    const definitions = createConnectedAppProviderModelToolDefinitions({
+      connectedApps: [xConnectedAppContext()],
+      executeConnectedAppTool: async (request) => {
+        executorRequests.push(request);
+        return {
+          ok: true,
+          output: `Completed ${request.operation}.`,
+          data: { ref: request.args.ref ?? "x:post:2073551549494596079" },
+        };
+      },
+    });
+    const search = definitions.find((definition) => definition.name === "connected_app_search");
+    const read = definitions.find((definition) => definition.name === "connected_app_read");
+    if (!search || !read) throw new Error("connected app provider tools missing");
+
+    const searchResult = await search.execute(
+      actionContext({
+        provider: "x",
+        query: "conversation_id:2073551549494596079",
+        operation: "x.search.posts",
+      }),
+    );
+    const readResult = await read.execute(
+      actionContext({
+        provider: "x",
+        ref: "https://x.com/thsottiaux/status/2073551549494596079",
+        operation: "x.post.read",
+      }),
+    );
+
+    expect(searchResult.ok).toBe(true);
+    expect(readResult.ok).toBe(true);
+    expect(executorRequests).toMatchObject([
+      {
+        provider: "x",
+        operation: "search",
+        capabilityIds: ["x.search.read"],
+        args: {
+          provider: "x",
+          query: "conversation_id:2073551549494596079",
+          operation: "x.search.posts",
+        },
+      },
+      {
+        provider: "x",
+        operation: "read",
+        capabilityIds: ["x.search.read"],
+        args: {
+          provider: "x",
+          ref: "https://x.com/thsottiaux/status/2073551549494596079",
+          operation: "x.post.read",
+        },
+      },
+    ]);
+  });
+
+  test("gates connected app writes on explicit intent and write capabilities", async () => {
+    const definitions = createConnectedAppProviderModelToolDefinitions({
+      connectedApps: [googleConnectedAppContext()],
+    });
+    const write = definitions.find((definition) => definition.name === "connected_app_write");
+    if (!write) throw new Error("connected_app_write missing");
+
+    const missingIntent = await write.execute(
+      actionContext({
+        provider: "google",
+        operation: "google.docs.update",
+        input: { ref: "google:doc:1", patch: "Hello" },
+      }),
+    );
+    const readCapability = await write.execute(
+      actionContext({
+        provider: "google",
+        operation: "google.docs.update",
+        input: { ref: "google:doc:1", patch: "Hello" },
+        explicitUserIntent: "User asked to update google:doc:1.",
+        capabilityIds: ["google.drive.file.read"],
+      }),
+    );
+    const unknownOperation = await write.execute(
+      actionContext({
+        provider: "google",
+        operation: "update_doc",
+        input: { ref: "google:doc:1", patch: "Hello" },
+        explicitUserIntent: "User asked to update google:doc:1.",
+        capabilityIds: ["google.docs.write"],
+      }),
+    );
+    const unavailable = await write.execute(
+      actionContext({
+        provider: "google",
+        operation: "google.docs.update",
+        input: { ref: "google:doc:1", patch: "Hello" },
+        explicitUserIntent: "User asked to update google:doc:1.",
+        capabilityIds: ["google.docs.write"],
+      }),
+    );
+
+    expect(missingIntent.ok).toBe(false);
+    expect(missingIntent.contentText).toContain("explicitUserIntent");
+    expect(readCapability.ok).toBe(false);
+    expect(readCapability.contentText).toContain("not authorized");
+    expect(unknownOperation.ok).toBe(false);
+    expect(unknownOperation.contentText).toContain("operation update_doc is not allowed");
+    expect(unavailable.ok).toBe(false);
+    expect(unavailable.contentText).toContain("No provider API call was made");
+  });
+
   test("reads enabled profile skills through scoped model tool", async () => {
     const definitions = createOpenPondProfileSkillModelToolDefinitions({
       skills: [
@@ -504,6 +960,59 @@ describe("model tool registry", () => {
   });
 });
 
+function googleConnectedAppContext(overrides: Partial<ResolvedConnectedAppContext> = {}): ResolvedConnectedAppContext {
+  return {
+    provider: "google",
+    label: "Google",
+    appIds: ["google"],
+    setupSurfaces: ["oauth_connector"],
+    accountLabels: ["Docs User"],
+    workspaceLabels: ["Drive"],
+    capabilities: [
+      { access: "read", id: "google.drive.file.read", label: "Read Drive files" },
+      { access: "write", id: "google.docs.write", label: "Edit Docs" },
+    ],
+    toolNames: [],
+    connectionIds: ["conn_google"],
+    ...overrides,
+  };
+}
+
+function mcpConnectedAppContext(): ResolvedConnectedAppContext {
+  return {
+    provider: "mcp",
+    label: "OpenPond MCP",
+    appIds: ["mcp"],
+    setupSurfaces: ["mcp_endpoint"],
+    accountLabels: [],
+    workspaceLabels: [],
+    capabilities: [
+      { access: "tooling", id: "mcp.tool.discover", label: "Discover tools" },
+    ],
+    toolNames: [],
+    connectionIds: [],
+  };
+}
+
+function xConnectedAppContext(): ResolvedConnectedAppContext {
+  return {
+    provider: "x",
+    label: "X",
+    appIds: ["x"],
+    setupSurfaces: ["oauth_connector"],
+    accountLabels: ["0xglu"],
+    workspaceLabels: [],
+    capabilities: [
+      { access: "read", id: "x.profile.read", label: "Read profile" },
+      { access: "read", id: "x.search.read", label: "Search X" },
+      { access: "read", id: "x.mentions.read", label: "Read mentions" },
+      { access: "write", id: "x.post.write", label: "Post" },
+    ],
+    toolNames: [],
+    connectionIds: ["conn_x"],
+  };
+}
+
 function actionContext(args: Record<string, unknown>) {
   return {
     session: baseSession({ workspaceKind: "sandbox", workspaceId: "sandbox_1" }),
@@ -516,6 +1025,73 @@ function actionContext(args: Record<string, unknown>) {
     workspaceDiffBaseline: null,
     mentionedApps: [],
     userPrompt: "run action",
+  };
+}
+
+function browserExecutor(input: {
+  available: boolean;
+  calls?: unknown[];
+}): BrowserHarnessToolExecutor {
+  const calls = input.calls ?? [];
+  const result = (action: BrowserHarnessToolName, output: string, data: Record<string, unknown> = {}) => ({
+    ok: true,
+    action,
+    output,
+    data,
+    metadata: {
+      activeTabId: "tab_1",
+      url: "https://example.com/app?token=secret",
+      snapshotId: "snap_1",
+      cursor: { x: 10, y: 20 },
+    },
+  });
+  return {
+    available: () => input.available,
+    async open(request) {
+      calls.push({ method: "open", url: request.url ?? null });
+      return result("openpond_browser_open", "Opened browser.");
+    },
+    async snapshot(request) {
+      calls.push({ method: "snapshot", maxTargets: request.maxTargets });
+      return result("openpond_browser_snapshot", "Captured browser.", {
+        snapshotId: "snap_1",
+        targets: [],
+      });
+    },
+    async moveCursor(request) {
+      calls.push({ method: "moveCursor", target: request.target });
+      return result("openpond_browser_move_cursor", "Moved cursor.");
+    },
+    async click(request) {
+      calls.push({
+        method: "click",
+        target: request.target,
+        button: request.button,
+        clickCount: request.clickCount,
+      });
+      return result("openpond_browser_click", "Clicked browser.");
+    },
+    async typeText(request) {
+      calls.push({
+        method: "typeText",
+        ...(request.target ? { target: request.target } : {}),
+        textLength: request.text.length,
+      });
+      return result("openpond_browser_type", "Typed in browser.");
+    },
+    async pressKey(request) {
+      calls.push({ method: "pressKey", key: request.key });
+      return result("openpond_browser_key", "Pressed key.");
+    },
+    async scroll(request) {
+      calls.push({
+        method: "scroll",
+        ...(request.target ? { target: request.target } : {}),
+        deltaX: request.deltaX,
+        deltaY: request.deltaY,
+      });
+      return result("openpond_browser_scroll", "Scrolled browser.");
+    },
   };
 }
 

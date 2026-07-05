@@ -3,6 +3,11 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { parseSkillMarkdown } from "openpond-agent-sdk/skills";
+import {
+  connectedIntegration,
+  connectedIntegrationCapabilityIds,
+  isConnectedIntegrationProvider,
+} from "openpond-agent-sdk/integrations";
 
 const packageRoot = path.resolve(import.meta.dir, "..");
 const fixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "primitive-contract");
@@ -38,7 +43,7 @@ describe("public primitive contract", () => {
 import { defineChannel } from "openpond-agent-sdk/channels";
 import { defineEval } from "openpond-agent-sdk/eval";
 import { defineInstructions } from "openpond-agent-sdk/instructions";
-import { defineIntegration, secret } from "openpond-agent-sdk/integrations";
+import { connectedIntegration, defineIntegration, secret } from "openpond-agent-sdk/integrations";
 import { schedule } from "openpond-agent-sdk/schedules";
 import { defineSkill } from "openpond-agent-sdk/skills";
 import { defineVolume } from "openpond-agent-sdk/volumes";
@@ -91,7 +96,8 @@ export default defineAgentProject({
   ],
   integrations: [
     defineIntegration({ provider: "opchat", required: true, scopes: ["opchat:chat:create"] }),
-    defineIntegration({ provider: "slack", required: false, capabilities: ["slack.message.send"] }),
+    defineIntegration({ provider: "slack", required: false, capabilities: ["slack.message.ingest"] }),
+    connectedIntegration.google({ required: true, capabilities: ["google.drive.file.read"] }),
   ],
   env: [
     secret.env("OPENAI_API_KEY", {
@@ -139,7 +145,7 @@ export default defineAgentProject({
       id: "slack",
       target: { action: "chat" },
       requiredConnections: ["slack"],
-      capabilities: ["slack.message.send"],
+      capabilities: ["slack.message.ingest"],
       normalizeEvent: (event) => ({ prompt: String(event.text ?? ""), channel: "slack" }),
       renderResponse: (result) => ({ text: result.text }),
     }),
@@ -339,6 +345,16 @@ export default defineAgentProject({
     });
     expect(JSON.stringify(manifest.envRefs)).not.toContain("literal");
     expect(manifest.integrations[0].schema).toBe("openpond.agent.integration.v1");
+    expect(manifest.integrations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "google",
+        required: true,
+        setupSurface: "oauth_connector",
+        capabilities: ["google.drive.file.read"],
+      }),
+    ]));
+    expect(firstBuild["openpond-manifest.preview.yaml"]).toContain("provider: google");
+    expect(firstBuild["openpond-manifest.preview.yaml"]).toContain("google.drive.file.read");
     expect(manifest.schedules[0].schema).toBe("openpond.agent.schedule.v1");
     expect(manifest.tools[0].schema).toBe("openpond.agent.tool.v1");
     expect(manifest.volumes[0].schema).toBe("openpond.agent.volume.v1");
@@ -431,6 +447,34 @@ export default defineAgentProject({
     expect(trace).toContain('"name":"tool.completed"');
     expect(trace).toContain("[redacted]");
     expect(trace).not.toContain("do-not-store");
+  });
+
+  test("exposes connected integration helpers from bundle metadata", () => {
+    expect(isConnectedIntegrationProvider("google")).toBe(true);
+    expect(isConnectedIntegrationProvider("slack")).toBe(false);
+    expect(isConnectedIntegrationProvider("mcp")).toBe(false);
+    expect(connectedIntegration.providers).toEqual(["google", "github", "x"]);
+    expect(connectedIntegrationCapabilityIds("google")).toEqual(expect.arrayContaining([
+      "google.drive.file.read",
+      "google.docs.write",
+    ]));
+    expect(connectedIntegration.catalog()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "google",
+        defaultLeaseCapabilityIds: expect.arrayContaining(["google.drive.file.read"]),
+      }),
+    ]));
+    expect(connectedIntegration.google({
+      required: true,
+      capabilities: ["google.drive.file.read"],
+    })).toMatchObject({
+      provider: "google",
+      setupSurface: "oauth_connector",
+      capabilities: ["google.drive.file.read"],
+    });
+    expect(() =>
+      connectedIntegration.google({ capabilities: ["github.repo.read"] }),
+    ).toThrow("Capability github.repo.read is not declared by google.");
   });
 
   test("validator emits stable machine-readable issues", async () => {

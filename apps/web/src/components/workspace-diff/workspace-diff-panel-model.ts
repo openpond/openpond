@@ -1,15 +1,28 @@
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 
-export type DiffTab = "goal" | "summary" | "file" | "review";
+export type DiffTab = "goal" | "files" | "file";
 
 export type WorkspaceDiffTabRequest = {
   id: number;
-  tab: Extract<DiffTab, "summary" | "review">;
+  tab: Extract<DiffTab, "files">;
 };
 
 export type WorkspaceDiffSideChatTab = {
   id: string;
   title: string;
+};
+
+export type WorkspaceFileSourceValue = "local" | "sandbox";
+
+export type WorkspaceFileSourceOption = {
+  value: WorkspaceFileSourceValue;
+  label: string;
+};
+
+export type WorkspaceFileSourceSwitcher = {
+  value: WorkspaceFileSourceValue;
+  options: WorkspaceFileSourceOption[];
+  onChange: (value: WorkspaceFileSourceValue) => void;
 };
 
 export type WorkspaceDiffRefreshOptions = {

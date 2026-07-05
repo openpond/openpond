@@ -45,6 +45,9 @@ export function ComposerProjectTargetControl({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const noProjectSelected = state.value === "none";
+  const triggerLabel = noProjectSelected ? "Select Project" : state.label;
+  const triggerDetail = noProjectSelected ? "Choose a project for local or cloud work" : state.detail;
   const selectedIconKind =
     state.options.find((option) => option.value === state.value)?.kind ?? "local";
   const visibleOptions = useMemo(() => {
@@ -79,7 +82,7 @@ export function ComposerProjectTargetControl({
   return (
     <div
       className={`composer-project-target ${placement === "top" ? "open-up" : ""}`}
-      data-tooltip={`${state.label}: ${state.detail}`}
+      data-tooltip={`${triggerLabel}: ${triggerDetail}`}
       ref={menuRef}
     >
       <button
@@ -92,7 +95,7 @@ export function ComposerProjectTargetControl({
         onClick={() => setOpen((current) => !current)}
       >
         <ProjectTargetIcon kind={selectedIconKind} size={14} />
-        <span>{state.label}</span>
+        <span>{triggerLabel}</span>
         <ChevronDown size={14} />
       </button>
       {open && (
@@ -171,8 +174,21 @@ export function WorkspaceActionControl({
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedIconKind = state.value === "cloud" || state.value === "queue_cloud" ? "cloud" : "local";
-  const tooltip = `Working in: ${state.label}. ${state.detail}`;
+  const selectedIconKind =
+    state.value === "cloud" || state.value === "queue_cloud"
+      ? "cloud"
+      : state.value === "hybrid"
+        ? "hybrid"
+        : "local";
+  const tooltip = `${state.label}: ${state.detail}`;
+  const uploadAction = state.uploadAction ?? null;
+  const uploadStatusText = uploadAction ? workspaceTargetOptionStatusText(uploadAction) : null;
+  const uploadTooltip = uploadAction
+    ? uploadAction.disabled && uploadAction.disabledReason
+      ? uploadAction.disabledReason
+      : `${uploadAction.label}: ${uploadStatusText ?? uploadAction.detail}`
+    : null;
+  const uploadDisabled = Boolean(uploadAction && (busy || state.busy || uploadAction.disabled));
 
   useEffect(() => {
     if (!open) return;
@@ -193,34 +209,47 @@ export function WorkspaceActionControl({
   return (
     <div
       className={`workspace-action-control ${placement === "top" ? "open-up" : ""}`}
-      data-tooltip={tooltip}
       ref={menuRef}
     >
       <button
         type="button"
         className={`workspace-action-trigger ${selectedIconKind} ${open ? "active" : ""}`}
         disabled={busy}
+        data-tooltip={tooltip}
         aria-label="Working in"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
         <WorkspaceTargetIcon value={state.value} size={14} />
-        <span className="workspace-target-trigger-text">
-          <strong>Working in: {state.label}</strong>
-          <small>{state.detail}</small>
-        </span>
+        <span className="workspace-target-trigger-label">{state.label}</span>
         <ChevronDown size={14} />
       </button>
+      {uploadAction ? (
+        <button
+          type="button"
+          className={`workspace-upload-trigger ${uploadAction.value}`}
+          disabled={uploadDisabled}
+          data-tooltip={uploadTooltip ?? undefined}
+          aria-label={uploadAction.label}
+          onClick={() => {
+            onChange(uploadAction.value);
+            setOpen(false);
+          }}
+        >
+          <WorkspaceTargetIcon value={uploadAction.value} size={14} />
+        </button>
+      ) : null}
       {open && (
         <div className="workspace-target-menu" role="menu" aria-label="Working in">
           {state.options.map((option) => {
             const selected = option.value === state.value;
             const disabled = busy || state.busy || option.disabled;
+            const statusText = workspaceTargetOptionStatusText(option);
+            const secondaryText = statusText ?? option.detail;
             const title = option.disabled && option.disabledReason
               ? option.disabledReason
-              : `${option.label}: ${option.detail}`;
-            const statusText = workspaceTargetOptionStatusText(option);
+              : `${option.label}: ${secondaryText}`;
             return (
               <button
                 key={option.value}
@@ -238,8 +267,7 @@ export function WorkspaceActionControl({
                 <WorkspaceTargetIcon value={option.value} size={14} />
                 <span>
                   <strong>{option.label}</strong>
-                  <small>{option.detail}</small>
-                  {statusText ? <em>{statusText}</em> : null}
+                  <small>{secondaryText}</small>
                 </span>
                 {selected && <Check size={14} />}
               </button>
@@ -266,6 +294,14 @@ function WorkspaceTargetIcon({
   size: number;
 }) {
   if (value === "cloud" || value === "queue_cloud") return <Cloud size={size} />;
+  if (value === "hybrid") {
+    return (
+      <span className="workspace-target-hybrid-icon" aria-hidden="true">
+        <Folder className="hybrid-folder" size={size} />
+        <Cloud className="hybrid-cloud" size={Math.max(7, Math.round(size * 0.62))} />
+      </span>
+    );
+  }
   if (value === "upload_cloud") return <UploadCloud size={size} />;
   return <Folder size={size} />;
 }

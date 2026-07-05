@@ -1,6 +1,7 @@
 import type { CSSProperties, RefObject } from "react";
 import {
   ArrowUp,
+  ArrowUpRight,
   AtSign,
   Bot,
   Plus,
@@ -50,16 +51,20 @@ export function ComposerPrimaryControls({
   onPlanningAppSelect,
   onProviderChange,
   onProviderSetupOpen,
+  onQueueDraft,
   onStop,
   onToggleAddMenu,
   onTranscript,
   provider,
   providerOptions,
+  queueDraftDisabled,
+  queueDraftTooltip,
   running,
   sendDisabled,
   sendTooltip,
   selectedMentionAppId,
   showToast,
+  steering,
 }: {
   addFiles: (files: File[]) => void;
   addMenuOpen: boolean;
@@ -85,16 +90,20 @@ export function ComposerPrimaryControls({
   onPlanningAppSelect: (app: OpenPondApp) => void;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
+  onQueueDraft: () => void;
   onStop: () => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
   onTranscript: (text: string) => void;
   provider: ChatProvider;
   providerOptions: DropdownOption[];
+  queueDraftDisabled: boolean;
+  queueDraftTooltip: string;
   running: boolean;
   sendDisabled: boolean;
   sendTooltip: string;
   selectedMentionAppId: string | null;
   showToast: ShowAppToast;
+  steering: boolean;
 }) {
   return (
     <div className="composer-primary-controls">
@@ -163,12 +172,11 @@ export function ComposerPrimaryControls({
       <button
         type="button"
         className="composer-create-control"
-        aria-label="Create agent"
+        aria-label="Make Agent"
         disabled={disabled}
         onClick={onCreateAsAgent}
       >
-        <Bot size={14} />
-        <span>Create</span>
+        <span>Make Agent</span>
       </button>
       {provider === "codex" ? (
         <DropdownSelect
@@ -258,6 +266,19 @@ export function ComposerPrimaryControls({
         showToast={showToast}
         onTranscript={onTranscript}
       />
+      {steering ? (
+        <button
+          type="button"
+          className="composer-queue-control"
+          disabled={queueDraftDisabled}
+          data-tooltip={queueDraftTooltip}
+          aria-label="Queue steer draft"
+          onClick={onQueueDraft}
+        >
+          <Plus size={13} />
+          <span>Queue</span>
+        </button>
+      ) : null}
       {running ? (
         <button
           type="button"
@@ -267,6 +288,11 @@ export function ComposerPrimaryControls({
           onClick={onStop}
         >
           <Square size={13} fill="currentColor" />
+        </button>
+      ) : steering ? (
+        <button className="send-button steer-button" disabled={sendDisabled} data-tooltip="Steer" aria-label="Steer">
+          <ArrowUpRight size={13} />
+          <span>Steer</span>
         </button>
       ) : (
         <button className="send-button" disabled={sendDisabled} data-tooltip={sendTooltip} aria-label={sendTooltip}>

@@ -25,6 +25,20 @@ type SmokeOptions = {
   jsonPath?: string;
 };
 
+type BrowserInputProof = {
+  snapshotTargetCount: number;
+  snapshotIdPresent: boolean;
+  screenshotAvailable: boolean;
+  moveOk: boolean;
+  clickOk: boolean;
+  typeOk: boolean;
+  keyOk: boolean;
+  clicked: boolean;
+  submitted: boolean;
+  typedLength: number;
+  cursorOverlay: boolean;
+};
+
 type CdpResponse = {
   id?: number;
   result?: unknown;
@@ -132,6 +146,14 @@ async function main(): Promise<void> {
     );
     if (!browserBounds.ok) throw new Error(browserBounds.error ?? "Browser sidebar bounds failed.");
     const browserState = await waitForBrowserState(cdp, conversationId, fixture.url, timeoutMs);
+    const fixtureTarget = await waitForDevtoolsTargetUrl(devtoolsPort, fixture.url, timeoutMs);
+    const fixtureCdp = await CdpClient.connect(fixtureTarget.webSocketDebuggerUrl);
+    let browserInputProof: BrowserInputProof;
+    try {
+      browserInputProof = await runBrowserInputProof(cdp, fixtureCdp, conversationId, timeoutMs);
+    } finally {
+      fixtureCdp.close();
+    }
     const browserClose = await evaluateValue<{ ok: boolean; error?: string }>(
       cdp,
       `window.openpond.browser.close({ conversationId: ${JSON.stringify(conversationId)} })`,
@@ -175,6 +197,7 @@ async function main(): Promise<void> {
       browser: {
         activeTabId: browserState.activeTabId,
         tabCount: browserState.tabs.length,
+        inputProof: browserInputProof,
         attachedAfterClose: browserDiagnostics.attachedRuntimeCount,
         closeProof: browserDiagnostics.proof,
       },
@@ -385,7 +408,42 @@ function commandExists(command: string): boolean {
 async function startFixtureServer(): Promise<{ server: Server; url: string }> {
   const server = createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    response.end("<!doctype html><title>OpenPond Smoke Fixture</title><h1>OpenPond Smoke Fixture</h1>");
+    response.end(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>OpenPond Smoke Fixture</title>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 32px; }
+      button, input { font: inherit; padding: 10px 12px; margin: 8px 0; }
+      #smoke-result { margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>OpenPond Smoke Fixture</h1>
+    <button id="smoke-button" aria-label="Smoke click target" type="button">Click target</button>
+    <form id="smoke-form">
+      <label for="smoke-input">Smoke text input</label>
+      <input id="smoke-input" aria-label="Smoke text input" autocomplete="off">
+      <button type="submit">Submit input</button>
+    </form>
+    <div id="smoke-result" role="status" data-clicked="false" data-submitted="false">Waiting</div>
+    <script>
+      const result = document.getElementById("smoke-result");
+      const input = document.getElementById("smoke-input");
+      document.getElementById("smoke-button").addEventListener("click", () => {
+        result.dataset.clicked = "true";
+        result.textContent = "Clicked";
+      });
+      document.getElementById("smoke-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        result.dataset.submitted = "true";
+        result.dataset.typedLength = String(input.value.length);
+        result.textContent = "Submitted";
+      });
+    </script>
+  </body>
+</html>`);
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -427,6 +485,27 @@ async function waitForDevtoolsTarget(port: number, timeoutMs: number): Promise<R
   throw new Error("Timed out waiting for packaged desktop renderer DevTools target.");
 }
 
+async function waitForDevtoolsTargetUrl(
+  port: number,
+  targetUrl: string,
+  timeoutMs: number,
+): Promise<Required<DevtoolsTarget>> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const target = await fetch(`http://127.0.0.1:${port}/json/list`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((targets) =>
+        Array.isArray(targets)
+          ? targets.find((candidate) => isUsableTarget(candidate) && candidate.url === targetUrl)
+          : null
+      )
+      .catch(() => null);
+    if (target) return target;
+    await delay(250);
+  }
+  throw new Error(`Timed out waiting for browser fixture DevTools target: ${targetUrl}`);
+}
+
 function isUsableTarget(target: DevtoolsTarget): target is Required<DevtoolsTarget> {
   return (
     target.type === "page" &&
@@ -462,6 +541,144 @@ async function waitForBrowserState(
     if (active?.url === url && !active.loading && !active.error) return state;
     return null;
   }, timeoutMs, "Timed out waiting for browser sidebar fixture page to load.");
+}
+
+async function runBrowserInputProof(
+  rendererCdp: CdpClient,
+  fixtureCdp: CdpClient,
+  conversationId: string,
+  timeoutMs: number,
+): Promise<BrowserInputProof> {
+  const typedLength = "native input proof".length;
+  const actionProof = await evaluateValue<{
+    ok: boolean;
+    error?: string;
+    snapshotTargetCount: number;
+    snapshotIdPresent: boolean;
+    screenshotAvailable: boolean;
+    moveOk: boolean;
+    clickOk: boolean;
+    typeOk: boolean;
+    keyOk: boolean;
+  }>(
+    rendererCdp,
+    `(async () => {
+      const conversationId = ${JSON.stringify(conversationId)};
+      const snapshotResult = await window.openpond.browser.snapshot({
+        conversationId,
+        maxTargets: 50,
+        includeScreenshot: true
+      });
+      const snapshot = snapshotResult?.data?.snapshot;
+      const targets = Array.isArray(snapshot?.targets) ? snapshot.targets : [];
+      const button = targets.find((target) =>
+        /Smoke click target|Click target/i.test(String(target.name || target.text || ""))
+      );
+      const input = targets.find((target) =>
+        /Smoke text input/i.test(String(target.name || target.text || ""))
+      );
+      if (!snapshotResult.ok || !snapshot?.snapshotId || !button?.ref || !input?.ref) {
+        return {
+          ok: false,
+          error: "Missing browser snapshot refs",
+          snapshotTargetCount: targets.length,
+          snapshotIdPresent: Boolean(snapshot?.snapshotId),
+          screenshotAvailable: Boolean(snapshotResult?.metadata?.screenshot),
+          moveOk: false,
+          clickOk: false,
+          typeOk: false,
+          keyOk: false
+        };
+      }
+      const move = await window.openpond.browser.moveCursor({
+        conversationId,
+        snapshotId: snapshot.snapshotId,
+        targetRef: button.ref,
+        waitAfterMoveMs: 80
+      });
+      const click = await window.openpond.browser.click({
+        conversationId,
+        snapshotId: snapshot.snapshotId,
+        targetRef: button.ref
+      });
+      const type = await window.openpond.browser.typeText({
+        conversationId,
+        snapshotId: snapshot.snapshotId,
+        targetRef: input.ref,
+        text: "native input proof"
+      });
+      const key = await window.openpond.browser.key({ conversationId, key: "Enter" });
+      return {
+        ok: Boolean(move.ok && click.ok && type.ok && key.ok),
+        error: [move, click, type, key].find((result) => !result.ok)?.output,
+        snapshotTargetCount: targets.length,
+        snapshotIdPresent: true,
+        screenshotAvailable: Boolean(snapshotResult?.metadata?.screenshot),
+        moveOk: Boolean(move.ok),
+        clickOk: Boolean(click.ok),
+        typeOk: Boolean(type.ok),
+        keyOk: Boolean(key.ok)
+      };
+    })()`,
+  );
+  if (!actionProof.ok) {
+    throw new Error(actionProof.error ?? "Browser harness input proof failed.");
+  }
+  let lastFixtureState: {
+    clicked: boolean;
+    submitted: boolean;
+    typedLength: number;
+    inputLength: number;
+    cursorOverlay: boolean;
+  } | null = null;
+  const fixtureProof = await waitFor(async () => {
+    const state = await evaluateValue<{
+      clicked: boolean;
+      submitted: boolean;
+      typedLength: number;
+      inputLength: number;
+      cursorOverlay: boolean;
+    }>(
+      fixtureCdp,
+      `(() => {
+        const result = document.getElementById("smoke-result");
+        const input = document.getElementById("smoke-input");
+        return {
+          clicked: result?.dataset.clicked === "true",
+          submitted: result?.dataset.submitted === "true",
+          typedLength: Number(result?.dataset.typedLength || 0),
+          inputLength: input && "value" in input ? input.value.length : 0,
+          cursorOverlay: Boolean(document.getElementById("__openpond_agent_cursor_root"))
+        };
+      })()`,
+    );
+    lastFixtureState = state;
+    if (
+      state.clicked &&
+      state.submitted &&
+      state.typedLength === typedLength &&
+      state.inputLength === typedLength &&
+      state.cursorOverlay
+    ) {
+      return state;
+    }
+    return null;
+  }, timeoutMs, () =>
+    `Timed out waiting for native browser input proof. Last fixture state: ${JSON.stringify(lastFixtureState)}`,
+  );
+  return {
+    snapshotTargetCount: actionProof.snapshotTargetCount,
+    snapshotIdPresent: actionProof.snapshotIdPresent,
+    screenshotAvailable: actionProof.screenshotAvailable,
+    moveOk: actionProof.moveOk,
+    clickOk: actionProof.clickOk,
+    typeOk: actionProof.typeOk,
+    keyOk: actionProof.keyOk,
+    clicked: fixtureProof.clicked,
+    submitted: fixtureProof.submitted,
+    typedLength: fixtureProof.typedLength,
+    cursorOverlay: fixtureProof.cursorOverlay,
+  };
 }
 
 async function waitForBrowserDetached(
@@ -549,7 +766,7 @@ async function measureFirstChatInputLatency(cdp: CdpClient): Promise<{ durationM
 async function waitFor<T>(
   probe: () => Promise<T | null | false>,
   timeoutMs: number,
-  message: string,
+  message: string | (() => string),
 ): Promise<T> {
   const started = Date.now();
   let lastError: unknown;
@@ -562,7 +779,8 @@ async function waitFor<T>(
     }
     await delay(250);
   }
-  throw new Error(lastError ? `${message} Last error: ${String(lastError)}` : message);
+  const resolvedMessage = typeof message === "function" ? message() : message;
+  throw new Error(lastError ? `${resolvedMessage} Last error: ${String(lastError)}` : resolvedMessage);
 }
 
 async function evaluateValue<T>(cdp: CdpClient, expression: string): Promise<T> {

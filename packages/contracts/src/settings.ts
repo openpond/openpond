@@ -160,6 +160,7 @@ export const InsightsEvidenceSourceSettingsSchema = z.object({
   abandonedGoals: z.boolean().default(true),
   userCorrections: z.boolean().default(true),
   unresolvedConversations: z.boolean().default(true),
+  usageAnomalies: z.boolean().default(true),
 });
 
 export type InsightsEvidenceSourceSettings = z.infer<typeof InsightsEvidenceSourceSettingsSchema>;

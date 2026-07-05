@@ -122,8 +122,9 @@ export async function listOpenAiCompatibleProviderModels(input: {
     requestSignal.cleanup();
   }
   if (!response.ok) {
+    const errorDetail = await readProviderError(response, input.errorBodyLimitBytes);
     throw new Error(
-      `Provider ${provider.providerId} model list failed: ${response.status} ${await readProviderError(response, input.errorBodyLimitBytes)}`,
+      `Provider ${provider.providerId} model list failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
     );
   }
   const payload = await readProviderJson(
@@ -200,6 +201,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
       method: "POST",
       headers: providerHeaders(provider.apiKey, "text/event-stream", input.requestId),
       body: JSON.stringify(buildChatCompletionBody({
+        providerId: provider.providerId,
         model: provider.model,
         messages: input.messages,
         tools: input.tools,
@@ -211,8 +213,9 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
     requestSignal.cleanup();
   }
   if (!response.ok || !response.body) {
+    const errorDetail = await readProviderError(response, input.errorBodyLimitBytes);
     throw new Error(
-      `Provider ${provider.providerId} stream failed: ${response.status} ${await readProviderError(response, input.errorBodyLimitBytes)}`,
+      `Provider ${provider.providerId} stream failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
     );
   }
   for await (const raw of parseSse(response.body, input.signal)) {
@@ -228,6 +231,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
 }
 
 function buildChatCompletionBody(input: {
+  providerId: OpenAiCompatibleProviderId;
   model: string;
   messages: HostedChatMessage[];
   tools?: HostedChatTool[];
@@ -240,6 +244,9 @@ function buildChatCompletionBody(input: {
   };
   if (input.tools) {
     body.tools = input.tools;
+  }
+  if (input.providerId === "zai" && input.tools && input.tools.length > 0) {
+    body.tool_stream = true;
   }
   if (input.toolChoice !== undefined) {
     body.tool_choice = input.toolChoice;
@@ -389,6 +396,23 @@ async function readProviderError(response: Response, maxBytes = PROVIDER_ERROR_B
   }
 }
 
+function providerErrorDetail(
+  provider: OpenAiCompatibleResolvedProvider,
+  detail: string,
+): string {
+  if (
+    provider.providerId === "zai" &&
+    /\b1113\b|insufficient balance|resource package/i.test(detail)
+  ) {
+    return [
+      detail,
+      "Z.ai Coding Plan subscriptions use https://api.z.ai/api/coding/paas/v4; the general API endpoint uses separate API balance/resource packages.",
+      "If this base URL is already configured, check the Coding Plan quota/reset window and that the selected model is included in the plan.",
+    ].join(" ");
+  }
+  return detail;
+}
+
 async function readProviderJson(response: Response, label: string, maxBytes = PROVIDER_RESPONSE_BODY_LIMIT_BYTES): Promise<unknown> {
   const result = await readLimitedResponseText(response, maxBytes, { truncate: false });
   try {
@@ -528,7 +552,7 @@ function streamDeltasFromChunk(raw: unknown): OpenAiCompatibleStreamDelta[] {
         ? (choiceRecord.delta as Record<string, unknown>)
         : {};
     for (const key of ["content", "reasoning_content"] as const) {
-      const value = stringValue(delta[key]);
+      const value = streamTextValue(delta[key]);
       if (!value) continue;
       deltas.push({
         type: key === "content" ? "text_delta" : "reasoning_delta",
@@ -560,6 +584,10 @@ function parseUsage(raw: unknown): unknown | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function streamTextValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function numberValue(value: unknown): number | null {

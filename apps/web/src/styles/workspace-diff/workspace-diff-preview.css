@@ -55,6 +55,26 @@
   white-space: nowrap;
 }
 
+.workspace-file-breadcrumbs button {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+}
+
+.workspace-file-breadcrumbs button:hover {
+  color: #f1f1f1;
+}
+
+.workspace-file-breadcrumbs > button:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-file-breadcrumb-segment {
   gap: 3px;
 }
@@ -64,7 +84,8 @@
   color: #636363;
 }
 
-.workspace-file-breadcrumb-segment span {
+.workspace-file-breadcrumb-segment span,
+.workspace-file-breadcrumb-segment button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -474,7 +495,6 @@
 .workspace-file-code::-webkit-scrollbar,
 .workspace-markdown-preview::-webkit-scrollbar,
 .workspace-split-code::-webkit-scrollbar,
-.workspace-diff-summary-view::-webkit-scrollbar,
 .workspace-file-tree::-webkit-scrollbar,
 .workspace-file-search-results::-webkit-scrollbar {
   width: 9px;
@@ -485,7 +505,6 @@
 .workspace-file-code::-webkit-scrollbar-track,
 .workspace-markdown-preview::-webkit-scrollbar-track,
 .workspace-split-code::-webkit-scrollbar-track,
-.workspace-diff-summary-view::-webkit-scrollbar-track,
 .workspace-file-tree::-webkit-scrollbar-track,
 .workspace-file-search-results::-webkit-scrollbar-track {
   background: transparent;
@@ -495,7 +514,6 @@
 .workspace-file-code::-webkit-scrollbar-thumb,
 .workspace-markdown-preview::-webkit-scrollbar-thumb,
 .workspace-split-code::-webkit-scrollbar-thumb,
-.workspace-diff-summary-view::-webkit-scrollbar-thumb,
 .workspace-file-tree::-webkit-scrollbar-thumb,
 .workspace-file-search-results::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
@@ -508,7 +526,6 @@
 .workspace-file-code::-webkit-scrollbar-thumb:hover,
 .workspace-markdown-preview::-webkit-scrollbar-thumb:hover,
 .workspace-split-code::-webkit-scrollbar-thumb:hover,
-.workspace-diff-summary-view::-webkit-scrollbar-thumb:hover,
 .workspace-file-tree::-webkit-scrollbar-thumb:hover,
 .workspace-file-search-results::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.34);

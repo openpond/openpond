@@ -46,6 +46,11 @@ export function sidebarProjectIdForSession(
     return session.workspaceId;
   }
 
+  if (session.metadata?.workspaceTarget === "hybrid" && session.cwd) {
+    const projectId = localProjectIdForSidebarPath(session.cwd, projectPathIndex);
+    if (projectId) return projectId;
+  }
+
   if (session.cloudProjectId && cloudProjectIds.has(session.cloudProjectId)) {
     return session.cloudProjectId;
   }
@@ -79,6 +84,11 @@ export function sidebarProjectKeyForSession(
     return projectSelectionKey("local", session.workspaceId);
   }
 
+  if (session.metadata?.workspaceTarget === "hybrid" && session.cwd) {
+    const projectId = localProjectIdForSidebarPath(session.cwd, projectPathIndex);
+    if (projectId) return projectSelectionKey("local", projectId);
+  }
+
   if (session.cloudProjectId && cloudProjectIds.has(session.cloudProjectId)) {
     return projectSelectionKey("cloud", session.cloudProjectId);
   }
@@ -96,10 +106,27 @@ export function sidebarProjectKeyForSession(
   return null;
 }
 
+function localProjectIdForSidebarPath(
+  value: string | null | undefined,
+  projectPathIndex: ProjectPathEntry[],
+): string | null {
+  const cwd = normalizeSidebarPath(value);
+  if (!cwd) return null;
+
+  for (const entry of projectPathIndex) {
+    if (isSameOrInsideSidebarPath(cwd, entry.path)) return entry.projectId;
+  }
+
+  return null;
+}
+
 export function isSidebarCloudWorkSession(
   session: Session,
   cloudProjectIds: ReadonlySet<string>,
 ): boolean {
+  if (session.localProjectId) return false;
+  if (session.metadata?.workspaceTarget === "hybrid") return false;
+
   return Boolean(
     session.cloudProjectId &&
       cloudProjectIds.has(session.cloudProjectId) &&

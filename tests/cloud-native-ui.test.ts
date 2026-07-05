@@ -14,7 +14,7 @@ import { emptyOpenPondProfileState } from "@openpond/contracts";
 
 import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import { CloudSetupDialog } from "../apps/web/src/components/workspace/CloudSetupDialog";
-import { useSidebarData } from "../apps/web/src/hooks/useSidebarData";
+import { useSidebarData, visibleSidebarProjectRows } from "../apps/web/src/hooks/useSidebarData";
 import { buildInitialCreatePipelineSnapshot } from "../apps/web/src/lib/create-pipeline-request";
 import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import {
@@ -287,6 +287,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     startProjectFromScratch: noop,
     startCloudProjectFromScratch: noop,
     moveProjectToCloud: noop,
+    switchProjectWorkspaceTarget: noop,
     removeProject: noop,
     toggleInsightsSystemProjectVisibility: noop,
     toggleProjectPinned: noop,
@@ -354,6 +355,7 @@ describe("Cloud native UI", () => {
         runtimeIndexes: buildRuntimeIndexes([], []),
         appPreferences: {},
         selectedSessionId: null,
+        selectedProjectId: localProjectKey,
         archivedChatsOpen: false,
         projectsExpanded: true,
         chatRowsVisibleCount: SIDEBAR_SECTION_LIMIT,
@@ -379,15 +381,47 @@ describe("Cloud native UI", () => {
 
     expect(markup.match(/row-label">Shared Repo/g)?.length).toBe(1);
     expect(markup).not.toContain("Local + Cloud");
-    expect(markup).toContain('aria-label="Shared Repo locations"');
-    expect(markup).toContain("Local Git");
-    expect(markup).toContain("/workspace/local-repo");
-    expect(markup).toContain("Cloud Project");
-    expect(markup).toContain("main / setup ready");
+    expect(markup).toContain('aria-label="Shared Repo status"');
+    expect(markup).not.toContain("Local Status");
+    expect(markup).not.toContain("Cloud Status");
+    expect(markup).not.toContain("Local Repo");
+    expect(markup).not.toContain("Cloud Repo");
+    expect(markup).toContain('data-workspace-target="local"');
+    expect(markup).toContain('data-workspace-target="cloud"');
+    expect(markup).toContain("main / available");
+    expect(markup).toContain("main / 1 running");
+    expect(markup).not.toContain("/workspace/local-repo");
     expect(markup).toContain("project-kind-icon local linked-cloud");
     expect(markup).toContain("project-kind-icon-cloud-badge");
     expect(markup).toContain("Hosted follow-up");
     expect(markup).not.toContain(">Cloud Projects<");
+  });
+
+  test("keeps the selected project visible without expanding all project rows", () => {
+    const rows = localProjectSidebarRows(
+      Array.from({ length: SIDEBAR_SECTION_LIMIT + 3 }, (_, index) =>
+        localProject({
+          id: `local_project_${index}`,
+          name: `Project ${index}`,
+        }),
+      ),
+    );
+    const selectedProjectId = rows[SIDEBAR_SECTION_LIMIT + 2]!.id;
+    const visibleRows = visibleSidebarProjectRows(rows, false, selectedProjectId);
+
+    expect(visibleRows).toHaveLength(SIDEBAR_SECTION_LIMIT);
+    expect(visibleRows.map((row) => row.id)).toContain(selectedProjectId);
+    expect(visibleRows.map((row) => row.id)).not.toContain(rows[SIDEBAR_SECTION_LIMIT - 1]!.id);
+  });
+
+  test("keeps project location popovers tied to hover or keyboard-visible focus", () => {
+    const css = readFileSync(
+      new URL("../apps/web/src/styles/sidebar/sidebar.css", import.meta.url),
+      "utf8",
+    );
+
+    expect(css).toContain(".sidebar-project-row:focus-visible + .sidebar-project-locations-popover");
+    expect(css).not.toContain(".sidebar-project-row-shell:focus-within .sidebar-project-locations-popover");
   });
 
   test("renders local and Cloud projects in one Projects section with grouped work items", () => {
@@ -409,13 +443,19 @@ describe("Cloud native UI", () => {
     expect(projectsSection).toContain('row-label">Cloud Repo</span><span class="sidebar-project-caret"');
     expect(projectsSection).not.toContain('row-label-detail">Local</span>');
     expect(projectsSection).not.toContain('row-label-detail">Cloud / main</span>');
-    expect(projectsSection).toContain('aria-label="Local Repo locations"');
-    expect(projectsSection).toContain('aria-label="Cloud Repo locations"');
-    expect(projectsSection).toContain("Local Git");
-    expect(projectsSection).toContain("Cloud Project");
+    expect(projectsSection).toContain('aria-label="Local Repo status"');
+    expect(projectsSection).toContain('aria-label="Cloud Repo status"');
+    expect(projectsSection).not.toContain("Local Status");
+    expect(projectsSection).not.toContain("Cloud Status");
+    expect(projectsSection).toContain("local / available");
+    expect(projectsSection).toContain("not in cloud");
+    expect(projectsSection).toContain("main / 1 running");
+    expect(projectsSection).toContain('data-workspace-target="local"');
+    expect(projectsSection).toContain('data-workspace-target="cloud"');
+    expect(projectsSection).toContain('data-workspace-target="upload_cloud"');
     expect(projectsSection).not.toContain("GitHub Source");
     expect(projectsSection).not.toContain("Cloud Source");
-    expect(projectsSection).toContain("Cloud Branch");
+    expect(projectsSection).not.toContain("/workspace/local-repo");
     expect(projectsSection).toContain('class="sidebar-project-caret"');
     expect(projectsSection).toContain("lucide-chevron-down");
     expect(projectsSection.indexOf('aria-label="More project actions"')).toBeGreaterThan(
