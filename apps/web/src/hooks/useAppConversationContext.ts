@@ -48,8 +48,8 @@ export function useAppConversationContext({
   const hasScopedConversationContext = Boolean(selectedSession || selectedApp || selectedProject || selectedCloudProject);
   const chatMentionApps = hasScopedConversationContext ? [] : mentionableSandboxApps;
   const connectedAppMentions = useMemo(
-    () => hasScopedConversationContext ? [] : connectedAppMentionOptionsFromStatusRows(connectedAppRows),
-    [connectedAppRows, hasScopedConversationContext],
+    () => connectedAppMentionOptionsFromStatusRows(connectedAppRows),
+    [connectedAppRows],
   );
   const pendingApproval = useMemo(() => {
     return latestPendingApprovalForSession(runtimeIndexes, selectedSessionId);

@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 350, in run
+    await self._prepare()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 379, in _prepare
+    await self._setup_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1097, in _setup_agent_environment
+    await self._start_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1103, in _start_agent_environment
+    await asyncio.wait_for(
+  File "/home/glu/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 876, in start
+    await self._run_docker_compose_command(["up", "--detach", "--wait"])
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 625, in _run_docker_compose_command
+    raise RuntimeError(
+RuntimeError: Docker compose command failed for environment sam-cell-seg. Command: docker compose --project-name sam-cell-seg__mnmtwzd__env --project-directory /home/glu/.cache/harbor/tasks/packages/terminal-bench/sam-cell-seg/a141c1f364a9a69e27545a062f5238a27dfde68dfa0a04921966ada2854bf1db/environment -f /tmp/tmpfefqhnh1/sam-cell-seg__MNMTWZD__env-docker-compose-resources.json -f /home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /tmp/tmp_mquiv6c/docker-compose-mounts.json up --detach --wait. Return code: 1. Stdout: Error response from daemon: client version 1.43 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version
+. Stderr: None. 

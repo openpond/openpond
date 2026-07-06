@@ -193,10 +193,11 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
     let executionTarget: WorkspaceExecutionTarget | null = null;
     try {
       let result: WorkspaceToolResult;
-      const localProject =
+      const localProjectId =
         session.workspaceKind === "local_project" && session.workspaceId
-          ? await findLocalWorkspace(session.workspaceId)
-          : null;
+          ? session.workspaceId
+          : session.localProjectId ?? null;
+      const localProject = localProjectId ? await findLocalWorkspace(localProjectId) : null;
       executionTarget = resolveWorkspaceExecutionTarget({ session, localProject });
       const capabilities = resolveWorkspaceCapabilities({ session, localProject });
       const blockedMessage = workspaceToolBlockedMessage({
@@ -226,6 +227,7 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           request: input,
           session,
           updateSession,
+          findLocalWorkspace,
         });
         if (sandboxAction) {
           result = sandboxAction;
@@ -255,10 +257,13 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
       }
   
       const resultSession = await getSession(sessionId).catch(() => session);
-      const resultLocalProject =
+      const resultLocalProjectId =
         resultSession.workspaceKind === "local_project" && resultSession.workspaceId
-          ? await findLocalWorkspace(resultSession.workspaceId).catch(() => localProject)
-          : null;
+          ? resultSession.workspaceId
+          : resultSession.localProjectId ?? null;
+      const resultLocalProject = resultLocalProjectId
+        ? await findLocalWorkspace(resultLocalProjectId).catch(() => localProject)
+        : null;
       const resultExecutionTarget = resolveWorkspaceExecutionTarget({
         session: resultSession,
         localProject: resultLocalProject,

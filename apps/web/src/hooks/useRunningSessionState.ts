@@ -5,12 +5,14 @@ import type { RuntimeIndexes } from "../lib/runtime-indexes";
 
 export function useRunningSessionState({
   goalRuntime,
+  goalRuntimeBySessionId,
   runtimeIndexes,
   selectedSession,
   selectedSessionId,
   sidebarSessions,
 }: {
   goalRuntime: GoalRuntimeStatus | null;
+  goalRuntimeBySessionId?: ReadonlyMap<string, GoalRuntimeStatus>;
   runtimeIndexes: RuntimeIndexes;
   selectedSession: Session | null;
   selectedSessionId: string | null;
@@ -22,6 +24,10 @@ export function useRunningSessionState({
   );
   const goalRunningSessionIds = useMemo(() => {
     const next = new Set<string>();
+    for (const [sessionId, runtime] of goalRuntimeBySessionId ?? []) {
+      const session = sessionById.get(sessionId);
+      if (runtime.tone === "active" && !session?.systemKind) next.add(sessionId);
+    }
     for (const sessionId of runtimeIndexes.activeGoalSessionIds) {
       const session = sessionById.get(sessionId);
       if (!session?.systemKind) next.add(sessionId);
@@ -30,7 +36,7 @@ export function useRunningSessionState({
       next.add(selectedSessionId);
     }
     return next;
-  }, [goalRuntime, runtimeIndexes, selectedSession, selectedSessionId, sessionById]);
+  }, [goalRuntime, goalRuntimeBySessionId, runtimeIndexes, selectedSession, selectedSessionId, sessionById]);
   const runningSessionIds = useMemo(() => {
     const next = new Set(goalRunningSessionIds);
     for (const session of sidebarSessions) {

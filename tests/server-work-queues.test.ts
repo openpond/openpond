@@ -120,6 +120,34 @@ describe("server work queues", () => {
     ]);
   });
 
+  test("resolves a cwd-only session as an active local folder workspace", async () => {
+    const repoPath = await createTempDir("openpond-cwd-session-workspace-");
+    const workflows = createWorkspaceSessionWorkflows({
+      appendRuntimeEvent: async () => undefined,
+      checkpointDiffQueue: createBackgroundWorkerQueue({ queueId: "unused-checkpoint-diff" }),
+      findLocalWorkspace: async () => null,
+      findOpenPondApp: async () => {
+        throw new Error("app lookup is not needed for cwd-only sessions");
+      },
+      storeDir: "/tmp/openpond-store",
+      workspaceDiffPayload: async () => {
+        throw new Error("workspace diff is not needed for cwd-only active workspace resolution");
+      },
+    });
+
+    const { app, state } = await workflows.activeWorkspace(baseSession({ cwd: repoPath }));
+
+    expect(app.id).toBe(`local_path:${repoPath}`);
+    expect(app.name).toBe(path.basename(repoPath));
+    expect(state).toMatchObject({
+      appId: `local_path:${repoPath}`,
+      source: "local_folder",
+      workspacePath: repoPath,
+      repoPath,
+      initialized: true,
+    });
+  });
+
   test("queues approved local Create follow-up work and drains persisted failure state", async () => {
     const repoPath = await createTempDir("openpond-local-create-repo-");
     const sourcePath = path.join(repoPath, "profiles", "default");

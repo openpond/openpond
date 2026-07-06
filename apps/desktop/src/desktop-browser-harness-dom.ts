@@ -54,13 +54,22 @@ export function parseBrowserSnapshotScriptResult(value: unknown): BrowserSnapsho
   return {
     url: stringValue(record.url),
     title: stringValue(record.title),
-    viewport: {
-      width: numberValue(viewport.width),
-      height: numberValue(viewport.height),
-      scrollX: numberValue(viewport.scrollX),
-      scrollY: numberValue(viewport.scrollY),
-    },
+    viewport: parseBrowserSnapshotViewport(viewport),
     targets,
+  };
+}
+
+function parseBrowserSnapshotViewport(viewport: Record<string, unknown>): BrowserSnapshotScriptResult["viewport"] {
+  const width = numberValue(viewport.width);
+  const height = numberValue(viewport.height);
+  if (width <= 0 || height <= 0) {
+    throw new Error("Browser snapshot viewport is not visible. Open the browser panel and try again.");
+  }
+  return {
+    width,
+    height,
+    scrollX: numberValue(viewport.scrollX),
+    scrollY: numberValue(viewport.scrollY),
   };
 }
 

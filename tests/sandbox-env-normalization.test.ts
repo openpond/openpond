@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  assertTerminalSandboxLifecycleSettled,
   normalizeIntegrationAttachInput,
   normalizeIntegrationLeaseId,
   normalizeSandboxRuntimeCreateInput,
@@ -9,6 +10,8 @@ import {
   implicitConnectedAppStatusTeamIds,
   mergeConnectedAppStatusConnectionResults,
   resolveImplicitConnectedAppStatusConnections,
+  sandboxLifecycleRequiresSynchronousAccounting,
+  sandboxRequestPayload,
   selectImplicitConnectedAppStatusTeamId,
   successfulConnectedAppStatusConnectionResults,
 } from "../apps/server/src/openpond/sandboxes";
@@ -18,6 +21,24 @@ import {
   summarizeSandboxToolResult,
 } from "../apps/server/src/workspace-tools/workspace-tool-sandbox-actions";
 import { normalizeMentionedSandboxToolRequest } from "../apps/server/src/runtime/turn-runner";
+
+const originalFetch = globalThis.fetch;
+const originalSandboxApiKey = process.env.OPENPOND_SANDBOX_API_KEY;
+const originalSandboxApiUrl = process.env.OPENPOND_SANDBOX_API_URL;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  if (originalSandboxApiKey === undefined) {
+    delete process.env.OPENPOND_SANDBOX_API_KEY;
+  } else {
+    process.env.OPENPOND_SANDBOX_API_KEY = originalSandboxApiKey;
+  }
+  if (originalSandboxApiUrl === undefined) {
+    delete process.env.OPENPOND_SANDBOX_API_URL;
+  } else {
+    process.env.OPENPOND_SANDBOX_API_URL = originalSandboxApiUrl;
+  }
+});
 
 describe("sandbox env normalization", () => {
   test("accepts secret ref env mappings", () => {
@@ -163,6 +184,233 @@ describe("sandbox runtime create normalization", () => {
 });
 
 describe("sandbox integration lease normalization", () => {
+  test("classifies creating sandboxes with active reservations as requiring synchronous lifecycle accounting", () => {
+    expect(
+      sandboxLifecycleRequiresSynchronousAccounting({
+        state: "creating",
+        reservation: { status: "reserved" },
+      } as never),
+    ).toBe(true);
+    expect(
+      sandboxLifecycleRequiresSynchronousAccounting({
+        state: "running",
+        reservation: { status: "reserved" },
+      } as never),
+    ).toBe(false);
+    expect(
+      sandboxLifecycleRequiresSynchronousAccounting({
+        state: "creating",
+        reservation: { status: "released" },
+      } as never),
+    ).toBe(false);
+  });
+
+  test("does not request async stop or delete for creating sandboxes with active reservations", async () => {
+    const requests: Array<{ method: string; pathname: string; prefer: string | null }> = [];
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? "GET";
+      requests.push({
+        method,
+        pathname: url.pathname,
+        prefer: new Headers(init?.headers).get("Prefer"),
+      });
+      if (method === "GET") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_creating", "creating", "reserved"),
+        });
+      }
+      if (method === "DELETE") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_creating", "deleted", "released"),
+        });
+      }
+      if (method === "POST" && url.pathname.endsWith("/stop")) {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_creating", "deleted", "released"),
+        });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    };
+
+    await sandboxRequestPayload({
+      type: "delete",
+      sandboxId: "sandbox_creating",
+    });
+    await sandboxRequestPayload({
+      type: "stop",
+      sandboxId: "sandbox_creating",
+    });
+
+    expect(requests).toEqual([
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_creating", prefer: null },
+      { method: "DELETE", pathname: "/v1/sandboxes/sandbox_creating", prefer: null },
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_creating", prefer: null },
+      { method: "POST", pathname: "/v1/sandboxes/sandbox_creating/stop", prefer: null },
+    ]);
+  });
+
+  test("keeps normal running sandbox stop and delete requests async", async () => {
+    const requests: Array<{ method: string; pathname: string; prefer: string | null }> = [];
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? "GET";
+      requests.push({
+        method,
+        pathname: url.pathname,
+        prefer: new Headers(init?.headers).get("Prefer"),
+      });
+      if (method === "GET") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_running", "running", "reserved"),
+        });
+      }
+      if (method === "DELETE") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_running", "deleted", "captured"),
+        });
+      }
+      if (method === "POST" && url.pathname.endsWith("/stop")) {
+        return Response.json({
+          accepted: true,
+          operation: "stop",
+          sandbox: sandboxLifecycleRecord("sandbox_running", "running", "reserved"),
+        });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    };
+
+    await sandboxRequestPayload({
+      type: "delete",
+      sandboxId: "sandbox_running",
+    });
+    await sandboxRequestPayload({
+      type: "stop",
+      sandboxId: "sandbox_running",
+    });
+
+    expect(requests).toEqual([
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_running", prefer: null },
+      { method: "DELETE", pathname: "/v1/sandboxes/sandbox_running", prefer: "respond-async" },
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_running", prefer: null },
+      { method: "POST", pathname: "/v1/sandboxes/sandbox_running/stop", prefer: "respond-async" },
+    ]);
+  });
+
+  test("rejects terminal stop or delete responses with unsettled active reservations", async () => {
+    expect(() =>
+      assertTerminalSandboxLifecycleSettled(
+        "delete",
+        sandboxLifecycleRecord("sandbox_deleted_reserved", "deleted", "reserved") as never,
+      ),
+    ).toThrow("reservation reservation_sandbox_deleted_reserved is still reserved");
+    expect(() =>
+      assertTerminalSandboxLifecycleSettled(
+        "stop",
+        sandboxLifecycleRecord("sandbox_running_reserved", "running", "reserved") as never,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertTerminalSandboxLifecycleSettled(
+        "delete",
+        sandboxLifecycleRecord("sandbox_deleted_released", "deleted", "released") as never,
+      ),
+    ).not.toThrow();
+  });
+
+  test("surfaces ambiguous delete-while-creating accounting instead of treating cleanup as complete", async () => {
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? "GET";
+      if (method === "GET") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_creating", "creating", "reserved"),
+        });
+      }
+      if (method === "DELETE") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_creating", "deleted", "reserved"),
+        });
+      }
+      if (method === "POST" && url.pathname.endsWith("/stop")) {
+        return Response.json({
+          accepted: true,
+          operation: "stop",
+          sandbox: sandboxLifecycleRecord("sandbox_creating", "deleted", "reserved"),
+        });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    };
+
+    await expect(
+      sandboxRequestPayload({
+        type: "delete",
+        sandboxId: "sandbox_creating",
+      }),
+    ).rejects.toThrow("Cleanup accounting has not settled");
+    await expect(
+      sandboxRequestPayload({
+        type: "stop",
+        sandboxId: "sandbox_creating",
+      }),
+    ).rejects.toThrow("Cleanup accounting has not settled");
+  });
+
+  test("explains failed lifecycle requests while creating reservations are still claimed", async () => {
+    const requests: Array<{ method: string; pathname: string }> = [];
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? "GET";
+      requests.push({ method, pathname: url.pathname });
+      if (method === "GET") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_claimed", "creating", "reserved"),
+        });
+      }
+      if (method === "DELETE") {
+        return Response.json({ error: "fetch failed" }, { status: 500 });
+      }
+      if (method === "POST" && url.pathname.endsWith("/stop")) {
+        return Response.json({ error: "sandbox_not_running" }, { status: 409 });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    };
+
+    await expect(
+      sandboxRequestPayload({
+        type: "delete",
+        sandboxId: "sandbox_claimed",
+      }),
+    ).rejects.toThrow(
+      "Sandbox delete failed while sandbox sandbox_claimed is still creating with active reservation reservation_sandbox_claimed.",
+    );
+    await expect(
+      sandboxRequestPayload({
+        type: "stop",
+        sandboxId: "sandbox_claimed",
+      }),
+    ).rejects.toThrow(
+      "Sandbox stop failed while sandbox sandbox_claimed is still creating with active reservation reservation_sandbox_claimed.",
+    );
+
+    expect(requests).toEqual([
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_claimed" },
+      { method: "DELETE", pathname: "/v1/sandboxes/sandbox_claimed" },
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_claimed" },
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_claimed" },
+      { method: "POST", pathname: "/v1/sandboxes/sandbox_claimed/stop" },
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_claimed" },
+    ]);
+  });
+
   test("selects an implicit connected app status team from active manageable organizations", () => {
     expect(
       implicitConnectedAppStatusTeamIds([
@@ -272,8 +520,8 @@ describe("sandbox integration lease normalization", () => {
     const result = await resolveImplicitConnectedAppStatusConnections(
       {
         listOrganizations: async () => [
-          organization("team_empty", "member", "active"),
-          organization("team_social", "admin", "active"),
+          organization("team_empty", "owner", "active"),
+          organization("team_social", "member", "active"),
           organization("team_unavailable", "member", "active"),
         ],
         integrationConnections: async (input: { teamId?: string; status?: string }) => {
@@ -300,6 +548,49 @@ describe("sandbox integration lease normalization", () => {
       teamId: "team_social",
       connections: [connection("connection_x", "team_social", "x")],
     });
+  });
+
+  test("lists integration connections across active teams when no team is supplied", async () => {
+    const requests: Array<{ pathname: string; search: string }> = [];
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      requests.push({ pathname: url.pathname, search: url.search });
+      if (url.pathname === "/v1/organizations") {
+        return Response.json({
+          organizations: [
+            organization("team_selected", "owner", "active"),
+            organization("team_social", "member", "active"),
+          ],
+        });
+      }
+      if (url.pathname === "/v1/integrations/connections" && url.searchParams.get("teamId") === "team_social") {
+        return Response.json({
+          teamId: "team_social",
+          connections: [connection("connection_x", "team_social", "x")],
+        });
+      }
+      return Response.json({
+        teamId: url.searchParams.get("teamId"),
+        connections: [],
+      });
+    };
+
+    const result = await sandboxRequestPayload({
+      type: "integration_connections",
+      payload: { status: "active" },
+    });
+
+    expect(result).toMatchObject({
+      teamId: "team_social",
+      connections: [connection("connection_x", "team_social", "x")],
+    });
+    expect(requests).toEqual([
+      { pathname: "/v1/organizations", search: "" },
+      { pathname: "/v1/integrations/connections", search: "?teamId=team_selected&status=active" },
+      { pathname: "/v1/integrations/connections", search: "?teamId=team_social&status=active" },
+    ]);
   });
 
   test("validates provider capabilities and strips provider before cloud proxying", () => {
@@ -695,3 +986,29 @@ describe("sandbox mentioned app tool requests", () => {
     });
   });
 });
+
+function sandboxLifecycleRecord(
+  id: string,
+  state: "creating" | "running" | "stopped" | "archived" | "deleted" | "error",
+  reservationStatus: "reserved" | "captured" | "released",
+) {
+  return {
+    id,
+    state,
+    reservation: {
+      id: `reservation_${id}`,
+      status: reservationStatus,
+      reservedUsd: "0.050000",
+      capturedUsd: reservationStatus === "captured" ? "0.010000" : "0.000000",
+      createdAt: "2026-07-06T00:00:00.000Z",
+      updatedAt: "2026-07-06T00:00:00.000Z",
+      mpp: {
+        mode: "simulated_poc",
+        reservationRef: `mpp_${id}`,
+        settlementRail: "tempo_usdce",
+      },
+    },
+    receipts: [],
+    logs: [],
+  };
+}

@@ -1,8 +1,10 @@
 import type {
   BootstrapPayload,
   ChatProvider,
+  CreateSessionRequest,
   Session,
 } from "@openpond/contracts";
+import type { TerminalApprovalPolicy, TerminalSandboxMode } from "./args.js";
 import { apiFetch } from "./connection.js";
 import { activeModelRef, type TerminalModelSelection } from "./formatting.js";
 import { resolveTerminalProjectTarget } from "./projects.js";
@@ -15,6 +17,10 @@ export type TerminalSessionConnection = {
 export type TerminalSessionOptions = TerminalModelSelection & {
   cwd: string;
   project: string | null;
+  headless?: boolean;
+  yes?: boolean;
+  approvalPolicy?: TerminalApprovalPolicy;
+  sandbox?: TerminalSandboxMode;
 };
 
 export type TerminalSessionState = TerminalModelSelection & {
@@ -69,17 +75,34 @@ export async function createTerminalChatSession(
   const target = resolveTerminalProjectTarget(payload, options.project);
   const provider = target?.provider ?? options.provider;
   const sessionOptions = { ...options, provider };
+  const targetSession: Partial<CreateSessionRequest> = target
+    ? target.session
+    : {
+        appId: options.project,
+        appName: null,
+        cwd: options.cwd,
+      };
+  const metadata = {
+    ...(targetSession.metadata ?? {}),
+    ...(options.headless
+      ? {
+          openpondTerminalMode: "one-shot",
+          openpondTerminal: {
+            mode: "one-shot",
+            sandbox: options.sandbox ?? null,
+          },
+        }
+      : {}),
+  };
   const body = {
     provider,
     modelRef: activeModelRef(sessionOptions, payload.providers),
     title: target?.label ? `${target.label} terminal` : "Terminal chat",
-    ...(target
-      ? target.session
-      : {
-          appId: options.project,
-          appName: null,
-          cwd: options.cwd,
-        }),
+    ...targetSession,
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    ...(options.headless && (options.yes || options.approvalPolicy === "never")
+      ? { openPondCommandAccessMode: "full-access" as const }
+      : {}),
   };
   return apiFetch<Session>(connection.server, connection.token, "/v1/sessions", {
     method: "POST",

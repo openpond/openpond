@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/break-filter-js-from-html",
+        "ref": "sha256:59a2641df9bca789642ad4ab3f5790de5ffed6eb4a594ca7846d26422a55c4a8",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "break-filter-js-from-html__5wmRnW2",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

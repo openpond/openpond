@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/constraints-scheduling",
+        "ref": "sha256:757c2b9672df2db1ca879878e6c13dcad20222381694a29920eb452276a69d90",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "constraints-scheduling__JNxWWMy",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

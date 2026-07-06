@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { CloudProject, CloudWorkItem, LocalProject, Session, WorkspaceState } from "@openpond/contracts";
 import {
   Archive,
@@ -24,6 +24,7 @@ import { CloudMoveIcon } from "../common/CloudMoveIcon";
 import { ProjectKindIcon } from "../common/ProjectKindIcon";
 import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
+import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
@@ -163,6 +164,7 @@ export function SidebarSessionRow({
   dragging,
   placeholder,
   running,
+  goalRuntime,
   terminalIndicator,
   onSelect,
   onTogglePin,
@@ -182,6 +184,7 @@ export function SidebarSessionRow({
   dragging?: boolean;
   placeholder?: boolean;
   running?: boolean;
+  goalRuntime?: GoalRuntimeStatus | null;
   terminalIndicator?: SidebarTerminalIndicator | null;
   onSelect: () => void;
   onTogglePin: () => void;
@@ -192,9 +195,41 @@ export function SidebarSessionRow({
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 }) {
-  const rowRunning = running ?? session.status === "active";
+  const goalRunning = goalRuntime?.tone === "active";
+  const rowRunning = goalRunning || (running ?? session.status === "active");
+  const runningLabel = goalRunning && goalRuntime ? sidebarGoalRuntimeTooltip(goalRuntime) : "Running";
+  const rowClassName = [onDockRight ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
+    .filter(Boolean)
+    .join(" ");
+  const rowShellRef = useRef<HTMLDivElement | null>(null);
+  const runningPopoverId = useId();
+  const [runningPopoverStyle, setRunningPopoverStyle] = useState<ProjectLocationsPopoverStyle>({});
+  const updateRunningPopoverPosition = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = rowShellRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const maxLeft = Math.max(12, window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12);
+    const maxTop = Math.max(12, window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE);
+    const left = Math.max(12, Math.min(rect.right + 10, maxLeft));
+    const top = Math.max(12, Math.min(rect.top - 4, maxTop));
+    const nextStyle: ProjectLocationsPopoverStyle = {
+      "--sidebar-project-locations-left": `${Math.round(left)}px`,
+      "--sidebar-project-locations-top": `${Math.round(top)}px`,
+    };
+
+    setRunningPopoverStyle((current) => {
+      if (
+        current["--sidebar-project-locations-left"] === nextStyle["--sidebar-project-locations-left"] &&
+        current["--sidebar-project-locations-top"] === nextStyle["--sidebar-project-locations-top"]
+      ) {
+        return current;
+      }
+      return nextStyle;
+    });
+  }, []);
   const runningDotStyle = useMemo(syncedRunningPulseStyle, []);
-  return (
+  const row = (
     <SidebarInteractiveRow
       selected={selected}
       dataSessionId={session.id}
@@ -202,7 +237,8 @@ export function SidebarSessionRow({
       iconless={hideIcon}
       nested={nested}
       placeholder={placeholder}
-      className={onDockRight ? "actions-3" : undefined}
+      className={rowClassName || undefined}
+      ariaDescribedBy={rowRunning ? runningPopoverId : undefined}
       onSelect={onSelect}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -217,7 +253,11 @@ export function SidebarSessionRow({
         <span className="row-meta-status">
           {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
           {rowRunning ? (
-            <span className="sidebar-running-dot" style={runningDotStyle} data-tooltip="Running" aria-label="Running" />
+            <span
+              className={`sidebar-running-dot${goalRunning ? " goal" : ""}`}
+              style={runningDotStyle}
+              aria-label={runningLabel}
+            />
           ) : (
             <time>{relativeAge(session.updatedAt)}</time>
           )}
@@ -238,6 +278,72 @@ export function SidebarSessionRow({
       </div>
     </SidebarInteractiveRow>
   );
+
+  if (!rowRunning) return row;
+
+  return (
+    <div
+      ref={rowShellRef}
+      className="sidebar-session-row-shell"
+      onFocusCapture={updateRunningPopoverPosition}
+      onPointerEnter={updateRunningPopoverPosition}
+    >
+      {row}
+      <SidebarSessionRunningPopover
+        goalRuntime={goalRunning ? goalRuntime ?? null : null}
+        id={runningPopoverId}
+        label={runningLabel}
+        style={runningPopoverStyle}
+      />
+    </div>
+  );
+}
+
+function sidebarGoalRuntimeTooltip(goalRuntime: GoalRuntimeStatus): string {
+  return goalRuntime.actionLabel;
+}
+
+function SidebarSessionRunningPopover({
+  goalRuntime,
+  id,
+  label,
+  style,
+}: {
+  goalRuntime: GoalRuntimeStatus | null;
+  id: string;
+  label: string;
+  style?: ProjectLocationsPopoverStyle;
+}) {
+  const objective = clampGoalObjectiveLines(goalRuntime?.objective.trim() || "Response in progress", 5);
+  const detail = goalRuntime ? `${goalRuntime.timeLabel} · ${goalRuntime.detail}` : "Chat response running";
+  return (
+    <aside
+      className="sidebar-project-locations-popover sidebar-session-running-popover"
+      id={id}
+      role="tooltip"
+      aria-label={label}
+      style={style}
+    >
+      <div className="sidebar-project-locations-title">{label}</div>
+      <div className="sidebar-project-location-list">
+        <div className={`sidebar-project-location-row ${goalRuntime ? "goal" : "running"}`}>
+          <span className="sidebar-project-location-icon running" aria-hidden="true">
+            <span className={`sidebar-running-popover-dot${goalRuntime ? " goal" : ""}`} />
+          </span>
+          <span className="sidebar-project-location-copy">
+            <span className="sidebar-session-running-objective">{objective}</span>
+            <span className="sidebar-session-running-detail">{detail}</span>
+          </span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function clampGoalObjectiveLines(value: string, maxLines: number): string {
+  const lines = value.replace(/\r\n?/g, "\n").split("\n");
+  if (lines.length <= maxLines) return value;
+  return `${lines.slice(0, maxLines).join("\n")}\n...`;
 }
 
 export function SidebarProjectRow({
@@ -617,7 +723,7 @@ function localProjectLocationRows(
     {
       key: "cloud",
       value: cloudLinked ? cloudProjectStatusValue(project, workspaceState, cloudStatus) : "not in cloud",
-      tone: cloudStatus?.tone ?? (cloudLinked ? "cloud" : "attention"),
+      tone: cloudStatus?.tone ?? "cloud",
       icon: <Cloud size={13} />,
       actionTarget: cloudLinked ? "cloud" : "upload_cloud",
     },
@@ -714,6 +820,7 @@ function SidebarProjectMoreButton({
     <button
       type="button"
       className={`sidebar-row-action ${open ? "active" : ""}`}
+      data-tooltip="More project actions"
       aria-label="More project actions"
       aria-haspopup="menu"
       aria-expanded={open}
@@ -804,6 +911,7 @@ function SidebarInteractiveRow({
   placeholder = false,
   selected,
   ariaExpanded,
+  ariaDescribedBy,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -819,6 +927,7 @@ function SidebarInteractiveRow({
   placeholder?: boolean;
   selected: boolean;
   ariaExpanded?: boolean;
+  ariaDescribedBy?: string;
   onSelect: () => void;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
@@ -844,6 +953,7 @@ function SidebarInteractiveRow({
       role="button"
       tabIndex={0}
       aria-expanded={ariaExpanded}
+      aria-describedby={ariaDescribedBy}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {

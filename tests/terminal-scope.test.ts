@@ -246,6 +246,72 @@ describe("sidebar terminal indicators", () => {
     expect(markup).toContain("sidebar-terminal-indicator running");
     expect(markup).toContain("aria-label=\"Terminal running\"");
   });
+
+  test("renders goal running state with objective tooltip on chat rows", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture(),
+        selected: false,
+        hideIcon: true,
+        running: true,
+        goalRuntime: {
+          objective: "Review command access doc",
+          status: "active",
+          timeUsedSeconds: 12,
+          tokensUsed: null,
+          tokenBudget: null,
+          actionLabel: "Pursuing goal",
+          timeLabel: "12s",
+          label: "Goal 12s",
+          detail: "Active",
+          tooltip: "Goal runtime: 12 seconds. Active. Review command access doc",
+          tone: "active",
+        },
+        onSelect: () => undefined,
+        onTogglePin: () => undefined,
+        onArchive: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("sidebar-row has-running-dot");
+    expect(markup).toContain("sidebar-running-dot goal");
+    expect(markup).toContain("sidebar-project-locations-popover sidebar-session-running-popover");
+    expect(markup).toContain("Pursuing goal");
+    expect(markup).toContain("Review command access doc");
+    expect(markup).not.toContain("Pursuing goal: Review command access doc");
+    expect(markup).not.toContain('data-tooltip="Pursuing goal: Review command access doc"');
+  });
+
+  test("truncates long goal objectives in the running tooltip body", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture(),
+        selected: false,
+        hideIcon: true,
+        running: true,
+        goalRuntime: {
+          objective: ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"].join("\n"),
+          status: "active",
+          timeUsedSeconds: 12,
+          tokensUsed: null,
+          tokenBudget: null,
+          actionLabel: "Pursuing goal",
+          timeLabel: "12s",
+          label: "Goal 12s",
+          detail: "Active",
+          tooltip: "Goal runtime: 12 seconds. Active.",
+          tone: "active",
+        },
+        onSelect: () => undefined,
+        onTogglePin: () => undefined,
+        onArchive: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("line 5");
+    expect(markup).toContain("...");
+    expect(markup).not.toContain("line 6");
+  });
 });
 
 function terminalTab(

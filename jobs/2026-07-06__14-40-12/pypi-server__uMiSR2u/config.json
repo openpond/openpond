@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/pypi-server",
+        "ref": "sha256:0eeffaeb7bc3b8eb617fb9d01772353c647a63dba61b6d96745fcd13f7f1f297",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "pypi-server__uMiSR2u",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

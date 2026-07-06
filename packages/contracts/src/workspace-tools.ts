@@ -62,6 +62,7 @@ export const WorkspaceToolNameSchema = z.enum([
   "sandbox_git_status",
   "sandbox_git_diff",
   "sandbox_git_export_patch",
+  "sandbox_git_apply_patch_local",
   "sandbox_git_branch",
   "sandbox_git_commit",
   "sandbox_git_pull",

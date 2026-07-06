@@ -5,6 +5,7 @@ import {
   CompactSessionRequestSchema,
   InsightsAskRequestSchema,
   PatchInsightRequestSchema,
+  RunSessionCommandRequestSchema,
   type Approval,
   type ChatProvider,
   type CodexStatus,
@@ -63,6 +64,8 @@ import { readProviderSecrets } from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
 import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
+import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
+import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
 import { isCodexHistorySessionId } from "./codex-history.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
@@ -273,6 +276,7 @@ export async function createOpenPondServer(
   } = createSessionStore({
     store,
     defaultSessionCwd,
+    loadAppPreferences,
     appendRuntimeEvent,
   });
 
@@ -308,6 +312,10 @@ export async function createOpenPondServer(
     openPondCacheScope,
     upsertScaffoldApp,
     gitBaseUrlFromContext,
+  });
+  const openPondCommandAccess = createOpenPondCommandAccessService({
+    upsertApproval,
+    appendRuntimeEvent,
   });
 
   const {
@@ -383,6 +391,7 @@ export async function createOpenPondServer(
     workspaceDiffBaseline,
     appendRuntimeEvent,
     executeWorkspaceTool,
+    executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
     loadOpenPondProfileState,
     readOpenPondProfileSkill: readProfileSkill,
@@ -393,6 +402,8 @@ export async function createOpenPondServer(
     browserToolExecutor: browserControlQueue.executor,
     listIntegrationConnections: listSandboxIntegrationConnections,
     loadPersonalizationSoul: async () => (await loadPersonalizationSettings(store, storeDir)).soul,
+    loadAppPreferences,
+    loadProviderSettings: async () => (await localByokRuntimeState()).settings,
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
     appendAssistantText,
@@ -446,11 +457,14 @@ export async function createOpenPondServer(
     store,
     queue: workQueues.localAgentSchedule,
     isClosing: () => closing,
+    loadProfileState: loadOpenPondProfileState,
     appendRuntimeEvent,
     logger,
   });
 
   async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval> {
+    const commandApproval = await openPondCommandAccess.resolveApproval(approvalId, payload);
+    if (commandApproval) return commandApproval;
     const createPipelineApproval = await resolveCreatePipelineApproval(approvalId, payload);
     if (createPipelineApproval) return createPipelineApproval;
     return resolveCodexApproval(approvalId, payload);
@@ -566,7 +580,7 @@ export async function createOpenPondServer(
         events: input.events,
         provider: input.provider,
         model: input.model,
-        streamOpenPondHostedChatTurn: async function* (streamInput) {
+        streamCompactionChatTurn: async function* (streamInput) {
           usageState.recorder = await startProviderRequestUsageRecorder({
             session: input.session,
             turn: null,
@@ -578,13 +592,20 @@ export async function createOpenPondServer(
             upsert: safeUpsertModelUsageRecord,
           });
           try {
-            for await (const delta of streamOpenPondHostedChatTurn(streamInput)) {
+            for await (const delta of streamOpenPondHostedChatTurn({
+              model: streamInput.model,
+              messages: streamInput.messages,
+              requestId: streamInput.requestId,
+              signal: streamInput.signal,
+            })) {
               if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
               if (delta.type === "reasoning_delta" && delta.text) {
                 usageState.recorder.observeDelta({ reasoningText: delta.text });
               }
               if (delta.type === "usage") usageState.recorder.observeDelta({ usage: delta.usage });
-              yield delta;
+              if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
+              if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
+              if (delta.type === "usage") yield { usage: delta.usage, raw: delta.raw };
             }
           } catch (error) {
             await failUsageRecorder(error);
@@ -842,6 +863,26 @@ export async function createOpenPondServer(
       : patchSession(sessionId, payload);
   }
 
+  async function runSessionCommandPayload(sessionId: string, payload: unknown): Promise<unknown> {
+    const input = RunSessionCommandRequestSchema.parse(payload);
+    const session = await getSession(sessionId);
+    if (session.provider === "codex" || isCodexHistorySessionId(session.id)) {
+      throw new Error("OpenPond command access is not available for Codex sessions.");
+    }
+    return runOpenPondDirectCommand({
+      appendRuntimeEvent,
+      executeLocalCommand: openPondCommandAccess.executeCommand,
+      executeWorkspaceTool,
+      getSession,
+      runtimeEventsSnapshot: async () => (await store.snapshot()).events,
+    }, {
+      session,
+      command: input.command,
+      cwd: input.cwd ?? null,
+      timeoutSeconds: input.timeoutSeconds ?? null,
+    });
+  }
+
   async function startGitInstallPayload(): Promise<unknown> {
     const result = startMacOSCommandLineToolsInstall();
     if (result.ok) return result;
@@ -966,6 +1007,7 @@ export async function createOpenPondServer(
       createSession,
       patchSession: patchSessionPayload,
       sendTurn,
+      runSessionCommand: runSessionCommandPayload,
       recordPreflightTurnFailure,
       updateTurnCreatePipeline,
       interruptSessionTurn,

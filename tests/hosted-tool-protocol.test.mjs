@@ -162,6 +162,7 @@ describe("hosted workspace tool protocol", () => {
       { action: "sandbox_git_status", args: {} },
       { action: "sandbox_git_diff", args: {} },
       { action: "sandbox_git_export_patch", args: {} },
+      { action: "sandbox_git_apply_patch_local", args: {} },
       { action: "sandbox_git_branch", args: { branch: "feature/test" } },
       { action: "sandbox_git_commit", args: { message: "Update sandbox files" } },
       { action: "sandbox_git_pull", args: {} },

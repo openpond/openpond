@@ -1,0 +1,95 @@
+{
+    "id": "23b70c63-a335-458e-823b-53f51da045dd",
+    "task_name": "terminal-bench/merge-diff-arc-agi-task",
+    "trial_name": "merge-diff-arc-agi-task__iKPetUC",
+    "trial_uri": "file:///home/glu/Projects/all/openpond/jobs/2026-07-06__14-40-12/merge-diff-arc-agi-task__iKPetUC",
+    "task_id": {
+        "org": "terminal-bench",
+        "name": "merge-diff-arc-agi-task",
+        "ref": "sha256:da91e751106b20ec871117222f6ade094dc4c23e554f01534c7b205982b133f8"
+    },
+    "source": "terminal-bench/terminal-bench-2",
+    "task_checksum": "84ecdb3650d696242fde463050a964f1df2c448dc2d2ae6965fb7458bf95e6b8",
+    "config": {
+        "task": {
+            "path": null,
+            "git_url": null,
+            "git_commit_id": null,
+            "name": "terminal-bench/merge-diff-arc-agi-task",
+            "ref": "sha256:da91e751106b20ec871117222f6ade094dc4c23e554f01534c7b205982b133f8",
+            "overwrite": false,
+            "download_dir": null,
+            "source": "terminal-bench/terminal-bench-2"
+        },
+        "trial_name": "merge-diff-arc-agi-task__iKPetUC",
+        "trials_dir": "jobs/2026-07-06__14-40-12",
+        "install_only": false,
+        "timeout_multiplier": 1.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": null,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": "oracle",
+            "import_path": null,
+            "model_name": null,
+            "n_concurrent": null,
+            "concurrency_group": null,
+            "skills": [],
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "extra_allowed_hosts": [],
+            "kwargs": {},
+            "mcp_servers": []
+        },
+        "environment": {
+            "type": "docker",
+            "import_path": null,
+            "force_build": false,
+            "delete": true,
+            "cpu_enforcement_policy": "auto",
+            "memory_enforcement_policy": "auto",
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "override_tpu": null,
+            "mounts": null,
+            "extra_docker_compose": [],
+            "kwargs": {},
+            "extra_allowed_hosts": []
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "disable": false
+        },
+        "artifacts": [],
+        "extra_instruction_paths": [],
+        "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+    },
+    "agent_info": {
+        "name": "oracle",
+        "version": "1.0.0",
+        "model_info": null
+    },
+    "agent_result": null,
+    "verifier_result": null,
+    "exception_info": {
+        "exception_type": "RuntimeError",
+        "exception_message": "Docker compose command failed for environment merge-diff-arc-agi-task. Command: docker compose --project-name merge-diff-arc-agi-task__ikpetuc__env --project-directory /home/glu/.cache/harbor/tasks/packages/terminal-bench/merge-diff-arc-agi-task/da91e751106b20ec871117222f6ade094dc4c23e554f01534c7b205982b133f8/environment -f /tmp/tmpcr0warja/merge-diff-arc-agi-task__iKPetUC__env-docker-compose-resources.json -f /home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /tmp/tmps65rn4jr/docker-compose-mounts.json up --detach --wait. Return code: 1. Stdout: Error response from daemon: client version 1.43 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version\n. Stderr: None. ",
+        "exception_traceback": "Traceback (most recent call last):\n  File \"/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py\", line 350, in run\n    await self._prepare()\n  File \"/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py\", line 379, in _prepare\n    await self._setup_agent_environment()\n  File \"/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py\", line 1097, in _setup_agent_environment\n    await self._start_agent_environment()\n  File \"/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py\", line 1103, in _start_agent_environment\n    await asyncio.wait_for(\n  File \"/home/glu/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py\", line 520, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py\", line 876, in start\n    await self._run_docker_compose_command([\"up\", \"--detach\", \"--wait\"])\n  File \"/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py\", line 625, in _run_docker_compose_command\n    raise RuntimeError(\nRuntimeError: Docker compose command failed for environment merge-diff-arc-agi-task. Command: docker compose --project-name merge-diff-arc-agi-task__ikpetuc__env --project-directory /home/glu/.cache/harbor/tasks/packages/terminal-bench/merge-diff-arc-agi-task/da91e751106b20ec871117222f6ade094dc4c23e554f01534c7b205982b133f8/environment -f /tmp/tmpcr0warja/merge-diff-arc-agi-task__iKPetUC__env-docker-compose-resources.json -f /home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /tmp/tmps65rn4jr/docker-compose-mounts.json up --detach --wait. Return code: 1. Stdout: Error response from daemon: client version 1.43 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version\n. Stderr: None. \n",
+        "occurred_at": "2026-07-06T14:40:26.970666"
+    },
+    "started_at": "2026-07-06T18:40:26.731483Z",
+    "finished_at": "2026-07-06T18:40:27.556300Z",
+    "environment_setup": {
+        "started_at": "2026-07-06T18:40:26.733655Z",
+        "finished_at": "2026-07-06T18:40:26.970252Z"
+    },
+    "agent_setup": null,
+    "agent_execution": null,
+    "verifier": null,
+    "step_results": null
+}

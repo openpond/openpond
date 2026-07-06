@@ -6,6 +6,7 @@ import {
   listCliCommandDefinitions,
 } from "../src/cli/command-registry";
 import type { Command } from "../src/cli/common";
+import { printHelp } from "../src/cli/help";
 
 describe("CLI command registry", () => {
   test("registers every command with usage, option schema, and handler metadata", () => {
@@ -46,6 +47,45 @@ describe("CLI command registry", () => {
       expect(definition?.optionSchema.cwd).toBe("string");
       expect(definition?.optionSchema.json).toBe("boolean");
     }
+  });
+
+  test("documents the headless chat contract in registry and top-level help", () => {
+    const definition = getCliCommandDefinition("chat");
+    expect(definition?.usage).toContain("--message <text>|--message-file <path>|--stdin");
+    expect(definition?.usage).toContain("--non-interactive");
+    expect(definition?.usage).toContain("--approval-policy <policy>");
+    expect(definition?.usage).toContain("--timeout-sec <n>");
+    expect(definition?.usage).toContain("--max-output-bytes <n>");
+    expect(definition?.usage).toContain("--sandbox <mode>");
+    expect(definition?.optionSchema).toMatchObject({
+      approvalPolicy: "string",
+      maxOutputBytes: "integer",
+      message: "string",
+      messageFile: "string",
+      nonInteractive: "boolean",
+      sandbox: "string",
+      stdin: "boolean",
+      timeoutSec: "integer",
+      yes: "boolean",
+    });
+
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (message?: unknown) => {
+      logs.push(String(message ?? ""));
+    };
+    try {
+      printHelp();
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = logs.join("\n");
+    expect(output).toContain("openpond chat (--message-file <path>|--message <text>|--stdin) --non-interactive");
+    expect(output).toContain("[--approval-policy <policy>]");
+    expect(output).toContain("[--timeout-sec <n>]");
+    expect(output).toContain("[--max-output-bytes <n>]");
+    expect(output).toContain("[--sandbox <mode>]");
   });
 
   test("prints command usage for aliases without invoking the command handler", async () => {

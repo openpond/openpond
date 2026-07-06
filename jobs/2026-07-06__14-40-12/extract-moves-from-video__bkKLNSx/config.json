@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/extract-moves-from-video",
+        "ref": "sha256:e15a249c82f4068634a136c0641a09feed2c12947e051e6b3c48f21699ed27c5",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "extract-moves-from-video__bkKLNSx",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

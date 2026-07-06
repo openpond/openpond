@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/fix-ocaml-gc",
+        "ref": "sha256:23621755f7f4ea84bfc67a18ac20f8e9ae05a057212a1dec1a1da6ffa7586e6a",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "fix-ocaml-gc__Voaqvpm",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

@@ -44,19 +44,25 @@ type CommandSummary = {
 export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGroupSummary {
   const counters = emptyCounters();
   let fallbackLabel = "";
+  const genericLabels: string[] = [];
+  const outcomeClauses: string[] = [];
+  const receiptClauses: string[] = [];
 
   for (const activity of activities) {
     if (!fallbackLabel && activity.label) fallbackLabel = activity.label;
+    addOutcomeClause(outcomeClauses, activity.label);
+    addReceiptClause(receiptClauses, activity);
     if (activity.kind === "command" && activity.content) {
       applyCommandSummary(counters, summarizeCommandActivity(activity.content));
       continue;
     }
-    applyLabeledActivity(counters, activity);
+    if (!applyLabeledActivity(counters, activity)) addGenericLabel(genericLabels, activity.label);
   }
 
-  const clauses = primaryClauses(counters);
+  const clauses = [...primaryClauses(counters), ...outcomeClauses, ...receiptClauses];
   const runClause = counters.runCount > 0 ? ranClause(counters.runCount) : "";
-  const text = formatActivityClauses(clauses, runClause) || fallbackLabel || "Ran command";
+  const genericSummary = formatGenericLabels(genericLabels);
+  const text = formatActivityClauses(clauses, runClause) || genericSummary || fallbackLabel || "Ran command";
 
   return {
     kind: summaryKind(counters, clauses, runClause),
@@ -113,43 +119,45 @@ function applyCommandSummary(counters: ActivityCounters, summary: CommandSummary
   if (summary.countedAsRun) counters.runCount += 1;
 }
 
-function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem): void {
+function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem): boolean {
   const label = activity.label.toLowerCase();
   if (activity.controlKind) {
     counters.controlCount += 1;
-    return;
+    return true;
   }
   if (label === "reasoning") {
     counters.reasoningCount += 1;
-    return;
+    return true;
   }
   if (label.includes("approval")) {
     counters.approvals += 1;
-    return;
+    return true;
   }
   if (label.includes("image")) {
     counters.imageCount += 1;
-    return;
+    return true;
   }
   if (label.includes("web")) {
     counters.webSearches += 1;
-    return;
+    return true;
   }
   if (/\b(searching|searched)\b/.test(label)) {
     counters.searchedCode += 1;
-    return;
+    return true;
   }
   if (/\b(listing|listed)\b/.test(label)) {
     counters.listedFiles += 1;
-    return;
+    return true;
   }
   if (/\b(reading|read)\b/.test(label)) {
     counters.readFileCount += 1;
-    return;
+    return true;
   }
   if (/\b(editing|edited|writing|wrote|deleting|deleted|moving|moved|uploading|uploaded|creating|created)\b/.test(label)) {
     counters.editCount += 1;
+    return true;
   }
+  return false;
 }
 
 function summarizeCommandActivity(command: string): CommandSummary {
@@ -272,6 +280,70 @@ function formatActivityClauses(primary: string[], runClause: string): string {
   if (primary.length === 0) return runClause ? capitalize(runClause) : "";
   if (runClause) return `${capitalize(formatList(primary))}, ${runClause}`;
   return capitalize(formatList(primary));
+}
+
+function addGenericLabel(labels: string[], label: string): void {
+  const normalized = label.trim();
+  if (!normalized) return;
+  if (labels.includes(normalized)) return;
+  labels.push(normalized);
+}
+
+function addOutcomeClause(clauses: string[], label: string): void {
+  const clause = outcomeClauseForLabel(label);
+  if (!clause || clauses.includes(clause)) return;
+  clauses.push(clause);
+}
+
+function addReceiptClause(clauses: string[], activity: ActivityItem): void {
+  const receipt = activity.receipt;
+  if (!receipt) return;
+  const clause = `${receipt.status} receipt ${shortId(receipt.id)} ${formatUsd(receipt.totalUsd)}`;
+  if (clauses.includes(clause)) return;
+  clauses.push(clause);
+}
+
+function outcomeClauseForLabel(label: string): string | null {
+  switch (label.trim().toLowerCase()) {
+    case "applied locally":
+      return "applied locally";
+    case "apply locally failed":
+      return "apply locally failed";
+    case "exported sandbox patch":
+      return "exported patch";
+    case "patch export failed":
+      return "patch export failed";
+    case "preserved sandbox source":
+      return "preserved sandbox source";
+    case "preserve failed":
+      return "preserve failed";
+    case "stopped sandbox":
+      return "stopped sandbox";
+    case "sandbox stop failed":
+      return "sandbox stop failed";
+    default:
+      return null;
+  }
+}
+
+function formatUsd(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith("$") ? trimmed : `$${trimmed}`;
+}
+
+function shortId(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 14) return normalized;
+  return `${normalized.slice(0, 6)}...${normalized.slice(-4)}`;
+}
+
+function formatGenericLabels(labels: string[]): string {
+  if (labels.length === 0) return "";
+  return capitalize(formatList(labels.map(sentenceFragment)));
+}
+
+function sentenceFragment(value: string): string {
+  return value ? `${value[0]!.toLowerCase()}${value.slice(1)}` : value;
 }
 
 function formatList(values: string[]): string {

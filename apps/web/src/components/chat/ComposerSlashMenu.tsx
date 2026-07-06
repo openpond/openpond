@@ -7,7 +7,10 @@ import {
   composerActionCatalogHint,
   composerActionCatalogLabel,
 } from "../../lib/composer-action-catalog";
-import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
+import {
+  composerSlashCommandDetail,
+  type ComposerSlashCommand,
+} from "../../lib/composer-slash-commands";
 
 export type SlashMenuItem =
   | { kind: "command"; command: ComposerSlashCommand }
@@ -31,7 +34,7 @@ function slashMenuItemLabel(item: SlashMenuItem): string {
 }
 
 function slashMenuItemDetail(item: SlashMenuItem): string {
-  if (item.kind === "command") return item.command.description;
+  if (item.kind === "command") return composerSlashCommandDetail(item.command);
   if (item.kind === "app-context") {
     return `Planning context${item.app.description ? `: ${item.app.description}` : item.app.gitRepo ? `: ${item.app.gitRepo}` : ""}`;
   }

@@ -5,6 +5,7 @@ import type {
   OpenPondSandboxClient,
   OpenPondOrganization,
   SandboxCreateInput,
+  SandboxRecord,
   SandboxExecInput,
   SandboxFileDownloadInput,
   SandboxForkInput,
@@ -333,13 +334,19 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     const projectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
     const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
     const status = normalizeIntegrationStatusFilter(input.status);
+    const query = {
+      ...(projectId ? { projectId } : {}),
+      ...(agentId ? { agentId } : {}),
+      status: status ?? "all",
+    };
+    const result = teamId
+      ? await client.integrationConnections({
+        teamId,
+        ...query,
+      })
+      : await resolveImplicitConnectedAppStatusConnections(client, query);
     return {
-      ...(await client.integrationConnections({
-        ...(teamId ? { teamId } : {}),
-        ...(projectId ? { projectId } : {}),
-        ...(agentId ? { agentId } : {}),
-        ...(status ? { status } : {}),
-      })),
+      ...result,
       account,
     };
   }
@@ -819,11 +826,15 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return { sandbox: await client.get(action.sandboxId), account };
   }
   if (action.type === "delete") {
+    const options = await sandboxLifecycleRequestOptions(client, action.sandboxId, {
+      failOnUnpreservedChanges: action.failOnUnpreservedChanges,
+    });
+    const sandbox = await client.delete(action.sandboxId, options).catch((error) =>
+      throwSandboxLifecycleRequestFailure("delete", client, action.sandboxId, error)
+    );
+    assertTerminalSandboxLifecycleSettled("delete", sandbox);
     return {
-      sandbox: await client.delete(action.sandboxId, {
-        failOnUnpreservedChanges: action.failOnUnpreservedChanges,
-        respondAsync: true,
-      }),
+      sandbox,
       account,
     };
   }
@@ -987,11 +998,15 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     };
   }
   if (action.type === "stop") {
+    const options = await sandboxLifecycleRequestOptions(client, action.sandboxId, {
+      failOnUnpreservedChanges: action.failOnUnpreservedChanges,
+    });
+    const result = await client.stop(action.sandboxId, options).catch((error) =>
+      throwSandboxLifecycleRequestFailure("stop", client, action.sandboxId, error)
+    );
+    assertTerminalSandboxLifecycleSettled("stop", result.sandbox);
     return {
-      ...(await client.stop(action.sandboxId, {
-        failOnUnpreservedChanges: action.failOnUnpreservedChanges,
-        respondAsync: true,
-      })),
+      ...result,
       account,
     };
   }
@@ -1201,6 +1216,67 @@ export async function listSandboxIntegrationConnections(input: {
   });
 }
 
+type SandboxLifecycleRequestOptions = {
+  failOnUnpreservedChanges?: boolean;
+  respondAsync?: boolean;
+};
+
+async function sandboxLifecycleRequestOptions(
+  client: OpenPondSandboxClient,
+  sandboxId: string,
+  input: { failOnUnpreservedChanges?: boolean } = {},
+): Promise<SandboxLifecycleRequestOptions> {
+  const respondAsync = await client.get(sandboxId)
+    .then((sandbox) => !sandboxLifecycleRequiresSynchronousAccounting(sandbox))
+    .catch(() => true);
+  return {
+    failOnUnpreservedChanges: input.failOnUnpreservedChanges,
+    ...(respondAsync ? { respondAsync: true } : {}),
+  };
+}
+
+export function sandboxLifecycleRequiresSynchronousAccounting(
+  sandbox: Pick<SandboxRecord, "state" | "reservation">,
+): boolean {
+  return sandbox.state === "creating" && sandbox.reservation.status === "reserved";
+}
+
+export function assertTerminalSandboxLifecycleSettled(
+  operation: "delete" | "stop",
+  sandbox: Pick<SandboxRecord, "id" | "state" | "reservation">,
+): void {
+  if (!terminalSandboxLifecycleStates.has(sandbox.state)) return;
+  if (sandbox.reservation.status !== "reserved") return;
+  throw new Error(
+    `Sandbox ${operation} reached ${sandbox.state}, but reservation ${sandbox.reservation.id} is still reserved. ` +
+    "Cleanup accounting has not settled; retry status before treating cleanup as complete.",
+  );
+}
+
+async function throwSandboxLifecycleRequestFailure(
+  operation: "delete" | "stop",
+  client: OpenPondSandboxClient,
+  sandboxId: string,
+  error: unknown,
+): Promise<never> {
+  const latest = await client.get(sandboxId).catch(() => null);
+  if (latest && sandboxLifecycleRequiresSynchronousAccounting(latest)) {
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Sandbox ${operation} failed while sandbox ${sandboxId} is still creating with active reservation ${latest.reservation.id}. ` +
+      `Cleanup accounting has not settled; retry status before treating cleanup as complete. Original error: ${originalMessage}`,
+    );
+  }
+  throw error instanceof Error ? error : new Error(String(error));
+}
+
+const terminalSandboxLifecycleStates = new Set<SandboxRecord["state"]>([
+  "stopped",
+  "archived",
+  "deleted",
+  "error",
+]);
+
 type IntegrationConnectionsResult = Awaited<ReturnType<OpenPondSandboxClient["integrationConnections"]>>;
 type ConnectedAppStatusConnectionsResult = {
   teamId: string | null;
@@ -1241,11 +1317,23 @@ export async function resolveImplicitConnectedAppStatusConnections(
   const successfulResults = successfulConnectedAppStatusConnectionResults(results);
   return {
     teamId:
+      connectedAppStatusTeamIdWithConnections(successfulResults) ??
       fallbackTeamId ??
       successfulResults.find((result) => result.teamId.trim())?.teamId.trim() ??
       null,
     connections: mergeConnectedAppStatusConnectionResults(successfulResults),
   };
+}
+
+function connectedAppStatusTeamIdWithConnections(
+  results: Array<{ teamId?: string | null; connections?: SandboxIntegrationConnection[] | null }>,
+): string | null {
+  for (const result of results) {
+    if ((result.connections?.length ?? 0) === 0) continue;
+    const teamId = result.teamId?.trim();
+    if (teamId) return teamId;
+  }
+  return null;
 }
 
 export function mergeConnectedAppStatusConnectionResults(
@@ -1574,6 +1662,15 @@ export function normalizeCreateInput(payload: unknown): SandboxCreateInput {
     (out as Record<string, unknown>).agentId = input.agentId.trim();
   }
   if (typeof input.command === "string" && input.command.trim()) out.command = input.command.trim();
+  if (typeof input.runtimeProfileId === "string" && input.runtimeProfileId.trim()) {
+    (out as Record<string, unknown>).runtimeProfileId = input.runtimeProfileId.trim();
+  }
+  if (input.workloadSource && typeof input.workloadSource === "object" && !Array.isArray(input.workloadSource)) {
+    (out as Record<string, unknown>).workloadSource = input.workloadSource;
+  }
+  if (input.sourceArchive && typeof input.sourceArchive === "object" && !Array.isArray(input.sourceArchive)) {
+    (out as Record<string, unknown>).sourceArchive = input.sourceArchive;
+  }
   if (input.visibility === "private" || input.visibility === "team") {
     out.visibility = input.visibility;
   }

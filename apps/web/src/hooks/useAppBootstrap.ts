@@ -5,6 +5,7 @@ import type {
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
+  OpenPondCommandAccessMode,
   RuntimeEvent,
   Session,
   SidebarAppPreferences,
@@ -16,6 +17,10 @@ import {
   codexPreferencesWithLocalOverrides,
   storedCodexPreferenceSyncPatch,
 } from "../lib/codex-preferences";
+import {
+  openPondCommandAccessPreferencesWithLocalOverride,
+  storedOpenPondCommandAccessPreferenceSyncPatch,
+} from "../lib/openpond-command-access-preferences";
 import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
 import { isSameConnection } from "../lib/layout";
 import type { OpenPondOrganization } from "../lib/organization-types";
@@ -53,6 +58,7 @@ export function useAppBootstrap(params: {
   setDraftProvider: SetState<ChatProvider>;
   setCodexPermissionMode: SetState<CodexPermissionMode>;
   setCodexReasoningEffort: SetState<CodexReasoningEffort>;
+  setOpenPondCommandAccessMode: SetState<OpenPondCommandAccessMode>;
   setError: SetState<string | null>;
   setSelectedAppId: SetState<string | null>;
   setSelectedProjectId: SetState<string | null>;
@@ -63,6 +69,7 @@ export function useAppBootstrap(params: {
     setDraftProvider,
     setCodexPermissionMode,
     setCodexReasoningEffort,
+    setOpenPondCommandAccessMode,
     setError,
     setSelectedAppId,
     setSelectedProjectId,
@@ -83,6 +90,7 @@ export function useAppBootstrap(params: {
   const codexHistorySessionsRef = useRef<Session[]>([]);
   const bootstrapServerIdRef = useRef<string | null>(null);
   const codexPreferenceSyncKeyRef = useRef<string | null>(null);
+  const openPondCommandAccessPreferenceSyncKeyRef = useRef<string | null>(null);
   const defaultTeamSyncKeyRef = useRef<string | null>(null);
   const latestDefaultTeamIdRef = useRef("");
   const startupReadyRef = useRef(false);
@@ -169,11 +177,17 @@ export function useAppBootstrap(params: {
         return next;
       });
       setCodexHistorySessionsState((current) => {
-        const next = mergeSessionListPreservingLocalSidebarState(
-          current,
-          payload.codexHistorySessions ?? [],
-          codexHistorySessionSidebarChangeTimesRef.current,
-        );
+        const next = sameServer
+          ? mergeBootstrapSessionListPreservingLocalState(
+              current,
+              payload.codexHistorySessions ?? [],
+              codexHistorySessionSidebarChangeTimesRef.current,
+            )
+          : mergeSessionListPreservingLocalSidebarState(
+              current,
+              payload.codexHistorySessions ?? [],
+              codexHistorySessionSidebarChangeTimesRef.current,
+            );
         codexHistorySessionsRef.current = next;
         return next;
       });
@@ -244,6 +258,15 @@ export function useAppBootstrap(params: {
   ]);
 
   useEffect(() => {
+    setOpenPondCommandAccessMode(
+      openPondCommandAccessPreferencesWithLocalOverride(bootstrap?.preferences).openPondCommandAccessMode,
+    );
+  }, [
+    bootstrap?.preferences.openPondCommandAccessMode,
+    setOpenPondCommandAccessMode,
+  ]);
+
+  useEffect(() => {
     if (!connection || !bootstrap) return;
     const patch = storedCodexPreferenceSyncPatch(bootstrap.preferences);
     const syncKey = JSON.stringify(patch);
@@ -265,6 +288,31 @@ export function useAppBootstrap(params: {
     bootstrap,
     bootstrap?.preferences.codexPermissionMode,
     bootstrap?.preferences.codexReasoningEffort,
+    connection,
+    setError,
+  ]);
+
+  useEffect(() => {
+    if (!connection || !bootstrap) return;
+    const patch = storedOpenPondCommandAccessPreferenceSyncPatch(bootstrap.preferences);
+    const syncKey = JSON.stringify(patch);
+    if (syncKey === "{}") {
+      openPondCommandAccessPreferenceSyncKeyRef.current = null;
+      return;
+    }
+    if (openPondCommandAccessPreferenceSyncKeyRef.current === syncKey) return;
+    openPondCommandAccessPreferenceSyncKeyRef.current = syncKey;
+    void api
+      .savePreferences(connection, patch)
+      .then(applyBootstrapPayload)
+      .catch((syncError) => {
+        openPondCommandAccessPreferenceSyncKeyRef.current = null;
+        setError(syncError instanceof Error ? syncError.message : String(syncError));
+      });
+  }, [
+    applyBootstrapPayload,
+    bootstrap,
+    bootstrap?.preferences.openPondCommandAccessMode,
     connection,
     setError,
   ]);

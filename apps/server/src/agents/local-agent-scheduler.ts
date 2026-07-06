@@ -8,12 +8,12 @@ import type {
   LocalAgentSchedule,
   LocalAgentScheduleRun,
   LocalAgentSchedulesResponse,
+  OpenPondProfileState,
   PatchLocalAgentScheduleRequest,
   RuntimeEvent,
 } from "@openpond/contracts";
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import type { SqliteStore } from "../store/store.js";
-import { listLocalProjects } from "../workspace/local-projects.js";
 import { event, now } from "../utils.js";
 
 const execFileAsync = promisify(execFile);
@@ -63,10 +63,17 @@ type AgentManifestPayload = {
   schedules: AgentScheduleDefinition[];
 };
 
+type AgentScheduleSource = {
+  id: string;
+  name: string;
+  agentRootPath: string;
+};
+
 export function createLocalAgentScheduleLoop(options: {
   store: SqliteStore;
   queue: BackgroundWorkerQueue;
   isClosing: () => boolean;
+  loadProfileState?: () => Promise<OpenPondProfileState>;
   appendRuntimeEvent?: (runtimeEvent: RuntimeEvent) => Promise<void>;
   logger?: LocalAgentSchedulerLogger;
   tickMs?: number;
@@ -100,20 +107,20 @@ export function createLocalAgentScheduleLoop(options: {
   }
 
   async function reconcile(): Promise<void> {
-    const projects = await listLocalProjects(options.store);
-    const agentProjects = projects.filter((project) => project.agentSdk?.rootPath);
-    for (const project of agentProjects) {
-      const agentRootPath = project.agentSdk?.rootPath;
-      if (!agentRootPath) continue;
+    const sources = await listProfileScheduleSources(options.loadProfileState, options.logger);
+    if (!sources) return;
+    const activeSourceIds = new Set<string>();
+    for (const source of sources) {
+      activeSourceIds.add(source.id);
       try {
-        const manifest = await inspectAgentProject(agentRootPath);
+        const manifest = await inspectAgentProject(source.agentRootPath);
         const existingSchedules = await options.store.listLocalAgentSchedules({
-          localProjectId: project.id,
+          localProjectId: source.id,
         });
         const existingById = new Map(existingSchedules.map((schedule) => [schedule.id, schedule]));
         const seenIds: string[] = [];
         for (const definition of manifest.schedules) {
-          const id = localScheduleId(project.id, definition.name);
+          const id = localScheduleId(source.id, definition.name);
           seenIds.push(id);
           const existing = existingById.get(id) ?? null;
           const timestamp = now();
@@ -128,9 +135,9 @@ export function createLocalAgentScheduleLoop(options: {
           });
           const schedule: LocalAgentSchedule = {
             id,
-            localProjectId: project.id,
-            localProjectName: project.name,
-            agentRootPath,
+            localProjectId: source.id,
+            localProjectName: source.name,
+            agentRootPath: source.agentRootPath,
             agentName: manifest.projectName,
             scheduleName: definition.name,
             scheduleType: definition.scheduleType,
@@ -152,16 +159,17 @@ export function createLocalAgentScheduleLoop(options: {
           };
           await options.store.upsertLocalAgentSchedule(schedule);
         }
-        await options.store.deleteLocalAgentSchedulesNotIn(project.id, seenIds);
+        await options.store.deleteLocalAgentSchedulesNotIn(source.id, seenIds);
       } catch (error) {
         options.logger?.warn("local agent schedule reconcile failed", {
-          projectId: project.id,
-          projectName: project.name,
-          agentRootPath,
+          sourceId: source.id,
+          sourceName: source.name,
+          agentRootPath: source.agentRootPath,
           error: errorText(error),
         });
       }
     }
+    await deleteSchedulesForInactiveSources(options.store, activeSourceIds);
     lastSyncAt = now();
     lastReconcileAtMs = Date.now();
   }
@@ -390,6 +398,64 @@ export function createLocalAgentScheduleLoop(options: {
     },
     status: schedulerStatus,
   };
+}
+
+async function listProfileScheduleSources(
+  loadProfileState: (() => Promise<OpenPondProfileState>) | undefined,
+  logger: LocalAgentSchedulerLogger | undefined,
+): Promise<AgentScheduleSource[] | null> {
+  if (!loadProfileState) return [];
+  try {
+    const profile = await loadProfileState();
+    if (profile.mode !== "local") return [];
+    if (profile.error) {
+      logger?.warn("local agent schedule profile source scan skipped", { error: profile.error });
+      return null;
+    }
+    if (!profile.repoPath || !profile.sourcePath) return [];
+    return profile.agents
+      .filter((agent) => agent.enabled)
+      .map((agent) => ({
+        id: profileScheduleSourceId(profile, agent.id),
+        name: agent.id,
+        agentRootPath: profileAgentRootPath(profile.sourcePath!, agent),
+      }));
+  } catch (error) {
+    logger?.warn("local agent schedule profile source scan failed", { error: errorText(error) });
+    return null;
+  }
+}
+
+function profileScheduleSourceId(profile: OpenPondProfileState, agentId: string): string {
+  return `profile_${stableHash({
+    repoPath: profile.repoPath,
+    profile: profile.activeProfile,
+    agentId,
+  }).slice(0, 20)}`;
+}
+
+function profileAgentRootPath(
+  profileSourcePath: string,
+  agent: OpenPondProfileState["agents"][number],
+): string {
+  return agent.id === "default"
+    ? profileSourcePath
+    : path.resolve(profileSourcePath, agent.path);
+}
+
+async function deleteSchedulesForInactiveSources(
+  store: SqliteStore,
+  activeSourceIds: Set<string>,
+): Promise<void> {
+  const schedules = await store.listLocalAgentSchedules();
+  const inactiveSourceIds = new Set(
+    schedules
+      .map((schedule) => schedule.localProjectId)
+      .filter((localProjectId) => !activeSourceIds.has(localProjectId)),
+  );
+  for (const localProjectId of inactiveSourceIds) {
+    await store.deleteLocalAgentSchedulesNotIn(localProjectId, []);
+  }
 }
 
 async function inspectAgentProject(agentRootPath: string): Promise<AgentManifestPayload> {

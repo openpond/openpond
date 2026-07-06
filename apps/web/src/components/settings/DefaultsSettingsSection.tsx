@@ -19,6 +19,7 @@ type DefaultsSettingsSectionProps = {
   defaultBranchPrefix: string;
   defaultNewProjectDirectory: string;
   goalStorageLocation: BootstrapPayload["preferences"]["goalStorageLocation"];
+  contextCompactionAutoEnabled: boolean;
   insightsEnabled: boolean;
   insightsUseDefaultModel: boolean;
   insightsProvider: ChatProvider;
@@ -31,6 +32,7 @@ type DefaultsSettingsSectionProps = {
   saveDefaults: (event: FormEvent<HTMLFormElement>) => void;
   changeInsightsProvider: (provider: ChatProvider) => void;
   setAdvancedWorkspaceControls: (value: boolean) => void;
+  setContextCompactionAutoEnabled: (value: boolean) => void;
   setDefaultBranchPrefix: (value: string) => void;
   setDefaultNewProjectDirectory: (value: string) => void;
   setGoalStorageLocation: (value: BootstrapPayload["preferences"]["goalStorageLocation"]) => void;
@@ -45,6 +47,7 @@ export function DefaultsSettingsSection({
   defaultBranchPrefix,
   defaultNewProjectDirectory,
   goalStorageLocation,
+  contextCompactionAutoEnabled,
   insightsEnabled,
   insightsUseDefaultModel,
   insightsProvider,
@@ -57,6 +60,7 @@ export function DefaultsSettingsSection({
   saveDefaults,
   changeInsightsProvider,
   setAdvancedWorkspaceControls,
+  setContextCompactionAutoEnabled,
   setDefaultBranchPrefix,
   setDefaultNewProjectDirectory,
   setGoalStorageLocation,
@@ -156,6 +160,22 @@ export function DefaultsSettingsSection({
           </label>
         </div>
         <div className="account-list-heading">
+          <span>Context</span>
+          <small>Controls automatic compaction for long OpenPond and BYOK chats</small>
+        </div>
+        <label className="settings-check-row">
+          <input
+            type="checkbox"
+            checked={contextCompactionAutoEnabled}
+            disabled={saving}
+            onChange={(event) => setContextCompactionAutoEnabled(event.target.checked)}
+          />
+          <span>
+            <strong>Auto compact long chats</strong>
+            <small>Summarize older turns at 85% context before the selected model runs out. The transcript stays visible.</small>
+          </span>
+        </label>
+        <div className="account-list-heading">
           <span>Insights</span>
           <small>Controls the background Insights agent</small>
         </div>
@@ -244,6 +264,7 @@ export function DefaultsSettingsSection({
               defaultNewProjectDirectory.trim() === preferences.defaultNewProjectDirectory &&
               goalStorageLocation === preferences.goalStorageLocation &&
               advancedWorkspaceControls === preferences.advancedWorkspaceControls &&
+              contextCompactionAutoEnabled === preferences.contextCompaction.autoEnabled &&
               insightsEnabled === preferences.insightsEnabled &&
               insightEvidenceSourcesEqual(insightsEvidenceSources, preferences.insightsEvidenceSources) &&
               insightModelSettingsEqual({

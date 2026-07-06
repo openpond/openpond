@@ -181,12 +181,30 @@
 
 .profile-commit-dialog,
 .profile-path-dialog,
+.profile-summary-dialog,
 .profile-sync-dialog {
   width: min(460px, calc(100vw - 34px));
 }
 
+.profile-summary-dialog {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(720px, calc(100vw - 34px));
+  max-height: calc(100vh - 34px);
+  overflow: hidden;
+}
+
 .profile-sync-dialog {
   width: min(520px, calc(100vw - 34px));
+}
+
+.profile-summary-dialog .profile-summary-card {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: #484848 transparent;
+}
+
+.profile-summary-dialog .profile-summary-panel {
+  border-bottom: 0;
 }
 
 .profile-dialog-summary {
@@ -502,7 +520,7 @@
 .profile-agent-table-head,
 .profile-agent-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.35fr) minmax(90px, 0.55fr) minmax(86px, 0.45fr) minmax(86px, 0.45fr);
+  grid-template-columns: minmax(180px, 1.2fr) minmax(90px, 0.48fr) minmax(86px, 0.4fr) minmax(132px, 0.62fr);
   align-items: center;
   justify-content: stretch;
 }
@@ -570,6 +588,43 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.product-row .profile-schedule-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-schedule-expression {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #a9a9a9;
+  font-size: 12px;
+  text-align: right;
+}
+
+.product-row .profile-schedule-controls {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.profile-schedule-button {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.profile-agent-list-note {
+  padding: 8px 16px 12px;
 }
 
 .profile-agent-identity {

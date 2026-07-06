@@ -4,10 +4,12 @@ import {
   BootstrapPayloadSchema,
   ContextUsageSnapshotSchema,
   CompactSessionRequestSchema,
+  AppPreferencesSchema,
   CloudWorkItemDetailSchema,
   CreateCloudWorkItemRequestSchema,
   CreatePipelineRequestSchema,
   CreateSessionRequestSchema,
+  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   ChatProviderSchema,
   ChatModelRefSchema,
   ModelUsageRecordSchema,
@@ -16,6 +18,7 @@ import {
   RuntimeEventNameSchema,
   SendCloudWorkItemMessageRequestSchema,
   SendTurnRequestSchema,
+  SessionSchema,
   TurnSchema,
   UpdateTurnCreatePipelineRequestSchema,
   WorkflowCaptureArtifactSchema,
@@ -25,6 +28,32 @@ import {
 describe("contracts", () => {
   test("session and turn requests validate defaults", () => {
     assert.equal(CreateSessionRequestSchema.parse({}).provider, "openpond");
+    assert.equal(
+      AppPreferencesSchema.parse({}).openPondCommandAccessMode,
+      DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    );
+    assert.equal(
+      CreateSessionRequestSchema.parse({ openPondCommandAccessMode: "full-access" }).openPondCommandAccessMode,
+      "full-access",
+    );
+    assert.equal(
+      SessionSchema.parse({
+        id: "session_1",
+        provider: "openpond",
+        title: "Legacy session",
+        appId: null,
+        appName: null,
+        cwd: "/tmp/openpond",
+        codexThreadId: null,
+        createdAt: "2026-07-01T10:00:00.000Z",
+        updatedAt: "2026-07-01T10:00:00.000Z",
+        status: "idle",
+        pinned: false,
+        archived: false,
+        order: 0,
+      }).openPondCommandAccessMode,
+      DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    );
     const turn = SendTurnRequestSchema.parse({ prompt: "hello. Do not use emojis." });
     assert.equal(turn.approvalPolicy, "on-request");
     assert.equal(turn.sandbox, "workspace-write");
@@ -169,6 +198,28 @@ describe("contracts", () => {
       50
     );
     assert.equal(CompactSessionRequestSchema.parse({}).reason, "manual");
+  });
+
+  test("context compaction preferences default on and preserve saved off", () => {
+    assert.deepEqual(AppPreferencesSchema.parse({}).contextCompaction, {
+      autoEnabled: true,
+      triggerPercent: 85,
+      summaryModel: "same_model",
+    });
+    assert.deepEqual(
+      AppPreferencesSchema.parse({
+        contextCompaction: {
+          autoEnabled: false,
+          triggerPercent: 90,
+          summaryModel: "same_model",
+        },
+      }).contextCompaction,
+      {
+        autoEnabled: false,
+        triggerPercent: 90,
+        summaryModel: "same_model",
+      },
+    );
   });
 
   test("v1 placeholder panes cover workspace surfaces", () => {

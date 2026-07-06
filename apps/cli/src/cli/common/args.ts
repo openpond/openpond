@@ -7,6 +7,15 @@ export type ParsedCliOptions = Record<string, string | boolean> & {
   [CLI_OPTION_VALUES]?: Record<string, string[]>;
 };
 
+export class CliUsageError extends Error {
+  readonly exitCode = 2;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CliUsageError";
+  }
+}
+
 type CliOptionValueKind = "boolean" | "string" | "number" | "integer" | "json";
 
 const CLI_SHORT_OPTION_ALIASES: Record<string, string> = {
@@ -22,6 +31,7 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   account: "string",
   agentId: "string",
   apiBaseUrl: "string",
+  approvalPolicy: "string",
   async: "boolean",
   baseUrl: "string",
   baseurl: "string",
@@ -56,10 +66,14 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   idleTimeoutSeconds: "integer",
   json: "boolean",
   limit: "integer",
+  maxOutputBytes: "integer",
   maxDurationSeconds: "integer",
   maxEntries: "integer",
   maxResults: "integer",
   memoryGb: "number",
+  message: "string",
+  messageFile: "string",
+  nonInteractive: "boolean",
   path: "string",
   port: "integer",
   profile: "string",
@@ -72,16 +86,20 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   setupTimeoutSeconds: "integer",
   since: "integer",
   sourceCheckDispatch: "string",
+  stdin: "boolean",
   targetProjectId: "string",
   teamId: "string",
   timeout: "integer",
   timeoutMs: "integer",
+  timeoutSec: "integer",
   timeoutSeconds: "integer",
   tui: "boolean",
   version: "boolean",
   workItemId: "string",
   yes: "boolean",
 };
+
+const CLI_POSITIVE_INTEGER_OPTIONS = new Set(["maxOutputBytes", "timeoutSec"]);
 
 export function parseArgs(argv: string[]): {
   command: Command;
@@ -154,11 +172,11 @@ function parseShortOptionToken(
     for (const alias of aliasBody) {
       const key = CLI_SHORT_OPTION_ALIASES[alias];
       if (!key) {
-        throw new Error(`unknown short option -${alias}`);
+        throw new CliUsageError(`unknown short option -${alias}`);
       }
       const kind = CLI_TYPED_OPTIONS[key];
       if (kind !== "boolean") {
-        throw new Error(`short option -${alias} requires its own value`);
+        throw new CliUsageError(`short option -${alias} requires its own value`);
       }
       setParsedOption(options, optionValues, key, "true");
     }
@@ -167,7 +185,7 @@ function parseShortOptionToken(
 
   const key = CLI_SHORT_OPTION_ALIASES[aliasBody];
   if (!key) {
-    throw new Error(`unknown short option -${aliasBody}`);
+    throw new CliUsageError(`unknown short option -${aliasBody}`);
   }
   const value = inlineValue ?? readOptionValue(args, key);
   setParsedOption(options, optionValues, key, value);
@@ -183,7 +201,7 @@ function readOptionValue(args: string[], key: string): string {
     const next = args.shift();
     if (next === undefined || (isOptionLike(next) && !isNegativeNumber(next))) {
       if (next !== undefined) args.unshift(next);
-      throw new Error(`${cliOptionLabel(key)} must be ${optionKindPhrase(kind)}`);
+      throw new CliUsageError(`${cliOptionLabel(key)} must be ${optionKindPhrase(kind)}`);
     }
     return next;
   }
@@ -206,25 +224,32 @@ function validateParsedOptionValue(key: string, value: string): void {
   if (!kind) return;
   if (kind === "boolean") {
     if (!isBooleanLiteral(value)) {
-      throw new Error(`${cliOptionLabel(key)} must be a boolean`);
+      throw new CliUsageError(`${cliOptionLabel(key)} must be a boolean`);
     }
     return;
   }
   if (value.trim().length === 0 || value === "true") {
-    throw new Error(`${cliOptionLabel(key)} must be ${optionKindPhrase(kind)}`);
+    throw new CliUsageError(`${cliOptionLabel(key)} must be ${optionKindPhrase(kind)}`);
   }
   if (kind === "number" || kind === "integer") {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
-      throw new Error(`${cliOptionLabel(key)} must be ${optionKindPhrase(kind)}`);
+      throw new CliUsageError(`${cliOptionLabel(key)} must be ${optionKindPhrase(kind)}`);
     }
     if (kind === "integer" && !Number.isInteger(parsed)) {
-      throw new Error(`${cliOptionLabel(key)} must be an integer`);
+      throw new CliUsageError(`${cliOptionLabel(key)} must be an integer`);
+    }
+    if (kind === "integer" && CLI_POSITIVE_INTEGER_OPTIONS.has(key) && parsed <= 0) {
+      throw new CliUsageError(`${cliOptionLabel(key)} must be a positive integer`);
     }
     return;
   }
   if (kind === "json") {
-    parseJsonOption(value, cliOptionLabel(key));
+    try {
+      parseJsonOption(value, cliOptionLabel(key));
+    } catch (error) {
+      throw new CliUsageError(error instanceof Error ? error.message : String(error));
+    }
   }
 }
 

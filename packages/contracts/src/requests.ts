@@ -6,6 +6,7 @@ import {
 } from "./create-pipeline.js";
 import {
   DEFAULT_CHAT_PROVIDER,
+  OpenPondCommandAccessModeSchema,
   CodexReasoningEffortSchema,
   ChatProviderSchema,
   CodexPermissionModeSchema,
@@ -103,6 +104,7 @@ export type ChatAttachmentSummary = z.infer<typeof ChatAttachmentSummarySchema>;
 export const CreateSessionRequestSchema = z.object({
   provider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   modelRef: ChatModelRefSchema.optional(),
+  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
   systemKind: z.enum(["openpond.insights"]).nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   appId: z.string().nullable().optional(),
@@ -334,6 +336,7 @@ export type CompactSessionRequest = z.infer<typeof CompactSessionRequestSchema>;
 export const PatchSessionRequestSchema = z.object({
   provider: ChatProviderSchema.optional(),
   modelRef: ChatModelRefSchema.nullable().optional(),
+  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
   order: z.number().optional(),
@@ -351,6 +354,14 @@ export const PatchSessionRequestSchema = z.object({
 });
 
 export type PatchSessionRequest = z.infer<typeof PatchSessionRequestSchema>;
+
+export const RunSessionCommandRequestSchema = z.object({
+  command: z.string().trim().min(1),
+  cwd: z.string().trim().min(1).max(4096).nullable().optional(),
+  timeoutSeconds: z.number().int().min(1).max(3600).optional(),
+});
+
+export type RunSessionCommandRequest = z.infer<typeof RunSessionCommandRequestSchema>;
 
 export const PatchSidebarAppPreferenceRequestSchema = SidebarAppPreferenceSchema;
 

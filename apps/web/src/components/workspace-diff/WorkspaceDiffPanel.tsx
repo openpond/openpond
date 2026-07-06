@@ -7,11 +7,11 @@ import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { GoalDetailsView, type GoalDetailsCreateRuntime } from "../goal/GoalDetailsView";
-import { SandboxWorkspacePanel } from "./SandboxWorkspacePanel";
+import { SandboxWorkspaceSummary } from "./SandboxWorkspaceSummary";
 import { WorkspaceDiffFiles } from "./WorkspaceDiffFiles";
 import { WorkspaceDiffTabs, WorkspaceDiffToolbar } from "./WorkspaceDiffPanelChrome";
 import { FilePreview } from "./WorkspaceFilePreview";
-import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, saveSandboxFile } from "./workspace-diff-file-model";
+import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, sandboxSourceReadbackDiffFromEvents, saveSandboxFile } from "./workspace-diff-file-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
 import { WORKSPACE_TEMPLATE_CONFIG_PATH, isDirectoryLikeDiffFile, isMarkdownPath, placeholderFile, type DiffTab, type FileDraft, type SandboxFileSource, type WorkspaceDiffRefreshOptions, type WorkspaceDiffSideChatTab, type WorkspaceDiffTabRequest, type WorkspaceFileSourceSwitcher } from "./workspace-diff-panel-model";
 import { editorDiagnosticStatus as resolveEditorDiagnosticStatus, readEditorControlsVisible, writeEditorControlsVisible } from "./workspace-diff-editor-state";
@@ -23,7 +23,6 @@ const EMPTY_REPO_FILES: string[] = [];
 
 export function WorkspaceDiffPanel({
   appId,
-  workspaceId,
   workspaceKind,
   connection,
   runtimeEvents,
@@ -42,7 +41,6 @@ export function WorkspaceDiffPanel({
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
-  onOpenBrowserUrl,
   onCloseSideChat,
   onOpenSideChat,
   onSelectSideChat,
@@ -76,21 +74,6 @@ export function WorkspaceDiffPanel({
   goalDetails?: WorkspaceGoalDetails | null;
   sandboxFileSource?: SandboxFileSource | null;
 }) {
-  if (!sandboxFileSource && (workspaceKind === "sandbox" || workspaceKind === "sandbox_template") && workspaceId) {
-    return (
-      <SandboxWorkspacePanel
-        sandboxId={workspaceId}
-        connection={connection}
-        runtimeEvents={runtimeEvents ?? []}
-        workspaceName={workspaceName}
-        expanded={expanded}
-        onOpenBrowserUrl={onOpenBrowserUrl}
-        onResizeStart={onResizeStart}
-        onToggleExpanded={onToggleExpanded}
-      />
-    );
-  }
-
   return (
     <WorkspaceDiffPanelInner
       appId={appId}
@@ -151,6 +134,7 @@ function sourceStatusForDiff({
   dirty,
   error,
   loading,
+  preservedReadback,
   sandboxMode,
   sourcePending,
 }: {
@@ -159,11 +143,13 @@ function sourceStatusForDiff({
   dirty: boolean;
   error: string | null;
   loading: boolean;
+  preservedReadback: boolean;
   sandboxMode: boolean;
   sourcePending: boolean;
 }): { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null {
   if (sourcePending) return { label: "sandbox pending", tone: "loading" };
   if (loading) return { label: "refreshing", tone: "loading" };
+  if (sandboxMode && preservedReadback && checkpointStatus) return checkpointStatus;
   if (error) return { label: "status unavailable", tone: "error" };
   if (sandboxMode && checkpointStatus?.tone === "error") return checkpointStatus;
   if (sandboxMode && checkpointStatus && !dirty && changedFiles === 0) return checkpointStatus;
@@ -298,6 +284,7 @@ function WorkspaceDiffPanelInner({
   const editorHandleRef = useRef<WorkspaceMonacoEditorHandle | null>(null);
   const sandboxId = sandboxFileSource?.sandboxId?.trim() || null;
   const sandboxMode = Boolean(sandboxFileSource);
+  const summaryAvailable = sandboxMode && Boolean(sandboxId);
   const sourceKey = sandboxMode ? `sandbox:${sandboxId ?? "pending"}` : `workspace:${appId ?? "none"}`;
   const canOpenRequestedFile = sandboxMode ? Boolean(sandboxId) : Boolean(appId);
   const previousSourceKeyRef = useRef(sourceKey);
@@ -358,7 +345,19 @@ function WorkspaceDiffPanelInner({
     [connection, sandboxId, sandboxMode],
   );
 
-  const displayDiff = sandboxMode ? sandboxDiff : diff;
+  const sandboxSourceReadbackDiff = useMemo(
+    () => sandboxSourceReadbackDiffFromEvents(runtimeEvents, sandboxId),
+    [runtimeEvents, sandboxId],
+  );
+  const sandboxDiffHasInspectableFiles = Boolean(
+    sandboxDiff && ((sandboxDiff.files?.length ?? 0) > 0 || (sandboxDiff.repoFiles?.length ?? 0) > 0),
+  );
+  const usingSandboxSourceReadback = sandboxMode && !sandboxDiffHasInspectableFiles && Boolean(sandboxSourceReadbackDiff);
+  const displayDiff = sandboxMode
+    ? sandboxDiffHasInspectableFiles
+      ? sandboxDiff
+      : sandboxSourceReadbackDiff ?? sandboxDiff
+    : diff;
   const checkpointStatus = useMemo(
     () => latestSandboxCheckpointStatus(runtimeEvents, sandboxId),
     [runtimeEvents, sandboxId],
@@ -468,6 +467,20 @@ function WorkspaceDiffPanelInner({
   useEffect(() => {
     refreshRef.current = onRefresh;
   }, [onRefresh]);
+
+  useEffect(() => {
+    if (sandboxMode || !connection || !appId || !workspaceInitialized || diff || workspaceError) return;
+    if (refreshBusyRef.current) return;
+
+    refreshBusyRef.current = true;
+    void Promise.resolve(refreshRef.current({ silent: true }))
+      .catch(() => {
+        // refreshWorkspaceDiff already surfaces errors in the app error state.
+      })
+      .finally(() => {
+        refreshBusyRef.current = false;
+      });
+  }, [appId, connection, diff, sandboxMode, workspaceError, workspaceInitialized]);
 
   useEffect(() => {
     if (previousSourceKeyRef.current !== sourceKey) {
@@ -606,6 +619,10 @@ function WorkspaceDiffPanelInner({
     if (!hasGoalDetails && activeTab === "goal") setActiveTab("files");
   }, [activeTab, hasGoalDetails]);
 
+  useEffect(() => {
+    if (!summaryAvailable && activeTab === "summary") setActiveTab("files");
+  }, [activeTab, summaryAvailable]);
+
   const selectedDetailPath = activeTab === "file" ? selectedPath : null;
 
   useEffect(() => {
@@ -628,7 +645,7 @@ function WorkspaceDiffPanelInner({
     setFileError(null);
     const request = sandboxMode
       ? sandboxId
-        ? readSandboxFile(connection, sandboxId, selectedDetailPath)
+        ? readSandboxFile(connection, sandboxId, selectedDetailPath, runtimeEvents)
         : Promise.reject(new Error(sandboxFileSource?.emptyMessage ?? "No sandbox filesystem is available."))
       : appId
         ? api.workspaceFile(connection, appId, selectedDetailPath)
@@ -663,9 +680,8 @@ function WorkspaceDiffPanelInner({
     activeTab,
     appId,
     connection,
-    currentDiffFileByPath,
-    displayDiff?.updatedAt,
     loadFullFiles,
+    runtimeEvents,
     sandboxFileSource?.emptyMessage,
     sandboxId,
     sandboxMode,
@@ -968,13 +984,16 @@ function WorkspaceDiffPanelInner({
   const hasChangedFiles = files.length > 0;
   const hasRepoFiles = repoFiles.length > 0;
   const hasOpenFiles = openFilePaths.length > 0;
-  const hasPanelContent = hasGoalDetails || hasChangedFiles || hasRepoFiles || hasOpenFiles;
+  const hasPanelContent = hasGoalDetails || summaryAvailable || hasChangedFiles || hasRepoFiles || hasOpenFiles;
   const visibleTab: DiffTab =
     activeTab === "goal" && hasGoalDetails
       ? "goal"
-      : activeTab === "file" && selectedPath
-        ? "file"
-        : "files";
+      : activeTab === "summary" && summaryAvailable
+        ? "summary"
+        : activeTab === "file" && selectedPath
+          ? "file"
+          : "files";
+  const initializedLocalEmptyMessage = visibleTab === "files" ? "No files to show" : "No local changes";
   const waitingForLocalWorkspace = workspaceKind === "local_project" && !workspaceInitialized && !workspaceError;
   const panelLoading = sandboxMode ? sandboxLoading : loading;
   const panelError = sandboxMode ? sandboxError : workspaceError;
@@ -984,6 +1003,7 @@ function WorkspaceDiffPanelInner({
     dirty: Boolean(displayDiff?.dirty),
     error: panelError,
     loading: panelLoading,
+    preservedReadback: usingSandboxSourceReadback,
     sandboxMode,
     sourcePending: sandboxMode && !sandboxId,
   });
@@ -996,7 +1016,7 @@ function WorkspaceDiffPanelInner({
       : waitingForLocalWorkspace
         ? "Loading workspace files"
         : workspaceInitialized
-          ? "No local changes"
+          ? initializedLocalEmptyMessage
           : "No local files to show";
   const selectedImagePath = !sandboxMode && selectedPath && isWorkspaceImagePath(selectedPath) ? selectedPath : null;
   const previewImagePreviewPath =
@@ -1044,6 +1064,7 @@ function WorkspaceDiffPanelInner({
         searchQuery={searchQuery}
         selectedPath={selectedPath}
         sideChatTabs={sideChatTabs}
+        summaryAvailable={summaryAvailable}
         sourceStatus={sourceStatus}
         sourceSwitcher={sourceSwitcher}
         visibleTab={visibleTab}
@@ -1076,6 +1097,11 @@ function WorkspaceDiffPanelInner({
         }}
         onSelectFiles={openFilesTab}
         onSelectGoal={() => setActiveTab("goal")}
+        onSelectSummary={() => {
+          setActiveTab("summary");
+          setAddMenuOpen(false);
+          setSearchOpen(false);
+        }}
         onSelectSideChat={onSelectSideChat}
         onToggleAddMenu={() => {
           setAddMenuOpen((open) => !open);
@@ -1088,6 +1114,11 @@ function WorkspaceDiffPanelInner({
         <GoalDetailsView
           createRuntime={goalDetails?.createRuntime ?? null}
           goalRuntime={goalDetails?.goalRuntime ?? null}
+        />
+      ) : visibleTab === "summary" && summaryAvailable ? (
+        <SandboxWorkspaceSummary
+          sandboxId={sandboxId}
+          connection={connection}
         />
       ) : !hasPanelContent ? (
         <div className="workspace-diff-empty">

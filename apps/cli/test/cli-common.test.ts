@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { optionValues, parseArgs, runCommand, runShellCommand } from "../src/cli/common";
+import { CliUsageError, optionValues, parseArgs, runCommand, runShellCommand } from "../src/cli/common";
 
 describe("CLI common parsing", () => {
   test("parses equals-style long options without changing rest arguments", () => {
@@ -87,12 +87,37 @@ describe("CLI common parsing", () => {
     expect(() => parseArgs(["sandbox", "ps", "--timeout-seconds=soon"])).toThrow(
       /timeout-seconds must be an integer/,
     );
+    expect(() => parseArgs(["chat", "--timeout-sec=0"])).toThrow(
+      /timeout-sec must be a positive integer/,
+    );
+    expect(() => parseArgs(["chat", "--max-output-bytes=-1"])).toThrow(
+      /max-output-bytes must be a positive integer/,
+    );
     expect(() => parseArgs(["profile", "current", "--json=maybe"])).toThrow(
       /json must be a boolean/,
     );
     expect(() => parseArgs(["run", "chat", "--cwd"])).toThrow(
       /cwd must be a string/,
     );
+  });
+
+  test("marks typed option parse failures as usage errors", () => {
+    try {
+      parseArgs(["chat", "--timeout-sec=soon"]);
+      throw new Error("expected parseArgs to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliUsageError);
+      expect((error as { exitCode?: number }).exitCode).toBe(2);
+      expect(error).toHaveProperty("message", "timeout-sec must be an integer");
+    }
+    try {
+      parseArgs(["chat", "--max-output-bytes=0"]);
+      throw new Error("expected parseArgs to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliUsageError);
+      expect((error as { exitCode?: number }).exitCode).toBe(2);
+      expect(error).toHaveProperty("message", "max-output-bytes must be a positive integer");
+    }
   });
 
   test("leaves command-specific text options permissive", () => {

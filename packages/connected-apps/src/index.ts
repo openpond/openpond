@@ -147,6 +147,7 @@ export type ConnectedAppBundle = {
 
 export type ConnectedAppConnectionLike = {
   id?: string | null;
+  teamId?: string | null;
   provider?: string | null;
   providerAccountName?: string | null;
   providerWorkspaceName?: string | null;
@@ -157,6 +158,7 @@ export type ConnectedAppConnectionLike = {
 
 export type ConnectedAppStatusConnection = {
   id: string | null;
+  teamId: string | null;
   provider: ConnectedAppProviderFamilyId;
   accountLabel: string | null;
   workspaceLabel: string | null;
@@ -849,6 +851,7 @@ function normalizeConnections(
     return [
       {
         id: connection.id ?? null,
+        teamId: connection.teamId?.trim() || null,
         provider,
         accountLabel: connection.providerAccountName ?? null,
         workspaceLabel: connection.providerWorkspaceName ?? null,

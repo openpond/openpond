@@ -4,8 +4,10 @@ import {
   ArrowUpRight,
   AtSign,
   Bot,
+  Pause,
   Plus,
   Shield,
+  SquareTerminal,
   Square,
   Upload,
 } from "../icons";
@@ -13,11 +15,13 @@ import type {
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
+  OpenPondCommandAccessMode,
   OpenPondApp,
 } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import {
   CODEX_PERMISSION_MODE_OPTIONS,
+  OPENPOND_COMMAND_ACCESS_MODE_OPTIONS,
   type DropdownOption,
 } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
@@ -43,8 +47,10 @@ export function ComposerPrimaryControls({
   mentionApps,
   modelValue,
   modelOptions = [],
+  openPondCommandAccessMode,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
+  onOpenPondCommandAccessModeChange,
   onModelChange,
   onCreateAsAgent,
   onOpenFilePicker,
@@ -64,6 +70,8 @@ export function ComposerPrimaryControls({
   sendTooltip,
   selectedMentionAppId,
   showToast,
+  stopIcon = "stop",
+  stopLabel = "Stop response",
   steering,
 }: {
   addFiles: (files: File[]) => void;
@@ -82,8 +90,10 @@ export function ComposerPrimaryControls({
   mentionApps: OpenPondApp[];
   modelValue: string;
   modelOptions?: DropdownOption[];
+  openPondCommandAccessMode: OpenPondCommandAccessMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
+  onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
   onModelChange: (value: string) => void;
   onCreateAsAgent: () => void;
   onOpenFilePicker: () => void;
@@ -103,6 +113,8 @@ export function ComposerPrimaryControls({
   sendTooltip: string;
   selectedMentionAppId: string | null;
   showToast: ShowAppToast;
+  stopIcon?: "pause" | "stop";
+  stopLabel?: string;
   steering: boolean;
 }) {
   return (
@@ -191,7 +203,17 @@ export function ComposerPrimaryControls({
           onChange={(value) => onCodexPermissionModeChange(value as CodexPermissionMode)}
         />
       ) : (
-        <span className="permission-select-placeholder" aria-hidden="true" />
+        <DropdownSelect
+          compact
+          className="permission-select"
+          icon={<SquareTerminal size={14} />}
+          placement={dropdownPlacement}
+          label="Command access"
+          value={openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode}
+          options={OPENPOND_COMMAND_ACCESS_MODE_OPTIONS}
+          disabled={busy}
+          onChange={(value) => onOpenPondCommandAccessModeChange(value as OpenPondCommandAccessMode)}
+        />
       )}
       <div className="composer-spacer" />
       <span className={`context-status-shell ${contextWindowStatus.tone}`} style={contextStatusStyle}>
@@ -283,11 +305,11 @@ export function ComposerPrimaryControls({
         <button
           type="button"
           className="send-button stop-button"
-          data-tooltip="Stop"
-          aria-label="Stop response"
+          data-tooltip={stopLabel}
+          aria-label={stopLabel}
           onClick={onStop}
         >
-          <Square size={13} fill="currentColor" />
+          {stopIcon === "pause" ? <Pause size={15} /> : <Square size={13} fill="currentColor" />}
         </button>
       ) : steering ? (
         <button className="send-button steer-button" disabled={sendDisabled} data-tooltip="Steer" aria-label="Steer">

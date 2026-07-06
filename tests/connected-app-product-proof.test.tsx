@@ -13,6 +13,8 @@ import {
   ConnectedAppRow,
   connectedAppSetupTeamId,
 } from "../apps/web/src/components/apps/AppsView";
+import { useAppConversationContext } from "../apps/web/src/hooks/useAppConversationContext";
+import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import { ComposerMentionMenu } from "../apps/web/src/components/chat/ComposerMentionMenu";
 import {
   connectedAppMentionOptionsFromStatusRows,
@@ -26,6 +28,7 @@ describe("connected app product proof", () => {
   test("renders connected OAuth providers in Apps status without exposing ingestion-only Teams as connected", () => {
     const rows = productProofStatusRows();
     const google = row(rows, "google");
+    const x = row(rows, "x");
     const teams = row(rows, "microsoft_teams");
 
     const googleMarkup = renderToStaticMarkup(
@@ -47,6 +50,7 @@ describe("connected app product proof", () => {
     expect(googleMarkup).toContain("Read Drive files");
     expect(googleMarkup).toContain("Write Drive files");
     expect(googleMarkup).not.toContain("conn_google");
+    expect(x.connections[0]?.teamId).toBe("team_social");
 
     expect(teamsMarkup).toContain("Teams");
     expect(teamsMarkup).toContain("Native app");
@@ -84,6 +88,15 @@ describe("connected app product proof", () => {
     expect(markup).not.toContain("Microsoft Teams");
     expect(markup).not.toContain("conn_google");
     expect(markup).not.toContain("conn_x");
+  });
+
+  test("keeps connected app mentions available inside scoped project chats", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopedConversationProbe),
+    );
+
+    expect(markup).toContain("connected:google,github,x");
+    expect(markup).toContain("apps:0");
   });
 
   test("decorates connected app mentions with canonical display labels while preserving prompt text", () => {
@@ -174,11 +187,32 @@ describe("connected app product proof", () => {
   });
 });
 
+function ScopedConversationProbe() {
+  const context = useAppConversationContext({
+    bootstrap: null,
+    connectedAppRows: productProofStatusRows(),
+    mentionableSandboxApps: [{ id: "app_alpha", name: "Alpha" }] as never,
+    runtimeIndexes: buildRuntimeIndexes([], []),
+    selectedApp: null,
+    selectedCloudProject: null,
+    selectedProject: { id: "local_project_1" } as never,
+    selectedSession: null,
+    selectedSessionId: null,
+  });
+
+  return createElement(
+    "span",
+    null,
+    `connected:${context.connectedAppMentions.map((option) => option.provider).join(",")};apps:${context.chatMentionApps.length}`,
+  );
+}
+
 function productProofStatusRows() {
   return buildConnectedAppStatusRows({
     connections: [
       {
         id: "conn_google",
+        teamId: "team_docs",
         provider: "google",
         providerAccountName: "Docs User",
         providerWorkspaceName: "Drive",
@@ -186,6 +220,7 @@ function productProofStatusRows() {
       },
       {
         id: "conn_github",
+        teamId: "team_code",
         provider: "github",
         providerAccountName: "Git User",
         providerWorkspaceName: "openpond",
@@ -193,6 +228,7 @@ function productProofStatusRows() {
       },
       {
         id: "conn_x",
+        teamId: "team_social",
         provider: "x",
         providerAccountName: "Social User",
         status: "active",

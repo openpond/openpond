@@ -34,6 +34,12 @@ type UseCloudWorkItemsInput = {
   showToast: ShowAppToast;
 };
 
+type CloudWorkItemBackgroundTarget = {
+  sourceRuntimeId?: string;
+  sourceSandboxId?: string;
+  agentId?: string;
+};
+
 export function useCloudWorkItems({
   bootstrap,
   connection,
@@ -385,6 +391,7 @@ export function useCloudWorkItems({
           prompt: message,
           sourceRef: selectedCloudWorkItem.sourceRef,
           baseSha: selectedCloudWorkItem.baseSha,
+          ...cloudWorkItemBackgroundTarget(selectedCloudWorkItem, cloudWorkItemDetail),
           branchPolicy: { mode: "patch_only" },
           budget: { maxDurationSeconds: 1800 },
           createPipelineRequest,
@@ -613,5 +620,39 @@ function createPipelineUsageAttribution(
     createPipelineRequestId: request.id,
     commandName: request.command,
     commandSource: "api",
+  };
+}
+
+export function cloudWorkItemBackgroundTarget(
+  workItem: CloudWorkItem,
+  detail: CloudWorkItemDetail | null,
+): CloudWorkItemBackgroundTarget {
+  const detailApplies = detail?.workItem.id === workItem.id;
+  const detailWorkItem = detailApplies ? detail.workItem : null;
+  const runtimeSession = detailApplies
+    ? (
+        detail.runtimeSessions.find((session) => !session.endedAt && (session.runtimeId || session.sandboxId)) ??
+        detail.runtimeSessions.find((session) => session.runtimeId || session.sandboxId) ??
+        null
+      )
+    : null;
+  const sourceRuntimeId =
+    detailWorkItem?.latestRuntimeId ??
+    workItem.latestRuntimeId ??
+    runtimeSession?.runtimeId ??
+    null;
+  const sourceSandboxId =
+    detailWorkItem?.latestSandboxId ??
+    workItem.latestSandboxId ??
+    runtimeSession?.sandboxId ??
+    null;
+  const agentId =
+    detailWorkItem?.assignedAgentId ??
+    workItem.assignedAgentId ??
+    null;
+  return {
+    ...(sourceRuntimeId ? { sourceRuntimeId } : {}),
+    ...(sourceSandboxId ? { sourceSandboxId } : {}),
+    ...(agentId ? { agentId } : {}),
   };
 }

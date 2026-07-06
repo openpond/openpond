@@ -15,7 +15,9 @@ import type {
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
+  OpenPondCommandAccessMode,
   OpenPondApp,
+  OpenPondProfileSkill,
   ResolveApprovalRequest,
   Session,
 } from "@openpond/contracts";
@@ -57,9 +59,11 @@ export function RightChatPanelStack({
   busy,
   codexPermissionMode,
   codexReasoningEffort,
+  openPondCommandAccessMode,
   connection,
   connectedAppMentions,
   mentionApps,
+  profileSkills,
   projectTarget,
   providerSettings,
   accountBaseUrl,
@@ -71,6 +75,7 @@ export function RightChatPanelStack({
   onClosePanel,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
+  onOpenPondCommandAccessModeChange,
   onModelChange,
   onOpenFileInSidebar,
   onOpenProfileSettings,
@@ -90,9 +95,11 @@ export function RightChatPanelStack({
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
+  openPondCommandAccessMode: OpenPondCommandAccessMode;
   connection: ClientConnection | null;
   connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
+  profileSkills: OpenPondProfileSkill[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
   accountBaseUrl?: string | null;
@@ -104,6 +111,7 @@ export function RightChatPanelStack({
   onClosePanel: (panelId: string) => void;
   onCodexPermissionModeChange: (mode: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
+  onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
   onModelChange: (panelId: string, model: string) => void;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
@@ -268,10 +276,12 @@ export function RightChatPanelStack({
             busy={busy}
             codexPermissionMode={codexPermissionMode}
             codexReasoningEffort={codexReasoningEffort}
+            openPondCommandAccessMode={openPondCommandAccessMode}
             connection={connection}
             connectedAppMentions={connectedAppMentions}
             key={panel.id}
             mentionApps={mentionApps}
+            profileSkills={profileSkills}
             panel={panel}
             projectTarget={projectTarget}
             providerSettings={providerSettings}
@@ -282,6 +292,7 @@ export function RightChatPanelStack({
             workspaceTarget={workspaceTarget}
             onCodexPermissionModeChange={onCodexPermissionModeChange}
             onCodexReasoningEffortChange={onCodexReasoningEffortChange}
+            onOpenPondCommandAccessModeChange={(mode) => onOpenPondCommandAccessModeChange(mode, panel.session)}
             onModelChange={(model) => onModelChange(panel.id, model)}
             onOpenFileInSidebar={onOpenFileInSidebar}
             onOpenProfileSettings={onOpenProfileSettings}
@@ -315,9 +326,11 @@ function RightChatPane({
   busy,
   codexPermissionMode,
   codexReasoningEffort,
+  openPondCommandAccessMode,
   connection,
   connectedAppMentions,
   mentionApps,
+  profileSkills,
   projectTarget,
   providerSettings,
   accountBaseUrl,
@@ -327,6 +340,7 @@ function RightChatPane({
   workspaceTarget,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
+  onOpenPondCommandAccessModeChange,
   onModelChange,
   onOpenFileInSidebar,
   onOpenProfileSettings,
@@ -344,9 +358,11 @@ function RightChatPane({
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
+  openPondCommandAccessMode: OpenPondCommandAccessMode;
   connection: ClientConnection | null;
   connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
+  profileSkills: OpenPondProfileSkill[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
   accountBaseUrl?: string | null;
@@ -356,6 +372,7 @@ function RightChatPane({
   workspaceTarget: WorkspaceTargetState;
   onCodexPermissionModeChange: (mode: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
+  onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode) => void;
   onModelChange: (model: string) => void;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
@@ -456,6 +473,7 @@ function RightChatPane({
           prompt={panel.prompt}
           mentionApps={mentionApps}
           connectedAppMentions={connectedAppMentions}
+          profileSkills={profileSkills}
           selectedMentionAppId={null}
           contextWindowStatus={panel.contextWindowStatus}
           goalRuntime={panel.goalRuntime}
@@ -474,6 +492,11 @@ function RightChatPane({
           workspaceTarget={workspaceTarget}
           codexPermissionMode={codexPermissionMode}
           codexReasoningEffort={codexReasoningEffort}
+          openPondCommandAccessMode={
+            panel.session?.provider === "codex"
+              ? openPondCommandAccessMode
+              : panel.session?.openPondCommandAccessMode ?? openPondCommandAccessMode
+          }
           onProviderChange={onProviderChange}
           onProviderSetupOpen={onProviderSetupOpen}
           onProjectTargetChange={onProjectTargetChange}
@@ -481,6 +504,7 @@ function RightChatPane({
           onModelChange={onModelChange}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           onCodexReasoningEffortChange={onCodexReasoningEffortChange}
+          onOpenPondCommandAccessModeChange={onOpenPondCommandAccessModeChange}
           onPromptChange={onPromptChange}
           onMentionAppSelect={undefined}
           showToast={showToast}

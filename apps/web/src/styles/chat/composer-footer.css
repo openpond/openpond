@@ -60,6 +60,10 @@
   overflow: visible;
 }
 
+.composer-primary-controls .dropdown-menu {
+  z-index: 90;
+}
+
 .composer.has-goal-runtime .composer-primary-controls,
 .composer.has-create-runtime .composer-primary-controls {
   right: 28px;
@@ -100,12 +104,12 @@
   height: 29px;
   max-width: 92px;
   border: 0;
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1f1f1;
+  border-radius: 8px;
+  background: transparent;
+  color: #d8d8d8;
   padding: 0 10px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 400;
   line-height: 1;
 }
 
@@ -123,7 +127,7 @@
 .composer-create-control:hover:not(:disabled),
 .composer-create-control:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .composer-create-control:disabled {

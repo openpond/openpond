@@ -5,6 +5,7 @@ import {
   Activity,
   Boxes,
   CheckCircle2,
+  Download,
   FolderGit2,
   GitCommitHorizontal,
   Github,
@@ -25,6 +26,47 @@ export type EnvironmentActionItem = {
   onSelect: () => void | Promise<unknown>;
 };
 
+export type WorkspaceToolActionHandler = (
+  action: WorkspaceToolRequest["action"],
+  args?: Record<string, unknown>,
+) => Promise<WorkspaceToolResult | null>;
+
+export type SandboxResumeTarget = {
+  id: string;
+  runtimeId: string | null;
+  teamId: string | null;
+  projectId: string | null;
+  state: string | null;
+};
+
+export async function checkpointAndStopSandbox(onWorkspaceToolAction?: WorkspaceToolActionHandler): Promise<void> {
+  if (!onWorkspaceToolAction) return;
+  await onWorkspaceToolAction("sandbox_preserve_source");
+  // Stop keeps the server-side unpreserved-change guard, and can still clean up after stale placement blocks preservation.
+  await onWorkspaceToolAction("sandbox_stop");
+}
+
+export function sandboxResumeArgs(target: SandboxResumeTarget): Record<string, unknown> {
+  return {
+    ...(target.teamId ? { teamId: target.teamId } : {}),
+    ...(target.projectId ? { projectId: target.projectId } : {}),
+    runtime: {
+      runtimeId: target.runtimeId,
+    },
+    visibility: "team",
+    budget: { maxUsd: "0.05" },
+    quotas: {
+      idleTimeoutSeconds: 15 * 60,
+      maxSpendUsd: "0.05",
+    },
+    metadata: {
+      source: "openpond-app-environment-menu-sandbox-resume",
+      resumeSandboxId: target.id,
+      previousState: target.state,
+    },
+  };
+}
+
 export function workspaceEnvironmentActionItems({
   busy,
   canCreateSandboxProject,
@@ -42,6 +84,7 @@ export function workspaceEnvironmentActionItems({
   projectSandboxTemplateValid,
   sandboxTemplateActionTargetCount,
   sandboxTemplateServiceTargets,
+  sandboxResumeTarget,
   selectedApp,
   selectedProject,
   setSandboxCreateDialogOpen,
@@ -61,14 +104,12 @@ export function workspaceEnvironmentActionItems({
   managed: boolean;
   onOpenCommitDialog?: (nextStep?: CommitNextStep) => void;
   onRunTerminalCommand?: (command: string) => void;
-  onWorkspaceToolAction?: (
-    action: WorkspaceToolRequest["action"],
-    args?: Record<string, unknown>,
-  ) => Promise<WorkspaceToolResult | null>;
+  onWorkspaceToolAction?: WorkspaceToolActionHandler;
   projectSandboxTemplate: boolean;
   projectSandboxTemplateValid: boolean;
   sandboxTemplateActionTargetCount: number;
   sandboxTemplateServiceTargets: Array<{ name: string }>;
+  sandboxResumeTarget?: SandboxResumeTarget | null;
   selectedApp?: OpenPondApp | null;
   selectedProject?: LocalProject | null;
   setSandboxCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -183,6 +224,20 @@ export function workspaceEnvironmentActionItems({
       onSelect: () => onWorkspaceToolAction?.("sandbox_status"),
     },
     {
+      icon: <Play size={14} />,
+      label: "Resume sandbox",
+      disabled:
+        workspaceBusyValue ||
+        !onWorkspaceToolAction ||
+        !sandboxResumeTarget?.runtimeId ||
+        sandboxResumeTarget.state === "running" ||
+        sandboxResumeTarget.state === "creating",
+      onSelect: () =>
+        sandboxResumeTarget?.runtimeId
+          ? onWorkspaceToolAction?.("sandbox_create", sandboxResumeArgs(sandboxResumeTarget))
+          : undefined,
+    },
+    {
       icon: <Activity size={14} />,
       label: "Sandbox logs",
       disabled: workspaceBusyValue || !onWorkspaceToolAction,
@@ -195,14 +250,22 @@ export function workspaceEnvironmentActionItems({
       onSelect: () => onWorkspaceToolAction?.("sandbox_receipts"),
     },
     {
+      icon: <Download size={14} />,
+      label: "Export patch",
+      disabled: workspaceBusyValue || !onWorkspaceToolAction,
+      onSelect: () => onWorkspaceToolAction?.("sandbox_git_export_patch"),
+    },
+    {
+      icon: <Upload size={14} />,
+      label: "Apply locally",
+      disabled: workspaceBusyValue || !onWorkspaceToolAction,
+      onSelect: () => onWorkspaceToolAction?.("sandbox_git_apply_patch_local"),
+    },
+    {
       icon: <Square size={14} />,
       label: "Checkpoint and stop",
       disabled: workspaceBusyValue || !onWorkspaceToolAction,
-      onSelect: async () => {
-        const preserveResult = await onWorkspaceToolAction?.("sandbox_preserve_source");
-        if (preserveResult?.ok === false) return;
-        await onWorkspaceToolAction?.("sandbox_stop");
-      },
+      onSelect: () => checkpointAndStopSandbox(onWorkspaceToolAction),
     },
   ];
   const defaultSandboxItems: EnvironmentActionItem[] = [

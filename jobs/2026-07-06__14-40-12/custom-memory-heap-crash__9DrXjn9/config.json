@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/custom-memory-heap-crash",
+        "ref": "sha256:72cdc9cf98c822a1449935ca32efc6612fe3d14928c9465c11285e95dcdf60cb",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "custom-memory-heap-crash__9DrXjn9",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

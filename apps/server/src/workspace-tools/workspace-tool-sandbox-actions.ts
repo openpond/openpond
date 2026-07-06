@@ -3,12 +3,17 @@ import { randomUUID } from "node:crypto";
 import {
   SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
   SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
+  type LocalProject,
   type Session,
+  type WorkspaceState,
   type WorkspaceToolRequest,
   type WorkspaceToolResult,
 } from "@openpond/contracts";
 import type { SandboxRuntime } from "@openpond/cloud";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
+import { localProjectStateWorkspace, localProjectWorkspacePaths } from "../workspace/local-projects.js";
+import { runWorkspaceCommand } from "../workspace/workspace-command.js";
+import { loadWorkspaceStateAtPath } from "../workspace/workspace-state.js";
 
 type SandboxToolAction = Extract<
   WorkspaceToolRequest["action"],
@@ -29,6 +34,7 @@ type SandboxToolAction = Extract<
   | "sandbox_git_status"
   | "sandbox_git_diff"
   | "sandbox_git_export_patch"
+  | "sandbox_git_apply_patch_local"
   | "sandbox_git_branch"
   | "sandbox_git_commit"
   | "sandbox_git_pull"
@@ -72,6 +78,7 @@ const SANDBOX_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
   "sandbox_git_status",
   "sandbox_git_diff",
   "sandbox_git_export_patch",
+  "sandbox_git_apply_patch_local",
   "sandbox_git_branch",
   "sandbox_git_commit",
   "sandbox_git_pull",
@@ -130,6 +137,11 @@ const SANDBOX_CHAT_DEFAULT_RUNTIME_METADATA_KEY = "openpondAppDefaultRuntime";
 const SANDBOX_CREATE_REQUEST_TIMEOUT_MS = 30_000;
 const SANDBOX_CREATE_RECOVERY_TIMEOUT_MS = 180_000;
 const SANDBOX_CREATE_RECOVERY_POLL_MS = 3_000;
+const SANDBOX_SOURCE_READBACK_SCHEMA_VERSION = "openpond.sandboxSourceReadback.v1";
+const SANDBOX_SOURCE_READBACK_MAX_FILES = 12;
+const SANDBOX_SOURCE_READBACK_MAX_FILE_BYTES = 64 * 1024;
+const SANDBOX_SOURCE_READBACK_MAX_TOTAL_BYTES = 96 * 1024;
+const SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS = 96_000;
 
 class SandboxCreateRequestTimeoutError extends Error {
   constructor(message: string) {
@@ -143,6 +155,7 @@ export async function handleSandboxWorkspaceToolAction(input: {
   session: Session;
   request: WorkspaceToolRequest;
   updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
+  findLocalWorkspace: (projectId: string) => Promise<LocalProject | null>;
 }): Promise<WorkspaceToolResult | null> {
   if (!SANDBOX_ACTIONS.has(input.request.action)) {
     return null;
@@ -397,6 +410,13 @@ export async function handleSandboxWorkspaceToolAction(input: {
         baseRef: stringArg(args, "baseRef", ""),
       },
     });
+  } else if (action === "sandbox_git_apply_patch_local") {
+    result = await applySandboxPatchToLocal({
+      args,
+      sandboxId,
+      session: input.session,
+      findLocalWorkspace: input.findLocalWorkspace,
+    });
   } else if (action === "sandbox_git_branch") {
     result = await sandboxRequestPayload({
       type: "git_branch",
@@ -449,7 +469,11 @@ export async function handleSandboxWorkspaceToolAction(input: {
       payload: {
         sandboxId,
         message: stringArg(args, "message", ""),
-        teamId: stringArg(args, "teamId", ""),
+        teamId: resolveSandboxSourcePreserveTeamId({
+          args,
+          session: input.session,
+          result: null,
+        }),
       },
     });
   } else if (action === "sandbox_promote_source") {
@@ -573,10 +597,137 @@ export async function handleSandboxWorkspaceToolAction(input: {
   return {
     ok: true,
     action,
-    appId: null,
+    appId: action === "sandbox_git_apply_patch_local" ? stringValue(asRecord(result).localProjectId) : null,
     output: summarizeSandboxToolResult(action, result, { attached: attachToSession }),
     data: result,
   };
+}
+
+async function applySandboxPatchToLocal(input: {
+  args: Record<string, unknown>;
+  sandboxId: string;
+  session: Session;
+  findLocalWorkspace: (projectId: string) => Promise<LocalProject | null>;
+}): Promise<Record<string, unknown>> {
+  const localProjectId = stringArg(input.args, "localProjectId", "") || input.session.localProjectId || "";
+  if (!localProjectId) {
+    throw new Error("This sandbox is not linked to a local checkout.");
+  }
+  const localProject = await input.findLocalWorkspace(localProjectId);
+  if (!localProject) {
+    throw new Error("Linked local checkout was not found.");
+  }
+  const workspaceOptions = {
+    clone: false,
+    allowPlainFolder: true,
+    linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null,
+  };
+  const workspaceState = await loadWorkspaceStateAtPath(
+    localProjectWorkspacePaths(localProject),
+    localProjectStateWorkspace(localProject),
+    workspaceOptions,
+  );
+  await assertApplyableLocalWorkspace(workspaceState, "sandbox");
+
+  const patchResponse = asRecord(
+    await sandboxRequestPayload({
+      type: "git_export_patch",
+      sandboxId: input.sandboxId,
+      payload: {
+        baseRef: stringArg(input.args, "baseRef", ""),
+      },
+    }),
+  );
+  const patchRecord = asRecord(patchResponse.patch);
+  const effectivePatchRecord = Object.keys(patchRecord).length > 0 ? patchRecord : patchResponse;
+  if (effectivePatchRecord.isRepo === false) {
+    throw new Error("Sandbox is not a Git repository.");
+  }
+  const patchText = typeof effectivePatchRecord.patch === "string" ? effectivePatchRecord.patch : "";
+  if (!patchText.trim() || effectivePatchRecord.empty === true) {
+    throw new Error("Sandbox patch is empty. There are no changes to apply locally.");
+  }
+
+  const check = await runWorkspaceCommand(
+    "git",
+    ["apply", "--check", "--whitespace=nowarn", "-"],
+    workspaceState.repoPath,
+    {},
+    patchText,
+  );
+  if (check.code !== 0) {
+    throw new Error(
+      check.stderr.trim() ||
+        check.stdout.trim() ||
+        "Sandbox patch does not apply cleanly to the local checkout.",
+    );
+  }
+  const apply = await runWorkspaceCommand(
+    "git",
+    ["apply", "--whitespace=nowarn", "-"],
+    workspaceState.repoPath,
+    {},
+    patchText,
+  );
+  if (apply.code !== 0) {
+    throw new Error(
+      apply.stderr.trim() ||
+        apply.stdout.trim() ||
+        "Unable to apply sandbox patch to the local checkout.",
+    );
+  }
+
+  const nextWorkspaceState = await loadWorkspaceStateAtPath(
+    localProjectWorkspacePaths(localProject),
+    localProjectStateWorkspace(localProject),
+    workspaceOptions,
+  );
+  return {
+    localProjectId: localProject.id,
+    localProjectName: localProject.name,
+    workspaceState: nextWorkspaceState,
+    patch: {
+      sandboxId: input.sandboxId,
+      filename: stringValue(effectivePatchRecord.filename),
+      bytes:
+        typeof effectivePatchRecord.bytes === "number"
+          ? effectivePatchRecord.bytes
+          : Buffer.byteLength(patchText, "utf8"),
+      applied: true,
+      fileCount: countPatchFiles(patchText),
+    },
+  };
+}
+
+async function assertApplyableLocalWorkspace(workspaceState: WorkspaceState, patchSourceLabel: string): Promise<void> {
+  if (!workspaceState.initialized) {
+    throw new Error(workspaceState.error || "Local checkout is not initialized.");
+  }
+  const repoCheck = await runWorkspaceCommand(
+    "git",
+    ["rev-parse", "--is-inside-work-tree"],
+    workspaceState.repoPath,
+  );
+  if (repoCheck.code !== 0 || repoCheck.stdout.trim() !== "true") {
+    throw new Error(`Local checkout must be a Git repository before applying a ${patchSourceLabel} patch.`);
+  }
+  if (workspaceState.dirty) {
+    throw new Error(`Commit or discard local changes before applying a ${patchSourceLabel} patch.`);
+  }
+}
+
+function countPatchFiles(patchText: string): number {
+  return sandboxSourceReadbackPatchFilePaths(patchText).length;
+}
+
+export function sandboxSourceReadbackPatchFilePaths(patchText: string): string[] {
+  const paths = new Set<string>();
+  for (const line of patchText.split("\n")) {
+    const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line.trim());
+    if (!match) continue;
+    paths.add(match[2]! || match[1]!);
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right));
 }
 
 type SandboxSourcePreservationResult = {
@@ -591,7 +742,40 @@ type SandboxSourcePreservationResult = {
   preserved?: boolean;
   preservedSha?: string | null;
   message?: string | null;
+  sourceReadbackArtifact?: SandboxSourceReadbackArtifact;
+  sourceReadbackError?: string;
   error?: string;
+};
+
+type SandboxSourceReadbackArtifact = {
+  schemaVersion: typeof SANDBOX_SOURCE_READBACK_SCHEMA_VERSION;
+  sandboxId: string;
+  runtimeId: string;
+  triggerAction: SandboxToolAction;
+  preservedSha: string | null;
+  createdAt: string;
+  patch: {
+    text: string;
+    bytes: number;
+    fileCount: number;
+    filename: string | null;
+    sha256: string | null;
+    lineCount: number | null;
+    empty: boolean;
+    truncated: boolean;
+  };
+  files: SandboxSourceReadbackFile[];
+  skippedFiles: number;
+};
+
+type SandboxSourceReadbackFile = {
+  path: string;
+  sizeBytes: number | null;
+  returnedBytes: number | null;
+  isBinary: boolean;
+  truncated: boolean;
+  content?: string;
+  unavailableReason?: string;
 };
 
 async function maybePreserveSandboxSourceAfterMutation(input: {
@@ -628,6 +812,22 @@ async function maybePreserveSandboxSourceAfterMutation(input: {
         },
       }),
     );
+    const preservedSha = typeof payload.preservedSha === "string" ? payload.preservedSha : null;
+    let sourceReadbackArtifact: SandboxSourceReadbackArtifact | undefined;
+    let sourceReadbackError: string | undefined;
+    if (payload.preserved === true && runtimeId) {
+      try {
+        sourceReadbackArtifact = await captureSandboxSourceReadbackArtifact({
+          sandboxId: input.sandboxId,
+          runtimeId,
+          triggerAction: input.action,
+          preservedSha,
+          patch: payload.patch,
+        });
+      } catch (error) {
+        sourceReadbackError = error instanceof Error ? error.message : String(error);
+      }
+    }
     const completedAtMs = Date.now();
     return {
       attempted: true,
@@ -639,8 +839,10 @@ async function maybePreserveSandboxSourceAfterMutation(input: {
       completedAt: new Date(completedAtMs).toISOString(),
       durationMs: completedAtMs - startedAtMs,
       preserved: payload.preserved === true,
-      preservedSha: typeof payload.preservedSha === "string" ? payload.preservedSha : null,
+      preservedSha,
       message: typeof payload.message === "string" ? payload.message : null,
+      ...(sourceReadbackArtifact ? { sourceReadbackArtifact } : {}),
+      ...(sourceReadbackError ? { sourceReadbackError } : {}),
     };
   } catch (error) {
     const completedAtMs = Date.now();
@@ -656,6 +858,95 @@ async function maybePreserveSandboxSourceAfterMutation(input: {
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function captureSandboxSourceReadbackArtifact(input: {
+  sandboxId: string;
+  runtimeId: string;
+  triggerAction: SandboxToolAction;
+  preservedSha: string | null;
+  patch: unknown;
+}): Promise<SandboxSourceReadbackArtifact> {
+  const patchRecord = asRecord(input.patch);
+  const rawPatchText = typeof patchRecord.patch === "string" ? patchRecord.patch : "";
+  const patchText = rawPatchText.length > SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS
+    ? rawPatchText.slice(0, SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS)
+    : rawPatchText;
+  const patchPaths = sandboxSourceReadbackPatchFilePaths(rawPatchText);
+  const files: SandboxSourceReadbackFile[] = [];
+  let totalReturnedBytes = 0;
+  let skippedFiles = Math.max(0, patchPaths.length - SANDBOX_SOURCE_READBACK_MAX_FILES);
+
+  for (const path of patchPaths.slice(0, SANDBOX_SOURCE_READBACK_MAX_FILES)) {
+    const remainingBytes = SANDBOX_SOURCE_READBACK_MAX_TOTAL_BYTES - totalReturnedBytes;
+    if (remainingBytes <= 0) {
+      skippedFiles += 1;
+      continue;
+    }
+    const maxBytes = Math.min(SANDBOX_SOURCE_READBACK_MAX_FILE_BYTES, remainingBytes);
+    try {
+      const downloadPayload = asRecord(
+        await sandboxRequestPayload({
+          type: "download_file",
+          sandboxId: input.sandboxId,
+          payload: { path, maxBytes },
+        }),
+      );
+      const file = asRecord(downloadPayload.file);
+      const isBinary = file.isBinary === true;
+      const returnedBytes = numberValue(file.returnedBytes);
+      const sizeBytes = numberValue(file.totalSizeBytes) ?? numberValue(file.sizeBytes);
+      const entry: SandboxSourceReadbackFile = {
+        path,
+        sizeBytes,
+        returnedBytes,
+        isBinary,
+        truncated: file.truncated === true,
+      };
+      if (isBinary) {
+        entry.unavailableReason = "binary file";
+      } else if (typeof file.contentsBase64 === "string") {
+        entry.content = Buffer.from(file.contentsBase64, "base64").toString("utf8");
+        totalReturnedBytes += Buffer.byteLength(entry.content, "utf8");
+      } else {
+        entry.unavailableReason = "missing text content";
+      }
+      files.push(entry);
+    } catch (error) {
+      files.push({
+        path,
+        sizeBytes: null,
+        returnedBytes: null,
+        isBinary: false,
+        truncated: false,
+        unavailableReason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return {
+    schemaVersion: SANDBOX_SOURCE_READBACK_SCHEMA_VERSION,
+    sandboxId: input.sandboxId,
+    runtimeId: input.runtimeId,
+    triggerAction: input.triggerAction,
+    preservedSha: input.preservedSha,
+    createdAt: new Date().toISOString(),
+    patch: {
+      text: patchText,
+      bytes:
+        typeof patchRecord.bytes === "number"
+          ? patchRecord.bytes
+          : Buffer.byteLength(rawPatchText, "utf8"),
+      fileCount: patchPaths.length,
+      filename: stringValue(patchRecord.filename),
+      sha256: stringValue(patchRecord.sha256),
+      lineCount: numberValue(patchRecord.lineCount),
+      empty: patchRecord.empty === true || !rawPatchText.trim(),
+      truncated: rawPatchText.length > patchText.length,
+    },
+    files,
+    skippedFiles,
+  };
 }
 
 export function isSandboxSourceMutationAction(action: WorkspaceToolRequest["action"]): boolean {
@@ -1050,6 +1341,13 @@ export function summarizeSandboxToolResult(
       ? `Exported sandbox patch ${filename} (${bytes} bytes)\n\n${text}`
       : `Exported empty sandbox patch ${filename}.`;
   }
+  if (action === "sandbox_git_apply_patch_local") {
+    const patch = asRecord(payload.patch);
+    const fileCount = typeof patch.fileCount === "number" ? patch.fileCount : 0;
+    const bytes = typeof patch.bytes === "number" ? patch.bytes : 0;
+    const localProjectName = typeof payload.localProjectName === "string" ? payload.localProjectName : "local checkout";
+    return `Applied sandbox patch to ${localProjectName}: ${fileCount} changed file${fileCount === 1 ? "" : "s"} (${bytes} bytes).`;
+  }
   if (action === "sandbox_git_branch") {
     const branch = asRecord(payload.branch);
     const name = typeof branch.branch === "string" ? branch.branch : "branch";
@@ -1411,6 +1709,14 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function sandboxIdFromPayload(value: unknown): string {

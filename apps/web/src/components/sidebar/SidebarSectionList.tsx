@@ -14,6 +14,7 @@ import {
 } from "../icons";
 import type { AppView, SidebarProjectItem } from "../../lib/app-models";
 import { SIDEBAR_CHAT_PAGE_SIZE, SIDEBAR_SECTION_LIMIT } from "../../lib/app-models";
+import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
 import {
@@ -26,6 +27,7 @@ import {
 } from "./SidebarRows";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
+const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
 
 export type SidebarProjectClickAction = "select_draft_project" | "toggle_project";
 
@@ -85,11 +87,13 @@ export function SidebarSectionList({
   localProjectRows,
   projectsCollapsed,
   projectsExpanded,
+  projectRows,
   projectSessionRowsByProjectId,
   moveProjectToCloud,
   removeProject,
   restoreSession,
   runningSessionIds,
+  goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   sectionMenuOpen,
   selectCloudWorkItem,
   selectedCloudWorkItemId,
@@ -122,6 +126,8 @@ export function SidebarSectionList({
 }: SidebarProps) {
   const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<Record<string, number>>({});
   const [expandedCloudProjectWorkItemIds, setExpandedCloudProjectWorkItemIds] = useState<Set<string>>(() => new Set());
+  const projectsSectionRows =
+    projectRows ?? [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
 
   function showMoreProjectChats(projectId: string, totalCount: number) {
     setProjectChatVisibleCounts((current) => {
@@ -227,6 +233,7 @@ export function SidebarSectionList({
             hideIcon
             nested
             running={runningSessionIds.has(session.id)}
+            goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
             terminalIndicator={terminalIndicatorForSession(session.id)}
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
@@ -363,6 +370,7 @@ export function SidebarSectionList({
               hideIcon
               placeholder={isDraggedRow}
               running={runningSessionIds.has(row.session.id)}
+              goalRuntime={goalRuntimeBySessionId.get(row.session.id) ?? null}
               terminalIndicator={terminalIndicatorForSession(row.session.id)}
               onSelect={() => selectSession(row.session)}
               onTogglePin={() => toggleSessionPinned(row.session)}
@@ -384,7 +392,6 @@ export function SidebarSectionList({
             />
           );
         })}
-        {pinnedRows.length === 0 && <div className="empty-row">No pinned items</div>}
       </SidebarSection>
 
       <SidebarSection
@@ -532,8 +539,10 @@ export function SidebarSectionList({
             {renderProjectChildren(item)}
           </div>
         ))}
-        {localProjectRows.length === 0 && cloudProjectRows.length === 0 && <div className="empty-row">No projects</div>}
-        {localProjectRows.length + cloudProjectRows.length > SIDEBAR_SECTION_LIMIT && (
+        {visibleProjectRows.length === 0 && localProjectRows.length === 0 && cloudProjectRows.length === 0 && (
+          <div className="empty-row">No projects</div>
+        )}
+        {projectsSectionRows.length > SIDEBAR_SECTION_LIMIT && (
           <SidebarShowMoreButton
             expanded={projectsExpanded}
             onClick={() => setProjectsExpanded((expanded) => !expanded)}
@@ -584,6 +593,7 @@ export function SidebarSectionList({
               archived
               hideIcon
               running={runningSessionIds.has(session.id)}
+              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
               terminalIndicator={terminalIndicatorForSession(session.id)}
               onSelect={() => {
                 restoreSession(session);
@@ -600,6 +610,7 @@ export function SidebarSectionList({
               selected={view === "chat" && selectedSessionId === session.id}
               hideIcon
               running={runningSessionIds.has(session.id)}
+              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
               terminalIndicator={terminalIndicatorForSession(session.id)}
               onSelect={() => selectSession(session)}
               onTogglePin={() => toggleSessionPinned(session)}

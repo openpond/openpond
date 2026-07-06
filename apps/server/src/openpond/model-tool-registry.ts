@@ -11,6 +11,11 @@ import type {
   WorkspaceToolResult,
 } from "@openpond/contracts";
 import { connectedAppIntegrationSkillByProvider } from "@openpond/contracts";
+import {
+  commandResultForModel,
+  type OpenPondCommandExecutionInput,
+  type OpenPondCommandRunResult,
+} from "./command-access.js";
 import { formatWorkspaceToolResultForModel } from "./hosted-tool-protocol.js";
 import type { NativeModelToolResult } from "./native-tool-calls.js";
 import {
@@ -90,11 +95,14 @@ export function createResourceModelToolDefinitions(deps: {
     options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null },
   ) => Promise<WorkspaceToolResult>;
 }): ModelToolDefinition[] {
-  const resourceEnabled = (context: ToolVisibilityContext) =>
-    context.session.workspaceKind === "local_project" ||
-    context.session.workspaceKind === "sandbox" ||
-    context.session.workspaceKind === "sandbox_template" ||
-    Boolean(deps.runtimeEvents?.length);
+  const resourceEnabled = (context: ToolVisibilityContext) => {
+    const target = resolveWorkspaceExecutionTarget({ session: context.session });
+    return (
+      target.target !== "none" ||
+      context.session.workspaceKind === "sandbox_template" ||
+      Boolean(deps.runtimeEvents?.length)
+    );
+  };
   const activeSandboxEnabled = (context: ToolVisibilityContext) =>
     isSandboxExecutionTarget(resolveWorkspaceExecutionTarget({ session: context.session })) &&
     Boolean(context.session.workspaceId);
@@ -378,7 +386,205 @@ export function createResourceModelToolDefinitions(deps: {
         return workspaceToolResultToModelToolResult(context.callId, "sandbox_edit_file", result);
       },
     },
+    {
+      name: "sandbox_status",
+      description:
+        "Read the active sandbox lifecycle status, runtime metadata, and readiness details before running commands or diagnosing sandbox startup.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+      enabled: activeSandboxEnabled,
+      execute: async (context) => {
+        const result = await deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_status",
+            args: {},
+            source: "chat_action",
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          },
+        );
+        return workspaceToolResultToModelToolResult(context.callId, "sandbox_status", result);
+      },
+    },
+    {
+      name: "sandbox_exec",
+      description:
+        "Run a bounded shell command inside the active sandbox workspace. Use this for Hybrid validation commands such as bun run typecheck; do not run workspace commands in the local checkout while Working in Hybrid.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          command: {
+            type: "string",
+            minLength: 1,
+            description: "Shell command to run in the sandbox workspace, for example bun run typecheck.",
+          },
+          timeoutSeconds: {
+            type: "integer",
+            minimum: 1,
+            maximum: 3600,
+            description: "Optional command timeout in seconds. Defaults to the sandbox workspace tool timeout.",
+          },
+        },
+        required: ["command"],
+      },
+      enabled: activeSandboxEnabled,
+      execute: async (context) => {
+        const result = await deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_exec",
+            args: {
+              command: stringArg(context.args, "command"),
+              ...(typeof context.args.timeoutSeconds === "number"
+                ? { timeoutSeconds: Math.max(1, Math.min(Math.floor(context.args.timeoutSeconds), 3600)) }
+                : {}),
+            },
+            source: "chat_action",
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          },
+        );
+        return workspaceToolResultToModelToolResult(context.callId, "sandbox_exec", result);
+      },
+    },
+    {
+      name: "sandbox_git_status",
+      description:
+        "Read git status for the active sandbox workspace. Use this after sandbox edits or commands to report changed files without reading the user's local checkout.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+      enabled: activeSandboxEnabled,
+      execute: async (context) => {
+        const result = await deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_git_status",
+            args: {},
+            source: "chat_action",
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          },
+        );
+        return workspaceToolResultToModelToolResult(context.callId, "sandbox_git_status", result);
+      },
+    },
+    {
+      name: "sandbox_git_diff",
+      description:
+        "Read the active sandbox workspace git diff. Use this to summarize sandbox-only changes or verify that a command/edit changed only expected files.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          baseRef: {
+            type: "string",
+            description: "Optional base ref for the diff. Omit for the default working-tree diff.",
+          },
+        },
+      },
+      enabled: activeSandboxEnabled,
+      execute: async (context) => {
+        const result = await deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_git_diff",
+            args: {
+              ...(typeof context.args.baseRef === "string" && context.args.baseRef.trim()
+                ? { baseRef: context.args.baseRef.trim() }
+                : {}),
+            },
+            source: "chat_action",
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          },
+        );
+        return workspaceToolResultToModelToolResult(context.callId, "sandbox_git_diff", result);
+      },
+    },
   ];
+}
+
+export function createCommandModelToolDefinition(deps: {
+  executeCommand: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
+}): ModelToolDefinition {
+  return {
+    name: "exec_command",
+    description:
+      "Run a bounded local shell command in the selected local project. Requires OpenPond command access and may pause for user approval.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        command: {
+          type: "string",
+          minLength: 1,
+          description: "Shell command to run in the selected local project, for example ls or bun run typecheck.",
+        },
+        cwd: {
+          type: "string",
+          description: "Optional working directory. Omit to use the selected project root.",
+        },
+        timeoutSeconds: {
+          type: "integer",
+          minimum: 1,
+          maximum: 3600,
+          description: "Optional command timeout in seconds. Defaults to 120.",
+        },
+      },
+      required: ["command"],
+    },
+    enabled: (context) => {
+      if (context.provider === "codex" || context.session.provider === "codex") return false;
+      if (context.session.openPondCommandAccessMode === "disabled") return false;
+      const target = resolveWorkspaceExecutionTarget({ session: context.session });
+      return target.target === "local" && Boolean(target.cwd || target.projectPath || context.session.cwd);
+    },
+    execute: async (context) => {
+      const result = await deps.executeCommand({
+        session: context.session,
+        turnId: context.turnId,
+        providerRequestId: context.callId,
+        command: stringArg(context.args, "command"),
+        cwd: typeof context.args.cwd === "string" ? context.args.cwd : null,
+        timeoutSeconds: typeof context.args.timeoutSeconds === "number" ? context.args.timeoutSeconds : null,
+        source: "model_tool",
+        signal: context.signal,
+      });
+      return {
+        toolCallId: context.callId,
+        name: "exec_command",
+        ok: result.ok,
+        contentText: commandResultForModel(result),
+        data: {
+          command: result.command,
+          cwd: result.cwd,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          timedOut: result.timedOut,
+          timeoutSeconds: result.timeoutSeconds,
+          truncated: result.truncated,
+          blockedReason: result.blockedReason,
+        },
+      };
+    },
+  };
 }
 
 export function createWebSearchModelToolDefinition(deps: {
@@ -491,7 +697,7 @@ export function createOpenPondProfileSkillModelToolDefinitions(deps: {
     {
       name: "profile_skill_read",
       description:
-        "Read the full body of one enabled OpenPond profile skill by name before following that skill's workflow.",
+        "Read the full body of one enabled OpenPond profile skill by name before following that skill's workflow. This loads instructions only; it does not run the skill, grant permissions, or create command execution tools.",
       parameters: {
         type: "object",
         additionalProperties: false,

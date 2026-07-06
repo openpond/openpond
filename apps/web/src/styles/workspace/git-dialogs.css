@@ -96,6 +96,26 @@
   font-weight: 700;
 }
 
+.sandbox-start-env-section {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #252525;
+  padding: 10px;
+}
+
+.sandbox-start-env-warning {
+  margin: 0;
+  border: 1px solid rgba(255, 190, 110, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 190, 110, 0.1);
+  color: #ffd39b;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .sandbox-start-schedules {
   display: grid;
   gap: 10px;

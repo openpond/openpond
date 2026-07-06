@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 350, in run
+    await self._prepare()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 379, in _prepare
+    await self._setup_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1097, in _setup_agent_environment
+    await self._start_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1103, in _start_agent_environment
+    await asyncio.wait_for(
+  File "/home/glu/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 876, in start
+    await self._run_docker_compose_command(["up", "--detach", "--wait"])
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 625, in _run_docker_compose_command
+    raise RuntimeError(
+RuntimeError: Docker compose command failed for environment install-windows-3-11. Command: docker compose --project-name install-windows-3-11__spqlejf__env --project-directory /home/glu/.cache/harbor/tasks/packages/terminal-bench/install-windows-3-11/3fccdcf345cef4dd1a828ad3829024109b163b871b3f39db1af9308a77ee4ce7/environment -f /tmp/tmpzuhpncux/install-windows-3-11__SPqLejF__env-docker-compose-resources.json -f /home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /tmp/tmpu9a50ehf/docker-compose-mounts.json up --detach --wait. Return code: 1. Stdout: Error response from daemon: client version 1.43 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version
+. Stderr: None. 

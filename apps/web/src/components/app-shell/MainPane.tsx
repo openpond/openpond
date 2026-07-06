@@ -22,14 +22,17 @@ import type {
   CloudWorkItemDetail,
   CodexPermissionMode,
   CodexReasoningEffort,
+  OpenPondCommandAccessMode,
   InsightItem,
   InsightRun,
   InsightRunTrigger,
   InsightStatus,
   Approval,
   OpenPondApp,
+  OpenPondProfileSkill,
   ResolveApprovalRequest,
   RuntimeEvent,
+  Session,
   UsageRequestAttribution,
   WorkspaceDiffSummary,
   WorkspaceKind,
@@ -103,6 +106,7 @@ type MainPaneProps = {
   steerAutoDispatchReady: boolean;
   mentionApps: OpenPondApp[];
   connectedAppMentions: ConnectedAppMentionOption[];
+  profileSkills: OpenPondProfileSkill[];
   selectedMentionAppId: string | null;
   busy: boolean;
   turnRunning: boolean;
@@ -110,6 +114,7 @@ type MainPaneProps = {
   activeModel: string;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
+  openPondCommandAccessMode: OpenPondCommandAccessMode;
   pendingApproval: Approval | null;
   activeWorkspaceAppId: string | null;
   activeWorkspaceId: string | null;
@@ -172,6 +177,7 @@ type MainPaneProps = {
   setDraftModel: (model: string) => void;
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
+  changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
   resolveApproval: (
     approvalId: string,
     decision: ResolveApprovalRequest["decision"],
@@ -425,6 +431,11 @@ function cloudWorkItemSandboxId(
   );
 }
 
+export function sandboxIdFromWorkspaceName(workspaceName: string | null): string | null {
+  const trimmed = workspaceName?.trim() ?? "";
+  return /^[a-z0-9]{24}$/.test(trimmed) ? trimmed : null;
+}
+
 export function MainPane({
   view,
   bootstrap,
@@ -437,6 +448,7 @@ export function MainPane({
   steerAutoDispatchReady,
   mentionApps,
   connectedAppMentions,
+  profileSkills,
   selectedMentionAppId,
   busy,
   turnRunning,
@@ -444,6 +456,7 @@ export function MainPane({
   activeModel,
   codexPermissionMode,
   codexReasoningEffort,
+  openPondCommandAccessMode,
   pendingApproval,
   activeWorkspaceAppId,
   activeWorkspaceId,
@@ -506,6 +519,7 @@ export function MainPane({
   setDraftModel,
   changeCodexPermissionMode,
   changeCodexReasoningEffort,
+  changeOpenPondCommandAccessMode,
   resolveApproval,
   answerCreatePipelineQuestionTurn,
   approveCreatePipelineTurn,
@@ -574,9 +588,13 @@ export function MainPane({
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails)) &&
     Boolean(selectedCloudWorkItem);
+  const showLocalDiffPanel = (view === "chat" || view === "profile") && Boolean(activeWorkspaceAppId);
   const showEmptyRightChatFallbackPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
-  const chatSandboxId = isCloudWorkspaceKind(activeWorkspaceKind) ? activeWorkspaceId : null;
+  const chatSandboxId = isCloudWorkspaceKind(activeWorkspaceKind)
+    ? activeWorkspaceId ?? sandboxIdFromWorkspaceName(workspaceName)
+    : null;
+  const showChatSandboxDiffPanel = view === "chat" && Boolean(chatSandboxId);
   const rightSidebarSandboxId = showCloudDiffPanel ? selectedCloudSandboxId : chatSandboxId;
   const rightSidebarSandboxSourceAvailable =
     Boolean(rightSidebarSandboxId) ||
@@ -618,7 +636,7 @@ export function MainPane({
     setRightSidebarSourceOverride(null);
   }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, showCloudDiffPanel, workspaceTarget.value]);
   const showDiffPanel =
-    (view === "chat" || showCloudDiffPanel) &&
+    (showLocalDiffPanel || showCloudDiffPanel || showChatSandboxDiffPanel) &&
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
   const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
@@ -1195,7 +1213,7 @@ export function MainPane({
       workspaceError={rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
-      onRefresh={() => void refreshWorkspaceDiff()}
+      onRefresh={(options) => void refreshWorkspaceDiff(options)}
       onToggleExpanded={onToggleDiffPanelExpanded}
       onOpenBrowser={onShowBrowserPanel}
       onOpenBrowserUrl={handleOpenBrowserLink}
@@ -1237,9 +1255,11 @@ export function MainPane({
       busy={busy}
       codexPermissionMode={codexPermissionMode}
       codexReasoningEffort={codexReasoningEffort}
+      openPondCommandAccessMode={openPondCommandAccessMode}
       connection={connection}
       connectedAppMentions={connectedAppMentions}
       mentionApps={mentionApps}
+      profileSkills={profileSkills}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
       accountBaseUrl={accountBaseUrl}
@@ -1251,6 +1271,7 @@ export function MainPane({
       onClosePanel={onCloseRightChatPanel}
       onCodexPermissionModeChange={changeCodexPermissionMode}
       onCodexReasoningEffortChange={changeCodexReasoningEffort}
+      onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
       onModelChange={onRightChatModelChange}
       onOpenFileInSidebar={handleOpenFileInSidebar}
       onOpenProfileSettings={onOpenProfileSettings}
@@ -1338,20 +1359,28 @@ export function MainPane({
           />
         </Suspense>
       ) : view === "profile" ? (
-        <Suspense fallback={null}>
-          <ProfileView
-            payload={bootstrap}
-            connection={connection}
-            onPayload={onPayload}
-            onError={onError}
-            onToast={showToast}
-            onSkillCommand={(command) => {
-              setPrompt(command);
-              setMentionedAppId(null);
-              setView("chat");
-            }}
-          />
-        </Suspense>
+        rightPanelExpanded ? (
+          <Suspense fallback={null}>{rightPanel}</Suspense>
+        ) : (
+          <>
+            <Suspense fallback={null}>
+              <ProfileView
+                payload={bootstrap}
+                connection={connection}
+                onPayload={onPayload}
+                onError={onError}
+                onToast={showToast}
+                onSkillCommand={(command) => {
+                  setPrompt(command);
+                  setMentionedAppId(null);
+                  setView("chat");
+                }}
+              />
+            </Suspense>
+            {terminalPanel}
+            {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
+          </>
+        )
       ) : view === "insights" ? (
         <Suspense fallback={null}>
           <InsightsView
@@ -1451,6 +1480,7 @@ export function MainPane({
                 prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
+                profileSkills={profileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1469,6 +1499,7 @@ export function MainPane({
                 workspaceTarget={workspaceTarget}
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
+                openPondCommandAccessMode={openPondCommandAccessMode}
                 onProviderChange={changeDraftProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1476,6 +1507,7 @@ export function MainPane({
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
+                onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
                 onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
@@ -1509,6 +1541,7 @@ export function MainPane({
                 prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
+                profileSkills={profileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1526,6 +1559,7 @@ export function MainPane({
                 workspaceTarget={workspaceTarget}
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
+                openPondCommandAccessMode={openPondCommandAccessMode}
                 onProviderChange={changeDraftProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1533,6 +1567,7 @@ export function MainPane({
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
+                onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
                 onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}

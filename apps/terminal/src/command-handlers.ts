@@ -1,7 +1,9 @@
 import {
   buildConnectedAppInstallUrl,
   connectedAppById,
+  type Approval,
   type BootstrapPayload,
+  type OpenPondCommandAccessMode,
 } from "@openpond/contracts";
 import type { TerminalOptions } from "./args.js";
 import { apiFetch } from "./connection.js";
@@ -27,6 +29,17 @@ import {
   createTerminalChatSession,
   type TerminalSessionConnection,
 } from "./session-state.js";
+import {
+  commandAccessModeForSession,
+  formatTerminalCommandApprovalQuestion,
+  formatTerminalPermissionMode,
+  formatTerminalPermissionsSummary,
+  latestPendingCommandApproval,
+  parseTerminalPermissionChoice,
+  parseTerminalPermissionMode,
+  terminalPermissionDecision,
+  type TerminalPermissionChoice,
+} from "./permissions.js";
 import { helpText, type SlashCommand } from "./ui/commands.js";
 import { systemItem, type TranscriptItem } from "./ui/transcript.js";
 
@@ -46,6 +59,8 @@ export type TerminalCommandContext = {
   setActiveSessionId(sessionId: string): void;
   getActiveAgentId(): string | null;
   setActiveAgentId(agentId: string): void;
+  getPendingCommandApproval?: () => Approval | null;
+  openCommandApprovalQuestion?: (approval: Approval) => void;
   refreshBootstrap(refreshCodex?: boolean): Promise<BootstrapPayload>;
   addItem(item: TranscriptItem): void;
   clearTranscript(): void;
@@ -163,6 +178,10 @@ export async function handleTerminalSlashCommand(
     context.render();
     return;
   }
+  if (command.type === "permissions") {
+    await handlePermissionsCommand(command.args, context, connection);
+    return;
+  }
   if (command.type === "agents") {
     const latest = await context.refreshBootstrap();
     context.addItem(systemItem(formatProfileAgents(latest.profile, context.getActiveAgentId())));
@@ -255,6 +274,87 @@ export async function handleTerminalSlashCommand(
     return;
   }
   context.addItem(systemItem(`Unknown command: ${command.command}`, "warning"));
+}
+
+async function handlePermissionsCommand(
+  args: string[],
+  context: TerminalCommandContext,
+  connection: TerminalSessionConnection,
+): Promise<void> {
+  const latest = await context.refreshBootstrap();
+  const activeSessionId = context.getActiveSessionId();
+  const pendingApproval =
+    context.getPendingCommandApproval?.() ??
+    latestPendingCommandApproval(latest, activeSessionId);
+  const first = args[0] ?? null;
+  const choice = parseTerminalPermissionChoice(first);
+
+  if (choice) {
+    if (!pendingApproval) {
+      context.addItem(systemItem("No command approval is pending.", "warning"));
+      return;
+    }
+    await resolveTerminalCommandApproval(connection, pendingApproval.id, choice);
+    context.addItem(systemItem(`Command approval resolved: ${choice}.`));
+    return;
+  }
+
+  if (pendingApproval && !first) {
+    if (context.openCommandApprovalQuestion) {
+      context.openCommandApprovalQuestion(pendingApproval);
+    } else {
+      context.addItem(systemItem(formatTerminalCommandApprovalQuestion(pendingApproval), "warning"));
+    }
+    return;
+  }
+
+  const mode = parseTerminalPermissionMode(first);
+  if (mode) {
+    if (!activeSessionId) {
+      context.addItem(systemItem("No active session.", "warning"));
+      return;
+    }
+    await patchTerminalSessionCommandAccess(connection, activeSessionId, mode);
+    await context.refreshBootstrap();
+    context.addItem(systemItem(`Command access set to ${formatTerminalPermissionMode(mode)}.`));
+    return;
+  }
+
+  if (first) {
+    context.addItem(
+      systemItem("Usage: /permissions [ask|full-access|yes|session|no|skip]", "warning"),
+    );
+    return;
+  }
+
+  context.addItem(systemItem(formatTerminalPermissionsSummary(commandAccessModeForSession(latest, activeSessionId))));
+}
+
+export async function resolveTerminalCommandApproval(
+  connection: TerminalSessionConnection,
+  approvalId: string,
+  choice: TerminalPermissionChoice,
+): Promise<Approval> {
+  return apiFetch<Approval>(
+    connection.server,
+    connection.token,
+    `/v1/approvals/${encodeURIComponent(approvalId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision: terminalPermissionDecision(choice) }),
+    },
+  );
+}
+
+async function patchTerminalSessionCommandAccess(
+  connection: TerminalSessionConnection,
+  sessionId: string,
+  mode: OpenPondCommandAccessMode,
+): Promise<void> {
+  await apiFetch(connection.server, connection.token, `/v1/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ openPondCommandAccessMode: mode }),
+  });
 }
 
 async function handleSettingsCommand(

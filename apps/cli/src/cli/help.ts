@@ -14,6 +14,9 @@ export function printHelp(): void {
   console.log("  openpond --tui");
   console.log("  openpond tui|interactive");
   console.log("  openpond chat [--model <model>] [--cwd <dir>] [--project <id>]");
+  console.log(
+    "  openpond chat (--message-file <path>|--message <text>|--stdin) --non-interactive [--yes] [--approval-policy <policy>] [--json] [--timeout-sec <n>] [--max-output-bytes <n>] [--sandbox <mode>]"
+  );
   console.log("  openpond init [--path <dir>] [--profile default] [--template blank-agent] [--force]");
   console.log("  openpond profile current [--json]");
   console.log("  openpond profile load --path <dir> [--profile <name>]");

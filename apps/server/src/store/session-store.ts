@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   CreateSessionRequestSchema,
+  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+  OpenPondCommandAccessModeSchema,
   PatchSessionRequestSchema,
+  type AppPreferences,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -12,19 +15,24 @@ import { event, now } from "../utils.js";
 export function createSessionStore(deps: {
   store: SqliteStore;
   defaultSessionCwd: (appId?: string | null) => string;
+  loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
 }) {
-  const { store, defaultSessionCwd, appendRuntimeEvent } = deps;
+  const { store, defaultSessionCwd, loadAppPreferences, appendRuntimeEvent } = deps;
 
   async function createSession(payload: unknown): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
     const createdAt = now();
     const sessionCount = await store.sessionCount();
     const workspaceKind = input.workspaceKind ?? (input.appId ? "sandbox_app" : undefined);
+    const openPondCommandAccessMode =
+      input.openPondCommandAccessMode ??
+      (loadAppPreferences ? (await loadAppPreferences()).openPondCommandAccessMode : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE);
     const session: Session = {
       id: randomUUID(),
       provider: input.provider,
       modelRef: input.modelRef ?? null,
+      openPondCommandAccessMode,
       systemKind: input.systemKind ?? null,
       hiddenFromDefaultSidebar: input.hiddenFromDefaultSidebar ?? false,
       title: input.title || input.appName || "New chat",
@@ -61,11 +69,13 @@ export function createSessionStore(deps: {
 
   async function patchSession(sessionId: string, payload: unknown): Promise<Session> {
     const input = PatchSessionRequestSchema.parse(payload);
-    const updated = await store.updateSession(sessionId, (session) => ({
-      ...session,
-      ...input,
-      updatedAt: session.updatedAt,
-    }));
+    const updated = await store.updateSession(sessionId, (session) =>
+      normalizeSessionCommandAccess({
+        ...session,
+        ...input,
+        updatedAt: session.updatedAt,
+      }),
+    );
     if (!updated) throw new Error("Session not found");
     return updated;
   }
@@ -73,15 +83,17 @@ export function createSessionStore(deps: {
   async function getSession(sessionId: string): Promise<Session> {
     const session = await store.getSession(sessionId);
     if (!session) throw new Error("Session not found");
-    return session;
+    return normalizeSessionCommandAccess(session);
   }
 
   async function updateSession(sessionId: string, patch: Partial<Session>): Promise<Session> {
-    const updated = await store.updateSession(sessionId, (session) => ({
-      ...session,
-      ...patch,
-      updatedAt: now(),
-    }));
+    const updated = await store.updateSession(sessionId, (session) =>
+      normalizeSessionCommandAccess({
+        ...session,
+        ...patch,
+        updatedAt: now(),
+      }),
+    );
     if (!updated) throw new Error("Session not found");
     return updated;
   }
@@ -160,5 +172,15 @@ export function createSessionStore(deps: {
     completeTurn,
     failTurn,
     interruptTurn,
+  };
+}
+
+function normalizeSessionCommandAccess(session: Session): Session {
+  const parsed = OpenPondCommandAccessModeSchema.safeParse(
+    (session as Session & { openPondCommandAccessMode?: unknown }).openPondCommandAccessMode,
+  );
+  return {
+    ...session,
+    openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   };
 }

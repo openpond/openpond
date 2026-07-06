@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { BootstrapPayload, CloudProject, Session } from "@openpond/contracts";
 import { sandboxMentionApps } from "../lib/chat-app-mentions";
 import { currentOpenPondAppIds, currentOpenPondProjectLink } from "../lib/project-links";
@@ -77,18 +77,11 @@ export function useAppSelectionState({
     () => buildSidebarProjectPathIndex(bootstrap?.localProjects ?? []),
     [bootstrap?.localProjects],
   );
-  const sidebarSessions = useMemo<Session[]>(() => {
-    const liveCodexThreadIds = new Set<string>();
-    const rows = sessions.slice();
-    for (const session of sessions) {
-      if (session.codexThreadId) liveCodexThreadIds.add(session.codexThreadId);
-    }
-    for (const session of codexHistorySessions) {
-      if (session.codexThreadId && liveCodexThreadIds.has(session.codexThreadId)) continue;
-      rows.push(session);
-    }
-    return rows.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
-  }, [codexHistorySessions, sessions]);
+  const sidebarSessionOrderKeysRef = useRef<string[]>([]);
+  const sidebarSessions = useMemo(
+    () => mergedSidebarSessions(sessions, codexHistorySessions, sidebarSessionOrderKeysRef.current),
+    [codexHistorySessions, sessions],
+  );
   const selectedSession = useMemo(
     () => sidebarSessions.find((session) => session.id === selectedSessionId) ?? null,
     [sidebarSessions, selectedSessionId],
@@ -144,4 +137,89 @@ export function useAppSelectionState({
     selectedSessionLinkedProject,
     sidebarSessions,
   };
+}
+
+export function mergedSidebarSessions(
+  sessions: Session[],
+  codexHistorySessions: Session[],
+  previousOrderKeys?: string[],
+): Session[] {
+  const rowsByKey = new Map<string, Session>();
+  for (const session of sessions) {
+    const key = sidebarSessionOrderKey(session);
+    rowsByKey.set(key, session);
+  }
+  for (const session of codexHistorySessions) {
+    const key = sidebarSessionOrderKey(session);
+    const current = rowsByKey.get(key);
+    rowsByKey.set(key, current ? mergeCodexHistorySessionIntoLiveSession(current, session) : session);
+  }
+
+  const entries = Array.from(rowsByKey.entries());
+  if (!previousOrderKeys) {
+    return entries
+      .sort((left, right) => compareSidebarSessionsForNewRows(left[1], right[1]))
+      .map((entry) => entry[1]);
+  }
+
+  const orderedEntries: Array<[string, Session]> = [];
+  const usedKeys = new Set<string>();
+  for (const key of previousOrderKeys) {
+    const row = rowsByKey.get(key);
+    if (!row) continue;
+    orderedEntries.push([key, row]);
+    usedKeys.add(key);
+  }
+
+  const newEntries = entries
+    .filter(([key]) => !usedKeys.has(key))
+    .sort((left, right) => compareSidebarSessionsForNewRows(left[1], right[1]));
+  const nextEntries = [...newEntries, ...orderedEntries];
+  previousOrderKeys.splice(0, previousOrderKeys.length, ...nextEntries.map(([key]) => key));
+  return nextEntries.map((entry) => entry[1]);
+}
+
+function mergeCodexHistorySessionIntoLiveSession(liveSession: Session, historySession: Session): Session {
+  return {
+    ...liveSession,
+    metadata: mergedSessionMetadata(liveSession.metadata, historySession.metadata),
+    status: liveSession.status === "active" || historySession.status === "active" ? "active" : liveSession.status,
+    updatedAt: newerIso(liveSession.updatedAt, historySession.updatedAt),
+  };
+}
+
+function sidebarSessionOrderKey(session: Session): string {
+  return session.codexThreadId ? `codex:${session.codexThreadId}` : `session:${session.id}`;
+}
+
+function compareSidebarSessionsForNewRows(left: Session, right: Session): number {
+  const updatedDelta = sessionTime(right) - sessionTime(left);
+  if (updatedDelta !== 0) return updatedDelta;
+  return left.title.localeCompare(right.title);
+}
+
+function mergedSessionMetadata(
+  liveMetadata: Session["metadata"] | undefined,
+  historyMetadata: Session["metadata"] | undefined,
+): Session["metadata"] | undefined {
+  const merged = {
+    ...(liveMetadata ?? {}),
+    ...(historyMetadata ?? {}),
+  };
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function newerIso(left: string, right: string): string {
+  const leftMs = Date.parse(left);
+  if (!Number.isFinite(leftMs)) return right;
+  const rightMs = Date.parse(right);
+  if (!Number.isFinite(rightMs)) return left;
+  return rightMs > leftMs ? right : left;
+}
+
+function sessionTime(session: Session): number {
+  const updatedAt = Date.parse(session.updatedAt);
+  if (Number.isFinite(updatedAt)) return updatedAt;
+  const createdAt = Date.parse(session.createdAt);
+  return Number.isFinite(createdAt) ? createdAt : 0;
 }

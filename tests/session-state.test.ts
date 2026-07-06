@@ -119,6 +119,41 @@ describe("session state merging", () => {
     ]);
   });
 
+  test("keeps existing sidebar order when bootstrap updates arrive in recency order", () => {
+    const current = [
+      session({ id: "session_1", codexThreadId: "thread_1", title: "First", updatedAt: older }),
+      session({ id: "session_2", codexThreadId: "thread_2", title: "Second", updatedAt: older }),
+    ];
+    const incoming = [
+      session({ id: "session_2", codexThreadId: "thread_2", title: "Second updated", updatedAt: newer }),
+      session({ id: "session_1", codexThreadId: "thread_1", title: "First", updatedAt: older }),
+    ];
+
+    expect(mergeBootstrapSessionListPreservingLocalState(current, incoming).map((item) => item.id)).toEqual([
+      "session_1",
+      "session_2",
+    ]);
+    expect(mergeBootstrapSessionListPreservingLocalState(current, incoming)[1]?.title).toBe("Second updated");
+  });
+
+  test("places genuinely new bootstrap sessions before the preserved client order", () => {
+    const current = [
+      session({ id: "session_1", codexThreadId: "thread_1", title: "First" }),
+      session({ id: "session_2", codexThreadId: "thread_2", title: "Second" }),
+    ];
+    const incoming = [
+      session({ id: "session_3", codexThreadId: "thread_3", title: "New", updatedAt: newer }),
+      session({ id: "session_2", codexThreadId: "thread_2", title: "Second", updatedAt: newer }),
+      session({ id: "session_1", codexThreadId: "thread_1", title: "First", updatedAt: newer }),
+    ];
+
+    expect(mergeBootstrapSessionListPreservingLocalState(current, incoming).map((item) => item.id)).toEqual([
+      "session_3",
+      "session_1",
+      "session_2",
+    ]);
+  });
+
   test("drops missing current sessions that are older than the bootstrap list", () => {
     const current = [
       session({ id: "session_missing", codexThreadId: "thread_missing", updatedAt: older }),

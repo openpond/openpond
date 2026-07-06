@@ -10,6 +10,10 @@ export type TerminalEventStreamRequest = {
   init: RequestInit;
 };
 
+export type TerminalEventStreamController = AbortController & {
+  ready: Promise<void>;
+};
+
 export function terminalEventStreamRequest(
   server: string,
   token: string,
@@ -69,10 +73,31 @@ export async function openTerminalEvents(input: {
   onStatus?: (status: TerminalEventStreamStatus) => void;
   fetchImpl?: typeof fetch;
   reconnectDelayMs?: (attempt: number) => number;
-}): Promise<AbortController> {
-  const controller = new AbortController();
+}): Promise<TerminalEventStreamController> {
+  const controller = new AbortController() as TerminalEventStreamController;
   const fetchImpl = input.fetchImpl ?? fetch;
   const reconnectDelayMs = input.reconnectDelayMs ?? terminalEventReconnectDelayMs;
+  let resolveReady = (): void => undefined;
+  let rejectReady = (_error: unknown): void => undefined;
+  let readySettled = false;
+  controller.ready = new Promise<void>((resolve, reject) => {
+    resolveReady = () => {
+      if (readySettled) return;
+      readySettled = true;
+      resolve();
+    };
+    rejectReady = (error) => {
+      if (readySettled) return;
+      readySettled = true;
+      reject(error);
+    };
+  });
+  controller.signal.addEventListener(
+    "abort",
+    () => rejectReady(new Error("event stream aborted before connecting")),
+    { once: true },
+  );
+  controller.ready.catch(() => undefined);
   void (async () => {
     let attempt = 0;
     while (!controller.signal.aborted) {
@@ -80,7 +105,9 @@ export async function openTerminalEvents(input: {
       try {
         const request = terminalEventStreamRequest(input.server, input.token, controller.signal);
         const response = await fetchImpl(request.url, request.init);
+        validateTerminalEventResponse(response);
         input.onStatus?.({ state: "connected", attempt });
+        resolveReady();
         await readTerminalEventStream(response, input.activeSessionId, input.onEvent, controller.signal);
         if (controller.signal.aborted) break;
         throw new Error("event stream ended");
@@ -106,6 +133,7 @@ function handleTerminalEventFrame(
   if (!dataLine) return;
   try {
     const event = JSON.parse(dataLine.slice(6)) as RuntimeEvent;
+    if (typeof event.name !== "string") return;
     if (!event.sessionId || event.sessionId === activeSessionId()) onEvent(event);
   } catch {
     // Ignore malformed keepalive frames.

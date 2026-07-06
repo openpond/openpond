@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/crack-7z-hash",
+        "ref": "sha256:c5b858a93a842b32c06ce0713d82af10102b7c1a3f3b8d6351c1d0ecb4d47dc9",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "crack-7z-hash__GVJP4nw",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

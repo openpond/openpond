@@ -19,6 +19,7 @@ export type ProfileSkillGoalRequest = {
   status: "queued";
   operation: "create" | "edit";
   objective: string;
+  userObjective: string;
   source: "slash_command" | "natural_language" | "model_tool";
   activeProfile: string;
   profileRepoPath: string;
@@ -166,7 +167,9 @@ function profileSkillHelp(profile: OpenPondProfileState): ProfileSkillCommandRes
     message: [
       "Profile skills support:",
       "- /skill list",
-      "- /skill create <optional-name> <what the skill should help with>",
+      "- /skill create <what the skill should help with>",
+      "- /skill create <skill-name>: <what the skill should help with>",
+      "- /skill create --name <skill-name> <what the skill should help with>",
       "- /skill edit <skill-name> <change request>",
       "",
       "Create/edit starts a profile-skill goal in the active profile repo. Skills are single-file profile instructions. If the workflow needs scripts, references, tools, or assets, create an agent instead.",
@@ -210,6 +213,7 @@ function createProfileSkillGoal(input: {
     profile: input.profile,
     operation: "create",
     objective: `Create a profile-backed skill${requestedName ? ` named ${requestedName}` : ""}: ${objective}`,
+    userObjective: objective,
     requestedName,
     targetSkillName: requestedName,
     source: input.source,
@@ -241,6 +245,7 @@ function updateProfileSkillGoal(input: {
     profile: input.profile,
     operation: "edit",
     objective: `Update profile-backed skill ${name}: ${changeRequest}`,
+    userObjective: changeRequest,
     requestedName: name,
     targetSkillName: name,
     source: input.source,
@@ -275,6 +280,7 @@ function createProfileSkillGoalRequest(input: {
   profile: WritableProfileState;
   operation: "create" | "edit";
   objective: string;
+  userObjective: string;
   requestedName: string | null;
   targetSkillName: string | null;
   source: ProfileSkillGoalRequest["source"];
@@ -290,6 +296,7 @@ function createProfileSkillGoalRequest(input: {
     status: "queued",
     operation: input.operation,
     objective: input.objective,
+    userObjective: input.userObjective,
     source: input.source,
     activeProfile: input.profile.activeProfile ?? "default",
     profileRepoPath: input.profile.repoPath,
@@ -335,18 +342,22 @@ function profileSkillGoalPrompt(goal: ProfileSkillGoalRequest): string {
 }
 
 function splitOptionalSkillName(input: string): { name: string | null; objective: string } {
-  const colon = /^([a-z][a-z0-9-]*):\s*([\s\S]+)$/.exec(input.trim());
+  const trimmed = input.trim();
+  const namedFlag = /^--name\s+([a-z][a-z0-9-]*)\s+([\s\S]+)$/i.exec(trimmed);
+  if (namedFlag) {
+    return {
+      name: normalizeSkillName(namedFlag[1] ?? ""),
+      objective: namedFlag[2]?.trim() ?? "",
+    };
+  }
+  const colon = /^([a-z][a-z0-9-]*):\s*([\s\S]+)$/.exec(trimmed);
   if (colon) {
     return {
       name: normalizeSkillName(colon[1] ?? ""),
       objective: colon[2]?.trim() ?? "",
     };
   }
-  const [first = "", ...rest] = input.trim().split(/\s+/);
-  const normalized = normalizeSkillName(first);
-  const objective = rest.join(" ").trim();
-  if (normalized && objective.length >= 8) return { name: normalized, objective };
-  return { name: null, objective: input.trim() };
+  return { name: null, objective: trimmed };
 }
 
 function requireAvailableSkillName(name: string, existingNames: Set<string>, profileSourcePath: string): string {
@@ -363,7 +374,7 @@ function skillDirectoryExists(profileSourcePath: string, name: string): boolean 
 }
 
 function cleanObjective(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return value.replace(/\r\n/g, "\n").trim();
 }
 
 function normalizeSkillName(value: string): string | null {

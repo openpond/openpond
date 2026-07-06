@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
+import { AppPreferencesSchema } from "@openpond/contracts";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
@@ -31,6 +32,7 @@ describe("session store patches", () => {
       expect(created.hiddenFromDefaultSidebar).toBe(false);
       expect(created.appId).toBeNull();
       expect(created.workspaceKind).toBeUndefined();
+      expect(created.openPondCommandAccessMode).toBe("ask");
       expect(created.cwd).toBe("/tmp/project");
       expect(stored?.hiddenFromDefaultSidebar).toBe(false);
       expect(events[0]).toMatchObject({
@@ -77,6 +79,61 @@ describe("session store patches", () => {
       });
 
       expect(patched.metadata).toEqual({ workspaceTarget: "hybrid", source: "patched" });
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
+  test("persists OpenPond command access defaults and patches", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const store = new SqliteStore(storeDir);
+
+    try {
+      const { createSession, patchSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        loadAppPreferences: async () =>
+          AppPreferencesSchema.parse({ openPondCommandAccessMode: "full-access" }),
+        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+      });
+
+      const inherited = await createSession({
+        provider: "openai",
+        title: "Inherited command access",
+      });
+      expect(inherited.openPondCommandAccessMode).toBe("full-access");
+      expect((await store.getSession(inherited.id))?.openPondCommandAccessMode).toBe("full-access");
+
+      const explicit = await createSession({
+        provider: "openai",
+        openPondCommandAccessMode: "ask",
+        title: "Explicit command access",
+      });
+      expect(explicit.openPondCommandAccessMode).toBe("ask");
+
+      const patched = await patchSession(inherited.id, { openPondCommandAccessMode: "ask" });
+      expect(patched.openPondCommandAccessMode).toBe("ask");
+      expect((await store.getSession(inherited.id))?.openPondCommandAccessMode).toBe("ask");
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
+  test("normalizes legacy sessions without command access mode", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const store = new SqliteStore(storeDir);
+    const legacySession = { ...session("session-legacy") } as Omit<Session, "openPondCommandAccessMode"> & {
+      openPondCommandAccessMode?: Session["openPondCommandAccessMode"];
+    };
+    delete legacySession.openPondCommandAccessMode;
+
+    try {
+      await store.insertSessionAtFront(legacySession as Session);
+      const stored = await store.getSession(legacySession.id);
+
+      expect(stored?.openPondCommandAccessMode).toBe("ask");
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });
@@ -130,6 +187,7 @@ function session(id: string): Session {
     id,
     provider: "openpond",
     modelRef: null,
+    openPondCommandAccessMode: "ask",
     title: id,
     appId: null,
     appName: null,

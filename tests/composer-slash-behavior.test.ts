@@ -827,6 +827,8 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("Start a guided creation flow in OpenPond Cloud.");
     expect(markup).toContain("/edit Edit selected agent");
     expect(markup).toContain("/skill Manage skills");
+    expect(markup).toContain("create, edit, list, help");
+    expect(markup).not.toContain("Subcommands:");
     expect(markup).toContain("/goal Run a goal");
     expect(markup).toContain("/goal-remote Run a cloud goal");
     expect(markup).toContain("/goal-local Run a local goal");

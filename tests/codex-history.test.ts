@@ -463,7 +463,7 @@ describe("codex history", () => {
       "turn.completed",
       "diagnostic",
     ]);
-    expect(parsed.events.at(-1)?.data).toMatchObject({ kind: "thread_goal_cleared" });
+    expect(parsed.events.at(-1)?.data).toMatchObject({ kind: "thread_goal_cleared", synthetic: true });
     expect(latestGoalRuntimeFromEvents(parsed.events)).toBeNull();
   });
 
@@ -514,7 +514,7 @@ describe("codex history", () => {
       "diagnostic",
     ]);
     expect(parsed.events[2]?.output).toBe("Turn interrupted: interrupted");
-    expect(parsed.events.at(-1)?.data).toMatchObject({ kind: "thread_goal_cleared" });
+    expect(parsed.events.at(-1)?.data).toMatchObject({ kind: "thread_goal_cleared", synthetic: true });
     expect(latestGoalRuntimeFromEvents(parsed.events)).toBeNull();
   });
 
@@ -637,6 +637,87 @@ describe("codex history", () => {
 
       expect(threads).toHaveLength(1);
       expect(threads[0]?.session.status).toBe("active");
+      expect(threads[0]?.session.metadata?.codexGoalRuntime).toMatchObject({
+        provider: "codex",
+        objective: "Keep running in goal mode",
+        status: "active",
+        timeUsedSeconds: 45,
+      });
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  test("lists active Codex goal metadata from injected goal context when the goal update is outside the tail", async () => {
+    const codexHome = await mkdtemp(path.join(os.tmpdir(), "openpond-codex-history-tail-goal-"));
+    try {
+      const threadId = "019e7138-5da2-7671-8837-202a36e0fff9";
+      const objective = "Continue tail-visible goal";
+      const sessionDir = path.join(codexHome, "sessions", "2026", "05", "28");
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(
+        path.join(sessionDir, `rollout-2026-05-28T20-52-59-${threadId}.jsonl`),
+        `${[
+          {
+            type: "session_meta",
+            timestamp: "2026-05-29T00:53:17.784Z",
+            payload: {
+              id: threadId,
+              cwd: "/home/glu/Projects/all/openpond-app",
+              timestamp: "2026-05-29T00:53:17.784Z",
+            },
+          },
+          {
+            type: "event_msg",
+            timestamp: new Date(Date.now() - 60_000).toISOString(),
+            payload: {
+              type: "thread_goal_updated",
+              threadId,
+              goal: {
+                threadId,
+                objective,
+                status: "active",
+                timeUsedSeconds: 45,
+              },
+            },
+          },
+          {
+            type: "response_item",
+            timestamp: new Date(Date.now() - 30_000).toISOString(),
+            payload: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "x".repeat(600 * 1024) }],
+            },
+          },
+          {
+            type: "response_item",
+            timestamp: new Date().toISOString(),
+            payload: {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `<codex_internal_context source="goal">\n<objective>\n${objective}\n</objective>\n\nBudget:\n- Tokens used: 1,200\n- Token budget: none\n</codex_internal_context>`,
+                },
+              ],
+            },
+          },
+        ].map((record) => JSON.stringify(record)).join("\n")}\n`,
+      );
+
+      const threads = await loadCodexHistoryThreads({ codexHome, metadataLimit: 10 });
+
+      expect(threads).toHaveLength(1);
+      expect(threads[0]?.session.status).toBe("active");
+      expect(threads[0]?.session.metadata?.codexGoalRuntime).toMatchObject({
+        provider: "codex",
+        objective,
+        status: "active",
+        tokensUsed: 1200,
+        tokenBudget: null,
+      });
     } finally {
       await rm(codexHome, { recursive: true, force: true });
     }

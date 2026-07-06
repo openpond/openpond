@@ -15,6 +15,7 @@ export const MUTATING_WORKSPACE_TOOL_ACTIONS = [
   "sandbox_move_file",
   "sandbox_exec",
   "sandbox_git_branch",
+  "sandbox_git_apply_patch_local",
   "sandbox_git_commit",
   "sandbox_git_pull",
   "sandbox_git_push",

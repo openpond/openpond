@@ -10,6 +10,7 @@ export const DEFAULT_CHAT_PROVIDER = "openpond" as const;
 export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.5" as const;
 export const DEFAULT_CODEX_PERMISSION_MODE = "default" as const;
 export const DEFAULT_CODEX_REASONING_EFFORT = "medium" as const;
+export const DEFAULT_OPENPOND_COMMAND_ACCESS_MODE = "ask" as const;
 export const DEFAULT_OPENPOND_CHAT_MODEL = "openpond-chat" as const;
 
 export const ChatProviderSchema = ProviderIdSchema;
@@ -19,6 +20,10 @@ export type ChatProvider = z.infer<typeof ChatProviderSchema>;
 export const CodexPermissionModeSchema = z.enum(["default", "auto-review", "full-access"]);
 
 export type CodexPermissionMode = z.infer<typeof CodexPermissionModeSchema>;
+
+export const OpenPondCommandAccessModeSchema = z.enum(["ask", "full-access", "disabled"]);
+
+export type OpenPondCommandAccessMode = z.infer<typeof OpenPondCommandAccessModeSchema>;
 
 export const CodexReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh"]);
 
@@ -165,6 +170,14 @@ export const InsightsEvidenceSourceSettingsSchema = z.object({
 
 export type InsightsEvidenceSourceSettings = z.infer<typeof InsightsEvidenceSourceSettingsSchema>;
 
+export const ContextCompactionPreferencesSchema = z.object({
+  autoEnabled: z.boolean().default(true),
+  triggerPercent: z.number().int().min(50).max(95).default(85),
+  summaryModel: z.enum(["same_model"]).default("same_model"),
+});
+
+export type ContextCompactionPreferences = z.infer<typeof ContextCompactionPreferencesSchema>;
+
 export const AppPreferencesSchema = z.object({
   defaultChatProvider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   defaultChatModel: z.string().min(1).default(DEFAULT_OPENPOND_CHAT_MODEL),
@@ -176,11 +189,15 @@ export const AppPreferencesSchema = z.object({
   ),
   codexPermissionMode: CodexPermissionModeSchema.default(DEFAULT_CODEX_PERMISSION_MODE),
   codexReasoningEffort: CodexReasoningEffortSchema.default(DEFAULT_CODEX_REASONING_EFFORT),
+  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
   defaultBranchPrefix: z.string().trim().max(48).default("feat/"),
   defaultNewProjectDirectory: z.string().trim().max(4096).default(""),
   goalStorageLocation: GoalStorageLocationSchema.default("global"),
   defaultTeamId: z.string().trim().max(191).nullable().default(null),
   advancedWorkspaceControls: z.boolean().default(false),
+  contextCompaction: ContextCompactionPreferencesSchema.optional().default(() =>
+    ContextCompactionPreferencesSchema.parse({}),
+  ),
   sidebarWidth: z.number().int().min(244).max(560).default(332),
   diffPanelWidth: z.number().int().min(320).max(920).default(560),
   sidebarSectionsCollapsed: SidebarSectionsCollapsedSchema.optional().default(() => SidebarSectionsCollapsedSchema.parse({})),

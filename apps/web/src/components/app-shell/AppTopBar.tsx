@@ -38,6 +38,7 @@ export function AppTopBar({
   title,
   breadcrumbs,
   workspaceName,
+  workspaceId,
   busy,
   workspaceState,
   workspaceKind,
@@ -73,6 +74,7 @@ export function AppTopBar({
   title: string;
   breadcrumbs?: TopBarBreadcrumb[];
   workspaceName: string | null;
+  workspaceId: string | null;
   busy: boolean;
   workspaceState: WorkspaceState | null;
   workspaceKind: WorkspaceKind | null;
@@ -159,6 +161,7 @@ export function AppTopBar({
                   mode="topbar"
                   busy={busy}
                   workspaceState={workspaceState}
+                  workspaceId={workspaceId}
                   workspaceKind={workspaceKind}
                   selectedApp={selectedApp}
                   selectedProject={selectedProject}

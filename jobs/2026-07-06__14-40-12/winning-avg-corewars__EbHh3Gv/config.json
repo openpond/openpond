@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/winning-avg-corewars",
+        "ref": "sha256:22bacd15f5063699f642a2e2c0a192865eb41924d4b35d8ddabf574debb6773c",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "winning-avg-corewars__EbHh3Gv",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

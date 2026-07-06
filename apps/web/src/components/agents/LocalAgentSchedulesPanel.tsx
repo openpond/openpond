@@ -10,6 +10,67 @@ export function LocalAgentSchedulesPanel({
 }: {
   connection: ClientConnection | null;
 }) {
+  const {
+    error: localSchedulesError,
+    loading: localSchedulesLoading,
+    pendingScheduleIds,
+    refresh: refreshLocalSchedules,
+    run: runLocalSchedule,
+    schedules: localSchedules,
+    toggle: toggleLocalSchedule,
+  } = useLocalAgentSchedules(connection);
+
+  return (
+    <section className="agent-schedule-section" aria-label="Local schedules">
+      <div className="agent-section-header">
+        <div>
+          <span>Local schedules</span>
+          <strong>{connection ? localSchedules.length : "Offline"}</strong>
+        </div>
+        <button
+          type="button"
+          className="agent-icon-button"
+          title="Refresh local schedules"
+          aria-label="Refresh local schedules"
+          disabled={!connection || localSchedulesLoading}
+          onClick={() => void refreshLocalSchedules()}
+        >
+          <RefreshCw size={16} aria-hidden="true" />
+        </button>
+      </div>
+      {!connection ? (
+        <div className="agent-create-empty">
+          <p>Connect to the local OpenPond server before viewing schedules.</p>
+        </div>
+      ) : localSchedulesError ? (
+        <div className="agent-create-error">{localSchedulesError}</div>
+      ) : null}
+      {connection && localSchedulesLoading && localSchedules.length === 0 ? (
+        <div className="agent-create-loading compact" aria-label="Loading local schedules" role="status">
+          <span />
+        </div>
+      ) : connection && localSchedules.length === 0 ? (
+        <div className="agent-create-empty">
+          <p>No local agent schedules detected.</p>
+        </div>
+      ) : connection ? (
+        <div className="agent-card-grid schedule-grid" aria-busy={localSchedulesLoading}>
+          {localSchedules.map((schedule) => (
+            <LocalScheduleCard
+              schedule={schedule}
+              key={schedule.id}
+              pending={pendingScheduleIds.has(schedule.id)}
+              onRun={() => void runLocalSchedule(schedule)}
+              onToggle={() => void toggleLocalSchedule(schedule)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function useLocalAgentSchedules(connection: ClientConnection | null) {
   const [localSchedules, setLocalSchedules] = useState<LocalAgentSchedule[]>([]);
   const [localSchedulesLoading, setLocalSchedulesLoading] = useState(false);
   const [localSchedulesError, setLocalSchedulesError] = useState<string | null>(null);
@@ -102,54 +163,15 @@ export function LocalAgentSchedulesPanel({
     });
   }
 
-  return (
-    <section className="agent-schedule-section" aria-label="Local schedules">
-      <div className="agent-section-header">
-        <div>
-          <span>Local schedules</span>
-          <strong>{connection ? localSchedules.length : "Offline"}</strong>
-        </div>
-        <button
-          type="button"
-          className="agent-icon-button"
-          title="Refresh local schedules"
-          aria-label="Refresh local schedules"
-          disabled={!connection || localSchedulesLoading}
-          onClick={() => void refreshLocalSchedules()}
-        >
-          <RefreshCw size={16} aria-hidden="true" />
-        </button>
-      </div>
-      {!connection ? (
-        <div className="agent-create-empty">
-          <p>Connect to the local OpenPond server before viewing schedules.</p>
-        </div>
-      ) : localSchedulesError ? (
-        <div className="agent-create-error">{localSchedulesError}</div>
-      ) : null}
-      {connection && localSchedulesLoading && localSchedules.length === 0 ? (
-        <div className="agent-create-loading compact" aria-label="Loading local schedules" role="status">
-          <span />
-        </div>
-      ) : connection && localSchedules.length === 0 ? (
-        <div className="agent-create-empty">
-          <p>No local agent schedules detected.</p>
-        </div>
-      ) : connection ? (
-        <div className="agent-card-grid schedule-grid" aria-busy={localSchedulesLoading}>
-          {localSchedules.map((schedule) => (
-            <LocalScheduleCard
-              schedule={schedule}
-              key={schedule.id}
-              pending={pendingScheduleIds.has(schedule.id)}
-              onRun={() => void runLocalSchedule(schedule)}
-              onToggle={() => void toggleLocalSchedule(schedule)}
-            />
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
+  return {
+    error: localSchedulesError,
+    loading: localSchedulesLoading,
+    pendingScheduleIds,
+    refresh: refreshLocalSchedules,
+    run: runLocalSchedule,
+    schedules: localSchedules,
+    toggle: toggleLocalSchedule,
+  };
 }
 
 function LocalScheduleCard({

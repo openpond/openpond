@@ -7,6 +7,7 @@ import {
   FileText,
   FolderOpen,
   Globe2,
+  Info,
   LoaderCircle,
   Maximize2,
   MessageSquare,
@@ -34,6 +35,7 @@ export function WorkspaceDiffTabs({
   searchQuery,
   selectedPath,
   sideChatTabs = [],
+  summaryAvailable,
   sourceStatus,
   sourceSwitcher,
   visibleTab,
@@ -48,6 +50,7 @@ export function WorkspaceDiffTabs({
   onSelectFile,
   onSelectFiles,
   onSelectGoal,
+  onSelectSummary,
   onSelectSideChat,
   onToggleAddMenu,
   onToggleExpanded,
@@ -62,6 +65,7 @@ export function WorkspaceDiffTabs({
   searchQuery: string;
   selectedPath: string | null;
   sideChatTabs?: WorkspaceDiffSideChatTab[];
+  summaryAvailable?: boolean;
   sourceStatus?: { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null;
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   visibleTab: DiffTab;
@@ -76,6 +80,7 @@ export function WorkspaceDiffTabs({
   onSelectFile: (path: string) => void;
   onSelectFiles: () => void;
   onSelectGoal: () => void;
+  onSelectSummary?: () => void;
   onSelectSideChat?: (panelId: string) => void;
   onToggleAddMenu: () => void;
   onToggleExpanded: () => void;
@@ -124,6 +129,18 @@ export function WorkspaceDiffTabs({
           >
             <FileText size={14} />
             <span>Goal</span>
+          </button>
+        ) : null}
+        {summaryAvailable && onSelectSummary ? (
+          <button
+            type="button"
+            className={`workspace-diff-tab ${visibleTab === "summary" ? "active" : ""}`}
+            role="tab"
+            aria-selected={visibleTab === "summary"}
+            onClick={onSelectSummary}
+          >
+            <Info size={14} />
+            <span>Summary</span>
           </button>
         ) : null}
         <button
@@ -215,6 +232,13 @@ export function WorkspaceDiffTabs({
                 <span>Files</span>
                 <kbd />
               </button>
+              {summaryAvailable && onSelectSummary ? (
+                <button type="button" role="menuitem" onClick={onSelectSummary}>
+                  <Info size={14} />
+                  <span>Summary</span>
+                  <kbd />
+                </button>
+              ) : null}
               <button type="button" role="menuitem" onClick={onOpenSearch}>
                 <Search size={14} />
                 <span>Open file</span>

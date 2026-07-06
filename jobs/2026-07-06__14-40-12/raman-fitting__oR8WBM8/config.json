@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/raman-fitting",
+        "ref": "sha256:6b2c34e3c5016c763bf1f2f2a7210ee711565f90b18c09b68f95c0daa9220229",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "raman-fitting__oR8WBM8",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

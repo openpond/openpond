@@ -1,11 +1,19 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CliUsageError } from "./common";
 import { runProcessCommand } from "../process-runner";
 
 type CliOptions = Record<string, string | boolean>;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export class OpenPondChildProcessExitError extends Error {
+  constructor(message: string, readonly exitCode: number) {
+    super(message);
+    this.name = "OpenPondChildProcessExitError";
+  }
+}
 
 export async function runOpenPondServerCommand(
   mode: "serve" | "web",
@@ -19,9 +27,10 @@ export async function runOpenPondServerCommand(
 }
 
 export async function runOpenPondTerminalCommand(options: CliOptions, rest: string[]): Promise<void> {
+  validateTerminalForwardingOptions(options);
   const root = findWorkspaceRoot();
   const terminal = resolveAppEntrypoint(root, "terminal");
-  const args = [terminal.entry, "chat", ...forwardedOptions(options), ...rest];
+  const args = [terminal.entry, "chat", ...forwardedOptions(withDefaultTerminalCwd(options)), ...rest];
   await runChild(terminal.runner, args, root);
 }
 
@@ -68,6 +77,33 @@ function forwardedOptions(options: CliOptions): string[] {
   return args;
 }
 
+function withDefaultTerminalCwd(options: CliOptions): CliOptions {
+  const callerCwd = process.cwd();
+  const cwd = typeof options.cwd === "string" && options.cwd.trim().length > 0
+    ? path.resolve(callerCwd, options.cwd)
+    : callerCwd;
+  const next: CliOptions = { ...options, cwd };
+  if (typeof options.messageFile === "string" && options.messageFile.trim().length > 0) {
+    next.messageFile = path.resolve(callerCwd, options.messageFile);
+  }
+  return next;
+}
+
+function validateTerminalForwardingOptions(options: CliOptions): void {
+  if (
+    typeof options.approvalPolicy === "string" &&
+    !["on-request", "never", "on-failure", "untrusted"].includes(options.approvalPolicy)
+  ) {
+    throw new CliUsageError("approval-policy must be on-request, never, on-failure, or untrusted");
+  }
+  if (
+    typeof options.sandbox === "string" &&
+    !["read-only", "workspace-write", "danger-full-access"].includes(options.sandbox)
+  ) {
+    throw new CliUsageError("sandbox must be read-only, workspace-write, or danger-full-access");
+  }
+}
+
 async function runChild(command: string, args: string[], cwd: string): Promise<void> {
   const result = await runProcessCommand(command, args, {
     cwd,
@@ -75,6 +111,6 @@ async function runChild(command: string, args: string[], cwd: string): Promise<v
     timeoutMs: 0,
   });
   if (result.code && result.code !== 0) {
-    throw new Error(`${path.basename(command)} exited with code ${result.code}`);
+    throw new OpenPondChildProcessExitError(`${path.basename(command)} exited with code ${result.code}`, result.code);
   }
 }

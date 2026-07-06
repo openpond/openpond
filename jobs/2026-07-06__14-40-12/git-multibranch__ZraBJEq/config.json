@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/git-multibranch",
+        "ref": "sha256:03d8f235cc737efc32ed92a11685f93581fe6e1fd4ad14fffaa049d2b59e381a",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "git-multibranch__ZraBJEq",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

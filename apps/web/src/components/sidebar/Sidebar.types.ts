@@ -4,6 +4,7 @@ import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView, PinnedSidebarItem, SettingsSection, SidebarDragItem, SidebarProjectItem } from "../../lib/app-models";
 import type { TerminalScopeSummary } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
+import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 
 export type SidebarProps = {
   view: AppView;
@@ -24,6 +25,7 @@ export type SidebarProps = {
   dragItem: SidebarDragItem | null;
   pinnedRows: PinnedSidebarItem[];
   pinnedSessions: Session[];
+  projectRows?: SidebarProjectItem[];
   visibleProjectRows: SidebarProjectItem[];
   localProjectRows: SidebarProjectItem[];
   insightsSystemProjectHidden: boolean | null;
@@ -34,6 +36,7 @@ export type SidebarProps = {
   sidebarProjectIdBySessionId: Record<string, string>;
   terminalSummaries: Record<string, TerminalScopeSummary>;
   runningSessionIds: ReadonlySet<string>;
+  goalRuntimeBySessionId?: ReadonlyMap<string, GoalRuntimeStatus>;
   visibleChatRows: Session[];
   chatRows: Session[];
   expandedProjectIds: ReadonlySet<string>;

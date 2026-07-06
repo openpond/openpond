@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/mteb-retrieve",
+        "ref": "sha256:5eed6e5ab80a4e7042f77a6cec8c01dd833a2c9c03a8c7ebdbd0b70f447750a5",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "mteb-retrieve__UnC62mN",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

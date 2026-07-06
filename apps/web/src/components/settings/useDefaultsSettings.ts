@@ -27,6 +27,9 @@ export function useDefaultsSettings({
   const [defaultNewProjectDirectory, setDefaultNewProjectDirectory] = useState(preferences.defaultNewProjectDirectory);
   const [goalStorageLocation, setGoalStorageLocation] = useState(preferences.goalStorageLocation);
   const [advancedWorkspaceControls, setAdvancedWorkspaceControls] = useState(preferences.advancedWorkspaceControls);
+  const [contextCompactionAutoEnabled, setContextCompactionAutoEnabled] = useState(
+    preferences.contextCompaction.autoEnabled,
+  );
   const [insightsEnabled, setInsightsEnabled] = useState(preferences.insightsEnabled);
   const [insightsUseDefaultModel, setInsightsUseDefaultModel] = useState(!preferences.insightsModelRef);
   const [insightsProvider, setInsightsProvider] = useState<ChatProvider>(
@@ -43,6 +46,7 @@ export function useDefaultsSettings({
     setDefaultNewProjectDirectory(preferences.defaultNewProjectDirectory);
     setGoalStorageLocation(preferences.goalStorageLocation);
     setAdvancedWorkspaceControls(preferences.advancedWorkspaceControls);
+    setContextCompactionAutoEnabled(preferences.contextCompaction.autoEnabled);
     setInsightsEnabled(preferences.insightsEnabled);
     setInsightsUseDefaultModel(!preferences.insightsModelRef);
     setInsightsProvider(preferences.insightsModelRef?.providerId ?? preferences.defaultChatProvider);
@@ -55,6 +59,7 @@ export function useDefaultsSettings({
     preferences.defaultNewProjectDirectory,
     preferences.goalStorageLocation,
     preferences.advancedWorkspaceControls,
+    preferences.contextCompaction.autoEnabled,
     preferences.insightsEnabled,
     preferences.insightsModelRef,
     preferences.insightsEvidenceSources,
@@ -89,6 +94,10 @@ export function useDefaultsSettings({
           defaultNewProjectDirectory: defaultNewProjectDirectory.trim(),
           goalStorageLocation,
           advancedWorkspaceControls,
+          contextCompaction: {
+            ...preferences.contextCompaction,
+            autoEnabled: contextCompactionAutoEnabled,
+          },
           insightsEnabled,
           insightsModelRef: insightsUseDefaultModel
             ? null
@@ -105,6 +114,7 @@ export function useDefaultsSettings({
 
   return {
     advancedWorkspaceControls,
+    contextCompactionAutoEnabled,
     defaultBranchPrefix,
     defaultNewProjectDirectory,
     goalStorageLocation,
@@ -118,6 +128,7 @@ export function useDefaultsSettings({
     saveDefaults,
     changeInsightsProvider,
     setAdvancedWorkspaceControls,
+    setContextCompactionAutoEnabled,
     setDefaultBranchPrefix,
     setDefaultNewProjectDirectory,
     setGoalStorageLocation,

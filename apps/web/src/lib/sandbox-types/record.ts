@@ -1,5 +1,6 @@
 import type {
   SandboxBudget,
+  SandboxQuotaPolicy,
   SandboxReceipt,
   SandboxReservation,
   SandboxResources,
@@ -33,6 +34,7 @@ export type SandboxRecord = {
   billingAccountId: string;
   resources: SandboxResources;
   budget: SandboxBudget;
+  quotas?: SandboxQuotaPolicy;
   reservation: SandboxReservation;
   commands: SandboxCommand[];
   processes?: SandboxProcess[];

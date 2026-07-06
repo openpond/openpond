@@ -6,6 +6,7 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     createSession,
     patchSession,
     sendTurn,
+    runSessionCommand,
     recordPreflightTurnFailure,
     updateTurnCreatePipeline,
     interruptSessionTurn,
@@ -25,6 +26,11 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   const turnMatch = /^\/v1\/sessions\/([^/]+)\/turns$/.exec(requestUrl.pathname);
   if (request.method === "POST" && turnMatch) {
     sendJson(response, 202, await sendTurn(turnMatch[1]!, await readJson(request)));
+    return true;
+  }
+  const commandMatch = /^\/v1\/sessions\/([^/]+)\/commands$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && commandMatch) {
+    sendJson(response, 202, await runSessionCommand(decodeURIComponent(commandMatch[1]!), await readJson(request)));
     return true;
   }
   const preflightFailureMatch =

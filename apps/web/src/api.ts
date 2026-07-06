@@ -36,6 +36,7 @@ import type {
   ResolveApprovalRequest,
   RemoteAccessStatus,
   RemoteAccessToggleResponse,
+  RunSessionCommandRequest,
   RuntimeEvent,
   SaveWorkspaceFileRequest,
   SaveOpenPondAccountRequest,
@@ -796,6 +797,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  runSessionCommand: (
+    connection: ClientConnection,
+    sessionId: string,
+    input: RunSessionCommandRequest,
+  ) =>
+    apiFetch<{ session: Session; events: RuntimeEvent[]; result: unknown }>(
+      connection,
+      `/v1/sessions/${encodeURIComponent(sessionId)}/commands`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
   recordPreflightTurnFailure: (
     connection: ClientConnection,
     sessionId: string,

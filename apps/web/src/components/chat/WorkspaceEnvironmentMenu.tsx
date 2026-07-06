@@ -19,6 +19,7 @@ import {
   Monitor,
   PanelRight,
   Search,
+  Shield,
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { normalizeOpenPondOrganization } from "../../lib/cloud-project-utils";
@@ -64,10 +65,95 @@ import {
   workspaceSourceLabel,
 } from "./workspace-environment-helpers";
 
+type SandboxChangeState = {
+  status: "idle" | "loading" | "ready" | "error";
+  changedFiles: number;
+  error: string | null;
+};
+
+export function sandboxChangedFileCount(porcelain: string): number {
+  return porcelain.split("\n").filter((line) => line.trim()).length;
+}
+
+export function sandboxChangeLabel(state: SandboxChangeState): string {
+  if (state.status === "loading") return "Checking sandbox changes";
+  if (state.status === "error") return "Sandbox status unavailable";
+  if (state.status !== "ready") return "Sandbox changes unknown";
+  if (state.changedFiles === 0) return "Sandbox clean";
+  return `${state.changedFiles} sandbox changed ${state.changedFiles === 1 ? "file" : "files"}`;
+}
+
+export function formatIdleTimeout(seconds: number): string {
+  if (seconds > 0 && seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `${hours} hr`;
+  }
+  if (seconds > 0 && seconds % 60 === 0) {
+    return `${seconds / 60} min`;
+  }
+  return `${seconds} sec`;
+}
+
+function formatUsd(value: string | null | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  if (raw.startsWith("$")) return raw;
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return `$${raw}`;
+  if (numeric === 0) return "$0";
+  const decimals = numeric >= 1 ? 2 : 4;
+  return `$${numeric.toFixed(decimals).replace(/0+$/, "").replace(/\.$/, "")}`;
+}
+
+function latestSandboxReceipt(sandbox: SandboxRecord) {
+  return sandbox.receipts
+    .slice()
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0] ?? null;
+}
+
+function sandboxCostStateLabel(sandbox: SandboxRecord): string | null {
+  const receipt = latestSandboxReceipt(sandbox);
+  if (receipt) {
+    const total = formatUsd(receipt.totalUsd);
+    if (receipt.reason === "idle_timeout") return total ? `stopped by idle timeout · charged ${total}` : "stopped by idle timeout";
+    if (receipt.reason === "budget_exhausted") return total ? `budget exhausted · charged ${total}` : "budget exhausted";
+    if (sandbox.state !== "running") return total ? `receipt ${receipt.status} · charged ${total}` : `receipt ${receipt.status}`;
+  }
+  if (sandbox.reservation.status === "reserved") {
+    const reserved = formatUsd(sandbox.reservation.reservedUsd);
+    return reserved ? `reservation active ${reserved}` : "reservation active";
+  }
+  if (sandbox.reservation.status === "captured") {
+    const captured = formatUsd(sandbox.reservation.capturedUsd);
+    return captured ? `captured ${captured}` : "captured";
+  }
+  if (sandbox.reservation.status === "released") return "reservation released";
+  return null;
+}
+
+export function sandboxRuntimePolicyLabel(sandbox: SandboxRecord | null): string {
+  if (!sandbox) return "Loading sandbox policy";
+  const idleTimeoutSeconds =
+    typeof sandbox.quotas?.idleTimeoutSeconds === "number" && sandbox.quotas.idleTimeoutSeconds > 0
+      ? sandbox.quotas.idleTimeoutSeconds
+      : null;
+  const spendCap = formatUsd(sandbox.quotas?.maxSpendUsd ?? sandbox.budget.maxUsd);
+  const parts = [
+    idleTimeoutSeconds
+      ? `Auto-stop after ${formatIdleTimeout(idleTimeoutSeconds)} idle`
+      : "Auto-stop policy unavailable",
+  ];
+  if (spendCap) parts.push(`cap ${spendCap}`);
+  const costState = sandboxCostStateLabel(sandbox);
+  if (costState) parts.push(costState);
+  return parts.join(" · ");
+}
+
 export function WorkspaceEnvironmentMenu({
   mode,
   busy,
   workspaceState,
+  workspaceId,
   workspaceKind,
   selectedApp,
   selectedProject,
@@ -90,6 +176,7 @@ export function WorkspaceEnvironmentMenu({
   mode: "dock" | "start" | "topbar";
   busy: boolean;
   workspaceState?: WorkspaceState | null;
+  workspaceId?: string | null;
   workspaceKind?: WorkspaceKind | null;
   selectedApp?: OpenPondApp | null;
   selectedProject?: LocalProject | null;
@@ -124,17 +211,32 @@ export function WorkspaceEnvironmentMenu({
   const [organizations, setOrganizations] = useState<OpenPondOrganization[]>([]);
   const [sandboxProjects, setSandboxProjects] = useState<SandboxProject[]>([]);
   const [sandboxAgents, setSandboxAgents] = useState<SandboxAgent[]>([]);
+  const [sandboxChangeState, setSandboxChangeState] = useState<SandboxChangeState>({
+    status: "idle",
+    changedFiles: 0,
+    error: null,
+  });
+  const [sandboxRecord, setSandboxRecord] = useState<SandboxRecord | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const branchSearchRef = useRef<HTMLInputElement | null>(null);
   const workspaceReady = Boolean(workspaceState?.initialized);
   const workspaceBusyValue = Boolean(workspaceBusy);
   const managed = Boolean(managedWorkspace);
-  const additions = workspaceDiff?.additions ?? 0;
-  const deletions = workspaceDiff?.deletions ?? 0;
-  const filesChanged = workspaceDiff?.filesChanged ?? workspaceState?.changedFilesCount ?? 0;
-  const hasDiffs = filesChanged > 0;
   const isProjectWorkspace = workspaceKind === "local_project" || Boolean(selectedProject);
   const isSandboxWorkspace = workspaceKind === "sandbox" || workspaceKind === "sandbox_template";
+  const sandboxWorkspaceId = isSandboxWorkspace ? workspaceId?.trim() || null : null;
+  const additions = isSandboxWorkspace ? 0 : workspaceDiff?.additions ?? 0;
+  const deletions = isSandboxWorkspace ? 0 : workspaceDiff?.deletions ?? 0;
+  const filesChanged = isSandboxWorkspace
+    ? sandboxChangeState.changedFiles
+    : workspaceDiff?.filesChanged ?? workspaceState?.changedFilesCount ?? 0;
+  const hasDiffs = filesChanged > 0;
+  const changesLabel = isSandboxWorkspace
+    ? sandboxChangeLabel(sandboxChangeState)
+    : hasDiffs
+      ? `${filesChanged} changed ${filesChanged === 1 ? "file" : "files"}`
+      : "No changes";
+  const sandboxPolicyLabel = isSandboxWorkspace ? sandboxRuntimePolicyLabel(sandboxRecord) : "";
   const gitWorkspace = workspaceState?.source !== "local_folder";
   const canInitGit = isProjectWorkspace && workspaceState?.source === "local_folder";
   const hasRemote = Boolean(workspaceState?.remoteUrl);
@@ -239,33 +341,58 @@ export function WorkspaceEnvironmentMenu({
     };
   }, [connection, defaultTeamId, isProjectWorkspace, open]);
 
-  async function ensureSandboxTemplateSource(commitMessage: string): Promise<boolean> {
-    if (!onWorkspaceToolAction) return false;
-    if (!projectRemoteUrl && canPublishProject) {
-      const publishResult = await onWorkspaceToolAction("publish_openpond_repo", {
-        replaceOrigin: false,
-        ...(workspaceState?.dirty ? { commitDirty: true, commitMessage } : {}),
+  useEffect(() => {
+    if (!open || !isSandboxWorkspace || !connection || !sandboxWorkspaceId) {
+      setSandboxChangeState({ status: "idle", changedFiles: 0, error: null });
+      return;
+    }
+    let cancelled = false;
+    setSandboxChangeState((current) => ({
+      status: "loading",
+      changedFiles: current.changedFiles,
+      error: null,
+    }));
+    api
+      .sandboxGitStatus(connection, sandboxWorkspaceId)
+      .then((payload) => {
+        if (cancelled) return;
+        setSandboxChangeState({
+          status: "ready",
+          changedFiles: sandboxChangedFileCount(payload.status?.porcelain ?? ""),
+          error: null,
+        });
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setSandboxChangeState({
+          status: "error",
+          changedFiles: 0,
+          error: errorMessage(caught),
+        });
       });
-      return Boolean(publishResult?.ok);
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, isSandboxWorkspace, open, sandboxWorkspaceId]);
+
+  useEffect(() => {
+    if (!open || !isSandboxWorkspace || !connection || !sandboxWorkspaceId) {
+      setSandboxRecord(null);
+      return;
     }
-
-    if (!gitWorkspace || !hasRemote) return Boolean(projectRemoteUrl);
-
-    if (workspaceState?.dirty) {
-      const commitResult = await onWorkspaceToolAction("git_commit", {
-        message: commitMessage,
-        includeUnstaged: true,
+    let cancelled = false;
+    api
+      .sandbox(connection, sandboxWorkspaceId)
+      .then((payload) => {
+        if (!cancelled) setSandboxRecord(payload.sandbox);
+      })
+      .catch(() => {
+        if (!cancelled) setSandboxRecord(null);
       });
-      if (!commitResult?.ok) return false;
-    }
-
-    if (workspaceState?.dirty || (workspaceState?.ahead ?? 0) > 0 || !workspaceState?.upstreamBranch) {
-      const pushResult = await onWorkspaceToolAction("git_push", { runChecks: false });
-      if (!pushResult?.ok) return false;
-    }
-
-    return true;
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, isSandboxWorkspace, open, sandboxWorkspaceId]);
 
   async function createSandboxFromProject(input: SandboxCreateDialogInput) {
     if (!onWorkspaceToolAction) return;
@@ -315,7 +442,7 @@ export function WorkspaceEnvironmentMenu({
       visibility: "team",
       resources: input.resources,
       budget: { maxUsd: input.budgetUsd },
-      quotas: { maxSpendUsd: input.budgetUsd },
+      quotas: { idleTimeoutSeconds: 15 * 60, maxSpendUsd: input.budgetUsd },
       ...(input.env.length > 0 ? { env: input.env } : {}),
       ...(input.volumes.length > 0 ? { volumes: input.volumes } : {}),
       metadata: {
@@ -396,11 +523,6 @@ export function WorkspaceEnvironmentMenu({
 
   async function runSandboxTemplateAction(input: SandboxRunActionDialogInput) {
     if (!onWorkspaceToolAction) return;
-    if (input.mode === "sandbox") {
-      const sourceReady = await ensureSandboxTemplateSource(`Run ${input.target} in sandbox`);
-      if (!sourceReady) return;
-    }
-
     const uploadedParams: Record<string, unknown> = {};
     const uploads: Array<{ path: string; contentsBase64: string }> = [];
     for (const upload of input.uploads) {
@@ -638,6 +760,15 @@ export function WorkspaceEnvironmentMenu({
     projectSandboxTemplateValid,
     sandboxTemplateActionTargetCount: sandboxTemplateActionTargets.length,
     sandboxTemplateServiceTargets,
+    sandboxResumeTarget: sandboxRecord
+      ? {
+          id: sandboxRecord.id,
+          runtimeId: sandboxRecord.runtimeId ?? null,
+          teamId: sandboxRecord.teamId ?? null,
+          projectId: sandboxRecord.projectId ?? null,
+          state: sandboxRecord.state ?? null,
+        }
+      : null,
     selectedApp,
     selectedProject,
     setSandboxCreateDialogOpen,
@@ -719,9 +850,9 @@ export function WorkspaceEnvironmentMenu({
               <PanelRight size={15} />
               <span>
                 <strong>Changes</strong>
-                <small>{hasDiffs ? `${filesChanged} changed ${filesChanged === 1 ? "file" : "files"}` : "No changes"}</small>
+                <small>{changesLabel}</small>
               </span>
-              {(hasDiffs || workspaceDiff) && (
+              {!isSandboxWorkspace && (hasDiffs || workspaceDiff) && (
                 <span className="environment-change-counts">
                   <span className="diff-addition">+{additions}</span>
                   <span className="diff-deletion">-{deletions}</span>
@@ -735,6 +866,15 @@ export function WorkspaceEnvironmentMenu({
                 <small>{workspaceState.repoPath || workspaceState.workspacePath}</small>
               </span>
             </div>
+            {isSandboxWorkspace ? (
+              <div className="environment-row static" title={sandboxPolicyLabel}>
+                <Shield size={15} />
+                <span>
+                  <strong>Idle cleanup</strong>
+                  <small>{sandboxPolicyLabel}</small>
+                </span>
+              </div>
+            ) : null}
             <button
               type="button"
               className={`environment-row ${branchOpen ? "active" : ""}`}

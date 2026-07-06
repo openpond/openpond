@@ -167,6 +167,7 @@ describe("composer steer queue", () => {
     expect(markup).toContain('aria-label="Steer queued draft: queued steer before goal"');
     expect(markup).toContain('aria-label="Edit queued steer"');
     expect(markup).toContain('aria-label="Delete queued steer"');
+    expect(markup).toContain('aria-label="Pause goal"');
   });
 
   test("renders edit dialog without replacing the composer implicitly", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createCommandModelToolDefinition,
   createConnectedAppSkillModelToolDefinitions,
   createOpenPondActionModelToolDefinitions,
   createOpenPondProfileSkillModelToolDefinitions,
@@ -130,6 +131,105 @@ describe("model tool registry", () => {
       "provide either targetRef/snapshotId or x/y",
     );
     expect(calls).toEqual([]);
+  });
+
+  test("keeps browser observation and workspace mutation routed separately in Hybrid harness", async () => {
+    const browserCalls: unknown[] = [];
+    const workspacePayloads: unknown[] = [];
+    let profileActionCalled = false;
+    const hybridSession = baseSession({
+      provider: "openrouter",
+      workspaceKind: "sandbox",
+      workspaceId: "sandbox_hybrid",
+      workspaceName: "Hybrid Sandbox",
+      localProjectId: "local_project_1",
+      cloudProjectId: "cloud_project_1",
+      cloudTeamId: "team_1",
+      metadata: { workspaceTarget: "hybrid" },
+    });
+    const browserDefinitions = createBrowserModelToolDefinitions(browserExecutor({
+      available: true,
+      calls: browserCalls,
+    }));
+    const resourceDefinitions = createResourceModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        workspacePayloads.push(payload);
+        const action = (payload as any).action;
+        return {
+          ok: true,
+          action,
+          output: action === "sandbox_exec" ? "fixture validation passed" : "Edited README.md.",
+          data: action === "sandbox_exec"
+            ? { command: { status: "succeeded", output: "fixture validation passed" } }
+            : { edit: { path: "README.md", replacements: 1, verified: true } },
+        };
+      },
+    });
+    const actionDefinitions = createOpenPondActionModelToolDefinitions({
+      actionCatalog: [
+        {
+          id: "profile.chat",
+          label: "Profile Chat",
+          implementation: { type: "openpond-profile-action", actionId: "chat" },
+        },
+      ],
+      executeWorkspaceTool: async () => {
+        throw new Error("profile actions should not become sandbox actions");
+      },
+      executeProfileAction: async () => {
+        profileActionCalled = true;
+        throw new Error("profile action should not run in Hybrid");
+      },
+    });
+    const snapshot = browserDefinitions.find((definition) => definition.name === "openpond_browser_snapshot");
+    const edit = resourceDefinitions.find((definition) => definition.name === "sandbox_edit_file");
+    const exec = resourceDefinitions.find((definition) => definition.name === "sandbox_exec");
+    const actionRun = actionDefinitions.find((definition) => definition.name === "openpond_action_run");
+    if (!snapshot || !edit || !exec || !actionRun) throw new Error("Hybrid harness tools missing");
+
+    const snapshotResult = await snapshot.execute({
+      ...actionContext({ maxTargets: 8 }),
+      session: hybridSession,
+    });
+    const editResult = await edit.execute({
+      ...actionContext({
+        path: "README.md",
+        oldText: "before",
+        newText: "after",
+      }),
+      session: hybridSession,
+    });
+    const execResult = await exec.execute({
+      ...actionContext({ command: "bun run typecheck" }),
+      session: hybridSession,
+    });
+    const localOnlyResult = await actionRun.execute({
+      ...actionContext({
+        actionId: "profile.chat",
+        input: { prompt: "hello" },
+      }),
+      session: hybridSession,
+    });
+
+    expect(snapshotResult.ok).toBe(true);
+    expect(editResult.ok).toBe(true);
+    expect(execResult.ok).toBe(true);
+    expect(localOnlyResult.ok).toBe(false);
+    expect(localOnlyResult.contentText).toContain("Working in Hybrid");
+    expect(profileActionCalled).toBe(false);
+    expect(browserCalls).toEqual([{ method: "snapshot", maxTargets: 8 }]);
+    expect(workspacePayloads).toEqual([
+      {
+        action: "sandbox_edit_file",
+        args: { path: "README.md", oldText: "before", newText: "after" },
+        source: "chat_action",
+      },
+      {
+        action: "sandbox_exec",
+        args: { command: "bun run typecheck" },
+        source: "chat_action",
+      },
+    ]);
   });
 
   test("maps sandbox resource search through sandbox_search_files", async () => {
@@ -370,6 +470,214 @@ describe("model tool registry", () => {
     ]);
     expect(writeResult.contentText).toContain("Wrote README.md.");
     expect(editResult.contentText).toContain("Edited README.md");
+  });
+
+  test("maps sandbox native command and git tools through sandbox workspace actions", async () => {
+    const payloads: unknown[] = [];
+    const definitions = createResourceModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        payloads.push(payload);
+        const action = (payload as any).action;
+        return {
+          ok: true,
+          action,
+          output:
+            action === "sandbox_exec"
+              ? "Command succeeded\n\nfixture validation passed"
+              : action === "sandbox_git_status"
+                ? "Sandbox git status has 1 changed file."
+                : action === "sandbox_git_diff"
+                  ? "diff --git a/README.md b/README.md"
+                  : "Sandbox is running.",
+          data:
+            action === "sandbox_exec"
+              ? { command: { status: "succeeded", output: "fixture validation passed" } }
+              : action === "sandbox_git_status"
+                ? { status: { files: [{ path: "README.md", status: "M" }] } }
+                : action === "sandbox_git_diff"
+                  ? { diff: "diff --git a/README.md b/README.md" }
+                  : { sandbox: { id: "sandbox_1", state: "running" } },
+        };
+      },
+    });
+    const status = definitions.find((definition) => definition.name === "sandbox_status");
+    const exec = definitions.find((definition) => definition.name === "sandbox_exec");
+    const gitStatus = definitions.find((definition) => definition.name === "sandbox_git_status");
+    const gitDiff = definitions.find((definition) => definition.name === "sandbox_git_diff");
+    if (!status || !exec || !gitStatus || !gitDiff) throw new Error("sandbox command/git tools missing");
+
+    expect(exec.enabled?.({
+      session: baseSession({ workspaceKind: "sandbox", workspaceId: "sandbox_1" }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(true);
+    expect(exec.enabled?.({
+      session: baseSession({ workspaceKind: "sandbox", workspaceId: null }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(false);
+
+    const statusResult = await status.execute(actionContext({}));
+    const execResult = await exec.execute(actionContext({ command: "bun run typecheck", timeoutSeconds: 180 }));
+    const gitStatusResult = await gitStatus.execute(actionContext({}));
+    const gitDiffResult = await gitDiff.execute(actionContext({ baseRef: "HEAD" }));
+
+    expect(payloads).toEqual([
+      {
+        action: "sandbox_status",
+        args: {},
+        source: "chat_action",
+      },
+      {
+        action: "sandbox_exec",
+        args: { command: "bun run typecheck", timeoutSeconds: 180 },
+        source: "chat_action",
+      },
+      {
+        action: "sandbox_git_status",
+        args: {},
+        source: "chat_action",
+      },
+      {
+        action: "sandbox_git_diff",
+        args: { baseRef: "HEAD" },
+        source: "chat_action",
+      },
+    ]);
+    expect(statusResult.contentText).toContain("Sandbox is running.");
+    expect(execResult.contentText).toContain("fixture validation passed");
+    expect(gitStatusResult.contentText).toContain("Sandbox git status has 1 changed file.");
+    expect(gitDiffResult.contentText).toContain("diff --git");
+  });
+
+  test("gates OpenPond exec_command to non-Codex local cwd sessions", async () => {
+    const tool = createCommandModelToolDefinition({
+      executeCommand: async (input) => ({
+        ok: true,
+        command: input.command,
+        cwd: input.cwd ?? input.session.cwd,
+        exitCode: 0,
+        stdout: "ok\n",
+        stderr: "",
+        timedOut: false,
+        timeoutSeconds: 120,
+        truncated: false,
+        blockedReason: null,
+      }),
+    });
+
+    expect(tool.enabled?.({
+      session: baseSession({
+        provider: "openrouter",
+        workspaceKind: "local_project",
+        workspaceId: "project_1",
+        cwd: "/tmp/project",
+        openPondCommandAccessMode: "ask",
+      }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(true);
+    expect(tool.enabled?.({
+      session: baseSession({
+        provider: "openrouter",
+        workspaceKind: undefined,
+        workspaceId: null,
+        localProjectId: null,
+        cwd: "/tmp/cwd-only",
+        openPondCommandAccessMode: "ask",
+      }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(true);
+    expect(tool.enabled?.({
+      session: baseSession({
+        provider: "codex",
+        workspaceKind: "local_project",
+        workspaceId: "project_1",
+        cwd: "/tmp/project",
+        openPondCommandAccessMode: "ask",
+      }),
+      provider: "codex",
+      model: "codex",
+      mentionedApps: [],
+    })).toBe(false);
+    expect(tool.enabled?.({
+      session: baseSession({
+        provider: "openrouter",
+        workspaceKind: "local_project",
+        workspaceId: "project_1",
+        cwd: "/tmp/project",
+        openPondCommandAccessMode: "disabled",
+      }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(false);
+    expect(tool.enabled?.({
+      session: baseSession({
+        provider: "openrouter",
+        workspaceKind: "sandbox",
+        workspaceId: "sandbox_1",
+        cwd: "/tmp/project",
+        openPondCommandAccessMode: "ask",
+      }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(false);
+  });
+
+  test("maps OpenPond exec_command model calls through command access service", async () => {
+    const calls: unknown[] = [];
+    const tool = createCommandModelToolDefinition({
+      executeCommand: async (input) => {
+        calls.push(input);
+        return {
+          ok: true,
+          command: input.command,
+          cwd: input.cwd ?? input.session.cwd,
+          exitCode: 0,
+          stdout: "hello\n",
+          stderr: "",
+          timedOut: false,
+          timeoutSeconds: 5,
+          truncated: false,
+          blockedReason: null,
+        };
+      },
+    });
+
+    const result = await tool.execute(actionContext(
+      { command: "printf hello", cwd: "/tmp/project", timeoutSeconds: 5 },
+      {
+        provider: "openrouter",
+        workspaceKind: "local_project",
+        workspaceId: "project_1",
+        cwd: "/tmp/project",
+        openPondCommandAccessMode: "full-access",
+      },
+    ));
+
+    expect(result.ok).toBe(true);
+    expect(result.name).toBe("exec_command");
+    expect(result.contentText).toContain("Command completed successfully.");
+    expect(result.data).toMatchObject({
+      command: "printf hello",
+      cwd: "/tmp/project",
+      stdout: "hello\n",
+      exitCode: 0,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      command: "printf hello",
+      cwd: "/tmp/project",
+      timeoutSeconds: 5,
+      source: "model_tool",
+    });
   });
 
   test("keeps binary sandbox file resources metadata-only", async () => {
@@ -1276,6 +1584,7 @@ function baseSession(overrides: Partial<Session> = {}): Session {
     id: "session_1",
     provider: "openrouter",
     modelRef: { providerId: "openrouter", modelId: "test/model" },
+    openPondCommandAccessMode: "ask",
     title: "BYOK chat",
     appId: null,
     appName: null,

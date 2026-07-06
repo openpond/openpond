@@ -17,6 +17,7 @@ import {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { connectedAppProviderActivityRows } from "../../lib/connected-app-provider-activity";
+import { readSandboxFile } from "./workspace-diff-file-model";
 import type {
   SandboxFileEntry,
   SandboxGitDiff,
@@ -155,11 +156,7 @@ export function SandboxWorkspacePanel({
     setIntegrationError(null);
     try {
       const [connectionsResult, leasesResult] = await Promise.all([
-        api.integrationConnections(connection, {
-          teamId: sandbox.teamId,
-          ...(sandbox.projectId ? { projectId: sandbox.projectId } : {}),
-          status: "active",
-        }),
+        api.integrationConnections(connection, sandboxAvailableIntegrationConnectionListInput(sandbox)),
         api.sandboxIntegrationLeases(connection, sandbox.id),
       ]);
       setIntegrationConnections(connectionsResult.connections);
@@ -248,10 +245,7 @@ export function SandboxWorkspacePanel({
       };
       const [replayResult, connectionsResult] = await Promise.all([
         api.sandboxReplays(connection, scope),
-        api.integrationConnections(connection, {
-          ...scope,
-          status: "active",
-        }),
+        api.integrationConnections(connection, sandboxAvailableIntegrationConnectionListInput(nextSandbox)),
       ]);
       const matchingReplays = replayResult.replays
         .filter((replay) => replayMatchesSandbox(nextSandbox, replay))
@@ -338,19 +332,18 @@ export function SandboxWorkspacePanel({
     }
     let cancelled = false;
     setFilePreview({ status: "loading", path: selectedFilePath, contents: null, message: null });
-    void api
-      .sandboxDownloadFile(connection, sandboxId, selectedFilePath, { maxBytes: 64 * 1024 })
+    void readSandboxFile(connection, sandboxId, selectedFilePath, runtimeEvents)
       .then((result) => {
         if (cancelled) return;
-        if (result.file.isBinary) {
+        if (result.content === null) {
           setFilePreview({ status: "idle", path: selectedFilePath, contents: null, message: "Binary file" });
           return;
         }
         setFilePreview({
           status: "idle",
           path: selectedFilePath,
-          contents: result.contents.length > 6000 ? `${result.contents.slice(0, 6000)}\n...` : result.contents,
-          message: result.file.truncated ? "Preview truncated" : null,
+          contents: result.content.length > 6000 ? `${result.content.slice(0, 6000)}\n...` : result.content,
+          message: result.content.length > 6000 ? "Preview truncated" : null,
         });
       })
       .catch((loadError) => {
@@ -366,7 +359,7 @@ export function SandboxWorkspacePanel({
     return () => {
       cancelled = true;
     };
-  }, [connection, sandboxId, selectedFilePath]);
+  }, [connection, runtimeEvents, sandboxId, selectedFilePath]);
 
   return (
     <aside
@@ -482,7 +475,8 @@ export function SandboxWorkspacePanel({
                         <span>{providerLabel(lease.provider)}</span>
                         <small>
                           {lease.required ? "required" : "optional"} / {leaseExpiryLabel(lease)}
-                          {lease.proxyUrl ? " / proxy" : ""}
+                          {" / "}
+                          {integrationLeaseRuntimeAccessLabel(lease)}
                         </small>
                       </div>
                       <button
@@ -872,6 +866,14 @@ function replayMatchesSandbox(sandbox: SandboxRecord, replay: SandboxReplayRecor
   return Boolean(sandbox.snapshots?.some((snapshot) => snapshot.id === replay.snapshotId));
 }
 
+export function sandboxAvailableIntegrationConnectionListInput(
+  sandbox: Pick<SandboxRecord, "teamId" | "projectId"> | null,
+): { status: "active" } {
+  void sandbox;
+  // Available app connections are account-visible across active teams; the server expands this teamless query.
+  return { status: "active" };
+}
+
 function connectedAppBundleForConnection(connection: SandboxIntegrationConnection) {
   const provider = normalizeConnectedAppProviderFamilyId(connection.provider);
   return provider ? connectedAppBundleByProvider(provider) : null;
@@ -893,6 +895,12 @@ function capabilityLabel(provider: string, capabilityId: string): string {
 
 function leaseExpiryLabel(lease: SandboxIntegrationLeaseRef): string {
   return lease.expiresAt ? `expires ${formatDate(lease.expiresAt)}` : "active";
+}
+
+export function integrationLeaseRuntimeAccessLabel(
+  lease: Pick<SandboxIntegrationLeaseRef, "proxyUrl">,
+): string {
+  return lease.proxyUrl ? "runtime proxy available" : "metadata only, no runtime proxy";
 }
 
 function connectionAccountLabel(connection: SandboxIntegrationConnection): string {
@@ -931,7 +939,7 @@ function sandboxAccessRows(sandbox: SandboxRecord | null): Array<{ type: string;
     rows.push({
       type: `integration-${lease.leaseId}`,
       label: `${lease.provider} lease`,
-      value: lease.expiresAt ? `expires ${formatDate(lease.expiresAt)}` : "active",
+      value: `${lease.expiresAt ? `expires ${formatDate(lease.expiresAt)}` : "active"} / ${integrationLeaseRuntimeAccessLabel(lease)}`,
     });
   }
   for (const preview of sandbox.previewPorts) {

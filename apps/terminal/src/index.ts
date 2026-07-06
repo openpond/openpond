@@ -4,6 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ReadStream, WriteStream } from "node:tty";
 import {
+  type Approval,
   type BootstrapPayload,
   type RuntimeEvent,
 } from "@openpond/contracts";
@@ -14,7 +15,12 @@ import {
   LINE_MODE_TURN_RUNNING_MESSAGE,
   TERMINAL_TURN_RUNNING_MESSAGE,
 } from "./line-mode-turn-guard.js";
-import { parseSlashCommand, SLASH_COMMANDS, type SlashCommandDefinition } from "./ui/commands.js";
+import {
+  parseDirectCommandPrompt,
+  parseSlashCommand,
+  SLASH_COMMANDS,
+  type SlashCommandDefinition,
+} from "./ui/commands.js";
 import { RawInput } from "./ui/input.js";
 import { renderTranscriptItemsForScrollback, renderWelcome } from "./ui/layout.js";
 import { createTerminalRenderScheduler } from "./ui/render-scheduler.js";
@@ -27,14 +33,28 @@ import {
   userItem,
   type TranscriptItem,
 } from "./ui/transcript.js";
-import { parseTerminalArgs, type TerminalOptions } from "./args.js";
+import { parseTerminalArgs, resolveTerminalChatMode, type TerminalOptions } from "./args.js";
 import { handleTerminalSlashCommand } from "./command-handlers.js";
 import { apiFetch, ensureServer, stopManagedServer } from "./connection.js";
+import {
+  runTerminalDirectCommand,
+  terminalDirectCommandBlockedReason,
+} from "./direct-command.js";
 import { openTerminalEvents } from "./events.js";
 import {
   ensureTerminalChatSession,
+  findTerminalSession,
   profileLabel,
 } from "./session-state.js";
+import {
+  commandApprovalFromRuntimeEvent,
+  commandApprovalIdFromResolvedEvent,
+  formatTerminalCommandApprovalQuestion,
+  latestPendingCommandApproval,
+  parseTerminalPermissionChoice,
+  TERMINAL_PERMISSION_QUESTION_CHOICES,
+  type TerminalPermissionChoice,
+} from "./permissions.js";
 import { createLatestWinsTaskScheduler, createSerialTaskScheduler } from "./task-scheduler.js";
 import {
   activeModelId,
@@ -44,6 +64,7 @@ import {
   modelLabel,
   providerLabel,
 } from "./formatting.js";
+import { runOneShotChat } from "./one-shot-chat.js";
 
 type Options = TerminalOptions;
 
@@ -67,7 +88,16 @@ function openUrlDetached(url: string): void {
 }
 
 async function chat(options: Options): Promise<void> {
-  if (!input.isTTY || !output.isTTY) {
+  const mode = resolveTerminalChatMode(options, {
+    inputIsTTY: Boolean(input.isTTY),
+    outputIsTTY: Boolean(output.isTTY),
+  });
+  if (mode === "one-shot") {
+    await runOneShotChat(options, { input, output });
+    return;
+  }
+
+  if (mode === "line-mode") {
     await lineModeChat(options);
     return;
   }
@@ -83,6 +113,9 @@ async function chat(options: Options): Promise<void> {
   let eventStream: AbortController | null = null;
   let exitResolve: (() => void) | null = null;
   let connection: { server: string; token: string } | null = null;
+  let pendingCommandApproval: Approval | null = null;
+  let permissionQuestion: { approval: Approval } | null = null;
+  let permissionQuestionSelectedIndex = 0;
   let running = false;
   let exitRequested = false;
   let notice: string | null = null;
@@ -124,6 +157,17 @@ async function chat(options: Options): Promise<void> {
   const eventRenderScheduler = createTerminalRenderScheduler(render);
 
   function activeSlashMenu(): { items: SlashCommandDefinition[]; selectedIndex: number } | null {
+    if (permissionQuestion) {
+      permissionQuestionSelectedIndex = Math.min(
+        Math.max(0, permissionQuestionSelectedIndex),
+        TERMINAL_PERMISSION_QUESTION_CHOICES.length - 1,
+      );
+      return {
+        items: TERMINAL_PERMISSION_QUESTION_CHOICES,
+        selectedIndex: permissionQuestionSelectedIndex,
+      };
+    }
+
     const appQuery = installAppQuery(composer.text);
     if (appQuery !== null) {
       const queryKey = `install:${appQuery}`;
@@ -177,6 +221,49 @@ async function chat(options: Options): Promise<void> {
     render();
   }
 
+  function activePendingCommandApproval(): Approval | null {
+    if (pendingCommandApproval?.status === "pending" && pendingCommandApproval.sessionId === activeSessionId) {
+      return pendingCommandApproval;
+    }
+    return latestPendingCommandApproval(payload, activeSessionId);
+  }
+
+  function openCommandApprovalQuestion(approval: Approval): void {
+    pendingCommandApproval = approval;
+    permissionQuestion = { approval };
+    permissionQuestionSelectedIndex = 0;
+    setNotice("approval question");
+    addItem(systemItem(formatTerminalCommandApprovalQuestion(approval), "warning"));
+  }
+
+  async function resolvePermissionQuestion(choice: TerminalPermissionChoice): Promise<void> {
+    if (!connection || !permissionQuestion) return;
+    const approval = permissionQuestion.approval;
+    setNotice("resolving approval");
+    try {
+      await apiFetch(connection.server, connection.token, `/v1/approvals/${encodeURIComponent(approval.id)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          decision:
+            choice === "yes"
+              ? "accept"
+              : choice === "session"
+                ? "acceptForSession"
+                : choice === "skip"
+                  ? "cancel"
+                  : "decline",
+        }),
+      });
+      permissionQuestion = null;
+      if (pendingCommandApproval?.id === approval.id) pendingCommandApproval = null;
+      notice = null;
+      render();
+    } catch (error) {
+      setNotice(null);
+      addItem(systemItem(error instanceof Error ? error.message : String(error), "error"));
+    }
+  }
+
   async function refreshBootstrap(refreshCodex = false): Promise<BootstrapPayload> {
     if (!connection) throw new Error("Not connected");
     payload = await apiFetch<BootstrapPayload>(connection.server, connection.token, `/v1/bootstrap${refreshCodex ? "?refreshCodex=1" : ""}`);
@@ -223,8 +310,48 @@ async function chat(options: Options): Promise<void> {
     }
   }
 
+  async function submitDirectCommand(command: string): Promise<void> {
+    if (!connection || !activeSessionId) return;
+    const latest = payload ?? await refreshBootstrap();
+    const session = findTerminalSession(latest, activeSessionId);
+    const blockedReason = terminalDirectCommandBlockedReason(session);
+    if (blockedReason || !session) {
+      addItem(systemItem(blockedReason ?? "Select a project to use this.", "warning"));
+      return;
+    }
+    setNotice("running command");
+    try {
+      const result = await runTerminalDirectCommand(connection, session, command);
+      for (const event of result.events) {
+        transcript = appendRuntimeEvent(transcript, event);
+      }
+      payload = await refreshBootstrap().catch(() => payload);
+    } catch (error) {
+      addItem(systemItem(error instanceof Error ? error.message : String(error), "error"));
+    } finally {
+      setNotice(null);
+      render();
+    }
+  }
+
   async function handleSubmit(text: string): Promise<void> {
     try {
+      if (permissionQuestion) {
+        const choice = parseTerminalPermissionChoice(text);
+        if (!choice) {
+          addItem(systemItem("Choose yes, session, no, or skip.", "warning"));
+          return;
+        }
+        transcript = appendTranscriptItem(transcript, userItem(text));
+        render();
+        await resolvePermissionQuestion(choice);
+        return;
+      }
+      const directCommand = parseDirectCommandPrompt(text);
+      if (directCommand) {
+        await submitDirectCommand(directCommand.command);
+        return;
+      }
       const command = parseSlashCommand(text);
       if (command) {
         transcript = appendTranscriptItem(transcript, userItem(text));
@@ -245,6 +372,8 @@ async function chat(options: Options): Promise<void> {
             setActiveAgentId: (agentId) => {
               activeAgentId = agentId;
             },
+            getPendingCommandApproval: activePendingCommandApproval,
+            openCommandApprovalQuestion,
             refreshBootstrap,
             addItem,
             clearTranscript: () => {
@@ -264,6 +393,15 @@ async function chat(options: Options): Promise<void> {
   }
 
   function submitMenuCommand(command: SlashCommandDefinition): void {
+    if (permissionQuestion) {
+      const choice =
+        parseTerminalPermissionChoice(composer.text) ??
+        parseTerminalPermissionChoice(command.submitText ?? command.name);
+      composer = createComposer();
+      render();
+      if (choice) void resolvePermissionQuestion(choice);
+      return;
+    }
     const commandText = command.submitText ?? `/${command.name}`;
     if (command.requiresArgument) {
       composer = replaceComposerText(composer, `${commandText} `);
@@ -296,12 +434,17 @@ async function chat(options: Options): Promise<void> {
 
     const menu = activeSlashMenu();
     if (menu && key === "up") {
-      slashSelectedIndex = Math.max(0, slashSelectedIndex - 1);
+      if (permissionQuestion) permissionQuestionSelectedIndex = Math.max(0, permissionQuestionSelectedIndex - 1);
+      else slashSelectedIndex = Math.max(0, slashSelectedIndex - 1);
       render();
       return;
     }
     if (menu && key === "down") {
-      slashSelectedIndex = Math.min(menu.items.length - 1, slashSelectedIndex + 1);
+      if (permissionQuestion) {
+        permissionQuestionSelectedIndex = Math.min(menu.items.length - 1, permissionQuestionSelectedIndex + 1);
+      } else {
+        slashSelectedIndex = Math.min(menu.items.length - 1, slashSelectedIndex + 1);
+      }
       render();
       return;
     }
@@ -320,7 +463,9 @@ async function chat(options: Options): Promise<void> {
       return;
     }
     if (result.action.type === "cancel-or-exit") {
-      if (running && connection && activeSessionId) {
+      if (permissionQuestion) {
+        void resolvePermissionQuestion("skip");
+      } else if (running && connection && activeSessionId) {
         setNotice("interrupting");
         void interruptTurn(connection.server, connection.token, activeSessionId).catch((error) => {
           addItem(systemItem(error instanceof Error ? error.message : String(error), "error"));
@@ -371,6 +516,16 @@ async function chat(options: Options): Promise<void> {
       activeSessionId: () => activeSessionId,
       onEvent: (event) => {
         turnSubmissionGuard.applyRuntimeEvent(event);
+        const requestedApproval = commandApprovalFromRuntimeEvent(event);
+        if (requestedApproval) pendingCommandApproval = requestedApproval;
+        const resolvedApprovalId = commandApprovalIdFromResolvedEvent(event);
+        if (resolvedApprovalId && pendingCommandApproval?.id === resolvedApprovalId) {
+          pendingCommandApproval = null;
+        }
+        if (resolvedApprovalId && permissionQuestion?.approval.id === resolvedApprovalId) {
+          permissionQuestion = null;
+          notice = null;
+        }
         if (event.name === "turn.started") running = true;
         transcript = appendRuntimeEvent(transcript, event);
         if (event.name === "turn.completed" || event.name === "turn.failed" || event.name === "turn.interrupted") {
@@ -477,7 +632,7 @@ async function main(): Promise<void> {
   const { command, options } = parseTerminalArgs(process.argv.slice(2));
   if (command !== "chat") {
     output.write(
-      "Usage: openpond-app chat [--server URL] [--provider PROVIDER] [--model MODEL] [--cwd DIR] [--project APP_ID] [--resume SESSION_ID]\n"
+      "Usage: openpond-app chat [--server URL] [--provider PROVIDER] [--model MODEL] [--cwd DIR] [--project APP_ID] [--resume SESSION_ID] (--message TEXT|--message-file PATH|--stdin) --non-interactive [--yes] [--approval-policy POLICY] [--json] [--timeout-sec SEC] [--max-output-bytes BYTES] [--sandbox MODE]\n"
     );
     return;
   }
@@ -486,5 +641,8 @@ async function main(): Promise<void> {
 
 void main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  const exitCode = typeof (error as { exitCode?: unknown }).exitCode === "number"
+    ? (error as { exitCode: number }).exitCode
+    : 1;
+  process.exit(exitCode);
 });

@@ -41,6 +41,15 @@ export type SandboxBudget = {
   maxUsd: string;
 };
 
+export type SandboxQuotaPolicy = {
+  maxDurationSeconds: number;
+  idleTimeoutSeconds: number;
+  maxCommands: number;
+  maxOpenPorts: number;
+  maxSnapshots: number;
+  maxSpendUsd: string;
+};
+
 export type SandboxEnvVarInput = {
   name: string;
   value?: string;

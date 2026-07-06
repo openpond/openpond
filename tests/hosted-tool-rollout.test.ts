@@ -34,6 +34,7 @@ describe("hosted tool rollout flags", () => {
     const flags = resolveHostedToolRolloutFlags();
 
     expect(flags.webSearchTool).toBe(true);
+    expect(flags.dynamicActionTools).toBe(true);
     expect(nativeToolTransportEnabledForProvider(flags, "openpond")).toBe(true);
     expect(nativeToolTransportEnabledForProvider(flags, "openrouter")).toBe(true);
     expect(nativeToolTransportEnabledForProvider(flags, "custom-openai-compatible")).toBe(false);

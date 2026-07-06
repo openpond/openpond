@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { Approval, BootstrapPayload } from "@openpond/contracts";
+import type { Approval, BootstrapPayload, LocalAgentSchedule } from "@openpond/contracts";
 import {
   Bot,
   FileText,
   FolderGit2,
   GitCommit,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
+  RotateCcw,
   UploadCloud,
   X,
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
+import { useLocalAgentSchedules } from "../agents/LocalAgentSchedulesPanel";
 
 type ProfileState = NonNullable<BootstrapPayload["profile"]>;
 type ProfileAgent = ProfileState["agents"][number];
@@ -51,7 +55,9 @@ export function ProfileSettingsSection({
   const [profileName, setProfileName] = useState("default");
   const [profileCommitMessage, setProfileCommitMessage] = useState("");
   const [profileBusy, setProfileBusy] = useState<string | null>(null);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
   const profile = payload?.profile ?? null;
+  const localScheduleState = useLocalAgentSchedules(connection);
   const selectedDefaultTeamId = payload?.preferences.defaultTeamId?.trim() || "";
   const pendingCreatePlanReviews = useMemo(
     () => profileCreatePlanReviews(payload?.approvals ?? []),
@@ -149,13 +155,17 @@ export function ProfileSettingsSection({
             submitProfileInit={submitProfileInit}
             submitProfileLoad={submitProfileLoad}
             submitProfilePush={submitProfilePush}
+            onOpenSummary={() => setSummaryDialogOpen(true)}
           />
 
           <div className="account-list profile-agent-list">
             <div className="account-list-heading profile-agent-list-heading">
               <span>Agents</span>
+              <div className="profile-skill-heading-actions">
+                <small>{localScheduleHeadingLabel(localScheduleState.schedules.length, localScheduleState.loading)}</small>
+              </div>
             </div>
-            {profile.agents.length ? (
+            {profile.agents.length || localScheduleState.schedules.length ? (
               <>
                 <div className="profile-agent-table-head" aria-hidden="true">
                   <span>Agent</span>
@@ -171,6 +181,17 @@ export function ProfileSettingsSection({
                     profile={profile}
                   />
                 ))}
+                {localScheduleState.schedules.map((schedule) => (
+                  <ProfileScheduleAgentRow
+                    key={schedule.id}
+                    pending={localScheduleState.pendingScheduleIds.has(schedule.id)}
+                    schedule={schedule}
+                    refreshing={localScheduleState.loading}
+                    onRefresh={() => void localScheduleState.refresh()}
+                    onRun={() => void localScheduleState.run(schedule)}
+                    onToggle={() => void localScheduleState.toggle(schedule)}
+                  />
+                ))}
               </>
             ) : (
               <div className="empty-account-list">
@@ -178,6 +199,11 @@ export function ProfileSettingsSection({
                 <span>Run profile checks after creating agents.</span>
               </div>
             )}
+            {localScheduleState.error ? (
+              <div className="profile-footline warning profile-agent-list-note">
+                Local schedules: {localScheduleState.error}
+              </div>
+            ) : null}
           </div>
 
           <ProfileSkillsSection
@@ -185,7 +211,13 @@ export function ProfileSettingsSection({
             profile={profile}
           />
 
-          <ProfileSummary profile={profile} pendingCreatePlanReviews={pendingCreatePlanReviews} />
+          {summaryDialogOpen ? (
+            <ProfileSummaryDialog
+              profile={profile}
+              pendingCreatePlanReviews={pendingCreatePlanReviews}
+              onClose={() => setSummaryDialogOpen(false)}
+            />
+          ) : null}
         </>
       ) : (
         <div className="account-list">
@@ -220,7 +252,43 @@ export function ProfileSettingsSection({
   );
 }
 
-function ProfileSummary({
+function ProfileSummaryDialog({
+  profile,
+  pendingCreatePlanReviews,
+  onClose,
+}: {
+  profile: ProfileState;
+  pendingCreatePlanReviews: Approval[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="git-dialog profile-summary-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-summary-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button className="git-dialog-close" type="button" title="Close" aria-label="Close" onClick={onClose}>
+          <X size={14} />
+        </button>
+        <div className="git-dialog-icon">
+          <FileText size={18} />
+        </div>
+        <h2 id="profile-summary-dialog-title">Profile summary</h2>
+        <ProfileSummaryCard profile={profile} pendingCreatePlanReviews={pendingCreatePlanReviews} />
+        <div className="git-dialog-footer">
+          <button className="git-dialog-secondary" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProfileSummaryCard({
   profile,
   pendingCreatePlanReviews,
 }: {
@@ -228,7 +296,7 @@ function ProfileSummary({
   pendingCreatePlanReviews: Approval[];
 }) {
   return (
-    <div className="account-list">
+    <div className="account-list profile-summary-card">
       <div className="account-list-heading">
         <span>Summary</span>
         <small>{profile.summary.state}</small>
@@ -353,6 +421,7 @@ type ProfileControlsProps = {
   profilePath: string;
   syncDisabledReason: string | null;
   inline?: boolean;
+  onOpenSummary?: () => void;
   setProfileCommitMessage: (value: string) => void;
   setProfileName: (value: string) => void;
   setProfilePath: (value: string) => void;
@@ -371,6 +440,7 @@ function ProfileControls({
   profileName,
   profilePath,
   syncDisabledReason,
+  onOpenSummary,
   setProfileCommitMessage,
   setProfileName,
   setProfilePath,
@@ -390,6 +460,16 @@ function ProfileControls({
         <div className="profile-control-actions">
           {!inline ? (
             <>
+              {onOpenSummary ? (
+                <button
+                  className="settings-secondary"
+                  type="button"
+                  onClick={onOpenSummary}
+                >
+                  <FileText size={14} />
+                  <span>Summary</span>
+                </button>
+              ) : null}
               <button
                 className="settings-secondary"
                 disabled={disabled}
@@ -718,6 +798,77 @@ function ProfileAgentRow({
   );
 }
 
+function ProfileScheduleAgentRow({
+  pending,
+  refreshing,
+  schedule,
+  onRefresh,
+  onRun,
+  onToggle,
+}: {
+  pending: boolean;
+  refreshing: boolean;
+  schedule: LocalAgentSchedule;
+  onRefresh: () => void;
+  onRun: () => void;
+  onToggle: () => void;
+}) {
+  const status = localScheduleStatus(schedule);
+  const toggleLabel = schedule.enabled ? "Pause schedule" : "Resume schedule";
+  return (
+    <div className="product-row profile-agent-row profile-schedule-agent-row">
+      <div className="profile-agent-identity">
+        <Bot size={18} />
+        <div>
+          <strong>{schedule.localProjectName}</strong>
+          <span title={schedule.scheduleName}>schedule: {schedule.scheduleName}</span>
+        </div>
+      </div>
+      <div className="profile-agent-action">
+        <span title={schedule.targetAction}>{schedule.targetAction}</span>
+      </div>
+      <ProfileStatusText status={status} />
+      <div className="profile-schedule-actions">
+        <span className="profile-schedule-expression" title={localScheduleTitle(schedule)}>
+          {schedule.enabled ? schedule.scheduleExpression : "Paused"}
+        </span>
+        <div className="profile-schedule-controls" aria-label={`${schedule.scheduleName} schedule controls`}>
+          <button
+            className="settings-icon-button profile-schedule-button"
+            disabled={refreshing}
+            type="button"
+            title="Refresh local schedules"
+            aria-label="Refresh local schedules"
+            onClick={onRefresh}
+          >
+            <RefreshCw size={14} className={refreshing ? "settings-spin" : undefined} />
+          </button>
+          <button
+            className="settings-icon-button profile-schedule-button"
+            disabled={pending}
+            type="button"
+            title="Run now"
+            aria-label={`Run ${schedule.scheduleName} now`}
+            onClick={onRun}
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            className="settings-icon-button profile-schedule-button"
+            disabled={pending}
+            type="button"
+            title={toggleLabel}
+            aria-label={`${toggleLabel}: ${schedule.scheduleName}`}
+            onClick={onToggle}
+          >
+            {schedule.enabled ? <Pause size={14} /> : <Play size={14} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfileSkillsSection({
   onSkillCommand,
   profile,
@@ -842,6 +993,42 @@ function ProfileMetric({ label, value }: { label: string; value: string }) {
       <strong title={value}>{value}</strong>
     </div>
   );
+}
+
+function localScheduleHeadingLabel(count: number, loading: boolean): string {
+  if (loading && count === 0) return "Loading schedules";
+  if (loading) return `${count} scheduled, refreshing`;
+  if (count === 1) return "1 scheduled";
+  if (count > 1) return `${count} scheduled`;
+  return "No schedules";
+}
+
+function localScheduleStatus(schedule: LocalAgentSchedule): ProfileStatusCell {
+  if (!schedule.enabled) return { state: "disabled", label: "Paused" };
+  if (schedule.lastError || schedule.lastRunStatus === "failed") return { state: "warning", label: "Failed" };
+  if (schedule.lastRunStatus === "running") return { state: "loading", label: "Running" };
+  if (schedule.lastRunStatus === "queued") return { state: "loading", label: "Queued" };
+  if (schedule.lastRunStatus === "skipped") return { state: "warning", label: "Skipped" };
+  if (schedule.lastRunStatus === "succeeded") return { state: "ready", label: "Succeeded" };
+  return { state: "loading", label: "Scheduled" };
+}
+
+function localScheduleTitle(schedule: LocalAgentSchedule): string {
+  const parts = [`${schedule.scheduleType}: ${schedule.scheduleExpression}`];
+  if (schedule.nextRunAt) parts.push(`next ${formatScheduleDate(schedule.nextRunAt)}`);
+  if (schedule.lastRunAt) parts.push(`last ${formatScheduleDate(schedule.lastRunAt)}`);
+  return parts.join(" - ");
+}
+
+function formatScheduleDate(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function shortSha(value: string | null | undefined): string {

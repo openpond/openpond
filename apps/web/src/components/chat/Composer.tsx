@@ -4,7 +4,9 @@ import type {
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
+  OpenPondCommandAccessMode,
   OpenPondApp,
+  OpenPondProfileSkill,
   ProviderSettings,
 } from "@openpond/contracts";
 import {
@@ -38,8 +40,14 @@ import {
 } from "../../lib/composer-action-catalog";
 import {
   COMPOSER_SLASH_COMMANDS,
+  composerSlashCommandMatches,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
+import {
+  activeProfileSkillInvocationContext,
+  profileSkillInvocationMatchesForQuery,
+  profileSkillInvocationText,
+} from "../../lib/profile-skill-invocations";
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import {
   ComposerProjectTargetControl,
@@ -69,6 +77,7 @@ import {
 } from "./ComposerInlineInput";
 import { ComposerMentionMenu, type ComposerMentionMenuItem } from "./ComposerMentionMenu";
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
+import { ComposerSkillMenu, type ComposerSkillMenuItem } from "./ComposerSkillMenu";
 import { ComposerSlashMenu, type SlashMenuItem } from "./ComposerSlashMenu";
 import {
   ComposerAttachmentPreview,
@@ -88,6 +97,7 @@ type ComposerProps = {
   composeNotice?: ComposerNotice | null;
   mentionApps?: OpenPondApp[];
   connectedAppMentions?: ConnectedAppMentionOption[];
+  profileSkills?: OpenPondProfileSkill[];
   selectedMentionAppId?: string | null;
   contextWindowStatus: ContextWindowStatus;
   goalRuntime?: GoalRuntimeStatus | null;
@@ -107,6 +117,7 @@ type ComposerProps = {
   workspaceTarget: WorkspaceTargetState;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
+  openPondCommandAccessMode: OpenPondCommandAccessMode;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
@@ -114,6 +125,7 @@ type ComposerProps = {
   onModelChange: (value: string) => void;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
+  onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
   onPromptChange: (value: string) => void;
   onMentionAppSelect?: (appId: string | null) => void;
   showToast: ShowAppToast;
@@ -173,20 +185,7 @@ function completedTypedSlashCommand(input: string, cursor: number): { command: C
 }
 
 function slashCommandMatchesForQuery(query: string): ComposerSlashCommand[] {
-  return COMPOSER_SLASH_COMMANDS
-    .filter((command) => {
-      if (!query) return true;
-      return [
-        command.id,
-        command.command,
-        command.label,
-        command.description,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    })
-    .slice(0, 8);
+  return composerSlashCommandMatches({ prompt: `/${query}` });
 }
 
 function slashActionMatchesForQuery(actions: SandboxActionCatalogEntry[], query: string): SandboxActionCatalogEntry[] {
@@ -248,6 +247,7 @@ export function Composer({
   composeNotice = null,
   mentionApps = [],
   connectedAppMentions = [],
+  profileSkills = [],
   selectedMentionAppId = null,
   contextWindowStatus,
   goalRuntime = null,
@@ -267,6 +267,7 @@ export function Composer({
   workspaceTarget,
   codexPermissionMode,
   codexReasoningEffort,
+  openPondCommandAccessMode,
   onProviderChange,
   onProviderSetupOpen,
   onProjectTargetChange,
@@ -274,6 +275,7 @@ export function Composer({
   onModelChange,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
+  onOpenPondCommandAccessModeChange,
   onPromptChange,
   onMentionAppSelect,
   showToast,
@@ -290,9 +292,12 @@ export function Composer({
   const suppressNextAutoDispatchRef = useRef(false);
   const [cursorIndex, setCursorIndex] = useState(prompt.length);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [skillIndex, setSkillIndex] = useState(0);
   const [actionIndex, setActionIndex] = useState(0);
   const [actionMenuDismissedPrompt, setActionMenuDismissedPrompt] = useState<string | null>(null);
+  const [skillMenuDismissedPrompt, setSkillMenuDismissedPrompt] = useState<string | null>(null);
   const [mentionMenuStyle, setMentionMenuStyle] = useState<CSSProperties>({});
+  const [skillMenuStyle, setSkillMenuStyle] = useState<CSSProperties>({});
   const [actionMenuStyle, setActionMenuStyle] = useState<CSSProperties>({});
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
@@ -316,7 +321,7 @@ export function Composer({
   } = useComposerAttachments();
   const placeholder = mode === "start" ? "Ask Openpond Anything" : "Ask for follow-up changes";
   const modelValue = normalizeChatModel(provider, model, providerSettings);
-  const dropdownPlacement = mode === "dock" ? "top" : "bottom";
+  const dropdownPlacement = mode === "dock" || showProjectFooter ? "top" : "bottom";
   const contextStatusTooltipId = useId();
   const goalDetailsId = useId();
   const contextStatusStyle = {
@@ -439,6 +444,24 @@ export function Composer({
     return [...appMatches, ...connectedAppMatches, ...actionMatches].slice(0, 8);
   }, [actionCatalog, connectedAppMentions, mentionApps, mentionContext]);
   const showMentionMenu = Boolean(!inputDisabled && mentionContext && mentionMatches.length > 0);
+  const activeSkillContext = useMemo(
+    () => activeProfileSkillInvocationContext(prompt, Math.min(cursorIndex, prompt.length)),
+    [cursorIndex, prompt],
+  );
+  const activeSkillKey = activeSkillContext
+    ? `${prompt}:${activeSkillContext.start}:${activeSkillContext.end}`
+    : null;
+  const skillMatches = useMemo<ComposerSkillMenuItem[]>(() => {
+    return activeSkillContext
+      ? profileSkillInvocationMatchesForQuery(profileSkills, activeSkillContext.query)
+      : [];
+  }, [activeSkillContext, profileSkills]);
+  const showSkillMenu = Boolean(
+    !inputDisabled &&
+    activeSkillContext &&
+    activeSkillKey &&
+    skillMenuDismissedPrompt !== activeSkillKey,
+  );
   const activeSlashContext = useMemo(
     () => activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
     [cursorIndex, prompt],
@@ -471,6 +494,9 @@ export function Composer({
   );
 
   const showGoalRuntime = Boolean(goalRuntime && !createPipelineRuntime);
+  const activeGoalRuntime = showGoalRuntime && goalRuntime?.tone === "active";
+  const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
+  const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
   const showWorkspaceFooterControls = projectTarget.value !== "none";
   const editingSteerDraft = useMemo(
     () => steerDrafts.find((draft) => draft.id === editingSteerDraftId) ?? null,
@@ -484,6 +510,10 @@ export function Composer({
   useEffect(() => {
     setMentionIndex(0);
   }, [mentionContext?.query]);
+
+  useEffect(() => {
+    setSkillIndex(0);
+  }, [activeSkillContext?.query, skillMatches.length]);
 
   useEffect(() => {
     setActionIndex(0);
@@ -563,6 +593,27 @@ export function Composer({
       window.removeEventListener("scroll", updateSlashMenuPosition, true);
     };
   }, [attachments.length, createPipelineRuntime, goalRuntime, prompt, selectedActionId, showActionMenu]);
+
+  useLayoutEffect(() => {
+    if (!showSkillMenu) return;
+    const input = inputRef.current?.element;
+    const composer = composerRef.current;
+    if (!input || !composer) return;
+    const inputElement = input;
+    const composerElement = composer;
+
+    function updateSkillMenuPosition() {
+      setSkillMenuStyle(slashMenuAnchorStyle(inputElement, composerElement));
+    }
+
+    updateSkillMenuPosition();
+    window.addEventListener("resize", updateSkillMenuPosition);
+    window.addEventListener("scroll", updateSkillMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateSkillMenuPosition);
+      window.removeEventListener("scroll", updateSkillMenuPosition, true);
+    };
+  }, [attachments.length, createPipelineRuntime, goalRuntime, prompt, selectedActionId, showSkillMenu]);
 
   useLayoutEffect(() => {
     if (!showMentionMenu) return;
@@ -732,6 +783,26 @@ export function Composer({
       return;
     }
     selectSlashAction(item.action);
+  }
+
+  function selectProfileSkill(item: ComposerSkillMenuItem) {
+    if (!activeSkillContext) return;
+    const start = Math.max(0, Math.min(activeSkillContext.start, prompt.length));
+    const end = Math.max(start, Math.min(activeSkillContext.end, prompt.length));
+    const before = prompt.slice(0, start);
+    const after = prompt.slice(end);
+    const prefix = before && !/\s$/.test(before) ? " " : "";
+    const suffix = after && !/^\s/.test(after) ? " " : "";
+    const invocation = `${profileSkillInvocationText(item)} `;
+    const inserted = `${prefix}${invocation}${suffix}`;
+    const nextPrompt = `${before}${inserted}${after}`;
+    const nextCursor = before.length + inserted.length;
+    setSkillMenuDismissedPrompt(null);
+    onPromptChange(nextPrompt);
+    setCursorIndex(nextCursor);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(nextCursor);
+    });
   }
 
   function openFilePicker() {
@@ -942,6 +1013,15 @@ export function Composer({
           style={mentionMenuStyle}
         />
       )}
+      {showSkillMenu && (
+        <ComposerSkillMenu
+          items={skillMatches}
+          onSelect={selectProfileSkill}
+          onSelectIndex={setSkillIndex}
+          skillIndex={skillIndex}
+          style={skillMenuStyle}
+        />
+      )}
       {showActionMenu && (
         <ComposerSlashMenu
           actionCatalogCount={actionCatalog.length}
@@ -1034,6 +1114,28 @@ export function Composer({
                   return;
                 }
               }
+              if (showSkillMenu) {
+                if (skillMatches.length > 0 && event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setSkillIndex((current) => (current + 1) % skillMatches.length);
+                  return;
+                }
+                if (skillMatches.length > 0 && event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setSkillIndex((current) => (current - 1 + skillMatches.length) % skillMatches.length);
+                  return;
+                }
+                if (skillMatches.length > 0 && (event.key === "Enter" || event.key === "Tab")) {
+                  event.preventDefault();
+                  selectProfileSkill(skillMatches[skillIndex] ?? skillMatches[0]!);
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setSkillMenuDismissedPrompt(activeSkillKey ?? prompt);
+                  return;
+                }
+              }
               if (showActionMenu) {
                 if (slashMatches.length > 0 && event.key === "ArrowDown") {
                   event.preventDefault();
@@ -1122,8 +1224,10 @@ export function Composer({
           mentionApps={mentionApps}
           modelValue={modelValue}
           modelOptions={modelOptions}
+          openPondCommandAccessMode={openPondCommandAccessMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           onCodexReasoningEffortChange={onCodexReasoningEffortChange}
+          onOpenPondCommandAccessModeChange={onOpenPondCommandAccessModeChange}
           onModelChange={onModelChange}
           onOpenFilePicker={openFilePicker}
           onCreateAsAgent={selectCreateAsAgent}
@@ -1143,6 +1247,8 @@ export function Composer({
           sendTooltip={sendTooltip}
           selectedMentionAppId={selectedMentionAppId}
           showToast={showToast}
+          stopIcon={stopControlIcon}
+          stopLabel={stopControlLabel}
           steering={steering}
         />
       </div>

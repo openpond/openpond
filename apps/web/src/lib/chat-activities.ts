@@ -35,6 +35,7 @@ export function appendActivityToList(
   const next = [...activities];
   if (mergeStreamedTextActivity(next, item, activity)) return next;
   if (mergeCommandActivity(next, item, activity)) return next;
+  if (mergeWorkspaceActionActivity(next, item, activity)) return next;
   return [...next, activity];
 }
 
@@ -108,6 +109,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const imagePreview = activityImagePreview(item);
   const kind = commandActivityKind(item);
   const controlKind = controlActivityKind(item);
+  const receipt = activityReceipt(item);
   const meta = activityMeta(item);
   return {
     id: item.id,
@@ -119,6 +121,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(kind ? { callId: activityCallId(item) ?? undefined } : {}),
     ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
     ...(meta ? { meta } : {}),
+    ...(receipt ? { receipt } : {}),
     state: activityState(item),
     ...(imagePreview ? { imagePreview } : {}),
   };
@@ -149,6 +152,22 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   return false;
 }
 
+function mergeWorkspaceActionActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
+  if (item.name !== "workspace_action_result") return false;
+  const existing = findMatchingWorkspaceActionActivity(activities, item);
+  if (!existing) return false;
+  existing.id = activity.id;
+  existing.label = activity.label;
+  existing.content = activity.content;
+  existing.timestamp = activity.timestamp;
+  existing.state = activity.state;
+  existing.detail = activity.detail;
+  existing.meta = activity.meta;
+  existing.receipt = activity.receipt;
+  existing.imagePreview = activity.imagePreview;
+  return true;
+}
+
 function mergeStreamedTextActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
   if (item.name !== "assistant.delta" && item.name !== "assistant.reasoning.delta") return false;
   const previous = activities[activities.length - 1];
@@ -165,6 +184,22 @@ function findMatchingCommandActivity(activities: ActivityItem[], item: RuntimeEv
     if (byCallId) return byCallId;
   }
   return findLast(activities, (candidate) => candidate.kind === "command");
+}
+
+function findMatchingWorkspaceActionActivity(activities: ActivityItem[], item: RuntimeEvent): ActivityItem | null {
+  const action = item.action ?? "";
+  const labels = WORKSPACE_ACTIVITY_LABELS[action] ?? {
+    started: "Running workspace action",
+    completed: "Workspace action completed",
+  };
+  return findLast(
+    activities,
+    (candidate) =>
+      candidate.state === "running" &&
+      candidate.label === labels.started &&
+      candidate.kind !== "command" &&
+      !candidate.controlKind,
+  );
 }
 
 function activityState(item: RuntimeEvent): ActivityItem["state"] {
@@ -257,6 +292,7 @@ const WORKSPACE_ACTIVITY_LABELS: Record<string, { started: string; completed: st
   sandbox_git_status: { started: "Checking sandbox git", completed: "Checked sandbox git" },
   sandbox_git_diff: { started: "Reading sandbox diff", completed: "Read sandbox diff" },
   sandbox_git_export_patch: { started: "Exporting sandbox patch", completed: "Exported sandbox patch", failed: "Patch export failed" },
+  sandbox_git_apply_patch_local: { started: "Applying sandbox patch locally", completed: "Applied locally", failed: "Apply locally failed" },
   sandbox_git_branch: { started: "Switching sandbox branch", completed: "Switched sandbox branch", failed: "Branch failed" },
   sandbox_git_commit: { started: "Committing sandbox changes", completed: "Committed sandbox changes", failed: "Commit failed" },
   sandbox_git_pull: { started: "Pulling sandbox changes", completed: "Pulled sandbox changes", failed: "Pull failed" },
@@ -321,8 +357,8 @@ function capabilityToolActivityLabel(item: RuntimeEvent): string | null {
     return failed ? "Create Pipeline failed" : "Started Create Pipeline";
   }
   if (item.action === "openpond_profile_skill_goal") {
-    if (item.name === "tool.started") return "Starting profile skill goal";
-    return failed ? "Profile skill goal failed" : "Started profile skill goal";
+    if (item.name === "tool.started") return "Creating profile skill";
+    return failed ? "Profile skill validation failed" : "Created profile skill";
   }
   if (item.action === "openpond_goal_control") {
     if (item.name === "tool.started") return "Updating goal";
@@ -468,13 +504,47 @@ function activityMeta(item: RuntimeEvent): string | null {
       facts.push("checkpoint clean");
     }
   }
+  const receipt = receiptFromData(data);
+  if (receipt) {
+    facts.push(`receipt ${shortId(receipt.id)}`);
+    facts.push(`${formatUsd(receipt.totalUsd)} ${receipt.status}`);
+  }
   return facts.length > 0 ? facts.join(" · ") : null;
+}
+
+function activityReceipt(item: RuntimeEvent): ActivityItem["receipt"] | undefined {
+  const receipt = receiptFromData(asRecord(item.data));
+  return receipt
+    ? {
+        id: receipt.id,
+        status: receipt.status,
+        totalUsd: receipt.totalUsd,
+      }
+    : undefined;
+}
+
+function receiptFromData(data: Record<string, unknown> | null): { id: string; status: string; totalUsd: string } | null {
+  const sandbox = asRecord(data?.sandbox);
+  const receipts = Array.isArray(sandbox?.receipts) ? sandbox.receipts : [];
+  for (let index = receipts.length - 1; index >= 0; index -= 1) {
+    const receipt = asRecord(receipts[index]);
+    const id = stringValue(receipt, ["id"]);
+    const status = stringValue(receipt, ["status"]);
+    const totalUsd = stringValue(receipt, ["totalUsd", "retailTotalUsd"]);
+    if (id && status && totalUsd) return { id, status, totalUsd };
+  }
+  return null;
 }
 
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) return `${Math.max(0, Math.round(durationMs))} ms`;
   if (durationMs < 10_000) return `${(durationMs / 1000).toFixed(1)} s`;
   return `${Math.round(durationMs / 1000)} s`;
+}
+
+function formatUsd(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith("$") ? trimmed : `$${trimmed}`;
 }
 
 function shortSha(value: string): string {

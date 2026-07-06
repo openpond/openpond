@@ -22,7 +22,7 @@ import {
   createOpenPondRepoApp,
   loadOpenPondAccountContext,
 } from "@openpond/runtime";
-import type { SandboxEnvVarInput } from "@openpond/cloud";
+import type { SandboxCreateInput, SandboxEnvVarInput } from "@openpond/cloud";
 import { writeSandboxTemplateScaffold } from "../scaffold/sandbox-template-scaffold.js";
 import { sandboxRequestPayload, type SandboxRequestAction } from "../openpond/sandboxes.js";
 import { expectedRemoteUrl } from "../workspace/workspace-common.js";
@@ -65,6 +65,8 @@ type AppActionHandlerResult = {
   result: WorkspaceToolResult;
   session: Session;
 };
+
+const SANDBOX_TEMPLATE_IDLE_TIMEOUT_SECONDS = 15 * 60;
 
 export async function handleAppWorkspaceToolAction({
   input,
@@ -486,8 +488,14 @@ type HostedSandboxTemplateCommandResult = {
 
 type SandboxTemplateSource = {
   branch: string;
-  commitSha: string;
-  remoteUrl: string;
+  commitSha: string | null;
+  remoteUrl: string | null;
+  transport: "cloud_project" | "git_remote";
+};
+
+type SandboxTemplateCloudScope = {
+  teamId: string;
+  projectId: string;
 };
 
 const HOSTED_SANDBOX_DIRECT_UPLOAD_BASE64_LIMIT = 6 * 1024 * 1024;
@@ -562,8 +570,16 @@ async function runSandboxTemplateExecutableInLinkedSandbox(input: {
   const source = await resolveSandboxTemplateSource(input.project);
   await reportSandboxTemplateProgress(
     input.reportProgress,
-    `Using ${source.branch}@${shortCommitSha(source.commitSha)} from ${source.remoteUrl}.`,
-    { phase: "source", branch: source.branch, commitSha: source.commitSha, remoteUrl: source.remoteUrl },
+    source.remoteUrl
+      ? `Using ${source.branch}@${shortCommitSha(source.commitSha)} from ${source.remoteUrl}.`
+      : `Using ${source.branch}@${shortCommitSha(source.commitSha)} from linked Cloud Project source.`,
+    {
+      phase: "source",
+      branch: source.branch,
+      commitSha: source.commitSha,
+      remoteUrl: source.remoteUrl,
+      sourceTransport: source.transport,
+    },
   );
   const sandboxMatch = await findOrCreateLinkedSandboxForTemplate({
     project: input.project,
@@ -663,12 +679,33 @@ async function runSandboxTemplateExecutableInLinkedSandbox(input: {
 }
 
 async function resolveSandboxTemplateSource(project: LocalProject): Promise<SandboxTemplateSource> {
+  const linkedSource = linkedSandboxTemplateSource(project);
+  if (linkedSource) return linkedSource;
+
   const repoPath = localProjectSandboxTemplateRootPath(project);
-  const source = await getWorkspaceDeploymentSource(repoPath);
+  try {
+    const source = await getWorkspaceDeploymentSource(repoPath);
+    return {
+      branch: source.branch,
+      commitSha: source.commitSha,
+      remoteUrl: source.remoteUrl,
+      transport: "git_remote",
+    };
+  } catch {
+    throw new Error("Upload/sync this Project to Cloud before running sandbox actions.");
+  }
+}
+
+function linkedSandboxTemplateSource(project: LocalProject): SandboxTemplateSource | null {
+  const linkedProject = project.linkedSandboxProject;
+  const localCommitSha = linkedProject?.lastUploadedCommit?.trim() ?? "";
+  if (!localCommitSha) return null;
+  const commitSha = linkedProject?.lastUploadTransport === "api_source_upload" ? null : localCommitSha;
   return {
-    branch: source.branch,
-    commitSha: source.commitSha,
-    remoteUrl: source.remoteUrl,
+    branch: linkedProject?.defaultBranch?.trim() || "main",
+    commitSha,
+    remoteUrl: linkedProject?.sourceRepoUrl?.trim() || null,
+    transport: "cloud_project",
   };
 }
 
@@ -734,18 +771,26 @@ async function createLinkedSandboxForTemplate(
   reportProgress?: WorkspaceActionProgressReporter,
 ): Promise<LinkedSandboxRecord> {
   let payload: unknown;
+  const cloudScope = sandboxTemplateCloudScope(project, source);
   try {
     await reportSandboxTemplateProgress(
       reportProgress,
       `Creating sandbox for ${project.name} at ${source.branch}@${shortCommitSha(source.commitSha)}.`,
-      { phase: "sandbox", projectId: project.id, branch: source.branch, commitSha: source.commitSha },
+      {
+        phase: "sandbox",
+        projectId: project.id,
+        cloudProjectId: cloudScope?.projectId ?? null,
+        branch: source.branch,
+        commitSha: source.commitSha,
+      },
     );
     const runtimePayload = await sandboxRequestPayload({
       type: "sandbox_runtime_create",
       payload: {
+        ...(cloudScope ? { teamId: cloudScope.teamId, projectId: cloudScope.projectId } : {}),
         mode: "template_build",
         baseBranch: source.branch || "master",
-        baseSha: source.commitSha,
+        ...(source.commitSha ? { baseSha: source.commitSha } : {}),
         promotionPolicy: "none",
         metadata: sandboxTemplateMetadata(project, manifest, source),
       },
@@ -754,16 +799,21 @@ async function createLinkedSandboxForTemplate(
     if (!runtimeId) {
       throw new Error(`Created sandbox runtime for ${project.name}, but the response did not include a runtime id.`);
     }
+    const repo = sandboxRuntimeSandboxRepo(source);
+    const workloadSource = sandboxTemplateWorkloadSource(manifest);
     const sandboxPayload = await sandboxRequestPayload({
       type: "sandbox_runtime_sandbox_create",
       runtimeId,
       payload: {
-        repo: source.remoteUrl,
+        ...(cloudScope ? { teamId: cloudScope.teamId, projectId: cloudScope.projectId } : {}),
+        ...(repo ? { repo } : {}),
         visibility: "team",
         resources: manifest.resources ?? {},
+        networkPolicy: sandboxTemplateNetworkPolicy(manifest),
         budget: { maxUsd: "0.05" },
-        quotas: { maxSpendUsd: "0.05" },
+        quotas: { idleTimeoutSeconds: SANDBOX_TEMPLATE_IDLE_TIMEOUT_SECONDS, maxSpendUsd: "0.05" },
         ...(env.length > 0 ? { env } : {}),
+        ...(workloadSource ? { workloadSource } : {}),
         volumes: manifest.volumes,
         metadata: sandboxTemplateMetadata(project, manifest, source),
       },
@@ -792,19 +842,34 @@ async function createLinkedSandboxForTemplate(
   throw new Error(`Sandbox ${sandbox.id} did not reach running state after create. Current state: ${sandbox.state}.`);
 }
 
+function sandboxTemplateCloudScope(
+  project: LocalProject,
+  source: SandboxTemplateSource,
+): SandboxTemplateCloudScope | null {
+  const linkedProject = project.linkedSandboxProject;
+  const teamId = linkedProject?.teamId?.trim() ?? "";
+  const projectId = linkedProject?.projectId?.trim() ?? "";
+  if (teamId && projectId) return { teamId, projectId };
+  return null;
+}
+
 function sandboxTemplateMetadata(
   project: LocalProject,
   manifest: SandboxTemplateManifest,
   source: SandboxTemplateSource,
 ): Record<string, unknown> {
+  const linkedProject = project.linkedSandboxProject;
   return {
     source: "openpond-app-local-sandbox-template-start",
     projectId: project.id,
     projectName: project.name,
+    ...(linkedProject?.teamId ? { cloudTeamId: linkedProject.teamId } : {}),
+    ...(linkedProject?.projectId ? { cloudProjectId: linkedProject.projectId } : {}),
     templateName: manifest.name,
     templateVersion: manifest.version,
     templateUseCase: manifest.useCase,
-    repoUrl: source.remoteUrl,
+    sourceTransport: source.transport,
+    ...(source.remoteUrl ? { repoUrl: source.remoteUrl } : {}),
     branch: source.branch,
     commitSha: source.commitSha,
     templateTargets: sandboxTemplateExecutableEntries(manifest).map((target) => ({
@@ -812,6 +877,31 @@ function sandboxTemplateMetadata(
       kind: target.kind,
     })),
   };
+}
+
+function sandboxRuntimeSandboxRepo(source: SandboxTemplateSource): string | null {
+  if (source.transport === "cloud_project") return null;
+  return source.remoteUrl;
+}
+
+function sandboxTemplateNetworkPolicy(
+  manifest: SandboxTemplateManifest,
+): NonNullable<SandboxCreateInput["networkPolicy"]> {
+  return {
+    internetEgress: manifest.network.egress === "allow" ? "allow" : "block",
+  };
+}
+
+function sandboxTemplateWorkloadSource(
+  manifest: SandboxTemplateManifest,
+): SandboxCreateInput["workloadSource"] | undefined {
+  if (manifest.runtime.image) {
+    return { image: manifest.runtime.image };
+  }
+  if (manifest.runtime.dockerfile) {
+    return { dockerfile: manifest.runtime.dockerfile };
+  }
+  return undefined;
 }
 
 function sandboxMatchesTemplateProject(
@@ -829,6 +919,7 @@ function sandboxMatchesTemplateSource(
   sandbox: LinkedSandboxRecord,
   source: SandboxTemplateSource,
 ): boolean {
+  if (!source.commitSha) return false;
   return sandbox.metadata.commitSha === source.commitSha;
 }
 
@@ -906,7 +997,8 @@ async function reportSandboxTemplateProgress(
   });
 }
 
-function shortCommitSha(value: string): string {
+function shortCommitSha(value: string | null | undefined): string {
+  if (!value) return "latest";
   return value.length > 12 ? value.slice(0, 12) : value;
 }
 

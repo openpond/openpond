@@ -26,6 +26,7 @@ import {
   runProfileCheck,
   runProfileSdkCommand,
 } from "../packages/cloud/src/profile/local-profile";
+import { executeProfileSkillGoalRequest } from "../packages/cloud/src/profile/profile-skill-goal-executor";
 import { runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
 import { PROFILE_SKILL_MAX_CHARS, loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
 
@@ -500,7 +501,7 @@ describe("local profile control invariants", () => {
       );
 
       const created = await runProfileSkillCommandFromPrompt(
-        "/skill create support-handoff-summaries Draft support handoff summaries.",
+        "/skill create support-handoff-summaries: Draft support handoff summaries.",
       );
       expect(created).toMatchObject({
         handled: false,
@@ -515,6 +516,38 @@ describe("local profile control invariants", () => {
       });
       expect(created?.prompt).toContain("Goal: Create a profile-backed skill named support-handoff-summaries");
       expect(created?.prompt).toContain("Keep the skill package single-file: only SKILL.md.");
+
+      const namedFlag = await runProfileSkillCommandFromPrompt(
+        "/skill create --name docker-cleanup clear Docker caches safely",
+      );
+      expect(namedFlag).toMatchObject({
+        handled: false,
+        action: "goal",
+        goal: {
+          kind: "profile_skill_create",
+          operation: "create",
+          requestedName: "docker-cleanup",
+          targetSkillName: "docker-cleanup",
+          targetSkillPath: "profiles/default/skills/docker-cleanup/SKILL.md",
+          userObjective: "clear Docker caches safely",
+        },
+      });
+
+      const plainLanguage = await runProfileSkillCommandFromPrompt(
+        "/skill create a skill that cleans up docker build cache and unused images",
+      );
+      expect(plainLanguage).toMatchObject({
+        handled: false,
+        action: "goal",
+        goal: {
+          kind: "profile_skill_create",
+          operation: "create",
+          requestedName: null,
+          targetSkillName: null,
+          targetSkillPath: null,
+          userObjective: "a skill that cleans up docker build cache and unused images",
+        },
+      });
 
       const list = await runProfileSkillCommandFromPrompt("/skill list");
       expect(list).toMatchObject({
@@ -574,7 +607,7 @@ describe("local profile control invariants", () => {
 
       const inferredName = await runProfileSkillGoalCommand({
         operation: "create",
-        objective: "Draft concise incident postmortems.",
+        objective: "Docker Cleanup CommandsThese are the exact commands run each time to clear Docker build cache and unused images while leaving containers and volumes alone.docker system dfdocker builder prune -af | tail -n 1docker image prune -af | tail -n 1docker system dfNotes:docker builder prune -af clears build cache.docker image prune -af removes unused images.These commands do not remove Docker volumes.These commands do not stop or remove running containers.",
         source: "model_tool",
       });
       expect(inferredName).toMatchObject({
@@ -592,6 +625,34 @@ describe("local profile control invariants", () => {
       });
       expect(inferredName?.prompt).toContain("Choose a concise lowercase kebab-case skill name");
       expect(inferredName?.prompt).toContain("profiles/default/skills/<skill-name>/SKILL.md");
+      const executed = await executeProfileSkillGoalRequest(inferredName.goal);
+      expect(executed).toMatchObject({
+        skillName: "docker-cleanup",
+        skillPath: "skills/docker-cleanup/SKILL.md",
+        invocation: "$docker-cleanup",
+        validationStatus: "valid",
+        goal: {
+          status: "completed",
+          targetSkillName: "docker-cleanup",
+          targetSkillPath: "profiles/default/skills/docker-cleanup/SKILL.md",
+        },
+      });
+      const dockerSkill = await readFile(
+        path.join(repoPath, "profiles", "default", "skills", "docker-cleanup", "SKILL.md"),
+        "utf8",
+      );
+      expect(dockerSkill).toContain("docker system df");
+      expect(dockerSkill).toContain("docker builder prune -af | tail -n 1");
+      expect(dockerSkill).toContain("docker image prune -af | tail -n 1");
+      const dockerCommandBlock = /```bash\n([\s\S]*?)\n```/.exec(dockerSkill)?.[1].split("\n");
+      expect(dockerCommandBlock).toEqual([
+        "docker system df",
+        "docker builder prune -af | tail -n 1",
+        "docker image prune -af | tail -n 1",
+        "docker system df",
+      ]);
+      expect(dockerSkill).toContain("These commands do not remove Docker volumes.");
+      expect(dockerSkill).toContain("These commands do not stop or remove running containers.");
 
       const structuredEdit = await runProfileSkillGoalCommand({
         operation: "edit",
@@ -648,6 +709,13 @@ describe("local profile control invariants", () => {
           source: "model_tool",
         }),
       ).rejects.toThrow("Describe what the skill should help with.");
+
+      const oversized = await runProfileSkillGoalCommand({
+        operation: "create",
+        objective: `Oversized skill ${"details ".repeat(PROFILE_SKILL_MAX_CHARS)}`,
+        source: "model_tool",
+      });
+      await expect(executeProfileSkillGoalRequest(oversized.goal)).rejects.toThrow("validation failed");
 
       await expect(
         runProfileSkillGoalCommand({

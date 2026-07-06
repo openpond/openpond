@@ -13,6 +13,18 @@ export function mergeRuntimeEventLists(first: RuntimeEvent[], second: RuntimeEve
   return merged;
 }
 
+export function mergeRuntimeEventsIntoSessionPageCache(
+  current: Record<string, RuntimeEvent[]>,
+  sessionId: string,
+  pageEvents: RuntimeEvent[],
+): Record<string, RuntimeEvent[]> {
+  if (pageEvents.length === 0) return current;
+  return {
+    ...current,
+    [sessionId]: mergeRuntimeEventLists(current[sessionId] ?? [], pageEvents),
+  };
+}
+
 export function mergeBootstrapRuntimeEvents(
   bootstrapEvents: RuntimeEvent[],
   currentEvents: RuntimeEvent[],
@@ -21,7 +33,7 @@ export function mergeBootstrapRuntimeEvents(
   if (bootstrapEvents.length === 0) return currentEvents;
 
   const bootstrapEventIds = new Set(bootstrapEvents.map((event) => event.id));
-  const latestBootstrapSequence = latestSequence(bootstrapEvents);
+  const latestBootstrapSequence = latestRuntimeEventSequence(bootstrapEvents);
   const newestBootstrapTimestamp = newestTimestamp(bootstrapEvents);
   const currentEventsAfterBootstrap = currentEvents.filter((event) => {
     if (bootstrapEventIds.has(event.id)) return false;
@@ -38,7 +50,7 @@ export function mergeBootstrapRuntimeEvents(
   return mergeRuntimeEventLists(bootstrapEvents, currentEventsAfterBootstrap);
 }
 
-function latestSequence(events: RuntimeEvent[]): number | null {
+export function latestRuntimeEventSequence(events: RuntimeEvent[]): number | null {
   let latest: number | null = null;
   for (const event of events) {
     if (typeof event.sequence !== "number") continue;

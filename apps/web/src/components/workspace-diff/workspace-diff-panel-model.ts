@@ -1,6 +1,6 @@
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 
-export type DiffTab = "goal" | "files" | "file";
+export type DiffTab = "goal" | "summary" | "files" | "file";
 
 export type WorkspaceDiffTabRequest = {
   id: number;

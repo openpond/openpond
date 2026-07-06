@@ -10,6 +10,7 @@ import type {
   CreatePipelineRequest,
   CreatePipelineSnapshot,
   LocalProject,
+  OpenPondCommandAccessMode,
   PersonalizationSettings,
   ProviderModel,
   ProviderSettings,
@@ -23,6 +24,7 @@ import {
   DEFAULT_CODEX_CHAT_MODEL,
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
+  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   DEFAULT_OPENPOND_CHAT_MODEL,
   PROVIDER_IDS,
 } from "@openpond/contracts";
@@ -56,6 +58,11 @@ export type ActivityItem = {
   callId?: string;
   detail?: string;
   meta?: string;
+  receipt?: {
+    id: string;
+    status: string;
+    totalUsd: string;
+  };
   state?: "running" | "completed" | "failed" | "pending";
   imagePreview?: {
     path: string;
@@ -186,11 +193,17 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   },
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
+  openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   defaultBranchPrefix: "feat/",
   defaultNewProjectDirectory: "",
   goalStorageLocation: "global",
   defaultTeamId: null,
   advancedWorkspaceControls: false,
+  contextCompaction: {
+    autoEnabled: true,
+    triggerPercent: 85,
+    summaryModel: "same_model",
+  },
   sidebarWidth: 332,
   diffPanelWidth: 560,
   sidebarSectionsCollapsed: {
@@ -276,6 +289,18 @@ export const CODEX_REASONING_EFFORT_OPTIONS: Array<DropdownOption & { value: Cod
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "Extra High", shortLabel: "Extra High" },
+];
+export const OPENPOND_COMMAND_ACCESS_MODE_OPTIONS: Array<DropdownOption & { value: OpenPondCommandAccessMode }> = [
+  {
+    value: "ask",
+    label: "Ask",
+    description: "Ask before running shell commands.",
+  },
+  {
+    value: "full-access",
+    label: "Full access",
+    description: "Run shell commands without approval prompts.",
+  },
 ];
 export const LSP_GLOBAL_MODE_OPTIONS: Array<DropdownOption & { value: WorkspaceLspGlobalMode }> = [
   { value: "auto", label: "Auto", description: "Use installed language servers when available." },
@@ -574,6 +599,8 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
       preferences?.codexPermissionMode ?? DEFAULT_APP_PREFERENCES.codexPermissionMode,
     codexReasoningEffort:
       preferences?.codexReasoningEffort ?? DEFAULT_APP_PREFERENCES.codexReasoningEffort,
+    openPondCommandAccessMode:
+      preferences?.openPondCommandAccessMode ?? DEFAULT_APP_PREFERENCES.openPondCommandAccessMode,
     defaultBranchPrefix: normalizeBranchPrefix(preferences?.defaultBranchPrefix),
     defaultNewProjectDirectory:
       preferences?.defaultNewProjectDirectory ?? DEFAULT_APP_PREFERENCES.defaultNewProjectDirectory,
@@ -582,6 +609,17 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
     defaultTeamId: preferences?.defaultTeamId?.trim() || null,
     advancedWorkspaceControls:
       preferences?.advancedWorkspaceControls ?? DEFAULT_APP_PREFERENCES.advancedWorkspaceControls,
+    contextCompaction: {
+      autoEnabled:
+        preferences?.contextCompaction?.autoEnabled ??
+        DEFAULT_APP_PREFERENCES.contextCompaction.autoEnabled,
+      triggerPercent:
+        preferences?.contextCompaction?.triggerPercent ??
+        DEFAULT_APP_PREFERENCES.contextCompaction.triggerPercent,
+      summaryModel:
+        preferences?.contextCompaction?.summaryModel ??
+        DEFAULT_APP_PREFERENCES.contextCompaction.summaryModel,
+    },
     sidebarWidth: preferences?.sidebarWidth ?? DEFAULT_APP_PREFERENCES.sidebarWidth,
     diffPanelWidth: preferences?.diffPanelWidth ?? DEFAULT_APP_PREFERENCES.diffPanelWidth,
     sidebarSectionsCollapsed: {

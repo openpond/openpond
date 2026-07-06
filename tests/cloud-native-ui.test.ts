@@ -14,6 +14,7 @@ import { emptyOpenPondProfileState } from "@openpond/contracts";
 
 import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import { CloudSetupDialog } from "../apps/web/src/components/workspace/CloudSetupDialog";
+import { cloudWorkItemBackgroundTarget } from "../apps/web/src/hooks/useCloudWorkItems";
 import { useSidebarData, visibleSidebarProjectRows } from "../apps/web/src/hooks/useSidebarData";
 import { buildInitialCreatePipelineSnapshot } from "../apps/web/src/lib/create-pipeline-request";
 import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
@@ -451,6 +452,8 @@ describe("Cloud native UI", () => {
     expect(projectsSection).not.toContain("Cloud Status");
     expect(projectsSection).toContain("local / available");
     expect(projectsSection).toContain("not in cloud");
+    expect(projectsSection).toContain('class="sidebar-project-location-row cloud clickable" data-workspace-target="upload_cloud"');
+    expect(projectsSection).not.toContain('class="sidebar-project-location-row attention clickable" data-workspace-target="upload_cloud"');
     expect(projectsSection).toContain("main / 1 running");
     expect(projectsSection).toContain('data-workspace-target="local"');
     expect(projectsSection).toContain('data-workspace-target="cloud"');
@@ -558,6 +561,54 @@ describe("Cloud native UI", () => {
     expect(markup).toContain("Show more");
     expect(markup).not.toContain("Show less");
     expect(markup).toContain("Showing 5 of 24 project chats");
+  });
+
+  test("keeps project chats in stable order across live and Codex history sessions", () => {
+    const project = localProject();
+    const projectId = projectSelectionKey("local", project.id);
+    const olderLiveChat = chatSession({
+      id: "live_project_chat",
+      title: "Older live project chat",
+      localProjectId: project.id,
+      workspaceId: project.id,
+      cwd: project.path,
+      updatedAt: "2026-07-06T13:00:00.000Z",
+    });
+    const newerCodexChat = chatSession({
+      id: "codex_history_project_chat",
+      provider: "codex",
+      title: "Newer Codex project chat",
+      localProjectId: project.id,
+      workspaceId: project.id,
+      cwd: project.path,
+      codexThreadId: "thread_newer",
+      updatedAt: "2026-07-06T13:20:00.000Z",
+    });
+    function ProjectChatOrderProbe() {
+      const data = useSidebarData({
+        localProjects: [project],
+        cloudProjects: [],
+        cloudWorkItems: [],
+        sessions: [olderLiveChat, newerCodexChat],
+        runtimeIndexes: buildRuntimeIndexes([], []),
+        appPreferences: {},
+        selectedSessionId: null,
+        selectedProjectId: null,
+        archivedChatsOpen: false,
+        projectsExpanded: true,
+        chatRowsVisibleCount: SIDEBAR_SECTION_LIMIT,
+      });
+
+      return createElement(
+        "span",
+        null,
+        data.projectSessionRowsByProjectId[projectId]?.map((session) => session.id).join(",") ?? "",
+      );
+    }
+
+    const markup = renderToStaticMarkup(createElement(ProjectChatOrderProbe));
+
+    expect(markup).toContain("live_project_chat,codex_history_project_chat");
   });
 
   test("advances the visible chat count by one page without overshooting", () => {
@@ -943,6 +994,59 @@ describe("Cloud native UI", () => {
     expect(markup).toContain("Edit plan");
     expect(markup).toContain("Cancel");
     expect(markup).not.toContain("Create pipeline metadata linked to this work item.");
+  });
+
+  test("derives background target ids from the selected Cloud work item detail", () => {
+    const staleWorkItem = cloudWorkItem({
+      latestRuntimeId: "runtime_stale",
+      latestSandboxId: "sandbox_stale",
+      assignedAgentId: "agent_stale",
+    });
+    const detailWorkItem = {
+      ...staleWorkItem,
+      latestRuntimeId: null,
+      latestSandboxId: null,
+      assignedAgentId: null,
+    };
+    const detail: CloudWorkItemDetail = {
+      ...cloudWorkItemDetail(detailWorkItem),
+      runtimeSessions: [
+        {
+          id: "runtime_session_old",
+          teamId: "team_1",
+          projectId: "cloud_project_1",
+          runtimeId: "runtime_old",
+          runtimeProfileId: "cloud-coding",
+          sandboxId: "sandbox_old",
+          taskRunId: "task_old",
+          startedAt: NOW,
+          endedAt: NOW,
+          metadata: {},
+        },
+        {
+          id: "runtime_session_active",
+          teamId: "team_1",
+          projectId: "cloud_project_1",
+          runtimeId: "runtime_active",
+          runtimeProfileId: "cloud-coding",
+          sandboxId: "sandbox_active",
+          taskRunId: "task_active",
+          startedAt: NOW,
+          endedAt: null,
+          metadata: {},
+        },
+      ],
+    };
+
+    expect(cloudWorkItemBackgroundTarget(staleWorkItem, detail)).toEqual({
+      sourceRuntimeId: "runtime_stale",
+      sourceSandboxId: "sandbox_stale",
+      agentId: "agent_stale",
+    });
+    expect(cloudWorkItemBackgroundTarget(detailWorkItem, detail)).toEqual({
+      sourceRuntimeId: "runtime_active",
+      sourceSandboxId: "sandbox_active",
+    });
   });
 
   test("silently hydrates Cloud thread details without loading copy", () => {

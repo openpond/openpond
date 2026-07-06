@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/cancel-async-tasks",
+        "ref": "sha256:7c230a29f27c49c2fff88f4721165f4241e456bd87a94cd525be05ae98c6cbbb",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "cancel-async-tasks__Y766fn2",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

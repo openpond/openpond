@@ -32,7 +32,7 @@ import { normalizeSidebarAppPreference } from "../preferences.js";
 import { sanitizeRuntimeEvent } from "../runtime/runtime-event-sanitizer.js";
 import { now } from "../utils.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store-schema.js";
-import { persistStoreData, readStoreData } from "./store-persistence.js";
+import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
 
 export { CURRENT_SQLITE_SCHEMA_VERSION } from "./store-schema.js";
 
@@ -198,14 +198,14 @@ export class SqliteStore {
     const rows = await this.all<PayloadRow>(
       "SELECT payload FROM projection_session_shells ORDER BY sort_index ASC",
     );
-    return rows.map((row) => JSON.parse(row.payload) as Session);
+    return rows.map((row) => normalizeSessionPayload(JSON.parse(row.payload)));
   }
 
   async getSession(sessionId: string): Promise<Session | null> {
     await this.ready;
     await this.writeQueue;
     const row = await this.get<PayloadRow>("SELECT payload FROM projection_session_shells WHERE id = ?", [sessionId]);
-    return row ? JSON.parse(row.payload) as Session : null;
+    return row ? normalizeSessionPayload(JSON.parse(row.payload)) : null;
   }
 
   async pendingApprovals(): Promise<Approval[]> {
@@ -1815,7 +1815,7 @@ export class SqliteStore {
     );
     const sessionIds = new Set<string>();
     for (const row of sessions) {
-      const session = JSON.parse(row.payload) as Session;
+      const session = normalizeSessionPayload(JSON.parse(row.payload));
       sessionIds.add(session.id);
       await this.upsertSessionShellProjection(session, row.sort_index);
     }

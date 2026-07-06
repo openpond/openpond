@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/dna-insert",
+        "ref": "sha256:6e134a226ff852d8bf20f15480c7c1d74e3911d5b458f5cca07aabd23e380f0d",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "dna-insert__dPt5qYE",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

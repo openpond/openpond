@@ -87,6 +87,11 @@ export function runOpenPondGoalControl(input: {
   if (!targetGoal) {
     throw new Error("No current OpenPond goal was found. Ask the user which goal to control, or start a new goal with an objective.");
   }
+  if (isProfileSkillGoal(targetGoal)) {
+    throw new Error(
+      "Profile skill goals cannot be controlled with generic goal control yet. Let the profile skill creation or edit finish, or start a new profile skill request.",
+    );
+  }
 
   const objective = cleanOptional(input.request.objective) ?? stringValue(targetGoal.objective) ?? "OpenPond goal";
   if (action === "restart") {
@@ -279,6 +284,11 @@ function findOpenPondGoalById(
 function openPondProvider(data: Record<string, unknown>, goal: Record<string, unknown> | null): boolean {
   const provider = stringValue(data.provider) ?? stringValue(goal?.provider) ?? "openpond";
   return provider === "openpond";
+}
+
+function isProfileSkillGoal(goal: Record<string, unknown>): boolean {
+  const kind = stringValue(goal.kind);
+  return kind === "profile_skill_create" || kind === "profile_skill_edit";
 }
 
 function cleanRequired(value: string | null | undefined, name: string): string {

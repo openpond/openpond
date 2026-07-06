@@ -66,5 +66,8 @@ export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void
 void runOpenPondCli().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
-  process.exit(1);
+  const exitCode = typeof (error as { exitCode?: unknown }).exitCode === "number"
+    ? (error as { exitCode: number }).exitCode
+    : 1;
+  process.exit(exitCode);
 });

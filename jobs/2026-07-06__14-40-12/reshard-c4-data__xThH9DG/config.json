@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/reshard-c4-data",
+        "ref": "sha256:afae733b4f83b97e0d88220fe51f8eb15adf2515a83ec67f1293a2a15eabe34e",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "reshard-c4-data__xThH9DG",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

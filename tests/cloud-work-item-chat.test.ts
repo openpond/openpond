@@ -529,6 +529,9 @@ describe("Cloud work item chat", () => {
         createPipelineRequest: request,
         createPipeline: approved,
         usageAttribution: backgroundAttribution,
+        sourceRuntimeId: "runtime_hybrid_background",
+        sourceSandboxId: "sandbox_hybrid_background",
+        agentId: "agent_hybrid_background",
         payload: { createPipelineDecision: "approved" },
       });
 
@@ -543,6 +546,9 @@ describe("Cloud work item chat", () => {
       const chatRequest = requests.find((candidate) => candidate.pathname === "/v1/work-items/work_item_attributed/chat");
       expect((chatRequest?.body.metadata as any)?.usageAttribution).toMatchObject(backgroundAttribution);
       const backgroundRequest = requests.find((candidate) => candidate.pathname === "/v1/work-items/work_item_attributed/handle-background");
+      expect(backgroundRequest?.body.sourceRuntimeId).toBe("runtime_hybrid_background");
+      expect(backgroundRequest?.body.sourceSandboxId).toBe("sandbox_hybrid_background");
+      expect(backgroundRequest?.body.agentId).toBe("agent_hybrid_background");
       expect(backgroundRequest?.body.usageAttribution).toMatchObject(backgroundAttribution);
       expect((backgroundRequest?.body.payload as any)?.usageAttribution).toMatchObject(backgroundAttribution);
       expect((backgroundRequest?.body.payload as any)?.createPipelineRequest).toMatchObject({

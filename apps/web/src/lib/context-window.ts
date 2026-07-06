@@ -1,6 +1,7 @@
 import {
   ContextUsageSnapshotSchema,
   type ChatProvider,
+  type ContextCompactionPreferences,
   type ContextUsageSnapshot,
   type RuntimeEvent,
 } from "@openpond/contracts";
@@ -32,6 +33,28 @@ function contextTone(percent: number | null): ContextWindowTone {
   return "low";
 }
 
+function compactionDetail(
+  preferences: ContextCompactionPreferences | null | undefined,
+  percent: number,
+): string {
+  const triggerPercent = preferences?.triggerPercent ?? 85;
+  if (preferences?.autoEnabled === false) {
+    if (percent >= triggerPercent) {
+      return "Auto compaction is off. Start a new chat or turn it on before the provider limit is reached.";
+    }
+    return "Auto compaction is off.";
+  }
+  return `Auto compacts at ${triggerPercent}% context when supported.`;
+}
+
+function isProviderManagedExternally(provider: ChatProvider): boolean {
+  return provider === "codex";
+}
+
+function isOpenPondHostedProvider(provider: ChatProvider): boolean {
+  return provider === "openpond";
+}
+
 export function latestContextUsageFromEvents(events: RuntimeEvent[]): ContextUsageSnapshot | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const item = events[index];
@@ -45,6 +68,7 @@ export function latestContextUsageFromEvents(events: RuntimeEvent[]): ContextUsa
 export function contextWindowStatusFromUsage(input: {
   provider: ChatProvider;
   snapshot: ContextUsageSnapshot | null;
+  preferences?: ContextCompactionPreferences | null;
 }): ContextWindowStatus {
   if (input.snapshot && input.snapshot.provider === input.provider) {
     const usedTokens = input.snapshot.usedTokens;
@@ -59,13 +83,13 @@ export function contextWindowStatusFromUsage(input: {
       percent,
       summary,
       tokensLabel,
-      detail: null,
-      tooltip: `Context window: ${summary} ${tokensLabel}.`,
+      detail: compactionDetail(input.preferences, percent),
+      tooltip: `Context window: ${summary} ${tokensLabel}. ${compactionDetail(input.preferences, percent)}`,
       tone: contextTone(percent),
     };
   }
 
-  if (input.provider === "codex") {
+  if (isProviderManagedExternally(input.provider)) {
     const detail = "Context is managed by Codex app-server.";
     return {
       usedTokens: 0,
@@ -73,6 +97,20 @@ export function contextWindowStatusFromUsage(input: {
       percent: null,
       summary: "Managed externally",
       tokensLabel: "Codex app-server",
+      detail,
+      tooltip: `Context window: ${detail}`,
+      tone: "unknown",
+    };
+  }
+
+  if (!isOpenPondHostedProvider(input.provider)) {
+    const detail = "Context pressure is unavailable until this provider has model context metadata.";
+    return {
+      usedTokens: 0,
+      maxTokens: null,
+      percent: null,
+      summary: "Limit unknown",
+      tokensLabel: "Provider metadata unavailable",
       detail,
       tooltip: `Context window: ${detail}`,
       tone: "unknown",

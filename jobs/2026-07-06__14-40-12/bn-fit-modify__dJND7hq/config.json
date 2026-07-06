@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/bn-fit-modify",
+        "ref": "sha256:48b71fbf20c4dfb661fe49d8fb6cfb91417be422c87889dd30110626a1d1f7eb",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "bn-fit-modify__dJND7hq",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

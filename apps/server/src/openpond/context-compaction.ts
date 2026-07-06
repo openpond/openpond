@@ -1,17 +1,38 @@
 import { randomUUID } from "node:crypto";
 import {
   DEFAULT_OPENPOND_CHAT_MODEL,
+  type ChatProvider,
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { HostedChatMessage } from "@openpond/cloud";
 import { formatPromptWithAttachmentContext } from "../chat-attachments.js";
-import { estimateHostedMessageTokens, hostedContextLimit, usableHostedContextLimit } from "./context-usage.js";
+import {
+  estimateHostedMessageTokens,
+  hostedContextLimit,
+  hostedContextProvider,
+  usableHostedContextLimit,
+} from "./context-usage.js";
 import { buildChatMessagesForProvider } from "./hosted-chat.js";
 import { textFromUnknown } from "../utils.js";
 
-export type HostedCompactionProvider = "openpond";
+export type HostedCompactionProvider = ChatProvider;
+
+export type ContextCompactionStreamDelta = {
+  text?: string;
+  reasoningText?: string;
+  usage?: unknown;
+  raw?: unknown;
+};
+
+export type ContextCompactionStream = (input: {
+  provider: ChatProvider;
+  model: string;
+  messages: HostedChatMessage[];
+  requestId: string;
+  signal?: AbortSignal;
+}) => AsyncGenerator<ContextCompactionStreamDelta, void, unknown>;
 
 export type HostedCompactionResult = {
   summary: string;
@@ -42,13 +63,16 @@ type HostedCompactionInput = {
   events: RuntimeEvent[];
   provider: HostedCompactionProvider;
   model?: string | null;
+  maxContextTokens?: number | null;
   signal?: AbortSignal;
-  streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
+  streamCompactionChatTurn?: ContextCompactionStream;
 };
 
 const HOSTED_AUTO_COMPACT_THRESHOLD_RATIO = 0.85;
 const MAX_SERIALIZED_EVENT_CHARS = 6_000;
 const MAX_COMPACTION_INPUT_CHARS = 180_000;
+const MIN_COMPACTION_INPUT_CHARS = 12_000;
+const COMPACTION_INPUT_CHARS_PER_CONTEXT_TOKEN = 3;
 
 const COMPACTION_SYSTEM_PROMPT = [
   "You compact conversation history for OpenPond App.",
@@ -63,10 +87,24 @@ export function hostedAutoCompactionDecision(input: {
   provider: HostedCompactionProvider;
   model: string;
   messages: HostedChatMessage[];
+  maxContextTokens?: number | null;
+  triggerPercent?: number;
 }): HostedAutoCompactionDecision {
-  const maxContextTokens = hostedContextLimit(input.provider, input.model);
+  const hostedProvider = hostedContextProvider(input.provider);
+  const maxContextTokens = input.maxContextTokens ?? (hostedProvider ? hostedContextLimit(hostedProvider, input.model) : null);
+  if (!maxContextTokens) {
+    return {
+      shouldCompact: false,
+      projectedTokens: estimateHostedMessageTokens(input.messages),
+      thresholdTokens: Number.MAX_SAFE_INTEGER,
+      usableContextTokens: 0,
+      maxContextTokens: 0,
+      tokenSource: "heuristic",
+    };
+  }
   const usableContextTokens = usableHostedContextLimit(maxContextTokens);
-  const thresholdTokens = Math.max(1, Math.floor(usableContextTokens * HOSTED_AUTO_COMPACT_THRESHOLD_RATIO));
+  const triggerRatio = Math.max(0.01, Math.min(1, (input.triggerPercent ?? 85) / 100));
+  const thresholdTokens = Math.max(1, Math.floor(usableContextTokens * triggerRatio));
   const projectedTokens = estimateHostedMessageTokens(input.messages);
   return {
     shouldCompact: projectedTokens >= thresholdTokens,
@@ -79,12 +117,13 @@ export function hostedAutoCompactionDecision(input: {
 }
 
 export async function runHostedContextCompaction(input: HostedCompactionInput): Promise<HostedCompactionResult> {
-  const model = hostedCompactionModel(input.model);
+  const model = hostedCompactionModel(input.provider, input.model);
+  const maxContextTokens = hostedCompactionContextLimit(input.provider, model, input.maxContextTokens);
   const projectionEvents = eventsForHostedCompaction(input.events);
   const { summaryEvents, preservedEvents } = splitEventsForHostedCompaction(projectionEvents);
   if (summaryEvents.length === 0) throw new Error("There is not enough prior context to compact.");
 
-  const serialized = serializeEventsForCompaction(summaryEvents);
+  const serialized = serializeEventsForCompaction(summaryEvents, compactionInputCharBudget(maxContextTokens));
   if (!serialized.trim()) throw new Error("There is not enough prior context to compact.");
 
   const messages: HostedChatMessage[] = [
@@ -122,14 +161,33 @@ export async function runHostedContextCompaction(input: HostedCompactionInput): 
     preservedEventCount: preservedEvents.length,
     inputTokensBefore: estimateHostedMessageTokens(beforeMessages),
     inputTokensAfter: estimateHostedMessageTokens(afterMessages),
-    maxContextTokens: hostedContextLimit(input.provider, model),
+    maxContextTokens,
     tokenSource: "heuristic",
   };
 }
 
-function hostedCompactionModel(model?: string | null): string {
+function hostedCompactionModel(provider: ChatProvider, model?: string | null): string {
   if (model?.trim()) return model.trim();
+  if (provider !== "openpond") throw new Error(`Context compaction for ${provider} requires a selected model.`);
   return DEFAULT_OPENPOND_CHAT_MODEL;
+}
+
+function hostedCompactionContextLimit(
+  provider: ChatProvider,
+  model: string,
+  maxContextTokens: number | null | undefined,
+): number {
+  if (maxContextTokens) return maxContextTokens;
+  const hostedProvider = hostedContextProvider(provider);
+  if (hostedProvider) return hostedContextLimit(hostedProvider, model);
+  throw new Error(`Context compaction for ${provider} requires a trusted context limit.`);
+}
+
+function compactionInputCharBudget(maxContextTokens: number): number {
+  return Math.min(
+    MAX_COMPACTION_INPUT_CHARS,
+    Math.max(MIN_COMPACTION_INPUT_CHARS, Math.floor(maxContextTokens * COMPACTION_INPUT_CHARS_PER_CONTEXT_TOKEN)),
+  );
 }
 
 function splitEventsForHostedCompaction(events: RuntimeEvent[]): {
@@ -181,25 +239,42 @@ async function streamCompactionSummary(input: HostedCompactionInput & {
 }): Promise<string> {
   let text = "";
   const requestId = `compact-${randomUUID()}`;
-  const streamOpenPondHostedChatTurn = input.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn;
-  for await (const delta of streamOpenPondHostedChatTurn({
+  const streamCompactionChatTurn = input.streamCompactionChatTurn ?? defaultOpenPondCompactionStream;
+  for await (const delta of streamCompactionChatTurn({
+    provider: input.provider,
     model: input.model,
     messages: input.messages,
     requestId,
     signal: input.signal,
   })) {
-    if (delta.type === "text_delta" && delta.text) text += delta.text;
+    if (delta.text) text += delta.text;
   }
   return text;
 }
 
-function serializeEventsForCompaction(events: RuntimeEvent[]): string {
+const defaultOpenPondCompactionStream: ContextCompactionStream = async function* (input) {
+  if (input.provider !== "openpond") {
+    throw new Error(`Context compaction stream is not configured for ${input.provider}.`);
+  }
+  for await (const delta of defaultStreamOpenPondHostedChatTurn({
+    model: input.model,
+    messages: input.messages,
+    requestId: input.requestId,
+    signal: input.signal,
+  })) {
+    if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
+    if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
+    if (delta.type === "usage") yield { usage: delta.usage, raw: delta.raw };
+  }
+};
+
+function serializeEventsForCompaction(events: RuntimeEvent[], maxInputChars: number): string {
   const lines: string[] = [];
   let totalChars = 0;
 
   function append(block: string): void {
-    if (!block.trim() || totalChars >= MAX_COMPACTION_INPUT_CHARS) return;
-    const remaining = MAX_COMPACTION_INPUT_CHARS - totalChars;
+    if (!block.trim() || totalChars >= maxInputChars) return;
+    const remaining = maxInputChars - totalChars;
     const value = block.length > remaining ? `${block.slice(0, Math.max(0, remaining - 32))}\n[compaction input truncated]` : block;
     lines.push(value);
     totalChars += value.length;

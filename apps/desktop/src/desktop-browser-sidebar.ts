@@ -239,7 +239,7 @@ export class BrowserSidebarManager {
   }
 
   async harnessSnapshot(input: BrowserHarnessSnapshotInput): Promise<BrowserHarnessResult> {
-    const runtime = await this.runtimeForBrowserInput(input, { requireLoadedUrl: false });
+    const runtime = await this.runtimeForBrowserInput(input, { requireVisible: true, requireLoadedUrl: false });
     await this.waitForRuntimeSettled(runtime);
     const rawSnapshot = await runtime.view.webContents.executeJavaScript(
       collectBrowserSnapshotTargetsScript(input.maxTargets),
@@ -452,7 +452,7 @@ export class BrowserSidebarManager {
     const runtime = await this.ensureRuntime(input.conversationId, tabId);
     runtime.lastUsedAt = Date.now();
     if (options.requireVisible && (!this.bounds || !runtime.view.getVisible())) {
-      throw new Error("Open the browser panel before using cursor or keyboard tools.");
+      throw new Error("Open the browser panel before using browser interaction tools.");
     }
     if (options.requireLoadedUrl && !pageUrl(runtime)) {
       throw new Error("Browser tab has no loaded page.");

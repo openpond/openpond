@@ -184,11 +184,12 @@ export function useSidebarData({
     () => cloudProjectRows.filter((item) => !localProjectKeyByLinkedCloudProjectId.has(item.project.id)),
     [cloudProjectRows, localProjectKeyByLinkedCloudProjectId],
   );
-  const projectRows = useMemo<SidebarProjectItem[]>(
+  const allProjectRows = useMemo<SidebarProjectItem[]>(
     () => [...localProjectRows, ...cloudOnlyProjectRows].sort(sortSidebarProjectRows),
     [cloudOnlyProjectRows, localProjectRows],
   );
-  const pinnedProjects = useMemo(() => projectRows.filter((item) => item.pinned), [projectRows]);
+  const pinnedProjects = useMemo(() => allProjectRows.filter((item) => item.pinned), [allProjectRows]);
+  const projectRows = useMemo(() => allProjectRows.filter((item) => !item.pinned), [allProjectRows]);
   const visibleProjectRows = useMemo(
     () => visibleSidebarProjectRows(projectRows, projectsExpanded, selectedProjectId),
     [projectRows, projectsExpanded, selectedProjectId]

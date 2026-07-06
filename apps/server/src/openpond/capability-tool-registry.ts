@@ -35,7 +35,9 @@ export type OpenPondProfileSkillGoalToolResult = {
   targetSkillPath: string | null;
   status: string;
   nextStep: string;
-  goalPrompt?: string;
+  validationStatus?: string;
+  validationMessages?: string[];
+  invocation?: string;
 };
 
 export type OpenPondGoalControlToolInput = {

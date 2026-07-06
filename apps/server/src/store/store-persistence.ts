@@ -1,4 +1,8 @@
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import {
+  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+  OpenPondCommandAccessModeSchema,
+} from "@openpond/contracts";
 import type { PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import { sanitizeRuntimeEvent } from "../runtime/runtime-event-sanitizer.js";
@@ -22,9 +26,18 @@ export async function readStorePayloads<T>(
   return rows.map((row) => JSON.parse(row.payload) as T);
 }
 
+export function normalizeSessionPayload(value: unknown): Session {
+  const session = value as Session & { openPondCommandAccessMode?: unknown };
+  const parsed = OpenPondCommandAccessModeSchema.safeParse(session.openPondCommandAccessMode);
+  return {
+    ...session,
+    openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+  };
+}
+
 export async function readStoreData(reader: StoreDbReader): Promise<StoreData> {
   return {
-    sessions: await readStorePayloads<Session>(reader, "sessions"),
+    sessions: (await readStorePayloads<Session>(reader, "sessions")).map(normalizeSessionPayload),
     turns: await readStorePayloads<Turn>(reader, "turns"),
     events: (await readStorePayloads<RuntimeEvent>(reader, "events")).map(sanitizeRuntimeEvent),
     approvals: await readStorePayloads<Approval>(reader, "approvals"),

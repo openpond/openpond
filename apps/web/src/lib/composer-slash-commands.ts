@@ -13,11 +13,16 @@ export type ComposerSlashCommand = {
   command: `/${ComposerSlashCommandId}`;
   label: string;
   description: string;
+  subcommands?: readonly string[];
 };
 
 export type ParsedComposerSlashCommand = {
   command: ComposerSlashCommandId;
   args: string;
+};
+
+export type ParsedComposerDirectCommand = {
+  command: string;
 };
 
 export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
@@ -38,6 +43,7 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/skill",
     label: "Manage skills",
     description: "Manage profile-backed reusable skill instructions.",
+    subcommands: ["create", "edit", "list", "help"],
   },
   {
     id: "goal",
@@ -79,6 +85,32 @@ export function composerSlashCommandText(command: ComposerSlashCommand): string 
   return `${command.command} `;
 }
 
+export function composerSlashCommandDetail(command: ComposerSlashCommand): string {
+  if (command.subcommands?.length) {
+    return command.subcommands.join(", ");
+  }
+  return command.description;
+}
+
+function composerSlashCommandPrimarySearchText(command: ComposerSlashCommand): string {
+  return [
+    command.id,
+    command.command,
+    command.label,
+    command.description,
+  ].join(" ");
+}
+
+function composerSlashCommandSubcommandSearchText(command: ComposerSlashCommand): string {
+  return (command.subcommands ?? [])
+    .flatMap((subcommand) => [
+      subcommand,
+      `${command.id} ${subcommand}`,
+      `${command.command} ${subcommand}`,
+    ])
+    .join(" ");
+}
+
 export function parseComposerSlashCommandPrompt(prompt: string): ParsedComposerSlashCommand | null {
   const match = /^\/([a-z][a-z0-9_-]*)(?:\s+([\s\S]*))?$/.exec(prompt.trim());
   if (!match) return null;
@@ -92,6 +124,13 @@ export function parseComposerSlashCommandPrompt(prompt: string): ParsedComposerS
   };
 }
 
+export function parseComposerDirectCommandPrompt(prompt: string): ParsedComposerDirectCommand | null {
+  const trimmed = prompt.trim();
+  if (!trimmed.startsWith("!")) return null;
+  const command = trimmed.slice(1).trim();
+  return command ? { command } : null;
+}
+
 export function composerSlashCommandMatches({
   commands = COMPOSER_SLASH_COMMANDS,
   prompt,
@@ -103,18 +142,15 @@ export function composerSlashCommandMatches({
 }): ComposerSlashCommand[] {
   if (!prompt.startsWith("/")) return [];
   const query = prompt.slice(1).trim().toLowerCase();
-  return commands
-    .filter((command) => {
-      if (!query) return true;
-      return [
-        command.id,
-        command.command,
-        command.label,
-        command.description,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    })
-    .slice(0, limit);
+  if (!query) return commands.slice(0, limit);
+
+  const primaryMatches = commands.filter((command) =>
+    composerSlashCommandPrimarySearchText(command).toLowerCase().includes(query),
+  );
+  const matches = primaryMatches.length > 0
+    ? primaryMatches
+    : commands.filter((command) =>
+      composerSlashCommandSubcommandSearchText(command).toLowerCase().includes(query),
+    );
+  return matches.slice(0, limit);
 }

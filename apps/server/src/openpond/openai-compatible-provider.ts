@@ -239,7 +239,7 @@ function buildChatCompletionBody(input: {
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.model,
-    messages: input.messages,
+    messages: mergeSystemMessages(input.messages),
     stream: true,
   };
   if (input.tools) {
@@ -252,6 +252,27 @@ function buildChatCompletionBody(input: {
     body.tool_choice = input.toolChoice;
   }
   return body;
+}
+
+function mergeSystemMessages(messages: HostedChatMessage[]): HostedChatMessage[] {
+  const systemContents: string[] = [];
+  const nonSystemMessages: HostedChatMessage[] = [];
+  for (const message of messages) {
+    if (message.role === "system") {
+      const content = typeof message.content === "string" ? message.content.trim() : "";
+      if (content) systemContents.push(content);
+      continue;
+    }
+    nonSystemMessages.push(message);
+  }
+  if (systemContents.length === 0) return messages;
+  return [
+    {
+      role: "system",
+      content: systemContents.join("\n\n"),
+    },
+    ...nonSystemMessages,
+  ];
 }
 
 function providerEndpointUrl(baseUrl: string, path: "models" | "chat/completions"): string {

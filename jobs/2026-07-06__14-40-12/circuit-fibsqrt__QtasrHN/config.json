@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/circuit-fibsqrt",
+        "ref": "sha256:fe25ab474ba626c4f45f57e757e86f2ad292de80b505e5b7ba0ba76c30d7fcc8",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "circuit-fibsqrt__QtasrHN",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

@@ -17,6 +17,7 @@ export type GoalRuntimeStatus = {
 
 type ThreadGoalRecord = {
   objective: string;
+  provider: string | null;
   status: string;
   statusLabel: string;
   timeUsedSeconds: number;
@@ -36,7 +37,7 @@ export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntime
     if (item?.name !== "diagnostic" || !data) continue;
     if (data.kind === "thread_goal_cleared") return null;
     if (data.kind === "thread_goal") {
-      const goal = threadGoalFromRecord(asRecord(data.goal));
+      const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider));
       if (goal) {
         const status = goalRuntimeStatus(goal);
         if (terminalTurnAfterGoal && status.tone === "active") return null;
@@ -44,7 +45,7 @@ export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntime
       }
     }
     if (data.kind === "goal_context") {
-      const goal = threadGoalFromGoalContext(item.output ?? "");
+      const goal = threadGoalFromGoalContext(item.output ?? "", stringValue(data.provider) ?? "codex");
       if (goal) {
         const status = goalRuntimeStatus(goal);
         if (terminalTurnAfterGoal && status.tone === "active") return null;
@@ -55,12 +56,42 @@ export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntime
   return null;
 }
 
+export function latestKnownActiveGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntimeStatus | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const item = events[index];
+    const data = asRecord(item?.data);
+    if (item?.name !== "diagnostic" || !data) continue;
+    if (data.kind === "thread_goal_cleared" && !booleanValue(data.synthetic)) return null;
+    if (data.kind === "thread_goal") {
+      const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider));
+      if (!goal) continue;
+      const status = goalRuntimeStatus(goal);
+      return status.tone === "active" ? status : null;
+    }
+    if (data.kind === "goal_context") {
+      const goal = threadGoalFromGoalContext(item.output ?? "", stringValue(data.provider) ?? "codex");
+      if (!goal) continue;
+      const status = goalRuntimeStatus(goal);
+      return status.tone === "active" ? status : null;
+    }
+  }
+  return null;
+}
+
+export function activeGoalRuntimeFromSessionMetadata(metadata: unknown): GoalRuntimeStatus | null {
+  const record = asRecord(asRecord(metadata)?.codexGoalRuntime);
+  const goal = threadGoalFromRecord(record, stringValue(record?.provider) ?? "codex");
+  if (!goal) return null;
+  const status = goalRuntimeStatus(goal);
+  return status.tone === "active" ? status : null;
+}
+
 function isTerminalTurnEvent(item: RuntimeEvent | undefined): boolean {
   return item?.name === "turn.completed" || item?.name === "turn.interrupted" || item?.name === "turn.failed";
 }
 
 function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
-  const presentation = openPondGoalStatusPresentation(goal.status);
+  const presentation = goalStatusPresentation(goal.status, goal.provider);
   const timeLabel = formatDuration(goal.timeUsedSeconds);
   const label = `Goal ${timeLabel}`;
   const tokens =
@@ -85,7 +116,10 @@ function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
   };
 }
 
-function threadGoalFromRecord(record: Record<string, unknown> | null): ThreadGoalRecord | null {
+function threadGoalFromRecord(
+  record: Record<string, unknown> | null,
+  provider: string | null = null,
+): ThreadGoalRecord | null {
   if (!record) return null;
   const objective = stringValue(record.objective) ?? "Active goal";
   const status = stringValue(record.status) ?? "active";
@@ -94,6 +128,7 @@ function threadGoalFromRecord(record: Record<string, unknown> | null): ThreadGoa
   const tokenBudget = numberValue(record.tokenBudget) ?? numberValue(record.token_budget);
   return {
     objective,
+    provider: normalizeProvider(provider) ?? normalizeProvider(stringValue(record.provider)),
     status,
     statusLabel: statusLabel(status),
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
@@ -102,7 +137,7 @@ function threadGoalFromRecord(record: Record<string, unknown> | null): ThreadGoa
   };
 }
 
-function threadGoalFromGoalContext(value: string): ThreadGoalRecord | null {
+function threadGoalFromGoalContext(value: string, provider: string | null = null): ThreadGoalRecord | null {
   if (!value.trim()) return null;
   const status = lineValue(value, "Status") ?? "active";
   const tokensUsed = numberFromLine(value, "Tokens used");
@@ -115,12 +150,54 @@ function threadGoalFromGoalContext(value: string): ThreadGoalRecord | null {
   const objective = xmlBlock(value, "objective") ?? xmlBlock(value, "untrusted_objective") ?? "Active goal";
   return {
     objective,
+    provider: normalizeProvider(provider),
     status,
     statusLabel: statusLabel(status),
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed,
     tokenBudget,
   };
+}
+
+function goalStatusPresentation(
+  status: string,
+  provider: string | null,
+): { tone: OpenPondGoalStatusTone; actionLabel: string } {
+  if (provider === "codex") {
+    const codexPresentation = codexGoalStatusPresentation(status);
+    if (codexPresentation) return codexPresentation;
+  }
+  return openPondGoalStatusPresentation(status);
+}
+
+function codexGoalStatusPresentation(status: string): { tone: OpenPondGoalStatusTone; actionLabel: string } | null {
+  switch (statusKey(status)) {
+    case "active":
+    case "running":
+      return { tone: "active", actionLabel: "Pursuing goal" };
+    case "paused":
+      return { tone: "paused", actionLabel: "Goal paused" };
+    case "blocked":
+      return { tone: "limited", actionLabel: "Goal blocked" };
+    case "complete":
+    case "completed":
+    case "achieved":
+      return { tone: "done", actionLabel: "Goal achieved" };
+    case "failed":
+      return { tone: "limited", actionLabel: "Goal failed" };
+    case "cancelled":
+    case "canceled":
+    case "stopped":
+      return { tone: "limited", actionLabel: "Goal cancelled" };
+    case "budget_limited":
+      return { tone: "limited", actionLabel: "Goal budget limited" };
+    default:
+      return null;
+  }
+}
+
+function statusKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[-\s]+/g, "_");
 }
 
 function lineValue(value: string, label: string): string | null {
@@ -172,9 +249,19 @@ function formatDurationLong(seconds: number): string {
 
 function formatTokenCount(tokens: number): string {
   if (tokens < 1000) return String(tokens);
+  if (tokens >= 1_000_000) {
+    const value = tokens / 1_000_000;
+    if (value < 10) return `${trimFixed(value, 2)}M`;
+    if (value < 100) return `${trimFixed(value, 1)}M`;
+    return `${Math.round(value)}M`;
+  }
   const value = tokens / 1000;
   if (value >= 10 || Number.isInteger(value)) return `${Math.round(value)}k`;
   return `${value.toFixed(1)}k`;
+}
+
+function trimFixed(value: number, digits: number): string {
+  return value.toFixed(digits).replace(/\.?0+$/, "");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -183,6 +270,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function booleanValue(value: unknown): boolean {
+  return value === true;
+}
+
+function normalizeProvider(value: string | null): string | null {
+  return value?.trim().toLowerCase() || null;
 }
 
 function numberValue(value: unknown): number | null {

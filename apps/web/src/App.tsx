@@ -7,7 +7,7 @@ import type {
   WorkspaceState,
   TerminalScope,
 } from "@openpond/contracts";
-import { buildConnectedAppStatusRows } from "@openpond/contracts";
+import { buildConnectedAppStatusRows, localPathWorkspaceId } from "@openpond/contracts";
 import {
   appReducer,
   createAppSetters,
@@ -29,16 +29,23 @@ import {
   type SidebarProjectItem,
 } from "./lib/app-models";
 import { buildCachedChatMessages } from "./lib/chat-messages";
-import { mergeRuntimeEventLists } from "./lib/runtime-event-lists";
+import {
+  latestRuntimeEventSequence,
+  mergeRuntimeEventLists,
+  mergeRuntimeEventsIntoSessionPageCache,
+} from "./lib/runtime-event-lists";
 import {
   cachedCodexHistoryThreadPayload,
   CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT,
   CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
   CODEX_HISTORY_THREAD_TAIL_LIMIT,
   loadCodexHistoryThreadPayload,
-  prefetchCodexHistoryThreadPayload,
 } from "./lib/codex-history-thread-cache";
-import { latestGoalRuntimeFromEvents } from "./lib/goal-runtime";
+import {
+  activeGoalRuntimeFromSessionMetadata,
+  latestGoalRuntimeFromEvents,
+  latestKnownActiveGoalRuntimeFromEvents,
+} from "./lib/goal-runtime";
 import { isCodexHistorySessionId } from "./lib/sidebar-session-projects";
 import {
   migrateDraftTerminalTabs,
@@ -89,6 +96,7 @@ import { useCloudWorkItems } from "./hooks/useCloudWorkItems";
 import { useCloudWorkspaceSetup } from "./hooks/useCloudWorkspaceSetup";
 import { useCodexHistoryEvents } from "./hooks/useCodexHistoryEvents";
 import { usePinnedSidebarDrag } from "./hooks/usePinnedSidebarDrag";
+import { useOpenPondCommandAccessActions } from "./hooks/useOpenPondCommandAccessActions";
 import { useSidebarData } from "./hooks/useSidebarData";
 import { useCommandShortcuts } from "./hooks/useAppEffects";
 import { useAppBootstrap } from "./hooks/useAppBootstrap";
@@ -151,6 +159,7 @@ export function App() {
   const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(null);
   const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [rightChatHistoryEvents, setRightChatHistoryEvents] = useState<Record<string, RuntimeEvent[]>>({});
+  const [codexHistorySidebarEvents, setCodexHistorySidebarEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<Record<string, ChatHistoryLoadState>>({});
   const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
@@ -181,6 +190,7 @@ export function App() {
     draftModel,
     codexPermissionMode,
     codexReasoningEffort,
+    openPondCommandAccessMode,
     busy,
     diffPanelOpen,
     diffPanelExpanded,
@@ -222,6 +232,7 @@ export function App() {
     setDraftModel,
     setCodexPermissionMode,
     setCodexReasoningEffort,
+    setOpenPondCommandAccessMode,
     setBusy,
     setDiffPanelOpen,
     setDiffPanelExpanded,
@@ -264,6 +275,7 @@ export function App() {
     setDraftProvider,
     setCodexPermissionMode,
     setCodexReasoningEffort,
+    setOpenPondCommandAccessMode,
     setError,
     setSelectedAppId,
     setSelectedProjectId,
@@ -399,6 +411,21 @@ export function App() {
     selectedSessionId,
     selectedSessionLinkedProject,
   });
+  const activeOpenPondCommandAccessMode =
+    selectedSession?.provider === "codex"
+      ? openPondCommandAccessMode
+      : selectedSession?.openPondCommandAccessMode ?? openPondCommandAccessMode;
+  const profileWorkspaceId =
+    view === "profile" && bootstrap?.profile?.mode === "local" && bootstrap.profile.repoPath
+      ? localPathWorkspaceId(bootstrap.profile.repoPath)
+      : null;
+  const profileWorkspaceName = profileWorkspaceId
+    ? `${bootstrap?.profile?.activeProfile ?? "default"} profile`
+    : null;
+  const viewWorkspaceAppId = profileWorkspaceId ?? activeWorkspaceAppId;
+  const viewWorkspaceId = profileWorkspaceId ?? activeWorkspaceId;
+  const viewWorkspaceKind = profileWorkspaceId ? "local_project" as const : activeWorkspaceKind;
+  const viewWorkspaceName = profileWorkspaceName ?? workspaceName;
   const { openPondActionCatalog, selectedActionCatalog } = useSandboxActionContext({
     cloudProjectById,
     cloudProjects: bootstrap?.cloudProjects ?? [],
@@ -487,6 +514,14 @@ export function App() {
     setCodexReasoningEffort,
     setError,
   });
+  const { changeOpenPondCommandAccessMode } = useOpenPondCommandAccessActions({
+    connection,
+    selectedSession,
+    setBootstrap,
+    setError,
+    setOpenPondCommandAccessMode,
+    setSessions,
+  });
 
   const resolveApproval = useApprovalResolver({ connection, setError });
   const beginNewChat = useBeginNewChat({
@@ -508,6 +543,7 @@ export function App() {
   useEffect(() => {
     setPagedSessionEvents({});
     setRightChatHistoryEvents({});
+    setCodexHistorySidebarEvents({});
     setChatHistoryLoadStates({});
     chatHistoryLoadingSessionIdsRef.current.clear();
   }, [bootstrap?.server.id]);
@@ -650,6 +686,7 @@ export function App() {
     () => runtimeEventsForSession(runtimeIndexes, selectedSessionId).length,
     [runtimeIndexes, selectedSessionId],
   );
+  const selectedForwardEventSyncKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId)) return undefined;
@@ -718,6 +755,57 @@ export function App() {
     selectedRuntimeEventCount,
     selectedSessionId,
     setError,
+  ]);
+  useEffect(() => {
+    if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId)) return undefined;
+    if (chatHistoryLoadingSessionIdsRef.current.has(selectedSessionId)) return undefined;
+    const latestServerSequence = bootstrap?.eventWindow?.latestSequence;
+    if (!latestServerSequence) return undefined;
+
+    const selectedEvents = mergeRuntimeEventLists(
+      selectedPagedSessionEvents,
+      runtimeEventsForSession(runtimeIndexes, selectedSessionId),
+    );
+    const latestSelectedSequence = latestRuntimeEventSequence(selectedEvents);
+    if (!latestSelectedSequence || latestSelectedSequence >= latestServerSequence) return undefined;
+
+    const syncKey = `${selectedSessionId}:${latestSelectedSequence}:${latestServerSequence}`;
+    if (selectedForwardEventSyncKeyRef.current === syncKey) return undefined;
+    selectedForwardEventSyncKeyRef.current = syncKey;
+
+    let cancelled = false;
+    void api
+      .runtimeEventsPage(connection, {
+        sessionId: selectedSessionId,
+        afterSequence: latestSelectedSequence,
+        limit: CHAT_HISTORY_PAGE_LIMIT,
+      })
+      .then((page) => {
+        if (cancelled) return;
+        const pageEvents = page.events.map((entry) => entry.event);
+        if (pageEvents.length === 0) return;
+        setPagedSessionEvents((current) =>
+          mergeRuntimeEventsIntoSessionPageCache(current, selectedSessionId, pageEvents),
+        );
+        setEvents((current) => mergeRuntimeEventLists(current, pageEvents));
+      })
+      .catch((historyError) => {
+        if (cancelled) return;
+        selectedForwardEventSyncKeyRef.current = null;
+        setError(historyError instanceof Error ? historyError.message : String(historyError));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bootstrap?.eventWindow?.latestSequence,
+    connection,
+    runtimeIndexes,
+    selectedPagedSessionEvents,
+    selectedSessionId,
+    setError,
+    setEvents,
   ]);
   const selectedRuntimeIndexes = useMemo(
     () => {
@@ -822,14 +910,62 @@ export function App() {
     visibleChatRows,
     visibleProjectRows,
   ]);
+  const applySidebarCodexHistoryPayload = useCallback(
+    (payload: { session: Session; events: RuntimeEvent[] }) => {
+      setCodexHistorySidebarEvents((current) =>
+        current[payload.session.id] === payload.events
+          ? current
+          : { ...current, [payload.session.id]: payload.events },
+      );
+      setCodexHistorySessions((current) =>
+        upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
+      );
+    },
+    [setCodexHistorySessions],
+  );
+  useEffect(() => {
+    if (
+      !selectedSession ||
+      !selectedSessionId ||
+      !isCodexHistorySessionId(selectedSessionId) ||
+      codexHistoryEvents.length === 0
+    ) {
+      return;
+    }
+    applySidebarCodexHistoryPayload({
+      session: selectedSession,
+      events: codexHistoryEvents,
+    });
+  }, [applySidebarCodexHistoryPayload, codexHistoryEvents, selectedSession, selectedSessionId]);
   useEffect(() => {
     if (!connection || codexHistoryPrefetchSessionIds.length === 0) return undefined;
     let cancelled = false;
     const timers: number[] = [];
 
+    const scheduleRefresh = (sessionId: string) => {
+      const timer = window.setTimeout(() => {
+        loadSidebarThread(sessionId, true);
+      }, 2500);
+      timers.push(timer);
+    };
+
+    const loadSidebarThread = (sessionId: string, force: boolean) => {
+      void loadCodexHistoryThreadPayload(connection, sessionId, { force })
+        .then((payload) => {
+          if (cancelled) return;
+          applySidebarCodexHistoryPayload(payload);
+          if (payload.session.status === "active" || latestGoalRuntimeFromEvents(payload.events)?.tone === "active") {
+            scheduleRefresh(sessionId);
+          }
+        })
+        .catch(() => undefined);
+    };
+
     codexHistoryPrefetchSessionIds.forEach((sessionId, index) => {
       const prefetch = () => {
-        if (!cancelled) prefetchCodexHistoryThreadPayload(connection, sessionId);
+        const cachedPayload = cachedCodexHistoryThreadPayload(connection, sessionId);
+        if (cachedPayload) applySidebarCodexHistoryPayload(cachedPayload);
+        loadSidebarThread(sessionId, Boolean(cachedPayload));
       };
       if (index === 0) {
         prefetch();
@@ -842,9 +978,69 @@ export function App() {
       cancelled = true;
       for (const timer of timers) window.clearTimeout(timer);
     };
-  }, [codexHistoryPrefetchSessionIds, connection]);
+  }, [applySidebarCodexHistoryPayload, codexHistoryPrefetchSessionIds, connection]);
+  const sidebarSessionById = useMemo(
+    () => new Map(sidebarSessions.map((session) => [session.id, session])),
+    [sidebarSessions],
+  );
+  const sidebarGoalRuntimeBySessionId = useMemo(() => {
+    const next = new Map(runtimeIndexes.latestGoalRuntimeBySessionId);
+    for (const session of sidebarSessions) {
+      const metadataGoalRuntime =
+        session.status === "active" ? activeGoalRuntimeFromSessionMetadata(session.metadata) : null;
+      if (metadataGoalRuntime) next.set(session.id, metadataGoalRuntime);
+    }
+    for (const historyEventsBySessionId of [codexHistorySidebarEvents, rightChatHistoryEvents]) {
+      for (const [sessionId, historyEvents] of Object.entries(historyEventsBySessionId)) {
+        const historySession = sidebarSessionById.get(sessionId);
+        const metadataGoalRuntime =
+          historySession?.status === "active"
+            ? activeGoalRuntimeFromSessionMetadata(historySession.metadata)
+            : null;
+        const historyGoalRuntime =
+          latestGoalRuntimeFromEvents(historyEvents) ??
+          (historySession?.status === "active"
+            ? latestKnownActiveGoalRuntimeFromEvents(historyEvents) ?? metadataGoalRuntime
+            : null);
+        if (historyGoalRuntime) {
+          next.set(sessionId, historyGoalRuntime);
+        } else {
+          next.delete(sessionId);
+        }
+      }
+    }
+    if (selectedSessionId) {
+      if (goalRuntime) {
+        next.set(selectedSessionId, goalRuntime);
+      } else if (selectedSession?.status === "active" && codexHistoryEvents.length > 0) {
+        const knownActiveGoalRuntime =
+          latestKnownActiveGoalRuntimeFromEvents(codexHistoryEvents) ??
+          activeGoalRuntimeFromSessionMetadata(selectedSession.metadata);
+        if (knownActiveGoalRuntime) {
+          next.set(selectedSessionId, knownActiveGoalRuntime);
+        } else {
+          next.delete(selectedSessionId);
+        }
+      } else if (!isCodexHistorySessionId(selectedSessionId) || codexHistoryEvents.length > 0) {
+        next.delete(selectedSessionId);
+      }
+    }
+    return next;
+  }, [
+    codexHistoryEvents.length,
+    codexHistorySidebarEvents,
+    goalRuntime,
+    rightChatHistoryEvents,
+    runtimeIndexes.latestGoalRuntimeBySessionId,
+    selectedSession?.status,
+    selectedSession?.metadata,
+    selectedSessionId,
+    sidebarSessionById,
+    sidebarSessions,
+  ]);
   const { runningSessionIds, selectedSessionRunning } = useRunningSessionState({
     goalRuntime,
+    goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
     runtimeIndexes,
     selectedSession,
     selectedSessionId,
@@ -879,6 +1075,7 @@ export function App() {
   const { commandProjectRows, contextWindowStatus, pinnedRows, sidebarWorkspaceAppIds } =
     useAppDerivedRows({
       activeProvider,
+      contextCompaction: appDefaults.contextCompaction,
       contextUsage,
       pinnedItems,
       pinnedPreviewKeys: pinnedPreviewKeys ?? [],
@@ -887,8 +1084,8 @@ export function App() {
       visibleProjectRows,
     });
   const shouldLoadWorkspaceDiff = Boolean(
-    activeWorkspaceAppId &&
-      view === "chat" &&
+    viewWorkspaceAppId &&
+      (view === "chat" || view === "profile") &&
       (commitDialogOpen || (diffPanelOpen && rightPanelMode !== "browser")),
   );
 
@@ -904,7 +1101,7 @@ export function App() {
     setWorkspaceBusy,
   } = useWorkspaceController({
     connection,
-    activeWorkspaceAppId,
+    activeWorkspaceAppId: viewWorkspaceAppId,
     view,
     shouldLoadWorkspaceDiff,
     sidebarWorkspaceAppIds,
@@ -912,13 +1109,20 @@ export function App() {
   });
   rememberWorkspaceStateRef.current = rememberWorkspaceState;
   const refreshWorkspaceDiffWhenNeeded = useCallback(
-    (appId: string | null | undefined = activeWorkspaceAppId) => {
-      if (!appId || appId !== activeWorkspaceAppId || !shouldLoadWorkspaceDiff) {
+    (appId: string | null | undefined = viewWorkspaceAppId) => {
+      if (!appId || appId !== viewWorkspaceAppId || !shouldLoadWorkspaceDiff) {
         return Promise.resolve(null);
       }
       return refreshWorkspaceDiff(appId);
     },
-    [activeWorkspaceAppId, refreshWorkspaceDiff, shouldLoadWorkspaceDiff],
+    [refreshWorkspaceDiff, shouldLoadWorkspaceDiff, viewWorkspaceAppId],
+  );
+  const refreshVisibleWorkspaceDiff = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      if (!viewWorkspaceAppId || !shouldLoadWorkspaceDiff) return;
+      await refreshWorkspaceDiff(viewWorkspaceAppId, options);
+    },
+    [refreshWorkspaceDiff, shouldLoadWorkspaceDiff, viewWorkspaceAppId],
   );
   const managedWorkspace = false;
   const activeCodexLocalSession = Boolean(
@@ -1159,6 +1363,7 @@ export function App() {
     connection,
     codexPermissionMode,
     codexReasoningEffort,
+    openPondCommandAccessMode: activeOpenPondCommandAccessMode,
     draftModel,
     draftProvider,
     expandProject,
@@ -1630,6 +1835,7 @@ export function App() {
       const contextWindowStatusForPanel = contextWindowStatusFromUsage({
         provider,
         snapshot: latestContextUsageForSession(panelIndexes, panel.sessionId),
+        preferences: appDefaults.contextCompaction,
       });
       const workspaceRootPath = session?.cwd ?? null;
       const activeWorkspaceAppIdForPanel =
@@ -1659,6 +1865,7 @@ export function App() {
     runningSessionIds,
     selectedSessionId,
     sidebarSessions,
+    appDefaults.contextCompaction,
   ]);
   const submitRightChatPrompt = useCallback(
     async (
@@ -1690,6 +1897,10 @@ export function App() {
       const session = panel.sessionId
         ? sidebarSessions.find((candidate) => candidate.id === panel.sessionId) ?? null
         : null;
+      const panelOpenPondCommandAccessMode =
+        session?.provider === "codex"
+          ? openPondCommandAccessMode
+          : session?.openPondCommandAccessMode ?? openPondCommandAccessMode;
       const promptForTurn = command ? promptForRightChatCommand(command, panelPromptForSubmit) : panelPromptForSubmit;
       const sessionEvents = isCodexHistorySessionId(panel.sessionId)
         ? (
@@ -1714,6 +1925,7 @@ export function App() {
         selectSession: false,
         provider: panel.provider,
         model: panel.model,
+        openPondCommandAccessMode: panelOpenPondCommandAccessMode,
         chatMessages: buildCachedChatMessages(sessionEvents),
         displayPrompt: options.displayPrompt,
         onCodexHistoryOptimisticEvent: appendRightCodexHistoryEvent,
@@ -1742,6 +1954,7 @@ export function App() {
       selectedSessionId,
       insights.runScan,
       insights.summary?.activeCount,
+      openPondCommandAccessMode,
       sendPrompt,
       setRightChatPanels,
       sidebarSessions,
@@ -1786,6 +1999,8 @@ export function App() {
   const desktopShell = isDesktopShell();
   const platform = connection?.platform ?? navigator.platform;
   const isMac = desktopShell && isMacPlatform(platform);
+  const viewTerminalScope: TerminalScope =
+    profileWorkspaceId ? { kind: "project", id: profileWorkspaceId } : activeTerminalScope;
   const terminalCwd = visibleWorkspaceState?.initialized
     ? visibleWorkspaceState.repoPath
     : (selectedSession?.cwd ?? null);
@@ -1850,6 +2065,7 @@ export function App() {
         dragItem,
         pinnedRows,
         pinnedSessions,
+        projectRows,
         visibleProjectRows,
         localProjectRows,
         insightsSystemProjectHidden,
@@ -1860,6 +2076,7 @@ export function App() {
         sidebarProjectIdBySessionId,
         terminalSummaries,
         runningSessionIds,
+        goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
         visibleChatRows,
         chatRows,
         expandedProjectIds,
@@ -1917,17 +2134,18 @@ export function App() {
       topBar={{
         sidebarOpen,
         title,
-        workspaceName,
+        workspaceName: viewWorkspaceName,
+        workspaceId: viewWorkspaceId,
         busy,
         workspaceState: visibleWorkspaceState,
-        workspaceKind: activeWorkspaceKind,
-        selectedApp: selectedProjectLinkedApp ?? selectedApp,
-        selectedProject,
+        workspaceKind: viewWorkspaceKind,
+        selectedApp: profileWorkspaceId ? null : selectedProjectLinkedApp ?? selectedApp,
+        selectedProject: profileWorkspaceId ? null : selectedProject,
         workspaceDiff: visibleWorkspaceDiff,
         managedWorkspace,
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat" || view === "cloud",
+        showDiffControls: view === "chat" || view === "cloud" || Boolean(profileWorkspaceId),
         diffPanelOpen: changesPanelActive,
         terminalOpen,
         onToggleDiffPanel: toggleChangesPanel,
@@ -1941,7 +2159,7 @@ export function App() {
           setView("insights");
         },
         onRunTerminalCommand: (command) => {
-          setPendingTerminalCommand({ id: Date.now(), scope: activeTerminalScope, command });
+          setPendingTerminalCommand({ id: Date.now(), scope: viewTerminalScope, command });
           setTerminalOpen(true);
         },
         onWorkspaceToolAction: runWorkspaceTool,
@@ -1970,6 +2188,7 @@ export function App() {
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
         mentionApps: chatMentionApps,
         connectedAppMentions,
+        profileSkills: bootstrap?.profile?.skills ?? [],
         selectedMentionAppId: mentionedAppId,
         busy,
         turnRunning: selectedSessionRunning,
@@ -1977,15 +2196,16 @@ export function App() {
         activeModel,
         codexPermissionMode,
         codexReasoningEffort,
+        openPondCommandAccessMode: activeOpenPondCommandAccessMode,
         pendingApproval,
-        activeWorkspaceAppId,
-        activeWorkspaceId,
-        activeWorkspaceKind,
+        activeWorkspaceAppId: viewWorkspaceAppId,
+        activeWorkspaceId: viewWorkspaceId,
+        activeWorkspaceKind: viewWorkspaceKind,
         projectTarget,
         actionCatalog: selectedActionCatalog,
         workspaceTarget,
         connection,
-        workspaceName,
+        workspaceName: viewWorkspaceName,
         workspaceState: visibleWorkspaceState,
         workspaceDiff: visibleWorkspaceDiff,
         workspaceBusy,
@@ -1997,7 +2217,7 @@ export function App() {
         rightPanelTabRequest,
         rightChatPanels: rightChatPanelViews,
         browserConversationId,
-        terminalScope: activeTerminalScope,
+        terminalScope: viewTerminalScope,
         terminalTabs,
         terminalCwd,
         pendingTerminalCommand,
@@ -2068,6 +2288,7 @@ export function App() {
         setDraftModel,
         changeCodexPermissionMode,
         changeCodexReasoningEffort,
+        changeOpenPondCommandAccessMode,
         resolveApproval,
         answerCreatePipelineQuestionTurn,
         approveCreatePipelineTurn,
@@ -2079,8 +2300,7 @@ export function App() {
         sendPrompt: sendPromptFromMainComposer,
         stopTurn,
         syncWorkspaceLocally,
-        refreshWorkspaceDiff: (options) =>
-          refreshWorkspaceDiff(activeWorkspaceAppId, options).then(() => undefined),
+        refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,
       }}
       cloudSetup={{
         state: cloudSetupDialog,

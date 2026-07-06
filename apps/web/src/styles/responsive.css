@@ -141,6 +141,16 @@
     justify-content: flex-start;
   }
 
+  .product-row .profile-schedule-actions {
+    justify-content: flex-start;
+    grid-template-columns: minmax(0, max-content) max-content;
+  }
+
+  .profile-schedule-expression {
+    flex: 0 1 auto;
+    text-align: left;
+  }
+
   .remote-access-peer-row {
     grid-template-columns: 38px minmax(0, 1fr);
   }

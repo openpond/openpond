@@ -44,6 +44,7 @@ export function useWorkspaceController({
       ? (workspaceStates[activeWorkspaceAppId] ?? (workspaceState?.appId === activeWorkspaceAppId ? workspaceState : null))
       : null;
   const visibleWorkspaceDiff = workspaceDiff?.appId === activeWorkspaceAppId ? workspaceDiff : null;
+  const shouldTrackActiveWorkspace = view === "chat" || view === "profile";
 
   const rememberWorkspaceState = useCallback((state: WorkspaceState) => {
     requestedWorkspaceStatusAppIds.current.add(state.appId);
@@ -119,7 +120,7 @@ export function useWorkspaceController({
   );
 
   useEffect(() => {
-    if (!connection || !activeWorkspaceAppId || view !== "chat") {
+    if (!connection || !activeWorkspaceAppId || !shouldTrackActiveWorkspace) {
       setWorkspaceState(null);
       setWorkspaceDiff(null);
       setWorkspaceBusy(false);
@@ -135,7 +136,9 @@ export function useWorkspaceController({
       .then((state) => {
         if (cancelled) return;
         rememberWorkspaceState(state);
-        if (!state.initialized) setWorkspaceDiff(null);
+        if (!state.initialized) {
+          setWorkspaceDiff((current) => (current?.appId === state.appId ? null : current));
+        }
       })
       .catch((workspaceError) => {
         if (isAbortError(workspaceError)) return;
@@ -156,16 +159,21 @@ export function useWorkspaceController({
     connection,
     rememberWorkspaceState,
     setError,
-    view,
+    shouldTrackActiveWorkspace,
   ]);
 
   useEffect(() => {
-    if (!connection || !activeWorkspaceAppId || !visibleWorkspaceState?.initialized || view !== "chat") {
+    if (!connection || !activeWorkspaceAppId || !shouldTrackActiveWorkspace) {
       setWorkspaceDiff(null);
       return;
     }
+    if (!visibleWorkspaceState?.initialized) {
+      if (visibleWorkspaceState && !visibleWorkspaceState.initialized) {
+        setWorkspaceDiff((current) => (current?.appId === activeWorkspaceAppId ? null : current));
+      }
+      return;
+    }
     if (!shouldLoadWorkspaceDiff) {
-      setWorkspaceDiff((current) => (current?.appId === activeWorkspaceAppId ? null : current));
       return;
     }
     void refreshWorkspaceDiff(activeWorkspaceAppId);
@@ -174,7 +182,7 @@ export function useWorkspaceController({
     connection,
     refreshWorkspaceDiff,
     shouldLoadWorkspaceDiff,
-    view,
+    shouldTrackActiveWorkspace,
     visibleWorkspaceState?.dirty,
     visibleWorkspaceState?.initialized,
   ]);

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeEvent } from "@openpond/contracts";
 import {
+  latestRuntimeEventSequence,
   mergeBootstrapRuntimeEvents,
+  mergeRuntimeEventsIntoSessionPageCache,
   mergeRuntimeEventLists,
 } from "../apps/web/src/lib/runtime-event-lists";
 
@@ -39,6 +41,55 @@ describe("runtime event list merging", () => {
       bootstrapEvents[0],
       bootstrapEvents[1],
       streamOnlyEvent,
+    ]);
+  });
+
+  test("returns the newest available sequence from a sparse event list", () => {
+    expect(latestRuntimeEventSequence([
+      runtimeEvent("one", 10),
+      runtimeEvent("stream-only"),
+      runtimeEvent("two", 12),
+      runtimeEvent("older", 11),
+    ])).toBe(12);
+  });
+
+  test("keeps forward-fetched selected session events in the session page cache", () => {
+    const selectedSessionId = "session_1";
+    const otherSessionId = "session_2";
+    const selectedBootstrapEvent = runtimeEvent("selected-bootstrap", 10, {
+      sessionId: selectedSessionId,
+      name: "workspace_action",
+      action: "sandbox_preserve_source",
+      status: "started",
+    });
+    const globalTailEvent = runtimeEvent("other-session-tail", 50, {
+      sessionId: otherSessionId,
+    });
+    const forwardSelectedEvent = runtimeEvent("selected-apply-result", 20, {
+      sessionId: selectedSessionId,
+      name: "workspace_action_result",
+      action: "sandbox_git_apply_patch_local",
+      status: "completed",
+      output: "Applied sandbox patch locally.",
+    });
+
+    const cache = mergeRuntimeEventsIntoSessionPageCache(
+      {},
+      selectedSessionId,
+      [forwardSelectedEvent],
+    );
+    const refreshedRuntimeEvents = mergeBootstrapRuntimeEvents(
+      [selectedBootstrapEvent, globalTailEvent],
+      [selectedBootstrapEvent, globalTailEvent, forwardSelectedEvent],
+    );
+    const refreshedSelectedEvents = refreshedRuntimeEvents.filter(
+      (event) => event.sessionId === selectedSessionId,
+    );
+
+    expect(refreshedSelectedEvents.map((event) => event.id)).toEqual(["selected-bootstrap"]);
+    expect(mergeRuntimeEventLists(cache[selectedSessionId] ?? [], refreshedSelectedEvents).map((event) => event.id)).toEqual([
+      "selected-apply-result",
+      "selected-bootstrap",
     ]);
   });
 });

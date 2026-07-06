@@ -107,6 +107,9 @@ export function SandboxCreateDialog({
   const requiredEnvRefsPresent = model.envInputs.every(
     (input) => !input.required || Boolean((envSecretRefs[input.name] ?? "").trim()),
   );
+  const missingRequiredEnvInputs = model.envInputs.filter(
+    (input) => input.required && !(envSecretRefs[input.name] ?? "").trim(),
+  );
   const canSubmit =
     (uploadBeforeCreate || Boolean(repoUrl.trim())) &&
     Boolean(command.trim()) &&
@@ -283,17 +286,37 @@ export function SandboxCreateDialog({
             />
           </label>
         ))}
-        {model.envInputs.map((input) => (
-          <label className="git-dialog-field" key={input.name}>
-            <span>{input.name}{input.required ? " *" : ""}</span>
-            <input
-              disabled={busy}
-              placeholder="openpond://secret/..."
-              value={envSecretRefs[input.name] ?? ""}
-              onChange={(event) => updateEnvSecretRef(input.name, event.target.value)}
-            />
-          </label>
-        ))}
+        {model.envInputs.length > 0 ? (
+          <div className="sandbox-start-env-section">
+            <div className="sandbox-start-section-title">Environment</div>
+            {missingRequiredEnvInputs.length > 0 ? (
+              <p className="sandbox-start-env-warning" role="status">
+                Required sandbox secret ref missing: {missingRequiredEnvInputs.map((input) => input.name).join(", ")}
+              </p>
+            ) : null}
+            {model.envInputs.map((input) => {
+              const secretRef = envSecretRefs[input.name] ?? "";
+              const missing = input.required && !secretRef.trim();
+              const descriptionId = `sandbox-env-${input.name}-description`;
+              return (
+                <label className="git-dialog-field" key={input.name}>
+                  <span>{input.name}{input.required ? " *" : ""}</span>
+                  <input
+                    aria-describedby={descriptionId}
+                    aria-invalid={missing}
+                    disabled={busy}
+                    placeholder="openpond://secret/..."
+                    value={secretRef}
+                    onChange={(event) => updateEnvSecretRef(input.name, event.target.value)}
+                  />
+                  <small id={descriptionId}>
+                    {missing ? "Add a sandbox secret ref before starting." : input.description || "Sandbox secret ref only."}
+                  </small>
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
         {visibleFileInputs.length > 0 || model.volumes.length > 0 ? (
           <>
             <label className="git-dialog-toggle">
@@ -413,7 +436,12 @@ export function SandboxCreateDialog({
           <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="git-dialog-primary" disabled={busy || !canSubmit} type="submit">
+          <button
+            className="git-dialog-primary"
+            disabled={busy || !canSubmit}
+            title={!requiredEnvRefsPresent ? "Required sandbox secret refs are missing." : undefined}
+            type="submit"
+          >
             <ExternalLink size={14} />
             Start
           </button>

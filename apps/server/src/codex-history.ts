@@ -11,6 +11,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { DEFAULT_OPENPOND_COMMAND_ACCESS_MODE } from "@openpond/contracts";
 import type { ChatAttachmentSummary, RuntimeEvent, Session } from "@openpond/contracts";
 import {
   chatAttachmentImageContentType,
@@ -69,6 +70,17 @@ type SessionMetadata = {
 type TailStatus = {
   status: Session["status"];
   latestMessageAt: string | null;
+  goalRuntime: CodexHistoryGoalRuntimeMetadata | null;
+};
+
+type CodexHistoryGoalRuntimeMetadata = {
+  provider: "codex";
+  objective: string;
+  status: string;
+  timeUsedSeconds: number;
+  tokensUsed: number | null;
+  tokenBudget: number | null;
+  updatedAt: string;
 };
 
 type CodexRecord = {
@@ -90,6 +102,7 @@ type ParsedCodexSession = {
   status: Session["status"];
   updatedAt: string | null;
   firstPrompt: string | null;
+  goalRuntime: CodexHistoryGoalRuntimeMetadata | null;
 };
 
 type CodexControlMessage = {
@@ -167,6 +180,10 @@ export async function readCodexHistoryThreadPayload(
   return {
     session: {
       ...thread.session,
+      metadata: sessionMetadataWithCodexGoalRuntime(
+        thread.session.metadata,
+        parsed.goalRuntime ?? codexGoalRuntimeFromSessionMetadata(thread.session.metadata),
+      ),
       status: parsed.status === "active" ? "active" : thread.session.status,
       updatedAt: latestIso([parsed.updatedAt, thread.session.updatedAt]),
       title: thread.session.title === "Codex chat" && parsed.firstPrompt
@@ -236,11 +253,13 @@ export async function loadCodexHistoryThreads(options: {
       session: {
         id: codexHistorySessionId(file.threadId),
         provider: "codex",
+        openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
         title,
         appId: null,
         appName: null,
         workspaceId: null,
         workspaceName: null,
+        metadata: sessionMetadataWithCodexGoalRuntime(undefined, tailStatus.goalRuntime),
         cwd,
         codexThreadId: file.threadId,
         createdAt,
@@ -308,6 +327,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   let currentTurnCompleted = false;
   let firstPrompt: string | null = null;
   let goalActive = false;
+  let latestKnownGoalRuntime: CodexHistoryGoalRuntimeMetadata | null = null;
   let latestUserAt: string | null = null;
   let latestLifecycleStartAt: string | null = null;
   let latestFinalAt: string | null = null;
@@ -352,7 +372,12 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     return currentTurnId;
   }
 
-  function pushThreadGoalCleared(timestamp: string, turnId: string | undefined, output = "Goal cleared"): void {
+  function pushThreadGoalCleared(
+    timestamp: string,
+    turnId: string | undefined,
+    output = "Goal cleared",
+    synthetic = false,
+  ): void {
     push(
       historyEvent({
         id: `${input.sessionId}_thread_goal_cleared_${safeId(`${timestamp}_${output}`)}`,
@@ -369,6 +394,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           kind: "thread_goal_cleared",
           provider: "codex",
           threadId: input.threadId,
+          synthetic,
         },
       }),
     );
@@ -398,7 +424,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     latestFinalAt = timestamp;
     if (goalActive) {
       goalActive = false;
-      pushThreadGoalCleared(timestamp, turnId, "Goal cleared");
+      pushThreadGoalCleared(timestamp, turnId, "Goal cleared", true);
     }
   }
 
@@ -412,6 +438,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         const goal = asRecord(payload.goal);
         if (!goal) return;
         goalActive = goalRecordIsActive(goal);
+        latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(goal, timestamp);
         const turnId = currentTurnId ?? undefined;
         push(
           historyEvent({
@@ -436,6 +463,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       }
       if (type === "thread_goal_cleared") {
         goalActive = false;
+        latestKnownGoalRuntime = null;
         const turnId = currentTurnId ?? undefined;
         pushThreadGoalCleared(timestamp, turnId);
         return;
@@ -463,6 +491,11 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       const content = textFromContent(rawContent);
       if (!content && !codexContentHasInputImage(rawContent)) return;
       if (role === "user") {
+        const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(content, timestamp);
+        if (internalGoalRuntime) {
+          goalActive = true;
+          latestKnownGoalRuntime ??= internalGoalRuntime;
+        }
         const controlMessage = codexControlMessage(content);
         if (controlMessage) {
           const turnId = currentTurnId ?? undefined;
@@ -488,7 +521,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             latestFinalAt = timestamp;
             if (goalActive) {
               goalActive = false;
-              pushThreadGoalCleared(timestamp, turnId, "Goal cleared");
+              pushThreadGoalCleared(timestamp, turnId, "Goal cleared", true);
             }
           }
           return;
@@ -657,6 +690,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       status,
       updatedAt: latestRecordAt,
       firstPrompt,
+      goalRuntime: latestKnownGoalRuntime,
     };
   }
 
@@ -788,9 +822,9 @@ async function readCodexSessionMetadata(file: CodexHistoryFile): Promise<Session
 
 async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdatedAt: string): Promise<TailStatus> {
   const recent = Date.now() - file.stats.mtimeMs <= DEFAULT_ACTIVE_WINDOW_MS;
-  if (!recent) return { status: "idle", latestMessageAt: null };
+  if (!recent) return { status: "idle", latestMessageAt: null, goalRuntime: null };
   const tail = await readTail(file.filePath, TAIL_BYTES).catch(() => "");
-  if (!tail) return { status: "idle", latestMessageAt: null };
+  if (!tail) return { status: "idle", latestMessageAt: null, goalRuntime: null };
   let latestUserAt: string | null = null;
   let latestFinalAt: string | null = null;
   let latestAssistantAt: string | null = null;
@@ -798,6 +832,7 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
   let latestLifecycleStartAt: string | null = null;
   let latestLifecycleAt: string | null = null;
   let goalActive = false;
+  let latestKnownGoalRuntime: CodexHistoryGoalRuntimeMetadata | null = null;
   let hasRunningMarker = false;
   for (const line of tail.split(/\r?\n/)) {
     const record = parseJson(line);
@@ -811,10 +846,12 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
         if (goal) {
           latestGoalAt = timestamp;
           goalActive = goalRecordIsActive(goal);
+          latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(goal, timestamp);
         }
       } else if (type === "thread_goal_cleared") {
         latestGoalAt = timestamp;
         goalActive = false;
+        latestKnownGoalRuntime = null;
       } else if (type === "task_started") {
         latestLifecycleStartAt = timestamp;
         latestLifecycleAt = timestamp;
@@ -834,6 +871,12 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
       const role = stringValue(responsePayload.role);
       const content = textFromContent(responsePayload.content);
       if (role === "user" && content) {
+        const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(content, timestamp);
+        if (internalGoalRuntime) {
+          latestKnownGoalRuntime ??= internalGoalRuntime;
+          latestGoalAt = timestamp;
+          goalActive = true;
+        }
         const controlMessage = codexControlMessage(content);
         if (controlMessage?.kind === "turn_aborted") latestFinalAt = timestamp;
         if (!controlMessage && !isCodexInjectedUserMessage(content)) latestUserAt = timestamp;
@@ -855,9 +898,14 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
   const latestUserMs = Math.max(millisFromIso(latestUserAt), millisFromIso(latestLifecycleStartAt));
   const latestFinalMs = millisFromIso(latestFinalAt);
   const active = Boolean(latestUserMs && (!latestFinalMs || latestUserMs > latestFinalMs));
+  const status = goalActive || active || (hasRunningMarker && !latestFinalMs) ? "active" : "idle";
+  if (status === "active" && !latestKnownGoalRuntime) {
+    latestKnownGoalRuntime = await latestKnownActiveGoalRuntimeForCodexHistoryFile(file, fallbackUpdatedAt);
+  }
   return {
-    status: goalActive || active || (hasRunningMarker && !latestFinalMs) ? "active" : "idle",
+    status,
     latestMessageAt: latestIso([latestAssistantAt, latestUserAt, latestGoalAt, latestLifecycleAt]),
+    goalRuntime: latestKnownGoalRuntime,
   };
 }
 
@@ -948,6 +996,40 @@ function goalObjective(goal: Record<string, unknown>): string | null {
   return stringValue(goal.objective);
 }
 
+function activeGoalRuntimeFromCodexGoalRecord(
+  goal: Record<string, unknown>,
+  timestamp: string,
+): CodexHistoryGoalRuntimeMetadata | null {
+  if (!goalRecordIsActive(goal)) return null;
+  return {
+    provider: "codex",
+    objective: goalObjective(goal) ?? "Active goal",
+    status: stringValue(goal.status) ?? "active",
+    timeUsedSeconds: nonNegativeInteger(
+      numberValue(goal.timeUsedSeconds) ?? numberValue(goal.time_used_seconds) ?? 0,
+    ),
+    tokensUsed: nullableNonNegativeInteger(numberValue(goal.tokensUsed) ?? numberValue(goal.tokens_used)),
+    tokenBudget: nullableNonNegativeInteger(numberValue(goal.tokenBudget) ?? numberValue(goal.token_budget)),
+    updatedAt: timestamp,
+  };
+}
+
+function activeGoalRuntimeFromCodexInternalContext(
+  content: string,
+  timestamp: string,
+): CodexHistoryGoalRuntimeMetadata | null {
+  if (!/<codex_internal_context\b[^>]*\bsource=["']goal["'][^>]*>/i.test(content)) return null;
+  return {
+    provider: "codex",
+    objective: xmlBlock(content, "objective") ?? "Active goal",
+    status: "active",
+    timeUsedSeconds: nonNegativeInteger(numberFromLine(content, "Time used seconds") ?? 0),
+    tokensUsed: nullableNonNegativeInteger(numberFromLine(content, "Tokens used")),
+    tokenBudget: nullableNonNegativeInteger(numberFromLine(content, "Token budget")),
+    updatedAt: timestamp,
+  };
+}
+
 function goalRecordIsActive(goal: Record<string, unknown>): boolean {
   const status = stringValue(goal.status) ?? "active";
   const normalized = status.toLowerCase();
@@ -967,9 +1049,100 @@ function goalRecordIsActive(goal: Record<string, unknown>): boolean {
   );
 }
 
+async function latestKnownActiveGoalRuntimeForCodexHistoryFile(
+  file: CodexHistoryFile,
+  fallbackUpdatedAt: string,
+): Promise<CodexHistoryGoalRuntimeMetadata | null> {
+  let latestKnownGoalRuntime: CodexHistoryGoalRuntimeMetadata | null = null;
+  await readJsonlRecords(file.filePath, (record) => {
+    const timestamp = isoTimestamp(record.timestamp) ?? fallbackUpdatedAt;
+    const payload = asRecord(record.payload);
+    if (record.type === "event_msg" && payload) {
+      const type = stringValue(payload.type);
+      if (type === "thread_goal_updated") {
+        const goal = asRecord(payload.goal);
+        if (goal) latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(goal, timestamp);
+        return;
+      }
+      if (type === "thread_goal_cleared") {
+        latestKnownGoalRuntime = null;
+        return;
+      }
+    }
+    const responsePayload = responsePayloadFromCodexRecord(record, payload);
+    if (responsePayload?.type !== "message" || stringValue(responsePayload.role) !== "user") return;
+    const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(
+      textFromContent(responsePayload.content),
+      timestamp,
+    );
+    if (internalGoalRuntime && !latestKnownGoalRuntime) latestKnownGoalRuntime = internalGoalRuntime;
+  }).catch(() => undefined);
+  return latestKnownGoalRuntime;
+}
+
+function sessionMetadataWithCodexGoalRuntime(
+  metadata: Session["metadata"] | undefined,
+  goalRuntime: CodexHistoryGoalRuntimeMetadata | null,
+): Session["metadata"] | undefined {
+  const next = { ...(metadata ?? {}) };
+  delete next.codexGoalRuntime;
+  if (goalRuntime) next.codexGoalRuntime = goalRuntime;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function codexGoalRuntimeFromSessionMetadata(
+  metadata: Session["metadata"] | undefined,
+): CodexHistoryGoalRuntimeMetadata | null {
+  const record = asRecord(metadata?.codexGoalRuntime);
+  if (!record || stringValue(record.provider) !== "codex") return null;
+  const objective = stringValue(record.objective);
+  const status = stringValue(record.status);
+  const updatedAt = isoTimestamp(record.updatedAt);
+  if (!objective || !status || !updatedAt) return null;
+  return {
+    provider: "codex",
+    objective,
+    status,
+    timeUsedSeconds: nonNegativeInteger(numberValue(record.timeUsedSeconds) ?? 0),
+    tokensUsed: nullableNonNegativeInteger(numberValue(record.tokensUsed)),
+    tokenBudget: nullableNonNegativeInteger(numberValue(record.tokenBudget)),
+    updatedAt,
+  };
+}
+
 function turnAbortMessage(payload: Record<string, unknown>): string {
   const reason = stringValue(payload.reason);
   return reason ? `Turn interrupted: ${reason}` : "Turn interrupted.";
+}
+
+function xmlBlock(value: string, tagName: string): string | null {
+  const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`<${escapedTag}[^>]*>([\\s\\S]*?)<\\/${escapedTag}>`, "i").exec(value);
+  return match?.[1]?.trim() || null;
+}
+
+function lineValue(value: string, label: string): string | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`^\\s*-?\\s*${escaped}:\\s*(.+?)\\s*$`, "im").exec(value);
+  return match?.[1]?.trim() || null;
+}
+
+function numberFromLine(value: string, label: string): number | null {
+  const raw = lineValue(value, label);
+  if (!raw || raw.toLowerCase() === "none") return null;
+  const normalized = raw.replace(/,/g, "");
+  const match = /^-?\d+(?:\.\d+)?/.exec(normalized);
+  if (!match) return null;
+  const number = Number(match[0]);
+  return Number.isFinite(number) ? number : null;
+}
+
+function nonNegativeInteger(value: number): number {
+  return Math.max(0, Math.floor(value));
+}
+
+function nullableNonNegativeInteger(value: number | null): number | null {
+  return value === null ? null : nonNegativeInteger(value);
 }
 
 function textFromContent(content: unknown): string {

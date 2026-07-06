@@ -3,6 +3,7 @@ import {
   type ChatProvider,
   type ContextUsageSnapshot,
   type HostedContextProvider,
+  type ProviderSettings,
 } from "@openpond/contracts";
 import type { HostedChatMessage } from "@openpond/cloud";
 
@@ -24,6 +25,23 @@ export function hostedContextLimit(_provider: HostedContextProvider, model: stri
 export function usableHostedContextLimit(maxContextTokens: number): number {
   const reserve = Math.max(MIN_CONTEXT_RESERVE_TOKENS, Math.ceil(maxContextTokens * 0.08));
   return Math.max(1, maxContextTokens - reserve);
+}
+
+export const usableContextLimit = usableHostedContextLimit;
+
+export function trustedProviderContextLimit(input: {
+  provider: ChatProvider;
+  model: string | null | undefined;
+  settings?: ProviderSettings | null;
+}): number | null {
+  const model = input.model?.trim();
+  if (!model) return null;
+  const hostedProvider = hostedContextProvider(input.provider);
+  if (hostedProvider) return hostedContextLimit(hostedProvider, model);
+
+  const cache = input.settings?.modelCaches[input.provider];
+  const cachedModel = cache?.models.find((candidate) => candidate.id === model);
+  return cachedModel?.contextWindow ?? null;
 }
 
 export function estimateHostedMessageTokens(messages: HostedChatMessage[]): number {
@@ -62,9 +80,10 @@ function tokenCountFromUsage(usage: unknown, includeCompletion: boolean): number
 }
 
 export function createContextUsageSnapshot(input: {
-  provider: HostedContextProvider;
+  provider: ChatProvider;
   model: string;
   messages: HostedChatMessage[];
+  maxContextTokens?: number | null;
   usage?: unknown;
   includeCompletion?: boolean;
   updatedAtEventId: string | null;
@@ -72,7 +91,13 @@ export function createContextUsageSnapshot(input: {
   const usedTokensFromUsage =
     input.usage === undefined ? null : tokenCountFromUsage(input.usage, Boolean(input.includeCompletion));
   const usedTokens = usedTokensFromUsage ?? estimateHostedMessageTokens(input.messages);
-  const maxContextTokens = hostedContextLimit(input.provider, input.model);
+  const maxContextTokens = input.maxContextTokens ?? trustedProviderContextLimit({
+    provider: input.provider,
+    model: input.model,
+  });
+  if (!maxContextTokens) {
+    throw new Error(`Cannot create context usage snapshot without a trusted context limit for ${input.provider}.`);
+  }
   const percentFull = Math.min(100, Math.round((usedTokens / maxContextTokens) * 100));
 
   return ContextUsageSnapshotSchema.parse({

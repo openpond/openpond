@@ -15,7 +15,10 @@ import { ApprovalRequestCard } from "../apps/web/src/components/chat/ApprovalReq
 import { ComposerCreatePipelineStrip } from "../apps/web/src/components/chat/ComposerCreatePipelineStrip";
 import { GoalDetailsView } from "../apps/web/src/components/goal/GoalDetailsView";
 import { WorkspaceDiffTabs } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanelChrome";
-import { shouldRunCreatePipelineCommandLocally } from "../apps/web/src/components/app-shell/MainPane";
+import {
+  sandboxIdFromWorkspaceName,
+  shouldRunCreatePipelineCommandLocally,
+} from "../apps/web/src/components/app-shell/MainPane";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import {
   composerActionCatalogMatches,
@@ -162,6 +165,8 @@ describe("OpenPond App action channel", () => {
     expect(composerSlashCommandMatches({ prompt: "/goal-r" }).map((item) => item.id)).toEqual([
       "goal-remote",
     ]);
+    expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
+    expect(composerSlashCommandMatches({ prompt: "/skill help" }).map((item) => item.id)).toEqual(["skill"]);
     expect(parseComposerSlashCommandPrompt("/create summarize files")).toEqual({
       command: "create",
       args: "summarize files",
@@ -686,6 +691,43 @@ describe("OpenPond App action channel", () => {
         view: "chat",
       }),
     ).toBe(false);
+  });
+
+  test("keeps direct sandbox chats on the standard right sidebar with a summary tab", () => {
+    expect(sandboxIdFromWorkspaceName("nas6d9khcmppt1sxvve1i7iu")).toBe("nas6d9khcmppt1sxvve1i7iu");
+    expect(sandboxIdFromWorkspaceName("H-16 X metadata-only sandbox proof")).toBeNull();
+
+    const html = renderToStaticMarkup(
+      createElement(WorkspaceDiffTabs, {
+        addMenuOpen: false,
+        expanded: false,
+        filteredFiles: [],
+        dirtyFilePaths: new Set<string>(),
+        openFiles: [],
+        goalDetailsAvailable: false,
+        searchOpen: false,
+        searchQuery: "",
+        selectedPath: null,
+        summaryAvailable: true,
+        visibleTab: "summary",
+        onCloseFileTab: () => undefined,
+        onCloseSearch: () => undefined,
+        onOpenFile: () => undefined,
+        onOpenBrowser: () => undefined,
+        onOpenSearch: () => undefined,
+        onSearchQueryChange: () => undefined,
+        onSelectFile: () => undefined,
+        onSelectFiles: () => undefined,
+        onSelectGoal: () => undefined,
+        onSelectSummary: () => undefined,
+        onToggleAddMenu: () => undefined,
+        onToggleExpanded: () => undefined,
+      }),
+    );
+
+    expect(html).toContain(">Summary</span>");
+    expect(html).toContain(">Files</span>");
+    expect(html.indexOf(">Summary</span>")).toBeLessThan(html.indexOf(">Files</span>"));
   });
 
   test("builds hosted create pipeline envelopes for Cloud work items", () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  parseBrowserSnapshotScriptResult,
   parseBrowserTargetResolutionResult,
   resolveBrowserSnapshotTargetScript,
 } from "../apps/desktop/src/desktop-browser-harness-dom";
@@ -52,6 +53,22 @@ describe("desktop browser harness DOM actionability", () => {
       role: "button",
       name: "Submit",
     });
+  });
+
+  test("rejects zero-sized browser snapshots instead of returning false empty proof", () => {
+    expect(() =>
+      parseBrowserSnapshotScriptResult({
+        url: "http://127.0.0.1:17876/",
+        title: "OpenPond App",
+        viewport: {
+          width: 0,
+          height: 0,
+          scrollX: 0,
+          scrollY: 0,
+        },
+        targets: [],
+      }),
+    ).toThrow("Browser snapshot viewport is not visible. Open the browser panel and try again.");
   });
 });
 

@@ -119,6 +119,7 @@ export type HttpRouteDeps = {
   createSession: (payload: unknown) => Promise<unknown>;
   patchSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   sendTurn: (sessionId: string, payload: unknown) => Promise<unknown>;
+  runSessionCommand: (sessionId: string, payload: unknown) => Promise<unknown>;
   recordPreflightTurnFailure: (sessionId: string, payload: unknown) => Promise<unknown>;
   updateTurnCreatePipeline: (
     sessionId: string,

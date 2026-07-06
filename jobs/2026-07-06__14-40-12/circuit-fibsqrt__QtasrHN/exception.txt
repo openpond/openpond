@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 350, in run
+    await self._prepare()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 379, in _prepare
+    await self._setup_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1097, in _setup_agent_environment
+    await self._start_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1103, in _start_agent_environment
+    await asyncio.wait_for(
+  File "/home/glu/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 876, in start
+    await self._run_docker_compose_command(["up", "--detach", "--wait"])
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 625, in _run_docker_compose_command
+    raise RuntimeError(
+RuntimeError: Docker compose command failed for environment circuit-fibsqrt. Command: docker compose --project-name circuit-fibsqrt__qtasrhn__env --project-directory /home/glu/.cache/harbor/tasks/packages/terminal-bench/circuit-fibsqrt/fe25ab474ba626c4f45f57e757e86f2ad292de80b505e5b7ba0ba76c30d7fcc8/environment -f /tmp/tmpc4f6erj9/circuit-fibsqrt__QtasrHN__env-docker-compose-resources.json -f /home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /tmp/tmpu2aijyuf/docker-compose-mounts.json up --detach --wait. Return code: 1. Stdout: Error response from daemon: client version 1.43 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version
+. Stderr: None. 

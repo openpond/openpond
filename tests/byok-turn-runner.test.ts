@@ -1,13 +1,18 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
+import { createContextUsageSnapshot } from "../apps/server/src/openpond/context-usage";
 import {
+  AppPreferencesSchema,
+  ProviderSettingsSchema,
   emptyOpenPondProfileState,
   type Approval,
+  type AppPreferences,
   type ModelUsageRecord,
+  type ProviderSettings,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -158,19 +163,23 @@ describe("BYOK turn runner dispatch", () => {
       });
 
       const createTurn = await runner.sendTurn("session_create", {
-        prompt: "/skill create support-handoff-summaries Draft support handoff summaries.",
+        prompt: "/skill create support-handoff-summaries: Draft support handoff summaries.",
         modelRef: { providerId: "openrouter", modelId: "test/model" },
       });
       expect(createTurn.status).toBe("completed");
       expect(sessions.get("session_create")?.cwd).toBe(repoPath);
-      expect(capturedCreateMessages.at(-1)?.content).toContain("<profile_skill_goal>");
-      expect(capturedCreateMessages.at(-1)?.content).toContain("profiles/default/skills/support-handoff-summaries/SKILL.md");
+      expect(capturedCreateMessages).toHaveLength(0);
       expect(events.some((event) =>
         event.sessionId === "session_create" &&
         event.name === "diagnostic" &&
         (event.data as any)?.kind === "thread_goal" &&
-        (event.data as any)?.goal?.kind === "profile_skill_create"
+        (event.data as any)?.goal?.kind === "profile_skill_create" &&
+        (event.data as any)?.goal?.status === "completed" &&
+        (event.data as any)?.goal?.targetSkillName === "support-handoff-summaries"
       )).toBe(true);
+      await expect(
+        readFile(path.join(profileSourcePath, "skills", "support-handoff-summaries", "SKILL.md"), "utf8"),
+      ).resolves.toContain("Draft support handoff summaries.");
 
       const skillPath = path.join(profileSourcePath, "skills", "support-handoff-summaries", "SKILL.md");
       await mkdir(path.dirname(skillPath), { recursive: true });
@@ -879,12 +888,15 @@ describe("BYOK turn runner dispatch", () => {
         operation: "create",
         targetSkillName: "support-handoff-summaries",
         targetSkillPath: "profiles/default/skills/support-handoff-summaries/SKILL.md",
-        status: "queued",
+        status: "completed",
+        validationStatus: "valid",
+        invocation: "$support-handoff-summaries",
       });
       const goalId = (completed?.data as any)?.result?.goalId;
       expect(goalId).toMatch(/^goal_/);
-      expect((completed?.data as any)?.result?.goalPrompt).toContain("<profile_skill_goal>");
-      expect((completed?.data as any)?.result?.goalPrompt).toContain("Keep the skill package single-file: only SKILL.md.");
+      await expect(
+        readFile(path.join(profileSourcePath, "skills", "support-handoff-summaries", "SKILL.md"), "utf8"),
+      ).resolves.toContain("Draft support handoff summaries.");
       expect(harness.events.some(
         (event) =>
           event.name === "diagnostic" &&
@@ -898,7 +910,8 @@ describe("BYOK turn runner dispatch", () => {
           event.name === "diagnostic" &&
           (event.data as any)?.kind === "thread_goal" &&
           (event.data as any)?.provider === "openpond" &&
-          (event.data as any)?.goal?.kind === "profile_skill_create",
+          (event.data as any)?.goal?.kind === "profile_skill_create" &&
+          (event.data as any)?.goal?.status === "completed",
       )).toBe(true);
       expect(harness.events.some(
         (event) =>
@@ -949,6 +962,7 @@ describe("BYOK turn runner dispatch", () => {
           id: goalId,
           kind: "profile_skill_create",
           targetSkillName: "support-handoff-summaries",
+          status: "completed",
         },
       });
     } finally {
@@ -1094,8 +1108,13 @@ describe("BYOK turn runner dispatch", () => {
         operation: "create",
         targetSkillName: "tone-check",
         targetSkillPath: "profiles/default/skills/tone-check/SKILL.md",
-        status: "queued",
+        status: "completed",
+        validationStatus: "valid",
+        invocation: "$tone-check",
       });
+      await expect(
+        readFile(path.join(profileSourcePath, "skills", "tone-check", "SKILL.md"), "utf8"),
+      ).resolves.toContain("Create a single SKILL.md tone-check skill");
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -1219,6 +1238,73 @@ describe("BYOK turn runner dispatch", () => {
     )).toBe(false);
   });
 
+  test("blocks generic goal control for profile-skill goals without replacing goal metadata", async () => {
+    const profileSkillGoal = {
+      id: "goal_profile_skill",
+      provider: "openpond",
+      kind: "profile_skill_create",
+      operation: "create",
+      objective: "Create a profile-backed skill: clean Docker caches.",
+      userObjective: "clean Docker caches.",
+      status: "running",
+      activeProfile: "default",
+      profileRepoPath: "/tmp/profile-repo",
+      profileSourcePath: "/tmp/profile-repo/profiles/default",
+      profileSourceRelativePath: "profiles/default",
+      requestedName: null,
+      targetSkillName: "docker-cleanup",
+      targetSkillPath: "profiles/default/skills/docker-cleanup/SKILL.md",
+    };
+    const harness = createNativeGoalControlHarness({
+      sessionOverrides: {
+        workspaceKind: "local_project",
+        cwd: "/tmp/openpond-goal-workspace",
+      },
+      initialEvents: [
+        {
+          id: "profile_skill_goal_event",
+          sessionId: "session_1",
+          turnId: "turn_prior",
+          name: "diagnostic",
+          timestamp: "2026-07-03T09:59:00.000Z",
+          source: "provider",
+          status: "completed",
+          output: "Create a profile-backed skill: clean Docker caches.",
+          data: {
+            kind: "thread_goal",
+            provider: "openpond",
+            goal: profileSkillGoal,
+          },
+        },
+      ],
+      toolArgs: {
+        action: "restart",
+        targetGoalId: "goal_profile_skill",
+        reason: "User asked to restart the selected goal.",
+      },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "restart this goal",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const completed = harness.events.find(
+      (event) => event.name === "tool.completed" && event.action === "openpond_goal_control",
+    );
+    expect(completed).toMatchObject({
+      status: "failed",
+    });
+    expect(completed?.output).toContain("Profile skill goals cannot be controlled with generic goal control yet");
+    expect(harness.events.filter(
+      (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
+    )).toHaveLength(1);
+    expect((harness.events.find(
+      (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
+    )?.data as any)?.goal).toMatchObject(profileSkillGoal);
+  });
+
   test("does not hard-route conceptual create or skill questions into workflow tools", async () => {
     const harness = createNativeGoalControlHarness({
       toolArgs: null,
@@ -1253,6 +1339,32 @@ describe("BYOK turn runner dispatch", () => {
     expect(harness.events.some(
       (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
     )).toBe(false);
+  });
+
+  test("omits workflow delegation tools for terminal one-shot turns", async () => {
+    const harness = createNativeGoalControlHarness({
+      toolArgs: null,
+      sessionOverrides: {
+        workspaceKind: undefined,
+        workspaceId: null,
+        localProjectId: null,
+        cwd: "/tmp/openpond-bench-task",
+      },
+      finalText: "One-shot task complete.",
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "write the task output file",
+      metadata: { openpondTerminalMode: "one-shot" },
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const toolNames = harness.streamInputs[0].tools.map((tool: any) => tool.function.name);
+    expect(toolNames).not.toContain("openpond_create_pipeline");
+    expect(toolNames).not.toContain("openpond_goal_control");
+    expect(toolNames).not.toContain("openpond_profile_skill_goal");
+    expect(toolNames).toEqual(expect.arrayContaining(["resource_search", "resource_read"]));
   });
 
   test("records local BYOK provider usage frames in the model usage ledger", async () => {
@@ -1403,6 +1515,207 @@ describe("BYOK turn runner dispatch", () => {
       visibility: "user_facing",
       totalTokens: 24,
     });
+  });
+
+  test("blocks hosted sends over the context limit when auto compaction is disabled", async () => {
+    const harness = createNativeGoalControlHarness({
+      providerId: "openpond",
+      modelId: "openpond-1k",
+      toolArgs: null,
+      initialEvents: [
+        ...hostedCompactionPriorEvents(),
+        {
+          id: "prior_large_assistant",
+          sessionId: "session_1",
+          turnId: "prior_large_turn",
+          name: "assistant.delta",
+          timestamp: "2026-07-03T09:20:00.000Z",
+          source: "provider",
+          output: "x".repeat(6000),
+        },
+      ],
+      finalText: "Hosted answer without compaction.",
+      usageByPass: {
+        1: { prompt_tokens: 180, completion_tokens: 8, total_tokens: 188 },
+      },
+      preferences: AppPreferencesSchema.parse({
+        contextCompaction: {
+          autoEnabled: false,
+        },
+      }),
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "answer without compaction",
+      modelRef: { providerId: "openpond", modelId: "openpond-1k" },
+    });
+
+    expect(turn.status).toBe("failed");
+    expect(turn.error).toContain("Start a new chat or turn auto compaction on");
+    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
+    expect(harness.events.some((event) => event.name === "session.compaction.completed")).toBe(false);
+    expect(harness.usageRecords).toHaveLength(0);
+    expect(harness.streamInputs).toHaveLength(0);
+  });
+
+  test("auto compacts local BYOK context with the selected provider and model", async () => {
+    const harness = createNativeGoalControlHarness({
+      toolArgs: null,
+      initialEvents: hostedCompactionPriorEvents(),
+      finalText: "BYOK answer after compaction.",
+      usageByPass: {
+        1: { prompt_tokens: 80, completion_tokens: 10, total_tokens: 90 },
+        2: { prompt_tokens: 22, completion_tokens: 5, total_tokens: 27 },
+      },
+      providerSettings: openRouterProviderSettingsWithContextWindow(2000),
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "answer after BYOK compaction",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(harness.streamInputs).toHaveLength(2);
+    expect(harness.streamInputs[0]).toMatchObject({
+      providerId: "openrouter",
+      modelId: "test/model",
+      requestId: expect.stringMatching(/^compact-/),
+    });
+    expect(harness.streamInputs[0].tools).toBeUndefined();
+    expect(harness.streamInputs[1]).toMatchObject({
+      providerId: "openrouter",
+      modelId: "test/model",
+    });
+    expect(harness.streamInputs[1].messages).toContainEqual(
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining("Conversation summary from earlier turns"),
+      }),
+    );
+    expect(JSON.stringify(harness.streamInputs[1].messages)).not.toContain(
+      "We need to preserve the durable support workflow requirements.",
+    );
+    const completed = harness.events.find((event) => event.name === "session.compaction.completed");
+    expect(completed?.data).toMatchObject({
+      provider: "openrouter",
+      model: "test/model",
+      mode: "summary",
+      maxContextTokens: 2000,
+      summary: "BYOK answer after compaction.",
+    });
+    expect(harness.usageRecords.map((record) => record.requestKind)).toEqual([
+      "context_compaction",
+      "chat_turn",
+    ]);
+    expect(harness.usageRecords[0]).toMatchObject({
+      provider: "openrouter",
+      model: "test/model",
+      route: "local_byok",
+      requestKind: "context_compaction",
+      visibility: "background",
+      totalTokens: 90,
+    });
+  });
+
+  test("preserves BYOK context and continues when summary compaction fails below the hard ceiling", async () => {
+    const harness = createNativeGoalControlHarness({
+      toolArgs: null,
+      initialEvents: hostedCompactionPriorEvents(),
+      finalText: "BYOK answer after failed compaction.",
+      failOnPass: 1,
+      usageByPass: {
+        2: { prompt_tokens: 30, completion_tokens: 6, total_tokens: 36 },
+      },
+      providerSettings: openRouterProviderSettingsWithContextWindow(2000),
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "answer after failed BYOK compaction",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(true);
+    const failed = harness.events.find((event) => event.name === "session.compaction.failed");
+    expect(failed).toMatchObject({
+      status: "failed",
+      error: "stream failed on pass 1",
+    });
+    expect(harness.streamInputs).toHaveLength(2);
+    expect(harness.streamInputs[1].messages).toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        content: "answer after failed BYOK compaction",
+      }),
+    );
+    expect(harness.usageRecords.map((record) => [record.requestKind, record.status])).toEqual([
+      ["context_compaction", "failed"],
+      ["chat_turn", "completed"],
+    ]);
+  });
+
+  test("blocks local BYOK sends over a trusted context limit when auto compaction is disabled", async () => {
+    const harness = createNativeGoalControlHarness({
+      toolArgs: null,
+      initialEvents: [
+        ...hostedCompactionPriorEvents(),
+        {
+          id: "prior_large_byok_assistant",
+          sessionId: "session_1",
+          turnId: "prior_large_byok_turn",
+          name: "assistant.delta",
+          timestamp: "2026-07-03T09:20:00.000Z",
+          source: "provider",
+          output: "x".repeat(6000),
+        },
+      ],
+      preferences: AppPreferencesSchema.parse({
+        contextCompaction: {
+          autoEnabled: false,
+        },
+      }),
+      providerSettings: openRouterProviderSettingsWithContextWindow(1000),
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "answer without BYOK compaction",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("failed");
+    expect(turn.error).toContain("Start a new chat or turn auto compaction on");
+    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
+    expect(harness.streamInputs).toHaveLength(0);
+    expect(harness.usageRecords).toHaveLength(0);
+  });
+
+  test("records local BYOK context usage when provider metadata includes a context window", async () => {
+    const harness = createNativeGoalControlHarness({
+      toolArgs: null,
+      finalText: "BYOK context measured.",
+      usage: { prompt_tokens: 1200, completion_tokens: 50, total_tokens: 1250 },
+      providerSettings: openRouterProviderSettingsWithContextWindow(10000),
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "measure local BYOK context",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const contextEvents = harness.events.filter((event) => event.name === "session.context.updated");
+    expect(contextEvents).toHaveLength(2);
+    expect(contextEvents.at(-1)?.data).toMatchObject({
+      provider: "openrouter",
+      model: "test/model",
+      usedTokens: 1250,
+      maxContextTokens: 10000,
+      usableContextTokens: 2000,
+      percentFull: 13,
+      source: "provider_usage",
+    });
+    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
   });
 
   test("records Insights scan usage with system session attribution", async () => {
@@ -2165,6 +2478,8 @@ function createNativeGoalControlHarness(input: {
   usage?: unknown;
   usageByPass?: Record<number, unknown>;
   failOnPass?: number;
+  preferences?: AppPreferences;
+  providerSettings?: ProviderSettings;
 }) {
   const providerId = input.providerId ?? "openrouter";
   const modelId = input.modelId ?? (providerId === "openpond" ? "openpond-chat" : "test/model");
@@ -2271,6 +2586,8 @@ function createNativeGoalControlHarness(input: {
       throw new Error("workspace tool execution should not be needed");
     },
     loadPersonalizationSoul: async () => "",
+    loadAppPreferences: async () => input.preferences ?? AppPreferencesSchema.parse({}),
+    loadProviderSettings: input.providerSettings ? async () => input.providerSettings! : undefined,
     maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
     hostedSystemPrompt: async () => "System prompt",
     appendAssistantText: async (nextSession, turnId, text) => {
@@ -2284,7 +2601,26 @@ function createNativeGoalControlHarness(input: {
         output: text,
       });
     },
-    appendHostedContextUsage: async () => undefined,
+    appendHostedContextUsage: async (contextInput) => {
+      const usageEvent: RuntimeEvent = {
+        id: `context_${events.length}`,
+        sessionId: contextInput.session.id,
+        turnId: contextInput.turnId,
+        name: "session.context.updated",
+        timestamp: "2026-07-03T10:00:00.000Z",
+        source: "server",
+        data: createContextUsageSnapshot({
+          provider: contextInput.provider,
+          model: contextInput.model,
+          messages: contextInput.messages,
+          maxContextTokens: contextInput.maxContextTokens,
+          usage: contextInput.usage,
+          includeCompletion: contextInput.includeCompletion,
+          updatedAtEventId: null,
+        }),
+      };
+      events.push(usageEvent);
+    },
     streamOpenPondHostedChatTurn: async function* (streamInput) {
       streamInputs.push({
         providerId: "openpond",
@@ -2357,6 +2693,36 @@ function createNativeGoalControlHarness(input: {
     streamInputs,
     usageRecords,
   };
+}
+
+function openRouterProviderSettingsWithContextWindow(contextWindow: number): ProviderSettings {
+  return ProviderSettingsSchema.parse({
+    providers: {
+      openrouter: {
+        enabled: true,
+        baseUrl: "https://openrouter.ai/api/v1",
+        defaultModel: "test/model",
+      },
+    },
+    modelCaches: {
+      openrouter: {
+        providerId: "openrouter",
+        source: "provider",
+        fetchedAt: "2026-07-03T10:00:00.000Z",
+        lastError: null,
+        models: [
+          {
+            id: "test/model",
+            providerId: "openrouter",
+            displayName: "Test Model",
+            contextWindow,
+            outputLimit: null,
+            source: "provider",
+          },
+        ],
+      },
+    },
+  });
 }
 
 function hostedCompactionPriorEvents(): RuntimeEvent[] {

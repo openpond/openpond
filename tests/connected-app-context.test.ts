@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { MentionedConnectedAppRef, Session } from "@openpond/contracts";
+import { resolveConnectedAppContextsForTurn } from "../apps/server/src/runtime/turn-runner";
 import { createHostedTurnHelpers } from "../apps/server/src/openpond/hosted-turn-helpers";
 import {
   buildConnectedAppIndexContext,
@@ -13,6 +14,15 @@ const googleRef: MentionedConnectedAppRef = {
   setupSurfaces: ["oauth_connector"],
   connectionIds: ["conn_google"],
   capabilities: ["google.drive.file.read", "google.docs.write"],
+};
+
+const xRef: MentionedConnectedAppRef = {
+  kind: "integration",
+  provider: "x",
+  appIds: ["x"],
+  setupSurfaces: ["oauth_connector"],
+  connectionIds: ["conn_x_social"],
+  capabilities: ["x.search.read"],
 };
 
 describe("connected app server context", () => {
@@ -165,5 +175,45 @@ describe("connected app server context", () => {
     expect(prompt).toContain("Google (google)");
     expect(prompt).toContain("tools: none registered");
     expect(prompt).not.toContain("conn_google");
+  });
+
+  test("falls back to all-team connections when the session team misses a mentioned app", async () => {
+    const calls: unknown[] = [];
+    const contexts = await resolveConnectedAppContextsForTurn({
+      refs: [xRef],
+      cloudTeamId: "team_current",
+      listIntegrationConnections: async (input) => {
+        calls.push(input);
+        if (input.teamId === "team_current") {
+          return { teamId: "team_current", connections: [] };
+        }
+        return {
+          teamId: "team_social",
+          connections: [
+            {
+              id: "conn_x_social",
+              teamId: "team_social",
+              provider: "x",
+              providerAccountName: "Social User",
+              status: "active",
+            },
+          ],
+        };
+      },
+    });
+
+    expect(calls).toEqual([
+      { teamId: "team_current", status: "active" },
+      { status: "active" },
+    ]);
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      provider: "x",
+      connectionIds: ["conn_x_social"],
+      accountLabels: ["Social User"],
+    });
+    expect(contexts[0]?.toolNames).toEqual(
+      expect.arrayContaining(["connected_app_skill_read", "connected_app_search"]),
+    );
   });
 });

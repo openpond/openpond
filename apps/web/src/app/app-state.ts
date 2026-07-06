@@ -1,9 +1,15 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { ChatProvider, CodexPermissionMode, CodexReasoningEffort } from "@openpond/contracts";
+import type {
+  ChatProvider,
+  CodexPermissionMode,
+  CodexReasoningEffort,
+  OpenPondCommandAccessMode,
+} from "@openpond/contracts";
 import {
   DEFAULT_CHAT_PROVIDER,
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
+  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   DEFAULT_OPENPOND_CHAT_MODEL,
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
@@ -55,6 +61,7 @@ export type AppState = {
   draftModel: string;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
+  openPondCommandAccessMode: OpenPondCommandAccessMode;
   busy: boolean;
   diffPanelOpen: boolean;
   diffPanelExpanded: boolean;
@@ -98,6 +105,7 @@ export const initialAppState: AppState = {
   draftModel: DEFAULT_OPENPOND_CHAT_MODEL,
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
+  openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   busy: false,
   diffPanelOpen: false,
   diffPanelExpanded: false,
@@ -304,6 +312,7 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setDraftModel: fieldSetter(dispatch, "draftModel"),
     setCodexPermissionMode: fieldSetter(dispatch, "codexPermissionMode"),
     setCodexReasoningEffort: fieldSetter(dispatch, "codexReasoningEffort"),
+    setOpenPondCommandAccessMode: fieldSetter(dispatch, "openPondCommandAccessMode"),
     setBusy: fieldSetter(dispatch, "busy"),
     setDiffPanelOpen: fieldSetter(dispatch, "diffPanelOpen"),
     setDiffPanelExpanded: fieldSetter(dispatch, "diffPanelExpanded"),

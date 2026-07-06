@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/install-windows-3-11",
+        "ref": "sha256:3fccdcf345cef4dd1a828ad3829024109b163b871b3f39db1af9308a77ee4ce7",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "install-windows-3-11__SPqLejF",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

@@ -126,6 +126,9 @@ describe("OpenPond action catalog context", () => {
 
     expect(prompt).toContain("OpenPond profile skills:");
     expect(prompt).toContain("- Load a profile skill before following it by calling profile_skill_read");
+    expect(prompt).toContain("do so only with tools that are actually available in this turn");
+    expect(prompt).toContain("If the loaded skill requires a tool that is unavailable");
+    expect(prompt).toContain("use copyable fenced Markdown with a newline after the opening fence");
     expect(prompt).toContain("- release-notes: Draft concise release notes from merged user-facing changes.");
     expect(prompt).not.toContain("Identify user-facing changes first");
   });

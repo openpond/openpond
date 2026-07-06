@@ -114,6 +114,24 @@
   scrollbar-width: thin;
 }
 
+.main-pane.page-active.diff-open {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, max(320px, min(var(--diff-panel-width), calc(100% - 520px))));
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.main-pane.page-active.diff-open.terminal-open {
+  grid-template-rows: minmax(0, 1fr) var(--terminal-panel-height);
+}
+
+.main-pane.page-active.diff-open .profile-view {
+  grid-column: 1;
+  grid-row: 1;
+  max-height: 100%;
+  overflow: auto;
+}
+
 .main-pane.page-active::-webkit-scrollbar {
   width: 9px;
 }

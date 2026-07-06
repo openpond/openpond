@@ -89,19 +89,27 @@ export function mergeBootstrapSessionListPreservingLocalState(
   recentLocalSidebarChangeTimes?: SessionSidebarStateChangeTimes,
   now = Date.now(),
 ): Session[] {
-  const incomingIds = new Set(incoming.map((session) => session.id));
-  const preservedCurrentSessions = current.filter(
-    (session) => !incomingIds.has(session.id) && shouldPreserveMissingBootstrapSession(session, incoming),
-  );
-  return [
-    ...preservedCurrentSessions,
-    ...mergeSessionListPreservingLocalSidebarState(
+  const currentById = new Map(current.map((session) => [session.id, session]));
+  const mergedIncomingById = new Map(
+    mergeSessionListPreservingLocalSidebarState(
       current,
       incoming,
       recentLocalSidebarChangeTimes,
       now,
-    ),
-  ];
+    ).map((session) => [session.id, session]),
+  );
+  const currentIds = new Set(currentById.keys());
+  const newIncomingSessions = incoming
+    .filter((session) => !currentIds.has(session.id))
+    .map((session) => mergedIncomingById.get(session.id) ?? session);
+  const existingAndPreservedSessions = current
+    .map((session) => {
+      const mergedIncoming = mergedIncomingById.get(session.id);
+      if (mergedIncoming) return mergedIncoming;
+      return shouldPreserveMissingBootstrapSession(session, incoming) ? session : null;
+    })
+    .filter((session): session is Session => Boolean(session));
+  return [...newIncomingSessions, ...existingAndPreservedSessions];
 }
 
 export function shouldPreserveMissingBootstrapSession(session: Session, incoming: Session[]): boolean {

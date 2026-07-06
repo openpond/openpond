@@ -196,10 +196,17 @@ export function useWorkspaceActions({
     await syncWorkspaceLocallyForApp(activeWorkspaceAppId);
   }
 
-  async function ensureActionSession(actionTitle: string): Promise<Session | null> {
+  async function ensureActionSession(
+    actionTitle: string,
+    action: WorkspaceToolRequest["action"],
+    args: Record<string, unknown> = {},
+  ): Promise<Session | null> {
     if (!connection) return null;
     const selectedWritableSession =
       selectedSession && !isCodexHistorySessionId(selectedSession.id) ? selectedSession : null;
+    if (shouldUseSelectedSessionForWorkspaceAction(action, selectedWritableSession, args)) {
+      return selectedWritableSession;
+    }
     if (
       selectedWritableSession &&
       selectedSessionMatchesWorkspace(selectedWritableSession, selectedProject, selectedApp)
@@ -291,7 +298,11 @@ export function useWorkspaceActions({
     args: Record<string, unknown> = {}
   ): Promise<WorkspaceToolResult | null> {
     if (!connection) return null;
-    const session = await ensureActionSession(workspaceName ? `${workspaceName} workspace` : "Workspace action");
+    const session = await ensureActionSession(
+      workspaceName ? `${workspaceName} workspace` : "Workspace action",
+      action,
+      args,
+    );
     if (!session) return null;
     const result = await api.workspaceTool(connection, session.id, {
       action,
@@ -300,7 +311,7 @@ export function useWorkspaceActions({
     });
     showToast(result.output, result.ok ? "success" : "error");
     applyBootstrapPayload(await api.bootstrap(connection));
-    const workspaceId = session.workspaceId ?? session.appId;
+    const workspaceId = result.appId ?? workspaceRefreshTargetForSession(session);
     if (workspaceId) {
       const state = await refreshWorkspace(workspaceId, false);
       if (state?.initialized) await refreshWorkspaceDiff(workspaceId);
@@ -416,4 +427,42 @@ function workspaceSelectionMatchesSession(
     return session.appId === selectedApp.id || session.workspaceId === selectedApp.id;
   }
   return false;
+}
+
+function workspaceRefreshTargetForSession(session: Session): string | null {
+  if (session.workspaceKind === "sandbox") return session.localProjectId ?? null;
+  return session.workspaceId ?? session.appId ?? null;
+}
+
+export function shouldUseSelectedSessionForWorkspaceAction(
+  action: WorkspaceToolRequest["action"],
+  session: Session | null,
+  args: Record<string, unknown> = {},
+): session is Session {
+  return (requiresExistingSandboxWorkspace(action) || isExplicitSandboxRuntimeResumeAction(action, args)) &&
+    isSandboxWorkspaceSession(session);
+}
+
+export function requiresExistingSandboxWorkspace(action: WorkspaceToolRequest["action"]): boolean {
+  if (!action.startsWith("sandbox_")) return false;
+  return action !== "sandbox_create" && action !== "sandbox_templates" && action !== "sandbox_template_launch";
+}
+
+function isSandboxWorkspaceSession(session: Session | null): session is Session {
+  return session?.workspaceKind === "sandbox" || session?.workspaceKind === "sandbox_template";
+}
+
+function isExplicitSandboxRuntimeResumeAction(
+  action: WorkspaceToolRequest["action"],
+  args: Record<string, unknown>,
+): boolean {
+  if (action !== "sandbox_create") return false;
+  const runtime = args.runtime;
+  return Boolean(
+    runtime &&
+      typeof runtime === "object" &&
+      !Array.isArray(runtime) &&
+      typeof (runtime as { runtimeId?: unknown }).runtimeId === "string" &&
+      (runtime as { runtimeId: string }).runtimeId.trim(),
+  );
 }

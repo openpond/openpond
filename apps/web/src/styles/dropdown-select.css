@@ -63,19 +63,29 @@
 
 .dropdown-select.permission-select.compact .dropdown-trigger {
   max-width: 186px;
-  border-color: rgba(6, 182, 212, 0.18);
-  background: rgba(6, 182, 212, 0.08);
+  border-color: transparent;
+  background: transparent;
+}
+
+.dropdown-select.permission-select.compact .dropdown-trigger > svg:first-child,
+.dropdown-select.permission-select.compact .dropdown-trigger > span {
   color: var(--cyan);
 }
 
-.dropdown-select.permission-select.compact .dropdown-trigger svg {
-  color: currentColor;
+.dropdown-select.permission-select.compact .dropdown-trigger > svg:last-child {
+  color: #8f8f8f;
 }
 
 .dropdown-select.permission-select.compact .dropdown-trigger:hover:not(:disabled),
 .dropdown-select.permission-select.compact .dropdown-trigger.active {
-  border-color: rgba(6, 182, 212, 0.34);
-  background: rgba(6, 182, 212, 0.14);
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dropdown-select.permission-select.compact .dropdown-trigger:hover:not(:disabled) > svg:first-child,
+.dropdown-select.permission-select.compact .dropdown-trigger:hover:not(:disabled) > span,
+.dropdown-select.permission-select.compact .dropdown-trigger.active > svg:first-child,
+.dropdown-select.permission-select.compact .dropdown-trigger.active > span {
   color: #67e8f9;
 }
 

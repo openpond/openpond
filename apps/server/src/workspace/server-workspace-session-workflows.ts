@@ -1,4 +1,5 @@
 import {
+  localPathWorkspaceId,
   WorkspaceDiffSummarySchema,
   WorkspaceStateSchema,
   type LocalProject,
@@ -9,6 +10,7 @@ import {
   type WorkspaceDiffSummary,
   type WorkspaceState,
 } from "@openpond/contracts";
+import path from "node:path";
 import { localProjectStateWorkspace, localProjectWorkspaceApp, localProjectWorkspacePaths } from "./local-projects.js";
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import { event, textFromUnknown } from "../utils.js";
@@ -53,6 +55,31 @@ export function createWorkspaceSessionWorkflows(deps: {
       );
       if (!state.initialized) throw new Error(state.error || "Workspace is not initialized");
       return { app: localProjectWorkspaceApp(project), state };
+    }
+    if (!session.workspaceKind && !session.appId && session.cwd) {
+      const workspacePath = session.cwd;
+      const app: OpenPondApp = {
+        id: localPathWorkspaceId(workspacePath),
+        name: path.basename(workspacePath) || workspacePath,
+        description: null,
+        visibility: "private",
+        gitOwner: null,
+        gitRepo: null,
+        gitHost: null,
+        defaultBranch: null,
+        sandbox: false,
+        updatedAt: session.updatedAt,
+        latestDeployment: null,
+      };
+      const state = WorkspaceStateSchema.parse(
+        await loadWorkspaceStateAtPath(
+          { workspacePath, repoPath: workspacePath },
+          app,
+          { clone: false, allowPlainFolder: true }
+        )
+      );
+      if (!state.initialized) throw new Error(state.error || "Workspace is not initialized");
+      return { app, state };
     }
     if (!session.appId) throw new Error("No active app workspace");
     const app = await findOpenPondApp(session.appId);

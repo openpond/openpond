@@ -3,13 +3,19 @@ import {
   CreatePipelineRequestSchema,
   CreatePipelineSnapshotSchema,
 } from "./create-pipeline.js";
-import { ChatProviderSchema, WorkspaceKindSchema } from "./settings.js";
+import {
+  ChatProviderSchema,
+  DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+  OpenPondCommandAccessModeSchema,
+  WorkspaceKindSchema,
+} from "./settings.js";
 import { ChatModelRefSchema } from "./providers.js";
 
 export const SessionSchema = z.object({
   id: z.string(),
   provider: ChatProviderSchema,
   modelRef: ChatModelRefSchema.nullable().optional(),
+  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
   systemKind: z.enum(["openpond.insights"]).nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   title: z.string(),

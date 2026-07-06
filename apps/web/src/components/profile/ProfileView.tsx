@@ -1,6 +1,5 @@
 import type { BootstrapPayload } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
-import { LocalAgentSchedulesPanel } from "../agents/LocalAgentSchedulesPanel";
 import { ProfileSettingsSection } from "../settings/ProfileSettingsSection";
 
 export function ProfileView({
@@ -20,7 +19,6 @@ export function ProfileView({
 }) {
   return (
     <section className="profile-view" aria-label="Profile">
-      <LocalAgentSchedulesPanel connection={connection} />
       <ProfileSettingsSection
         payload={payload}
         connection={connection}

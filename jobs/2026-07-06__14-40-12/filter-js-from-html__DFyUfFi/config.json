@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/filter-js-from-html",
+        "ref": "sha256:18470eb1fd5611b7c27f69a1ec0f66cfbf95f93c2c295d55709381cf8b7cb3cd",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "filter-js-from-html__DFyUfFi",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

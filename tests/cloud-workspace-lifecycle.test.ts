@@ -115,6 +115,212 @@ describe("cloud workspace lifecycle", () => {
     });
     expect(JSON.stringify(requests[0]?.body)).not.toContain("runtimeAgent");
   });
+
+  test("fails bounded when a new Hybrid sandbox create stays creating during chat preflight", async () => {
+    const session = baseHybridSession();
+    const requests: Array<{
+      body: unknown;
+      method: string;
+      path: string;
+    }> = [];
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      const body =
+        typeof init?.body === "string" ? JSON.parse(init.body) : null;
+      requests.push({
+        body,
+        method: init?.method ?? "GET",
+        path: url.pathname + url.search,
+      });
+
+      if (url.pathname === "/v1/sessions/session_hybrid/workspace-tools") {
+        return jsonResponse({
+          ok: true,
+          action: "sandbox_create",
+          output: "Sandbox workspace attached: sandbox_new (creating)",
+          data: {
+            sandbox: {
+              id: "sandbox_new",
+              name: "Hybrid Repo",
+              state: "creating",
+              runtimeId: "runtime_hybrid",
+              projectId: "cloud_project_1",
+              teamId: "team_1",
+            },
+          },
+        });
+      }
+
+      if (url.pathname === "/v1/bootstrap") {
+        return jsonResponse({
+          sessions: [
+            {
+              ...session,
+              workspaceId: "sandbox_new",
+              workspaceName: "Hybrid Repo",
+            },
+          ],
+        });
+      }
+
+      if (url.pathname === "/v1/sandboxes/sandbox_new") {
+        return jsonResponse({
+          sandbox: {
+            id: "sandbox_new",
+            state: "creating",
+            runtimeId: "runtime_hybrid",
+            projectId: "cloud_project_1",
+            teamId: "team_1",
+          },
+        });
+      }
+
+      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
+    }) as typeof fetch;
+
+    let now = 0;
+    await expect(
+      ensureCloudWorkspaceRunning({
+        branch: "main",
+        connection: connection(),
+        localProject: localProject(),
+        session,
+        source: "openpond-app-hybrid-chat-preflight",
+        waitOptions: {
+          delay: async () => undefined,
+          now: () => {
+            const current = now;
+            now += 60_001;
+            return current;
+          },
+          pollMs: 0,
+        },
+      }),
+    ).rejects.toThrow("Timed out waiting for Cloud sandbox sandbox_new to start; latest state is creating.");
+
+    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+      "POST /v1/sessions/session_hybrid/workspace-tools",
+      "GET /v1/bootstrap?refreshCodex=1",
+      "GET /v1/sandboxes/sandbox_new",
+    ]);
+    expect(requests[0]?.body).toMatchObject({
+      args: {
+        metadata: {
+          source: "openpond-app-hybrid-chat-preflight",
+        },
+      },
+    });
+  });
+
+  test("fails bounded when an attached Hybrid sandbox stays creating", async () => {
+    const session = { ...baseHybridSession(), workspaceId: "sandbox_creating" };
+    const requests: Array<{
+      method: string;
+      path: string;
+    }> = [];
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      requests.push({
+        method: init?.method ?? "GET",
+        path: url.pathname + url.search,
+      });
+
+      if (url.pathname === "/v1/sandboxes/sandbox_creating") {
+        return jsonResponse({
+          sandbox: {
+            id: "sandbox_creating",
+            state: "creating",
+            runtimeId: "runtime_hybrid",
+            projectId: "cloud_project_1",
+            teamId: "team_1",
+          },
+        });
+      }
+
+      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
+    }) as typeof fetch;
+
+    let now = 0;
+    await expect(
+      ensureCloudWorkspaceRunning({
+        branch: "main",
+        connection: connection(),
+        localProject: localProject(),
+        session,
+        source: "openpond-app-hybrid-chat-preflight",
+        waitOptions: {
+          delay: async () => undefined,
+          now: () => {
+            const current = now;
+            now += 2;
+            return current;
+          },
+          pollMs: 0,
+          timeoutMs: 1,
+        },
+      }),
+    ).rejects.toThrow("Timed out waiting for Cloud sandbox sandbox_creating to start; latest state is creating.");
+
+    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+      "GET /v1/sandboxes/sandbox_creating",
+      "GET /v1/sandboxes/sandbox_creating",
+    ]);
+  });
+
+  test("fails immediately when an attached Hybrid sandbox is already stale creating", async () => {
+    const session = { ...baseHybridSession(), workspaceId: "sandbox_stale_creating" };
+    const requests: Array<{
+      method: string;
+      path: string;
+    }> = [];
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      requests.push({
+        method: init?.method ?? "GET",
+        path: url.pathname + url.search,
+      });
+
+      if (url.pathname === "/v1/sandboxes/sandbox_stale_creating") {
+        return jsonResponse({
+          sandbox: {
+            id: "sandbox_stale_creating",
+            state: "creating",
+            runtimeId: "runtime_hybrid",
+            projectId: "cloud_project_1",
+            teamId: "team_1",
+            createdAt: "1970-01-01T00:00:00.000Z",
+          },
+        });
+      }
+
+      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
+    }) as typeof fetch;
+
+    await expect(
+      ensureCloudWorkspaceRunning({
+        branch: "main",
+        connection: connection(),
+        localProject: localProject(),
+        session,
+        source: "openpond-app-hybrid-chat-preflight",
+        waitOptions: {
+          delay: async () => undefined,
+          now: () => 120_000,
+          pollMs: 0,
+          timeoutMs: 60_000,
+        },
+      }),
+    ).rejects.toThrow(
+      "Timed out waiting for Cloud sandbox sandbox_stale_creating to start; latest state is creating.",
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+      "GET /v1/sandboxes/sandbox_stale_creating",
+    ]);
+  });
 });
 
 function jsonResponse(payload: unknown, status = 200): Response {

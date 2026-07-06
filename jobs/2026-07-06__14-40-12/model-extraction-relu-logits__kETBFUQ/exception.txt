@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 350, in run
+    await self._prepare()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 379, in _prepare
+    await self._setup_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1097, in _setup_agent_environment
+    await self._start_agent_environment()
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/trial/trial.py", line 1103, in _start_agent_environment
+    await asyncio.wait_for(
+  File "/home/glu/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 876, in start
+    await self._run_docker_compose_command(["up", "--detach", "--wait"])
+  File "/home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 625, in _run_docker_compose_command
+    raise RuntimeError(
+RuntimeError: Docker compose command failed for environment model-extraction-relu-logits. Command: docker compose --project-name model-extraction-relu-logits__ketbfuq__env --project-directory /home/glu/.cache/harbor/tasks/packages/terminal-bench/model-extraction-relu-logits/01c5070dce68bb815b30cf71357050d26d695a79a2292953cc59d03e2795c12b/environment -f /tmp/tmptdxsy70g/model-extraction-relu-logits__kETBFUQ__env-docker-compose-resources.json -f /home/glu/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /tmp/tmph3tlo4nd/docker-compose-mounts.json up --detach --wait. Return code: 1. Stdout: Error response from daemon: client version 1.43 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version
+. Stderr: None. 

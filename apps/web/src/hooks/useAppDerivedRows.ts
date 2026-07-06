@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import type { ChatProvider, ContextUsageSnapshot } from "@openpond/contracts";
+import type {
+  ChatProvider,
+  ContextCompactionPreferences,
+  ContextUsageSnapshot,
+} from "@openpond/contracts";
 import {
   contextWindowStatusFromUsage,
   type ContextWindowStatus,
@@ -13,6 +17,7 @@ import {
 
 export function useAppDerivedRows({
   activeProvider,
+  contextCompaction,
   contextUsage,
   pinnedItems,
   pinnedPreviewKeys,
@@ -21,6 +26,7 @@ export function useAppDerivedRows({
   visibleProjectRows,
 }: {
   activeProvider: ChatProvider;
+  contextCompaction: ContextCompactionPreferences;
   contextUsage: ContextUsageSnapshot | null;
   pinnedItems: PinnedSidebarItem[];
   pinnedPreviewKeys: string[];
@@ -37,8 +43,9 @@ export function useAppDerivedRows({
       contextWindowStatusFromUsage({
         provider: activeProvider,
         snapshot: contextUsage,
+        preferences: contextCompaction,
       }),
-    [activeProvider, contextUsage],
+    [activeProvider, contextCompaction, contextUsage],
   );
   const sidebarWorkspaceAppIds = useMemo(
     () =>

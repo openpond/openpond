@@ -10,6 +10,7 @@ export type SlashCommand =
   | { type: "install"; id: string }
   | { type: "logs" }
   | { type: "model"; id: string | null }
+  | { type: "permissions"; args: string[] }
   | { type: "provider"; id: string | null }
   | { type: "providers" }
   | { type: "profile"; args: string[] }
@@ -28,6 +29,10 @@ export type SlashCommandDefinition = {
   submitText?: string;
 };
 
+export type ParsedDirectCommand = {
+  command: string;
+};
+
 export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { name: "help", usage: "/help", description: "show this help" },
   { name: "providers", usage: "/providers", description: "list providers" },
@@ -37,6 +42,7 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { name: "install", usage: "/install <app>", description: "open app details", requiresArgument: true },
   { name: "projects", usage: "/projects", description: "list projects" },
   { name: "project", usage: "/project <id>", description: "switch project", requiresArgument: true },
+  { name: "permissions", usage: "/permissions [ask|full-access]", description: "show or change command access" },
   { name: "profile", usage: "/profile [status|diff|catalog|check|push]", description: "show or sync profile" },
   { name: "agents", usage: "/agents", description: "list agents" },
   { name: "agent", usage: "/agent <id>", description: "select agent", requiresArgument: true },
@@ -65,6 +71,7 @@ export function parseSlashCommand(text: string): SlashCommand | null {
   if (command === "projects") return { type: "projects" };
   if (command === "project") return { type: "project", id: rest.join(" ").trim() };
   if (command === "model") return { type: "model", id: rest.join(" ").trim() || null };
+  if (command === "permissions") return { type: "permissions", args: rest };
   if (command === "profile") return { type: "profile", args: rest };
   if (command === "logs") return { type: "logs" };
   if (command === "providers") return { type: "providers" };
@@ -80,6 +87,13 @@ export function parseSlashCommand(text: string): SlashCommand | null {
   }
   if (command === "settings") return { type: "settings", args: rest };
   return { type: "unknown", command };
+}
+
+export function parseDirectCommandPrompt(text: string): ParsedDirectCommand | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("!")) return null;
+  const command = trimmed.slice(1).trim();
+  return command ? { command } : null;
 }
 
 export function helpText(): string {

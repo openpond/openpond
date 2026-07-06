@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/large-scale-text-editing",
+        "ref": "sha256:f1196bcc75f57494f04617c635c7d23a8f231d25e68136dae02615eaa846ad90",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "large-scale-text-editing__dAQPgza",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

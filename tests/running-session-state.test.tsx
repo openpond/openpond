@@ -33,15 +33,45 @@ describe("running session state", () => {
     expect(html).toContain("selected=true");
     expect(html).toContain("running=chat_session");
   });
+
+  test("uses sidebar goal runtime map for provider-independent running goals", () => {
+    const chatSession = session({ id: "chat_session", status: "idle" });
+    const indexes = buildRuntimeIndexes([], []);
+    const goalRuntimeBySessionId = new Map([
+      [
+        chatSession.id,
+        {
+          objective: "Keep working",
+          status: "running",
+          timeUsedSeconds: 4,
+          tokensUsed: null,
+          tokenBudget: null,
+          actionLabel: "Pursuing goal",
+          timeLabel: "4s",
+          label: "Goal 4s",
+          detail: "Running",
+          tooltip: "Goal runtime: 4 seconds. Running. Keep working",
+          tone: "active" as const,
+        },
+      ],
+    ]);
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes, goalRuntimeBySessionId);
+
+    expect(html).toContain("selected=true");
+    expect(html).toContain("running=chat_session");
+  });
 });
 
 function renderRunningProbe(
   selectedSession: Session,
   sidebarSessions: Session[],
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>,
+  goalRuntimeBySessionId?: Parameters<typeof useRunningSessionState>[0]["goalRuntimeBySessionId"],
 ): string {
   return renderToStaticMarkup(
     createElement(RunningProbe, {
+      goalRuntimeBySessionId,
       selectedSession,
       sidebarSessions,
       runtimeIndexes,
@@ -50,16 +80,19 @@ function renderRunningProbe(
 }
 
 function RunningProbe({
+  goalRuntimeBySessionId,
   selectedSession,
   sidebarSessions,
   runtimeIndexes,
 }: {
+  goalRuntimeBySessionId?: Parameters<typeof useRunningSessionState>[0]["goalRuntimeBySessionId"];
   selectedSession: Session;
   sidebarSessions: Session[];
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
 }) {
   const state = useRunningSessionState({
     goalRuntime: latestGoalRuntimeForSession(runtimeIndexes, selectedSession.id),
+    goalRuntimeBySessionId,
     runtimeIndexes,
     selectedSession,
     selectedSessionId: selectedSession.id,

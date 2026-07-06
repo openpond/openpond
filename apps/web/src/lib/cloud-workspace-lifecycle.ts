@@ -12,8 +12,9 @@ const CLOUD_CODING_RUNTIME_PROFILE_ID = "openpond-coding-core-v1";
 const CLOUD_CODING_IDLE_TIMEOUT_SECONDS = 15 * 60;
 const CLOUD_CODING_MAX_SPEND_USD = "0.05";
 
-const CLOUD_SANDBOX_START_TIMEOUT_MS = 10 * 60_000;
-const CLOUD_SANDBOX_START_POLL_MS = 1_500;
+const DEFAULT_CLOUD_SANDBOX_START_TIMEOUT_MS = 10 * 60_000;
+const DEFAULT_CHAT_PREFLIGHT_SANDBOX_START_TIMEOUT_MS = 60_000;
+const DEFAULT_CLOUD_SANDBOX_START_POLL_MS = 1_500;
 
 export type CloudWorkspaceReadyStatus =
   | "already_running"
@@ -46,6 +47,14 @@ type EnsureCloudWorkspaceRunningInput = {
   localProject?: LocalProject | null;
   session: Session;
   source: string;
+  waitOptions?: CloudSandboxStartWaitOptions;
+};
+
+type CloudSandboxStartWaitOptions = {
+  delay?: (ms: number) => Promise<void>;
+  now?: () => number;
+  pollMs?: number;
+  timeoutMs?: number;
 };
 
 export async function ensureCloudWorkspaceRunning({
@@ -54,6 +63,7 @@ export async function ensureCloudWorkspaceRunning({
   localProject,
   session,
   source,
+  waitOptions,
 }: EnsureCloudWorkspaceRunningInput): Promise<CloudWorkspaceReadyResult> {
   if (!isCloudWorkspaceKind(session.workspaceKind)) {
     return {
@@ -74,8 +84,16 @@ export async function ensureCloudWorkspaceRunning({
       };
     }
     if (current?.state === "creating") {
+      assertAttachedCreatingSandboxNotStale(current, waitOptions);
       return {
-        sandbox: await waitForSandboxRunning(connection, attachedSandboxId),
+        sandbox: await waitForSandboxRunning(
+          connection,
+          attachedSandboxId,
+          withDefaultWaitTimeout(
+            waitOptions,
+            defaultSandboxStartTimeoutForSource(source),
+          ),
+        ),
         session,
         status: "waited_for_creating",
       };
@@ -93,11 +111,19 @@ export async function ensureCloudWorkspaceRunning({
       session,
       source,
       target,
+      waitOptions,
     });
     const nextSandbox =
       result.sandbox ??
       (result.session.workspaceId
-        ? await waitForSandboxRunning(connection, result.session.workspaceId)
+        ? await waitForSandboxRunning(
+            connection,
+            result.session.workspaceId,
+            withDefaultWaitTimeout(
+              waitOptions,
+              defaultSandboxStartTimeoutForSource(source),
+            ),
+          )
         : null);
     return {
       ...result,
@@ -118,6 +144,7 @@ export async function ensureCloudWorkspaceRunning({
     session,
     source,
     target,
+    waitOptions,
   });
 }
 
@@ -158,6 +185,7 @@ async function startCloudWorkspaceSession(input: {
   session: Session;
   source: string;
   target: CloudProjectTarget;
+  waitOptions?: CloudSandboxStartWaitOptions;
 }): Promise<CloudWorkspaceReadyResult> {
   const result = await api.workspaceTool(input.connection, input.session.id, {
     action: "sandbox_create",
@@ -179,7 +207,14 @@ async function startCloudWorkspaceSession(input: {
   const sandbox =
     sandboxFromResult?.state === "running" || !sandboxId
       ? sandboxFromResult
-      : await waitForSandboxRunning(input.connection, sandboxId);
+      : await waitForSandboxRunning(
+          input.connection,
+          sandboxId,
+          withDefaultWaitTimeout(
+            input.waitOptions,
+            defaultSandboxStartTimeoutForSource(input.source),
+          ),
+        );
 
   return {
     bootstrap,
@@ -235,22 +270,58 @@ async function readAttachedSandbox(
 async function waitForSandboxRunning(
   connection: ClientConnection,
   sandboxId: string,
+  waitOptions: CloudSandboxStartWaitOptions = {},
 ): Promise<SandboxRecord> {
-  const startedAt = Date.now();
+  const now = waitOptions.now ?? Date.now;
+  const timeoutMs = waitOptions.timeoutMs ?? DEFAULT_CLOUD_SANDBOX_START_TIMEOUT_MS;
+  const pollMs = waitOptions.pollMs ?? DEFAULT_CLOUD_SANDBOX_START_POLL_MS;
+  const sleep = waitOptions.delay ?? delay;
+  const startedAt = now();
   let latest: SandboxRecord | null = null;
-  while (Date.now() - startedAt < CLOUD_SANDBOX_START_TIMEOUT_MS) {
+  while (true) {
     latest = (await api.sandbox(connection, sandboxId)).sandbox;
     if (latest.state === "running") return latest;
     if (latest.state === "error" || latest.state === "deleted") {
       throw new Error(`Cloud sandbox ${sandboxId} is ${latest.state}.`);
     }
-    await delay(CLOUD_SANDBOX_START_POLL_MS);
+    if (now() - startedAt >= timeoutMs) break;
+    await sleep(pollMs);
   }
   throw new Error(
     `Timed out waiting for Cloud sandbox ${sandboxId} to start${
       latest ? `; latest state is ${latest.state}` : ""
     }.`,
   );
+}
+
+function assertAttachedCreatingSandboxNotStale(
+  sandbox: SandboxRecord,
+  waitOptions: CloudSandboxStartWaitOptions = {},
+): void {
+  const timeoutMs = waitOptions.timeoutMs ?? DEFAULT_CHAT_PREFLIGHT_SANDBOX_START_TIMEOUT_MS;
+  const createdAtMs = Date.parse(sandbox.createdAt);
+  if (!Number.isFinite(createdAtMs)) return;
+  const now = waitOptions.now ?? Date.now;
+  if (now() - createdAtMs < timeoutMs) return;
+  throw new Error(
+    `Timed out waiting for Cloud sandbox ${sandbox.id} to start; latest state is ${sandbox.state}.`,
+  );
+}
+
+function defaultSandboxStartTimeoutForSource(source: string): number {
+  return source.includes("chat-preflight")
+    ? DEFAULT_CHAT_PREFLIGHT_SANDBOX_START_TIMEOUT_MS
+    : DEFAULT_CLOUD_SANDBOX_START_TIMEOUT_MS;
+}
+
+function withDefaultWaitTimeout(
+  waitOptions: CloudSandboxStartWaitOptions | undefined,
+  timeoutMs: number,
+): CloudSandboxStartWaitOptions {
+  return {
+    ...waitOptions,
+    timeoutMs: waitOptions?.timeoutMs ?? timeoutMs,
+  };
 }
 
 function sandboxFromWorkspaceToolResult(result: WorkspaceToolResult): SandboxRecord | null {
@@ -266,5 +337,5 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

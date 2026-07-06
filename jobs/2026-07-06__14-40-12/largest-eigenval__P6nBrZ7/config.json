@@ -1,0 +1,10 @@
+{
+    "task": {
+        "name": "terminal-bench/largest-eigenval",
+        "ref": "sha256:89ed1e066ddb3e9fb78eae0c7d9b2fcf263af0962bd93b0ee07833248ecd0450",
+        "source": "terminal-bench/terminal-bench-2"
+    },
+    "trial_name": "largest-eigenval__P6nBrZ7",
+    "trials_dir": "jobs/2026-07-06__14-40-12",
+    "job_id": "2f4edf5a-379b-4a74-ab5a-1d23a7f52ea4"
+}

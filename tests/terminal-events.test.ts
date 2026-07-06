@@ -1,3 +1,5 @@
+import path from "node:path";
+import { Readable, Writable } from "node:stream";
 import { describe, expect, test } from "bun:test";
 import {
   emptyOpenPondProfileState,
@@ -13,11 +15,18 @@ import {
   TERMINAL_TURN_RUNNING_MESSAGE,
 } from "../apps/terminal/src/line-mode-turn-guard";
 
-import { parseTerminalArgs } from "../apps/terminal/src/args";
+import { parseTerminalArgs, resolveTerminalChatMode, shouldRunOneShotChat, TerminalUsageError } from "../apps/terminal/src/args";
 import {
   handleTerminalSlashCommand,
+  resolveTerminalCommandApproval,
   type TerminalCommandContext,
 } from "../apps/terminal/src/command-handlers";
+import {
+  formatTerminalCommandApprovalQuestion,
+  latestPendingCommandApproval,
+  parseTerminalPermissionChoice,
+  terminalPermissionDecision,
+} from "../apps/terminal/src/permissions";
 import {
   openTerminalEvents,
   readTerminalEventStream,
@@ -27,6 +36,11 @@ import {
   validateTerminalEventResponse,
 } from "../apps/terminal/src/events";
 import { apiFetch } from "../apps/terminal/src/connection";
+import {
+  runTerminalDirectCommand,
+  terminalDirectCommandBlockedReason,
+} from "../apps/terminal/src/direct-command";
+import { createOneShotAccumulator, runOneShotChat, TerminalOneShotExitError } from "../apps/terminal/src/one-shot-chat";
 import {
   activeModelId,
   blockingSetupRequirementsForAction,
@@ -60,6 +74,13 @@ import {
   limitActiveTranscriptItems,
   type TranscriptItem,
 } from "../apps/terminal/src/ui/transcript";
+import {
+  parseDirectCommandPrompt,
+  parseSlashCommand,
+} from "../apps/terminal/src/ui/commands";
+import { runProcessCommand } from "../apps/cli/src/process-runner";
+
+const REPO_ROOT = path.resolve(import.meta.dir, "..");
 
 function eventStreamResponse(frames: string): Response {
   const encoder = new TextEncoder();
@@ -131,6 +152,16 @@ describe("terminal argument parser", () => {
         project: null,
         resume: null,
         noServerStart: false,
+        message: null,
+        messageFile: null,
+        stdin: false,
+        nonInteractive: false,
+        json: false,
+        yes: false,
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+        timeoutSec: null,
+        maxOutputBytes: null,
       },
     });
   });
@@ -166,10 +197,758 @@ describe("terminal argument parser", () => {
         project: "local_project_1",
         resume: "session_1",
         noServerStart: true,
+        message: null,
+        messageFile: null,
+        stdin: false,
+        nonInteractive: false,
+        json: false,
+        yes: false,
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+        timeoutSec: null,
+        maxOutputBytes: null,
       },
     });
   });
+
+  test("parses one-shot chat options and keeps trust controls explicit", () => {
+    const parsed = parseTerminalArgs(
+      [
+        "chat",
+        "--message",
+        "fix the failing test",
+        "--stdin",
+        "--non-interactive",
+        "--json",
+        "--yes",
+        "--approval-policy",
+        "never",
+        "--sandbox",
+        "danger-full-access",
+        "--timeout-sec",
+        "120",
+        "--max-output-bytes",
+        "4096",
+      ],
+      "/repo",
+    );
+
+    expect(parsed.options).toMatchObject({
+      message: "fix the failing test",
+      stdin: true,
+      nonInteractive: true,
+      json: true,
+      yes: true,
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+      timeoutSec: 120,
+      maxOutputBytes: 4096,
+    });
+    expect(shouldRunOneShotChat(parsed.options)).toBe(true);
+  });
+
+  test("marks invalid one-shot option values as usage errors", () => {
+    expect(() => parseTerminalArgs(["chat", "--timeout-sec", "soon"], "/repo")).toThrow(
+      /timeout-sec must be a positive integer/,
+    );
+    try {
+      parseTerminalArgs(["chat", "--timeout-sec", "soon"], "/repo");
+      throw new Error("expected parseTerminalArgs to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TerminalUsageError);
+      expect((error as { exitCode?: number }).exitCode).toBe(2);
+    }
+  });
+
+  test("routes chat modes without stealing existing interactive and pipe line-mode paths", () => {
+    const baseOptions = parseTerminalArgs(["chat"], "/repo").options;
+    const oneShotOptions = parseTerminalArgs(["chat", "--message", "run this"], "/repo").options;
+
+    expect(resolveTerminalChatMode(baseOptions, { inputIsTTY: true, outputIsTTY: true })).toBe("interactive");
+    expect(resolveTerminalChatMode(baseOptions, { inputIsTTY: false, outputIsTTY: true })).toBe("line-mode");
+    expect(resolveTerminalChatMode(baseOptions, { inputIsTTY: true, outputIsTTY: false })).toBe("line-mode");
+    expect(resolveTerminalChatMode(oneShotOptions, { inputIsTTY: false, outputIsTTY: false })).toBe("one-shot");
+  });
+
+  test("direct terminal usage advertises the headless trust controls", async () => {
+    const result = await runProcessCommand(
+      process.execPath,
+      [path.join(REPO_ROOT, "apps", "terminal", "src", "index.ts"), "help"],
+      { timeoutMs: 5_000 },
+    );
+
+    expect(result.timedOut).toBe(false);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Usage: openpond-app chat");
+    expect(result.stdout).toContain("[--approval-policy POLICY]");
+    expect(result.stdout).toContain("[--sandbox MODE]");
+  });
 });
+
+describe("terminal one-shot chat result accumulator", () => {
+  test("collects assistant output and terminal completion metadata", () => {
+    const accumulator = createOneShotAccumulator();
+
+    accumulator.apply(runtimeEvent({
+      id: "event-1",
+      name: "assistant.delta",
+      turnId: "turn-1",
+      output: "done",
+    }));
+    accumulator.apply(runtimeEvent({
+      id: "event-2",
+      name: "command.output",
+      turnId: "turn-1",
+      output: "bun test",
+    }));
+    accumulator.apply(runtimeEvent({
+      id: "event-3",
+      name: "tool.completed",
+      action: "exec_command",
+      turnId: "turn-1",
+      output: "Command completed successfully.",
+    }));
+    accumulator.apply(runtimeEvent({
+      id: "event-4",
+      name: "workspace_action_result",
+      turnId: "turn-1",
+      output: "saved",
+    }));
+
+    const result = accumulator.result({
+      terminal: "turn.completed",
+      sessionId: "session-1",
+      provider: "openai",
+      model: "gpt-5",
+      cwd: "/repo",
+      startedAt: "2026-07-06T00:00:00.000Z",
+      startedAtMs: Date.now(),
+      error: null,
+    });
+
+    expect(result).toMatchObject({
+      status: "completed",
+      sessionId: "session-1",
+      turnId: "turn-1",
+      provider: "openai",
+      model: "gpt-5",
+      cwd: "/repo",
+      finalMessage: "done",
+      events: {
+        terminal: "turn.completed",
+        total: 4,
+        commands: 2,
+        workspaceActions: 1,
+      },
+      usage: null,
+      error: null,
+    });
+  });
+
+  test("maps failed, interrupted, timeout, and pre-turn error terminal states", () => {
+    for (const [terminal, expectedStatus] of [
+      ["turn.failed", "failed"],
+      ["turn.interrupted", "interrupted"],
+      ["timeout", "timeout"],
+      ["error", "failed"],
+    ] as const) {
+      const result = createOneShotAccumulator().result({
+        terminal,
+        sessionId: terminal === "error" ? null : "session-1",
+        provider: "openpond",
+        model: null,
+        cwd: "/repo",
+        startedAt: "2026-07-06T00:00:00.000Z",
+        startedAtMs: Date.now(),
+        error: expectedStatus === "failed" ? "boom" : null,
+      });
+
+      expect(result.status).toBe(expectedStatus);
+      expect(result.events.terminal).toBe(terminal);
+      if (terminal === "error") expect(result.sessionId).toBeNull();
+    }
+  });
+
+  test("caps final assistant output when max output bytes is set", () => {
+    const accumulator = createOneShotAccumulator({ maxOutputBytes: 5 });
+
+    accumulator.apply(runtimeEvent({
+      id: "event-1",
+      name: "assistant.delta",
+      output: "hello world",
+    }));
+
+    const result = accumulator.result({
+      terminal: "turn.completed",
+      sessionId: "session-1",
+      provider: "openpond",
+      model: "openpond-chat",
+      cwd: "/repo",
+      startedAt: "2026-07-06T00:00:00.000Z",
+      startedAtMs: Date.now(),
+      error: null,
+    });
+
+    expect(result.finalMessage).toBe("hello");
+    expect(result.output).toEqual({
+      finalMessageBytes: 5,
+      truncated: true,
+      maxOutputBytes: 5,
+    });
+  });
+
+  test("captures authoritative context usage snapshots and ignores heuristic snapshots", () => {
+    const accumulator = createOneShotAccumulator();
+    accumulator.apply(runtimeEvent({
+      id: "event-heuristic-usage",
+      name: "session.context.updated",
+      turnId: "turn-1",
+      data: {
+        provider: "openpond",
+        model: "openpond-chat",
+        usedTokens: 80,
+        maxContextTokens: 128000,
+        usableContextTokens: 117760,
+        percentFull: 1,
+        source: "heuristic",
+        updatedAtEventId: "event-heuristic-usage",
+      },
+    }));
+    accumulator.apply(runtimeEvent({
+      id: "event-provider-usage",
+      name: "session.context.updated",
+      turnId: "turn-1",
+      data: {
+        provider: "openpond",
+        model: "openpond-chat",
+        usedTokens: 123,
+        maxContextTokens: 128000,
+        usableContextTokens: 117760,
+        percentFull: 1,
+        source: "provider_usage",
+        updatedAtEventId: "event-provider-usage",
+      },
+    }));
+
+    const result = accumulator.result({
+      terminal: "turn.completed",
+      sessionId: "session-1",
+      provider: "openpond",
+      model: "openpond-chat",
+      cwd: "/repo",
+      startedAt: "2026-07-06T00:00:00.000Z",
+      startedAtMs: Date.now(),
+      error: null,
+    });
+
+    expect(result.usage).toEqual({
+      provider: "openpond",
+      model: "openpond-chat",
+      usedTokens: 123,
+      maxContextTokens: 128000,
+      usableContextTokens: 117760,
+      percentFull: 1,
+      source: "provider_usage",
+      updatedAtEventId: "event-provider-usage",
+    });
+  });
+});
+
+describe("terminal one-shot chat runner", () => {
+  test("rejects ambiguous one-shot input sources before contacting the server", async () => {
+    const options = parseTerminalArgs(["chat", "--message", "from message", "--stdin", "--non-interactive"], "/repo").options;
+
+    try {
+      await runOneShotChat(options, { input: Readable.from(["from stdin"]) });
+      throw new Error("expected runOneShotChat to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TerminalOneShotExitError);
+      expect((error as { exitCode?: number }).exitCode).toBe(2);
+      expect(error).toHaveProperty(
+        "message",
+        "openpond chat --non-interactive accepts exactly one instruction source; received --message, --stdin.",
+      );
+    }
+  });
+
+  test("submits one turn, waits for terminal completion, and emits structured JSON", async () => {
+    const fake = startOneShotFakeServer([
+      runtimeEvent({
+        id: "event-assistant",
+        name: "assistant.delta",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "Task complete.",
+      }),
+      runtimeEvent({
+        id: "event-provider-usage",
+        name: "session.context.updated",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        data: {
+          provider: "openpond",
+          model: "openpond-chat",
+          usedTokens: 456,
+          maxContextTokens: 128000,
+          usableContextTokens: 117760,
+          percentFull: 1,
+          source: "provider_usage",
+          updatedAtEventId: "event-provider-usage",
+        },
+      }),
+      runtimeEvent({
+        id: "event-completed",
+        name: "turn.completed",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "done",
+      }),
+    ]);
+    const output = createStringWritable();
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      const result = await runOneShotChat(
+        parseTerminalArgs(
+          [
+            "chat",
+            "--server",
+            fake.url,
+            "--message",
+            "Run the benchmark task",
+            "--non-interactive",
+            "--json",
+            "--yes",
+            "--sandbox",
+            "workspace-write",
+            "--timeout-sec",
+            "5",
+          ],
+          "/bench/task",
+        ).options,
+        {
+          output: output.stream,
+          connection: { server: fake.url, token: "test-token" },
+        },
+      );
+
+      const printed = JSON.parse(output.text()) as typeof result;
+      expect(result.status).toBe("completed");
+      expect(printed.status).toBe("completed");
+      expect(printed.finalMessage).toBe("Task complete.");
+      expect(printed.usage).toMatchObject({
+        provider: "openpond",
+        model: "openpond-chat",
+        usedTokens: 456,
+        source: "provider_usage",
+      });
+      expect(fake.turnRequests).toHaveLength(1);
+      expect(fake.turnRequests[0]).toMatchObject({
+        prompt: "Run the benchmark task",
+        cwd: "/bench/task",
+        approvalPolicy: "never",
+        sandbox: "workspace-write",
+        metadata: {
+          openpondTerminalMode: "one-shot",
+          openpondTerminal: {
+            mode: "one-shot",
+            nonInteractive: true,
+            sandbox: "workspace-write",
+          },
+        },
+      });
+      expect(fake.sessionRequests[0]).toMatchObject({
+        openPondCommandAccessMode: "full-access",
+        metadata: {
+          openpondTerminalMode: "one-shot",
+          openpondTerminal: {
+            mode: "one-shot",
+            sandbox: "workspace-write",
+          },
+        },
+      });
+    } finally {
+      process.exitCode = previousExitCode;
+      fake.stop();
+    }
+  });
+
+  test("waits for the event stream to connect before posting a one-shot turn", async () => {
+    let releaseEventStream!: () => void;
+    const eventStreamGate = new Promise<void>((resolve) => {
+      releaseEventStream = resolve;
+    });
+    const fake = startOneShotFakeServer(
+      [
+        runtimeEvent({
+          id: "event-completed",
+          name: "turn.completed",
+          sessionId: "session-one-shot",
+          turnId: "turn-one-shot",
+          output: "done",
+        }),
+      ],
+      { eventStreamGate },
+    );
+    const output = createStringWritable();
+
+    try {
+      const running = runOneShotChat(
+        parseTerminalArgs(
+          [
+            "chat",
+            "--server",
+            fake.url,
+            "--message",
+            "Run after stream connects",
+            "--non-interactive",
+            "--json",
+            "--timeout-sec",
+            "5",
+          ],
+          "/bench/task",
+        ).options,
+        {
+          output: output.stream,
+          connection: { server: fake.url, token: "test-token" },
+        },
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(fake.turnRequests).toHaveLength(0);
+      releaseEventStream();
+      const result = await running;
+      expect(result.status).toBe("completed");
+      expect(fake.turnRequests).toHaveLength(1);
+    } finally {
+      fake.stop();
+    }
+  });
+
+  test("reconnects the event stream before posting a one-shot turn", async () => {
+    const fake = startOneShotFakeServer(
+      [
+        runtimeEvent({
+          id: "event-completed",
+          name: "turn.completed",
+          sessionId: "session-one-shot",
+          turnId: "turn-one-shot",
+          output: "done",
+        }),
+      ],
+      { eventStreamFailuresBeforeReady: 1 },
+    );
+    const output = createStringWritable();
+
+    try {
+      const result = await runOneShotChat(
+        parseTerminalArgs(
+          [
+            "chat",
+            "--server",
+            fake.url,
+            "--message",
+            "Run after stream reconnects",
+            "--non-interactive",
+            "--json",
+            "--timeout-sec",
+            "2",
+          ],
+          "/bench/task",
+        ).options,
+        {
+          output: output.stream,
+          connection: { server: fake.url, token: "test-token" },
+        },
+      );
+
+      expect(result.status).toBe("completed");
+      expect(fake.eventStreamRequests).toBe(2);
+      expect(fake.turnRequests).toHaveLength(1);
+    } finally {
+      fake.stop();
+    }
+  });
+
+  test("times out before posting a turn when the event stream never connects", async () => {
+    const fake = startOneShotFakeServer([], { eventStreamGate: new Promise(() => undefined) });
+    const output = createStringWritable();
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      const options = parseTerminalArgs(
+        [
+          "chat",
+          "--server",
+          fake.url,
+          "--message",
+          "Run only if stream connects",
+          "--non-interactive",
+          "--json",
+          "--timeout-sec",
+          "1",
+        ],
+        "/bench/task",
+      ).options;
+      options.timeoutSec = 0.01;
+
+      const result = await runOneShotChat(options, {
+        output: output.stream,
+        connection: { server: fake.url, token: "test-token" },
+      });
+
+      const printed = JSON.parse(output.text()) as typeof result;
+      expect(result.status).toBe("timeout");
+      expect(printed.status).toBe("timeout");
+      expect(process.exitCode).toBe(124);
+      expect(fake.turnRequests).toHaveLength(0);
+      expect(fake.interruptRequests).toBe(0);
+    } finally {
+      process.exitCode = previousExitCode ?? 0;
+      fake.stop();
+    }
+  });
+
+  test("streams human-readable output when JSON is not requested", async () => {
+    const fake = startOneShotFakeServer([
+      runtimeEvent({
+        id: "event-assistant",
+        name: "assistant.delta",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "Human task complete.",
+      }),
+      runtimeEvent({
+        id: "event-command",
+        name: "command.output",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "bun test",
+      }),
+      runtimeEvent({
+        id: "event-workspace",
+        name: "workspace_action_result",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "updated file",
+      }),
+      runtimeEvent({
+        id: "event-completed",
+        name: "turn.completed",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "done",
+      }),
+    ]);
+    const output = createStringWritable();
+
+    try {
+      const result = await runOneShotChat(
+        parseTerminalArgs(
+          [
+            "chat",
+            "--server",
+            fake.url,
+            "--message",
+            "Run the human output task",
+            "--non-interactive",
+            "--timeout-sec",
+            "5",
+          ],
+          "/bench/task",
+        ).options,
+        {
+          output: output.stream,
+          connection: { server: fake.url, token: "test-token" },
+        },
+      );
+
+      const printed = output.text();
+      expect(result.status).toBe("completed");
+      expect(printed).toContain("OpenPond OpenPond / OpenPond Chat /bench/task");
+      expect(printed).toContain("Human task complete.");
+      expect(printed).toContain("[command] bun test");
+      expect(printed).toContain("[openpond] updated file");
+      expect(printed).toContain("[turn completed]");
+      expect(printed).not.toContain('"status":');
+      expect(fake.turnRequests).toHaveLength(1);
+    } finally {
+      fake.stop();
+    }
+  });
+
+  test("interrupts the active turn and exits 124 when one-shot chat times out", async () => {
+    const fake = startOneShotFakeServer([]);
+    const output = createStringWritable();
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      const options = parseTerminalArgs(
+        [
+          "chat",
+          "--server",
+          fake.url,
+          "--message",
+          "Run until timeout",
+          "--non-interactive",
+          "--json",
+          "--timeout-sec",
+          "1",
+        ],
+        "/bench/task",
+      ).options;
+      options.timeoutSec = 0.01;
+
+      const result = await runOneShotChat(options, {
+        output: output.stream,
+        connection: { server: fake.url, token: "test-token" },
+      });
+
+      const printed = JSON.parse(output.text()) as typeof result;
+      expect(result.status).toBe("timeout");
+      expect(printed.status).toBe("timeout");
+      expect(printed.error).toBe("Timed out after 0.01s.");
+      expect(process.exitCode).toBe(124);
+      expect(fake.turnRequests).toHaveLength(1);
+      expect(fake.interruptRequests).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode ?? 0;
+      fake.stop();
+    }
+  });
+});
+
+function createStringWritable(): { stream: Writable; text: () => string } {
+  let text = "";
+  return {
+    stream: new Writable({
+      write(chunk, _encoding, callback) {
+        text += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+        callback();
+      },
+    }),
+    text: () => text,
+  };
+}
+
+function startOneShotFakeServer(
+  events: RuntimeEvent[],
+  options: { eventStreamGate?: Promise<void>; eventStreamFailuresBeforeReady?: number } = {},
+): {
+  url: string;
+  sessionRequests: Record<string, unknown>[];
+  turnRequests: Record<string, unknown>[];
+  interruptRequests: number;
+  eventStreamRequests: number;
+  stop: () => void;
+} {
+  const encoder = new TextEncoder();
+  const eventControllers = new Set<ReadableStreamDefaultController<Uint8Array>>();
+  const queuedFrames: string[] = [];
+  const sessionRequests: Record<string, unknown>[] = [];
+  const turnRequests: Record<string, unknown>[] = [];
+  let interruptRequests = 0;
+  let eventStreamRequests = 0;
+  const now = "2026-07-06T00:00:00.000Z";
+
+  function enqueueFrame(frame: string): void {
+    if (eventControllers.size === 0) {
+      queuedFrames.push(frame);
+      return;
+    }
+    for (const controller of eventControllers) {
+      controller.enqueue(encoder.encode(frame));
+    }
+  }
+
+  function emitRuntimeEvent(event: RuntimeEvent): void {
+    enqueueFrame(`data: ${JSON.stringify(event)}\n\n`);
+  }
+
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url);
+      if (url.pathname === "/health") return new Response("ok");
+      if (url.pathname === "/v1/bootstrap") return Response.json(terminalSessionBootstrapFixture());
+      if (request.method === "POST" && url.pathname === "/v1/sessions") {
+        const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+        sessionRequests.push(body);
+        return Response.json({
+          id: "session-one-shot",
+          provider: body.provider ?? "openpond",
+          modelRef: body.modelRef ?? null,
+          openPondCommandAccessMode: body.openPondCommandAccessMode ?? "ask",
+          title: body.title ?? "Terminal chat",
+          appId: body.appId ?? null,
+          appName: body.appName ?? null,
+          cwd: body.cwd ?? null,
+          codexThreadId: null,
+          createdAt: now,
+          updatedAt: now,
+          status: "idle",
+          pinned: false,
+          archived: false,
+          order: 0,
+        });
+      }
+      if (url.pathname === "/v1/events") {
+        eventStreamRequests += 1;
+        if (eventStreamRequests <= (options.eventStreamFailuresBeforeReady ?? 0)) {
+          return Response.json({ error: "event stream temporarily unavailable" }, { status: 503 });
+        }
+        await options.eventStreamGate;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              eventControllers.add(controller);
+              controller.enqueue(encoder.encode('event: ready\ndata: {"ok": true}\n\n'));
+              for (const frame of queuedFrames.splice(0)) {
+                controller.enqueue(encoder.encode(frame));
+              }
+            },
+            cancel() {
+              eventControllers.clear();
+            },
+          }),
+          {
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      }
+      if (request.method === "POST" && url.pathname === "/v1/sessions/session-one-shot/turns") {
+        const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+        turnRequests.push(body);
+        queueMicrotask(() => {
+          for (const event of events) emitRuntimeEvent(event);
+        });
+        return Response.json({ id: "turn-one-shot" }, { status: 202 });
+      }
+      if (request.method === "POST" && url.pathname === "/v1/sessions/session-one-shot/turns/interrupt") {
+        interruptRequests += 1;
+        return Response.json({ ok: true }, { status: 202 });
+      }
+      return Response.json({ error: "not found" }, { status: 404 });
+    },
+  });
+
+  return {
+    url: `http://127.0.0.1:${server.port}`,
+    sessionRequests,
+    turnRequests,
+    get interruptRequests() {
+      return interruptRequests;
+    },
+    get eventStreamRequests() {
+      return eventStreamRequests;
+    },
+    stop: () => server.stop(true),
+  };
+}
 
 function terminalProviderSettingsFixture(): ProviderSettings {
   return ProviderSettingsSchema.parse({
@@ -304,6 +1083,11 @@ function terminalSessionBootstrapFixture(): BootstrapPayload {
     profile: terminalProfileFixture(),
     sessions: [
       {
+        id: "session-current",
+        provider: "openpond",
+        openPondCommandAccessMode: "ask",
+      },
+      {
         id: "session-openai",
         provider: "openpond",
         modelRef: {
@@ -322,6 +1106,7 @@ function terminalSessionBootstrapFixture(): BootstrapPayload {
         provider: "codex",
       },
     ],
+    approvals: [],
   } as unknown as BootstrapPayload;
 }
 
@@ -615,6 +1400,17 @@ describe("terminal session-state helpers", () => {
 });
 
 describe("terminal slash command handler", () => {
+  test("parses permissions and direct command prompts", () => {
+    expect(parseSlashCommand("/permissions full-access")).toEqual({
+      type: "permissions",
+      args: ["full-access"],
+    });
+    expect(parseDirectCommandPrompt("!docker system df")).toEqual({
+      command: "docker system df",
+    });
+    expect(parseDirectCommandPrompt("!   ")).toBeNull();
+  });
+
   test("switches provider and resets explicit model selection", async () => {
     const fixture = terminalCommandContextFixture();
 
@@ -697,6 +1493,234 @@ describe("terminal slash command handler", () => {
       cwd: "/repo/site",
     });
   });
+
+  test("permissions command patches active session command access mode", async () => {
+    const originalFetch = globalThis.fetch;
+    const fixture = terminalCommandContextFixture();
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = (async (url, init) => {
+      requests.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ id: "session-current", openPondCommandAccessMode: "full-access" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      await handleTerminalSlashCommand(
+        { type: "permissions", args: ["full-access"] },
+        fixture.context,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:17874/v1/sessions/session-current",
+        body: { openPondCommandAccessMode: "full-access" },
+      },
+    ]);
+    expect(fixture.items[0]?.kind === "system" ? fixture.items[0].text : "").toContain(
+      "Command access set to Full access.",
+    );
+  });
+
+  test("permissions command opens pending command approval question mode", async () => {
+    let openedApprovalId: string | null = null;
+    const payload = {
+      ...terminalSessionBootstrapFixture(),
+      approvals: [
+        {
+          id: "approval-command-1",
+          sessionId: "session-current",
+          turnId: "turn-1",
+          providerRequestId: "request-1",
+          kind: "command",
+          title: "docker system df",
+          detail: JSON.stringify({
+            command: "docker system df",
+            cwd: "/repo/site",
+            risk: "read",
+            timeoutSeconds: 120,
+            sessionApprovalFamily: {
+              label: "docker system",
+            },
+          }),
+          status: "pending",
+          createdAt: "2026-07-06T00:00:00.000Z",
+        },
+      ],
+    } as unknown as BootstrapPayload;
+    const fixture = terminalCommandContextFixture(payload);
+    fixture.context.openCommandApprovalQuestion = (approval) => {
+      openedApprovalId = approval.id;
+    };
+
+    await handleTerminalSlashCommand(
+      { type: "permissions", args: [] },
+      fixture.context,
+    );
+
+    expect(openedApprovalId).toBe("approval-command-1");
+    expect(latestPendingCommandApproval(payload, "session-current")?.id).toBe("approval-command-1");
+    expect(formatTerminalCommandApprovalQuestion(payload.approvals[0]!)).toContain("session approval family: docker system");
+  });
+
+  test("terminal permission choices map to approval resolution decisions", async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = (async (url, init) => {
+      requests.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ id: "approval-command-1", status: "accepted_for_session" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      expect(parseTerminalPermissionChoice("session")).toBe("session");
+      expect(terminalPermissionDecision("session")).toBe("acceptForSession");
+      await resolveTerminalCommandApproval(
+        { server: "http://127.0.0.1:17874", token: "local-token" },
+        "approval-command-1",
+        "session",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:17874/v1/approvals/approval-command-1",
+        body: { decision: "acceptForSession" },
+      },
+    ]);
+  });
+
+  test("terminal direct commands post to the dedicated command endpoint", async () => {
+    const originalFetch = globalThis.fetch;
+    const session = {
+      id: "session-current",
+      provider: "openpond",
+      workspaceKind: "local_project",
+      cwd: "/repo/site",
+    } as BootstrapPayload["sessions"][number];
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = (async (url, init) => {
+      requests.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ session, events: [], result: { ok: true } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      expect(terminalDirectCommandBlockedReason(session)).toBeNull();
+      await expect(
+        runTerminalDirectCommand(
+          { server: "http://127.0.0.1:17874", token: "local-token" },
+          session,
+          "docker system df",
+        ),
+      ).resolves.toMatchObject({ result: { ok: true } });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:17874/v1/sessions/session-current/commands",
+        body: {
+          command: "docker system df",
+          cwd: "/repo/site",
+        },
+      },
+    ]);
+  });
+
+  test("terminal direct commands post sandbox sessions to the dedicated command endpoint", async () => {
+    const originalFetch = globalThis.fetch;
+    const session = {
+      id: "session-sandbox",
+      provider: "openpond",
+      workspaceKind: "sandbox",
+      workspaceId: "sandbox-1",
+      cwd: null,
+    } as BootstrapPayload["sessions"][number];
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = (async (url, init) => {
+      requests.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ session, events: [], result: { ok: true } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      expect(terminalDirectCommandBlockedReason(session)).toBeNull();
+      await expect(
+        runTerminalDirectCommand(
+          { server: "http://127.0.0.1:17874", token: "local-token" },
+          session,
+          "bun run typecheck",
+        ),
+      ).resolves.toMatchObject({ result: { ok: true } });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:17874/v1/sessions/session-sandbox/commands",
+        body: {
+          command: "bun run typecheck",
+          cwd: null,
+        },
+      },
+    ]);
+  });
+
+  test("terminal direct commands require a supported workspace session", () => {
+    expect(terminalDirectCommandBlockedReason(null)).toBe("Select a project to use this.");
+    expect(
+      terminalDirectCommandBlockedReason({
+        id: "session-codex",
+        provider: "codex",
+        workspaceKind: "local_project",
+        cwd: "/repo/site",
+      } as BootstrapPayload["sessions"][number]),
+    ).toBe("Select a project to use this.");
+    expect(
+      terminalDirectCommandBlockedReason({
+        id: "session-cloud",
+        provider: "openpond",
+        workspaceKind: "sandbox",
+        workspaceId: "sandbox-1",
+        cwd: null,
+      } as BootstrapPayload["sessions"][number]),
+    ).toBeNull();
+    expect(
+      terminalDirectCommandBlockedReason({
+        id: "session-cloud-missing-workspace",
+        provider: "openpond",
+        workspaceKind: "sandbox",
+        cwd: null,
+      } as BootstrapPayload["sessions"][number]),
+    ).toBe("Select a project to use this.");
+  });
 });
 
 describe("terminal event stream helpers", () => {
@@ -773,6 +1797,8 @@ describe("terminal event stream helpers", () => {
     await readTerminalEventStream(
       eventStreamResponse(
         [
+          'event: ready\ndata: {"ok":true}',
+          "",
           'data: {"name":"turn.started","sessionId":"active"}',
           "",
           'data: {"name":"turn.started","sessionId":"other"}',
@@ -806,38 +1832,34 @@ describe("terminal event stream helpers", () => {
     const events: RuntimeEvent[] = [];
     let requestCount = 0;
     let controller: AbortController | null = null;
+    let resolveCompleted = (): void => undefined;
     const completed = new Promise<void>((resolve) => {
-      void openTerminalEvents({
-        server: "http://127.0.0.1:17874",
-        token: "local-token",
-        activeSessionId: () => "active",
-        reconnectDelayMs: () => 0,
-        onStatus: (status) => statuses.push(status),
-        onEvent: (event) => {
-          events.push(event);
-          controller?.abort();
-          resolve();
-        },
-        fetchImpl: async () => {
-          requestCount += 1;
-          if (requestCount === 1) return new Response(null, { status: 503, statusText: "unavailable" });
-          return eventStreamResponse('data: {"id":"event-after-reconnect","name":"turn.completed","sessionId":"active","timestamp":"2026-07-01T00:00:00.000Z"}\n\n');
-        },
-      }).then((handle) => {
-        controller = handle;
-      });
+      resolveCompleted = resolve;
     });
+    const handle = await openTerminalEvents({
+      server: "http://127.0.0.1:17874",
+      token: "local-token",
+      activeSessionId: () => "active",
+      reconnectDelayMs: () => 0,
+      onStatus: (status) => statuses.push(status),
+      onEvent: (event) => {
+        events.push(event);
+        controller?.abort();
+        resolveCompleted();
+      },
+      fetchImpl: async () => {
+        requestCount += 1;
+        if (requestCount === 1) return new Response(null, { status: 503, statusText: "unavailable" });
+        return eventStreamResponse('data: {"id":"event-after-reconnect","name":"turn.completed","sessionId":"active","timestamp":"2026-07-01T00:00:00.000Z"}\n\n');
+      },
+    });
+    controller = handle;
 
+    await expect(handle.ready).resolves.toBeUndefined();
     await completed;
 
     expect(requestCount).toBe(2);
-    expect(statuses.map((status) => status.state)).toEqual([
-      "connecting",
-      "connected",
-      "disconnected",
-      "connecting",
-      "connected",
-    ]);
+    expect(statuses.map((status) => status.state)).toEqual(["connecting", "disconnected", "connecting", "connected"]);
     expect(events.map((event) => event.id)).toEqual(["event-after-reconnect"]);
   });
 });

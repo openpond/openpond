@@ -932,8 +932,8 @@ describe("chat message projection", () => {
     expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
       "Starting Create Pipeline",
       "Started Create Pipeline",
-      "Starting profile skill goal",
-      "Started profile skill goal",
+      "Creating profile skill",
+      "Created profile skill",
       "Updating goal",
       "Updated goal",
     ]);
@@ -1198,6 +1198,199 @@ describe("chat message projection", () => {
     );
     expect(html).toContain("Searched code");
     expect(html).not.toContain("activityGroupSummary");
+  });
+
+  test("merges workspace action results into the started activity row", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "sandbox_create_started",
+        name: "workspace_action",
+        action: "sandbox_create",
+        status: "started",
+        sessionId: "session_1",
+      }),
+      runtimeEvent({
+        id: "sandbox_create_completed",
+        name: "workspace_action_result",
+        action: "sandbox_create",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Sandbox workspace attached: sandbox_123 (creating)",
+      }),
+    ]);
+
+    const activities = messages[0]?.activities ?? [];
+    expect(activities).toHaveLength(1);
+    expect(activities[0]?.label).toBe("Started sandbox");
+    expect(activities[0]?.content).toBe("Sandbox workspace attached: sandbox_123 (creating)");
+    expect(activities[0]?.state).toBe("completed");
+
+    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[0]! }));
+    expect(html).toContain("Started sandbox");
+    expect(html).not.toContain("Starting sandbox");
+  });
+
+  test("merges failed workspace action results into the started activity row", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "sandbox_stop_started",
+        name: "workspace_action",
+        action: "sandbox_stop",
+        status: "started",
+        sessionId: "session_1",
+      }),
+      runtimeEvent({
+        id: "sandbox_stop_failed",
+        name: "workspace_action_result",
+        action: "sandbox_stop",
+        status: "failed",
+        sessionId: "session_1",
+        output: "Sandbox stop failed.",
+      }),
+    ]);
+
+    const activities = messages[0]?.activities ?? [];
+    expect(activities).toHaveLength(1);
+    expect(activities[0]?.label).toBe("Sandbox stop failed");
+    expect(activities[0]?.content).toBe("Sandbox stop failed.");
+    expect(activities[0]?.state).toBe("failed");
+  });
+
+  test("summarizes mixed generic workspace actions instead of hiding later actions", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "sandbox_preserve_started",
+        name: "workspace_action",
+        action: "sandbox_preserve_source",
+        status: "started",
+        sessionId: "session_1",
+      }),
+      runtimeEvent({
+        id: "sandbox_preserve_failed",
+        name: "workspace_action_result",
+        action: "sandbox_preserve_source",
+        status: "failed",
+        sessionId: "session_1",
+        output: "placement_stale",
+      }),
+      runtimeEvent({
+        id: "sandbox_stop_started",
+        name: "workspace_action",
+        action: "sandbox_stop",
+        status: "started",
+        sessionId: "session_1",
+      }),
+      runtimeEvent({
+        id: "sandbox_stop_completed",
+        name: "workspace_action_result",
+        action: "sandbox_stop",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Stopped sandbox.",
+      }),
+    ]);
+
+    const activities = messages[0]?.activities ?? [];
+    expect(activities).toHaveLength(2);
+    expect(activityGroupSummary(activities)).toBe("Preserve failed and stopped sandbox");
+  });
+
+  test("surfaces apply and stop outcomes when mixed with read actions", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "sandbox_exec_completed",
+        name: "workspace_action_result",
+        action: "sandbox_exec",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Command succeeded",
+      }),
+      runtimeEvent({
+        id: "sandbox_read_completed",
+        name: "workspace_action_result",
+        action: "sandbox_read_file",
+        status: "completed",
+        sessionId: "session_1",
+        output: "README.md",
+      }),
+      runtimeEvent({
+        id: "sandbox_git_status_completed",
+        name: "workspace_action_result",
+        action: "sandbox_git_status",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Sandbox git status has 1 changed file.",
+      }),
+      runtimeEvent({
+        id: "sandbox_apply_completed",
+        name: "workspace_action_result",
+        action: "sandbox_git_apply_patch_local",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Applied sandbox patch to github-pr-tracker-9: 1 changed file.",
+      }),
+      runtimeEvent({
+        id: "sandbox_preserve_completed",
+        name: "workspace_action_result",
+        action: "sandbox_preserve_source",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Preserved sandbox changes.",
+      }),
+      runtimeEvent({
+        id: "sandbox_stop_completed",
+        name: "workspace_action_result",
+        action: "sandbox_stop",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Stopped sandbox.",
+      }),
+      runtimeEvent({
+        id: "sandbox_status_with_receipt",
+        name: "workspace_action",
+        action: "sandbox_status",
+        status: "started",
+        sessionId: "session_1",
+      }),
+      runtimeEvent({
+        id: "sandbox_status_with_receipt_result",
+        name: "workspace_action_result",
+        action: "sandbox_status",
+        status: "completed",
+        sessionId: "session_1",
+        output: "Read sandbox status.",
+        data: {
+          workspaceExecutionTarget: {
+            target: "sandbox",
+            sandboxId: "sandbox_receipt_1234567890",
+            hybrid: true,
+          },
+          sandbox: {
+            receipts: [
+              {
+                id: "receipt_1234567890",
+                status: "captured",
+                totalUsd: "0.011696",
+              },
+            ],
+          },
+        },
+      }),
+    ]);
+
+    const activities = messages[0]?.activities ?? [];
+    expect(activityGroupSummary(activities)).toBe(
+      "Read a file, applied locally, preserved sandbox source, stopped sandbox, and captured receipt receip...7890 $0.011696",
+    );
+    expect(activities.at(-1)).toMatchObject({
+      label: "Checked sandbox",
+      meta: "Hybrid sandbox sandbo...7890 · receipt receip...7890 · $0.011696 captured",
+      receipt: {
+        id: "receipt_1234567890",
+        status: "captured",
+        totalUsd: "0.011696",
+      },
+    });
   });
 
   test("summarizes mixed command groups with deterministic counts", () => {
