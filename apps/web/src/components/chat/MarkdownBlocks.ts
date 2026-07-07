@@ -18,6 +18,7 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   let listOrdered = false;
   let codeLines: string[] | null = null;
   let codeLanguage: string | undefined;
+  let codeFenceTicks = 0;
 
   function flushParagraph() {
     if (paragraph.length === 0) return;
@@ -34,23 +35,25 @@ export function parseBlocks(content: string): MarkdownBlock[] {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]!;
-    const fence = line.match(/^```\s*([A-Za-z0-9_-]+)?\s*$/);
-    if (fence) {
-      if (codeLines) {
+    if (codeLines) {
+      if (isClosingFenceLine(line, codeFenceTicks)) {
         blocks.push({ type: "code", content: codeLines.join("\n"), language: codeLanguage });
         codeLines = null;
         codeLanguage = undefined;
-      } else {
-        flushParagraph();
-        flushList();
-        codeLines = [];
-        codeLanguage = fence[1];
+        codeFenceTicks = 0;
+        continue;
       }
+      codeLines.push(line);
       continue;
     }
 
-    if (codeLines) {
-      codeLines.push(line);
+    const fence = parseOpeningFenceLine(line);
+    if (fence) {
+      flushParagraph();
+      flushList();
+      codeLines = fence.firstLine === undefined ? [] : [fence.firstLine];
+      codeLanguage = fence.language;
+      codeFenceTicks = fence.ticks;
       continue;
     }
 
@@ -63,12 +66,12 @@ export function parseBlocks(content: string): MarkdownBlock[] {
       continue;
     }
 
-    const headingMatch = line.match(/^\s*#{1,4}\s+(.+)$/);
+    const headingMatch = line.match(/^\s*(#{1,4})(?:\s+|(?=\d+[.)]\s+))(.+)$/);
     if (headingMatch) {
       flushParagraph();
       flushList();
-      const level = Math.min(4, Math.max(1, line.trimStart().indexOf(" "))) as 1 | 2 | 3 | 4;
-      blocks.push({ type: "heading", level, content: headingMatch[1]!.trim() });
+      const level = headingMatch[1]!.length as 1 | 2 | 3 | 4;
+      blocks.push({ type: "heading", level, content: headingMatch[2]!.trim() });
       continue;
     }
 
@@ -96,6 +99,24 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   flushParagraph();
   flushList();
   return blocks;
+}
+
+function isClosingFenceLine(line: string, minTicks: number): boolean {
+  const fence = line.match(/^\s*(`{2,})\s*(?:[A-Za-z0-9_-]+)?\s*$/);
+  return Boolean(fence && fence[1]!.length >= minTicks);
+}
+
+function parseOpeningFenceLine(line: string): { language?: string; firstLine?: string; ticks: number } | null {
+  const standardFence = line.match(/^\s*(`{2,})\s*([A-Za-z0-9_-]+)?\s*$/);
+  if (standardFence) return { language: standardFence[2], ticks: standardFence[1]!.length };
+
+  const runOnFence = line.match(/^\s*(`{2,})\s*([A-Za-z][A-Za-z0-9_-]*)(?:\s+(\S.*)|(\S.*))$/);
+  if (!runOnFence) return null;
+  return {
+    language: runOnFence[2],
+    firstLine: runOnFence[3] ?? runOnFence[4],
+    ticks: runOnFence[1]!.length,
+  };
 }
 
 function parseListItem(value: string): MarkdownListItem {

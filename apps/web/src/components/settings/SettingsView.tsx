@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
-import type { ClientConnection } from "../../api";
+import type { ClientConnection, PreferencesPayload } from "../../api";
 import { EMPTY_PERSONALIZATION, normalizePreferences } from "../../lib/app-models";
 import type { SettingsSection } from "../../lib/app-models";
 import { AccountSettingsSection } from "./AccountSettingsSection";
@@ -54,11 +54,19 @@ export function SettingsView({
     },
     [onPayload, payload],
   );
+  const applyPreferencesPayload = useCallback(
+    (preferencesPayload: PreferencesPayload) => {
+      if (!payload) return;
+      onPayload({ ...payload, preferences: preferencesPayload.preferences });
+    },
+    [onPayload, payload],
+  );
   const accountSettings = useAccountSettings({ connection, onError, onPayload });
   const providerSettings = useProviderSettings({
     connection,
     onError,
     onPayload,
+    onPreferences: applyPreferencesPayload,
     onProviders: applyProviderSettings,
     preferences,
     providers: payload?.providers ?? null,
@@ -67,6 +75,7 @@ export function SettingsView({
     connection,
     onError,
     onPayload,
+    onPreferences: applyPreferencesPayload,
     preferences,
     providers: payload?.providers ?? null,
   });
@@ -75,6 +84,7 @@ export function SettingsView({
     enabled: section === "editor",
     onError,
     onPayload,
+    onPreferences: applyPreferencesPayload,
     onToast,
     preferences,
   });
@@ -99,6 +109,7 @@ export function SettingsView({
             payload={payload}
             connection={connection}
             onPayload={onPayload}
+            onPreferences={applyPreferencesPayload}
             onError={onError}
             onToast={onToast}
             {...accountSettings}

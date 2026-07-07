@@ -3,11 +3,11 @@ import path from "node:path";
 import type { RuntimeEvent } from "@openpond/contracts";
 import {
   isGeneratedWorkspacePath,
-  listPlainWorkspaceFiles,
   normalizeWorkspaceFilePath,
   workspaceImageContentType,
 } from "../workspace/workspaces.js";
-import { listWorkspaceFiles, searchWorkspaceFiles } from "../workspace-tools/workspace-tool-file-system.js";
+
+export { searchLocalWorkspaceResources } from "./workspace-resource-search.js";
 
 export type ResourceReadRequest = {
   ref: string;
@@ -107,64 +107,6 @@ export async function readLocalWorkspaceResource(input: {
     return readWorkspaceDirectoryResource(input.repoPath, parsed.identifier, input.request);
   }
   return readWorkspaceFileResource(input.repoPath, parsed.identifier, input.request);
-}
-
-export async function searchLocalWorkspaceResources(input: {
-  repoPath: string;
-  request: ResourceSearchRequest;
-}): Promise<ResourceSearchResult> {
-  if (input.request.scope !== "workspace") {
-    throw new Error(`Unsupported resource search scope: ${input.request.scope}`);
-  }
-  const query = input.request.query.trim();
-  if (!query) throw new Error("Resource search query is required");
-
-  const limit = normalizeLimit(input.request.limit, DEFAULT_RESOURCE_SEARCH_LIMIT, MAX_RESOURCE_SEARCH_LIMIT);
-  const items: ResourceSearchResult["items"] = [];
-  const seen = new Set<string>();
-  const addItem = (item: ResourceSearchResult["items"][number]) => {
-    if (items.length >= limit || seen.has(item.ref)) return;
-    seen.add(item.ref);
-    items.push(item);
-  };
-
-  const files = await visibleWorkspaceFiles(input.repoPath);
-  const lowerQuery = query.toLowerCase();
-  for (const filePath of files) {
-    if (!filePath.toLowerCase().includes(lowerQuery)) continue;
-    addItem({
-      ref: workspaceFileRef(filePath),
-      title: filePath,
-      snippet: "Path match",
-      score: 1,
-      metadata: { source: "workspace", matchKind: "path", path: filePath },
-    });
-  }
-
-  if (items.length < limit) {
-    const matches = await searchWorkspaceFiles(input.repoPath, query);
-    for (const match of matches) {
-      addItem({
-        ref: workspaceFileRef(match.path),
-        title: match.path,
-        snippet: `${match.line}: ${match.text}`,
-        score: 0.8,
-        metadata: {
-          source: "workspace",
-          matchKind: "text",
-          path: match.path,
-          line: match.line,
-        },
-      });
-    }
-  }
-
-  return {
-    query,
-    scope: input.request.scope,
-    items,
-    truncated: items.length >= limit,
-  };
 }
 
 export function readSessionResource(input: {
@@ -654,14 +596,6 @@ async function readWorkspaceDirectoryResource(
     relatedRefs: visible.slice(0, 50).map((entry) => entry.ref),
     truncation: content.truncation,
   };
-}
-
-async function visibleWorkspaceFiles(repoPath: string): Promise<string[]> {
-  try {
-    return await listWorkspaceFiles(repoPath);
-  } catch {
-    return listPlainWorkspaceFiles(repoPath);
-  }
 }
 
 async function resolveWorkspacePath(repoPath: string, relativePath: string): Promise<string> {

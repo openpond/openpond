@@ -111,7 +111,7 @@ export function createResourceModelToolDefinitions(deps: {
     {
       name: "resource_search",
       description:
-        "Search the active workspace for resources by path or text and return stable resource refs with snippets.",
+        "Search resources and return stable refs with snippets. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. Workspace search defaults to exact literal path/text matching; use filters.mode=\"path\" for file/path lookup and filters.mode=\"ranked\" for broad multi-term retrieval.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -124,18 +124,36 @@ export function createResourceModelToolDefinitions(deps: {
           query: {
             type: "string",
             minLength: 1,
-            description: "Path or text query to search for.",
+            description: "Path, identifier, or specific multi-term text query to search for. Avoid generic one-word terms for broad exploration.",
           },
           limit: {
             type: "integer",
             minimum: 1,
             maximum: 100,
-            description: "Maximum number of resource refs to return.",
+            description: "Maximum number of resource refs to return. Use 5-10 for normal code navigation; only use higher limits when the user explicitly asks for exhaustive search.",
           },
           filters: {
             type: "object",
             additionalProperties: true,
-            description: "Optional scope-specific filters.",
+            properties: {
+              mode: {
+                type: "string",
+                enum: ["exact", "path", "ranked"],
+                description:
+                  "Workspace search mode. exact preserves the query as a literal path/text phrase. path searches file paths. ranked uses BM25-style term retrieval for loose natural-language queries.",
+              },
+              matchMode: {
+                type: "string",
+                enum: ["exact", "path", "ranked"],
+                description: "Alias for mode.",
+              },
+              path: {
+                type: "string",
+                description: "Optional sandbox search path filter when scope is sandbox.",
+              },
+            },
+            description:
+              "Optional scope-specific filters. For workspace searches, set mode to ranked for loose model-style queries or path for filename/path lookup; omit it for exact literal search.",
           },
         },
         required: ["scope", "query"],

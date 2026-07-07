@@ -54,6 +54,8 @@ const METADATA_PERSIST_DEBOUNCE_MS = 150;
 const STATE_EMIT_DEBOUNCE_MS = 25;
 const SNAPSHOT_CACHE_LIMIT = 20;
 const SNAPSHOT_CACHE_TTL_MS = 5 * 60_000;
+const HARNESS_REVEAL_TIMEOUT_MS = 5_000;
+const HARNESS_REVEAL_POLL_MS = 50;
 
 type RuntimeTab = {
   conversationId: string;
@@ -91,6 +93,7 @@ export class BrowserSidebarManager {
   private readonly snapshotCaches = new Map<string, BrowserSnapshotCache>();
   private readonly pendingStateEmits = new Map<string, PendingStateEmit>();
   private readonly pendingTabPersists = new Map<string, PendingTabPersist>();
+  private readonly boundsWaiters = new Set<() => void>();
   private readonly recentEvictions: BrowserEvictionDecision[] = [];
   private readonly evictionTimer: NodeJS.Timeout;
   private cursor = { x: 0, y: 0 };
@@ -194,6 +197,7 @@ export class BrowserSidebarManager {
     this.activeConversationId = input.conversationId;
     this.bounds = sanitizeBounds(input.bounds);
     await this.attachActive(input.conversationId);
+    this.notifyBoundsWaiters();
   }
 
   async state(conversationId: string): Promise<BrowserConversationState> {
@@ -230,6 +234,7 @@ export class BrowserSidebarManager {
         await this.newTab({ conversationId: input.conversationId });
       }
     }
+    await this.requestPanelReveal(input.conversationId);
     const metadata = await this.harnessMetadata(input);
     return {
       ok: true,
@@ -452,12 +457,65 @@ export class BrowserSidebarManager {
     const runtime = await this.ensureRuntime(input.conversationId, tabId);
     runtime.lastUsedAt = Date.now();
     if (options.requireVisible && (!this.bounds || !runtime.view.getVisible())) {
+      await this.requestPanelReveal(input.conversationId);
+      await this.attachActive(input.conversationId);
+    }
+    if (options.requireVisible && (!this.bounds || !runtime.view.getVisible())) {
       throw new Error("Open the browser panel before using browser interaction tools.");
     }
     if (options.requireLoadedUrl && !pageUrl(runtime)) {
       throw new Error("Browser tab has no loaded page.");
     }
     return runtime;
+  }
+
+  private async requestPanelReveal(conversationId: string): Promise<void> {
+    if (this.hasVisibleBounds(conversationId)) return;
+    if (this.window.isDestroyed()) throw new Error("App window is no longer available.");
+    if (!this.window.isVisible()) this.window.show();
+    if (this.window.isMinimized()) this.window.restore();
+    this.window.focus();
+    this.window.webContents.send("openpond:browser:reveal", {
+      conversationId,
+      reason: "model_tool",
+    });
+    await this.waitForVisibleBounds(conversationId);
+  }
+
+  private async waitForVisibleBounds(
+    conversationId: string,
+    timeoutMs = HARNESS_REVEAL_TIMEOUT_MS,
+  ): Promise<void> {
+    if (this.hasVisibleBounds(conversationId)) return;
+    await new Promise<void>((resolve, reject) => {
+      const check = () => {
+        if (!this.hasVisibleBounds(conversationId)) return;
+        cleanup();
+        resolve();
+      };
+      const cleanup = () => {
+        clearTimeout(timeout);
+        clearInterval(interval);
+        this.boundsWaiters.delete(check);
+      };
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("Browser panel did not become visible before the browser tool timed out."));
+      }, timeoutMs);
+      const interval = setInterval(check, HARNESS_REVEAL_POLL_MS);
+      this.boundsWaiters.add(check);
+      timeout.unref?.();
+      interval.unref?.();
+      check();
+    });
+  }
+
+  private hasVisibleBounds(conversationId: string): boolean {
+    return this.activeConversationId === conversationId && Boolean(this.bounds);
+  }
+
+  private notifyBoundsWaiters(): void {
+    for (const waiter of Array.from(this.boundsWaiters)) waiter();
   }
 
   private async waitForRuntimeSettled(runtime: RuntimeTab, timeoutMs = 10_000): Promise<void> {

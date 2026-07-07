@@ -463,6 +463,19 @@
   font-size: 13px;
 }
 
+.provider-dialog-note code {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 4px;
+  color: #f2f2f2;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.codex-provider-actions {
+  padding: 0 20px 20px;
+}
+
 .provider-validation-message strong {
   white-space: pre-line;
 }

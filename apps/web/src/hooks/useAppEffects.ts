@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { Approval, RuntimeEvent } from "@openpond/contracts";
 import { openEventStream, type ClientConnection } from "../api";
 import type { SidebarSectionMenuId } from "../app/app-state";
+import { mergeRuntimeEventLists } from "../lib/runtime-event-lists";
 
 type ShortcutInput = {
   searchOpen: boolean;
@@ -76,7 +77,7 @@ export function useRuntimeEvents({ connection, setEvents, setApprovals, setError
       pendingRuntimeEvents = [];
       if (nextEvents.length === 0) return;
 
-      setEvents((current) => [...current, ...nextEvents]);
+      setEvents((current) => mergeRuntimeEventLists(current, nextEvents));
       setApprovals((current) => {
         let next = current;
         for (const runtimeEvent of nextEvents) {

@@ -342,7 +342,7 @@ function buildLocalProjectTurnContext(
       "Local project workspace context:",
       workspacePath ? `workspace: ${workspacePath}` : null,
       "- The active workspace is a user-selected local project folder.",
-      "- Use available native resource tools for workspace inspection, especially resource_search and resource_read.",
+      "- Use available native resource tools for workspace inspection, especially resource_search and resource_read. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. For workspace resource_search, omit filters.mode for exact literal path/text search, use filters.mode=\"path\" for file/path lookup, and use filters.mode=\"ranked\" for broad multi-term retrieval.",
       "- Keep resource refs and file paths relative to the project workspace root.",
       "- Do not claim local file changes, git changes, or command execution unless an available tool result confirms them.",
     ]
@@ -371,7 +371,7 @@ function buildLocalSandboxTemplateTurnContext(
       "Local sandbox template workspace context:",
       workspacePath ? `workspace: ${workspacePath}` : null,
       "- The active workspace is a user-selected local sandbox-template project with openpond.yaml.",
-      "- Use available native resource tools for inspection, especially resource_search and resource_read.",
+      "- Use available native resource tools for inspection, especially resource_search and resource_read. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. For workspace resource_search, omit filters.mode for exact literal path/text search, use filters.mode=\"path\" for file/path lookup, and use filters.mode=\"ranked\" for broad multi-term retrieval.",
       "- Keep resource refs and file paths relative to the project workspace root.",
       "- Do not claim validation, publishing, file changes, git changes, or sandbox execution unless an available tool result confirms them.",
     ]

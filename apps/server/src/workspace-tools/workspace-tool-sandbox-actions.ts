@@ -1100,8 +1100,10 @@ async function createSandboxFromToolArgs(params: {
         ? "manual"
         : "none");
   const createRequestId = randomUUID();
-  const reuseDefaultRuntime = params.reuseDefaultRuntime ?? true;
-  const markDefaultRuntime = params.markDefaultRuntime ?? Boolean(projectId || agentId);
+  const reuseDefaultRuntime =
+    params.reuseDefaultRuntime ?? booleanArg(args, "reuseDefaultRuntime") ?? true;
+  const markDefaultRuntime =
+    params.markDefaultRuntime ?? booleanArg(args, "markDefaultRuntime") ?? Boolean(projectId || agentId);
   const metadata = {
     source: params.source,
     ...recordArg(args, "metadata"),

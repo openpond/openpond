@@ -28,7 +28,7 @@ function commandStarted(id: string, turnId: string, command: string): RuntimeEve
 }
 
 describe("chat message projection", () => {
-  test("renders assistant reasoning as streamed activity separate from answer content", () => {
+  test("renders assistant reasoning as first-class text separate from tools and answer content", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -60,29 +60,123 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
+    expect(messages.map((message) => message.role)).toEqual(["user", "reasoning", "assistant"]);
     expect(messages[1]).toMatchObject({
-      role: "activity_group",
-      activities: [
-        {
-          label: "Reasoning",
-          content: "The user is greeting Z.ai. It should answer briefly.",
-        },
-      ],
+      role: "reasoning",
+      content: "The user is greeting Z.ai. It should answer briefly.",
     });
-    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe("Reasoned");
     expect(messages[2]).toMatchObject({
       role: "assistant",
       content: "Hello z.ai",
     });
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    expect(html).toContain("Reasoned");
+    expect(html).toContain("Show thinking");
+    expect(html).not.toContain("The user is greeting Z.ai.");
+    expect(html).not.toContain("Reasoning");
     expect(html).not.toContain("Hello z.ai");
 
     const assistantHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[2]! }));
     expect(assistantHtml).toContain("Hello z.ai");
     expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
+  });
+
+  test("keeps reasoning text separate when tool runs occur between reasoning deltas", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "find chat code" },
+      }),
+      runtimeEvent({
+        id: "reasoning_1",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "I need to find the relevant files.",
+      }),
+      runtimeEvent({
+        id: "tool_started",
+        name: "tool.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        action: "resource_search",
+        status: "started",
+        args: { scope: "workspace", query: "chat composer" },
+      }),
+      runtimeEvent({
+        id: "tool_completed",
+        name: "tool.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        action: "resource_search",
+        status: "completed",
+        output: "Found 2 resources.",
+      }),
+      runtimeEvent({
+        id: "reasoning_2",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "Now I can inspect the candidate.",
+      }),
+      runtimeEvent({
+        id: "assistant_1",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "I found the chat files.",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "reasoning",
+      "activity_group",
+      "reasoning",
+      "assistant",
+    ]);
+    expect(messages[1]?.content).toBe("I need to find the relevant files.");
+    expect(messages[2]?.activities?.map((activity) => activity.label)).toEqual([
+      "Searching resources",
+      "Searched resources",
+    ]);
+    expect(messages[3]?.content).toBe("Now I can inspect the candidate.");
+    expect(messages[4]?.content).toBe("I found the chat files.");
+  });
+
+  test("keeps rendered reasoning muted by default while preserving raw content", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "check draft cleanup" },
+      }),
+      runtimeEvent({
+        id: "reasoning_1",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output:
+          'I found the branch in `app-state.ts`.\n```ts\nconst prompt = String(nextValue);\n```\n' +
+          `${"This is progress context. ".repeat(45)}\nNow I need to find \`setPrompt(\"\")\`.`,
+      }),
+    ]);
+
+    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    expect(html).toContain("assistant-reasoning-message collapsed");
+    expect(html).toContain("Show thinking");
+    expect(html).not.toContain("I found the branch");
+    expect(html).not.toContain("app-state.ts");
+    expect(html).not.toContain("const prompt");
+    expect(html).not.toContain("setPrompt");
+    expect(html).not.toContain("Reasoning");
+    expect(messages[1]?.content).toContain("const prompt");
+    expect(messages[1]?.content).toContain("setPrompt");
   });
 
   test("renders Insights scan prompts as compact evidence cards", () => {

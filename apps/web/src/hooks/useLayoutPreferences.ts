@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
-import { api, type ClientConnection } from "../api";
+import { api, type ClientConnection, type PreferencesPayload } from "../api";
 import { normalizePreferences } from "../lib/app-models";
 import { DEFAULT_DIFF_PANEL_WIDTH, DEFAULT_SIDEBAR_WIDTH, clampDiffPanelWidth, clampSidebarWidth } from "../lib/layout";
 import {
@@ -81,8 +81,8 @@ export function useLayoutPreferences({
   }, [preferences]);
 
   const updatePreferencePayload = useCallback(
-    (payload: BootstrapPayload) => {
-      setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : payload));
+    (payload: PreferencesPayload) => {
+      setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : current));
     },
     [setBootstrap]
   );
@@ -90,37 +90,41 @@ export function useLayoutPreferences({
   const persistSidebarWidth = useCallback(
     async (width: number) => {
       if (!connection) return;
+      if (clampSidebarWidth(normalizePreferences(preferences).sidebarWidth) === width) return;
       try {
         updatePreferencePayload(await api.savePreferences(connection, { sidebarWidth: width }));
       } catch (preferenceError) {
         setError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
       }
     },
-    [connection, setError, updatePreferencePayload]
+    [connection, preferences, setError, updatePreferencePayload]
   );
 
   const persistDiffPanelWidth = useCallback(
     async (width: number) => {
       if (!connection) return;
+      if (clampDiffPanelWidth(normalizePreferences(preferences).diffPanelWidth) === width) return;
       try {
         updatePreferencePayload(await api.savePreferences(connection, { diffPanelWidth: width }));
       } catch (preferenceError) {
         setError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
       }
     },
-    [connection, setError, updatePreferencePayload]
+    [connection, preferences, setError, updatePreferencePayload]
   );
 
   const persistSidebarSectionsCollapsed = useCallback(
     async (sidebarSectionsCollapsed: SidebarSectionsCollapsed) => {
       if (!connection) return;
+      const current = normalizePreferences(preferences).sidebarSectionsCollapsed;
+      if (sidebarSectionsCollapsedEqual(current, sidebarSectionsCollapsed)) return;
       try {
         updatePreferencePayload(await api.savePreferences(connection, { sidebarSectionsCollapsed }));
       } catch (preferenceError) {
         setError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
       }
     },
-    [connection, setError, updatePreferencePayload]
+    [connection, preferences, setError, updatePreferencePayload]
   );
 
   const updateSidebarSectionsCollapsed = useCallback(
@@ -228,4 +232,16 @@ export function useLayoutPreferences({
     startSidebarResize,
     startDiffPanelResize,
   };
+}
+
+function sidebarSectionsCollapsedEqual(
+  left: SidebarSectionsCollapsed,
+  right: SidebarSectionsCollapsed,
+): boolean {
+  return (
+    left.pinned === right.pinned &&
+    left.projects === right.projects &&
+    left.cloudProjects === right.cloudProjects &&
+    left.chats === right.chats
+  );
 }

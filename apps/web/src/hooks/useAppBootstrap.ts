@@ -10,7 +10,7 @@ import type {
   Session,
   SidebarAppPreferences,
 } from "@openpond/contracts";
-import { api, resolveConnection, type ClientConnection } from "../api";
+import { api, resolveConnection, type ClientConnection, type PreferencesPayload } from "../api";
 import { normalizePreferences, parseProjectSelection, projectSelectionKey } from "../lib/app-models";
 import { latestReadyLocalCreatePipelineProfileRefreshKey } from "../lib/create-pipeline-profile-refresh";
 import {
@@ -232,6 +232,11 @@ export function useAppBootstrap(params: {
     [setSelectedAppId, setSelectedProjectId, setSelectedSessionId]
   );
 
+  const applyPreferencesPayload = useCallback((payload: PreferencesPayload) => {
+    latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
+    setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : current));
+  }, []);
+
   useEffect(() => {
     const preferences = normalizePreferences(bootstrap?.preferences);
     setDraftProvider(preferences.defaultChatProvider);
@@ -278,13 +283,13 @@ export function useAppBootstrap(params: {
     codexPreferenceSyncKeyRef.current = syncKey;
     void api
       .savePreferences(connection, patch)
-      .then(applyBootstrapPayload)
+      .then(applyPreferencesPayload)
       .catch((syncError) => {
         codexPreferenceSyncKeyRef.current = null;
         setError(syncError instanceof Error ? syncError.message : String(syncError));
       });
   }, [
-    applyBootstrapPayload,
+    applyPreferencesPayload,
     bootstrap,
     bootstrap?.preferences.codexPermissionMode,
     bootstrap?.preferences.codexReasoningEffort,
@@ -304,13 +309,13 @@ export function useAppBootstrap(params: {
     openPondCommandAccessPreferenceSyncKeyRef.current = syncKey;
     void api
       .savePreferences(connection, patch)
-      .then(applyBootstrapPayload)
+      .then(applyPreferencesPayload)
       .catch((syncError) => {
         openPondCommandAccessPreferenceSyncKeyRef.current = null;
         setError(syncError instanceof Error ? syncError.message : String(syncError));
       });
   }, [
-    applyBootstrapPayload,
+    applyPreferencesPayload,
     bootstrap,
     bootstrap?.preferences.openPondCommandAccessMode,
     connection,
@@ -417,7 +422,7 @@ export function useAppBootstrap(params: {
           if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== firstTeamId) {
             void api
               .savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave })
-              .then(applyBootstrapPayload)
+              .then(applyPreferencesPayload)
               .catch((defaultTeamError) => {
                 setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
               });
@@ -425,14 +430,14 @@ export function useAppBootstrap(params: {
           return;
         }
         if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== firstTeamId) {
-          applyBootstrapPayload(
+          applyPreferencesPayload(
             await api.savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave }),
           );
           completeStartup();
           return;
         }
         if (!cancelled) {
-          applyBootstrapPayload(updatedPayload);
+          applyPreferencesPayload(updatedPayload);
           completeStartup();
         }
       })
@@ -452,7 +457,15 @@ export function useAppBootstrap(params: {
         defaultTeamSyncKeyRef.current = null;
       }
     };
-  }, [applyBootstrapPayload, bootstrap, completeStartup, connection, setBlockingStartupStage, setError]);
+  }, [
+    applyBootstrapPayload,
+    applyPreferencesPayload,
+    bootstrap,
+    completeStartup,
+    connection,
+    setBlockingStartupStage,
+    setError,
+  ]);
 
   const load = useCallback(async () => {
     setBlockingStartupStage("connecting");

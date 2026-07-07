@@ -141,7 +141,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
         appendCreatePipelineDebugActivity(messages, item);
         continue;
       }
-      appendActivityMessage(messages, item);
+      appendReasoningMessage(messages, item);
       continue;
     }
 
@@ -237,6 +237,24 @@ function takePendingSources(
   const sources = pendingSourcesByTurnId.get(turnId);
   if (sources) pendingSourcesByTurnId.delete(turnId);
   return sources;
+}
+
+function appendReasoningMessage(messages: ChatMessage[], item: RuntimeEvent): void {
+  const content = item.output ?? "";
+  if (!content) return;
+  const previous = messages[messages.length - 1];
+  if (previous?.role === "reasoning" && previous.turnId === item.turnId) {
+    previous.content = `${previous.content ?? ""}${content}`;
+    previous.timestamp = item.timestamp;
+    return;
+  }
+  messages.push({
+    id: item.id,
+    role: "reasoning",
+    content,
+    timestamp: item.timestamp,
+    turnId: item.turnId,
+  });
 }
 
 function appendCreatePipelineDebugActivity(messages: ChatMessage[], item: RuntimeEvent): void {

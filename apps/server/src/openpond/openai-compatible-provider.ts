@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   ProviderModelSchema,
   type ProviderId,
@@ -199,7 +198,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   try {
     response = await fetch(providerEndpointUrl(provider.baseUrl, "chat/completions"), {
       method: "POST",
-      headers: providerHeaders(provider.apiKey, "text/event-stream", input.requestId),
+      headers: providerHeaders(provider.apiKey, "text/event-stream"),
       body: JSON.stringify(buildChatCompletionBody({
         providerId: provider.providerId,
         model: provider.model,
@@ -306,15 +305,13 @@ export function normalizeOpenAiCompatibleBaseUrl(value: string | null | undefine
   return url.toString().replace(/\/+$/, "");
 }
 
-function providerHeaders(apiKey: string, accept: string, requestId?: string): Headers {
+function providerHeaders(apiKey: string, accept: string): Headers {
   const trimmed = apiKey.trim();
   if (!trimmed) throw new Error("Provider API key is required.");
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${trimmed}`);
   headers.set("Content-Type", "application/json");
   headers.set("Accept", accept);
-  headers.set("x-openpond-client", "openpond-app");
-  headers.set("x-openpond-request-id", requestId || randomUUID());
   return headers;
 }
 

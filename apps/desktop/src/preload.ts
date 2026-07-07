@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld("openpond", {
       ipcRenderer.on("openpond:browser:state", listener);
       return () => ipcRenderer.removeListener("openpond:browser:state", listener);
     },
+    onRevealRequest: (callback: (request: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: unknown) => callback(request);
+      ipcRenderer.on("openpond:browser:reveal", listener);
+      return () => ipcRenderer.removeListener("openpond:browser:reveal", listener);
+    },
   },
   retryStartup: () => ipcRenderer.invoke("openpond:startup:retry"),
   openLogsFolder: () => ipcRenderer.invoke("openpond:logs:open"),

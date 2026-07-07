@@ -7,19 +7,21 @@ import type {
   InsightsEvidenceSourceSettings,
   ProviderSettings,
 } from "@openpond/contracts";
-import { api, type ClientConnection } from "../../api";
+import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { modelRefForTurn, normalizeBranchPrefix, normalizeChatModel } from "../../lib/app-models";
 
 export function useDefaultsSettings({
   connection,
   onError,
   onPayload,
+  onPreferences,
   preferences,
   providers,
 }: {
   connection: ClientConnection | null;
   onError: (message: string | null) => void;
   onPayload: (payload: BootstrapPayload) => void;
+  onPreferences: (payload: PreferencesPayload) => void;
   preferences: AppPreferences;
   providers: ProviderSettings | null | undefined;
 }) {
@@ -88,7 +90,7 @@ export function useDefaultsSettings({
     setSaving(true);
     onError(null);
     try {
-      onPayload(
+      onPreferences(
         await api.savePreferences(connection, {
           defaultBranchPrefix: normalizeBranchPrefix(defaultBranchPrefix),
           defaultNewProjectDirectory: defaultNewProjectDirectory.trim(),

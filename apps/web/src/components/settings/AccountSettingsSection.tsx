@@ -2,7 +2,7 @@ import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 import { ExternalLink, KeyRound, Plus, RefreshCw } from "../icons";
-import { api, type ClientConnection } from "../../api";
+import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
 import {
@@ -35,6 +35,7 @@ type AccountSettingsSectionProps = {
   refreshAccounts: () => Promise<void>;
   switchAccount: (handleValue: string, baseUrlValue?: string | null) => Promise<void>;
   onPayload: (payload: BootstrapPayload) => void;
+  onPreferences: (payload: PreferencesPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
@@ -54,6 +55,7 @@ export function AccountSettingsSection({
   refreshAccounts,
   switchAccount,
   onPayload,
+  onPreferences,
   onError,
   onToast,
 }: AccountSettingsSectionProps) {
@@ -213,7 +215,7 @@ export function AccountSettingsSection({
       },
     }).catch(() => undefined);
     try {
-      onPayload(
+      onPreferences(
         await api.savePreferences(connection, {
           defaultTeamId: organization.teamId,
         })

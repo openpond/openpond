@@ -1,5 +1,6 @@
 import type {
   Approval,
+  AppPreferences,
   ApplyCloudWorkItemLocalPatchRequest,
   BootstrapPayload,
   CloudWorkItemBackgroundRequest,
@@ -101,6 +102,10 @@ type ProviderModelsResponse = {
 type CodexHistoryTurnInterruptResponse =
   | { interrupted: true }
   | { interrupted: false; reason: "no_active_openpond_turn" | "turn_not_ready" };
+
+export type PreferencesPayload = {
+  preferences: AppPreferences;
+};
 
 export type RuntimeEventPagePayload = {
   events: Array<{ sequence: number; event: RuntimeEvent }>;
@@ -310,7 +315,7 @@ export const api = {
       body: JSON.stringify(input),
     }),
   savePreferences: (connection: ClientConnection, input: UpdateAppPreferencesRequest) =>
-    apiFetch<BootstrapPayload>(connection, "/v1/preferences", {
+    apiFetch<PreferencesPayload>(connection, "/v1/preferences", {
       method: "PATCH",
       body: JSON.stringify(input),
     }),

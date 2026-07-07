@@ -30,6 +30,11 @@ import {
 } from "./lib/app-models";
 import { buildCachedChatMessages } from "./lib/chat-messages";
 import {
+  appendPendingUserChatMessage,
+  hasMatchingUserMessage,
+  type PendingChatUserMessage,
+} from "./lib/pending-chat-messages";
+import {
   latestRuntimeEventSequence,
   mergeRuntimeEventLists,
   mergeRuntimeEventsIntoSessionPageCache,
@@ -88,6 +93,7 @@ import { useAppShellEffects } from "./hooks/useAppShellEffects";
 import { useApprovalResolver } from "./hooks/useApprovalResolver";
 import { useAppDerivedRows } from "./hooks/useAppDerivedRows";
 import { useBeginNewChat } from "./hooks/useBeginNewChat";
+import { useBrowserRevealRequests } from "./hooks/useBrowserRevealRequests";
 import { useChatActions } from "./hooks/useChatActions";
 import { useAppConversationContext } from "./hooks/useAppConversationContext";
 import { useCloudSessionReady } from "./hooks/useCloudSessionReady";
@@ -160,6 +166,7 @@ export function App() {
   const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [rightChatHistoryEvents, setRightChatHistoryEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [codexHistorySidebarEvents, setCodexHistorySidebarEvents] = useState<Record<string, RuntimeEvent[]>>({});
+  const [pendingChatUserMessages, setPendingChatUserMessages] = useState<Record<string, PendingChatUserMessage>>({});
   const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<Record<string, ChatHistoryLoadState>>({});
   const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
@@ -544,6 +551,7 @@ export function App() {
     setPagedSessionEvents({});
     setRightChatHistoryEvents({});
     setCodexHistorySidebarEvents({});
+    setPendingChatUserMessages({});
     setChatHistoryLoadStates({});
     chatHistoryLoadingSessionIdsRef.current.clear();
   }, [bootstrap?.server.id]);
@@ -853,6 +861,40 @@ export function App() {
     projectsExpanded,
     chatRowsVisibleCount,
   });
+  const recordPendingChatUserMessage = useCallback((message: PendingChatUserMessage) => {
+    setPendingChatUserMessages((current) => ({
+      ...current,
+      [message.sessionId]: message,
+    }));
+  }, []);
+  const clearPendingChatUserMessage = useCallback((sessionId: string, messageId: string) => {
+    setPendingChatUserMessages((current) => {
+      if (current[sessionId]?.id !== messageId) return current;
+      const next = { ...current };
+      delete next[sessionId];
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    setPendingChatUserMessages((current) => {
+      let next = current;
+      for (const [sessionId, pendingMessage] of Object.entries(current)) {
+        const realMessages = buildCachedChatMessages(runtimeEventsForSession(runtimeIndexes, sessionId));
+        if (!hasMatchingUserMessage(realMessages, pendingMessage)) continue;
+        if (next === current) next = { ...current };
+        delete next[sessionId];
+      }
+      return next;
+    });
+  }, [runtimeIndexes]);
+  const visibleChatMessages = useMemo(
+    () =>
+      appendPendingUserChatMessage(
+        chatMessages,
+        selectedSessionId ? pendingChatUserMessages[selectedSessionId] : null,
+      ),
+    [chatMessages, pendingChatUserMessages, selectedSessionId],
+  );
   const activeTerminalScope = useMemo<TerminalScope>(
     () => terminalScopeForSelection({ selectedAppId, selectedProjectId, selectedSessionId }),
     [selectedAppId, selectedProjectId, selectedSessionId],
@@ -1391,6 +1433,8 @@ export function App() {
     setCodexHistoryEvents,
     setCodexHistorySessions,
     onCodexHistoryTurnPayload: applyRightCodexHistoryPayload,
+    onPendingUserMessage: recordPendingChatUserMessage,
+    onClearPendingUserMessage: clearPendingChatUserMessage,
     setEvents,
     setSelectedAppId,
     setSelectedProjectId,
@@ -1667,6 +1711,16 @@ export function App() {
     setNewProjectName,
     setRightPanelMode,
   });
+  const browserRevealSessionIds = useMemo(
+    () => sessions.map((session) => session.id),
+    [sessions],
+  );
+  useBrowserRevealRequests({
+    browserConversationId,
+    sessionIds: browserRevealSessionIds,
+    onOpenSession: openSessionInChat,
+    onShowBrowserPanel: showBrowserPanel,
+  });
   const showRightPanelDiffTab = useCallback(
     (tab: WorkspaceDiffTabRequest["tab"]) => {
       setRightPanelTabRequest((current) => ({ id: (current?.id ?? 0) + 1, tab }));
@@ -1841,11 +1895,15 @@ export function App() {
       const activeWorkspaceAppIdForPanel =
         session?.appId ??
         (session?.workspaceKind === "local_project" ? session.workspaceId ?? null : null);
+      const panelMessages = buildCachedChatMessages(panelEvents);
       return {
         ...panel,
         session,
         title: session?.title ?? "New chat",
-        messages: buildCachedChatMessages(panelEvents),
+        messages: appendPendingUserChatMessage(
+          panelMessages,
+          panel.sessionId ? pendingChatUserMessages[panel.sessionId] : null,
+        ),
         contextWindowStatus: contextWindowStatusForPanel,
         goalRuntime: latestGoalRuntimeForSession(panelIndexes, panel.sessionId),
         pendingApproval: panelPendingApproval,
@@ -1861,6 +1919,7 @@ export function App() {
     codexHistoryEvents,
     rightChatHistoryEvents,
     rightChatPanels,
+    pendingChatUserMessages,
     runtimeIndexes,
     runningSessionIds,
     selectedSessionId,
@@ -2180,7 +2239,7 @@ export function App() {
         view,
         bootstrap,
         runtimeEvents: sessionEvents,
-        chatMessages,
+        chatMessages: visibleChatMessages,
         contextWindowStatus,
         goalRuntime,
         prompt,

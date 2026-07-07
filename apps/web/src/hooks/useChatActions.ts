@@ -75,6 +75,10 @@ import {
   preloadSandboxAgents,
   readSandboxAgentsFromMemory,
 } from "../lib/sandbox-agent-memory";
+import {
+  createPendingUserChatMessage,
+  type PendingChatUserMessage,
+} from "../lib/pending-chat-messages";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 import {
   isCloudWorkspaceKind,
@@ -117,6 +121,8 @@ type UseChatActionsInput = {
   setCodexHistoryEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
   onCodexHistoryTurnPayload?: (payload: CodexHistoryTurnPayload) => void;
+  onPendingUserMessage?: (message: PendingChatUserMessage) => void;
+  onClearPendingUserMessage?: (sessionId: string, messageId: string) => void;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
@@ -275,6 +281,8 @@ export function useChatActions({
   setCodexHistoryEvents,
   setCodexHistorySessions,
   onCodexHistoryTurnPayload,
+  onPendingUserMessage,
+  onClearPendingUserMessage,
   setEvents,
   setSelectedAppId,
   setSelectedProjectId,
@@ -559,6 +567,7 @@ export function useChatActions({
     );
     setError(null);
     let turnSessionId: string | null = null;
+    let pendingUserMessage: PendingChatUserMessage | null = null;
     try {
       if (directCommandForTurn && providerForTurn !== "codex" && selectedSessionForTurn?.provider !== "codex") {
         if (attachments.length > 0) {
@@ -622,15 +631,17 @@ export function useChatActions({
           const payload = await api.bootstrap(connection);
           applyBootstrapPayload(payload);
           clearPromptForTurn();
-          setEvents((current) => [
-              ...current,
-              ...directActionRunEvents({
+          setEvents((current) =>
+            mergeRuntimeEventLists(
+              current,
+              directActionRunEvents({
                 action: selectedActionForTurn,
                 prompt: displayPromptForTurn,
                 runPayload,
                 sessionId: session!.id,
               }),
-            ]);
+            ),
+          );
           return true;
         }
 
@@ -718,15 +729,17 @@ export function useChatActions({
           );
         const payload = await api.bootstrap(connection);
         applyBootstrapPayload(payload);
-        setEvents((current) => [
-            ...current,
-            ...directActionRunEvents({
+        setEvents((current) =>
+          mergeRuntimeEventLists(
+            current,
+            directActionRunEvents({
               action: selectedActionForTurn,
               prompt: displayPromptForTurn,
               runPayload,
               sessionId: session!.id,
             }),
-          ]);
+          ),
+        );
         return true;
       }
       let session = selectedSessionForTurn;
@@ -877,9 +890,16 @@ export function useChatActions({
       if (parsedCreatePipelineCommand?.command === "edit" && !createPipelineRequest) {
         throw new Error("Select an agent-backed chat before using /edit.");
       }
+      pendingUserMessage = createPendingUserChatMessage({
+        afterMessageId: turnChatMessages.at(-1)?.id ?? null,
+        attachments,
+        content: value,
+        sessionId: session.id,
+      });
       clearPromptForTurn();
       turnSessionId = session.id;
       activeTurnSessionIdsRef.current.add(turnSessionId);
+      onPendingUserMessage?.(pendingUserMessage);
       setSessions((current) =>
         current.map((candidate) =>
           candidate.id === turnSessionId ? { ...candidate, status: "active" } : candidate
@@ -917,6 +937,9 @@ export function useChatActions({
       }
       return true;
     } catch (sendError) {
+      if (pendingUserMessage) {
+        onClearPendingUserMessage?.(pendingUserMessage.sessionId, pendingUserMessage.id);
+      }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
       return false;
     } finally {

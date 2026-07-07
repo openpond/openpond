@@ -538,6 +538,7 @@ export function createServerPayloads(deps: {
   version: string;
   runtimeVersion: string;
   getCodexStatus: () => CodexStatus;
+  refreshCodexStatus?: () => Promise<CodexStatus>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   isClosing: () => boolean;
 }) {
@@ -552,6 +553,7 @@ export function createServerPayloads(deps: {
     version,
     runtimeVersion,
     getCodexStatus,
+    refreshCodexStatus,
     appendRuntimeEvent,
     isClosing,
   } = deps;
@@ -627,20 +629,24 @@ export function createServerPayloads(deps: {
     });
   }
 
-  async function updateAppPreferencesPayload(payload: unknown): Promise<BootstrapPayload> {
+  async function updateAppPreferencesPayload(payload: unknown): Promise<{ preferences: AppPreferences }> {
     const input = UpdateAppPreferencesRequestSchema.parse(payload);
     const syncGoalStorageLocation = hasObjectKey(payload, "goalStorageLocation");
+    let updatedPreferences: AppPreferences | null = null;
     const update = appPreferencesUpdateQueue.then(async () => {
       const current = await loadAppPreferences();
       const next = normalizeAppPreferences({ ...current, ...input });
-      await store.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, next);
+      updatedPreferences = next;
+      if (JSON.stringify(next) !== JSON.stringify(current)) {
+        await store.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, next);
+      }
       if (syncGoalStorageLocation) {
         await saveGlobalConfig({ goalStorageLocation: next.goalStorageLocation });
       }
     });
     appPreferencesUpdateQueue = update.catch(() => undefined);
     await update;
-    return bootstrapPayload();
+    return { preferences: updatedPreferences ?? await loadAppPreferences() };
   }
 
   async function updateProviderSettingsPayload(payload: unknown): Promise<ProviderSettings> {
@@ -824,6 +830,31 @@ export function createServerPayloads(deps: {
       const status = state.settings.statuses[providerId];
       const config = state.settings.providers[providerId];
       if (!status || !config) throw new Error(`Unknown provider: ${providerId}`);
+
+      if (providerId === "codex") {
+        const codex = refreshCodexStatus ? await refreshCodexStatus() : getCodexStatus();
+        const modelId =
+          request.modelId ?? config.defaultModel ?? state.settings.modelCaches[providerId]?.models[0]?.id ?? null;
+        const errors: string[] = [];
+        if (!codex.available) {
+          errors.push("Codex CLI was not found. Install Codex or set CODEX_BINARY to the Codex executable.");
+        } else if (codex.authHealth !== "signed_in") {
+          errors.push("Sign in with ChatGPT through Codex before using subscription-backed models.");
+        }
+        if (!modelId) errors.push("OpenAI Codex has no selected or cached model.");
+
+        const providers = await providerSettingsPayload();
+        return {
+          providerId,
+          ok: errors.length === 0,
+          live: false,
+          baseUrl: null,
+          modelId,
+          credential: providers.statuses[providerId]?.credential ?? status.credential,
+          errors,
+          providers,
+        };
+      }
 
       if (isOpenAiCompatibleProviderId(providerId)) {
         try {

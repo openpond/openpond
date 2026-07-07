@@ -109,7 +109,7 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
   },
   {
     id: "codex",
-    displayName: "Codex",
+    displayName: "OpenAI Codex",
     credentialModes: ["codex-login"],
     routing: { localRuntime: true },
     capabilities: {

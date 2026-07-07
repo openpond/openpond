@@ -88,6 +88,7 @@ describe("cloud workspace lifecycle", () => {
         args: {
           teamId: "team_1",
           projectId: "cloud_project_1",
+          reuseDefaultRuntime: false,
           workflowMode: "feature",
           runtimeBaseBranch: "main",
           runtimePromotionPolicy: "manual",

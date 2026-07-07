@@ -146,7 +146,7 @@ export type InsightsRunPromptSummary = {
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "activity_group" | "error" | "status_divider";
+  role: "user" | "assistant" | "reasoning" | "activity_group" | "error" | "status_divider";
   content?: string;
   errorKind?: "opchat_quota_exceeded";
   attachments?: ChatAttachmentSummary[];

@@ -219,6 +219,10 @@ type BrowserConversationState = {
   tabs: BrowserTabState[];
 };
 
+type BrowserRevealRequest = BrowserConversationInput & {
+  reason: "model_tool";
+};
+
 type BrowserDiagnostics = {
   activeConversationId: string | null;
   attachedRuntimeCount: number;
@@ -269,6 +273,7 @@ interface Window {
       key: (input: BrowserKeyInput) => Promise<BrowserHarnessResult>;
       scroll: (input: BrowserScrollInput) => Promise<BrowserHarnessResult>;
       onState: (callback: (state: BrowserConversationState) => void) => () => void;
+      onRevealRequest: (callback: (request: BrowserRevealRequest) => void) => () => void;
     };
     retryStartup?: () => Promise<{ ok: boolean; error?: string }>;
     openLogsFolder?: () => Promise<{ ok: boolean; error?: string }>;

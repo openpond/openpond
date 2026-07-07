@@ -62,6 +62,7 @@ function providerStateLabel(status: ProviderStatus | null | undefined): string {
   if (status.available) return "Ready";
   if (status.credential.connected) return "Configured";
   if (status.credential.lastError || status.lastError) return "Needs attention";
+  if (status.id === "codex") return "Needs Codex login";
   if (status.routing.localByok) return "Needs key";
   return status.enabled ? "Enabled" : "Off";
 }
@@ -71,6 +72,7 @@ function providerStateTone(status: ProviderStatus | null | undefined): string {
   if (status.available) return "ready";
   if (status.credential.connected) return "configured";
   if (status.credential.lastError || status.lastError) return "warning";
+  if (status.id === "codex") return "warning";
   return "muted";
 }
 
@@ -263,6 +265,10 @@ function ProviderDetailsDialog({
   const cache = settings.modelCaches[providerId];
   const modelCount = Math.max(cache?.models.length ?? 0, status.modelIds.length);
   const localByok = status.routing.localByok && isRunnableChatProvider(providerId) && providerId !== "codex";
+  const baseUrlLabel =
+    providerId === "codex"
+      ? "Codex app server"
+      : config?.baseUrl ?? (providerId === "openpond" ? account?.chatApiBaseUrl : null) ?? "Not set";
   return (
     <div className="git-dialog-backdrop provider-dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -292,7 +298,7 @@ function ProviderDetailsDialog({
           </div>
           <div>
             <dt>Base URL</dt>
-            <dd title={config?.baseUrl ?? undefined}>{config?.baseUrl ?? account?.chatApiBaseUrl ?? "Not set"}</dd>
+            <dd title={baseUrlLabel}>{baseUrlLabel}</dd>
           </div>
           <div>
             <dt>Model</dt>
@@ -328,7 +334,13 @@ function ProviderDetailsDialog({
           ) : null}
         </dl>
 
-        {localByok && config && cache ? (
+        {providerId === "codex" ? (
+          <CodexProviderDetails
+            providerBusy={providerBusy}
+            status={status}
+            onValidate={onValidate}
+          />
+        ) : localByok && config && cache ? (
           <LocalByokProviderDetails
             providerId={providerId}
             providerBusy={providerBusy}
@@ -347,6 +359,40 @@ function ProviderDetailsDialog({
           </div>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function CodexProviderDetails({
+  providerBusy,
+  status,
+  onValidate,
+}: {
+  providerBusy: string | null;
+  status: ProviderStatus;
+  onValidate: (provider: ChatProvider, request?: { baseUrl?: string; modelId?: string }) => Promise<void>;
+}) {
+  const validateBusy = providerBusy === "codex:validate";
+  return (
+    <div className="provider-dialog-body codex-provider-body">
+      <div className="provider-dialog-note codex-provider-note">
+        <KeyRound size={15} />
+        <span>
+          Uses your local <code>codex login</code> session through the Codex app server. This route is separate from
+          OpenAI Platform API-key billing.
+        </span>
+      </div>
+      <div className="settings-button-row codex-provider-actions">
+        <button
+          type="button"
+          className="settings-secondary"
+          disabled={validateBusy}
+          onClick={() => void onValidate("codex", { modelId: status.defaultModel ?? undefined })}
+        >
+          {validateBusy ? <Loader2 size={14} className="settings-spin" /> : <CheckCircle2 size={14} />}
+          <span>{validateBusy ? "Testing" : "Test Codex login"}</span>
+        </button>
+      </div>
     </div>
   );
 }

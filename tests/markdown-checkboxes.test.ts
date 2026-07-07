@@ -156,4 +156,34 @@ describe("markdown checkbox rendering", () => {
     expect(markup).not.toContain("markdown-inline-image");
     expect(markup).not.toContain("<img");
   });
+
+  test("renders numbered headings that are missing the markdown space", () => {
+    const markup = renderMarkdown("##1. Draft not reappearing after send\n\nThis already works.");
+
+    expect(markup).toContain('<h2 class="markdown-heading">1. Draft not reappearing after send</h2>');
+    expect(markup).toContain('<p class="markdown-paragraph">This already works.</p>');
+    expect(markup).not.toContain("##1.");
+  });
+
+  test("renders run-on fenced code without swallowing following prose", () => {
+    const markup = renderMarkdown(
+      '```tsx{message.content ? <div className="user-message-content">{message.content}</div> : null}\n```\n\nAfter the code block.',
+    );
+
+    expect(markup).toContain('<pre class="markdown-code-block"><code>{message.content ? &lt;div');
+    expect(markup).toContain("user-message-content");
+    expect(markup).toContain('</code></pre><p class="markdown-paragraph">After the code block.</p>');
+    expect(markup).not.toContain("```tsx");
+  });
+
+  test("renders malformed double-backtick fenced code blocks", () => {
+    const markup = renderMarkdown(
+      '``ts if (action.key === "prompt") {\nconst prompt = String(nextValue);\n}\n``\n\nAfter the code block.',
+    );
+
+    expect(markup).toContain('<pre class="markdown-code-block"><code>if (action.key === &quot;prompt&quot;) {');
+    expect(markup).toContain("const prompt = String(nextValue);");
+    expect(markup).toContain('</code></pre><p class="markdown-paragraph">After the code block.</p>');
+    expect(markup).not.toContain("``ts");
+  });
 });

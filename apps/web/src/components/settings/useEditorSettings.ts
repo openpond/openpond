@@ -8,13 +8,14 @@ import type {
   WorkspaceLspLanguageMode,
   WorkspaceLspSettingsStatusResponse,
 } from "@openpond/contracts";
-import { api, type ClientConnection } from "../../api";
+import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 
 export function useEditorSettings({
   connection,
   enabled,
   onError,
   onPayload,
+  onPreferences,
   onToast,
   preferences,
 }: {
@@ -22,6 +23,7 @@ export function useEditorSettings({
   enabled: boolean;
   onError: (message: string | null) => void;
   onPayload: (payload: BootstrapPayload) => void;
+  onPreferences: (payload: PreferencesPayload) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   preferences: AppPreferences;
 }) {
@@ -87,7 +89,7 @@ export function useEditorSettings({
       const payload = await api.savePreferences(connection, {
         editor: editorPreferences,
       });
-      onPayload(payload);
+      onPreferences(payload);
       setLspStatus(await api.workspaceLspSettingsStatus(connection));
     } catch (saveError) {
       onError(saveError instanceof Error ? saveError.message : String(saveError));

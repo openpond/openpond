@@ -33,11 +33,12 @@ export function useAccountSettings({
     setSaving(true);
     onError(null);
     try {
-      await api.switchOpenPondAccount(connection, {
+      const switchedPayload = await api.switchOpenPondAccount(connection, {
         handle: handleValue,
         baseUrl: baseUrlValue ?? null,
       });
-      onPayload(await api.savePreferences(connection, { defaultTeamId: null }));
+      const preferencesPayload = await api.savePreferences(connection, { defaultTeamId: null });
+      onPayload({ ...switchedPayload, preferences: preferencesPayload.preferences });
     } catch (switchError) {
       onError(switchError instanceof Error ? switchError.message : String(switchError));
     } finally {
@@ -51,11 +52,12 @@ export function useAccountSettings({
     setSaving(true);
     onError(null);
     try {
-      await api.saveOpenPondAccount(connection, {
+      const savedPayload = await api.saveOpenPondAccount(connection, {
         apiKey: apiKey.trim(),
         setActive: true,
       });
-      onPayload(await api.savePreferences(connection, { defaultTeamId: null }));
+      const preferencesPayload = await api.savePreferences(connection, { defaultTeamId: null });
+      onPayload({ ...savedPayload, preferences: preferencesPayload.preferences });
       setApiKey("");
     } catch (saveError) {
       onError(saveError instanceof Error ? saveError.message : String(saveError));
@@ -71,7 +73,7 @@ export function useAccountSettings({
     try {
       const handle = input.handle?.trim();
       const environment = input.environment?.trim();
-      await api.saveOpenPondAccount(connection, {
+      const savedPayload = await api.saveOpenPondAccount(connection, {
         apiKey: input.apiKey.trim(),
         handle: handle || undefined,
         baseUrl: input.baseUrl,
@@ -79,7 +81,8 @@ export function useAccountSettings({
         environment: environment || "custom",
         setActive: true,
       });
-      onPayload(await api.savePreferences(connection, { defaultTeamId: null }));
+      const preferencesPayload = await api.savePreferences(connection, { defaultTeamId: null });
+      onPayload({ ...savedPayload, preferences: preferencesPayload.preferences });
       setApiKey("");
     } catch (saveError) {
       onError(saveError instanceof Error ? saveError.message : String(saveError));

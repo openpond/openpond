@@ -29,6 +29,14 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("instead of a bare path or raw HTML");
   });
 
+  test("keeps exposed reasoning prose-only", () => {
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("If you emit reasoning or thinking content");
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("keep it sparse and user-readable");
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("Omit reasoning for routine searches, reads, tool calls");
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("Do not restate the user request, narrate every action");
+    expect(HOSTED_CHAT_SYSTEM_PROMPT).toContain("Put necessary code or exact snippets only in the final assistant answer");
+  });
+
   test("resolves hosted chat bases to the OpChat route root", () => {
     expect(resolveHostedChatApiBaseUrl(null, {}, "https://api.openpond.ai")).toBe(
       DEFAULT_OPENPOND_OPCHAT_API_BASE_URL,

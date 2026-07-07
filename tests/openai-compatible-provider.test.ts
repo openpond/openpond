@@ -18,11 +18,20 @@ afterEach(() => {
 
 describe("OpenAI-compatible provider adapter", () => {
   test("streams chat completions with local BYOK credentials", async () => {
-    const requests: Array<{ url: string; authorization: string | null; body: Record<string, unknown> }> = [];
+    const requests: Array<{
+      url: string;
+      authorization: string | null;
+      openPondClient: string | null;
+      openPondRequestId: string | null;
+      body: Record<string, unknown>;
+    }> = [];
     globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
       requests.push({
         url: String(input),
-        authorization: new Headers(init?.headers).get("authorization"),
+        authorization: headers.get("authorization"),
+        openPondClient: headers.get("x-openpond-client"),
+        openPondRequestId: headers.get("x-openpond-request-id"),
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
       return streamResponse([
@@ -50,6 +59,8 @@ describe("OpenAI-compatible provider adapter", () => {
       {
         url: "https://provider.example/v1/chat/completions",
         authorization: "Bearer sk-test",
+        openPondClient: null,
+        openPondRequestId: null,
         body: {
           model: "test/model",
           messages: [{ role: "user", content: "hello z.ai" }],

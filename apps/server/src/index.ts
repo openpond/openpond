@@ -261,6 +261,7 @@ export async function createOpenPondServer(
     version,
     runtimeVersion,
     getCodexStatus: () => codexStatus,
+    refreshCodexStatus,
     appendRuntimeEvent,
     isClosing: () => closing,
   });

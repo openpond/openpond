@@ -9,13 +9,14 @@ import type {
   ProviderSettings,
   ProviderValidationRequest,
 } from "@openpond/contracts";
-import { api, type ClientConnection } from "../../api";
+import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { normalizeChatModel } from "../../lib/app-models";
 
 export function useProviderSettings({
   connection,
   onError,
   onPayload,
+  onPreferences,
   onProviders,
   preferences,
   providers,
@@ -23,6 +24,7 @@ export function useProviderSettings({
   connection: ClientConnection | null;
   onError: (message: string | null) => void;
   onPayload: (payload: BootstrapPayload) => void;
+  onPreferences: (payload: PreferencesPayload) => void;
   onProviders: (providers: ProviderSettings) => void;
   preferences: AppPreferences;
   providers: ProviderSettings | null | undefined;
@@ -44,7 +46,7 @@ export function useProviderSettings({
     setSaving(true);
     onError(null);
     try {
-      onPayload(
+      onPreferences(
         await api.savePreferences(connection, {
           defaultChatProvider: defaultProvider,
           defaultChatModel: normalizeChatModel(defaultProvider, defaultModel, providers),

@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Copy, CreditCard, ExternalLink, FileText, Globe2, ImageIcon } from "../icons";
+import { ChevronDown, ChevronUp, Copy, CreditCard, ExternalLink, FileText, Globe2, ImageIcon } from "../icons";
 import type { ChatAttachmentSummary } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
@@ -52,6 +52,19 @@ export const MessageRow = memo(function MessageRow({
 
   if (message.role === "activity_group") {
     return <ActivityGroup activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} message={message} />;
+  }
+
+  if (message.role === "reasoning") {
+    return (
+      <ReasoningMessage
+        activeWorkspaceAppId={activeWorkspaceAppId}
+        connection={connection}
+        message={message}
+        onOpenBrowserLink={onOpenBrowserLink}
+        onOpenFileInSidebar={onOpenFileInSidebar}
+        workspaceRootPath={workspaceRootPath}
+      />
+    );
   }
 
   if (message.role === "error") {
@@ -471,6 +484,49 @@ export const ThinkingIndicator = memo(function ThinkingIndicator() {
     </article>
   );
 });
+
+function ReasoningMessage({
+  activeWorkspaceAppId,
+  connection,
+  message,
+  onOpenBrowserLink,
+  onOpenFileInSidebar,
+  workspaceRootPath,
+}: Pick<
+  MessageRowProps,
+  "activeWorkspaceAppId" | "connection" | "message" | "onOpenBrowserLink" | "onOpenFileInSidebar" | "workspaceRootPath"
+>) {
+  const content = message.content?.trim() ?? "";
+  const [expanded, setExpanded] = useState(false);
+  if (!content) return null;
+  return (
+    <article className="message-row assistant reasoning-row">
+      <div className={`assistant-reasoning-message ${expanded ? "expanded" : "collapsed"}`}>
+        <button
+          type="button"
+          className="assistant-reasoning-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          <span>{expanded ? "Hide thinking" : "Show thinking"}</span>
+        </button>
+        {expanded ? (
+          <div className="assistant-reasoning-content">
+            <MarkdownText
+              activeWorkspaceAppId={activeWorkspaceAppId}
+              connection={connection}
+              content={content}
+              onOpenBrowserLink={onOpenBrowserLink}
+              onOpenFileInSidebar={onOpenFileInSidebar}
+              workspaceRootPath={workspaceRootPath}
+            />
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
 
 function StatusDivider({ message }: { message: ChatMessage }) {
   const tone = message.statusTone ?? "info";

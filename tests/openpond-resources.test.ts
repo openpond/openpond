@@ -107,9 +107,119 @@ describe("OpenPond resource read/search", () => {
     });
 
     expect(result.scope).toBe("workspace");
+    expect(result.truncated).toBe(false);
     expect(result.items.map((item) => item.ref)).toContain("workspace:file:src/chat-renderer.ts");
     expect(result.items.map((item) => item.ref)).toContain("workspace:file:README.md");
     expect(result.items.some((item) => item.snippet?.includes("inline image"))).toBe(true);
+  });
+
+  test("marks workspace search results truncated only when more matches exist", async () => {
+    const repoPath = await tempWorkspace();
+    await mkdir(path.join(repoPath, "src"), { recursive: true });
+    await writeFile(path.join(repoPath, "src/one.ts"), "shared needle\n");
+    await writeFile(path.join(repoPath, "src/two.ts"), "shared needle\n");
+    await writeFile(path.join(repoPath, "src/three.ts"), "shared needle\n");
+
+    const limited = await searchLocalWorkspaceResources({
+      repoPath,
+      request: { scope: "workspace", query: "shared needle", limit: 2 },
+    });
+    const complete = await searchLocalWorkspaceResources({
+      repoPath,
+      request: { scope: "workspace", query: "shared needle", limit: 5 },
+    });
+
+    expect(limited.items).toHaveLength(2);
+    expect(limited.truncated).toBe(true);
+    expect(complete.items).toHaveLength(3);
+    expect(complete.truncated).toBe(false);
+  });
+
+  test("keeps loose workspace queries out of exact search by default", async () => {
+    const repoPath = await tempWorkspace();
+    await mkdir(path.join(repoPath, "src/components/chat"), { recursive: true });
+    await writeFile(
+      path.join(repoPath, "src/components/chat/Composer.tsx"),
+      [
+        "export function Composer() {",
+        "  return <textarea aria-label=\"Message\" onKeyDown={sendMessage} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    const result = await searchLocalWorkspaceResources({
+      repoPath,
+      request: { scope: "workspace", query: "textarea TextArea chat message send", limit: 10 },
+    });
+
+    expect(result.items).toEqual([]);
+  });
+
+  test("searches workspace resources with explicit ranked multi-term retrieval", async () => {
+    const repoPath = await tempWorkspace();
+    await mkdir(path.join(repoPath, "src/components/chat"), { recursive: true });
+    await writeFile(
+      path.join(repoPath, "src/components/chat/Composer.tsx"),
+      [
+        "export function Composer() {",
+        "  return <textarea aria-label=\"Message\" onKeyDown={sendMessage} />;",
+        "}",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(repoPath, "src/components/chat/Messages.tsx"),
+      [
+        "export function UserMessage() {",
+        "  return <button aria-label=\"Show more\"><ChevronDown /></button>;",
+        "}",
+      ].join("\n"),
+    );
+
+    const composer = await searchLocalWorkspaceResources({
+      repoPath,
+      request: {
+        scope: "workspace",
+        query: "textarea TextArea chat message send",
+        limit: 10,
+        filters: { mode: "ranked" },
+      },
+    });
+    const messages = await searchLocalWorkspaceResources({
+      repoPath,
+      request: {
+        scope: "workspace",
+        query: "user message show more down arrow",
+        limit: 10,
+        filters: { mode: "ranked" },
+      },
+    });
+
+    expect(composer.items.map((item) => item.ref)).toContain("workspace:file:src/components/chat/Composer.tsx");
+    expect(messages.items.map((item) => item.ref)).toContain("workspace:file:src/components/chat/Messages.tsx");
+    expect(composer.items[0]?.metadata).toMatchObject({ matchKind: "ranked", searchMode: "ranked" });
+  });
+
+  test("searches workspace resources with explicit path lookup", async () => {
+    const repoPath = await tempWorkspace();
+    await mkdir(path.join(repoPath, "src/components/chat"), { recursive: true });
+    await mkdir(path.join(repoPath, "src/components/settings"), { recursive: true });
+    await writeFile(path.join(repoPath, "src/components/chat/MessageComposer.tsx"), "export const value = 1;\n");
+    await writeFile(path.join(repoPath, "src/components/settings/MessagePanel.tsx"), "export const value = 2;\n");
+
+    const result = await searchLocalWorkspaceResources({
+      repoPath,
+      request: {
+        scope: "workspace",
+        query: "chat composer",
+        limit: 10,
+        filters: { mode: "path" },
+      },
+    });
+
+    expect(result.items[0]).toMatchObject({
+      ref: "workspace:file:src/components/chat/MessageComposer.tsx",
+      metadata: { matchKind: "path", searchMode: "path" },
+    });
   });
 
   test("searches and reads current-session event resources", () => {

@@ -238,6 +238,7 @@ function cloudCodingSandboxCreateArgs(input: {
   return {
     teamId: input.target.teamId,
     ...(input.target.projectId ? { projectId: input.target.projectId } : {}),
+    reuseDefaultRuntime: false,
     workflowMode: "feature",
     runtimeBaseBranch: input.target.branch,
     runtimePromotionPolicy: "manual",
