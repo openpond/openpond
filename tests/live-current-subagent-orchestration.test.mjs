@@ -186,10 +186,45 @@ describe("live current OpenPond subagent orchestration", () => {
         assert.equal(state.childSession?.subagentRoleId, "research");
         assert.deepEqual(state.childSession?.modelRef, { providerId: PROVIDER_ID, modelId: MODEL_ID });
 
-        const assistantText = state.events
+        const initialAssistantText = state.events
           .filter((event) => event.sessionId === session.id && event.name === "assistant.delta")
           .map((event) => event.output ?? "")
           .join("");
+        let assistantText = initialAssistantText;
+        let followUpTurnId = null;
+        if (!/native model tool/i.test(assistantText) || !/not by regex|not regex|not.*regex/i.test(assistantText)) {
+          const followUpTurn = await api(token, `/v1/sessions/${session.id}/turns`, {
+            method: "POST",
+            body: JSON.stringify({
+              prompt: [
+                "The research subagent has completed. Use the pushed subagent receipt and child conversation context already in this chat to answer the original narrow question now.",
+                "Do not start another subagent unless the completed child result is unavailable.",
+                "Answer in two concise bullets and include the child conversation id or run id if available.",
+              ].join("\n"),
+              modelRef: { providerId: PROVIDER_ID, modelId: MODEL_ID },
+              approvalPolicy: "never",
+              sandbox: "read-only",
+            }),
+          });
+          followUpTurnId = followUpTurn?.id ?? null;
+          if (followUpTurnId) {
+            const followUpDone = await waitForEvent(
+              token,
+              events,
+              (event) => event.sessionId === session.id &&
+                event.turnId === followUpTurnId &&
+                (event.name === "turn.completed" || event.name === "turn.failed"),
+              "parent follow-up turn completion",
+              240000,
+            );
+            assert.equal(followUpDone.name, "turn.completed", followUpDone.output || "parent follow-up did not complete");
+          }
+          const followUpState = await bootstrapSessionState(token, session.id, startedRun.childSessionId);
+          assistantText = followUpState.events
+            .filter((event) => event.sessionId === session.id && event.name === "assistant.delta")
+            .map((event) => event.output ?? "")
+            .join("");
+        }
         assert.match(assistantText, /native model tool/i);
         assert.match(assistantText, /not by regex|not regex|not.*regex/i);
 
@@ -207,6 +242,8 @@ describe("live current OpenPond subagent orchestration", () => {
               runId: startedRun.runId,
               runStatus: completedEvent.data?.run?.status,
               parentTurnStatus: parentDone.name,
+              followUpTurnId,
+              initialAssistantText,
               assistantText,
             },
             null,

@@ -235,6 +235,7 @@ const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
   "subagent.cancelled",
   "subagent.message",
 ]);
+const SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES = 3;
 
 export type HostedToolMode = "auto" | "native" | "text_fallback" | "disabled";
 
@@ -1257,17 +1258,20 @@ export function createTurnRunner(deps: {
       toRole: input.toRole ?? null,
     });
     const deliveredRunIds = recipientRuns.map((run) => run.id);
-    const delivery: SubagentMessageDelivery = {
+    let delivery: SubagentMessageDelivery = {
       status: deliveredRunIds.length > 0 ? "delivered" : "undelivered",
       deliveredRunIds,
       acknowledgedRunIds: deliveredRunIds,
+      wakeRequestedRunIds: [],
+      wakeInterruptedRunIds: [],
+      wakeDeferredRunIds: [],
       reason: deliveredRunIds.length > 0
         ? null
         : input.toRunId || input.toRole
           ? "No matching active child run was available for delivery."
           : "No target run or role was supplied.",
     };
-    const message = SubagentMessageSchema.parse({
+    let message = SubagentMessageSchema.parse({
       id: randomUUID(),
       parentGoalId,
       fromRunId,
@@ -1282,6 +1286,21 @@ export function createTurnRunner(deps: {
     });
     await deps.appendMessage(message);
     await deliverSubagentMessageToReceivers(context, message, recipientRuns);
+    const wake = priority === "interrupt"
+      ? await wakeInterruptPrioritySubagentRuns(context, message, recipientRuns)
+      : null;
+    if (wake) {
+      delivery = SubagentMessageSchema.parse({
+        ...message,
+        delivery: {
+          ...delivery,
+          wakeRequestedRunIds: wake.requestedRunIds,
+          wakeInterruptedRunIds: wake.interruptedRunIds,
+          wakeDeferredRunIds: wake.deferredRunIds,
+        },
+      }).delivery!;
+      message = { ...message, delivery };
+    }
     await appendRuntimeEvent(
       event({
         sessionId: context.session.id,
@@ -1313,9 +1332,7 @@ export function createTurnRunner(deps: {
     return {
       messageId: message.id,
       delivery,
-      nextStep: deliveredRunIds.length > 0
-        ? `${priority === "interrupt" ? "Interrupt message" : "Message"} persisted, delivered, and acknowledged by ${deliveredRunIds.length} subagent run${deliveredRunIds.length === 1 ? "" : "s"} at the runtime boundary.`
-        : "Message persisted in the goal-scoped subagent mailbox.",
+      nextStep: subagentMessageDeliveryNextStep({ priority, deliveredRunIds, delivery }),
     };
   }
 
@@ -1377,6 +1394,119 @@ export function createTurnRunner(deps: {
     }
   }
 
+  async function wakeInterruptPrioritySubagentRuns(
+    context: ModelToolExecutionContext,
+    message: SubagentMessage,
+    recipients: SubagentRun[],
+  ): Promise<{ requestedRunIds: string[]; interruptedRunIds: string[]; deferredRunIds: string[] }> {
+    const deps = requireSubagentDeps();
+    const requestedRunIds: string[] = [];
+    const interruptedRunIds: string[] = [];
+    const deferredRunIds: string[] = [];
+    for (const recipient of recipients) {
+      if (!recipient.childSessionId) continue;
+      requestedRunIds.push(recipient.id);
+      const active = activeTurns.get(recipient.childSessionId);
+      const activeTurnId = active?.turn.id ?? null;
+      const requestedAt = now();
+      let wakeStatus = active ? "interrupting" : "deferred";
+      let interruptError: string | null = null;
+      const latestRun = (await deps.getRun(recipient.id).catch(() => null)) ?? recipient;
+      let updated = SubagentRunSchema.parse({
+        ...latestRun,
+        metadata: withSubagentInterruptWakeMetadata(latestRun.metadata, {
+          messageId: message.id,
+          kind: message.kind,
+          fromRunId: message.fromRunId,
+          priority: message.priority ?? "normal",
+          requestedAt,
+          activeTurnId,
+          status: wakeStatus,
+        }),
+      });
+      await deps.upsertRun(updated);
+      if (active) {
+        try {
+          await interruptActiveTurn(active, `Interrupted for subagent message ${message.id}`);
+          wakeStatus = "interrupted";
+          interruptedRunIds.push(recipient.id);
+        } catch (error) {
+          wakeStatus = "deferred";
+          interruptError = textFromUnknown(error) || "Failed to interrupt active child turn.";
+          deferredRunIds.push(recipient.id);
+        }
+      } else {
+        deferredRunIds.push(recipient.id);
+      }
+      updated = SubagentRunSchema.parse({
+        ...updated,
+        metadata: withSubagentInterruptWakeMetadata(updated.metadata, {
+          messageId: message.id,
+          kind: message.kind,
+          fromRunId: message.fromRunId,
+          priority: message.priority ?? "normal",
+          requestedAt,
+          activeTurnId,
+          status: wakeStatus,
+          ...(interruptError ? { error: interruptError } : {}),
+        }),
+      });
+      await deps.upsertRun(updated);
+      const parentSession = await getSession(updated.parentSessionId).catch(() => context.session);
+      await appendSubagentReceipt({
+        parentSession,
+        parentTurnId: updated.parentTurnId ?? context.turnId,
+        run: updated,
+        eventName: "subagent.progress",
+        status: "pending",
+        output: active
+          ? `${updated.roleId} subagent received interrupt steering and is waking at a fresh model boundary.`
+          : `${updated.roleId} subagent received interrupt steering and will read it at the next model boundary.`,
+      });
+    }
+    return { requestedRunIds, interruptedRunIds, deferredRunIds };
+  }
+
+  function subagentMessageDeliveryNextStep(input: {
+    priority: SubagentMessagePriority;
+    deliveredRunIds: string[];
+    delivery: SubagentMessageDelivery;
+  }): string {
+    if (input.deliveredRunIds.length === 0) return "Message persisted in the goal-scoped subagent mailbox.";
+    const prefix = input.priority === "interrupt" ? "Interrupt message" : "Message";
+    const base =
+      `${prefix} persisted, delivered, and acknowledged by ${input.deliveredRunIds.length} subagent run${input.deliveredRunIds.length === 1 ? "" : "s"} at the runtime boundary.`;
+    if (input.priority !== "interrupt") return base;
+    const interrupted = input.delivery.wakeInterruptedRunIds?.length ?? 0;
+    const deferred = input.delivery.wakeDeferredRunIds?.length ?? 0;
+    if (interrupted > 0) {
+      return `${base} Woke ${interrupted} active child turn${interrupted === 1 ? "" : "s"} for a fresh model boundary.`;
+    }
+    if (deferred > 0) {
+      return `${base} No active child turn needed interruption; delivery is queued for the next child model boundary.`;
+    }
+    return base;
+  }
+
+  function withSubagentInterruptWakeMetadata(
+    metadata: Record<string, unknown> | undefined,
+    wake: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const current = recordFromUnknown(metadata) ?? {};
+    const history = Array.isArray(current.interruptWakeHistory)
+      ? current.interruptWakeHistory.filter((item) => recordFromUnknown(item)).slice(-19)
+      : [];
+    const nextWake = {
+      ...(recordFromUnknown(current.interruptWake) ?? {}),
+      ...wake,
+    };
+    return {
+      ...current,
+      interruptWake: nextWake,
+      interruptWakeHistory: [...history, nextWake],
+    };
+  }
+
   async function runSubagentChildTurn(input: {
     run: SubagentRun;
     role: SubagentRoleSettings;
@@ -1413,34 +1543,66 @@ export function createTurnRunner(deps: {
       output: `${run.roleId} subagent is working in child conversation ${run.childSessionId ?? "unknown"}.`,
     });
     try {
-      const childTurn = await sendTurn(input.childSession.id, {
-        prompt: subagentChildPrompt({
-          role: input.role,
-          objective: input.run.objective,
-          parentSession: input.parentSession,
-          contextPack: input.contextPack,
-        }),
-        modelRef: input.run.modelRef ?? undefined,
-        metadata: {
-          subagentRunId: input.run.id,
-          parentSessionId: input.parentSession.id,
-          parentTurnId: input.parentTurnId,
-          parentGoalId: input.run.parentGoalId,
-          subagentRoleId: input.run.roleId,
-          subagentPermissions: input.childTurnPermissions,
-          usageAttribution: subagentUsageAttribution(input.run),
-        },
-        usageAttribution: subagentUsageAttribution(input.run),
-        approvalPolicy: input.childTurnPermissions.approvalPolicy,
-        sandbox: input.childTurnPermissions.sandbox,
-        codexPermissionMode: input.childTurnPermissions.codexPermissionMode,
-        codexReasoningEffort: input.childTurnPermissions.codexReasoningEffort,
+      let childPrompt = subagentChildPrompt({
+        role: input.role,
+        objective: input.run.objective,
+        parentSession: input.parentSession,
+        contextPack: input.contextPack,
       });
-      const finalizedChildTurn = await finalizedSubagentChildTurn(childTurn);
-      const latestAfterChild = await deps.getRun(run.id);
-      if (latestAfterChild?.status === "cancelled") return;
-      if (finalizedChildTurn.status !== "completed") {
-        throw new Error(finalizedChildTurn.error || `Child turn ended with status ${finalizedChildTurn.status}.`);
+      let wakeResumeCount = 0;
+      while (true) {
+        const childTurn = await sendTurn(input.childSession.id, {
+          prompt: childPrompt,
+          modelRef: input.run.modelRef ?? undefined,
+          metadata: {
+            subagentRunId: input.run.id,
+            parentSessionId: input.parentSession.id,
+            parentTurnId: input.parentTurnId,
+            parentGoalId: input.run.parentGoalId,
+            subagentRoleId: input.run.roleId,
+            subagentPermissions: input.childTurnPermissions,
+            usageAttribution: subagentUsageAttribution(input.run),
+          },
+          usageAttribution: subagentUsageAttribution(input.run),
+          approvalPolicy: input.childTurnPermissions.approvalPolicy,
+          sandbox: input.childTurnPermissions.sandbox,
+          codexPermissionMode: input.childTurnPermissions.codexPermissionMode,
+          codexReasoningEffort: input.childTurnPermissions.codexReasoningEffort,
+        });
+        const finalizedChildTurn = await finalizedSubagentChildTurn(childTurn);
+        const latestAfterChild = await deps.getRun(run.id);
+        if (latestAfterChild?.status === "cancelled") return;
+        run = latestAfterChild ?? run;
+        if (finalizedChildTurn.status === "interrupted") {
+          const wake = subagentInterruptWakeForTurn(run, finalizedChildTurn.id);
+          if (wake && wakeResumeCount < SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES) {
+            wakeResumeCount += 1;
+            run = await markSubagentInterruptWakeResuming({
+              run,
+              interruptedTurnId: finalizedChildTurn.id,
+              wake,
+              resumeCount: wakeResumeCount,
+            });
+            await appendSubagentReceipt({
+              parentSession: input.parentSession,
+              parentTurnId: input.parentTurnId,
+              run,
+              eventName: "subagent.progress",
+              status: "pending",
+              output: `${run.roleId} subagent is resuming after interrupt steering.`,
+            });
+            childPrompt = subagentInterruptWakeResumePrompt({
+              run,
+              interruptedTurnId: finalizedChildTurn.id,
+              wake,
+            });
+            continue;
+          }
+        }
+        if (finalizedChildTurn.status !== "completed") {
+          throw new Error(finalizedChildTurn.error || `Child turn ended with status ${finalizedChildTurn.status}.`);
+        }
+        break;
       }
       const completedAt = now();
       const summary = await latestAssistantTextForSession(input.childSession.id);
@@ -1524,6 +1686,56 @@ export function createTurnRunner(deps: {
       if (latest.status !== "in_progress") return latest;
     }
     return latest;
+  }
+
+  function subagentInterruptWakeForTurn(run: SubagentRun, turnId: string): Record<string, unknown> | null {
+    const wake = recordFromUnknown(recordFromUnknown(run.metadata)?.interruptWake);
+    if (!wake) return null;
+    if (stringFromRecord(wake, "activeTurnId") !== turnId) return null;
+    const status = stringFromRecord(wake, "status");
+    if (status !== "interrupted" && status !== "interrupting") return null;
+    if (!stringFromRecord(wake, "messageId")) return null;
+    return wake;
+  }
+
+  async function markSubagentInterruptWakeResuming(input: {
+    run: SubagentRun;
+    interruptedTurnId: string;
+    wake: Record<string, unknown>;
+    resumeCount: number;
+  }): Promise<SubagentRun> {
+    const deps = requireSubagentDeps();
+    const updated = SubagentRunSchema.parse({
+      ...input.run,
+      status: "running",
+      completedAt: null,
+      error: null,
+      metadata: withSubagentInterruptWakeMetadata(input.run.metadata, {
+        ...input.wake,
+        status: "resuming",
+        interruptedTurnId: input.interruptedTurnId,
+        resumeCount: input.resumeCount,
+        resumedAt: now(),
+      }),
+    });
+    await deps.upsertRun(updated);
+    return updated;
+  }
+
+  function subagentInterruptWakeResumePrompt(input: {
+    run: SubagentRun;
+    interruptedTurnId: string;
+    wake: Record<string, unknown>;
+  }): string {
+    const messageId = stringFromRecord(input.wake, "messageId") ?? "unknown";
+    return [
+      "A high-priority subagent mailbox message interrupted your previous child turn.",
+      `Message id: ${messageId}`,
+      `Interrupted turn: ${input.interruptedTurnId}`,
+      `Original assignment: ${input.run.objective}`,
+      "Read the Subagent mailbox interrupt in this turn context, apply that steering, and continue the assignment.",
+      "If the interrupted work was a wait, sleep, or polling command, do not repeat it unless the updated assignment still requires it.",
+    ].join("\n");
   }
 
   async function appendSubagentReceipt(input: {
@@ -4429,14 +4641,9 @@ export function createTurnRunner(deps: {
     }
   }
 
-  async function interruptSessionTurn(sessionId: string): Promise<Turn> {
-    const active = activeTurns.get(sessionId);
-    const session = active?.session ?? (await getSession(sessionId));
-    const inProgressTurn = active?.turn ?? (await findInProgressTurn(sessionId));
-    if (!inProgressTurn) throw new Error("No active turn to stop.");
-
-    active?.controller.abort();
-    if (active?.codexRuntime && active.codexTurnId) {
+  async function interruptActiveTurn(active: ActiveTurn, reason: string): Promise<Turn> {
+    active.controller.abort();
+    if (active.codexRuntime && active.codexTurnId) {
       try {
         await active.codexRuntime.client.interruptTurn({
           threadId: active.codexRuntime.threadId,
@@ -4446,7 +4653,17 @@ export function createTurnRunner(deps: {
         await active.codexRuntime.client.stop().catch(() => undefined);
       }
     }
-    return interruptTurn(session, inProgressTurn.id, "Stopped by user");
+    return interruptTurn(active.session, active.turn.id, reason);
+  }
+
+  async function interruptSessionTurn(sessionId: string, reason = "Stopped by user"): Promise<Turn> {
+    const active = activeTurns.get(sessionId);
+    const session = active?.session ?? (await getSession(sessionId));
+    const inProgressTurn = active?.turn ?? (await findInProgressTurn(sessionId));
+    if (!inProgressTurn) throw new Error("No active turn to stop.");
+
+    if (active) return interruptActiveTurn(active, reason);
+    return interruptTurn(session, inProgressTurn.id, reason);
   }
 
   async function findInProgressTurn(sessionId: string): Promise<Turn | null> {

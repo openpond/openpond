@@ -213,6 +213,9 @@ export const SubagentMessageDeliverySchema = z.object({
   status: z.enum(["pending", "delivered", "undelivered"]).default("pending"),
   deliveredRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
   acknowledgedRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
+  wakeRequestedRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
+  wakeInterruptedRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
+  wakeDeferredRunIds: z.array(z.string().trim().min(1).max(200)).max(200).default([]),
   reason: z.string().trim().min(1).max(1000).nullable().default(null),
 });
 

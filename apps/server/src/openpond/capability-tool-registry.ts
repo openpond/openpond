@@ -118,6 +118,9 @@ export type OpenPondSubagentMessageToolResult = {
     status: "pending" | "delivered" | "undelivered";
     deliveredRunIds: string[];
     acknowledgedRunIds: string[];
+    wakeRequestedRunIds?: string[];
+    wakeInterruptedRunIds?: string[];
+    wakeDeferredRunIds?: string[];
     reason: string | null;
   };
   nextStep: string;

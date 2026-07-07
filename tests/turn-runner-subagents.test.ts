@@ -882,6 +882,148 @@ describe("turn runner subagent native tools", () => {
     expect(JSON.stringify(childInputs)).toContain("Treat this as high-priority steering at this safe model boundary.");
   });
 
+  test("wakes a long-running child turn for interrupt-priority steering and resumes with mailbox context", async () => {
+    let sendStartTool = true;
+    let parentStartReturned = false;
+    let sendInterruptTool = true;
+    let childStreamStarted = false;
+    let resolveChildStreamStarted: (() => void) | null = null;
+    let resolveChildAbort: (() => void) | null = null;
+    const childStreamStartedPromise = new Promise<void>((resolve) => {
+      resolveChildStreamStarted = resolve;
+    });
+    const childAbortPromise = new Promise<void>((resolve) => {
+      resolveChildAbort = resolve;
+    });
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_start",
+      toolArgs: {},
+      disableDefaultToolCall: true,
+      preferences: preferences(),
+      initialEvents: [activeGoalEvent()],
+      textBySessionId: {
+        "role:review": [
+          "This review response should be interrupted before it lands.",
+          "Review resumed after interrupt steering.",
+        ],
+      },
+      toolCallForStream: (_streamInput, context) => {
+        if (context.requestSession?.id !== "session_1") return null;
+        if (sendStartTool) {
+          sendStartTool = false;
+          return {
+            name: "openpond_subagent_start",
+            args: {
+              roleId: "review",
+              objective: "Review the patch slowly before reporting",
+              required: true,
+            },
+          };
+        }
+        if (!parentStartReturned || !childStreamStarted || !sendInterruptTool) return null;
+        const run = context.runs.find((candidate) => candidate.roleId === "review");
+        if (!run) return null;
+        sendInterruptTool = false;
+        return {
+          name: "openpond_subagent_send_message",
+          args: {
+            toRunId: run.id,
+            kind: "status",
+            priority: "interrupt",
+            body: "Stop waiting; report the narrowed review scope now.",
+          },
+        };
+      },
+      onStreamInput: async (streamInput, context) => {
+        if (context.requestSession?.subagentRoleId !== "review" || context.injectedFlags.reviewWaitStarted) return;
+        context.injectedFlags.reviewWaitStarted = true;
+        childStreamStarted = true;
+        resolveChildStreamStarted?.();
+        await new Promise<void>((resolve) => {
+          const signal: AbortSignal | undefined = streamInput.signal;
+          if (!signal) {
+            resolve();
+            return;
+          }
+          if (signal.aborted) {
+            resolveChildAbort?.();
+            resolve();
+            return;
+          }
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolveChildAbort?.();
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+
+    const startTurn = await harness.runner.sendTurn("session_1", {
+      prompt: "Start a slow review subagent",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+    parentStartReturned = true;
+    await withTimeout(childStreamStartedPromise, "child stream did not start");
+
+    const messageTurn = await harness.runner.sendTurn("session_1", {
+      prompt: "Interrupt the review child with new scope",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+    await withTimeout(childAbortPromise, "child stream was not interrupted");
+    await harness.subagentQueue.drain();
+
+    const run = harness.runs.find((candidate) => candidate.roleId === "review");
+    const childSession = [...harness.sessions.values()].find((session) => session.subagentRunId === run?.id);
+    expect(run).toBeTruthy();
+    expect(childSession).toBeTruthy();
+    const runId = run?.id ?? "missing-run";
+    const childSessionId = childSession?.id ?? "missing-child-session";
+    expect(startTurn.status).toBe("completed");
+    expect(messageTurn.status).toBe("completed");
+    expect(run).toMatchObject({
+      status: "completed",
+      report: {
+        summary: "Review resumed after interrupt steering.",
+      },
+    });
+    expect((run?.metadata as any)?.interruptWake).toMatchObject({
+      status: "resuming",
+      resumeCount: 1,
+    });
+    const interruptedChildTurns = harness.turns.filter(
+      (turn) => turn.sessionId === childSessionId && turn.status === "interrupted",
+    );
+    const completedChildTurns = harness.turns.filter(
+      (turn) => turn.sessionId === childSessionId && turn.status === "completed",
+    );
+    expect(interruptedChildTurns).toHaveLength(1);
+    expect(completedChildTurns).toHaveLength(1);
+    expect(harness.messages[0]).toMatchObject({
+      priority: "interrupt",
+      delivery: {
+        status: "delivered",
+        deliveredRunIds: [runId],
+        acknowledgedRunIds: [runId],
+      },
+    });
+    const messageResult = harness.events.find(
+      (event) => event.name === "tool.completed" && event.action === "openpond_subagent_send_message",
+    );
+    expect((messageResult?.data as any)?.result.delivery).toMatchObject({
+      wakeRequestedRunIds: [runId],
+      wakeInterruptedRunIds: [runId],
+      wakeDeferredRunIds: [],
+    });
+    expect((messageResult?.data as any)?.result.nextStep).toContain("Woke 1 active child turn");
+    const resumedInput = harness.streamInputs.find((input) => input.requestId === completedChildTurns[0]?.id);
+    expect(JSON.stringify(resumedInput)).toContain("Subagent mailbox interrupt:");
+    expect(JSON.stringify(resumedInput)).toContain("Stop waiting; report the narrowed review scope now.");
+  });
+
   test("inherits parent approval policy while clamping read-only child sandbox", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
@@ -1578,6 +1720,18 @@ function createSubagentHarness(input: {
       injectedFlags: Record<string, boolean>;
     },
   ) => void | Promise<void>;
+  toolCallForStream?: (
+    streamInput: any,
+    context: {
+      streamPass: number;
+      requestTurn: Turn | undefined;
+      requestSession: Session | null;
+      events: RuntimeEvent[];
+      runs: SubagentRun[];
+      injectedFlags: Record<string, boolean>;
+    },
+  ) => { name: string; args: Record<string, unknown>; id?: string } | null | Promise<{ name: string; args: Record<string, unknown>; id?: string } | null>;
+  disableDefaultToolCall?: boolean;
   forkSandboxForSubagent?: (input: {
     sandboxId: string;
     payload: Record<string, unknown>;
@@ -1828,6 +1982,32 @@ function createSubagentHarness(input: {
         runs,
         injectedFlags,
       });
+      const scriptedToolCall = await input.toolCallForStream?.(streamInput, {
+        streamPass,
+        requestTurn,
+        requestSession: requestSession ?? null,
+        events,
+        runs,
+        injectedFlags,
+      });
+      if (scriptedToolCall) {
+        yield {
+          toolCalls: [
+            {
+              index: 0,
+              id: scriptedToolCall.id ?? `call_${scriptedToolCall.name}_${streamPass}`,
+              type: "function",
+              function: {
+                name: scriptedToolCall.name,
+                arguments: JSON.stringify(scriptedToolCall.args),
+              },
+            },
+          ],
+          raw: { pass: streamPass, scriptedToolCall: true },
+        };
+        yield { finishReason: "tool_calls", raw: { pass: streamPass, scriptedToolCall: true } };
+        return;
+      }
       const scripted = requestTurn?.sessionId
         ? input.textBySessionId?.[requestTurn.sessionId] ??
           (requestSession?.subagentRoleId ? input.textBySessionId?.[`role:${requestSession.subagentRoleId}`] : null)
@@ -1851,7 +2031,7 @@ function createSubagentHarness(input: {
         if (usage) yield { usage, raw: { pass: streamPass, scripted: true, usage: true } };
         return;
       }
-      if (streamPass === 1) {
+      if (!input.disableDefaultToolCall && streamPass === 1) {
         yield {
           toolCalls: [
             {
@@ -1899,6 +2079,20 @@ function git(cwd: string, args: string[]): void {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args.join(" ")} failed`);
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, message: string, ms = 3000): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 
