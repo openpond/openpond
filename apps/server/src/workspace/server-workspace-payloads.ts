@@ -62,6 +62,7 @@ import {
   updateLocalProjectAgentSetup,
   upsertLocalProject,
 } from "./local-projects.js";
+import { subagentIsolatedWorkspaceRepoPath } from "./subagent-workspace.js";
 import { writeWorkspaceFile } from "../workspace-tools/workspace-tool-file-system.js";
 import type { SqliteStore } from "../store/store.js";
 import { now, textFromUnknown } from "../utils.js";
@@ -245,9 +246,11 @@ export function createServerWorkspacePayloads(deps: {
   }
 
   async function resolveSessionWorkspaceCwd(
-    session: Pick<Session, "appId" | "cwd" | "workspaceId" | "workspaceKind">,
+    session: Pick<Session, "appId" | "cwd" | "metadata" | "subagentRunId" | "workspaceId" | "workspaceKind">,
     options: { ensureOpenPond?: boolean } = {}
   ): Promise<string | null> {
+    const subagentRepoPath = subagentIsolatedWorkspaceRepoPath(session);
+    if (subagentRepoPath) return subagentRepoPath;
     if (session.workspaceKind === "local_project" && session.workspaceId) {
       const project = await findLocalWorkspace(session.workspaceId);
       if (project) return localProjectWorkspacePaths(project).repoPath;

@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
   DEFAULT_OPENPOND_CHAT_MODEL,
+  SubagentRunSchema,
   type ChatProvider,
   type RuntimeEvent,
   type Session,
+  type SubagentRef,
+  type SubagentRun,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { HostedChatMessage } from "@openpond/cloud";
@@ -311,6 +314,10 @@ function serializeEventsForCompaction(events: RuntimeEvent[], maxInputChars: num
       append(section("Goal Context", goalContextPreview(item), item));
       continue;
     }
+    if (item.name.startsWith("subagent.")) {
+      append(section("Subagent Activity", subagentEventPreview(item), item));
+      continue;
+    }
     if (item.name === "turn.failed") {
       append(section("Turn Failed", item.error ?? item.output ?? "", item));
       continue;
@@ -357,14 +364,55 @@ function goalContextPreview(event: RuntimeEvent): string {
   return [ref ? `ref: ${ref}` : null, event.output, textFromUnknown(data)].filter(Boolean).join("\n");
 }
 
+function subagentEventPreview(event: RuntimeEvent): string {
+  const run = subagentRunFromEvent(event);
+  if (!run) return eventPreview(event);
+  const usage = asRecord(run.metadata.usage);
+  const report = run.report;
+  return [
+    `run: subagent-run:${run.id}`,
+    `role: ${run.roleId}`,
+    `status: ${run.status}`,
+    run.parentGoalId ? `parent goal: ${run.parentGoalId}` : null,
+    run.childSessionId ? `child session: session:${run.childSessionId}` : null,
+    `objective: ${run.objective}`,
+    report?.summary ? `summary: ${report.summary}` : null,
+    report?.findings.length ? `findings: ${report.findings.slice(0, 6).join(" | ")}` : null,
+    report?.blockers.length ? `blockers: ${report.blockers.slice(0, 6).join(" | ")}` : null,
+    report?.testsRun.length ? `tests: ${report.testsRun.slice(0, 6).join(" | ")}` : null,
+    subagentRefsPreview(report?.artifacts, "artifacts"),
+    subagentRefPreview(report?.patchRef, "patch"),
+    subagentRefPreview(report?.diffRef, "diff"),
+    usage ? subagentUsagePreview(usage) : null,
+    run.error ? `error: ${run.error}` : null,
+  ].filter(Boolean).join("\n");
+}
+
 function durableResourceRefs(events: RuntimeEvent[]): string[] {
   const refs = new Set<string>();
   for (const item of events) {
     if (isGoalContextEvent(item) && item.id) refs.add(`goal-context:${item.id}`);
+    collectSubagentRefs(item, refs);
     collectResourceRefs(item.data, refs);
     collectResourceRefs(item.args, refs);
   }
   return [...refs].slice(0, 100);
+}
+
+function collectSubagentRefs(event: RuntimeEvent, refs: Set<string>): void {
+  if (!event.name.startsWith("subagent.")) return;
+  const run = subagentRunFromEvent(event);
+  if (!run) return;
+  refs.add(`subagent-run:${run.id}`);
+  if (run.childSessionId) refs.add(`session:${run.childSessionId}`);
+  for (const ref of [
+    ...(run.report?.artifacts ?? []),
+    run.report?.patchRef ?? null,
+    run.report?.diffRef ?? null,
+  ]) {
+    if (!ref) continue;
+    refs.add(subagentDurableRef(ref));
+  }
 }
 
 function collectResourceRefs(value: unknown, refs: Set<string>): void {
@@ -384,7 +432,45 @@ function collectResourceRefs(value: unknown, refs: Set<string>): void {
 }
 
 function isDurableResourceRef(value: string): boolean {
-  return /^(workspace:(?:file|dir):|sandbox:(?:file|dir):|git:|event:|message:|artifact:|goal-context:)/.test(value);
+  return /^(workspace:(?:file|dir):|sandbox:(?:file|dir):|git:|event:|message:|artifact:|goal-context:|session:|subagent-run:)/.test(value);
+}
+
+function subagentRunFromEvent(event: RuntimeEvent): SubagentRun | null {
+  const data = asRecord(event.data);
+  const parsed = SubagentRunSchema.safeParse(asRecord(data?.run));
+  return parsed.success ? parsed.data : null;
+}
+
+function subagentRefsPreview(refs: readonly SubagentRef[] | null | undefined, label: string): string | null {
+  if (!refs?.length) return null;
+  return `${label}: ${refs.slice(0, 8).map((ref) => `${ref.kind}:${ref.id} (${ref.label})`).join(" | ")}`;
+}
+
+function subagentRefPreview(ref: SubagentRef | null | undefined, label: string): string | null {
+  return ref ? `${label}: ${ref.kind}:${ref.id} (${ref.label})` : null;
+}
+
+function subagentDurableRef(ref: SubagentRef): string {
+  if (ref.kind === "session") return `session:${ref.id}`;
+  if (ref.kind === "artifact") return `artifact:${ref.id}`;
+  if (ref.kind === "turn") return `event:${ref.id}`;
+  if (ref.kind === "diff") return `git:diff:${ref.id}`;
+  return ref.id.startsWith("workspace:") || ref.id.startsWith("sandbox:") ? ref.id : `workspace:file:${ref.id}`;
+}
+
+function subagentUsagePreview(usage: Record<string, unknown>): string | null {
+  const totalTokens = numberValue(usage.totalTokens);
+  const requestCount = numberValue(usage.requestCount);
+  if (totalTokens <= 0 && requestCount <= 0) return null;
+  return `usage: ${totalTokens} tokens across ${requestCount} ${requestCount === 1 ? "request" : "requests"}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
 function truncate(value: string, maxChars: number): string {

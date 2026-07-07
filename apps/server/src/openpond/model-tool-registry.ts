@@ -6,6 +6,7 @@ import type {
   OpenPondApp,
   OpenPondProfileSkill,
   RuntimeEvent,
+  SendTurnRequest,
   Session,
   WorkspaceDiffSummary,
   WorkspaceToolResult,
@@ -37,6 +38,10 @@ export type ToolVisibilityContext = {
 export type ModelToolExecutionContext = {
   session: Session;
   turnId: string;
+  turnPermissions: Pick<
+    SendTurnRequest,
+    "approvalPolicy" | "sandbox" | "codexPermissionMode" | "codexReasoningEffort"
+  >;
   provider: ChatProvider;
   model: string;
   callId: string;

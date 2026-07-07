@@ -8,15 +8,16 @@ export function mergeSessionPreservingLocalSidebarState(
   current: Session | null | undefined,
   incoming: Session,
 ): Session {
-  if (!current || !isNewerIso(current.updatedAt, incoming.updatedAt)) return incoming;
-  return {
+  if (!current) return incoming;
+  const merged = isNewerIso(current.updatedAt, incoming.updatedAt) ? {
     ...incoming,
     pinned: current.pinned,
     archived: current.archived,
     order: current.order,
     status: current.status,
     updatedAt: current.updatedAt,
-  };
+  } : incoming;
+  return sameSession(current, merged) ? current : merged;
 }
 
 export function mergeSessionPreservingLocalSidebarStateAndRecency(
@@ -24,7 +25,7 @@ export function mergeSessionPreservingLocalSidebarStateAndRecency(
   incoming: Session,
 ): Session {
   const merged = mergeSessionPreservingLocalSidebarState(current, incoming);
-  return current
+  const next = current
     ? {
         ...merged,
         pinned: current.pinned,
@@ -33,6 +34,7 @@ export function mergeSessionPreservingLocalSidebarStateAndRecency(
         updatedAt: current.updatedAt,
       }
     : merged;
+  return current && sameSession(current, next) ? current : next;
 }
 
 export function upsertSessionPreservingLocalSidebarState(
@@ -40,12 +42,15 @@ export function upsertSessionPreservingLocalSidebarState(
   incoming: Session,
 ): Session[] {
   let found = false;
+  let changed = false;
   const next = sessions.map((session) => {
     if (session.id !== incoming.id) return session;
     found = true;
-    return mergeSessionPreservingLocalSidebarState(session, incoming);
+    const merged = mergeSessionPreservingLocalSidebarState(session, incoming);
+    if (merged !== session) changed = true;
+    return merged;
   });
-  return found ? next : [incoming, ...sessions];
+  return found ? (changed ? next : sessions) : [incoming, ...sessions];
 }
 
 export function upsertSessionPreservingLocalSidebarStateAndRecency(
@@ -53,12 +58,15 @@ export function upsertSessionPreservingLocalSidebarStateAndRecency(
   incoming: Session,
 ): Session[] {
   let found = false;
+  let changed = false;
   const next = sessions.map((session) => {
     if (session.id !== incoming.id) return session;
     found = true;
-    return mergeSessionPreservingLocalSidebarStateAndRecency(session, incoming);
+    const merged = mergeSessionPreservingLocalSidebarStateAndRecency(session, incoming);
+    if (merged !== session) changed = true;
+    return merged;
   });
-  return found ? next : [incoming, ...sessions];
+  return found ? (changed ? next : sessions) : [incoming, ...sessions];
 }
 
 export function mergeSessionListPreservingLocalSidebarState(
@@ -139,6 +147,10 @@ function isNewerIso(left: string, right: string): boolean {
   const leftMs = Date.parse(left);
   const rightMs = Date.parse(right);
   return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs > rightMs;
+}
+
+function sameSession(left: Session, right: Session): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function latestSessionUpdatedAt(sessions: Session[]): number | null {

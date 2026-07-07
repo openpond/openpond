@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { CodexNotification } from "@openpond/codex-provider";
-import type { ModelUsageRecord, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import {
+  SubagentRunSchema,
+  type Approval,
+  type ModelUsageRecord,
+  type RuntimeEvent,
+  type Session,
+  type SubagentRun,
+  type Turn,
+} from "@openpond/contracts";
 import type { SqliteStore } from "../apps/server/src/store/store";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 import { createCodexBridge } from "../apps/server/src/runtime/codex-bridge";
@@ -92,9 +100,117 @@ describe("codex bridge usage ledger", () => {
       },
     });
   });
+
+  test("mirrors child approval waits and resolutions to parent subagent receipts", async () => {
+    const queue = createBackgroundWorkerQueue({ queueId: "codex-approval-ingestion" });
+    const events: RuntimeEvent[] = [];
+    const approvals: Approval[] = [];
+    const runs: SubagentRun[] = [
+      subagentRun({
+        id: "run_child",
+        parentSessionId: "session_parent",
+        parentTurnId: "turn_parent",
+        parentGoalId: "goal_parent",
+        childSessionId: "session_child",
+        status: "running",
+      }),
+    ];
+    const parentSession = codexSession({
+      id: "session_parent",
+      title: "Parent chat",
+    });
+    const childSession = codexSession({
+      id: "session_child",
+      title: "Research child",
+      parentSessionId: "session_parent",
+      parentTurnId: "turn_parent",
+      parentGoalId: "goal_parent",
+      subagentRunId: "run_child",
+      subagentRoleId: "research",
+      hiddenFromDefaultSidebar: true,
+    });
+    const bridge = createCodexBridge({
+      store: {
+        async snapshot() {
+          return {
+            sessions: [parentSession, childSession],
+            turns: [codexTurn({ id: "turn_child", sessionId: "session_child" })],
+            events,
+            approvals,
+          };
+        },
+        async getSubagentRun(runId: string) {
+          return runs.find((run) => run.id === runId) ?? null;
+        },
+        async upsertSubagentRun(run: SubagentRun) {
+          const parsed = SubagentRunSchema.parse(run);
+          const index = runs.findIndex((candidate) => candidate.id === parsed.id);
+          if (index === -1) runs.push(parsed);
+          else runs[index] = parsed;
+          return parsed;
+        },
+      } as unknown as SqliteStore,
+      upsertApproval: async (approval) => {
+        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        if (index === -1) approvals.push(approval);
+        else approvals[index] = approval;
+      },
+      appendRuntimeEvent: async (event) => {
+        events.push(event);
+      },
+      providerRuntimeIngestionQueue: queue,
+    });
+
+    const pendingResult = bridge.handleCodexServerRequest("session_child", {
+      id: "provider_request_1",
+      method: "item/commandExecution/requestApproval",
+      params: {
+        turnId: "turn_child",
+        command: "bun test tests/turn-runner-subagents.test.ts",
+        reason: "Validate child subagent changes.",
+      },
+    } as any);
+    await waitFor(() => events.some((event) => event.name === "subagent.blocked" && event.sessionId === "session_parent"));
+
+    expect(runs[0]).toMatchObject({
+      status: "blocked",
+      error: "Waiting for approval: bun test tests/turn-runner-subagents.test.ts",
+      metadata: {
+        pendingApproval: {
+          sessionId: "session_child",
+          status: "pending",
+        },
+      },
+    });
+    expect(events.find((event) => event.name === "subagent.blocked" && event.sessionId === "session_parent")).toMatchObject({
+      status: "pending",
+      output: "Subagent research is waiting for approval: bun test tests/turn-runner-subagents.test.ts",
+      data: {
+        childSessionId: "session_child",
+        parentGoalId: "goal_parent",
+      },
+    });
+
+    await bridge.resolveApproval(approvals[0]!.id, { decision: "accept" });
+    await pendingResult;
+
+    expect(runs[0]).toMatchObject({
+      status: "running",
+      error: null,
+      metadata: {
+        lastApproval: {
+          status: "accepted",
+        },
+      },
+    });
+    expect(events.find((event) => event.name === "subagent.started" && event.sessionId === "session_parent")).toMatchObject({
+      status: "started",
+      output: "Subagent research approval accepted; child run is continuing.",
+    });
+  });
 });
 
-function codexSession(): Session {
+function codexSession(overrides: Partial<Session> = {}): Session {
   return {
     id: "session_codex",
     provider: "codex",
@@ -116,10 +232,11 @@ function codexSession(): Session {
     pinned: false,
     archived: false,
     order: 0,
+    ...overrides,
   };
 }
 
-function codexTurn(): Turn {
+function codexTurn(overrides: Partial<Turn> = {}): Turn {
   return {
     id: "turn_codex",
     sessionId: "session_codex",
@@ -133,5 +250,36 @@ function codexTurn(): Turn {
     metadata: {},
     createPipelineRequest: null,
     createPipeline: null,
+    ...overrides,
   };
+}
+
+function subagentRun(overrides: Partial<SubagentRun> = {}): SubagentRun {
+  return SubagentRunSchema.parse({
+    id: "run_child",
+    parentSessionId: "session_parent",
+    parentTurnId: "turn_parent",
+    parentGoalId: "goal_parent",
+    childSessionId: "session_child",
+    roleId: "research",
+    objective: "Review approval behavior",
+    modelRef: { providerId: "codex", modelId: "gpt-5.3-codex" },
+    isolationMode: "copy_on_write",
+    toolPolicy: "read_only",
+    background: true,
+    peerMessages: "goal_scoped",
+    status: "running",
+    required: true,
+    createdAt: "2026-07-04T10:00:00.000Z",
+    startedAt: "2026-07-04T10:00:01.000Z",
+    ...overrides,
+  });
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("Timed out waiting for condition.");
 }

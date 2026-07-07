@@ -312,6 +312,40 @@ describe("sidebar terminal indicators", () => {
     expect(markup).toContain("...");
     expect(markup).not.toContain("line 6");
   });
+
+  test("renders active subagents with purple running state ahead of goal state", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture(),
+        selected: false,
+        hideIcon: true,
+        running: true,
+        goalRuntime: {
+          objective: "Review command access doc",
+          status: "active",
+          timeUsedSeconds: 12,
+          tokensUsed: null,
+          tokenBudget: null,
+          actionLabel: "Pursuing goal",
+          timeLabel: "12s",
+          label: "Goal 12s",
+          detail: "Active",
+          tooltip: "Goal runtime: 12 seconds. Active. Review command access doc",
+          tone: "active",
+        },
+        subagentRuntime: subagentRuntimeFixture(),
+        onSelect: () => undefined,
+        onTogglePin: () => undefined,
+        onArchive: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("sidebar-running-dot subagent");
+    expect(markup).toContain("sidebar-running-popover-dot subagent");
+    expect(markup).toContain("2 subagents running");
+    expect(markup).toContain("Subagents: Coding running, Review queued");
+    expect(markup).not.toContain("sidebar-running-dot goal");
+  });
 });
 
 function terminalTab(
@@ -358,5 +392,119 @@ function sessionFixture(): Session {
     pinned: false,
     archived: false,
     order: 0,
+  };
+}
+
+function subagentRuntimeFixture() {
+  const coding = {
+    id: "run_coding",
+    parentSessionId: "session_1",
+    parentTurnId: "turn_1",
+    parentGoalId: "goal_1",
+    childSessionId: "child_coding",
+    roleId: "coding",
+    objective: "Implement the patch",
+    modelRef: { providerId: "zai", modelId: "glm-5.2" },
+    isolationMode: "copy_on_write",
+    toolPolicy: "read_only",
+    background: true,
+    peerMessages: "goal_scoped",
+    status: "running",
+    required: true,
+    createdAt: "2026-07-07T10:00:00.000Z",
+    startedAt: "2026-07-07T10:00:01.000Z",
+    completedAt: null,
+    error: null,
+    report: null,
+    metadata: {},
+  } as const;
+  const review = {
+    ...coding,
+    id: "run_review",
+    childSessionId: "child_review",
+    roleId: "review",
+    objective: "Review the patch",
+    status: "queued",
+    startedAt: null,
+  } as const;
+  return {
+    sessionId: "session_1",
+    runs: [coding, review],
+    activeRuns: [coding, review],
+    blockedRuns: [],
+    completedRuns: [],
+    latestRun: coding,
+    activeCount: 2,
+    blockedCount: 0,
+    completedCount: 0,
+    requiredOpenCount: 2,
+    usage: {
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      requestCount: 0,
+    },
+    blockers: [],
+    evidenceRefs: [],
+    testsRunCount: 0,
+    taskGraph: {
+      rootId: "parent:session_1",
+      nodes: [
+        {
+          runId: "run_coding",
+          roleId: "coding",
+          status: "running",
+          objective: "Implement the patch",
+          required: true,
+          childSessionId: "child_coding",
+          modelLabel: "zai/glm-5.2",
+          isolationLabel: "copy on write - read only",
+          summary: null,
+          blockerCount: 0,
+          evidenceCount: 0,
+          testsRunCount: 0,
+          createdAt: "2026-07-07T10:00:00.000Z",
+          startedAt: "2026-07-07T10:00:01.000Z",
+          completedAt: null,
+        },
+        {
+          runId: "run_review",
+          roleId: "review",
+          status: "queued",
+          objective: "Review the patch",
+          required: true,
+          childSessionId: "child_review",
+          modelLabel: "zai/glm-5.2",
+          isolationLabel: "copy on write - read only",
+          summary: null,
+          blockerCount: 0,
+          evidenceCount: 0,
+          testsRunCount: 0,
+          createdAt: "2026-07-07T10:00:00.000Z",
+          startedAt: null,
+          completedAt: null,
+        },
+      ],
+      edges: [
+        {
+          id: "start:run_coding",
+          fromRunId: "parent:session_1",
+          toRunId: "run_coding",
+          kind: "started",
+          label: "Started",
+          createdAt: "2026-07-07T10:00:00.000Z",
+        },
+        {
+          id: "start:run_review",
+          fromRunId: "parent:session_1",
+          toRunId: "run_review",
+          kind: "started",
+          label: "Started",
+          createdAt: "2026-07-07T10:00:00.000Z",
+        },
+      ],
+    },
+    label: "2 subagents running",
+    tooltip: "Subagents: Coding running, Review queued",
   };
 }

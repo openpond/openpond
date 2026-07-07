@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUBAGENT_RUNTIME_EVENT_NAMES } from "./subagents.js";
 
 export const RuntimeEventNameSchema = z.enum([
   "session.started",
@@ -25,6 +26,7 @@ export const RuntimeEventNameSchema = z.enum([
   "turn.failed",
   "turn.interrupted",
   "session.closed",
+  ...SUBAGENT_RUNTIME_EVENT_NAMES,
   "diagnostic",
 ]);
 

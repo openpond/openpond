@@ -1,6 +1,7 @@
 import type { Approval, ContextUsageSnapshot, RuntimeEvent } from "@openpond/contracts";
 import { latestContextUsageFromEvents } from "./context-window";
 import { latestGoalRuntimeFromEvents, type GoalRuntimeStatus } from "./goal-runtime";
+import { latestSubagentRuntimeFromEvents, type SubagentRuntimeStatus } from "./subagent-runtime";
 
 export type ApprovalStatus = Approval["status"];
 
@@ -8,7 +9,9 @@ export type RuntimeIndexes = {
   eventsBySessionId: Map<string, RuntimeEvent[]>;
   latestContextUsageBySessionId: Map<string, ContextUsageSnapshot>;
   latestGoalRuntimeBySessionId: Map<string, GoalRuntimeStatus>;
+  latestSubagentRuntimeBySessionId: Map<string, SubagentRuntimeStatus>;
   activeGoalSessionIds: Set<string>;
+  activeSubagentSessionIds: Set<string>;
   approvalsById: Map<string, Approval>;
   approvalsByStatus: Map<ApprovalStatus, Approval[]>;
   pendingApprovalsBySessionId: Map<string, Approval[]>;
@@ -45,7 +48,12 @@ export function buildRuntimeIndexesWithReuse(
 
 function buildRuntimeEventIndexes(events: RuntimeEvent[]): Pick<
   RuntimeIndexes,
-  "eventsBySessionId" | "latestContextUsageBySessionId" | "latestGoalRuntimeBySessionId" | "activeGoalSessionIds"
+  | "eventsBySessionId"
+  | "latestContextUsageBySessionId"
+  | "latestGoalRuntimeBySessionId"
+  | "latestSubagentRuntimeBySessionId"
+  | "activeGoalSessionIds"
+  | "activeSubagentSessionIds"
 > {
   const eventsBySessionId = new Map<string, RuntimeEvent[]>();
   for (const item of events) {
@@ -67,12 +75,19 @@ function appendRuntimeEventIndexes(
   events: RuntimeEvent[],
 ): Pick<
   RuntimeIndexes,
-  "eventsBySessionId" | "latestContextUsageBySessionId" | "latestGoalRuntimeBySessionId" | "activeGoalSessionIds"
+  | "eventsBySessionId"
+  | "latestContextUsageBySessionId"
+  | "latestGoalRuntimeBySessionId"
+  | "latestSubagentRuntimeBySessionId"
+  | "activeGoalSessionIds"
+  | "activeSubagentSessionIds"
 > {
   const eventsBySessionId = new Map(previous.eventsBySessionId);
   const latestContextUsageBySessionId = new Map(previous.latestContextUsageBySessionId);
   const latestGoalRuntimeBySessionId = new Map(previous.latestGoalRuntimeBySessionId);
+  const latestSubagentRuntimeBySessionId = new Map(previous.latestSubagentRuntimeBySessionId);
   const activeGoalSessionIds = new Set(previous.activeGoalSessionIds);
+  const activeSubagentSessionIds = new Set(previous.activeSubagentSessionIds);
   const changedSessionIds = new Set<string>();
 
   for (let index = previousEventCount; index < events.length; index += 1) {
@@ -108,13 +123,28 @@ function appendRuntimeEventIndexes(
       latestGoalRuntimeBySessionId.delete(sessionId);
       activeGoalSessionIds.delete(sessionId);
     }
+
+    const subagentRuntime = latestSubagentRuntimeFromEvents(sessionEvents, sessionId);
+    if (subagentRuntime) {
+      latestSubagentRuntimeBySessionId.set(sessionId, subagentRuntime);
+      if (subagentRuntime.activeCount > 0) {
+        activeSubagentSessionIds.add(sessionId);
+      } else {
+        activeSubagentSessionIds.delete(sessionId);
+      }
+    } else {
+      latestSubagentRuntimeBySessionId.delete(sessionId);
+      activeSubagentSessionIds.delete(sessionId);
+    }
   }
 
   return {
     eventsBySessionId,
     latestContextUsageBySessionId,
     latestGoalRuntimeBySessionId,
+    latestSubagentRuntimeBySessionId,
     activeGoalSessionIds,
+    activeSubagentSessionIds,
   };
 }
 
@@ -122,11 +152,18 @@ function runtimeEventDerivedIndexes(
   eventsBySessionId: Map<string, RuntimeEvent[]>,
 ): Pick<
   RuntimeIndexes,
-  "eventsBySessionId" | "latestContextUsageBySessionId" | "latestGoalRuntimeBySessionId" | "activeGoalSessionIds"
+  | "eventsBySessionId"
+  | "latestContextUsageBySessionId"
+  | "latestGoalRuntimeBySessionId"
+  | "latestSubagentRuntimeBySessionId"
+  | "activeGoalSessionIds"
+  | "activeSubagentSessionIds"
 > {
   const latestContextUsageBySessionId = new Map<string, ContextUsageSnapshot>();
   const latestGoalRuntimeBySessionId = new Map<string, GoalRuntimeStatus>();
+  const latestSubagentRuntimeBySessionId = new Map<string, SubagentRuntimeStatus>();
   const activeGoalSessionIds = new Set<string>();
+  const activeSubagentSessionIds = new Set<string>();
   for (const [sessionId, sessionEvents] of eventsBySessionId) {
     const contextUsage = latestContextUsageFromEvents(sessionEvents);
     if (contextUsage) latestContextUsageBySessionId.set(sessionId, contextUsage);
@@ -136,12 +173,20 @@ function runtimeEventDerivedIndexes(
     latestGoalRuntimeBySessionId.set(sessionId, goalRuntime);
     if (goalRuntime.tone === "active") activeGoalSessionIds.add(sessionId);
   }
+  for (const [sessionId, sessionEvents] of eventsBySessionId) {
+    const subagentRuntime = latestSubagentRuntimeFromEvents(sessionEvents, sessionId);
+    if (!subagentRuntime) continue;
+    latestSubagentRuntimeBySessionId.set(sessionId, subagentRuntime);
+    if (subagentRuntime.activeCount > 0) activeSubagentSessionIds.add(sessionId);
+  }
 
   return {
     eventsBySessionId,
     latestContextUsageBySessionId,
     latestGoalRuntimeBySessionId,
+    latestSubagentRuntimeBySessionId,
     activeGoalSessionIds,
+    activeSubagentSessionIds,
   };
 }
 
@@ -212,6 +257,14 @@ export function latestGoalRuntimeForSession(
 ): GoalRuntimeStatus | null {
   if (!sessionId) return null;
   return indexes.latestGoalRuntimeBySessionId.get(sessionId) ?? null;
+}
+
+export function latestSubagentRuntimeForSession(
+  indexes: RuntimeIndexes,
+  sessionId: string | null,
+): SubagentRuntimeStatus | null {
+  if (!sessionId) return null;
+  return indexes.latestSubagentRuntimeBySessionId.get(sessionId) ?? null;
 }
 
 export function approvalsWithStatus(indexes: RuntimeIndexes, status: ApprovalStatus): Approval[] {

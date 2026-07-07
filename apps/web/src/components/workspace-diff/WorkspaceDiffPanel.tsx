@@ -4,6 +4,7 @@ import { api, type ClientConnection } from "../../api";
 import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import { DEFAULT_APP_PREFERENCES } from "../../lib/app-models";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { GoalDetailsView, type GoalDetailsCreateRuntime } from "../goal/GoalDetailsView";
@@ -108,6 +109,7 @@ type WorkspaceGoalDetails = {
   active: boolean;
   createRuntime: GoalDetailsCreateRuntime | null;
   goalRuntime: GoalRuntimeStatus | null;
+  subagentRuntime: SubagentRuntimeStatus | null;
 };
 
 function detailedWorkspaceFile(
@@ -288,7 +290,7 @@ function WorkspaceDiffPanelInner({
   const sourceKey = sandboxMode ? `sandbox:${sandboxId ?? "pending"}` : `workspace:${appId ?? "none"}`;
   const canOpenRequestedFile = sandboxMode ? Boolean(sandboxId) : Boolean(appId);
   const previousSourceKeyRef = useRef(sourceKey);
-  const hasGoalDetails = Boolean(goalDetails?.createRuntime || goalDetails?.goalRuntime);
+  const hasGoalDetails = Boolean(goalDetails?.createRuntime || goalDetails?.goalRuntime || goalDetails?.subagentRuntime);
 
   const refreshSandboxWorkspace = useCallback(
     async (options: WorkspaceDiffRefreshOptions = {}) => {
@@ -1114,6 +1116,7 @@ function WorkspaceDiffPanelInner({
         <GoalDetailsView
           createRuntime={goalDetails?.createRuntime ?? null}
           goalRuntime={goalDetails?.goalRuntime ?? null}
+          subagentRuntime={goalDetails?.subagentRuntime ?? null}
         />
       ) : visibleTab === "summary" && summaryAvailable ? (
         <SandboxWorkspaceSummary

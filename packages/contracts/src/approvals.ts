@@ -11,6 +11,7 @@ export const ApprovalSchema = z.object({
     "permissions",
     "user_input",
     "create_plan",
+    "subagent_patch_apply",
     "legacy_exec",
     "legacy_patch",
   ]),

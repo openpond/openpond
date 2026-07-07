@@ -10,10 +10,15 @@ import {
   CodexReasoningEffortSchema,
   ChatProviderSchema,
   CodexPermissionModeSchema,
-  AppPreferencesSchema,
+  ContextCompactionPreferencesSchema,
+  GoalStorageLocationSchema,
+  InsightsEvidenceSourceSettingsSchema,
   PersonalizationTemplateIdSchema,
+  SidebarSectionsCollapsedSchema,
+  WorkspaceEditorPreferencesSchema,
   WorkspaceKindSchema,
 } from "./settings.js";
+import { SubagentPreferencesSchema, SubagentRoleIdSchema } from "./subagents.js";
 import {
   ChatModelRefSchema,
   ProviderCredentialDeleteRequestSchema,
@@ -107,6 +112,11 @@ export const CreateSessionRequestSchema = z.object({
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
   systemKind: z.enum(["openpond.insights"]).nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
+  parentSessionId: z.string().trim().min(1).max(200).nullable().optional(),
+  parentTurnId: z.string().trim().min(1).max(200).nullable().optional(),
+  parentGoalId: z.string().trim().min(1).max(200).nullable().optional(),
+  subagentRunId: z.string().trim().min(1).max(200).nullable().optional(),
+  subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
   appId: z.string().nullable().optional(),
   appName: z.string().nullable().optional(),
   workspaceKind: WorkspaceKindSchema.optional(),
@@ -341,6 +351,11 @@ export const PatchSessionRequestSchema = z.object({
   archived: z.boolean().optional(),
   order: z.number().optional(),
   title: z.string().optional(),
+  parentSessionId: z.string().trim().min(1).max(200).nullable().optional(),
+  parentTurnId: z.string().trim().min(1).max(200).nullable().optional(),
+  parentGoalId: z.string().trim().min(1).max(200).nullable().optional(),
+  subagentRunId: z.string().trim().min(1).max(200).nullable().optional(),
+  subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
   appId: z.string().nullable().optional(),
   appName: z.string().nullable().optional(),
   workspaceKind: WorkspaceKindSchema.optional(),
@@ -373,13 +388,45 @@ export const ReorderSidebarAppsRequestSchema = z.object({
 
 export type ReorderSidebarAppsRequest = z.infer<typeof ReorderSidebarAppsRequestSchema>;
 
-export const UpdateAppPreferencesRequestSchema = AppPreferencesSchema.partial();
+export const UpdateAppPreferencesRequestSchema = z.object({
+  defaultChatProvider: ChatProviderSchema.optional(),
+  defaultChatModel: z.string().min(1).optional(),
+  defaultChatModelRef: ChatModelRefSchema.nullable().optional(),
+  insightsEnabled: z.boolean().optional(),
+  insightsModelRef: ChatModelRefSchema.nullable().optional(),
+  insightsEvidenceSources: InsightsEvidenceSourceSettingsSchema.optional(),
+  subagents: SubagentPreferencesSchema.optional(),
+  codexPermissionMode: CodexPermissionModeSchema.optional(),
+  codexReasoningEffort: CodexReasoningEffortSchema.optional(),
+  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
+  defaultBranchPrefix: z.string().trim().max(48).optional(),
+  defaultNewProjectDirectory: z.string().trim().max(4096).optional(),
+  goalStorageLocation: GoalStorageLocationSchema.optional(),
+  defaultTeamId: z.string().trim().max(191).nullable().optional(),
+  advancedWorkspaceControls: z.boolean().optional(),
+  contextCompaction: ContextCompactionPreferencesSchema.optional(),
+  sidebarWidth: z.number().int().min(244).max(560).optional(),
+  diffPanelWidth: z.number().int().min(320).max(920).optional(),
+  sidebarSectionsCollapsed: SidebarSectionsCollapsedSchema.optional(),
+  editor: WorkspaceEditorPreferencesSchema.optional(),
+});
 
 export type UpdateAppPreferencesRequest = z.infer<typeof UpdateAppPreferencesRequestSchema>;
 
 export const UpdateProviderSettingsRequestSchema = ProviderSettingsUpdateSchema;
 
 export type UpdateProviderSettingsRequest = z.infer<typeof UpdateProviderSettingsRequestSchema>;
+
+export const RecordClientDiagnosticRequestSchema = z
+  .object({
+    message: z.string().trim().min(1).max(4000),
+    surface: z.string().trim().min(1).max(120).default("app"),
+    stack: z.string().max(12000).nullable().optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export type RecordClientDiagnosticRequest = z.infer<typeof RecordClientDiagnosticRequestSchema>;
 
 export const SetProviderCredentialRequestSchema = ProviderCredentialWriteRequestSchema;
 

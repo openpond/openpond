@@ -35,6 +35,7 @@ export const ProviderCredentialModeSchema = z.enum([
   "openpond-account",
   "openpond-managed",
   "codex-login",
+  "chatgpt-subscription",
   "local-byok",
   "hosted-byok",
   "custom",
@@ -50,6 +51,7 @@ export const ProviderCredentialSourceSchema = z.enum([
   "env",
   "openpond_account",
   "codex_login",
+  "chatgpt_subscription",
   "hosted",
 ]);
 
@@ -282,7 +284,7 @@ export type ProviderCredentialWriteRequest = z.infer<
 >;
 
 export const ProviderCredentialDeleteRequestSchema = z.object({
-  source: z.enum(["local_secret", "env"]).optional(),
+  source: z.enum(["local_secret", "env", "chatgpt_subscription"]).optional(),
 });
 
 export type ProviderCredentialDeleteRequest = z.infer<

@@ -25,6 +25,7 @@ import { ProjectKindIcon } from "../common/ProjectKindIcon";
 import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
@@ -165,8 +166,12 @@ export function SidebarSessionRow({
   placeholder,
   running,
   goalRuntime,
+  subagentRuntime,
   terminalIndicator,
+  childSessionCount = 0,
+  childSessionsExpanded = false,
   onSelect,
+  onToggleChildSessions,
   onTogglePin,
   onDockRight,
   onArchive,
@@ -185,8 +190,12 @@ export function SidebarSessionRow({
   placeholder?: boolean;
   running?: boolean;
   goalRuntime?: GoalRuntimeStatus | null;
+  subagentRuntime?: SubagentRuntimeStatus | null;
   terminalIndicator?: SidebarTerminalIndicator | null;
+  childSessionCount?: number;
+  childSessionsExpanded?: boolean;
   onSelect: () => void;
+  onToggleChildSessions?: () => void;
   onTogglePin: () => void;
   onDockRight?: () => void;
   onArchive: () => void;
@@ -196,8 +205,15 @@ export function SidebarSessionRow({
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 }) {
   const goalRunning = goalRuntime?.tone === "active";
-  const rowRunning = goalRunning || (running ?? session.status === "active");
-  const runningLabel = goalRunning && goalRuntime ? sidebarGoalRuntimeTooltip(goalRuntime) : "Running";
+  const subagentRunning = (subagentRuntime?.activeCount ?? 0) > 0;
+  const hasChildSessions = childSessionCount > 0 && Boolean(onToggleChildSessions);
+  const effectiveHideIcon = hideIcon && !hasChildSessions;
+  const rowRunning = subagentRunning || goalRunning || (running ?? session.status === "active");
+  const runningLabel = subagentRunning && subagentRuntime
+    ? subagentRuntime.label
+    : goalRunning && goalRuntime
+      ? sidebarGoalRuntimeTooltip(goalRuntime)
+      : "Running";
   const rowClassName = [onDockRight ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
     .filter(Boolean)
     .join(" ");
@@ -234,10 +250,11 @@ export function SidebarSessionRow({
       selected={selected}
       dataSessionId={session.id}
       dragging={dragging}
-      iconless={hideIcon}
+      iconless={effectiveHideIcon}
       nested={nested}
       placeholder={placeholder}
       className={rowClassName || undefined}
+      ariaExpanded={hasChildSessions ? childSessionsExpanded : undefined}
       ariaDescribedBy={rowRunning ? runningPopoverId : undefined}
       onSelect={onSelect}
       onDragStart={onDragStart}
@@ -245,7 +262,25 @@ export function SidebarSessionRow({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      {hideIcon ? null : (icon ?? <MessageSquare size={15} />)}
+      {effectiveHideIcon ? null : hasChildSessions ? (
+        <button
+          type="button"
+          className="sidebar-child-toggle"
+          data-tooltip={childSessionsExpanded ? "Hide subagent conversations" : "Show subagent conversations"}
+          aria-label={`${childSessionsExpanded ? "Hide" : "Show"} ${childSessionCount} subagent ${
+            childSessionCount === 1 ? "conversation" : "conversations"
+          }`}
+          aria-expanded={childSessionsExpanded}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleChildSessions?.();
+          }}
+        >
+          {childSessionsExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </button>
+      ) : (
+        icon ?? <MessageSquare size={15} />
+      )}
       <span className="row-label-shell">
         <span className="row-label">{session.title}</span>
       </span>
@@ -254,7 +289,7 @@ export function SidebarSessionRow({
           {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
           {rowRunning ? (
             <span
-              className={`sidebar-running-dot${goalRunning ? " goal" : ""}`}
+              className={`sidebar-running-dot${subagentRunning ? " subagent" : goalRunning ? " goal" : ""}`}
               style={runningDotStyle}
               aria-label={runningLabel}
             />
@@ -290,10 +325,11 @@ export function SidebarSessionRow({
     >
       {row}
       <SidebarSessionRunningPopover
-        goalRuntime={goalRunning ? goalRuntime ?? null : null}
+        goalRuntime={!subagentRunning && goalRunning ? goalRuntime ?? null : null}
         id={runningPopoverId}
         label={runningLabel}
         style={runningPopoverStyle}
+        subagentRuntime={subagentRunning ? subagentRuntime ?? null : null}
       />
     </div>
   );
@@ -308,14 +344,26 @@ function SidebarSessionRunningPopover({
   id,
   label,
   style,
+  subagentRuntime,
 }: {
   goalRuntime: GoalRuntimeStatus | null;
   id: string;
   label: string;
   style?: ProjectLocationsPopoverStyle;
+  subagentRuntime: SubagentRuntimeStatus | null;
 }) {
-  const objective = clampGoalObjectiveLines(goalRuntime?.objective.trim() || "Response in progress", 5);
-  const detail = goalRuntime ? `${goalRuntime.timeLabel} · ${goalRuntime.detail}` : "Chat response running";
+  const objective = clampGoalObjectiveLines(
+    subagentRuntime
+      ? subagentRuntime.tooltip
+      : goalRuntime?.objective.trim() || "Response in progress",
+    5,
+  );
+  const detail = subagentRuntime
+    ? subagentPopoverDetail(subagentRuntime)
+    : goalRuntime
+      ? `${goalRuntime.timeLabel} · ${goalRuntime.detail}`
+      : "Chat response running";
+  const rowKind = subagentRuntime ? "subagent" : goalRuntime ? "goal" : "running";
   return (
     <aside
       className="sidebar-project-locations-popover sidebar-session-running-popover"
@@ -326,9 +374,9 @@ function SidebarSessionRunningPopover({
     >
       <div className="sidebar-project-locations-title">{label}</div>
       <div className="sidebar-project-location-list">
-        <div className={`sidebar-project-location-row ${goalRuntime ? "goal" : "running"}`}>
+        <div className={`sidebar-project-location-row ${rowKind}`}>
           <span className="sidebar-project-location-icon running" aria-hidden="true">
-            <span className={`sidebar-running-popover-dot${goalRuntime ? " goal" : ""}`} />
+            <span className={`sidebar-running-popover-dot${subagentRuntime ? " subagent" : goalRuntime ? " goal" : ""}`} />
           </span>
           <span className="sidebar-project-location-copy">
             <span className="sidebar-session-running-objective">{objective}</span>
@@ -338,6 +386,15 @@ function SidebarSessionRunningPopover({
       </div>
     </aside>
   );
+}
+
+function subagentPopoverDetail(runtime: SubagentRuntimeStatus): string {
+  const parts = [
+    runtime.activeCount > 0 ? `${runtime.activeCount} active` : null,
+    runtime.blockedCount > 0 ? `${runtime.blockedCount} blocked` : null,
+    runtime.completedCount > 0 ? `${runtime.completedCount} completed` : null,
+  ].filter(Boolean);
+  return parts.join(" · ") || "Subagent receipts available";
 }
 
 function clampGoalObjectiveLines(value: string, maxLines: number): string {

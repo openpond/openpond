@@ -12,6 +12,7 @@ import {
 } from "@openpond/contracts";
 import path from "node:path";
 import { localProjectStateWorkspace, localProjectWorkspaceApp, localProjectWorkspacePaths } from "./local-projects.js";
+import { subagentIsolatedWorkspaceRepoPath } from "./subagent-workspace.js";
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import { event, textFromUnknown } from "../utils.js";
 import { loadWorkspaceState, loadWorkspaceStateAtPath } from "./workspaces.js";
@@ -37,6 +38,31 @@ export function createWorkspaceSessionWorkflows(deps: {
   } = deps;
 
   async function activeWorkspace(session: Session): Promise<{ app: OpenPondApp; state: WorkspaceState }> {
+    const subagentRepoPath = subagentIsolatedWorkspaceRepoPath(session);
+    if (subagentRepoPath) {
+      const app: OpenPondApp = {
+        id: localPathWorkspaceId(subagentRepoPath),
+        name: path.basename(subagentRepoPath) || "Subagent workspace",
+        description: null,
+        visibility: "private",
+        gitOwner: null,
+        gitRepo: null,
+        gitHost: null,
+        defaultBranch: null,
+        sandbox: false,
+        updatedAt: session.updatedAt,
+        latestDeployment: null,
+      };
+      const state = WorkspaceStateSchema.parse(
+        await loadWorkspaceStateAtPath(
+          { workspacePath: subagentRepoPath, repoPath: subagentRepoPath },
+          app,
+          { clone: false, allowPlainFolder: true },
+        ),
+      );
+      if (!state.initialized) throw new Error(state.error || "Subagent workspace is not initialized");
+      return { app, state };
+    }
     if (session.workspaceKind === "local_project") {
       const workspaceId = session.workspaceId;
       if (!workspaceId) throw new Error("No active project workspace");

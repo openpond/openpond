@@ -18,8 +18,10 @@ export async function handleSettingsRoutes({ deps, request, requestUrl, response
     refreshProviderModelsPayload,
     writeProviderCredentialPayload,
     deleteProviderCredentialPayload,
+    startOpenAiSubscriptionAuthPayload,
     validateProviderCredentialPayload,
     providerDiagnosticsPayload,
+    recordClientDiagnosticPayload,
     updatePersonalizationPayload,
   } = deps;
   if (request.method === "GET" && requestUrl.pathname === "/v1/system/git") {
@@ -120,6 +122,10 @@ export async function handleSettingsRoutes({ deps, request, requestUrl, response
     );
     return true;
   }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/providers/openai/subscription-auth") {
+    sendJson(response, 200, await startOpenAiSubscriptionAuthPayload(await readJson(request)));
+    return true;
+  }
   const providerValidationMatch = /^\/v1\/providers\/([^/]+)\/validate$/.exec(
     requestUrl.pathname,
   );
@@ -136,6 +142,10 @@ export async function handleSettingsRoutes({ deps, request, requestUrl, response
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/diagnostics/providers") {
     sendJson(response, 200, await providerDiagnosticsPayload());
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/diagnostics/client") {
+    sendJson(response, 201, await recordClientDiagnosticPayload(await readJson(request)));
     return true;
   }
   if (request.method === "PATCH" && requestUrl.pathname === "/v1/personalization") {

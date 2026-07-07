@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
-import { ChevronUp, ClipboardCopy, Download, FolderOpen, Pause, Play, RefreshCw } from "../icons";
+import type { RuntimeEvent } from "@openpond/contracts";
+import { ChevronUp, CircleAlert, ClipboardCopy, Download, FolderOpen, Pause, Play, RefreshCw } from "../icons";
 
 type DiagnosticsStatus = {
   label: string;
@@ -8,6 +9,7 @@ type DiagnosticsStatus = {
 } | null;
 
 type DiagnosticsSettingsSectionProps = {
+  diagnostics: RuntimeEvent[];
   diagnosticsAvailable: boolean;
   diagnosticsBusy: "logs" | "copy" | "export" | null;
   diagnosticsStatus: DiagnosticsStatus;
@@ -27,6 +29,7 @@ type DiagnosticsSettingsSectionProps = {
 };
 
 export function DiagnosticsSettingsSection({
+  diagnostics,
   diagnosticsAvailable,
   diagnosticsBusy,
   diagnosticsStatus,
@@ -44,9 +47,49 @@ export function DiagnosticsSettingsSection({
   refreshLogView,
   toggleTailLogs,
 }: DiagnosticsSettingsSectionProps) {
+  const savedDiagnostics = diagnostics
+    .filter((diagnostic) => diagnostic.name === "diagnostic" && diagnostic.status === "failed")
+    .slice()
+    .reverse()
+    .map(formatSavedDiagnostic);
+  const openpond = typeof window === "undefined" ? undefined : window.openpond;
   return (
     <section className="account-settings">
       <h1>Diagnostics</h1>
+      <div className="diagnostics-log-panel">
+        <div className="account-list-heading">
+          <span>Recent errors</span>
+          <small>{savedDiagnostics.length} saved</small>
+        </div>
+        <div className="diagnostics-error-list" role="list">
+          {savedDiagnostics.length === 0 ? (
+            <div className="diagnostics-error-empty">No saved errors</div>
+          ) : (
+            savedDiagnostics.map((diagnostic) => (
+              <article className="diagnostics-error-entry" key={diagnostic.id} role="listitem">
+                <CircleAlert size={15} />
+                <div className="diagnostics-error-body">
+                  <div className="diagnostics-error-title">
+                    <strong>{diagnostic.message}</strong>
+                    <time dateTime={diagnostic.timestamp}>{diagnostic.timeLabel}</time>
+                  </div>
+                  <div className="diagnostics-error-meta">
+                    <span>{diagnostic.surface}</span>
+                    {diagnostic.status ? <span>{diagnostic.status}</span> : null}
+                    {diagnostic.sequence ? <span>#{diagnostic.sequence}</span> : null}
+                  </div>
+                  {diagnostic.detail ? (
+                    <details className="diagnostics-error-detail">
+                      <summary>Details</summary>
+                      <pre>{diagnostic.detail}</pre>
+                    </details>
+                  ) : null}
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </div>
       <div className="account-list">
         <div className="account-list-heading">
           <span>Logs</span>
@@ -60,7 +103,7 @@ export function DiagnosticsSettingsSection({
           <button
             type="button"
             className="settings-secondary"
-            disabled={diagnosticsBusy !== null || !window.openpond?.openLogsFolder}
+            disabled={diagnosticsBusy !== null || !openpond?.openLogsFolder}
             onClick={() => void openLogsFolder()}
           >
             <FolderOpen size={15} />
@@ -75,7 +118,7 @@ export function DiagnosticsSettingsSection({
           <button
             type="button"
             className="settings-secondary"
-            disabled={diagnosticsBusy !== null || !window.openpond?.exportDiagnostics}
+            disabled={diagnosticsBusy !== null || !openpond?.exportDiagnostics}
             onClick={() => void exportDiagnosticsBundle()}
           >
             <Download size={15} />
@@ -90,7 +133,7 @@ export function DiagnosticsSettingsSection({
           <button
             type="button"
             className="settings-secondary"
-            disabled={diagnosticsBusy !== null || !window.openpond?.copyRecentLogs}
+            disabled={diagnosticsBusy !== null || !openpond?.copyRecentLogs}
             onClick={() => void copyRecentLogs()}
           >
             <ClipboardCopy size={15} />
@@ -109,7 +152,7 @@ export function DiagnosticsSettingsSection({
               className={`settings-icon-button ${tailLogs ? "active" : ""}`}
               title={tailLogs ? "Pause tail" : "Tail logs"}
               aria-label={tailLogs ? "Pause tail" : "Tail logs"}
-              disabled={!window.openpond?.readRecentLogs}
+              disabled={!openpond?.readRecentLogs}
               onClick={toggleTailLogs}
             >
               {tailLogs ? <Pause size={15} /> : <Play size={15} />}
@@ -119,7 +162,7 @@ export function DiagnosticsSettingsSection({
               className="settings-icon-button"
               title="Refresh logs"
               aria-label="Refresh logs"
-              disabled={logViewBusy !== null || !window.openpond?.readRecentLogs}
+              disabled={logViewBusy !== null || !openpond?.readRecentLogs}
               onClick={() => void refreshLogView(logLineLimit, "refresh")}
             >
               <RefreshCw size={15} />
@@ -127,7 +170,7 @@ export function DiagnosticsSettingsSection({
             <button
               type="button"
               className="settings-secondary"
-              disabled={logViewBusy !== null || !window.openpond?.readRecentLogs}
+              disabled={logViewBusy !== null || !openpond?.readRecentLogs}
               onClick={loadOlderLogs}
             >
               <ChevronUp size={15} />
@@ -163,4 +206,61 @@ export function DiagnosticsSettingsSection({
       )}
     </section>
   );
+}
+
+type SavedDiagnostic = {
+  id: string;
+  timestamp: string;
+  timeLabel: string;
+  message: string;
+  surface: string;
+  status: string | null;
+  sequence: number | null;
+  detail: string | null;
+};
+
+function formatSavedDiagnostic(event: RuntimeEvent): SavedDiagnostic {
+  const data = asRecord(event.data);
+  const context = asRecord(data.context);
+  const stack = stringValue(data.stack);
+  const detail = stack ?? stringValue(data.detail) ?? stringValue(context.detail) ?? null;
+  return {
+    id: event.id,
+    timestamp: event.timestamp,
+    timeLabel: formatDiagnosticTime(event.timestamp),
+    message: diagnosticMessage(event, data),
+    surface: stringValue(data.surface) ?? event.source ?? "diagnostic",
+    status: event.status ?? null,
+    sequence: event.sequence ?? null,
+    detail,
+  };
+}
+
+function diagnosticMessage(event: RuntimeEvent, data: Record<string, unknown>): string {
+  return (
+    stringValue(event.error) ??
+    stringValue(event.output) ??
+    stringValue(data.message) ??
+    stringValue(data.error) ??
+    "Diagnostic event"
+  );
+}
+
+function formatDiagnosticTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

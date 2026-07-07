@@ -851,6 +851,7 @@ function requestKindLabel(kind: string): string {
   if (kind === "insights_scan") return "Insight scan";
   if (kind === "insights_question") return "Insight question";
   if (kind === "goal_control") return "Goal control";
+  if (kind === "subagent") return "Subagent";
   if (kind === "codex_context") return "Codex context";
   return "Other";
 }

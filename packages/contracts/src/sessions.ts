@@ -10,6 +10,7 @@ import {
   WorkspaceKindSchema,
 } from "./settings.js";
 import { ChatModelRefSchema } from "./providers.js";
+import { SubagentRoleIdSchema } from "./subagents.js";
 
 export const SessionSchema = z.object({
   id: z.string(),
@@ -18,6 +19,11 @@ export const SessionSchema = z.object({
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
   systemKind: z.enum(["openpond.insights"]).nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
+  parentSessionId: z.string().nullable().optional(),
+  parentTurnId: z.string().nullable().optional(),
+  parentGoalId: z.string().nullable().optional(),
+  subagentRunId: z.string().nullable().optional(),
+  subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
   title: z.string(),
   appId: z.string().nullable(),
   appName: z.string().nullable(),

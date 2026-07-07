@@ -28,7 +28,7 @@ export type ShowAppToast = (
   message: string,
   tone?: AppToast["tone"],
   options?: Pick<AppToast, "actionLabel" | "onAction" | "persistent">,
-) => void;
+) => number;
 
 export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";
 

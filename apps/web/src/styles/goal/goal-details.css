@@ -163,6 +163,85 @@
   line-height: 1.4;
 }
 
+.goal-details-task-graph {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-details-task-node {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border-left: 2px solid rgba(168, 85, 247, 0.55);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 8px 8px 8px 10px;
+}
+
+.goal-details-task-node-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.goal-details-task-node-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.goal-details-task-node strong,
+.goal-details-task-node small,
+.goal-details-task-node p {
+  min-width: 0;
+  margin: 0;
+}
+
+.goal-details-task-node strong {
+  overflow: hidden;
+  color: #f3f4f6;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-details-task-node small,
+.goal-details-task-node p {
+  overflow-wrap: anywhere;
+  color: #aeb5bf;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.goal-details-task-node-meta,
+.goal-details-task-edges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.goal-details-task-node-meta span,
+.goal-details-task-edges span {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9aa4b2;
+  padding: 3px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.goal-details-task-edges span {
+  background: rgba(168, 85, 247, 0.11);
+  color: #d8b4fe;
+}
+
 .goal-details-inline-state {
   flex: none;
   border-radius: 999px;
@@ -175,18 +254,28 @@
 
 .goal-details-inline-state.pending,
 .goal-details-inline-state.declared,
-.goal-details-inline-state.required {
+.goal-details-inline-state.required,
+.goal-details-inline-state.queued,
+.goal-details-inline-state.needs_resume {
   background: rgba(250, 204, 21, 0.13);
   color: #fde68a;
 }
 
 .goal-details-inline-state.answered,
-.goal-details-inline-state.satisfied {
+.goal-details-inline-state.satisfied,
+.goal-details-inline-state.completed {
   background: rgba(34, 197, 94, 0.13);
   color: #bbf7d0;
 }
 
-.goal-details-inline-state.blocked {
+.goal-details-inline-state.running {
+  background: rgba(168, 85, 247, 0.15);
+  color: #e9d5ff;
+}
+
+.goal-details-inline-state.blocked,
+.goal-details-inline-state.failed,
+.goal-details-inline-state.cancelled {
   background: rgba(248, 113, 113, 0.15);
   color: #fecaca;
 }

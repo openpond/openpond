@@ -14,6 +14,7 @@ import {
   connectedAppMentionOptionsFromStatusRows,
   resolveMentionedConnectedApps,
 } from "../apps/web/src/lib/connected-app-mentions";
+import { hasGitHubIssueSubmitConnection } from "../apps/web/src/lib/submit-issue-command";
 
 const apps = [
   {
@@ -153,5 +154,18 @@ describe("connected app mention resolution", () => {
       prompt: "Use @drive and @twitter for this",
       mentionedConnectedApps: refs,
     }).mentionedConnectedApps).toEqual(refs);
+  });
+
+  test("detects GitHub issue-submit readiness from active connected app status", () => {
+    const options = connectedAppMentionOptionsFromStatusRows(
+      buildConnectedAppStatusRows({
+        connections: [
+          { id: "conn_github", provider: "github", status: "active" },
+        ],
+      }),
+    );
+
+    expect(hasGitHubIssueSubmitConnection(options)).toBe(true);
+    expect(hasGitHubIssueSubmitConnection([])).toBe(false);
   });
 });

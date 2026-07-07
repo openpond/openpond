@@ -234,6 +234,8 @@ function usageRecord(
       turnId,
       insightRunId: insightRunId ?? null,
       goalId: null,
+      subagentRunId: null,
+      subagentRoleId: null,
       createPipelineRequestId: null,
       createPipelineId: null,
       commandName: null,

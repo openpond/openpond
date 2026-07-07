@@ -352,6 +352,54 @@ describe("model usage recorder", () => {
       },
     });
   });
+
+  test("classifies explicit subagent usage attribution as background subagent work", async () => {
+    const rows: ModelUsageRecord[] = [];
+    const recorder = await startProviderRequestUsageRecorder({
+      session: usageSession({ id: "session_child_subagent" }),
+      turn: usageTurn({
+        id: "turn_child_subagent",
+        sessionId: "session_child_subagent",
+        metadata: {
+          usageAttribution: {
+            surface: "goal",
+            workflowKind: "subagent",
+            goalId: "goal_usage",
+            subagentRunId: "run_usage_research",
+            subagentRoleId: "research",
+          },
+        },
+      }),
+      provider: "openrouter",
+      model: "test/model",
+      requestId: "turn_child_subagent:model:0",
+      requestOrdinal: 0,
+      upsert: async (record) => {
+        const index = rows.findIndex((candidate) => candidate.requestId === record.requestId);
+        if (index === -1) rows.push(record);
+        else rows[index] = record;
+      },
+    });
+
+    recorder.observeDelta({ text: "research report" });
+    recorder.observeDelta({ usage: { prompt_tokens: 44, completion_tokens: 11, total_tokens: 55 } });
+    await recorder.complete();
+
+    expect(rows[0]).toMatchObject({
+      requestKind: "subagent",
+      visibility: "background",
+      totalTokens: 55,
+      attribution: {
+        surface: "goal",
+        workflowKind: "subagent",
+        sessionId: "session_child_subagent",
+        turnId: "turn_child_subagent",
+        goalId: "goal_usage",
+        subagentRunId: "run_usage_research",
+        subagentRoleId: "research",
+      },
+    });
+  });
 });
 
 function usageSession(patch: Partial<Session> = {}): Session {

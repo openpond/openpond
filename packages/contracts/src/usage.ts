@@ -23,6 +23,7 @@ export const ModelUsageRequestKindSchema = z.enum([
   "insights_scan",
   "insights_question",
   "goal_control",
+  "subagent",
   "codex_context",
   "other",
 ]);
@@ -66,6 +67,7 @@ export const UsageWorkflowKindSchema = z.enum([
   "summary",
   "scan",
   "goal_control",
+  "subagent",
   "other",
 ]);
 
@@ -76,6 +78,8 @@ export const ModelUsageAttributionSchema = z.object({
   turnId: z.string().trim().min(1).nullable(),
   insightRunId: z.string().trim().min(1).nullable(),
   goalId: z.string().trim().min(1).nullable(),
+  subagentRunId: z.string().trim().min(1).nullable().default(null),
+  subagentRoleId: z.string().trim().min(1).nullable().default(null),
   createPipelineRequestId: z.string().trim().min(1).nullable(),
   createPipelineId: z.string().trim().min(1).nullable(),
   commandName: z.string().trim().min(1).max(160).nullable(),
@@ -93,6 +97,8 @@ export const UsageRequestAttributionSchema = z.object({
   workflowKind: UsageWorkflowKindSchema.optional(),
   insightRunId: z.string().trim().min(1).nullable().optional(),
   goalId: z.string().trim().min(1).nullable().optional(),
+  subagentRunId: z.string().trim().min(1).nullable().optional(),
+  subagentRoleId: z.string().trim().min(1).nullable().optional(),
   createPipelineRequestId: z.string().trim().min(1).nullable().optional(),
   createPipelineId: z.string().trim().min(1).nullable().optional(),
   commandName: z.string().trim().min(1).max(160).nullable().optional(),

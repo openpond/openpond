@@ -60,7 +60,10 @@ import { usageRecordsPayload, usageSummaryPayload } from "./api/usage-payloads.j
 import { readProvidersFile } from "./openpond/provider-settings.js";
 import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
-import { readProviderSecrets } from "./openpond/provider-secrets.js";
+import {
+  readProviderSecrets,
+  writeProviderChatGptSubscriptionCredential,
+} from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
 import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
@@ -190,8 +193,10 @@ export async function createOpenPondServer(
     refreshProviderModelsPayload,
     writeProviderCredentialPayload,
     deleteProviderCredentialPayload,
+    startOpenAiSubscriptionAuthPayload,
     validateProviderCredentialPayload,
     providerDiagnosticsPayload,
+    recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
     codexHistoryThreadPayload,
@@ -375,9 +380,11 @@ export async function createOpenPondServer(
     interruptSessionTurn,
     updateTurnCreatePipeline,
     resolveCreatePipelineApproval,
+    resolveSubagentPatchApplyApproval,
   } = createTurnRunner({
     attachmentRootDir,
     store,
+    createSession,
     upsertApproval,
     getSession,
     updateSession,
@@ -392,6 +399,8 @@ export async function createOpenPondServer(
     workspaceDiffBaseline,
     appendRuntimeEvent,
     executeWorkspaceTool,
+    forkSandboxForSubagent: async ({ sandboxId, payload }) =>
+      sandboxRequestPayload({ type: "fork", sandboxId, payload }),
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
     loadOpenPondProfileState,
@@ -421,6 +430,14 @@ export async function createOpenPondServer(
         toolChoice: input.toolChoice,
         requestId: input.requestId,
         signal: input.signal,
+        saveChatGptSubscriptionCredential: async (providerId, credential) => {
+          await writeProviderChatGptSubscriptionCredential({
+            paths: providerSecretPaths,
+            providerId,
+            credential,
+            timestamp: now(),
+          });
+        },
       })) {
         if (delta.type === "text_delta") {
           yield { text: delta.text, raw: delta.raw };
@@ -434,6 +451,7 @@ export async function createOpenPondServer(
       }
     },
     streamOpenPondHostedChatTurn,
+    subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
@@ -468,6 +486,8 @@ export async function createOpenPondServer(
     if (commandApproval) return commandApproval;
     const createPipelineApproval = await resolveCreatePipelineApproval(approvalId, payload);
     if (createPipelineApproval) return createPipelineApproval;
+    const subagentPatchApplyApproval = await resolveSubagentPatchApplyApproval(approvalId, payload);
+    if (subagentPatchApplyApproval) return subagentPatchApplyApproval;
     return resolveCodexApproval(approvalId, payload);
   }
 
@@ -946,8 +966,10 @@ export async function createOpenPondServer(
       refreshProviderModelsPayload,
       writeProviderCredentialPayload,
       deleteProviderCredentialPayload,
+      startOpenAiSubscriptionAuthPayload,
       validateProviderCredentialPayload,
       providerDiagnosticsPayload,
+      recordClientDiagnosticPayload,
       updatePersonalizationPayload,
       reorderSidebarApps,
       patchSidebarAppPreference,

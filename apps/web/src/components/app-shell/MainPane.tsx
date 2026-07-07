@@ -12,7 +12,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, CircleAlert, DownloadCloud } from "../icons";
+import { ArrowDown, ArrowLeft, ArrowRight, DownloadCloud } from "../icons";
 import type {
   BootstrapPayload,
   ChatAttachment,
@@ -43,6 +43,7 @@ import type { ClientConnection } from "../../api";
 import type { AppView, ChatMessage } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
@@ -66,6 +67,10 @@ import {
   resolveRightSidebarFileSource,
   type RightSidebarFileSource,
 } from "../../lib/right-sidebar-file-source";
+import {
+  buildSubmitIssueSlashPrompt,
+  hasGitHubIssueSubmitConnection,
+} from "../../lib/submit-issue-command";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
@@ -101,6 +106,7 @@ type MainPaneProps = {
   chatMessages: ChatMessage[];
   contextWindowStatus: ContextWindowStatus;
   goalRuntime: GoalRuntimeStatus | null;
+  subagentRuntime: SubagentRuntimeStatus | null;
   prompt: string;
   steerAutoDispatchBlocked: boolean;
   steerAutoDispatchReady: boolean;
@@ -164,7 +170,6 @@ type MainPaneProps = {
   onDiffPanelResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   canSyncWorkspace: boolean;
   startMessage: string;
-  error: string | null;
   onPayload: (payload: BootstrapPayload) => void;
   onError: (message: string | null) => void;
   setView: (view: AppView) => void;
@@ -443,6 +448,7 @@ export function MainPane({
   chatMessages,
   contextWindowStatus,
   goalRuntime,
+  subagentRuntime,
   prompt,
   steerAutoDispatchBlocked,
   steerAutoDispatchReady,
@@ -506,7 +512,6 @@ export function MainPane({
   onDiffPanelResizeStart,
   canSyncWorkspace,
   startMessage,
-  error,
   onPayload,
   onError,
   setView,
@@ -582,7 +587,7 @@ export function MainPane({
     [cloudWorkItemDetail, selectedCloudWorkItem],
   );
   const latestCreateRuntime = useMemo(() => latestCreatePipelineRuntime(chatMessages), [chatMessages]);
-  const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime);
+  const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime) || Boolean(subagentRuntime);
   const showCloudDiffPanel =
     view === "cloud" &&
     diffPanelOpen &&
@@ -734,6 +739,19 @@ export function MainPane({
             showToast(`/${command.command} tasks do not accept attachments yet. Add file context in the task thread.`, "error");
             return false;
           }
+          if (command.command === "submit-issue") {
+            if (!hasGitHubIssueSubmitConnection(connectedAppMentions)) {
+              showToast("Connect the GitHub app before using /submit-issue.", "error");
+              return false;
+            }
+            return sendPrompt([], null, buildSubmitIssueSlashPrompt(command.args), {
+              clearPrompt: options.preservePrompt ? () => undefined : undefined,
+              usageAttribution: usageAttributionForComposerSlashCommand(
+                command,
+                selectedCommand ? "composer_selection" : "prompt_parse",
+              ),
+            });
+          }
           if (
             isLocalComposerSlashCommand(command) ||
             shouldRunCreatePipelineCommandLocally({
@@ -774,6 +792,7 @@ export function MainPane({
     [
       activeWorkspaceKind,
       bootstrap?.profile,
+      connectedAppMentions,
       onAskInsightsQuestion,
       onOpenInsightsSession,
       onCreateCloudWork,
@@ -1230,6 +1249,7 @@ export function MainPane({
             }
           : null,
         goalRuntime,
+        subagentRuntime,
       }}
       sandboxFileSource={
         rightSidebarUsesSandbox
@@ -1275,6 +1295,7 @@ export function MainPane({
       onModelChange={onRightChatModelChange}
       onOpenFileInSidebar={handleOpenFileInSidebar}
       onOpenProfileSettings={onOpenProfileSettings}
+      onOpenSession={onOpenInsightsSession}
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
@@ -1430,6 +1451,7 @@ export function MainPane({
                     onOpenFileInSidebar={handleOpenFileInSidebar}
                     onOpenBrowserLink={handleOpenBrowserLink}
                     onOpenProfileSettings={onOpenProfileSettings}
+                    onOpenSession={onOpenInsightsSession}
                     workspaceRootPath={workspaceRootPath}
                     showFooter={row.showFooter}
                   />
@@ -1484,6 +1506,7 @@ export function MainPane({
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
+                subagentRuntime={subagentRuntime}
                 createPipelineRuntime={createPipelineRuntime}
                 busy={turnRunning}
                 running={turnRunning}
@@ -1545,6 +1568,7 @@ export function MainPane({
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
+                subagentRuntime={subagentRuntime}
                 createPipelineRuntime={createPipelineRuntime}
                 busy={turnRunning}
                 running={turnRunning}
@@ -1579,12 +1603,6 @@ export function MainPane({
           {terminalPanel}
           <Suspense fallback={null}>{rightPanel}</Suspense>
         </>
-      )}
-      {error && (
-        <div className="error-line">
-          <CircleAlert size={14} />
-          {error}
-        </div>
       )}
     </main>
   );

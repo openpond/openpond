@@ -714,6 +714,110 @@
   flex-wrap: wrap;
 }
 
+.diagnostics-error-list {
+  display: grid;
+  align-content: start;
+  max-height: min(34vh, 340px);
+  overflow: auto;
+  scrollbar-color: #424242 transparent;
+}
+
+.diagnostics-error-entry {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: #ffb0a4;
+  content-visibility: auto;
+  contain-intrinsic-size: 86px;
+}
+
+.diagnostics-error-entry:first-child {
+  border-top: 0;
+}
+
+.diagnostics-error-entry svg {
+  margin-top: 2px;
+  color: #ff8f7d;
+}
+
+.diagnostics-error-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diagnostics-error-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.diagnostics-error-title strong {
+  min-width: 0;
+  color: #f4f4f4;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-error-title time,
+.diagnostics-error-meta {
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.diagnostics-error-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.diagnostics-error-meta span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostics-error-detail {
+  min-width: 0;
+}
+
+.diagnostics-error-detail summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #d8d8d8;
+  font-size: 12px;
+}
+
+.diagnostics-error-detail pre {
+  max-height: 180px;
+  margin: 8px 0 0;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #0f0f0f;
+  color: #dcdcdc;
+  padding: 9px 10px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-error-empty {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  color: #8f8f8f;
+  font-size: 13px;
+}
+
 .diagnostics-log-viewer {
   display: grid;
   align-content: start;

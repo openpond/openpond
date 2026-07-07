@@ -46,6 +46,13 @@ type ServerHealth = {
   runtimeVersion?: string;
 };
 
+type ClientDiagnosticPayload = {
+  message: string;
+  surface: string;
+  stack?: string | null;
+  context?: Record<string, unknown>;
+};
+
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcessWithoutNullStreams | null = null;
 let webProcess: ChildProcessWithoutNullStreams | null = null;
@@ -97,6 +104,57 @@ async function urlAvailable(url: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function rendererDiagnosticPayload(payload: unknown): ClientDiagnosticPayload {
+  const record = asRecord(payload);
+  const nestedError = asRecord(record.error);
+  const reason = record.reason;
+  const reasonRecord = asRecord(reason);
+  const message =
+    stringValue(record.message) ??
+    stringValue(nestedError.message) ??
+    stringValue(reasonRecord.message) ??
+    stringValue(reason) ??
+    "Renderer error";
+  return {
+    message: message.slice(0, 4000),
+    surface: "renderer",
+    stack: (stringValue(nestedError.stack) ?? stringValue(reasonRecord.stack))?.slice(0, 12000) ?? null,
+    context: {
+      type: stringValue(record.type),
+      filename: stringValue(record.filename),
+      lineno: numberValue(record.lineno),
+      colno: numberValue(record.colno),
+      errorName: stringValue(nestedError.name) ?? stringValue(reasonRecord.name),
+    },
+  };
+}
+
+async function recordRendererDiagnostic(payload: unknown): Promise<boolean> {
+  const activeConnection = connection;
+  if (!activeConnection) return false;
+  const response = await fetch(`${activeConnection.serverUrl}/v1/diagnostics/client`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${activeConnection.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(rendererDiagnosticPayload(payload)),
+  });
+  return response.ok;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: string): Promise<string> {
@@ -364,6 +422,9 @@ function registerIpcHandlers(): void {
   handleTrackedIpc("openpond:microphone:request", () => requestMicrophoneAccess());
   handleTrackedIpc("openpond:renderer:error", (_event, payload) => {
     desktopLogger().error("renderer error", { payload });
+    void recordRendererDiagnostic(payload).catch((error) => {
+      desktopLogger().warn("renderer diagnostic forward failed", { error });
+    });
     return true;
   });
   handleTrackedIpc("openpond:window:minimize", async (event) => {

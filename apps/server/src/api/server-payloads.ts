@@ -19,6 +19,7 @@ import {
   OpenCloudWorkItemRequestSchema,
   PatchSidebarAppPreferenceRequestSchema,
   PatchSessionRequestSchema,
+  RecordClientDiagnosticRequestSchema,
   RecordPreflightTurnFailureRequestSchema,
   PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
@@ -128,6 +129,7 @@ import {
   listOpenAiCompatibleProviderModels,
   validateOpenAiCompatibleProvider,
 } from "../openpond/openai-compatible-provider.js";
+import { createOpenAiSubscriptionAuthService } from "../openpond/openai-subscription-auth.js";
 import { ProviderDiagnosticsTracker } from "../openpond/provider-diagnostics.js";
 import {
   deleteProviderCredential,
@@ -135,6 +137,7 @@ import {
   parseProviderCredentialWriteRequest,
   readProviderSecrets,
   updateProviderCredentialValidation,
+  writeProviderChatGptSubscriptionCredential,
   writeProviderCredential,
 } from "../openpond/provider-secrets.js";
 import { providerSecretsConfigPath, providerSecretsKeyPath } from "../paths.js";
@@ -572,6 +575,24 @@ export function createServerPayloads(deps: {
     secretsFilePath: providerSecretsConfigPath(storeDir),
     keyFilePath: providerSecretsKeyPath(storeDir),
   };
+  const openAiSubscriptionAuth = createOpenAiSubscriptionAuthService({
+    saveCredential: async (credential) => {
+      await writeProviderChatGptSubscriptionCredential({
+        paths: providerSecretPaths,
+        providerId: "openai",
+        credential,
+        timestamp: now(),
+      });
+      await updateProvidersFile(providersFilePath, (latest) =>
+        mergeProviderConfigPatch({
+          value: latest,
+          providerId: "openai",
+          patch: { enabled: true },
+          updatedAt: now(),
+        }),
+      );
+    },
+  });
   const providerDiagnostics = new ProviderDiagnosticsTracker();
   const activeCodexHistoryTurns = new Map<string, ActiveCodexHistoryTurn>();
   let appPreferencesUpdateQueue: Promise<void> = Promise.resolve();
@@ -819,6 +840,25 @@ export function createServerPayloads(deps: {
     return providerSettingsPayload();
   }
 
+  async function startOpenAiSubscriptionAuthPayload(payload: unknown): Promise<unknown> {
+    const input = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const method = input.method === "device" ? "device" : "browser";
+    if (method === "device") {
+      const result = await openAiSubscriptionAuth.startDeviceLogin();
+      return {
+        providerId: "openai",
+        method,
+        ...result,
+      };
+    }
+    const result = await openAiSubscriptionAuth.startBrowserLogin();
+    return {
+      providerId: "openai",
+      method,
+      ...result,
+    };
+  }
+
   async function validateProviderCredentialPayload(
     providerIdValue: string,
     payload: unknown,
@@ -940,6 +980,24 @@ export function createServerPayloads(deps: {
   async function providerDiagnosticsPayload(): Promise<unknown> {
     const state = await localProviderRuntimeState();
     return providerDiagnostics.snapshot(state.settings);
+  }
+
+  async function recordClientDiagnosticPayload(payload: unknown): Promise<{ diagnostic: RuntimeEvent }> {
+    const input = RecordClientDiagnosticRequestSchema.parse(payload);
+    const diagnostic = event({
+      name: "diagnostic",
+      source: "server",
+      status: "failed",
+      output: input.message,
+      data: {
+        kind: "client_error",
+        surface: input.surface,
+        stack: input.stack ?? null,
+        context: input.context ?? {},
+      },
+    });
+    await appendRuntimeEvent(diagnostic);
+    return { diagnostic };
   }
 
   async function updatePersonalizationPayload(payload: unknown): Promise<BootstrapPayload> {
@@ -2744,8 +2802,10 @@ export function createServerPayloads(deps: {
     refreshProviderModelsPayload,
     writeProviderCredentialPayload,
     deleteProviderCredentialPayload,
+    startOpenAiSubscriptionAuthPayload,
     validateProviderCredentialPayload,
     providerDiagnosticsPayload,
+    recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
     findOpenPondApp,

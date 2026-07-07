@@ -185,8 +185,3 @@
 .main-pane.cloud-active.diff-open.diff-expanded {
   grid-template-columns: minmax(0, 1fr);
 }
-
-.main-pane.chat-active .error-line,
-.main-pane.chat-start .error-line {
-  grid-column: 1;
-}

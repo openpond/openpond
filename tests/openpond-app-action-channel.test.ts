@@ -28,6 +28,7 @@ import {
   composerSlashCommandMatches,
   parseComposerSlashCommandPrompt,
 } from "../apps/web/src/lib/composer-slash-commands";
+import { buildSubmitIssueSlashPrompt } from "../apps/web/src/lib/submit-issue-command";
 import {
   approveCreatePipelineSnapshot,
   buildComposerCreatePipelineRequest,
@@ -154,6 +155,7 @@ describe("OpenPond App action channel", () => {
       "goal-remote",
       "goal-local",
       "insights",
+      "submit-issue",
       "sync-cloud",
     ]);
     expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual(["create"]);
@@ -167,6 +169,7 @@ describe("OpenPond App action channel", () => {
     ]);
     expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/skill help" }).map((item) => item.id)).toEqual(["skill"]);
+    expect(composerSlashCommandMatches({ prompt: "/submit issue" }).map((item) => item.id)).toEqual(["submit-issue"]);
     expect(parseComposerSlashCommandPrompt("/create summarize files")).toEqual({
       command: "create",
       args: "summarize files",
@@ -187,7 +190,20 @@ describe("OpenPond App action channel", () => {
       command: "sync-cloud",
       args: "",
     });
+    expect(parseComposerSlashCommandPrompt("/submit-issue add a crash report")).toEqual({
+      command: "submit-issue",
+      args: "add a crash report",
+    });
     expect(parseComposerSlashCommandPrompt("/unknown summarize files")).toBeNull();
+  });
+
+  test("builds GitHub-connected submit issue prompts for openpond", () => {
+    const prompt = buildSubmitIssueSlashPrompt("Add export progress to long-running workspace sync.");
+
+    expect(prompt).toContain("@github");
+    expect(prompt).toContain("openpond/openpond");
+    expect(prompt).toContain("github.issue.create");
+    expect(prompt).toContain("Add export progress to long-running workspace sync.");
   });
 
   test("builds create pipeline envelopes from composer slash commands", () => {
@@ -1309,5 +1325,28 @@ describe("OpenPond App action channel", () => {
       }),
     );
     expect(html).toBe("");
+  });
+
+  test("renders subagent patch approvals without session approval", () => {
+    const approval: Approval = {
+      id: "approval-subagent-patch",
+      sessionId: "session_1",
+      turnId: "turn_1",
+      providerRequestId: "run_1",
+      kind: "subagent_patch_apply",
+      title: "Apply coding subagent patch",
+      detail: JSON.stringify({ patchPath: "/tmp/openpond-subagents/run/handoff.patch" }),
+      status: "pending",
+      createdAt: timestamp,
+    };
+    const html = renderToStaticMarkup(
+      createElement(ApprovalRequestCard, {
+        approval,
+        onResolve: async () => undefined,
+      }),
+    );
+    expect(html).toContain("Subagent patch");
+    expect(html).toContain("Apply coding subagent patch");
+    expect(html).not.toContain(">Session</span>");
   });
 });

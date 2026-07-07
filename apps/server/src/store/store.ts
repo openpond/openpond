@@ -10,6 +10,8 @@ import type {
   Session,
   SidebarAppPreference,
   SidebarAppPreferences,
+  SubagentMessage,
+  SubagentRun,
   Turn,
   LocalAgentSchedule,
   LocalAgentScheduleRun,
@@ -18,7 +20,12 @@ import type {
   ModelUsageStatus,
   ModelUsageVisibility,
 } from "@openpond/contracts";
-import { ContextUsageSnapshotSchema, ModelUsageRecordSchema } from "@openpond/contracts";
+import {
+  ContextUsageSnapshotSchema,
+  ModelUsageRecordSchema,
+  SubagentMessageSchema,
+  SubagentRunSchema,
+} from "@openpond/contracts";
 import type {
   CacheEntry,
   CacheEntryRow,
@@ -117,6 +124,28 @@ type LocalAgentScheduleRunRow = PayloadRow & {
   status: LocalAgentScheduleRunStatus;
   created_at: string;
   updated_at: string;
+};
+
+type SubagentRunRow = PayloadRow & {
+  id: string;
+  parent_session_id: string;
+  parent_turn_id: string | null;
+  parent_goal_id: string | null;
+  child_session_id: string | null;
+  role_id: string;
+  status: SubagentRun["status"];
+  created_at: string;
+  updated_at: string;
+};
+
+type SubagentMessageRow = PayloadRow & {
+  id: string;
+  parent_goal_id: string | null;
+  from_run_id: string;
+  to_run_id: string | null;
+  to_role: string | null;
+  kind: SubagentMessage["kind"];
+  created_at: string;
 };
 
 type ThreadDetailProjectionRow = PayloadRow & {
@@ -900,6 +929,158 @@ export class SqliteStore {
     return updated;
   }
 
+  async upsertSubagentRun(run: SubagentRun): Promise<SubagentRun> {
+    await this.ready;
+    const parsed = SubagentRunSchema.parse(run);
+    const updatedAt = now();
+    const write = this.writeQueue.then(async () => {
+      await this.run(
+        `INSERT INTO subagent_runs (
+           id,
+           parent_session_id,
+           parent_turn_id,
+           parent_goal_id,
+           child_session_id,
+           role_id,
+           status,
+           payload,
+           created_at,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id)
+         DO UPDATE SET
+           parent_session_id = excluded.parent_session_id,
+           parent_turn_id = excluded.parent_turn_id,
+           parent_goal_id = excluded.parent_goal_id,
+           child_session_id = excluded.child_session_id,
+           role_id = excluded.role_id,
+           status = excluded.status,
+           payload = excluded.payload,
+           updated_at = excluded.updated_at`,
+        subagentRunParams(parsed, updatedAt),
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return (await this.getSubagentRun(parsed.id)) ?? parsed;
+  }
+
+  async getSubagentRun(id: string): Promise<SubagentRun | null> {
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<SubagentRunRow>("SELECT * FROM subagent_runs WHERE id = ?", [id]);
+    return row ? subagentRunFromRow(row) : null;
+  }
+
+  async listSubagentRuns(query: {
+    parentSessionId?: string | null;
+    parentGoalId?: string | null;
+    childSessionId?: string | null;
+    status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+    limit?: number;
+  } = {}): Promise<SubagentRun[]> {
+    await this.ready;
+    await this.writeQueue;
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (query.parentSessionId) {
+      where.push("parent_session_id = ?");
+      params.push(query.parentSessionId);
+    }
+    if (query.parentGoalId) {
+      where.push("parent_goal_id = ?");
+      params.push(query.parentGoalId);
+    }
+    if (query.childSessionId) {
+      where.push("child_session_id = ?");
+      params.push(query.childSessionId);
+    }
+    if (query.status) {
+      const statuses = Array.isArray(query.status) ? query.status : [query.status];
+      if (statuses.length === 1) {
+        where.push("status = ?");
+        params.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+        params.push(...statuses);
+      }
+    }
+    const limitSql = query.limit === undefined ? "" : "LIMIT ?";
+    if (query.limit !== undefined) params.push(Math.max(1, Math.min(1000, Math.trunc(query.limit))));
+    const rows = await this.all<SubagentRunRow>(
+      `SELECT * FROM subagent_runs
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY updated_at DESC, created_at DESC
+       ${limitSql}`,
+      params,
+    );
+    return rows.map(subagentRunFromRow);
+  }
+
+  async appendSubagentMessage(message: SubagentMessage): Promise<SubagentMessage> {
+    await this.ready;
+    const parsed = SubagentMessageSchema.parse(message);
+    const write = this.writeQueue.then(async () => {
+      await this.run(
+        `INSERT INTO subagent_messages (
+           id,
+           parent_goal_id,
+           from_run_id,
+           to_run_id,
+           to_role,
+           kind,
+           payload,
+           created_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        subagentMessageParams(parsed),
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return parsed;
+  }
+
+  async listSubagentMessages(query: {
+    parentGoalId?: string | null;
+    fromRunId?: string | null;
+    toRunId?: string | null;
+    toRole?: string | null;
+    limit?: number;
+  } = {}): Promise<SubagentMessage[]> {
+    await this.ready;
+    await this.writeQueue;
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (query.parentGoalId) {
+      where.push("parent_goal_id = ?");
+      params.push(query.parentGoalId);
+    }
+    if (query.fromRunId) {
+      where.push("from_run_id = ?");
+      params.push(query.fromRunId);
+    }
+    if (query.toRunId) {
+      where.push("to_run_id = ?");
+      params.push(query.toRunId);
+    }
+    if (query.toRole) {
+      where.push("to_role = ?");
+      params.push(query.toRole);
+    }
+    const limitSql = query.limit === undefined ? "" : "LIMIT ?";
+    if (query.limit !== undefined) params.push(Math.max(1, Math.min(1000, Math.trunc(query.limit))));
+    const rows = await this.all<SubagentMessageRow>(
+      `SELECT * FROM subagent_messages
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY created_at ASC
+       ${limitSql}`,
+      params,
+    );
+    return rows.map(subagentMessageFromRow);
+  }
+
   async sessionCount(): Promise<number> {
     await this.ready;
     await this.writeQueue;
@@ -1602,6 +1783,49 @@ export class SqliteStore {
     `);
   }
 
+  async createSubagentTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS subagent_runs (
+        id TEXT PRIMARY KEY,
+        parent_session_id TEXT NOT NULL,
+        parent_turn_id TEXT,
+        parent_goal_id TEXT,
+        child_session_id TEXT,
+        role_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS subagent_runs_parent_session_status_idx
+        ON subagent_runs(parent_session_id, status, updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS subagent_runs_parent_goal_status_idx
+        ON subagent_runs(parent_goal_id, status, updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS subagent_runs_child_session_idx
+        ON subagent_runs(child_session_id);
+
+      CREATE TABLE IF NOT EXISTS subagent_messages (
+        id TEXT PRIMARY KEY,
+        parent_goal_id TEXT,
+        from_run_id TEXT NOT NULL,
+        to_run_id TEXT,
+        to_role TEXT,
+        kind TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS subagent_messages_parent_goal_created_idx
+        ON subagent_messages(parent_goal_id, created_at);
+
+      CREATE INDEX IF NOT EXISTS subagent_messages_receiver_created_idx
+        ON subagent_messages(to_run_id, to_role, created_at);
+    `);
+  }
+
   private async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
     const rows = await this.all<TableInfoRow>(`PRAGMA table_info(${table})`);
     if (rows.some((row) => row.name === column)) return;
@@ -1936,10 +2160,50 @@ const SQLITE_MIGRATIONS: Migration[] = [
     version: 8,
     run: (store) => store.createLocalAgentScheduleTables(),
   },
+  {
+    version: 9,
+    run: (store) => store.createSubagentTables(),
+  },
 ];
 
 function localAgentScheduleFromRow(row: LocalAgentScheduleRow): LocalAgentSchedule {
   return JSON.parse(row.payload) as LocalAgentSchedule;
+}
+
+function subagentRunFromRow(row: SubagentRunRow): SubagentRun {
+  return SubagentRunSchema.parse(JSON.parse(row.payload));
+}
+
+function subagentRunParams(run: SubagentRun, updatedAt: string): unknown[] {
+  return [
+    run.id,
+    run.parentSessionId,
+    run.parentTurnId,
+    run.parentGoalId,
+    run.childSessionId,
+    run.roleId,
+    run.status,
+    JSON.stringify(run),
+    run.createdAt,
+    updatedAt,
+  ];
+}
+
+function subagentMessageFromRow(row: SubagentMessageRow): SubagentMessage {
+  return SubagentMessageSchema.parse(JSON.parse(row.payload));
+}
+
+function subagentMessageParams(message: SubagentMessage): unknown[] {
+  return [
+    message.id,
+    message.parentGoalId,
+    message.fromRunId,
+    message.toRunId,
+    message.toRole,
+    message.kind,
+    JSON.stringify(message),
+    message.createdAt,
+  ];
 }
 
 function localAgentScheduleParams(schedule: LocalAgentSchedule): unknown[] {

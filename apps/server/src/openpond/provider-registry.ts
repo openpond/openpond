@@ -180,7 +180,7 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
   {
     id: "openai",
     displayName: "OpenAI",
-    credentialModes: ["local-byok"],
+    credentialModes: ["chatgpt-subscription", "local-byok"],
     routing: { localRuntime: true, localByok: true },
     capabilities: {
       chatCompletions: true,
@@ -722,6 +722,15 @@ function credentialStatusFromSecret(secret: ProviderSecretRecord | undefined) {
       lastError:
         secret.lastError ??
         (connected || !secret.envVar ? null : `Environment variable ${secret.envVar} is not set.`),
+    });
+  }
+  if (secret.source === "chatgpt_subscription") {
+    return ProviderCredentialStatusSchema.parse({
+      connected: Boolean(secret.oauth?.refreshToken),
+      source,
+      redacted: secret.oauth?.accountId ? redactIdentity(secret.oauth.accountId) : "ChatGPT subscription",
+      lastValidatedAt: secret.lastValidatedAt ?? null,
+      lastError: secret.lastError ?? null,
     });
   }
   return ProviderCredentialStatusSchema.parse({

@@ -15,6 +15,8 @@ import type {
   ProviderModel,
   ProviderSettings,
   Session,
+  SubagentRoleId,
+  SubagentRoleSettings,
   WorkspaceDiffSummary,
   WorkspaceLspGlobalMode,
   WorkspaceLspLanguageMode,
@@ -27,6 +29,8 @@ import {
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   DEFAULT_OPENPOND_CHAT_MODEL,
   PROVIDER_IDS,
+  SubagentPreferencesSchema,
+  defaultSubagentPreferences,
 } from "@openpond/contracts";
 
 export type AppView =
@@ -62,6 +66,12 @@ export type ActivityItem = {
     id: string;
     status: string;
     totalUsd: string;
+  };
+  openSession?: {
+    sessionId: string;
+    label: string;
+    roleId?: string;
+    status?: string;
   };
   state?: "running" | "completed" | "failed" | "pending";
   imagePreview?: {
@@ -191,6 +201,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     unresolvedConversations: true,
     usageAnomalies: true,
   },
+  subagents: defaultSubagentPreferences(),
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -238,7 +249,7 @@ const OPENPOND_MODEL_OPTIONS = [
 ];
 export const PROVIDER_OPTIONS: Array<DropdownOption & { value: ChatProvider }> = [
   { value: "openpond", label: "OpenPond Chat", description: "OpChat" },
-  { value: "codex", label: "Codex", description: "Local Codex" },
+  { value: "codex", label: "OpenAI Codex", description: "Codex login" },
 ];
 export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
   "openai",
@@ -595,6 +606,9 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
       ...DEFAULT_APP_PREFERENCES.insightsEvidenceSources,
       ...(preferences?.insightsEvidenceSources ?? {}),
     },
+    subagents: SubagentPreferencesSchema.parse(
+      preferences?.subagents ?? DEFAULT_APP_PREFERENCES.subagents,
+    ),
     codexPermissionMode:
       preferences?.codexPermissionMode ?? DEFAULT_APP_PREFERENCES.codexPermissionMode,
     codexReasoningEffort:
@@ -674,6 +688,33 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
   };
 }
 
+export function subagentRoleSettingsFor(
+  preferences: AppPreferences | null | undefined,
+  roleId: SubagentRoleId | string,
+): SubagentRoleSettings | null {
+  const subagents = SubagentPreferencesSchema.parse(
+    preferences?.subagents ?? DEFAULT_APP_PREFERENCES.subagents,
+  );
+  return subagents.roles.find((role) => role.id === roleId) ?? null;
+}
+
+export function subagentModelRefForRole(
+  preferences: AppPreferences | null | undefined,
+  roleId: SubagentRoleId | string,
+  settings?: ProviderSettings | null,
+): ChatModelRef | null {
+  const basePreferences = normalizePreferences(preferences);
+  const role = subagentRoleSettingsFor(basePreferences, roleId);
+  if (role?.modelRef) return role.modelRef;
+  return (
+    modelRefForTurn(
+      basePreferences.defaultChatProvider,
+      basePreferences.defaultChatModel,
+      settings,
+    ) ?? null
+  );
+}
+
 export function normalizeBranchPrefix(value?: string | null): string {
   const trimmed = value?.trim() ?? DEFAULT_APP_PREFERENCES.defaultBranchPrefix;
   if (!trimmed) return "";
@@ -693,7 +734,7 @@ export function normalizeBranchPrefix(value?: string | null): string {
 
 export function chatProviderLabel(provider: ChatProvider, settings?: ProviderSettings | null): string {
   if (provider === "openpond") return "OpenPond Chat";
-  return providerStatus(settings, provider)?.displayName ?? (provider === "codex" ? "Codex" : provider);
+  return providerStatus(settings, provider)?.displayName ?? (provider === "codex" ? "OpenAI Codex" : provider);
 }
 
 export function chatModelLabel(model: string, settings?: ProviderSettings | null, provider?: ChatProvider): string {

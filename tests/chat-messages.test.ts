@@ -28,6 +28,170 @@ function commandStarted(id: string, turnId: string, command: string): RuntimeEve
 }
 
 describe("chat message projection", () => {
+  test("projects subagent receipts as parent transcript activities", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "start subagents" },
+      }),
+      runtimeEvent({
+        id: "subagent_started",
+        name: "subagent.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "pending",
+        output: "Started coding subagent.",
+        data: {
+          childSessionId: "session_child",
+          run: {
+            childSessionId: "session_child",
+            roleId: "coding",
+            status: "queued",
+          },
+        },
+      }),
+      runtimeEvent({
+        id: "subagent_completed",
+        name: "subagent.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+        output: "coding subagent completed.",
+        data: {
+          childSessionId: "session_child",
+          run: {
+            childSessionId: "session_child",
+            roleId: "coding",
+            status: "completed",
+          },
+        },
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group"]);
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
+      "Started subagent",
+      "Subagent completed",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
+      "Started coding subagent.",
+      "coding subagent completed.",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.openSession)).toEqual([
+      { sessionId: "session_child", label: "Open conversation", roleId: "coding", status: "queued" },
+      { sessionId: "session_child", label: "Open conversation", roleId: "coding", status: "completed" },
+    ]);
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+        onOpenSession: () => undefined,
+      }),
+    );
+    expect(html).toContain("activity-subagent-avatar-group");
+    expect(html).toContain("Open Coding subagent (completed) conversation");
+  });
+
+  test("keeps subagent state visible in mixed parent activity summaries", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "start a research subagent" },
+      }),
+      runtimeEvent({
+        id: "subagent_started",
+        name: "subagent.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "started",
+        output: "Research subagent started.",
+        data: {
+          childSessionId: "session_child",
+          run: {
+            childSessionId: "session_child",
+            roleId: "research",
+            status: "running",
+          },
+        },
+      }),
+      commandStarted("read_1", "turn_1", "sed -n '1,160p' apps/server/src/runtime/turn-runner.ts"),
+      commandStarted("search_1", "turn_1", "rg \"openpond_subagent_start\" apps/server/src tests"),
+      runtimeEvent({
+        id: "subagent_completed",
+        name: "subagent.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+        output: "Research subagent completed.",
+        data: {
+          childSessionId: "session_child",
+          run: {
+            childSessionId: "session_child",
+            roleId: "research",
+            status: "completed",
+          },
+        },
+      }),
+    ]);
+
+    const activities = messages[1]?.activities ?? [];
+    expect(activityGroupSummary(activities)).toBe("Subagent completed, read a file, and searched code");
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[1]!,
+        onOpenSession: () => undefined,
+      }),
+    );
+    expect(html).toContain("Subagent completed, read a file, and searched code");
+    expect(html).toContain("activity-subagent-avatar-group");
+    expect(html).toContain("Open Research subagent (completed) conversation");
+  });
+
+  test("deduplicates running subagent receipts in parent activity summaries", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "start a visible test subagent" },
+      }),
+      runtimeEvent({
+        id: "subagent_started",
+        name: "subagent.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "started",
+        output: "Test subagent queued.",
+        data: {
+          childSessionId: "session_child",
+        },
+      }),
+      runtimeEvent({
+        id: "subagent_running",
+        name: "subagent.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "started",
+        output: "Test subagent running.",
+        data: {
+          run: {
+            childSessionId: "session_child",
+          },
+        },
+      }),
+    ]);
+
+    const activities = messages[1]?.activities ?? [];
+    expect(activityGroupSummary(activities)).toBe("Subagent running");
+  });
+
   test("renders assistant reasoning as first-class text separate from tools and answer content", () => {
     const messages = buildChatMessages([
       runtimeEvent({

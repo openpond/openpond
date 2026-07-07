@@ -185,6 +185,12 @@ function modelUsageRequestKind(input: {
   }
   const requestAttribution = usageRequestAttributionFromTurn(input.turn);
   if (
+    requestAttribution?.subagentRunId ||
+    requestAttribution?.workflowKind === "subagent"
+  ) {
+    return "subagent";
+  }
+  if (
     requestAttribution?.workflowKind === "goal_control" ||
     requestAttribution?.surface === "goal" ||
     requestAttribution?.goalId ||
@@ -205,6 +211,7 @@ function modelUsageVisibility(
     requestKind === "context_compaction" ||
     requestKind === "create_pipeline_planner" ||
     requestKind === "goal_control" ||
+    requestKind === "subagent" ||
     requestKind === "insights_scan" ||
     requestKind === "insights_question" ||
     requestKind === "codex_context"
@@ -229,6 +236,8 @@ function modelUsageAttribution(input: {
     turnId: input.turn?.id ?? null,
     insightRunId: requestAttribution?.insightRunId ?? insightRunIdFromTurn(input.turn),
     goalId: requestAttribution?.goalId ?? goalIdFromTurn(input.turn),
+    subagentRunId: requestAttribution?.subagentRunId ?? null,
+    subagentRoleId: requestAttribution?.subagentRoleId ?? null,
     createPipelineRequestId: requestAttribution?.createPipelineRequestId ?? input.turn?.createPipelineRequest?.id ?? null,
     createPipelineId: requestAttribution?.createPipelineId ?? input.turn?.createPipeline?.id ?? null,
     commandName,
@@ -251,6 +260,7 @@ function usageSurface(
   }
   if (requestKind === "create_pipeline_planner") return "create_pipeline";
   if (requestKind === "context_compaction") return "compaction";
+  if (requestKind === "subagent") return "goal";
   if (requestKind === "goal_control") return "goal";
   return "chat";
 }
@@ -263,6 +273,7 @@ function usageWorkflowKind(
   if (requestKind === "create_pipeline_planner") return "planner";
   if (requestKind === "context_compaction") return "summary";
   if (requestKind === "insights_scan" || requestKind === "insights_question") return "scan";
+  if (requestKind === "subagent") return "subagent";
   if (requestKind === "goal_control") return "goal_control";
   if (commandName || requestKind === "slash_command") return "slash_command";
   return requestOrdinal === 0 ? "direct_chat" : "tool_loop";

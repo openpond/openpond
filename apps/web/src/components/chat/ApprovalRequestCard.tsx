@@ -19,7 +19,7 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
   if (!approval || approval.kind === "create_plan") return null;
 
   const detail = formatApprovalDetail(approval.detail);
-  const supportsSessionApproval = true;
+  const supportsSessionApproval = approval.kind !== "subagent_patch_apply";
 
   async function resolve(decision: ApprovalDecision) {
     if (!approval || pendingDecision) return;
@@ -97,6 +97,7 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
 
 function approvalKindLabel(kind: Approval["kind"]): string {
   if (kind === "create_plan") return "Plan review";
+  if (kind === "subagent_patch_apply") return "Subagent patch";
   if (kind === "file_change" || kind === "legacy_patch") return "File change";
   if (kind === "permissions") return "Permissions";
   if (kind === "user_input") return "Input needed";

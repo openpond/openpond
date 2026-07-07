@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
+import type { BootstrapPayload, ProviderSettings, RuntimeEvent } from "@openpond/contracts";
 import type { ClientConnection, PreferencesPayload } from "../../api";
 import { EMPTY_PERSONALIZATION, normalizePreferences } from "../../lib/app-models";
 import type { SettingsSection } from "../../lib/app-models";
@@ -26,6 +26,7 @@ import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/Wind
 export function SettingsView({
   payload,
   connection,
+  diagnostics,
   onPayload,
   onError,
   onToast,
@@ -35,6 +36,7 @@ export function SettingsView({
 }: {
   payload: BootstrapPayload | null;
   connection: ClientConnection | null;
+  diagnostics?: RuntimeEvent[];
   onPayload: (payload: BootstrapPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
@@ -46,6 +48,7 @@ export function SettingsView({
   const codex = payload?.codex ?? null;
   const preferences = useMemo(() => normalizePreferences(payload?.preferences), [payload?.preferences]);
   const personalization = payload?.personalization ?? EMPTY_PERSONALIZATION;
+  const savedDiagnostics = diagnostics ?? payload?.diagnostics ?? [];
   const isMac = isDesktopShell() && isMacPlatform(connection?.platform);
   const applyProviderSettings = useCallback(
     (providers: ProviderSettings) => {
@@ -151,7 +154,7 @@ export function SettingsView({
         ) : section === "personalization" ? (
           <PersonalizationSettingsSection {...personalizationSettings} />
         ) : (
-          <DiagnosticsSettingsSection {...diagnosticsSettings} />
+          <DiagnosticsSettingsSection diagnostics={savedDiagnostics} {...diagnosticsSettings} />
         )}
       </main>
     </div>

@@ -29,6 +29,7 @@ type MessageRowProps = {
   onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenProfileSettings?: () => void;
+  onOpenSession?: (sessionId: string) => void;
   showFooter?: boolean;
   workspaceRootPath?: string | null;
 };
@@ -43,6 +44,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenBrowserLink,
   onOpenFileInSidebar,
   onOpenProfileSettings,
+  onOpenSession,
   showFooter = false,
   workspaceRootPath = null,
 }: MessageRowProps) {
@@ -51,7 +53,14 @@ export const MessageRow = memo(function MessageRow({
   }
 
   if (message.role === "activity_group") {
-    return <ActivityGroup activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} message={message} />;
+    return (
+      <ActivityGroup
+        activeWorkspaceAppId={activeWorkspaceAppId}
+        connection={connection}
+        message={message}
+        onOpenSession={onOpenSession}
+      />
+    );
   }
 
   if (message.role === "reasoning") {
@@ -200,6 +209,7 @@ function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProp
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
     previous.onOpenProfileSettings === next.onOpenProfileSettings &&
+    previous.onOpenSession === next.onOpenSession &&
     previous.showFooter === next.showFooter &&
     previous.workspaceRootPath === next.workspaceRootPath &&
     chatMessageShallowEqual(previous.message, next.message)

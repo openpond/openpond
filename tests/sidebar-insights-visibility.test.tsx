@@ -132,6 +132,33 @@ describe("Insights sidebar visibility", () => {
     expect(rendered).toContain("visibleChats=terminal_plain");
     expect(rendered).toContain("projectSessions=local:local_visible=terminal_project");
   });
+
+  test("groups hidden subagent child conversations under their parent chat", () => {
+    const parent = session({
+      id: "parent_chat",
+      title: "Parent chat",
+    });
+    const child = session({
+      id: "child_research",
+      title: "Research: inspect docs",
+      hiddenFromDefaultSidebar: true,
+      parentSessionId: parent.id,
+      subagentRunId: "run_research",
+      subagentRoleId: "research",
+    });
+
+    const rendered = renderSidebarDataProbe({
+      projects: [],
+      sessions: [parent, child],
+      selectedSessionId: parent.id,
+    });
+
+    expect(rendered).toContain("active=1");
+    expect(rendered).toContain("chats=parent_chat");
+    expect(rendered).toContain("visibleChats=parent_chat");
+    expect(rendered).toContain("childSessions=parent_chat=child_research");
+    expect(rendered).not.toContain("chats=parent_chat,child_research");
+  });
 });
 
 function renderSidebarDataProbe(input: {
@@ -174,6 +201,9 @@ function SidebarDataProbe({
       `visibleChats=${data.visibleChatRows.map((row) => row.id).join(",")}`,
       `projectSessions=${Object.entries(data.projectSessionRowsByProjectId)
         .map(([projectId, rows]) => `${projectId}=${rows.map((row) => row.id).join(",")}`)
+        .join("|")}`,
+      `childSessions=${Object.entries(data.childSessionRowsByParentId)
+        .map(([parentId, rows]) => `${parentId}=${rows.map((row) => row.id).join(",")}`)
         .join("|")}`,
       `selectedProject=${projectSelectionKey("local", selectedSessionId)}`,
     ].join(";"),

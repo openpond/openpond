@@ -174,7 +174,7 @@ export function createConnectedAppProviderModelToolDefinitions(deps: {
             type: "string",
             minLength: 1,
             description:
-              "Provider operation id from the loaded connected app instructions, such as google.docs.update, github.issue.comment, x.post.create, or x.reply.create.",
+              "Provider operation id from the loaded connected app instructions, such as google.docs.update, github.issue.create, x.post.create, or x.reply.create.",
           },
           input: {
             type: "object",

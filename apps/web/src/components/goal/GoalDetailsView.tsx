@@ -5,6 +5,7 @@ import {
   type CreatePipelineSnapshot,
 } from "@openpond/contracts";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { CircleAlert, FileText } from "../icons";
 
 export type GoalDetailsCreateRuntime = {
@@ -16,13 +17,16 @@ export type GoalDetailsCreateRuntime = {
 export type GoalDetailsViewProps = {
   createRuntime: GoalDetailsCreateRuntime | null;
   goalRuntime: GoalRuntimeStatus | null;
+  subagentRuntime?: SubagentRuntimeStatus | null;
 };
 
-export function GoalDetailsView({ createRuntime, goalRuntime }: GoalDetailsViewProps) {
+export function GoalDetailsView({ createRuntime, goalRuntime, subagentRuntime = null }: GoalDetailsViewProps) {
   const title = createRuntime ? "Create Plan Details" : "Goal Details";
   const stateLabel = createRuntime
     ? createStateLabel(createRuntime.snapshot?.state ?? "planning")
-    : goalRuntime?.actionLabel ?? "No active goal";
+    : subagentRuntime?.activeCount
+      ? subagentRuntime.label
+      : goalRuntime?.actionLabel ?? "No active goal";
 
   return (
     <div className="goal-details-view" aria-label={title}>
@@ -38,8 +42,8 @@ export function GoalDetailsView({ createRuntime, goalRuntime }: GoalDetailsViewP
       <div className="goal-details-body">
         {createRuntime ? (
           <CreateDetails runtime={createRuntime} />
-        ) : goalRuntime ? (
-          <GoalRuntimeDetails goalRuntime={goalRuntime} />
+        ) : goalRuntime || subagentRuntime ? (
+          <GoalRuntimeDetails goalRuntime={goalRuntime} subagentRuntime={subagentRuntime} />
         ) : (
           <EmptyDetails />
         )}
@@ -271,27 +275,156 @@ function CreateContextDetails({
   );
 }
 
-function GoalRuntimeDetails({ goalRuntime }: { goalRuntime: GoalRuntimeStatus }) {
+function GoalRuntimeDetails({
+  goalRuntime,
+  subagentRuntime,
+}: {
+  goalRuntime: GoalRuntimeStatus | null;
+  subagentRuntime: SubagentRuntimeStatus | null;
+}) {
   return (
     <>
-      <DetailSection title="Goal">
-        <p className="goal-details-summary">{goalRuntime.objective}</p>
-        <DetailGrid
-          rows={[
-            ["Status", goalRuntime.actionLabel],
-            ["Runtime", goalRuntime.timeLabel],
-            ["Detail", goalRuntime.detail],
-          ]}
-        />
-      </DetailSection>
+      {goalRuntime ? (
+        <DetailSection title="Goal">
+          <p className="goal-details-summary">{goalRuntime.objective}</p>
+          <DetailGrid
+            rows={[
+              ["Status", goalRuntime.actionLabel],
+              ["Runtime", goalRuntime.timeLabel],
+              ["Detail", goalRuntime.detail],
+            ]}
+          />
+        </DetailSection>
+      ) : null}
+      {subagentRuntime ? <SubagentDetails runtime={subagentRuntime} /> : null}
       <DetailSection title="Raw State">
         <details className="goal-details-raw">
           <summary>Show structured payload</summary>
-          <pre>{JSON.stringify(goalRuntime, null, 2)}</pre>
+          <pre>{JSON.stringify({ goalRuntime, subagentRuntime }, null, 2)}</pre>
         </details>
       </DetailSection>
     </>
   );
+}
+
+function SubagentDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {
+  return (
+    <>
+      <DetailSection title="Subagents">
+        <DetailGrid
+          rows={[
+            ["Active", String(runtime.activeCount)],
+            ["Blocked", String(runtime.blockedCount)],
+            ["Completed", String(runtime.completedCount)],
+            ["Required open", String(runtime.requiredOpenCount)],
+            ["Usage", subagentUsageLabel(runtime.usage.totalTokens, runtime.usage.requestCount)],
+            ["Evidence", String(runtime.evidenceRefs.length)],
+            ["Checks", String(runtime.testsRunCount)],
+          ]}
+        />
+        {runtime.blockers.length > 0 ? (
+          <ul className="goal-details-list compact">
+            {runtime.blockers.slice(0, 4).map((blocker) => (
+              <li className="goal-details-list-item" key={`${blocker.runId}:${blocker.message}`}>
+                <span className={`goal-details-inline-state ${blocker.status}`}>{blocker.status}</span>
+                <div>
+                  <strong>{subagentRoleLabel(blocker.roleId)}</strong>
+                  <p>{blocker.message}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <ul className="goal-details-list">
+          {runtime.runs.slice(0, 8).map((run) => (
+            <li className="goal-details-list-item" key={run.id}>
+              <span className={`goal-details-inline-state ${run.status}`}>{run.status}</span>
+              <div>
+                <strong>{subagentRoleLabel(run.roleId)}</strong>
+                <p>{run.objective}</p>
+                {run.report?.summary ? <small>{run.report.summary}</small> : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </DetailSection>
+      {runtime.taskGraph.nodes.length > 0 ? <SubagentTaskGraphDetails runtime={runtime} /> : null}
+    </>
+  );
+}
+
+function SubagentTaskGraphDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {
+  const edgesByTarget = new Map<string, typeof runtime.taskGraph.edges>();
+  for (const edge of runtime.taskGraph.edges) {
+    const bucket = edgesByTarget.get(edge.toRunId) ?? [];
+    bucket.push(edge);
+    edgesByTarget.set(edge.toRunId, bucket);
+  }
+  return (
+    <DetailSection title="Task Graph">
+      <ol className="goal-details-task-graph">
+        {runtime.taskGraph.nodes.map((node) => {
+          const incoming = edgesByTarget.get(node.runId) ?? [];
+          return (
+            <li className="goal-details-task-node" key={node.runId}>
+              <div className="goal-details-task-node-header">
+                <span className={`goal-details-inline-state ${node.status}`}>{node.status}</span>
+                <div>
+                  <strong>{subagentRoleLabel(node.roleId)}</strong>
+                  <small>{node.modelLabel} · {node.isolationLabel}</small>
+                </div>
+              </div>
+              <p>{node.objective}</p>
+              <div className="goal-details-task-node-meta">
+                <span>{node.required ? "Required" : "Optional"}</span>
+                <span>{node.evidenceCount} evidence</span>
+                <span>{node.testsRunCount} checks</span>
+                <span>{node.blockerCount} blockers</span>
+              </div>
+              {incoming.length > 0 ? (
+                <div className="goal-details-task-edges">
+                  {incoming.slice(0, 3).map((edge) => (
+                    <span key={edge.id}>{edgeLabel(edge.fromRunId, edge.label, runtime.sessionId)}</span>
+                  ))}
+                </div>
+              ) : null}
+              {node.summary ? <small>{node.summary}</small> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </DetailSection>
+  );
+}
+
+function edgeLabel(fromRunId: string, label: string, sessionId: string): string {
+  if (fromRunId === `parent:${sessionId}`) return `Parent ${label.toLowerCase()}`;
+  if (fromRunId.startsWith("parent:")) return `Parent ${label.toLowerCase()}`;
+  return `${fromRunId} ${label.toLowerCase()}`;
+}
+
+function subagentUsageLabel(totalTokens: number, requestCount: number): string {
+  if (totalTokens <= 0 && requestCount <= 0) return "0 tokens";
+  const requestLabel = `${requestCount} ${requestCount === 1 ? "request" : "requests"}`;
+  return `${formatTokenCount(totalTokens)} tokens · ${requestLabel}`;
+}
+
+function subagentRoleLabel(roleId: string): string {
+  return roleId.slice(0, 1).toUpperCase() + roleId.slice(1).replace(/[-_]+/g, " ");
+}
+
+function formatTokenCount(tokens: number): string {
+  if (tokens < 1000) return String(tokens);
+  if (tokens >= 1_000_000) {
+    const value = tokens / 1_000_000;
+    return `${trimFixed(value, value < 10 ? 2 : 1)}M`;
+  }
+  const value = tokens / 1000;
+  return `${trimFixed(value, value < 10 ? 1 : 0)}k`;
+}
+
+function trimFixed(value: number, digits: number): string {
+  return value.toFixed(digits).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
 
 function EmptyDetails() {

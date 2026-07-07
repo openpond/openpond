@@ -23,6 +23,7 @@ import {
 } from "../apps/server/src/openpond/provider-settings";
 import {
   readProviderSecrets,
+  writeProviderChatGptSubscriptionCredential,
   writeProviderCredential,
   type ProviderSecretStorePaths,
 } from "../apps/server/src/openpond/provider-secrets";
@@ -344,6 +345,48 @@ describe("local BYOK provider registry", () => {
       redacted: "sk-t...1234",
     });
     expect(JSON.stringify(settings)).not.toContain("sk-test-secret-1234");
+  });
+
+  test("stores OpenAI ChatGPT subscription credentials encrypted with redacted status only", async () => {
+    const paths = await tempSecretPaths();
+    await writeProviderChatGptSubscriptionCredential({
+      paths,
+      providerId: "openai",
+      credential: {
+        accessToken: "access-token-secret",
+        refreshToken: "refresh-token-secret",
+        expiresAt: Date.now() + 3600_000,
+        accountId: "acct_1234567890",
+      },
+      timestamp: "2026-06-30T10:00:00.000Z",
+    });
+
+    const rawSecretFile = await readFile(paths.secretsFilePath, "utf8");
+    expect(rawSecretFile).not.toContain("access-token-secret");
+    expect(rawSecretFile).not.toContain("refresh-token-secret");
+
+    const secrets = await readProviderSecrets(paths);
+    expect(secrets.providers.openai?.oauth?.refreshToken).toBe("refresh-token-secret");
+    expect(secrets.providers.openai?.value).toBeNull();
+
+    const settings = buildProviderSettings({
+      file: {
+        version: 1,
+        providers: {
+          openai: ProviderConfigSchema.parse({ enabled: true }),
+        },
+        modelCaches: {},
+      },
+      secrets,
+    });
+
+    expect(settings.statuses.openai?.available).toBe(true);
+    expect(settings.statuses.openai?.credential).toMatchObject({
+      connected: true,
+      source: "chatgpt_subscription",
+      redacted: "ac***90",
+    });
+    expect(JSON.stringify(settings)).not.toContain("refresh-token-secret");
   });
 
   test("serializes concurrent provider settings file updates", async () => {

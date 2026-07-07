@@ -563,6 +563,48 @@ describe("Cloud native UI", () => {
     expect(markup).toContain("Showing 5 of 24 project chats");
   });
 
+  test("groups hidden subagent child conversations under the parent chat row", () => {
+    const parent = chatSession({
+      id: "parent_chat",
+      title: "Parent implementation chat",
+    });
+    const child = chatSession({
+      id: "child_research",
+      title: "Research: inspect agent docs",
+      hiddenFromDefaultSidebar: true,
+      parentSessionId: parent.id,
+      subagentRunId: "run_research",
+      subagentRoleId: "research",
+    });
+
+    const collapsedMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedSessionId: parent.id,
+        visibleChatRows: [parent],
+        chatRows: [parent],
+        childSessionRowsByParentId: {
+          [parent.id]: [child],
+        },
+      })),
+    );
+    expect(collapsedMarkup).toContain("Show 1 subagent conversation");
+    expect(collapsedMarkup).not.toContain("Research: inspect agent docs");
+
+    const selectedChildMarkup = renderToStaticMarkup(
+      createElement(SidebarSectionList, sidebarProps({
+        selectedSessionId: child.id,
+        visibleChatRows: [parent],
+        chatRows: [parent],
+        childSessionRowsByParentId: {
+          [parent.id]: [child],
+        },
+      })),
+    );
+    expect(selectedChildMarkup).toContain("Parent implementation chat");
+    expect(selectedChildMarkup).toContain("Research: inspect agent docs");
+    expect(selectedChildMarkup).toContain('aria-expanded="true"');
+  });
+
   test("keeps project chats in stable order across live and Codex history sessions", () => {
     const project = localProject();
     const projectId = projectSelectionKey("local", project.id);

@@ -26,6 +26,7 @@ const BranchDialog = lazy(() =>
 export function AppSettingsRoute({
   payload,
   connection,
+  diagnostics,
   initialSection,
   onPayload,
   onError,
@@ -38,6 +39,7 @@ export function AppSettingsRoute({
       <SettingsView
         payload={payload}
         connection={connection}
+        diagnostics={diagnostics}
         initialSection={initialSection}
         onPayload={onPayload}
         onError={onError}

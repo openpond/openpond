@@ -34,7 +34,8 @@ export type ServerWorkQueueId =
   | "checkpoint-diff"
   | "provider-runtime-ingestion"
   | "insights"
-  | "local-agent-schedule";
+  | "local-agent-schedule"
+  | "subagent";
 
 export type ServerWorkQueues = {
   turnFollowUp: BackgroundWorkerQueue;
@@ -42,6 +43,7 @@ export type ServerWorkQueues = {
   providerRuntimeIngestion: BackgroundWorkerQueue;
   insights: BackgroundWorkerQueue;
   localAgentSchedule: BackgroundWorkerQueue;
+  subagent: BackgroundWorkerQueue;
   drain: (queueId?: ServerWorkQueueId) => Promise<void>;
   receipts: (queueId?: ServerWorkQueueId) => BackgroundWorkReceipt[];
 };
@@ -143,12 +145,14 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     queueId: "local-agent-schedule",
     logger,
   });
+  const subagent = createBackgroundWorkerQueue({ queueId: "subagent", logger });
   const byId: Record<ServerWorkQueueId, BackgroundWorkerQueue> = {
     "turn-follow-up": turnFollowUp,
     "checkpoint-diff": checkpointDiff,
     "provider-runtime-ingestion": providerRuntimeIngestion,
     insights,
     "local-agent-schedule": localAgentSchedule,
+    subagent,
   };
 
   return {
@@ -157,6 +161,7 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     providerRuntimeIngestion,
     insights,
     localAgentSchedule,
+    subagent,
     drain: async (queueId?: ServerWorkQueueId) => {
       if (queueId) {
         await byId[queueId].drain();

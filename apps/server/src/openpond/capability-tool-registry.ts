@@ -1,4 +1,11 @@
-import type { CreatePipelineSnapshot } from "@openpond/contracts";
+import type {
+  ChatModelRef,
+  CreatePipelineSnapshot,
+  SubagentIsolationMode,
+  SubagentPeerMessages,
+  SubagentRunStatus,
+  SubagentToolPolicy,
+} from "@openpond/contracts";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,
@@ -41,7 +48,7 @@ export type OpenPondProfileSkillGoalToolResult = {
 };
 
 export type OpenPondGoalControlToolInput = {
-  action: "start" | "restart" | "pause" | "resume" | "stop";
+  action: "start" | "restart" | "pause" | "resume" | "complete" | "stop";
   objective?: string | null;
   targetGoalId?: string | null;
   mode?: "local" | "remote" | "auto" | null;
@@ -50,10 +57,69 @@ export type OpenPondGoalControlToolInput = {
 
 export type OpenPondGoalControlToolResult = {
   goalId: string;
-  action: "start" | "restart" | "pause" | "resume" | "stop";
+  action: "start" | "restart" | "pause" | "resume" | "complete" | "stop";
   status: string;
   objective: string;
   mode: "local" | "remote";
+  nextStep: string;
+};
+
+export type OpenPondSubagentStartToolInput = {
+  roleId: string;
+  objective: string;
+  context?: string | null;
+  required?: boolean | null;
+};
+
+export type OpenPondSubagentToolResult = {
+  runId: string;
+  childSessionId: string | null;
+  roleId: string;
+  status: SubagentRunStatus;
+  modelRef: ChatModelRef | null;
+  isolationMode: SubagentIsolationMode;
+  toolPolicy: SubagentToolPolicy;
+  background: boolean;
+  peerMessages: SubagentPeerMessages;
+  nextStep: string;
+};
+
+export type OpenPondSubagentStatusToolInput = {
+  runId?: string | null;
+  parentGoalId?: string | null;
+};
+
+export type OpenPondSubagentStatusToolResult = {
+  runs: OpenPondSubagentToolResult[];
+  nextStep: string;
+};
+
+export type OpenPondSubagentJoinToolInput = {
+  runId: string;
+};
+
+export type OpenPondSubagentCancelToolInput = {
+  runId: string;
+  reason?: string | null;
+  cleanupWorkspace?: boolean | null;
+};
+
+export type OpenPondSubagentMessageToolInput = {
+  toRunId?: string | null;
+  toRole?: string | null;
+  kind: "question" | "answer" | "handoff" | "artifact" | "status" | "blocker";
+  priority?: "normal" | "interrupt" | null;
+  body: string;
+};
+
+export type OpenPondSubagentMessageToolResult = {
+  messageId: string;
+  delivery: {
+    status: "pending" | "delivered" | "undelivered";
+    deliveredRunIds: string[];
+    acknowledgedRunIds: string[];
+    reason: string | null;
+  };
   nextStep: string;
 };
 
@@ -70,6 +136,26 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     context: ModelToolExecutionContext,
     input: OpenPondGoalControlToolInput,
   ) => Promise<OpenPondGoalControlToolResult>;
+  startSubagent?: (
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentStartToolInput,
+  ) => Promise<OpenPondSubagentToolResult>;
+  statusSubagents?: (
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentStatusToolInput,
+  ) => Promise<OpenPondSubagentStatusToolResult>;
+  joinSubagent?: (
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentJoinToolInput,
+  ) => Promise<OpenPondSubagentToolResult>;
+  cancelSubagent?: (
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentCancelToolInput,
+  ) => Promise<OpenPondSubagentToolResult>;
+  sendSubagentMessage?: (
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentMessageToolInput,
+  ) => Promise<OpenPondSubagentMessageToolResult>;
 }): ModelToolDefinition[] {
   const definitions: ModelToolDefinition[] = [
     {
@@ -112,14 +198,14 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     {
       name: "openpond_goal_control",
       description:
-        "Start, restart, pause, resume, or stop the current OpenPond goal after resolving the target goal and execution mode from chat context.",
+        "Start, restart, pause, resume, complete, or stop the current OpenPond goal after resolving the target goal and execution mode from chat context.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           action: {
             type: "string",
-            enum: ["start", "restart", "pause", "resume", "stop"],
+            enum: ["start", "restart", "pause", "resume", "complete", "stop"],
             description: "Goal lifecycle action to perform after interpreting the user's request.",
           },
           objective: {
@@ -152,6 +238,173 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
       },
     },
   ];
+  if (deps.startSubagent) {
+    definitions.push({
+      name: "openpond_subagent_start",
+      description:
+        "Start a background specialist child conversation for a bounded role and objective. Use this for independent research, review, testing, planning, docs, or coding subtasks that can report back with receipts.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          roleId: {
+            type: "string",
+            minLength: 1,
+            description: "Configured subagent role id such as coding, research, review, test, docs, planner, or summarizer.",
+          },
+          objective: {
+            type: "string",
+            minLength: 1,
+            description: "Specific child assignment. Keep it scoped enough for one background worker.",
+          },
+          context: {
+            type: "string",
+            minLength: 1,
+            description: "Optional concise context pack or constraints not obvious from the parent chat.",
+          },
+          required: {
+            type: "boolean",
+            description: "Whether parent goal completion should treat this child result as required.",
+          },
+        },
+        required: ["roleId", "objective"],
+      },
+      execute: async (context) => {
+        const input = subagentStartToolInput(context.args);
+        const result = await deps.startSubagent!(context, input);
+        return subagentToolResult(context.callId, "openpond_subagent_start", result);
+      },
+    });
+  }
+  if (deps.statusSubagents) {
+    definitions.push({
+      name: "openpond_subagent_status",
+      description:
+        "Read current status for a subagent run or all child runs under a parent goal.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          runId: {
+            type: "string",
+            minLength: 1,
+            description: "Specific subagent run id to inspect.",
+          },
+          parentGoalId: {
+            type: "string",
+            minLength: 1,
+            description: "Goal id whose child runs should be listed.",
+          },
+        },
+      },
+      execute: async (context) => {
+        const input = subagentStatusToolInput(context.args);
+        const result = await deps.statusSubagents!(context, input);
+        return subagentStatusToolResult(context.callId, result);
+      },
+    });
+  }
+  if (deps.joinSubagent) {
+    definitions.push({
+      name: "openpond_subagent_join",
+      description:
+        "Inspect a specific child run report. If the child is still running or blocked, this returns its current receipt state instead of waiting indefinitely.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          runId: {
+            type: "string",
+            minLength: 1,
+            description: "Subagent run id to join or inspect.",
+          },
+        },
+        required: ["runId"],
+      },
+      execute: async (context) => {
+        const input = subagentJoinToolInput(context.args);
+        const result = await deps.joinSubagent!(context, input);
+        return subagentToolResult(context.callId, "openpond_subagent_join", result);
+      },
+    });
+  }
+  if (deps.cancelSubagent) {
+    definitions.push({
+      name: "openpond_subagent_cancel",
+      description:
+        "Cancel a queued, running, blocked, or needs-resume child subagent run and clean up its isolated workspace when possible.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          runId: {
+            type: "string",
+            minLength: 1,
+            description: "Subagent run id to cancel.",
+          },
+          reason: {
+            type: "string",
+            minLength: 1,
+            description: "Concise cancellation reason.",
+          },
+          cleanupWorkspace: {
+            type: "boolean",
+            description: "Defaults to true. Set false only when the isolated child workspace should be retained for manual inspection.",
+          },
+        },
+        required: ["runId"],
+      },
+      execute: async (context) => {
+        const input = subagentCancelToolInput(context.args);
+        const result = await deps.cancelSubagent!(context, input);
+        return subagentToolResult(context.callId, "openpond_subagent_cancel", result);
+      },
+    });
+  }
+  if (deps.sendSubagentMessage) {
+    definitions.push({
+      name: "openpond_subagent_send_message",
+      description:
+        "Send a typed runtime-mediated message to a sibling child run or role under the same goal.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          toRunId: {
+            type: "string",
+            minLength: 1,
+            description: "Specific child run id to receive the message.",
+          },
+          toRole: {
+            type: "string",
+            minLength: 1,
+            description: "Role id to receive the message when no exact run id is known.",
+          },
+          kind: {
+            type: "string",
+            enum: ["question", "answer", "handoff", "artifact", "status", "blocker"],
+            description: "Message kind.",
+          },
+          priority: {
+            type: "string",
+            enum: ["normal", "interrupt"],
+            description: "Use interrupt only when the receiver should see this steering at the next safe boundary instead of ordinary mailbox priority.",
+          },
+          body: {
+            type: "string",
+            minLength: 1,
+            description: "Concise message body.",
+          },
+        },
+        required: ["kind", "body"],
+      },
+      execute: async (context) => {
+        const input = subagentMessageToolInput(context.args);
+        const result = await deps.sendSubagentMessage!(context, input);
+        return subagentMessageToolResult(context.callId, result);
+      },
+    });
+  }
   if (deps.startProfileSkillGoal) {
     definitions.push({
       name: "openpond_profile_skill_goal",
@@ -206,9 +459,10 @@ function goalControlToolInput(args: Record<string, unknown>): OpenPondGoalContro
     action !== "restart" &&
     action !== "pause" &&
     action !== "resume" &&
+    action !== "complete" &&
     action !== "stop"
   ) {
-    throw new Error("action must be start, restart, pause, resume, or stop");
+    throw new Error("action must be start, restart, pause, resume, complete, or stop");
   }
   const objective = optionalStringArg(args, "objective");
   const targetGoalId = optionalStringArg(args, "targetGoalId");
@@ -237,6 +491,135 @@ function goalControlToolResult(
       {
         ok: true,
         action: "openpond_goal_control",
+        output: result.nextStep,
+        data: result,
+      },
+      null,
+      2,
+    ),
+    data: result,
+  };
+}
+
+function subagentStartToolInput(args: Record<string, unknown>): OpenPondSubagentStartToolInput {
+  const roleId = stringArg(args, "roleId");
+  const objective = stringArg(args, "objective");
+  const context = optionalStringArg(args, "context");
+  const required = optionalBooleanArg(args, "required");
+  return {
+    roleId,
+    objective,
+    ...(context ? { context } : {}),
+    ...(required === null ? {} : { required }),
+  };
+}
+
+function subagentStatusToolInput(args: Record<string, unknown>): OpenPondSubagentStatusToolInput {
+  const runId = optionalStringArg(args, "runId");
+  const parentGoalId = optionalStringArg(args, "parentGoalId");
+  return {
+    ...(runId ? { runId } : {}),
+    ...(parentGoalId ? { parentGoalId } : {}),
+  };
+}
+
+function subagentJoinToolInput(args: Record<string, unknown>): OpenPondSubagentJoinToolInput {
+  return { runId: stringArg(args, "runId") };
+}
+
+function subagentCancelToolInput(args: Record<string, unknown>): OpenPondSubagentCancelToolInput {
+  return {
+    runId: stringArg(args, "runId"),
+    reason: optionalStringArg(args, "reason"),
+    cleanupWorkspace: optionalBooleanArg(args, "cleanupWorkspace"),
+  };
+}
+
+function subagentMessageToolInput(args: Record<string, unknown>): OpenPondSubagentMessageToolInput {
+  const kind = args.kind;
+  if (
+    kind !== "question" &&
+    kind !== "answer" &&
+    kind !== "handoff" &&
+    kind !== "artifact" &&
+    kind !== "status" &&
+    kind !== "blocker"
+  ) {
+    throw new Error("kind must be question, answer, handoff, artifact, status, or blocker");
+  }
+  return {
+    toRunId: optionalStringArg(args, "toRunId"),
+    toRole: optionalStringArg(args, "toRole"),
+    kind,
+    priority: subagentMessagePriorityArg(args),
+    body: stringArg(args, "body"),
+  };
+}
+
+function subagentMessagePriorityArg(args: Record<string, unknown>): "normal" | "interrupt" | null {
+  const priority = args.priority;
+  if (priority === undefined || priority === null || priority === "") return null;
+  if (priority === "normal" || priority === "interrupt") return priority;
+  throw new Error("priority must be normal or interrupt");
+}
+
+function subagentToolResult(
+  callId: string,
+  name: "openpond_subagent_start" | "openpond_subagent_join" | "openpond_subagent_cancel",
+  result: OpenPondSubagentToolResult,
+): NativeModelToolResult {
+  return {
+    toolCallId: callId,
+    name,
+    ok: true,
+    contentText: JSON.stringify(
+      {
+        ok: true,
+        action: name,
+        output: result.nextStep,
+        data: result,
+      },
+      null,
+      2,
+    ),
+    data: result,
+  };
+}
+
+function subagentStatusToolResult(
+  callId: string,
+  result: OpenPondSubagentStatusToolResult,
+): NativeModelToolResult {
+  return {
+    toolCallId: callId,
+    name: "openpond_subagent_status",
+    ok: true,
+    contentText: JSON.stringify(
+      {
+        ok: true,
+        action: "openpond_subagent_status",
+        output: result.nextStep,
+        data: result,
+      },
+      null,
+      2,
+    ),
+    data: result,
+  };
+}
+
+function subagentMessageToolResult(
+  callId: string,
+  result: OpenPondSubagentMessageToolResult,
+): NativeModelToolResult {
+  return {
+    toolCallId: callId,
+    name: "openpond_subagent_send_message",
+    ok: true,
+    contentText: JSON.stringify(
+      {
+        ok: true,
+        action: "openpond_subagent_send_message",
         output: result.nextStep,
         data: result,
       },
@@ -340,4 +723,11 @@ function stringArg(args: Record<string, unknown>, key: string): string {
 function optionalStringArg(args: Record<string, unknown>, key: string): string | null {
   const value = args[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function optionalBooleanArg(args: Record<string, unknown>, key: string): boolean | null {
+  const value = args[key];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+  return value;
 }

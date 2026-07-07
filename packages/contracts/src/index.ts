@@ -8,6 +8,7 @@ export * from "./account.js";
 export * from "./providers.js";
 export * from "./settings.js";
 export * from "./sessions.js";
+export * from "./subagents.js";
 export * from "./approvals.js";
 export * from "./placeholders.js";
 export * from "./bootstrap.js";

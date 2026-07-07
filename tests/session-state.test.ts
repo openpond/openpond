@@ -83,6 +83,13 @@ describe("session state merging", () => {
     expect(upsertSessionPreservingLocalSidebarState([current], incoming)).toEqual([incoming]);
   });
 
+  test("returns the current array when an upsert does not change session data", () => {
+    const current = [session()];
+
+    expect(upsertSessionPreservingLocalSidebarState(current, { ...current[0]! })).toBe(current);
+    expect(upsertSessionPreservingLocalSidebarStateAndRecency(current, { ...current[0]! })).toBe(current);
+  });
+
   test("preserves local sidebar state during bootstrap list replacement", () => {
     const current = [
       session({ updatedAt: newer, pinned: true, order: 1, status: "idle" }),

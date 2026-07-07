@@ -18,6 +18,7 @@ import {
 } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { ClientConnection } from "../../api";
@@ -41,8 +42,10 @@ import {
 import {
   COMPOSER_SLASH_COMMANDS,
   composerSlashCommandMatches,
+  parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
+import { formatSubmitIssueFormInput, type SubmitIssueFormInput } from "../../lib/submit-issue-command";
 import {
   activeProfileSkillInvocationContext,
   profileSkillInvocationMatchesForQuery,
@@ -79,6 +82,7 @@ import { ComposerMentionMenu, type ComposerMentionMenuItem } from "./ComposerMen
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
 import { ComposerSkillMenu, type ComposerSkillMenuItem } from "./ComposerSkillMenu";
 import { ComposerSlashMenu, type SlashMenuItem } from "./ComposerSlashMenu";
+import { SubmitIssueDialog } from "./SubmitIssueDialog";
 import {
   ComposerAttachmentPreview,
   readComposerAttachmentPayload,
@@ -101,6 +105,7 @@ type ComposerProps = {
   selectedMentionAppId?: string | null;
   contextWindowStatus: ContextWindowStatus;
   goalRuntime?: GoalRuntimeStatus | null;
+  subagentRuntime?: SubagentRuntimeStatus | null;
   createPipelineRuntime?: ComposerCreatePipelineRuntime | null;
   busy: boolean;
   running?: boolean;
@@ -154,6 +159,10 @@ type ActiveSlashContext = {
   query: string;
   start: number;
 };
+
+const SUBMIT_ISSUE_COMMAND = COMPOSER_SLASH_COMMANDS.find(
+  (command) => command.id === "submit-issue",
+) as ComposerSlashCommand;
 
 function activeSlashCommandContext(input: string, cursor: number): ActiveSlashContext | null {
   const beforeCursor = input.slice(0, Math.max(0, Math.min(cursor, input.length)));
@@ -251,6 +260,7 @@ export function Composer({
   selectedMentionAppId = null,
   contextWindowStatus,
   goalRuntime = null,
+  subagentRuntime = null,
   createPipelineRuntime = null,
   busy,
   running = busy,
@@ -310,6 +320,9 @@ export function Composer({
   const [sendingSteerDraftId, setSendingSteerDraftId] = useState<string | null>(null);
   const [editingSteerDraftId, setEditingSteerDraftId] = useState<string | null>(null);
   const [editSteerDraftValue, setEditSteerDraftValue] = useState("");
+  const [submitIssueDialogOpen, setSubmitIssueDialogOpen] = useState(false);
+  const [submitIssueInitialDescription, setSubmitIssueInitialDescription] = useState("");
+  const [submitIssueSubmitting, setSubmitIssueSubmitting] = useState(false);
   const {
     attachmentError,
     attachments,
@@ -483,7 +496,7 @@ export function Composer({
       ...commandMatches.map((command) => ({ kind: "command" as const, command })),
       ...appContextMatches.map((app) => ({ kind: "app-context" as const, app })),
       ...actionMatches.map((action) => ({ kind: "action" as const, action })),
-    ].slice(0, 8),
+    ].slice(0, 10),
     [actionMatches, appContextMatches, commandMatches],
   );
   const showActionMenu = Boolean(
@@ -643,6 +656,17 @@ export function Composer({
     setSelectedActionMentionText(null);
   }
 
+  function openSubmitIssueDialog(initialDescription: string) {
+    setSubmitIssueInitialDescription(initialDescription.trim());
+    setSubmitIssueDialogOpen(true);
+  }
+
+  function closeSubmitIssueDialog() {
+    if (submitIssueSubmitting) return;
+    setSubmitIssueDialogOpen(false);
+    clearSelectedInvocation();
+  }
+
   function clearComposerPrompt() {
     clearSelectedInvocation();
     onPromptChange("");
@@ -768,6 +792,9 @@ export function Composer({
     setActionMenuDismissedPrompt(null);
     onPromptChange(nextPrompt);
     setCursorIndex(nextCursor);
+    if (command.id === "submit-issue") {
+      openSubmitIssueDialog(nextPrompt);
+    }
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(nextCursor, { afterToken: true });
     });
@@ -921,7 +948,19 @@ export function Composer({
   }
 
   async function submitComposer() {
-    if (submittingRef.current || sendDisabled) return;
+    if (submittingRef.current) return;
+    const parsedSubmitIssuePrompt = selectedAction || selectedCommand
+      ? null
+      : parseComposerSlashCommandPrompt(prompt);
+    if (selectedCommand?.id === "submit-issue" || parsedSubmitIssuePrompt?.command === "submit-issue") {
+      openSubmitIssueDialog(
+        parsedSubmitIssuePrompt?.command === "submit-issue"
+          ? parsedSubmitIssuePrompt.args
+          : prompt,
+      );
+      return;
+    }
+    if (sendDisabled) return;
     submittingRef.current = true;
     setAddMenuOpen(false);
     setAttachmentError(null);
@@ -955,6 +994,35 @@ export function Composer({
     } finally {
       submittingRef.current = false;
       setSerializingAttachments(false);
+    }
+  }
+
+  async function submitIssueForm(input: SubmitIssueFormInput): Promise<boolean> {
+    if (submittingRef.current || submitIssueSubmitting) return false;
+    submittingRef.current = true;
+    setSubmitIssueSubmitting(true);
+    setAddMenuOpen(false);
+    setAttachmentError(null);
+    try {
+      if (running) {
+        const stopped = await onStop();
+        if (stopped === false) return false;
+      }
+      const sent = await onSubmit([], null, SUBMIT_ISSUE_COMMAND, {
+        displayPrompt: `/submit-issue ${input.title.trim()}`,
+        promptOverride: formatSubmitIssueFormInput(input),
+      });
+      if (sent) {
+        setSubmitIssueDialogOpen(false);
+        clearSelectedInvocation();
+      }
+      return sent;
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      submittingRef.current = false;
+      setSubmitIssueSubmitting(false);
     }
   }
 
@@ -1032,6 +1100,13 @@ export function Composer({
           style={actionMenuStyle}
         />
       )}
+      <SubmitIssueDialog
+        busy={submitIssueSubmitting}
+        initialDescription={submitIssueInitialDescription}
+        open={submitIssueDialogOpen}
+        onClose={closeSubmitIssueDialog}
+        onSubmit={submitIssueForm}
+      />
       {createPipelineRuntime && (
         <ComposerCreatePipelineStrip runtime={createPipelineRuntime} />
       )}
@@ -1055,6 +1130,7 @@ export function Composer({
           detailsOpen={goalDetailsOpen}
           goalRuntime={goalRuntime}
           objectiveId={goalDetailsId}
+          subagentRuntime={subagentRuntime}
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
@@ -1186,6 +1262,9 @@ export function Composer({
                   setActionMenuDismissedPrompt(null);
                   onPromptChange(nextPrompt);
                   setCursorIndex(nextCursor);
+                  if (completedCommand.command.id === "submit-issue") {
+                    openSubmitIssueDialog(nextPrompt);
+                  }
                   window.requestAnimationFrame(() => {
                     inputRef.current?.focusAtPromptIndex(nextCursor, { afterToken: true });
                   });

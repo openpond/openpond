@@ -22,6 +22,7 @@ import {
 import {
   latestContextUsageForSession,
   latestGoalRuntimeForSession,
+  latestSubagentRuntimeForSession,
   runtimeEventsForSession,
   type RuntimeIndexes,
 } from "../lib/runtime-indexes";
@@ -140,6 +141,22 @@ export function useSidebarData({
     }
     return rows;
   }, [activeSessions, sidebarProjectIdBySessionId]);
+  const childSessionRowsByParentId = useMemo(() => {
+    const rows: Record<string, Session[]> = {};
+    for (const session of sessions) {
+      if (session.archived || !isSubagentChildSession(session)) continue;
+      const parentRows = rows[session.parentSessionId];
+      if (parentRows) {
+        parentRows.push(session);
+      } else {
+        rows[session.parentSessionId] = [session];
+      }
+    }
+    for (const parentRows of Object.values(rows)) {
+      parentRows.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+    }
+    return rows;
+  }, [sessions]);
   const localProjectRows = useMemo<SidebarProjectItem[]>(
     () =>
       visibleLocalProjects
@@ -262,6 +279,7 @@ export function useSidebarData({
   const chatMessages = useMemo(() => buildCachedChatMessages(sessionEvents), [sessionEvents]);
   const contextUsage = latestContextUsageForSession(runtimeIndexes, selectedSessionId);
   const goalRuntime = latestGoalRuntimeForSession(runtimeIndexes, selectedSessionId);
+  const subagentRuntime = latestSubagentRuntimeForSession(runtimeIndexes, selectedSessionId);
 
   return {
     activeSessions,
@@ -276,6 +294,7 @@ export function useSidebarData({
     cloudProjectRows: cloudOnlyProjectRows,
     cloudWorkItemsByProjectId,
     projectSessionRowsByProjectId,
+    childSessionRowsByParentId,
     sidebarProjectIdBySessionId,
     chatRows,
     visibleChatRows,
@@ -283,12 +302,18 @@ export function useSidebarData({
     chatMessages,
     contextUsage,
     goalRuntime,
+    subagentRuntime,
   };
 }
 
 function isVisibleActiveSidebarSession(session: Session, visibleLocalProjectIds: ReadonlySet<string>): boolean {
+  if (isSubagentChildSession(session)) return false;
   if (!session.hiddenFromDefaultSidebar) return true;
   return Boolean(session.systemKind && session.localProjectId && visibleLocalProjectIds.has(session.localProjectId));
+}
+
+function isSubagentChildSession(session: Session): session is Session & { parentSessionId: string; subagentRunId: string } {
+  return Boolean(session.parentSessionId && session.subagentRunId);
 }
 
 function sortSidebarProjectRows(left: SidebarProjectItem, right: SidebarProjectItem): number {

@@ -33,6 +33,7 @@ import type {
   ProviderSettings,
   ProviderValidationRequest,
   ReorderSidebarAppsRequest,
+  RecordClientDiagnosticRequest,
   RecordPreflightTurnFailureRequest,
   ResolveApprovalRequest,
   RemoteAccessStatus,
@@ -98,6 +99,22 @@ type ProviderModelsResponse = {
   query: string | null;
   providers: ProviderSettings;
 };
+
+export type OpenAiSubscriptionAuthResponse =
+  | {
+      providerId: "openai";
+      method: "browser";
+      url: string;
+      redirectUri: string;
+      expiresAt: number;
+    }
+  | {
+      providerId: "openai";
+      method: "device";
+      url: string;
+      userCode: string;
+      expiresAt: number;
+    };
 
 type CodexHistoryTurnInterruptResponse =
   | { interrupted: true }
@@ -367,6 +384,14 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify(input),
     }),
+  startOpenAiSubscriptionAuth: (
+    connection: ClientConnection,
+    input: { method: "browser" | "device" },
+  ) =>
+    apiFetch<OpenAiSubscriptionAuthResponse>(connection, "/v1/providers/openai/subscription-auth", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   validateProviderCredential: (
     connection: ClientConnection,
     providerId: string,
@@ -388,6 +413,11 @@ export const api = {
   savePersonalization: (connection: ClientConnection, input: UpdatePersonalizationRequest) =>
     apiFetch<BootstrapPayload>(connection, "/v1/personalization", {
       method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  recordClientDiagnostic: (connection: ClientConnection, input: RecordClientDiagnosticRequest) =>
+    apiFetch<{ diagnostic: RuntimeEvent }>(connection, "/v1/diagnostics/client", {
+      method: "POST",
       body: JSON.stringify(input),
     }),
   profileCurrent: (connection: ClientConnection) =>

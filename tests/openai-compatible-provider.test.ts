@@ -4,6 +4,7 @@ import { buildProviderSettings } from "../apps/server/src/openpond/provider-regi
 import {
   listOpenAiCompatibleProviderModels,
   normalizeOpenAiCompatibleBaseUrl,
+  resolveOpenAiCompatibleProvider,
   streamOpenAiCompatibleChatCompletion,
   validateOpenAiCompatibleProvider,
 } from "../apps/server/src/openpond/openai-compatible-provider";
@@ -228,6 +229,123 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(models[0]?.capabilities.reasoning).toBe(true);
   });
 
+  test("explains raw OpenAI provider credentials", () => {
+    expect(() =>
+      resolveOpenAiCompatibleProvider({
+        ...providerState("https://api.openai.com/v1", "openai", null),
+        providerId: "openai",
+        modelId: "gpt-5.5",
+      }),
+    ).toThrow(/The raw OpenAI provider uses Platform API credentials/);
+  });
+
+  test("streams OpenAI ChatGPT subscription requests through the Codex Responses endpoint", async () => {
+    const requests: Array<{
+      url: string;
+      authorization: string | null;
+      accountId: string | null;
+      body: Record<string, unknown>;
+    }> = [];
+    globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        url: String(input),
+        authorization: headers.get("authorization"),
+        accountId: headers.get("chatgpt-account-id"),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return streamResponse([
+        sse({ type: "response.output_text.delta", delta: "Hello" }),
+        sse({
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "function_call", call_id: "call_read", name: "resource_read", arguments: "" },
+        }),
+        sse({
+          type: "response.function_call_arguments.delta",
+          output_index: 0,
+          item_id: "call_read",
+          delta: '{"ref":',
+        }),
+        sse({
+          type: "response.function_call_arguments.delta",
+          output_index: 0,
+          item_id: "call_read",
+          delta: '"README.md"}',
+        }),
+        sse({ type: "response.completed", response: { usage: { total_tokens: 12 } } }),
+      ]);
+    };
+
+    const deltas = [];
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      ...subscriptionProviderState(),
+      providerId: "openai",
+      modelId: "gpt-5.5",
+      messages: [
+        { role: "system", content: "Be concise." },
+        { role: "user", content: "read README" },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "resource_read",
+            parameters: { type: "object" },
+          },
+        },
+      ],
+      toolChoice: "auto",
+      requestId: "turn_subscription",
+    })) {
+      deltas.push(delta);
+    }
+
+    expect(requests).toEqual([
+      {
+        url: "https://chatgpt.com/backend-api/codex/responses",
+        authorization: "Bearer access-token",
+        accountId: "acct_123456",
+        body: {
+          model: "gpt-5.5",
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: "read README" }],
+            },
+          ],
+          stream: true,
+          store: false,
+          instructions: "Be concise.",
+          tools: [
+            {
+              type: "function",
+              name: "resource_read",
+              parameters: { type: "object" },
+            },
+          ],
+          tool_choice: "auto",
+        },
+      },
+    ]);
+    expect(deltas.map((delta) => delta.type)).toEqual([
+      "text_delta",
+      "tool_call_delta",
+      "tool_call_delta",
+      "tool_call_delta",
+      "usage",
+      "finish",
+    ]);
+    expect(deltas[0]).toMatchObject({ type: "text_delta", text: "Hello" });
+    expect(deltas.slice(1, 4)).toMatchObject([
+      { type: "tool_call_delta", toolCalls: [{ id: "call_read", function: { name: "resource_read" } }] },
+      { type: "tool_call_delta", toolCalls: [{ function: { arguments: '{"ref":' } }] },
+      { type: "tool_call_delta", toolCalls: [{ function: { arguments: '"README.md"}' } }] },
+    ]);
+    expect(deltas[4]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
+  });
+
   test("normalizes endpoint-shaped base URLs before building requests", async () => {
     const requests: string[] = [];
     globalThis.fetch = async (input) => {
@@ -329,7 +447,8 @@ describe("OpenAI-compatible provider adapter", () => {
 
 function providerState(
   baseUrl = "https://provider.example/v1",
-  providerId: "openrouter" | "zai" = "openrouter",
+  providerId: "openai" | "openrouter" | "zai" = "openrouter",
+  apiKey: string | null = "sk-test",
 ): { settings: ReturnType<typeof buildProviderSettings>; secrets: ProviderSecrets } {
   const file: ProvidersFile = {
     version: 1,
@@ -344,11 +463,50 @@ function providerState(
   };
   const secrets: ProviderSecrets = {
     version: 1,
+    providers: {},
+  };
+  if (apiKey) {
+    secrets.providers[providerId] = {
+      source: "local_secret",
+      value: apiKey,
+      envVar: null,
+      oauth: null,
+      createdAt: "2026-06-30T10:00:00.000Z",
+      updatedAt: "2026-06-30T10:00:00.000Z",
+      lastValidatedAt: null,
+      lastError: null,
+    };
+  }
+  return {
+    settings: buildProviderSettings({ file, secrets }),
+    secrets,
+  };
+}
+
+function subscriptionProviderState(): { settings: ReturnType<typeof buildProviderSettings>; secrets: ProviderSecrets } {
+  const file: ProvidersFile = {
+    version: 1,
     providers: {
-      [providerId]: {
-        source: "local_secret",
-        value: "sk-test",
+      openai: ProviderConfigSchema.parse({
+        enabled: true,
+        defaultModel: "gpt-5.5",
+      }),
+    },
+    modelCaches: {},
+  };
+  const secrets: ProviderSecrets = {
+    version: 1,
+    providers: {
+      openai: {
+        source: "chatgpt_subscription",
+        value: null,
         envVar: null,
+        oauth: {
+          accessToken: "access-token",
+          refreshToken: "refresh-token",
+          expiresAt: Date.now() + 3600_000,
+          accountId: "acct_123456",
+        },
         createdAt: "2026-06-30T10:00:00.000Z",
         updatedAt: "2026-06-30T10:00:00.000Z",
         lastValidatedAt: null,
@@ -373,4 +531,8 @@ function streamResponse(chunks: string[]): Response {
   return new Response(chunks.join(""), {
     headers: { "content-type": "text/event-stream" },
   });
+}
+
+function sse(payload: unknown): string {
+  return `data: ${JSON.stringify(payload)}\n\n`;
 }

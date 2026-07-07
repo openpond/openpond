@@ -9,6 +9,7 @@ import {
   promptWithSelectedInvocationText,
   type ComposerProjectTargetState,
 } from "../apps/web/src/components/chat/Composer";
+import { SubmitIssueDialog } from "../apps/web/src/components/chat/SubmitIssueDialog";
 import { workspaceTargetOptionStatusText } from "../apps/web/src/components/chat/ComposerControls";
 import { ComposerInvocationPill } from "../apps/web/src/components/chat/ComposerInvocationPill";
 import { ComposerPrimaryControls } from "../apps/web/src/components/chat/ComposerPrimaryControls";
@@ -832,8 +833,28 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("/goal Run a goal");
     expect(markup).toContain("/goal-remote Run a cloud goal");
     expect(markup).toContain("/goal-local Run a local goal");
+    expect(markup).toContain("/submit-issue Submit issue");
+    expect(markup).toContain("File a GitHub issue in openpond/openpond through the connected GitHub app.");
     expect(markup).toContain("/sync-cloud Upload/sync to Cloud");
     expect(markup).not.toContain("No agents or project actions available");
+  });
+
+  test("renders the submit issue command as a structured issue form", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SubmitIssueDialog, {
+        busy: false,
+        initialDescription: "Crash when syncing",
+        open: true,
+        onClose: noop,
+        onSubmit: async () => true,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Submit GitHub issue"');
+    expect(markup).toContain("openpond/openpond");
+    expect(markup).toContain("Short issue title");
+    expect(markup).toContain("Crash when syncing");
+    expect(markup).toContain("Submit issue");
   });
 
   test("regular chat composer shows slash commands after existing text", () => {

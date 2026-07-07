@@ -353,7 +353,6 @@ export function useAppBootstrap(params: {
     defaultTeamSyncKeyRef.current = syncKey;
 
     let cancelled = false;
-    let settled = false;
     const preloadTeamAgents = (teamId: string) =>
       preloadSandboxAgents({
         teamId,
@@ -369,7 +368,6 @@ export function useAppBootstrap(params: {
 
     void preloadOpenPondOrganizations({
       accountKey,
-      force: true,
       fetchOrganizations: async () => {
         const payload = await api.organizations(connection);
         return payload.organizations
@@ -446,21 +444,16 @@ export function useAppBootstrap(params: {
         defaultTeamSyncKeyRef.current = null;
         setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
         completeStartup();
-      })
-      .finally(() => {
-        settled = true;
       });
-
     return () => {
       cancelled = true;
-      if (!settled && defaultTeamSyncKeyRef.current === syncKey) {
-        defaultTeamSyncKeyRef.current = null;
-      }
     };
   }, [
     applyBootstrapPayload,
     applyPreferencesPayload,
-    bootstrap,
+    bootstrap?.account,
+    bootstrap?.accountMeta.asOf,
+    bootstrap?.preferences.defaultTeamId,
     completeStartup,
     connection,
     setBlockingStartupStage,

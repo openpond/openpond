@@ -225,6 +225,7 @@ function normalizeRoutePath(pathValue: string): string {
     [/^\/v1\/sandbox-secrets\/[^/]+\/attach$/, "/v1/sandbox-secrets/:secretId/attach"],
     [/^\/v1\/sandbox-secrets\/[^/]+\/revoke$/, "/v1/sandbox-secrets/:secretId/revoke"],
     [/^\/v1\/sandbox-secrets\/[^/]+\/delete$/, "/v1/sandbox-secrets/:secretId/delete"],
+    [/^\/v1\/diagnostics\/client$/, "/v1/diagnostics/client"],
     [/^\/v1\/sandbox-projects\/[^/]+$/, "/v1/sandbox-projects/:projectId"],
     [/^\/v1\/sandbox-projects\/[^/]+\/sync$/, "/v1/sandbox-projects/:projectId/sync"],
     [/^\/v1\/sandbox-projects\/[^/]+\/source$/, "/v1/sandbox-projects/:projectId/source"],

@@ -10,6 +10,7 @@ export type ActivityGroupSummaryKind =
   | "read"
   | "reasoning"
   | "search"
+  | "subagent"
   | "web";
 
 export type ActivityGroupSummary = {
@@ -28,9 +29,12 @@ type ActivityCounters = {
   reasoningCount: number;
   runCount: number;
   searchedCode: number;
+  subagentStatuses: Map<string, SubagentActivityStatus>;
   testsOrChecks: number;
   webSearches: number;
 };
+
+type SubagentActivityStatus = "blocked" | "completed" | "failed" | "running";
 
 type CommandSummary = {
   countedAsRun: boolean;
@@ -104,6 +108,7 @@ function emptyCounters(): ActivityCounters {
     reasoningCount: 0,
     runCount: 0,
     searchedCode: 0,
+    subagentStatuses: new Map(),
     testsOrChecks: 0,
     webSearches: 0,
   };
@@ -131,6 +136,17 @@ function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem
   }
   if (label.includes("approval")) {
     counters.approvals += 1;
+    return true;
+  }
+  if (label.includes("subagent")) {
+    const status = label.includes("failed")
+      ? "failed"
+      : label.includes("blocked")
+        ? "blocked"
+        : label.includes("completed")
+          ? "completed"
+          : "running";
+    setSubagentStatus(counters, activity, status);
     return true;
   }
   if (label.includes("image")) {
@@ -234,6 +250,8 @@ function likelyFileArgs(values: string[]): string[] {
 
 function primaryClauses(counters: ActivityCounters): string[] {
   const clauses: string[] = [];
+  const subagent = subagentClause(counters);
+  if (subagent) clauses.push(subagent);
   if (counters.editCount > 0) clauses.push("made edits");
   const readCount = counters.readFiles.size || counters.readFileCount;
   if (readCount > 0) clauses.push(countClause("read", readCount, "file"));
@@ -248,12 +266,59 @@ function primaryClauses(counters: ActivityCounters): string[] {
   return clauses;
 }
 
+function subagentClause(counters: ActivityCounters): string | null {
+  const counts = subagentStatusCounts(counters);
+  if (counts.failed > 0) return countSubagentClause(counts.failed, "failed");
+  if (counts.blocked > 0) return countSubagentClause(counts.blocked, "blocked");
+  if (counts.running > 0 && counts.completed === 0) {
+    return countSubagentClause(counts.running, "running");
+  }
+  if (counts.completed > 0) return countSubagentClause(counts.completed, "completed");
+  return null;
+}
+
+function setSubagentStatus(
+  counters: ActivityCounters,
+  activity: ActivityItem,
+  status: SubagentActivityStatus,
+): void {
+  const key = activity.openSession?.sessionId ?? (activity.content.trim() || activity.id);
+  const current = counters.subagentStatuses.get(key);
+  if (!current || subagentStatusRank(status) > subagentStatusRank(current)) {
+    counters.subagentStatuses.set(key, status);
+  }
+}
+
+function subagentStatusCounts(counters: ActivityCounters): Record<SubagentActivityStatus, number> {
+  const counts: Record<SubagentActivityStatus, number> = {
+    blocked: 0,
+    completed: 0,
+    failed: 0,
+    running: 0,
+  };
+  for (const status of counters.subagentStatuses.values()) counts[status] += 1;
+  return counts;
+}
+
+function subagentStatusRank(status: SubagentActivityStatus): number {
+  if (status === "running") return 1;
+  if (status === "completed") return 2;
+  if (status === "blocked") return 3;
+  return 4;
+}
+
+function countSubagentClause(count: number, status: "blocked" | "completed" | "failed" | "running"): string {
+  if (count === 1) return `subagent ${status}`;
+  return `${count} subagents ${status}`;
+}
+
 function summaryKind(
   counters: ActivityCounters,
   clauses: string[],
   runClause: string,
 ): ActivityGroupSummaryKind {
   const activeKinds: ActivityGroupSummaryKind[] = [];
+  if (counters.subagentStatuses.size > 0) activeKinds.push("subagent");
   if (counters.editCount > 0) activeKinds.push("edit");
   if (counters.readFiles.size > 0 || counters.readFileCount > 0) activeKinds.push("read");
   if (counters.searchedCode > 0) activeKinds.push("search");

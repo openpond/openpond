@@ -43,6 +43,12 @@ describe("server HTTP route table", () => {
           name: "listProviderModelsPayload",
           args: ["provider-one", { refresh: true, limit: 5 }],
         });
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/diagnostics/client", 201, { message: "UI failed", surface: "app" }),
+      ).resolves.toMatchObject({
+        name: "recordClientDiagnosticPayload",
+        args: [{ message: "UI failed", surface: "app" }],
+      });
       await expect(expectJsonRequest(origin, "GET", "/v1/workspaces/app-1/diff", 200)).resolves.toMatchObject({
         name: "workspaceDiffPayload",
         args: ["app-1"],
@@ -101,6 +107,7 @@ describe("server HTTP route table", () => {
         "sandboxPayload",
         "createLocalProjectPayload",
         "listProviderModelsPayload",
+        "recordClientDiagnosticPayload",
         "workspaceDiffPayload",
         "workspaceLspRuntimeStatusPayload",
         "listInsightsPayload",

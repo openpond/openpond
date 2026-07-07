@@ -1,4 +1,5 @@
 import type { AppToast as AppToastModel } from "../../app/app-state";
+import { X } from "../icons";
 
 type AppToastProps = {
   toast: AppToastModel | null;
@@ -24,7 +25,7 @@ export function AppToast({ toast, onDismiss }: AppToastProps) {
       )}
       {toast.persistent && (
         <button type="button" className="app-toast-close" aria-label="Dismiss notification" onClick={onDismiss}>
-          x
+          <X size={14} />
         </button>
       )}
     </div>

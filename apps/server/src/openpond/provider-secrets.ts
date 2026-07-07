@@ -10,13 +10,21 @@ import {
 } from "@openpond/contracts";
 
 export type ProviderSecretRecord = {
-  source: "local_secret" | "env";
+  source: "local_secret" | "env" | "chatgpt_subscription";
   value: string | null;
   envVar: string | null;
+  oauth: ProviderChatGptSubscriptionCredential | null;
   createdAt: string;
   updatedAt: string;
   lastValidatedAt: string | null;
   lastError: string | null;
+};
+
+export type ProviderChatGptSubscriptionCredential = {
+  accessToken: string | null;
+  refreshToken: string;
+  expiresAt: number;
+  accountId: string | null;
 };
 
 export type ProviderSecrets = {
@@ -25,7 +33,7 @@ export type ProviderSecrets = {
 };
 
 type ProviderSecretFileRecord = {
-  source: "local_secret" | "env";
+  source: "local_secret" | "env" | "chatgpt_subscription";
   envVar?: string | null;
   ciphertext?: string | null;
   iv?: string | null;
@@ -64,7 +72,10 @@ function parseSecretsFile(value: unknown): ProviderSecretsFile {
   const providers: Record<string, ProviderSecretFileRecord> = {};
   for (const [providerId, rawValue] of Object.entries(rawProviders)) {
     const raw = asRecord(rawValue);
-    const source = raw.source === "env" || raw.source === "local_secret" ? raw.source : null;
+    const source =
+      raw.source === "env" || raw.source === "local_secret" || raw.source === "chatgpt_subscription"
+        ? raw.source
+        : null;
     if (!source) continue;
     providers[providerId] = {
       source,
@@ -148,7 +159,9 @@ async function writeRawSecretsFile(
 
 export async function readProviderSecrets(paths: ProviderSecretStorePaths): Promise<ProviderSecrets> {
   const raw = await readRawSecretsFile(paths.secretsFilePath);
-  const needsKey = Object.values(raw.providers).some((record) => record.source === "local_secret");
+  const needsKey = Object.values(raw.providers).some(
+    (record) => record.source === "local_secret" || record.source === "chatgpt_subscription",
+  );
   const key = needsKey ? await readSecretKey(paths.keyFilePath) : null;
   const providers: Record<string, ProviderSecretRecord> = {};
   for (const [providerId, record] of Object.entries(raw.providers)) {
@@ -160,6 +173,7 @@ export async function readProviderSecrets(paths: ProviderSecretStorePaths): Prom
         source: "env",
         value: null,
         envVar: record.envVar ?? null,
+        oauth: null,
         createdAt,
         updatedAt,
         lastValidatedAt: record.lastValidatedAt ?? null,
@@ -168,18 +182,26 @@ export async function readProviderSecrets(paths: ProviderSecretStorePaths): Prom
       continue;
     }
     let value: string | null = null;
+    let oauth: ProviderChatGptSubscriptionCredential | null = null;
     let lastError = record.lastError ?? null;
     try {
       value = decryptValue(record, key);
       if (!value) lastError = lastError ?? "Provider credential could not be decrypted.";
+      if (record.source === "chatgpt_subscription") {
+        oauth = parseChatGptSubscriptionCredential(value);
+        value = null;
+        if (!oauth) lastError = lastError ?? "Provider ChatGPT subscription credential could not be read.";
+      }
     } catch (error) {
       value = null;
+      oauth = null;
       lastError = error instanceof Error ? error.message : String(error);
     }
     providers[providerId] = {
-      source: "local_secret",
+      source: record.source,
       value,
       envVar: null,
+      oauth,
       createdAt,
       updatedAt,
       lastValidatedAt: record.lastValidatedAt ?? null,
@@ -187,6 +209,24 @@ export async function readProviderSecrets(paths: ProviderSecretStorePaths): Prom
     };
   }
   return { version: 1, providers };
+}
+
+function parseChatGptSubscriptionCredential(value: string | null): ProviderChatGptSubscriptionCredential | null {
+  if (!value) return null;
+  const parsed = JSON.parse(value) as unknown;
+  if (!parsed || typeof parsed !== "object") return null;
+  const record = parsed as Record<string, unknown>;
+  const refreshToken = stringValue(record.refreshToken);
+  if (!refreshToken) return null;
+  return {
+    accessToken: stringValue(record.accessToken),
+    refreshToken,
+    expiresAt:
+      typeof record.expiresAt === "number" && Number.isFinite(record.expiresAt)
+        ? record.expiresAt
+        : 0,
+    accountId: stringValue(record.accountId),
+  };
 }
 
 export function parseProviderCredentialWriteRequest(
@@ -230,6 +270,29 @@ export async function writeProviderCredential(input: {
         lastError: null,
       };
     }
+    await writeRawSecretsFile(input.paths.secretsFilePath, current);
+    return readProviderSecrets(input.paths);
+  });
+}
+
+export async function writeProviderChatGptSubscriptionCredential(input: {
+  paths: ProviderSecretStorePaths;
+  providerId: ProviderId;
+  credential: ProviderChatGptSubscriptionCredential;
+  timestamp: string;
+  lastError?: string | null;
+}): Promise<ProviderSecrets> {
+  return withProviderSecretQueue(input.paths, async () => {
+    const current = await readRawSecretsFile(input.paths.secretsFilePath);
+    const existing = current.providers[input.providerId];
+    current.providers[input.providerId] = {
+      source: "chatgpt_subscription",
+      ...encryptValue(JSON.stringify(input.credential), await ensureSecretKey(input.paths.keyFilePath)),
+      createdAt: existing?.createdAt ?? input.timestamp,
+      updatedAt: input.timestamp,
+      lastValidatedAt: input.timestamp,
+      lastError: input.lastError ?? null,
+    };
     await writeRawSecretsFile(input.paths.secretsFilePath, current);
     return readProviderSecrets(input.paths);
   });

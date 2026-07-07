@@ -41,6 +41,7 @@ type ProviderSettingsSectionProps = {
     provider: ChatProvider,
     credential: ProviderCredentialWriteRequest,
   ) => Promise<void>;
+  startOpenAiSubscriptionAuth: (method: "browser" | "device") => Promise<unknown>;
   validateProvider: (provider: ChatProvider, request?: { baseUrl?: string; modelId?: string }) => Promise<void>;
 };
 
@@ -79,6 +80,7 @@ function providerStateTone(status: ProviderStatus | null | undefined): string {
 function credentialSummary(status: ProviderStatus): string {
   if (!status.credential.connected) return status.credential.lastError ?? "Not connected";
   if (status.credential.redacted) return status.credential.redacted;
+  if (status.credential.source === "chatgpt_subscription") return "ChatGPT subscription";
   return status.credential.source;
 }
 
@@ -89,8 +91,15 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
   const modelCount = Math.max(cache?.models.length ?? 0, status.modelIds.length);
   const modelLabel = status.defaultModel ? chatModelLabel(status.defaultModel, settings, status.id) : "";
   const modelCountLabel = modelCount === 1 ? "1 model" : `${modelCount} models`;
+  const credentialLabel =
+    status.id === "openai" && status.credential.connected
+      ? status.credential.source === "chatgpt_subscription"
+        ? "Subscription"
+        : "API key"
+      : "";
   const parts = [
     providerStateLabel(status),
+    credentialLabel,
     cache ? modelCountLabel : "",
     modelLabel,
   ].filter(Boolean);
@@ -139,6 +148,7 @@ export function ProviderSettingsSection({
   refreshProviderModels,
   saveProviderConfig,
   saveProviderCredential,
+  startOpenAiSubscriptionAuth,
   validateProvider,
 }: ProviderSettingsSectionProps) {
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
@@ -224,6 +234,7 @@ export function ProviderSettingsSection({
           onRefreshModels={refreshProviderModels}
           onSaveConfig={saveProviderConfig}
           onSaveCredential={saveProviderCredential}
+          onStartOpenAiSubscriptionAuth={startOpenAiSubscriptionAuth}
           onValidate={validateProvider}
         />
       ) : null}
@@ -243,6 +254,7 @@ function ProviderDetailsDialog({
   onRefreshModels,
   onSaveConfig,
   onSaveCredential,
+  onStartOpenAiSubscriptionAuth,
   onValidate,
 }: {
   account: BootstrapPayload["account"] | null;
@@ -259,6 +271,7 @@ function ProviderDetailsDialog({
     provider: ChatProvider,
     credential: ProviderCredentialWriteRequest,
   ) => Promise<void>;
+  onStartOpenAiSubscriptionAuth: (method: "browser" | "device") => Promise<unknown>;
   onValidate: (provider: ChatProvider, request?: { baseUrl?: string; modelId?: string }) => Promise<void>;
 }) {
   const config = settings.providers[providerId];
@@ -350,6 +363,7 @@ function ProviderDetailsDialog({
             onRefreshModels={onRefreshModels}
             onSaveConfig={onSaveConfig}
             onSaveCredential={onSaveCredential}
+            onStartOpenAiSubscriptionAuth={onStartOpenAiSubscriptionAuth}
             onValidate={onValidate}
           />
         ) : status.routing.localByok && !isRunnableChatProvider(providerId) ? (
@@ -406,6 +420,7 @@ function LocalByokProviderDetails({
   onRefreshModels,
   onSaveConfig,
   onSaveCredential,
+  onStartOpenAiSubscriptionAuth,
   onValidate,
 }: {
   providerId: ChatProvider;
@@ -419,6 +434,7 @@ function LocalByokProviderDetails({
     provider: ChatProvider,
     credential: ProviderCredentialWriteRequest,
   ) => Promise<void>;
+  onStartOpenAiSubscriptionAuth: (method: "browser" | "device") => Promise<unknown>;
   onValidate: (provider: ChatProvider, request?: { baseUrl?: string; modelId?: string }) => Promise<void>;
 }) {
   const config = settings.providers[providerId]!;
@@ -441,6 +457,8 @@ function LocalByokProviderDetails({
   const credentialBusy = providerBusy === `${providerId}:credential`;
   const validateBusy = providerBusy === `${providerId}:validate`;
   const modelsBusy = providerBusy === `${providerId}:models`;
+  const subscriptionBusy = providerBusy === "openai:credential";
+  const openAiProvider = providerId === "openai";
   const visibleModelOptions = useMemo(
     () =>
       visibleProviderModelOptions(
@@ -589,6 +607,37 @@ function LocalByokProviderDetails({
       </form>
 
       <form className="provider-card-form credential-form" onSubmit={(event) => void submitCredential(event)}>
+        {openAiProvider ? (
+          <div className="provider-dialog-note codex-provider-note">
+            <KeyRound size={15} />
+            <span>
+              ChatGPT subscription auth opens OpenAI login and stores a refresh token locally. API keys remain available
+              below for raw Platform billing.
+            </span>
+          </div>
+        ) : null}
+        {openAiProvider ? (
+          <div className="settings-button-row">
+            <button
+              type="button"
+              className="settings-secondary"
+              disabled={subscriptionBusy}
+              onClick={() => void onStartOpenAiSubscriptionAuth("browser")}
+            >
+              {subscriptionBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
+              <span>{subscriptionBusy ? "Opening" : "Connect ChatGPT"}</span>
+            </button>
+            <button
+              type="button"
+              className="settings-secondary"
+              disabled={subscriptionBusy}
+              onClick={() => void onStartOpenAiSubscriptionAuth("device")}
+            >
+              {subscriptionBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
+              <span>Device code</span>
+            </button>
+          </div>
+        ) : null}
         <div className="provider-card-grid credential-grid">
           <div className="settings-select-field">
             <span>Credential source</span>

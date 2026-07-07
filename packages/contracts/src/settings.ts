@@ -5,6 +5,7 @@ import {
   ProviderSettingsSchema,
   type ProviderSettings,
 } from "./providers.js";
+import { SubagentPreferencesSchema } from "./subagents.js";
 
 export const DEFAULT_CHAT_PROVIDER = "openpond" as const;
 export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.5" as const;
@@ -187,6 +188,7 @@ export const AppPreferencesSchema = z.object({
   insightsEvidenceSources: InsightsEvidenceSourceSettingsSchema.optional().default(() =>
     InsightsEvidenceSourceSettingsSchema.parse({}),
   ),
+  subagents: SubagentPreferencesSchema.optional().default(() => SubagentPreferencesSchema.parse({})),
   codexPermissionMode: CodexPermissionModeSchema.default(DEFAULT_CODEX_PERMISSION_MODE),
   codexReasoningEffort: CodexReasoningEffortSchema.default(DEFAULT_CODEX_REASONING_EFFORT),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),

@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   AppPreferencesSchema,
   ChatProviderSchema,
@@ -7,6 +10,8 @@ import {
   CreatePipelineSnapshotSchema,
   ResolveApprovalRequestSchema,
   SendTurnRequestSchema,
+  SubagentMessageSchema,
+  SubagentRunSchema,
   UpdateTurnCreatePipelineRequestSchema,
   type Approval,
   type AppPreferences,
@@ -24,8 +29,14 @@ import {
   type OpenPondProfileSkill,
   type OpenPondProfileState,
   type ProviderSettings,
+  type ResolveApprovalRequest,
   type RuntimeEvent,
   type Session,
+  type SubagentMessage,
+  type SubagentMessageDelivery,
+  type SubagentMessagePriority,
+  type SubagentRun,
+  type SubagentRoleSettings,
   type Turn,
   type UsageRequestAttribution,
   type WorkspaceDiffSummary,
@@ -87,6 +98,14 @@ import {
   type OpenPondGoalControlToolResult,
   type OpenPondProfileSkillGoalToolInput,
   type OpenPondProfileSkillGoalToolResult,
+  type OpenPondSubagentCancelToolInput,
+  type OpenPondSubagentJoinToolInput,
+  type OpenPondSubagentMessageToolInput,
+  type OpenPondSubagentMessageToolResult,
+  type OpenPondSubagentStartToolInput,
+  type OpenPondSubagentStatusToolInput,
+  type OpenPondSubagentStatusToolResult,
+  type OpenPondSubagentToolResult,
 } from "../openpond/capability-tool-registry.js";
 import {
   createBrowserModelToolDefinitions,
@@ -154,6 +173,7 @@ import {
 import { startProviderRequestUsageRecorder } from "./model-usage-recorder.js";
 import { requiresWorkspaceToolForPrompt } from "./workspace-tool-requirements.js";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
+import { runWorkspaceCommand, truncatePatch } from "../workspace/workspaces.js";
 
 type HostedToolLoopDelta = {
   text?: string;
@@ -164,6 +184,14 @@ type HostedToolLoopDelta = {
   usage?: unknown;
 };
 
+type SubagentSandboxForkRequest = {
+  sandboxId: string;
+  payload: Record<string, unknown>;
+  parentSession: Session;
+  role: SubagentRoleSettings;
+  runId: string;
+};
+
 type HostedToolLoopStreamOptions = {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
@@ -172,6 +200,40 @@ type HostedToolLoopStreamOptions = {
 const RESOURCE_TEXT_FALLBACK_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
   "resource_search",
   "resource_read",
+]);
+const READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
+  "resource_search",
+  "resource_read",
+  "workspace_status",
+  "list_files",
+  "read_files",
+  "search_files",
+  "git_status",
+  "git_diff",
+  "sandbox_status",
+  "sandbox_list_files",
+  "sandbox_read_file",
+  "sandbox_search_files",
+  "sandbox_git_status",
+  "sandbox_git_diff",
+  "sandbox_git_export_patch",
+  "sandbox_snapshot_catalog",
+  "sandbox_templates",
+  "sandbox_replays",
+  "sandbox_replay_get",
+  "sandbox_replay_logs",
+  "sandbox_replay_artifacts",
+  "sandbox_logs",
+  "sandbox_receipts",
+]);
+const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
+  "subagent.progress",
+  "subagent.reported",
+  "subagent.completed",
+  "subagent.failed",
+  "subagent.blocked",
+  "subagent.cancelled",
+  "subagent.message",
 ]);
 
 export type HostedToolMode = "auto" | "native" | "text_fallback" | "disabled";
@@ -308,6 +370,10 @@ type CodexTurnInput = Pick<
   SendTurnRequest,
   "approvalPolicy" | "sandbox" | "model" | "codexPermissionMode" | "codexReasoningEffort"
 >;
+type SubagentTurnPermissions = Pick<
+  SendTurnRequest,
+  "approvalPolicy" | "sandbox" | "codexPermissionMode" | "codexReasoningEffort"
+>;
 type ActiveTurn = {
   session: Session;
   turn: Turn;
@@ -410,8 +476,35 @@ export function createTurnRunner(deps: {
     updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
     getApproval(approvalId: string): Promise<Approval | null>;
     upsertModelUsageRecord?(record: ModelUsageRecord): Promise<ModelUsageRecord>;
+    listModelUsageRecords?(query?: {
+      sessionId?: string | null;
+      turnId?: string | null;
+      startedAtFrom?: string | null;
+      startedAtTo?: string | null;
+      visibility?: ModelUsageRecord["visibility"] | "all" | null;
+      status?: ModelUsageRecord["status"] | "missing" | "all" | null;
+      limit?: number;
+    }): Promise<ModelUsageRecord[]>;
+    upsertSubagentRun?(run: SubagentRun): Promise<SubagentRun>;
+    getSubagentRun?(runId: string): Promise<SubagentRun | null>;
+    listSubagentRuns?(query?: {
+      parentSessionId?: string | null;
+      parentGoalId?: string | null;
+      childSessionId?: string | null;
+      status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+      limit?: number;
+    }): Promise<SubagentRun[]>;
+    appendSubagentMessage?(message: SubagentMessage): Promise<SubagentMessage>;
+    listSubagentMessages?(query?: {
+      parentGoalId?: string | null;
+      fromRunId?: string | null;
+      toRunId?: string | null;
+      toRole?: string | null;
+      limit?: number;
+    }): Promise<SubagentMessage[]>;
   };
   upsertApproval: (approval: Approval) => Promise<void>;
+  createSession?: (payload: unknown) => Promise<Session>;
   getSession: (sessionId: string) => Promise<Session>;
   updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
   completeTurn: (sessionId: string, turnId: string, providerTurnId?: string | null) => Promise<Turn>;
@@ -420,7 +513,7 @@ export function createTurnRunner(deps: {
   defaultSessionCwd: (appId?: string | null) => string;
   findOpenPondApp: (appId: string) => Promise<OpenPondApp>;
   resolveSessionWorkspaceCwd: (
-    session: Pick<Session, "appId" | "cwd" | "workspaceId" | "workspaceKind">,
+    session: Pick<Session, "appId" | "cwd" | "metadata" | "subagentRunId" | "workspaceId" | "workspaceKind">,
     options?: { ensureOpenPond?: boolean }
   ) => Promise<string | null>;
   ensureCodexRuntime: (
@@ -439,6 +532,7 @@ export function createTurnRunner(deps: {
     payload: unknown,
     options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null }
   ) => Promise<WorkspaceToolResult>;
+  forkSandboxForSubagent?: (input: SubagentSandboxForkRequest) => Promise<unknown>;
   executeOpenPondCommand?: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
@@ -508,6 +602,7 @@ export function createTurnRunner(deps: {
   ) => Promise<LocalCreatePipelineCheckResult>;
   planCreatePipeline?: CreatePipelinePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
+  subagentQueue?: BackgroundWorkerQueue;
   maxHostedWorkspaceToolRounds: number;
   maxRepeatedInvalidToolRequests: number;
   hostedToolFlags?: Partial<HostedToolRolloutFlags>;
@@ -516,6 +611,7 @@ export function createTurnRunner(deps: {
     attachmentRootDir,
     store,
     upsertApproval,
+    createSession,
     getSession,
     updateSession,
     completeTurn,
@@ -529,6 +625,7 @@ export function createTurnRunner(deps: {
     workspaceDiffBaseline,
     appendRuntimeEvent,
     executeWorkspaceTool,
+    forkSandboxForSubagent,
     executeOpenPondCommand,
     executeProfileAction,
     loadOpenPondProfileState,
@@ -551,6 +648,7 @@ export function createTurnRunner(deps: {
     runLocalCreatePipelineChecks,
     planCreatePipeline,
     turnFollowUpQueue,
+    subagentQueue,
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
   } = deps;
@@ -597,6 +695,10 @@ export function createTurnRunner(deps: {
     return new Promise((_, reject) => {
       signal.addEventListener("abort", () => reject(interruptedError()), { once: true });
     });
+  }
+
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async function getStoredTurn(turnId: string): Promise<Turn | null> {
@@ -743,6 +845,15 @@ export function createTurnRunner(deps: {
           ...(executeProfileSkillGoal
             ? { startProfileSkillGoal: startProfileSkillGoalFromModelTool }
             : {}),
+          ...(subagentToolsAvailable()
+            ? {
+                startSubagent: startSubagentFromModelTool,
+                statusSubagents: statusSubagentsFromModelTool,
+                joinSubagent: joinSubagentFromModelTool,
+                cancelSubagent: cancelSubagentFromModelTool,
+                sendSubagentMessage: sendSubagentMessageFromModelTool,
+              }
+            : {}),
         }),
       );
     }
@@ -788,6 +899,1665 @@ export function createTurnRunner(deps: {
       );
     }
     return definitions;
+  }
+
+  function subagentToolsAvailable(): boolean {
+    return Boolean(
+      createSession &&
+        subagentQueue &&
+        store.upsertSubagentRun &&
+        store.getSubagentRun &&
+        store.listSubagentRuns &&
+        store.appendSubagentMessage &&
+        store.listModelUsageRecords
+    );
+  }
+
+  function requireSubagentDeps() {
+    if (
+      !createSession ||
+      !subagentQueue ||
+      !store.upsertSubagentRun ||
+      !store.getSubagentRun ||
+      !store.listSubagentRuns ||
+      !store.appendSubagentMessage ||
+      !store.listModelUsageRecords
+    ) {
+      throw new Error("Subagent runtime dependencies are not available.");
+    }
+    return {
+      createSession,
+      queue: subagentQueue,
+      upsertRun: (run: SubagentRun) => store.upsertSubagentRun!(run),
+      getRun: (runId: string) => store.getSubagentRun!(runId),
+      listRuns: (query?: Parameters<NonNullable<typeof store.listSubagentRuns>>[0]) =>
+        store.listSubagentRuns!(query),
+      appendMessage: (message: SubagentMessage) => store.appendSubagentMessage!(message),
+      listUsageRecords: (query?: Parameters<NonNullable<typeof store.listModelUsageRecords>>[0]) =>
+        store.listModelUsageRecords!(query),
+    };
+  }
+
+  async function startSubagentFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentStartToolInput,
+  ): Promise<OpenPondSubagentToolResult> {
+    if (context.session.subagentRunId) {
+      throw new Error("Child subagents cannot start additional subagents in this version.");
+    }
+    const deps = requireSubagentDeps();
+    const preferences = await loadAppPreferences();
+    if (!preferences.subagents.enabled) throw new Error("Subagents are disabled in settings.");
+    const role = preferences.subagents.roles.find((candidate) => candidate.id === input.roleId);
+    if (!role?.enabled) throw new Error(`Subagent role ${input.roleId} is not enabled.`);
+    const parentModelRef = context.model ? { providerId: context.provider, modelId: context.model } : null;
+    const modelRef = role.modelRef ?? parentModelRef ?? preferences.defaultChatModelRef ?? {
+      providerId: preferences.defaultChatProvider,
+      modelId: preferences.defaultChatModel,
+    };
+    const workspaceTargetKey = await subagentWorkspaceTargetKeyForSession(context.session);
+    const activeRuns = await deps.listRuns({
+      parentSessionId: context.session.id,
+      status: ["queued", "running", "needs_resume"],
+      limit: 1000,
+    });
+    if (activeRuns.length >= preferences.subagents.maxConcurrentRuns) {
+      throw new Error(
+        `Subagent concurrency limit reached: ${activeRuns.length}/${preferences.subagents.maxConcurrentRuns} active child runs.`,
+      );
+    }
+    const activeRoleRuns = activeRuns.filter((run) => run.roleId === role.id);
+    if (activeRoleRuns.length >= role.maxConcurrentRuns) {
+      throw new Error(
+        `Subagent role ${role.id} concurrency limit reached: ${activeRoleRuns.length}/${role.maxConcurrentRuns} active runs.`,
+      );
+    }
+    const providerLimit = preferences.subagents.maxConcurrentRunsPerProvider;
+    if (providerLimit !== null) {
+      const activeProviderRuns = activeRuns.filter((run) => run.modelRef?.providerId === modelRef.providerId);
+      if (activeProviderRuns.length >= providerLimit) {
+        throw new Error(
+          `Subagent provider ${modelRef.providerId} concurrency limit reached: ${activeProviderRuns.length}/${providerLimit} active runs.`,
+        );
+      }
+    }
+    const workspaceTargetLimit = preferences.subagents.maxConcurrentRunsPerWorkspaceTarget;
+    if (workspaceTargetLimit !== null) {
+      const activeWorkspaceRuns = activeRuns.filter((run) => subagentWorkspaceTargetKeyFromRun(run) === workspaceTargetKey);
+      if (activeWorkspaceRuns.length >= workspaceTargetLimit) {
+        throw new Error(
+          `Subagent workspace target concurrency limit reached: ${activeWorkspaceRuns.length}/${workspaceTargetLimit} active runs for ${workspaceTargetKey}.`,
+        );
+      }
+    }
+    const parentGoalId = activeThreadGoalId((await store.snapshot()).events, context.session.id);
+    const budget = await subagentUsageBudgetForParent({
+      parentSessionId: context.session.id,
+      roleId: role.id,
+      preferences,
+    });
+    assertSubagentBudgetAvailable({ budget, role });
+    const runId = randomUUID();
+    const createdAt = now();
+    const childTurnPermissions = subagentChildTurnPermissions(context.turnPermissions, role);
+    const isolation = await prepareSubagentWorkspaceIsolation({
+      parentSession: context.session,
+      role,
+      runId,
+    });
+    const childSessionWorkspace = isolation.sessionWorkspace ?? {};
+    const childSessionMetadata = {
+      ...(recordFromUnknown(childSessionWorkspace.metadata) ?? {}),
+      subagent: {
+        runId,
+        roleId: role.id,
+        parentSessionId: context.session.id,
+        parentTurnId: context.turnId,
+        parentGoalId,
+        toolPolicy: role.toolPolicy,
+        requestedIsolationMode: role.isolationMode,
+        effectiveIsolationMode: isolation.effectiveIsolationMode,
+        workspace: isolation.workspace,
+      },
+    };
+    const childSession = await deps.createSession({
+      provider: modelRef.providerId,
+      modelRef,
+      openPondCommandAccessMode: context.session.openPondCommandAccessMode,
+      hiddenFromDefaultSidebar: true,
+      parentSessionId: context.session.id,
+      parentTurnId: context.turnId,
+      parentGoalId,
+      subagentRunId: runId,
+      subagentRoleId: role.id,
+      appId: context.session.appId,
+      appName: context.session.appName,
+      workspaceKind: childSessionWorkspace.workspaceKind ?? context.session.workspaceKind,
+      workspaceId: childSessionWorkspace.workspaceId ?? context.session.workspaceId,
+      workspaceName: childSessionWorkspace.workspaceName ?? context.session.workspaceName,
+      localProjectId: childSessionWorkspace.localProjectId ?? context.session.localProjectId,
+      cloudProjectId: childSessionWorkspace.cloudProjectId ?? context.session.cloudProjectId,
+      cloudTeamId: childSessionWorkspace.cloudTeamId ?? context.session.cloudTeamId,
+      cwd: isolation.cwd ?? context.session.cwd,
+      title: `${subagentRoleLabel(role)}: ${input.objective.slice(0, 72)}`,
+      metadata: childSessionMetadata,
+    });
+    const isolationBlocker = isolation.blocker;
+    const run = SubagentRunSchema.parse({
+      id: runId,
+      parentSessionId: context.session.id,
+      parentTurnId: context.turnId,
+      parentGoalId,
+      childSessionId: childSession.id,
+      roleId: role.id,
+      objective: input.objective,
+      modelRef,
+      isolationMode: role.isolationMode,
+      toolPolicy: role.toolPolicy,
+      background: role.background,
+      peerMessages: role.peerMessages,
+      status: isolationBlocker ? "blocked" : "queued",
+      required: input.required ?? true,
+      createdAt,
+      startedAt: null,
+      completedAt: isolationBlocker ? createdAt : null,
+      error: isolationBlocker,
+      report: isolationBlocker
+        ? {
+            summary: "Subagent blocked before execution because write-capable child isolation is not available yet.",
+            blockers: [isolationBlocker],
+            followUpNeeded: true,
+          }
+        : null,
+      metadata: {
+        context: input.context ?? null,
+        childTurnPermissions,
+        tokenBudget: {
+          totalMaxTokens: preferences.subagents.maxTokens,
+          roleMaxTokens: role.maxTokens,
+          roleMaxTurns: role.maxTurns,
+          totalTokensUsedBeforeStart: budget.totalTokens,
+          roleTokensUsedBeforeStart: budget.roleTokens,
+        },
+        concurrency: {
+          providerId: modelRef.providerId,
+          providerMaxConcurrentRuns: providerLimit,
+          workspaceTargetKey,
+          workspaceTargetMaxConcurrentRuns: workspaceTargetLimit,
+        },
+        subagentWorkspace: isolation.workspace,
+      },
+    });
+    await deps.upsertRun(run);
+    await appendSubagentReceipt({
+      parentSession: context.session,
+      parentTurnId: context.turnId,
+      run,
+      eventName: isolationBlocker ? "subagent.blocked" : "subagent.started",
+      status: isolationBlocker ? "failed" : "pending",
+      output: isolationBlocker
+        ? `Subagent ${role.id} blocked: ${isolationBlocker}`
+        : `Started ${role.id} subagent.`,
+    });
+    if (!isolationBlocker && role.background) {
+      deps.queue.enqueue(
+        {
+          label: `${role.id}: ${input.objective.slice(0, 80)}`,
+          metadata: { runId, childSessionId: childSession.id, parentSessionId: context.session.id },
+        },
+        () => runSubagentChildTurn({
+          run,
+          role,
+          childSession,
+          parentSession: context.session,
+          parentTurnId: context.turnId,
+          contextPack: input.context ?? null,
+          childTurnPermissions,
+        }),
+      );
+    }
+    return subagentToolResultFromRun(run, isolationBlocker
+      ? "Open the child conversation or wait for workspace isolation support before retrying write-capable work."
+      : "Subagent queued in the background. This start call does not wait for completion; continue parent work and use pushed receipts, or call openpond_subagent_join only when an explicit blocking/diagnostic check is needed.");
+  }
+
+  async function statusSubagentsFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentStatusToolInput,
+  ): Promise<OpenPondSubagentStatusToolResult> {
+    const deps = requireSubagentDeps();
+    const runs = input.runId
+      ? [(await deps.getRun(input.runId))].filter((run): run is SubagentRun => Boolean(run))
+      : await deps.listRuns({
+          parentSessionId: context.session.id,
+          parentGoalId: input.parentGoalId ?? undefined,
+          limit: 50,
+        });
+    for (const run of runs) {
+      assertSubagentRunAccessible(context.session, run);
+    }
+    return {
+      runs: runs.map((run) => subagentToolResultFromRun(run, "Subagent status loaded.")),
+      nextStep: runs.length === 0 ? "No matching subagent runs." : `Loaded ${runs.length} subagent run${runs.length === 1 ? "" : "s"}.`,
+    };
+  }
+
+  async function joinSubagentFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentJoinToolInput,
+  ): Promise<OpenPondSubagentToolResult> {
+    const deps = requireSubagentDeps();
+    const run = await deps.getRun(input.runId);
+    if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
+    assertSubagentRunAccessible(context.session, run);
+    return subagentToolResultFromRun(run, run.status === "completed"
+      ? "Subagent completed; use its report and child conversation as evidence."
+      : "Subagent has not completed yet; continue parent work or check again later.");
+  }
+
+  async function cancelSubagentFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentCancelToolInput,
+  ): Promise<OpenPondSubagentToolResult> {
+    const deps = requireSubagentDeps();
+    const run = await deps.getRun(input.runId);
+    if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
+    assertSubagentRunAccessible(context.session, run);
+    if (run.status === "completed") {
+      return subagentToolResultFromRun(run, "Subagent already completed; no cancellation was applied.");
+    }
+    if (run.status === "cancelled") {
+      return subagentToolResultFromRun(run, "Subagent was already cancelled.");
+    }
+    const reason = input.reason?.trim() || "Subagent cancelled by request.";
+    const cancelledAt = now();
+    let nextRun = SubagentRunSchema.parse({
+      ...run,
+      status: "cancelled",
+      completedAt: cancelledAt,
+      error: reason,
+      report: {
+        ...(run.report ?? {}),
+        summary: run.report?.summary || "Subagent cancelled before completion.",
+        blockers: uniqueNonEmptyStrings([...(run.report?.blockers ?? []), reason]),
+        followUpNeeded: false,
+      },
+      metadata: {
+        ...(run.metadata ?? {}),
+        cancellation: {
+          reason,
+          cancelledAt,
+          requestedBySessionId: context.session.id,
+          requestedByTurnId: context.turnId,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+
+    let interruptResult: Record<string, unknown> | null = null;
+    if (run.childSessionId) {
+      try {
+        const interrupted = await interruptSessionTurn(run.childSessionId);
+        interruptResult = {
+          status: interrupted.status,
+          turnId: interrupted.id,
+        };
+      } catch (error) {
+        interruptResult = {
+          status: "not_active",
+          error: textFromUnknown(error) || "No active child turn to interrupt.",
+        };
+      }
+    }
+    const cleanupResult = input.cleanupWorkspace === false
+      ? { status: "skipped", reason: "cleanupWorkspace was false" }
+      : await cleanupSubagentWorkspace(nextRun);
+    nextRun = SubagentRunSchema.parse({
+      ...nextRun,
+      metadata: {
+        ...(nextRun.metadata ?? {}),
+        cancellation: {
+          ...(recordFromUnknown(nextRun.metadata?.cancellation) ?? {}),
+          interruptResult,
+          workspaceCleanup: cleanupResult,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+    const parentSession = run.parentSessionId === context.session.id
+      ? context.session
+      : await getSession(run.parentSessionId).catch(() => context.session);
+    await appendSubagentReceipt({
+      parentSession,
+      parentTurnId: run.parentTurnId ?? context.turnId,
+      run: nextRun,
+      eventName: "subagent.cancelled",
+      status: "failed",
+      output: `${run.roleId} subagent cancelled: ${reason}`,
+    });
+    return subagentToolResultFromRun(
+      nextRun,
+      cleanupResult?.status === "removed"
+        ? "Subagent cancelled and isolated workspace cleanup completed."
+        : "Subagent cancelled.",
+    );
+  }
+
+  async function sendSubagentMessageFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentMessageToolInput,
+  ): Promise<OpenPondSubagentMessageToolResult> {
+    const deps = requireSubagentDeps();
+    const parentGoalId = activeThreadGoalId((await store.snapshot()).events, context.session.parentSessionId ?? context.session.id);
+    const fromRunId = context.session.subagentRunId ?? `parent:${context.session.id}`;
+    const priority = input.priority ?? "normal";
+    const recipientRuns = await resolveSubagentMessageRecipients(context, {
+      parentGoalId,
+      toRunId: input.toRunId ?? null,
+      toRole: input.toRole ?? null,
+    });
+    const deliveredRunIds = recipientRuns.map((run) => run.id);
+    const delivery: SubagentMessageDelivery = {
+      status: deliveredRunIds.length > 0 ? "delivered" : "undelivered",
+      deliveredRunIds,
+      acknowledgedRunIds: deliveredRunIds,
+      reason: deliveredRunIds.length > 0
+        ? null
+        : input.toRunId || input.toRole
+          ? "No matching active child run was available for delivery."
+          : "No target run or role was supplied.",
+    };
+    const message = SubagentMessageSchema.parse({
+      id: randomUUID(),
+      parentGoalId,
+      fromRunId,
+      toRunId: input.toRunId ?? null,
+      toRole: input.toRole ?? null,
+      kind: input.kind,
+      priority,
+      body: input.body,
+      refs: [],
+      delivery,
+      createdAt: now(),
+    });
+    await deps.appendMessage(message);
+    await deliverSubagentMessageToReceivers(context, message, recipientRuns);
+    await appendRuntimeEvent(
+      event({
+        sessionId: context.session.id,
+        turnId: context.turnId,
+        name: "subagent.message",
+        source: "provider",
+        appId: context.session.appId,
+        status: delivery.status === "delivered" ? "completed" : "pending",
+        output: priority === "interrupt"
+          ? `Interrupt subagent message sent: ${message.kind}.`
+          : `Subagent message sent: ${message.kind}.`,
+        data: { message, delivery, deliveredRunIds },
+      }),
+    );
+    if (context.session.parentSessionId && context.session.parentSessionId !== context.session.id) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: context.session.parentSessionId,
+          turnId: context.turnId,
+          name: "subagent.message",
+          source: "server",
+          appId: context.session.appId,
+          status: "completed",
+          output: `Subagent ${fromRunId} sent ${message.kind}.`,
+          data: { message, delivery, deliveredRunIds },
+        }),
+      );
+    }
+    return {
+      messageId: message.id,
+      delivery,
+      nextStep: deliveredRunIds.length > 0
+        ? `${priority === "interrupt" ? "Interrupt message" : "Message"} persisted, delivered, and acknowledged by ${deliveredRunIds.length} subagent run${deliveredRunIds.length === 1 ? "" : "s"} at the runtime boundary.`
+        : "Message persisted in the goal-scoped subagent mailbox.",
+    };
+  }
+
+  async function resolveSubagentMessageRecipients(
+    context: ModelToolExecutionContext,
+    input: {
+      parentGoalId: string | null;
+      toRunId: string | null;
+      toRole: string | null;
+    },
+  ): Promise<SubagentRun[]> {
+    const deps = requireSubagentDeps();
+    const parentSessionId = context.session.parentSessionId ?? context.session.id;
+    const recipients = input.toRunId
+      ? [(await deps.getRun(input.toRunId))].filter((run): run is SubagentRun => Boolean(run))
+      : input.toRole
+        ? await deps.listRuns({
+            parentSessionId,
+            parentGoalId: input.parentGoalId ?? undefined,
+            status: ["queued", "running", "needs_resume"],
+            limit: 50,
+          })
+        : [];
+    return recipients.filter((run) => {
+      if (run.parentSessionId !== parentSessionId) return false;
+      if (input.toRole && run.roleId !== input.toRole) return false;
+      if (!run.childSessionId) return false;
+      return true;
+    });
+  }
+
+  async function deliverSubagentMessageToReceivers(
+    context: ModelToolExecutionContext,
+    message: SubagentMessage,
+    recipients: SubagentRun[],
+  ): Promise<void> {
+    for (const run of recipients) {
+      const childSessionId = run.childSessionId;
+      if (!childSessionId) continue;
+      await appendRuntimeEvent(
+        event({
+          sessionId: childSessionId,
+          name: "subagent.message",
+          source: "server",
+          appId: context.session.appId,
+          status: "pending",
+          output: message.priority === "interrupt"
+            ? `Interrupt subagent message received: ${message.kind}.`
+            : `Subagent message received: ${message.kind}.`,
+          data: {
+            message,
+            delivery: message.delivery ?? null,
+            deliveredToRunId: run.id,
+            acknowledgedRunId: run.id,
+            priority: message.priority ?? "normal",
+          },
+        }),
+      );
+    }
+  }
+
+  async function runSubagentChildTurn(input: {
+    run: SubagentRun;
+    role: SubagentRoleSettings;
+    childSession: Session;
+    parentSession: Session;
+    parentTurnId: string;
+    contextPack: string | null;
+    childTurnPermissions: SubagentTurnPermissions;
+  }): Promise<void> {
+    const deps = requireSubagentDeps();
+    const latestBeforeStart = await deps.getRun(input.run.id);
+    if (latestBeforeStart?.status === "cancelled") return;
+    const startedAt = now();
+    let run = SubagentRunSchema.parse({
+      ...(latestBeforeStart ?? input.run),
+      status: "running",
+      startedAt,
+    });
+    await deps.upsertRun(run);
+    await appendSubagentReceipt({
+      parentSession: input.parentSession,
+      parentTurnId: input.parentTurnId,
+      run,
+      eventName: "subagent.started",
+      status: "started",
+      output: `${run.roleId} subagent is running.`,
+    });
+    await appendSubagentReceipt({
+      parentSession: input.parentSession,
+      parentTurnId: input.parentTurnId,
+      run,
+      eventName: "subagent.progress",
+      status: "pending",
+      output: `${run.roleId} subagent is working in child conversation ${run.childSessionId ?? "unknown"}.`,
+    });
+    try {
+      const childTurn = await sendTurn(input.childSession.id, {
+        prompt: subagentChildPrompt({
+          role: input.role,
+          objective: input.run.objective,
+          parentSession: input.parentSession,
+          contextPack: input.contextPack,
+        }),
+        modelRef: input.run.modelRef ?? undefined,
+        metadata: {
+          subagentRunId: input.run.id,
+          parentSessionId: input.parentSession.id,
+          parentTurnId: input.parentTurnId,
+          parentGoalId: input.run.parentGoalId,
+          subagentRoleId: input.run.roleId,
+          subagentPermissions: input.childTurnPermissions,
+          usageAttribution: subagentUsageAttribution(input.run),
+        },
+        usageAttribution: subagentUsageAttribution(input.run),
+        approvalPolicy: input.childTurnPermissions.approvalPolicy,
+        sandbox: input.childTurnPermissions.sandbox,
+        codexPermissionMode: input.childTurnPermissions.codexPermissionMode,
+        codexReasoningEffort: input.childTurnPermissions.codexReasoningEffort,
+      });
+      const finalizedChildTurn = await finalizedSubagentChildTurn(childTurn);
+      const latestAfterChild = await deps.getRun(run.id);
+      if (latestAfterChild?.status === "cancelled") return;
+      if (finalizedChildTurn.status !== "completed") {
+        throw new Error(finalizedChildTurn.error || `Child turn ended with status ${finalizedChildTurn.status}.`);
+      }
+      const completedAt = now();
+      const summary = await latestAssistantTextForSession(input.childSession.id);
+      const usage = await subagentUsageTotalsForRun(input.run.id);
+      const workspaceHandoff = await captureSubagentWorkspaceHandoff(run);
+      run = SubagentRunSchema.parse({
+        ...run,
+        status: "completed",
+        completedAt,
+        report: {
+          summary: summary || "Child conversation completed.",
+          artifacts: workspaceHandoff?.artifacts ?? [],
+          patchRef: workspaceHandoff?.patchRef ?? null,
+          diffRef: workspaceHandoff?.diffRef ?? null,
+          blockers: [],
+          followUpNeeded: workspaceHandoff?.changed ?? false,
+        },
+        metadata: {
+          ...(run.metadata ?? {}),
+          usage,
+          ...(workspaceHandoff ? { workspaceHandoff: workspaceHandoff.metadata } : {}),
+        },
+      });
+      await deps.upsertRun(run);
+      if (workspaceHandoff?.changed) {
+        await appendSubagentReceipt({
+          parentSession: input.parentSession,
+          parentTurnId: input.parentTurnId,
+          run,
+          eventName: "subagent.reported",
+          status: "completed",
+          output: `${run.roleId} subagent produced an isolated patch for parent review.`,
+        });
+        await requestSubagentPatchApplyApproval({
+          parentSession: input.parentSession,
+          parentTurnId: input.parentTurnId,
+          run,
+        });
+      }
+      await appendSubagentReceipt({
+        parentSession: input.parentSession,
+        parentTurnId: input.parentTurnId,
+        run,
+        eventName: "subagent.completed",
+        status: "completed",
+        output: `${run.roleId} subagent completed.`,
+      });
+    } catch (error) {
+      const latestAfterError = await deps.getRun(run.id).catch(() => null);
+      if (latestAfterError?.status === "cancelled") return;
+      const message = textFromUnknown(error) || "Subagent failed.";
+      run = SubagentRunSchema.parse({
+        ...run,
+        status: "failed",
+        completedAt: now(),
+        error: message,
+        report: {
+          summary: "Child conversation failed before producing a final report.",
+          blockers: [message],
+          followUpNeeded: true,
+        },
+      });
+      await deps.upsertRun(run);
+      await appendSubagentReceipt({
+        parentSession: input.parentSession,
+        parentTurnId: input.parentTurnId,
+        run,
+        eventName: "subagent.failed",
+        status: "failed",
+        output: `${run.roleId} subagent failed: ${message}`,
+      });
+    }
+  }
+
+  async function finalizedSubagentChildTurn(turn: Turn): Promise<Turn> {
+    let latest = (await getStoredTurn(turn.id)) ?? turn;
+    if (latest.status !== "in_progress") return latest;
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      await delay(250);
+      latest = (await getStoredTurn(turn.id)) ?? latest;
+      if (latest.status !== "in_progress") return latest;
+    }
+    return latest;
+  }
+
+  async function appendSubagentReceipt(input: {
+    parentSession: Session;
+    parentTurnId: string;
+    run: SubagentRun;
+    eventName: Extract<RuntimeEvent["name"], `subagent.${string}`>;
+    status: RuntimeEvent["status"];
+    output: string;
+  }): Promise<void> {
+    await appendRuntimeEvent(
+      event({
+        sessionId: input.parentSession.id,
+        turnId: input.parentTurnId,
+        name: input.eventName,
+        source: "server",
+        appId: input.parentSession.appId,
+        status: input.status,
+        output: input.output,
+        data: {
+          run: input.run,
+          childSessionId: input.run.childSessionId,
+          parentGoalId: input.run.parentGoalId,
+        },
+      }),
+    );
+  }
+
+  async function requestSubagentPatchApplyApproval(input: {
+    parentSession: Session;
+    parentTurnId: string;
+    run: SubagentRun;
+  }): Promise<Approval | null> {
+    const handoff = workspaceHandoffFromRun(input.run);
+    if (!handoff || !truthyRecordBoolean(handoff, "changed")) return null;
+    const patchPath = stringFromRecord(handoff, "patchPath");
+    const parentRepoPath = stringFromRecord(handoff, "parentRepoPath");
+    if (!patchPath || !parentRepoPath) return null;
+    const approvalId = `approval_subagent_patch_${input.run.id}`;
+    const existing = await store.getApproval(approvalId);
+    if (existing) return existing;
+    const approval: Approval = {
+      id: approvalId,
+      sessionId: input.parentSession.id,
+      turnId: input.parentTurnId,
+      providerRequestId: input.run.id,
+      kind: "subagent_patch_apply",
+      title: `Apply ${input.run.roleId} subagent patch: ${truncateApprovalTitle(input.run.objective)}`,
+      detail: JSON.stringify(
+        {
+          runId: input.run.id,
+          roleId: input.run.roleId,
+          childSessionId: input.run.childSessionId,
+          parentGoalId: input.run.parentGoalId,
+          objective: input.run.objective,
+          summary: input.run.report?.summary ?? null,
+          parentRepoPath,
+          patchPath,
+          branch: handoff.branch ?? null,
+          baseCommit: handoff.baseCommit ?? null,
+          patchBytes: handoff.patchBytes ?? null,
+          patchPreview: handoff.patchPreview ?? null,
+          patchTruncated: handoff.patchTruncated ?? null,
+        },
+        null,
+        2,
+      ),
+      status: "pending",
+      createdAt: now(),
+    };
+    await upsertApproval(approval);
+    await appendRuntimeEvent(
+      event({
+        sessionId: input.parentSession.id,
+        turnId: input.parentTurnId,
+        name: "approval.requested",
+        source: "server",
+        action: "subagent_patch_apply",
+        appId: input.parentSession.appId,
+        status: "pending",
+        output: approval.title,
+        data: approval,
+      }),
+    );
+    return approval;
+  }
+
+  function subagentToolResultFromRun(run: SubagentRun, nextStep: string): OpenPondSubagentToolResult {
+    return {
+      runId: run.id,
+      childSessionId: run.childSessionId,
+      roleId: run.roleId,
+      status: run.status,
+      modelRef: run.modelRef,
+      isolationMode: run.isolationMode,
+      toolPolicy: run.toolPolicy,
+      background: run.background,
+      peerMessages: run.peerMessages,
+      nextStep,
+    };
+  }
+
+  function subagentRoleLabel(role: SubagentRoleSettings): string {
+    return role.id.slice(0, 1).toUpperCase() + role.id.slice(1).replace(/[-_]+/g, " ");
+  }
+
+  function uniqueNonEmptyStrings(values: readonly string[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+      const normalized = value.trim();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      result.push(normalized);
+    }
+    return result;
+  }
+
+  type SubagentUsageBudgetSnapshot = {
+    totalTokens: number;
+    roleTokens: number;
+    totalMaxTokens: number | null;
+    roleMaxTokens: number | null;
+  };
+
+  type SubagentContinuationTurnContext = {
+    run: SubagentRun;
+    role: SubagentRoleSettings;
+    usageAttribution: UsageRequestAttribution;
+    turnPermissions: SubagentTurnPermissions;
+    priorTurnCount: number;
+    maxTurns: number | null;
+    managedBySubagentRunner: boolean;
+  };
+
+  async function subagentUsageBudgetForParent(input: {
+    parentSessionId: string;
+    roleId: string;
+    preferences: AppPreferences;
+  }): Promise<SubagentUsageBudgetSnapshot> {
+    const deps = requireSubagentDeps();
+    const runs = await deps.listRuns({ parentSessionId: input.parentSessionId, limit: 10_000 });
+    const runIds = new Set(runs.map((run) => run.id));
+    const roleRunIds = new Set(runs.filter((run) => run.roleId === input.roleId).map((run) => run.id));
+    const records = await deps.listUsageRecords({ status: "completed" });
+    const totalTokens = subagentUsageTotal(records, runIds);
+    const roleTokens = subagentUsageTotal(records, roleRunIds);
+    const role = input.preferences.subagents.roles.find((candidate) => candidate.id === input.roleId) ?? null;
+    return {
+      totalTokens,
+      roleTokens,
+      totalMaxTokens: input.preferences.subagents.maxTokens,
+      roleMaxTokens: role?.maxTokens ?? null,
+    };
+  }
+
+  async function subagentUsageTotalsForRun(runId: string): Promise<{
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    requestCount: number;
+  }> {
+    const deps = requireSubagentDeps();
+    const records = await deps.listUsageRecords({ status: "completed" });
+    const matching = records.filter((record) => record.attribution.subagentRunId === runId);
+    return {
+      totalTokens: sumUsageField(matching, "totalTokens"),
+      promptTokens: sumUsageField(matching, "promptTokens"),
+      completionTokens: sumUsageField(matching, "completionTokens"),
+      requestCount: matching.length,
+    };
+  }
+
+  function assertSubagentBudgetAvailable(input: {
+    budget: SubagentUsageBudgetSnapshot;
+    role: SubagentRoleSettings;
+  }): void {
+    const { budget, role } = input;
+    if (budget.totalMaxTokens !== null && budget.totalTokens >= budget.totalMaxTokens) {
+      throw new Error(
+        `Subagent token budget reached: ${budget.totalTokens}/${budget.totalMaxTokens} tokens used across this parent conversation.`,
+      );
+    }
+    if (budget.roleMaxTokens !== null && budget.roleTokens >= budget.roleMaxTokens) {
+      throw new Error(
+        `Subagent role ${role.id} token budget reached: ${budget.roleTokens}/${budget.roleMaxTokens} tokens used.`,
+      );
+    }
+  }
+
+  async function prepareSubagentContinuationTurn(input: {
+    session: Session;
+    request: SendTurnRequest;
+    requestedTurnPermissions: SubagentTurnPermissions;
+  }): Promise<SubagentContinuationTurnContext | null> {
+    if (!input.session.subagentRunId) return null;
+    const deps = requireSubagentDeps();
+    const run = await deps.getRun(input.session.subagentRunId);
+    if (!run) throw new Error(`Subagent run ${input.session.subagentRunId} was not found.`);
+    if (run.childSessionId && run.childSessionId !== input.session.id) {
+      throw new Error(`Subagent run ${run.id} is linked to a different child conversation.`);
+    }
+    const preferences = await loadAppPreferences();
+    const role = preferences.subagents.roles.find((candidate) => candidate.id === run.roleId);
+    if (!role?.enabled) throw new Error(`Subagent role ${run.roleId} is not enabled.`);
+    const budget = await subagentUsageBudgetForParent({
+      parentSessionId: run.parentSessionId,
+      roleId: run.roleId,
+      preferences,
+    });
+    assertSubagentBudgetAvailable({ budget, role });
+    const priorTurnCount = (await store.snapshot()).turns.filter((turn) => turn.sessionId === input.session.id).length;
+    const maxTurns = subagentMaxTurnsForRun(role, run);
+    if (maxTurns !== null && priorTurnCount >= maxTurns) {
+      throw new Error(
+        `Subagent role ${role.id} turn budget reached: ${priorTurnCount}/${maxTurns} turns used for run ${run.id}.`,
+      );
+    }
+    const metadata = recordFromUnknown(input.request.metadata);
+    const managedBySubagentRunner = stringFromRecord(metadata ?? {}, "subagentRunId") === run.id;
+    return {
+      run,
+      role,
+      usageAttribution: input.request.usageAttribution ?? subagentUsageAttribution(run),
+      turnPermissions: subagentTurnPermissionsFromRun(run) ??
+        subagentChildTurnPermissions(input.requestedTurnPermissions, role),
+      priorTurnCount,
+      maxTurns,
+      managedBySubagentRunner,
+    };
+  }
+
+  function subagentMaxTurnsForRun(role: SubagentRoleSettings, run: SubagentRun): number | null {
+    if (role.maxTurns !== null) return role.maxTurns;
+    const tokenBudget = recordFromUnknown(recordFromUnknown(run.metadata)?.tokenBudget);
+    const value = tokenBudget?.roleMaxTurns;
+    return Number.isInteger(value) && Number(value) > 0 ? Number(value) : null;
+  }
+
+  function subagentTurnPermissionsFromRun(run: SubagentRun): SubagentTurnPermissions | null {
+    const permissions = recordFromUnknown(recordFromUnknown(run.metadata)?.childTurnPermissions);
+    if (!permissions) return null;
+    const approvalPolicy = stringFromRecord(permissions, "approvalPolicy");
+    const sandbox = stringFromRecord(permissions, "sandbox");
+    const codexPermissionMode = stringFromRecord(permissions, "codexPermissionMode");
+    const codexReasoningEffort = stringFromRecord(permissions, "codexReasoningEffort");
+    if (!isApprovalPolicy(approvalPolicy) || !isSandboxMode(sandbox) || !isCodexPermissionMode(codexPermissionMode)) {
+      return null;
+    }
+    return {
+      approvalPolicy,
+      sandbox,
+      codexPermissionMode,
+      codexReasoningEffort: isCodexReasoningEffort(codexReasoningEffort) ? codexReasoningEffort : undefined,
+    };
+  }
+
+  function isApprovalPolicy(value: string | null): value is SendTurnRequest["approvalPolicy"] {
+    return value === "untrusted" || value === "on-failure" || value === "on-request" || value === "never";
+  }
+
+  function isSandboxMode(value: string | null): value is SendTurnRequest["sandbox"] {
+    return value === "read-only" || value === "workspace-write" || value === "danger-full-access";
+  }
+
+  function isCodexPermissionMode(value: string | null): value is SendTurnRequest["codexPermissionMode"] {
+    return value === "default" || value === "auto-review" || value === "full-access";
+  }
+
+  function isCodexReasoningEffort(value: string | null): value is NonNullable<SendTurnRequest["codexReasoningEffort"]> {
+    return value === "low" || value === "medium" || value === "high" || value === "xhigh";
+  }
+
+  async function markSubagentContinuationRunning(input: {
+    context: SubagentContinuationTurnContext | null;
+    childTurnId: string;
+  }): Promise<void> {
+    if (!input.context || input.context.managedBySubagentRunner) return;
+    const run = input.context.run;
+    if (run.status === "queued" || run.status === "running") return;
+    const deps = requireSubagentDeps();
+    const updated = SubagentRunSchema.parse({
+      ...run,
+      status: "running",
+      startedAt: run.startedAt ?? now(),
+      completedAt: null,
+      error: null,
+      metadata: {
+        ...(run.metadata ?? {}),
+        lastFollowUpTurnId: input.childTurnId,
+        lastFollowUpStartedAt: now(),
+        turnBudget: {
+          usedBeforeTurn: input.context.priorTurnCount,
+          maxTurns: input.context.maxTurns,
+        },
+      },
+    });
+    await deps.upsertRun(updated);
+    input.context.run = updated;
+    const parentSession = await getSession(run.parentSessionId).catch(() => null);
+    if (parentSession) {
+      await appendSubagentReceipt({
+        parentSession,
+        parentTurnId: run.parentTurnId ?? input.childTurnId,
+        run: updated,
+        eventName: "subagent.started",
+        status: "started",
+        output: `${run.roleId} subagent follow-up is running.`,
+      });
+    }
+  }
+
+  async function finalizeSubagentContinuationTurn(input: {
+    context: SubagentContinuationTurnContext | null;
+    childSession: Session;
+    childTurnId: string;
+  }): Promise<void> {
+    const context = input.context;
+    if (!context || context.managedBySubagentRunner) return;
+    const turn = await getStoredTurn(input.childTurnId);
+    if (!turn || turn.status === "in_progress") return;
+    const deps = requireSubagentDeps();
+    const latestRun = await deps.getRun(context.run.id);
+    if (!latestRun) return;
+    const usage = await subagentUsageTotalsForRun(latestRun.id);
+    const summary = await latestAssistantTextForSession(input.childSession.id);
+    const completed = turn.status === "completed";
+    const interrupted = turn.status === "interrupted";
+    const message = turn.error || (completed ? null : "Subagent follow-up failed.");
+    const updated = SubagentRunSchema.parse({
+      ...latestRun,
+      status: completed ? "completed" : interrupted ? "needs_resume" : "failed",
+      completedAt: completed ? now() : latestRun.completedAt,
+      error: completed ? null : message,
+      report: {
+        ...(latestRun.report ?? {}),
+        summary: summary || latestRun.report?.summary || (completed ? "Child conversation completed." : "Subagent follow-up did not complete."),
+        blockers: completed
+          ? latestRun.report?.blockers ?? []
+          : uniqueNonEmptyStrings([...(latestRun.report?.blockers ?? []), message ?? "Subagent follow-up did not complete."]),
+        followUpNeeded: !completed,
+      },
+      metadata: {
+        ...(latestRun.metadata ?? {}),
+        usage,
+        lastFollowUpTurnId: input.childTurnId,
+        lastFollowUpCompletedAt: now(),
+        turnBudget: {
+          usedTurns: context.priorTurnCount + 1,
+          maxTurns: context.maxTurns,
+        },
+      },
+    });
+    await deps.upsertRun(updated);
+    const parentSession = await getSession(updated.parentSessionId).catch(() => null);
+    if (parentSession) {
+      await appendSubagentReceipt({
+        parentSession,
+        parentTurnId: updated.parentTurnId ?? input.childTurnId,
+        run: updated,
+        eventName: completed ? "subagent.completed" : "subagent.failed",
+        status: completed ? "completed" : "failed",
+        output: completed
+          ? `${updated.roleId} subagent follow-up completed.`
+          : `${updated.roleId} subagent follow-up failed: ${message}`,
+      });
+    }
+  }
+
+  function subagentUsageAttribution(run: SubagentRun): UsageRequestAttribution {
+    return {
+      surface: run.parentGoalId ? "goal" : "chat",
+      workflowKind: "subagent",
+      goalId: run.parentGoalId,
+      subagentRunId: run.id,
+      subagentRoleId: run.roleId,
+    };
+  }
+
+  function subagentUsageTotal(records: ModelUsageRecord[], runIds: ReadonlySet<string>): number {
+    if (runIds.size === 0) return 0;
+    return sumUsageField(
+      records.filter((record) => {
+        const runId = record.attribution.subagentRunId;
+        return Boolean(runId && runIds.has(runId));
+      }),
+      "totalTokens",
+    );
+  }
+
+  function sumUsageField(
+    records: ModelUsageRecord[],
+    field: "totalTokens" | "promptTokens" | "completionTokens",
+  ): number {
+    return records.reduce((total, record) => {
+      const value = record[field];
+      return total + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+    }, 0);
+  }
+
+  function turnPermissionsFromSendTurnInput(input: SendTurnRequest): SubagentTurnPermissions {
+    return {
+      approvalPolicy: input.approvalPolicy,
+      sandbox: input.sandbox,
+      codexPermissionMode: input.codexPermissionMode,
+      codexReasoningEffort: input.codexReasoningEffort,
+    };
+  }
+
+  function subagentChildTurnPermissions(
+    parent: SubagentTurnPermissions,
+    role: SubagentRoleSettings,
+  ): SubagentTurnPermissions {
+    return {
+      ...parent,
+      sandbox: clampSandboxToRole(parent.sandbox, role.toolPolicy),
+    };
+  }
+
+  function clampSandboxToRole(
+    parentSandbox: SendTurnRequest["sandbox"],
+    toolPolicy: SubagentRoleSettings["toolPolicy"],
+  ): SendTurnRequest["sandbox"] {
+    const roleSandbox = toolPolicy === "read_only"
+      ? "read-only"
+      : toolPolicy === "workspace_write"
+        ? "workspace-write"
+        : "danger-full-access";
+    return sandboxRank(parentSandbox) <= sandboxRank(roleSandbox) ? parentSandbox : roleSandbox;
+  }
+
+  function sandboxRank(sandbox: SendTurnRequest["sandbox"]): number {
+    if (sandbox === "read-only") return 0;
+    if (sandbox === "workspace-write") return 1;
+    return 2;
+  }
+
+  function subagentIsolationBlocker(role: SubagentRoleSettings): string | null {
+    if (role.toolPolicy === "read_only") return null;
+    if (role.isolationMode === "none") {
+      return "write-capable subagents require an isolated workspace target.";
+    }
+    return `${role.isolationMode} isolation is not available for this workspace target.`;
+  }
+
+  async function subagentWorkspaceTargetKeyForSession(session: Session): Promise<string> {
+    const target = resolveWorkspaceExecutionTarget({ session });
+    if (target.target === "sandbox") {
+      const sandboxId = session.cloudProjectId ?? session.workspaceId ?? session.cloudTeamId ?? session.id;
+      return `sandbox:${sandboxId}`;
+    }
+    const cwd =
+      session.cwd ??
+      (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: false }).catch(() => null)) ??
+      null;
+    if (!cwd) return `session:${session.id}`;
+    const rootResult = await runWorkspaceCommand("git", ["rev-parse", "--show-toplevel"], cwd).catch(() => null);
+    const repoRoot = rootResult?.code === 0 ? rootResult.stdout.trim() : "";
+    return `local:${repoRoot || cwd}`;
+  }
+
+  function subagentWorkspaceTargetKeyFromRun(run: SubagentRun): string | null {
+    const metadata = recordFromUnknown(run.metadata);
+    const concurrency = recordFromUnknown(metadata?.concurrency);
+    const storedKey = concurrency ? stringFromRecord(concurrency, "workspaceTargetKey") : null;
+    if (storedKey) return storedKey;
+    const workspace = subagentWorkspaceFromRun(run);
+    if (!workspace) return null;
+    const target = stringFromRecord(workspace, "target");
+    if (target === "local") {
+      const parentRepoPath = stringFromRecord(workspace, "parentRepoPath");
+      const workspaceRoot = stringFromRecord(workspace, "workspaceRoot");
+      const repoPath = stringFromRecord(workspace, "repoPath");
+      return `local:${parentRepoPath ?? workspaceRoot ?? repoPath ?? "unknown"}`;
+    }
+    if (target === "sandbox") {
+      return `sandbox:${stringFromRecord(workspace, "sandboxId") ?? stringFromRecord(workspace, "workspaceId") ?? "unknown"}`;
+    }
+    return target ? `${target}:unknown` : null;
+  }
+
+  type PreparedSubagentWorkspaceIsolation = {
+    cwd: string | null;
+    effectiveIsolationMode: SubagentRoleSettings["isolationMode"];
+    blocker: string | null;
+    workspace: Record<string, unknown> | null;
+    sessionWorkspace?: Partial<Pick<
+      Session,
+      | "workspaceKind"
+      | "workspaceId"
+      | "workspaceName"
+      | "localProjectId"
+      | "cloudProjectId"
+      | "cloudTeamId"
+      | "metadata"
+    >> | null;
+  };
+
+  type LocalSubagentGitWorktree = Record<string, unknown> & {
+    repoPath: string;
+  };
+
+  async function prepareSubagentWorkspaceIsolation(input: {
+    parentSession: Session;
+    role: SubagentRoleSettings;
+    runId: string;
+  }): Promise<PreparedSubagentWorkspaceIsolation> {
+    if (input.role.toolPolicy === "read_only") {
+      return {
+        cwd: input.parentSession.cwd,
+        effectiveIsolationMode: "none",
+        blocker: null,
+        workspace: null,
+      };
+    }
+    const staticBlocker = subagentIsolationBlocker(input.role);
+    if (staticBlocker && input.role.isolationMode === "none") {
+      return {
+        cwd: input.parentSession.cwd,
+        effectiveIsolationMode: "none",
+        blocker: staticBlocker,
+        workspace: null,
+      };
+    }
+
+    const target = resolveWorkspaceExecutionTarget({ session: input.parentSession });
+    if (target.target === "sandbox") {
+      return prepareSandboxSubagentWorkspaceIsolation({
+        parentSession: input.parentSession,
+        role: input.role,
+        runId: input.runId,
+        target,
+      });
+    }
+
+    const parentCwd =
+      input.parentSession.cwd ??
+      (await resolveSessionWorkspaceCwd(input.parentSession, { ensureOpenPond: false })) ??
+      null;
+    if (!parentCwd) {
+      return {
+        cwd: null,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: `${input.role.isolationMode} isolation requires a local git workspace, but this chat has no local workspace cwd.`,
+        workspace: null,
+      };
+    }
+
+    try {
+      const workspace = await createLocalSubagentGitWorktree({
+        parentCwd,
+        role: input.role,
+        runId: input.runId,
+      });
+      return {
+        cwd: workspace.repoPath,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: null,
+        workspace,
+      };
+    } catch (error) {
+      return {
+        cwd: parentCwd,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: `${input.role.isolationMode} isolation unavailable: ${textFromUnknown(error) || "Unable to create isolated worktree."}`,
+        workspace: null,
+      };
+    }
+  }
+
+  async function prepareSandboxSubagentWorkspaceIsolation(input: {
+    parentSession: Session;
+    role: SubagentRoleSettings;
+    runId: string;
+    target: Extract<ReturnType<typeof resolveWorkspaceExecutionTarget>, { target: "sandbox" }>;
+  }): Promise<PreparedSubagentWorkspaceIsolation> {
+    const parentSandboxId = input.target.sandboxId ?? input.target.workspaceId;
+    if (!parentSandboxId) {
+      return {
+        cwd: input.parentSession.cwd,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: `${input.role.isolationMode} isolation requires a sandbox id, but this chat has no sandbox workspace id.`,
+        workspace: {
+          mode: input.role.isolationMode,
+          target: "sandbox",
+          unavailableReason: "missing_parent_sandbox_id",
+        },
+      };
+    }
+    if (!forkSandboxForSubagent) {
+      return {
+        cwd: input.parentSession.cwd,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: [
+          `${input.role.isolationMode} isolation requires sandbox fork support, but no sandbox fork executor is configured.`,
+          "The child stayed on the sandbox target and did not fall back to local files.",
+        ].join(" "),
+        workspace: {
+          mode: input.role.isolationMode,
+          target: "sandbox",
+          parentSandboxId,
+          unavailableReason: "sandbox_fork_executor_unavailable",
+        },
+      };
+    }
+
+    const forkedAt = now();
+    const forkPayload = {
+      visibility: "private",
+      metadata: {
+        openpondPurpose: "subagent_copy_on_write",
+        subagentRunId: input.runId,
+        subagentRoleId: input.role.id,
+        parentSessionId: input.parentSession.id,
+        parentWorkspaceId: input.target.workspaceId,
+        parentSandboxId,
+        isolationMode: input.role.isolationMode,
+        forkedAt,
+      },
+    };
+    let forkResult: unknown;
+    try {
+      forkResult = await forkSandboxForSubagent({
+        sandboxId: parentSandboxId,
+        payload: forkPayload,
+        parentSession: input.parentSession,
+        role: input.role,
+        runId: input.runId,
+      });
+    } catch (error) {
+      const message = textFromUnknown(error) || "Sandbox fork failed.";
+      return {
+        cwd: input.parentSession.cwd,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: `${input.role.isolationMode} isolation unavailable: ${message}`,
+        workspace: {
+          mode: input.role.isolationMode,
+          target: "sandbox",
+          parentSandboxId,
+          unavailableReason: "sandbox_fork_failed",
+          error: message,
+        },
+      };
+    }
+
+    const sandbox = sandboxRecordFromForkPayload(forkResult);
+    const sandboxId = sandboxIdFromForkPayload(forkResult);
+    if (!sandboxId) {
+      return {
+        cwd: input.parentSession.cwd,
+        effectiveIsolationMode: input.role.isolationMode,
+        blocker: `${input.role.isolationMode} isolation unavailable: sandbox fork response did not include a sandbox id.`,
+        workspace: {
+          mode: input.role.isolationMode,
+          target: "sandbox",
+          parentSandboxId,
+          unavailableReason: "sandbox_fork_missing_id",
+        },
+      };
+    }
+
+    const workspaceName =
+      (sandbox ? stringFromRecord(sandbox, "name") ?? stringFromRecord(sandbox, "title") : null) ??
+      (input.parentSession.workspaceName ? `${input.parentSession.workspaceName} fork` : "Subagent sandbox fork");
+    const workspace = {
+      mode: input.role.isolationMode,
+      implementation: "sandbox_fork",
+      target: "sandbox",
+      sandboxId,
+      workspaceId: sandboxId,
+      workspaceKind: input.target.workspaceKind,
+      workspaceName,
+      parentSandboxId,
+      parentWorkspaceId: input.target.workspaceId,
+      sourceSandboxId: sourceSandboxIdFromForkPayload(forkResult) ?? parentSandboxId,
+      cloudProjectId: input.target.cloudProjectId,
+      cloudTeamId: input.target.cloudTeamId,
+      localProjectId: input.target.localProjectId,
+      forkedAt,
+      cleanup: "manual_after_handoff",
+    };
+    const sessionWorkspace: NonNullable<PreparedSubagentWorkspaceIsolation["sessionWorkspace"]> = {
+      workspaceKind: input.target.workspaceKind as Session["workspaceKind"],
+      workspaceId: sandboxId,
+      workspaceName,
+      localProjectId: input.target.localProjectId,
+      cloudProjectId: input.target.cloudProjectId,
+      cloudTeamId: input.target.cloudTeamId,
+      ...(input.target.hybrid ? { metadata: { workspaceTarget: "hybrid" } } : {}),
+    };
+    return {
+      cwd: input.parentSession.cwd,
+      effectiveIsolationMode: input.role.isolationMode,
+      blocker: null,
+      workspace,
+      sessionWorkspace,
+    };
+  }
+
+  function sandboxRecordFromForkPayload(payload: unknown): Record<string, unknown> | null {
+    const root = recordFromUnknown(payload);
+    const data = recordFromUnknown(root?.data);
+    return recordFromUnknown(root?.sandbox) ?? recordFromUnknown(data?.sandbox);
+  }
+
+  function sandboxIdFromForkPayload(payload: unknown): string | null {
+    const root = recordFromUnknown(payload);
+    const sandbox = sandboxRecordFromForkPayload(payload);
+    return (
+      (sandbox ? stringFromRecord(sandbox, "id") ?? stringFromRecord(sandbox, "sandboxId") : null) ??
+      (root ? stringFromRecord(root, "sandboxId") ?? stringFromRecord(root, "id") : null)
+    );
+  }
+
+  function sourceSandboxIdFromForkPayload(payload: unknown): string | null {
+    const root = recordFromUnknown(payload);
+    const data = recordFromUnknown(root?.data);
+    const sourceSandbox = recordFromUnknown(root?.sourceSandbox) ?? recordFromUnknown(data?.sourceSandbox);
+    return sourceSandbox ? stringFromRecord(sourceSandbox, "id") ?? stringFromRecord(sourceSandbox, "sandboxId") : null;
+  }
+
+  async function createLocalSubagentGitWorktree(input: {
+    parentCwd: string;
+    role: SubagentRoleSettings;
+    runId: string;
+  }): Promise<LocalSubagentGitWorktree> {
+    const repoRootResult = await runWorkspaceCommand("git", ["rev-parse", "--show-toplevel"], input.parentCwd);
+    const parentRepoPath = repoRootResult.stdout.trim();
+    if (repoRootResult.code !== 0 || !parentRepoPath) {
+      throw new Error(repoRootResult.stderr.trim() || repoRootResult.stdout.trim() || "Parent workspace is not a git repository.");
+    }
+    const headResult = await runWorkspaceCommand("git", ["rev-parse", "--verify", "HEAD"], parentRepoPath);
+    const baseCommit = headResult.stdout.trim();
+    if (headResult.code !== 0 || !baseCommit) {
+      throw new Error(headResult.stderr.trim() || headResult.stdout.trim() || "Parent git repository has no HEAD commit.");
+    }
+    const statusResult = await runWorkspaceCommand("git", ["status", "--porcelain=v1"], parentRepoPath);
+    if (statusResult.code !== 0) {
+      throw new Error(statusResult.stderr.trim() || statusResult.stdout.trim() || "Unable to inspect parent git status.");
+    }
+
+    const safeRunId = safeSubagentPathSegment(input.runId);
+    const safeRoleId = safeSubagentPathSegment(input.role.id);
+    const workspaceRoot = path.join(
+      os.tmpdir(),
+      "openpond-subagents",
+      safeSubagentPathSegment(path.basename(parentRepoPath) || "repo"),
+      `${safeRoleId}-${safeRunId}`,
+    );
+    const worktreePath = path.join(workspaceRoot, "repo");
+    const branch = `openpond/subagent/${safeRoleId}/${safeRunId.slice(0, 24)}`;
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    const addResult = await runWorkspaceCommand(
+      "git",
+      ["worktree", "add", "-b", branch, worktreePath, baseCommit],
+      parentRepoPath,
+    );
+    if (addResult.code !== 0) {
+      await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
+      throw new Error(addResult.stderr.trim() || addResult.stdout.trim() || "git worktree add failed");
+    }
+
+    return {
+      mode: input.role.isolationMode,
+      implementation: "git_worktree",
+      target: "local",
+      repoPath: worktreePath,
+      worktreePath,
+      workspaceRoot,
+      parentRepoPath,
+      branch,
+      baseCommit,
+      parentDirty: Boolean(statusResult.stdout.trim()),
+      createdAt: now(),
+      cleanup: "manual_after_handoff",
+    };
+  }
+
+  function safeSubagentPathSegment(value: string): string {
+    return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) || "subagent";
+  }
+
+  async function captureSubagentWorkspaceHandoff(run: SubagentRun): Promise<{
+    changed: boolean;
+    artifacts: NonNullable<SubagentRun["report"]>["artifacts"];
+    patchRef: NonNullable<SubagentRun["report"]>["patchRef"];
+    diffRef: NonNullable<SubagentRun["report"]>["diffRef"];
+    metadata: Record<string, unknown>;
+  } | null> {
+    const workspace = subagentWorkspaceFromRun(run);
+    if (!workspace) return null;
+    if (workspace.implementation === "sandbox_fork") {
+      return captureSubagentSandboxForkHandoff(run, workspace);
+    }
+    if (workspace.implementation !== "git_worktree") return null;
+    const repoPath = typeof workspace.repoPath === "string" ? workspace.repoPath : null;
+    const parentRepoPath = typeof workspace.parentRepoPath === "string" ? workspace.parentRepoPath : null;
+    const workspaceRoot = typeof workspace.workspaceRoot === "string" ? workspace.workspaceRoot : null;
+    if (!repoPath || !workspaceRoot) return null;
+
+    await runWorkspaceCommand("git", ["add", "-N", "."], repoPath).catch(() => null);
+    const diffResult = await runWorkspaceCommand("git", ["diff", "--binary", "HEAD"], repoPath);
+    if (diffResult.code !== 0) {
+      return {
+        changed: false,
+        artifacts: [],
+        patchRef: null,
+        diffRef: null,
+        metadata: {
+          status: "failed",
+          reason: diffResult.stderr.trim() || diffResult.stdout.trim() || "git diff failed",
+          repoPath,
+          parentRepoPath,
+        },
+      };
+    }
+    const statusResult = await runWorkspaceCommand("git", ["status", "--porcelain=v1", "-b"], repoPath);
+    const patch = diffResult.stdout;
+    const changed = Boolean(patch.trim());
+    const patchPath = path.join(workspaceRoot, "handoff.patch");
+    if (changed) await fs.writeFile(patchPath, patch, "utf8");
+    const patchPreview = truncatePatch(patch);
+    const patchRef = changed
+      ? { kind: "file" as const, id: patchPath, label: "Isolated child patch" }
+      : null;
+    const diffRef = changed
+      ? { kind: "diff" as const, id: `subagent-run:${run.id}:diff`, label: "Isolated child diff" }
+      : null;
+    return {
+      changed,
+      artifacts: patchRef ? [patchRef] : [],
+      patchRef,
+      diffRef,
+      metadata: {
+        status: "captured",
+        changed,
+        repoPath,
+        parentRepoPath,
+        workspaceRoot,
+        branch: workspace.branch ?? null,
+        baseCommit: workspace.baseCommit ?? null,
+        patchPath: changed ? patchPath : null,
+        patchBytes: Buffer.byteLength(patch, "utf8"),
+        patchPreview,
+        patchTruncated: patchPreview !== patch,
+        statusText: statusResult.code === 0 ? statusResult.stdout : null,
+        apply: changed
+          ? {
+              command: "git",
+              args: parentRepoPath ? ["-C", parentRepoPath, "apply", patchPath] : ["apply", patchPath],
+              requiresUserReview: true,
+            }
+          : null,
+      },
+    };
+  }
+
+  function captureSubagentSandboxForkHandoff(
+    run: SubagentRun,
+    workspace: Record<string, unknown>,
+  ): {
+    changed: boolean;
+    artifacts: NonNullable<SubagentRun["report"]>["artifacts"];
+    patchRef: NonNullable<SubagentRun["report"]>["patchRef"];
+    diffRef: NonNullable<SubagentRun["report"]>["diffRef"];
+    metadata: Record<string, unknown>;
+  } | null {
+    const sandboxId = stringFromRecord(workspace, "sandboxId") ?? stringFromRecord(workspace, "workspaceId");
+    if (!sandboxId) return null;
+    const label = stringFromRecord(workspace, "workspaceName") ?? `${run.roleId} sandbox fork`;
+    const sandboxRef = {
+      kind: "artifact" as const,
+      id: `sandbox:${sandboxId}`,
+      label: `Isolated sandbox: ${label}`,
+    };
+    return {
+      changed: true,
+      artifacts: [sandboxRef],
+      patchRef: null,
+      diffRef: null,
+      metadata: {
+        status: "captured",
+        changed: true,
+        implementation: "sandbox_fork",
+        target: "sandbox",
+        sandboxId,
+        parentSandboxId: stringFromRecord(workspace, "parentSandboxId"),
+        sourceSandboxId: stringFromRecord(workspace, "sourceSandboxId"),
+        workspaceKind: stringFromRecord(workspace, "workspaceKind"),
+        workspaceName: label,
+        forkedAt: stringFromRecord(workspace, "forkedAt"),
+        artifactRef: sandboxRef,
+        merge: {
+          strategy: "sandbox_review",
+          requiresUserReview: true,
+        },
+      },
+    };
+  }
+
+  function subagentWorkspaceFromRun(run: SubagentRun): Record<string, unknown> | null {
+    const metadata = recordFromUnknown(run.metadata);
+    return recordFromUnknown(metadata?.subagentWorkspace) ?? recordFromUnknown(metadata?.workspace);
+  }
+
+  async function cleanupSubagentWorkspace(run: SubagentRun): Promise<Record<string, unknown> | null> {
+    const workspace = subagentWorkspaceFromRun(run);
+    if (!workspace || workspace.implementation !== "git_worktree") return null;
+    const workspaceRoot = stringFromRecord(workspace, "workspaceRoot");
+    const worktreePath = stringFromRecord(workspace, "worktreePath") ?? stringFromRecord(workspace, "repoPath");
+    const parentRepoPath = stringFromRecord(workspace, "parentRepoPath");
+    const removedAt = now();
+    const result: Record<string, unknown> = {
+      status: "removed",
+      removedAt,
+      workspaceRoot,
+      worktreePath,
+      parentRepoPath,
+    };
+    if (parentRepoPath && worktreePath) {
+      const removeResult = await runWorkspaceCommand(
+        "git",
+        ["worktree", "remove", "--force", worktreePath],
+        parentRepoPath,
+      ).catch((error) => ({
+        code: 1,
+        stdout: "",
+        stderr: textFromUnknown(error) || "git worktree remove failed",
+      }));
+      result.gitWorktreeRemove = {
+        code: removeResult.code,
+        stdout: removeResult.stdout.trim() || null,
+        stderr: removeResult.stderr.trim() || null,
+      };
+    }
+    if (workspaceRoot) {
+      await fs.rm(workspaceRoot, { recursive: true, force: true }).catch((error) => {
+        result.status = "failed";
+        result.rmError = textFromUnknown(error) || "Failed to remove isolated workspace root.";
+      });
+    } else {
+      result.status = "skipped";
+      result.reason = "workspaceRoot missing";
+    }
+    return result;
+  }
+
+  function workspaceHandoffFromRun(run: SubagentRun): Record<string, unknown> | null {
+    const metadata = recordFromUnknown(run.metadata);
+    return recordFromUnknown(metadata?.workspaceHandoff);
+  }
+
+  function truthyRecordBoolean(record: Record<string, unknown>, key: string): boolean {
+    return record[key] === true;
+  }
+
+  function truncateApprovalTitle(value: string): string {
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (normalized.length <= 88) return normalized;
+    return `${normalized.slice(0, 85)}...`;
+  }
+
+  function assertPathInside(input: {
+    rootPath: string;
+    targetPath: string;
+    label: string;
+  }): void {
+    const rootPath = path.resolve(input.rootPath);
+    const targetPath = path.resolve(input.targetPath);
+    const relative = path.relative(rootPath, targetPath);
+    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return;
+    throw new Error(`${input.label} path must stay inside the isolated subagent workspace.`);
+  }
+
+  function assertSubagentRunAccessible(session: Session, run: SubagentRun): void {
+    if (
+      run.parentSessionId === session.id ||
+      run.childSessionId === session.id ||
+      (session.parentSessionId && session.parentSessionId === run.parentSessionId)
+    ) {
+      return;
+    }
+    throw new Error(`Subagent run ${run.id} is not linked to the current conversation.`);
+  }
+
+  function subagentChildPrompt(input: {
+    role: SubagentRoleSettings;
+    objective: string;
+    parentSession: Session;
+    contextPack: string | null;
+  }): string {
+    return [
+      `You are an OpenPond ${input.role.id} subagent running in a background child conversation.`,
+      "Work only on the assignment below. Do not start additional subagents.",
+      `Tool policy: ${input.role.toolPolicy}. Isolation: ${input.role.isolationMode}.`,
+      `Parent chat: ${input.parentSession.title} (${input.parentSession.id}).`,
+      "",
+      "Assignment:",
+      input.objective,
+      input.contextPack ? ["", "Context:", input.contextPack].join("\n") : "",
+      "",
+      "When finished, respond with a concise report: summary, findings, files or artifacts changed/read, tests or checks run, blockers, confidence, and follow-up needed.",
+    ].filter(Boolean).join("\n");
+  }
+
+  async function latestAssistantTextForSession(sessionId: string): Promise<string | null> {
+    const events = (await store.snapshot()).events.filter((item) => item.sessionId === sessionId);
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const item = events[index];
+      if (item?.name === "assistant.delta" && item.output?.trim()) return item.output.trim();
+    }
+    return null;
+  }
+
+  function activeThreadGoalId(events: RuntimeEvent[], sessionId: string): string | null {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const item = events[index];
+      if (item.sessionId !== sessionId || item.name !== "diagnostic") continue;
+      const data = item.data;
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      const record = data as Record<string, unknown>;
+      if (record.kind === "thread_goal_cleared") return null;
+      if (record.kind !== "thread_goal") continue;
+      const goal = record.goal;
+      if (!goal || typeof goal !== "object" || Array.isArray(goal)) continue;
+      const goalRecord = goal as Record<string, unknown>;
+      const status = stringFromRecord(goalRecord, "status")?.toLowerCase() ?? "active";
+      if (status === "completed" || status === "complete" || status === "failed" || status === "stopped") {
+        return null;
+      }
+      return stringFromRecord(goalRecord, "id");
+    }
+    return null;
   }
 
   async function startCreatePipelineFromModelTool(
@@ -1207,6 +2977,11 @@ export function createTurnRunner(deps: {
       events: runtimeEvents,
       request: input,
     });
+    await assertGoalSubagentsResolvedForCompletion({
+      context,
+      goalId: result.goal.id,
+      action: result.action,
+    });
     await appendRuntimeEvent(
       event({
         sessionId: context.session.id,
@@ -1243,19 +3018,94 @@ export function createTurnRunner(deps: {
         },
       }),
     );
+    const resumedSubagentCount = await markGoalSubagentsNeedsResume({
+      context,
+      goalId: result.goal.id,
+      action: result.action,
+    });
+    const nextStep = resumedSubagentCount > 0
+      ? `${result.nextStep} ${resumedSubagentCount} active ${resumedSubagentCount === 1 ? "subagent needs" : "subagents need"} resume.`
+      : result.nextStep;
     return {
       goalId: result.goal.id,
       action: result.action,
       status: result.status,
       objective: result.goal.objective,
       mode: result.mode,
-      nextStep: result.nextStep,
+      nextStep,
     };
+  }
+
+  async function assertGoalSubagentsResolvedForCompletion(input: {
+    context: ModelToolExecutionContext;
+    goalId: string;
+    action: string;
+  }): Promise<void> {
+    if (input.action !== "complete" || !subagentToolsAvailable()) return;
+    const deps = requireSubagentDeps();
+    const runs = await deps.listRuns({
+      parentSessionId: input.context.session.id,
+      parentGoalId: input.goalId,
+      limit: 1000,
+    });
+    const unresolved = runs.filter((run) => run.required && run.status !== "completed");
+    if (unresolved.length === 0) return;
+    const details = unresolved.slice(0, 8).map((run) => `${run.roleId} ${run.status} (${run.id})`).join(", ");
+    const hidden = unresolved.length > 8 ? `, +${unresolved.length - 8} more` : "";
+    throw new Error(
+      `Cannot complete goal ${input.goalId} while required subagents are unresolved: ${details}${hidden}. Join, resume, or explicitly resolve those child runs first.`,
+    );
+  }
+
+  async function markGoalSubagentsNeedsResume(input: {
+    context: ModelToolExecutionContext;
+    goalId: string;
+    action: string;
+  }): Promise<number> {
+    if (input.action !== "resume" || !subagentToolsAvailable()) return 0;
+    const deps = requireSubagentDeps();
+    const runs = await deps.listRuns({
+      parentSessionId: input.context.session.id,
+      parentGoalId: input.goalId,
+      status: ["queued", "running"],
+      limit: 1000,
+    });
+    let updatedCount = 0;
+    for (const run of runs) {
+      const blocker = "Goal resumed; this child conversation needs resume before its required subagent work can finish.";
+      const updated = SubagentRunSchema.parse({
+        ...run,
+        status: "needs_resume",
+        report: {
+          ...(run.report ?? {}),
+          summary: run.report?.summary || "Subagent needs resume after parent goal resumed.",
+          blockers: uniqueNonEmptyStrings([...(run.report?.blockers ?? []), blocker]),
+          followUpNeeded: true,
+        },
+        metadata: {
+          ...run.metadata,
+          needsResumeAt: now(),
+          needsResumeReason: "parent_goal_resumed",
+        },
+      });
+      await deps.upsertRun(updated);
+      await appendSubagentReceipt({
+        parentSession: input.context.session,
+        parentTurnId: input.context.turnId,
+        run: updated,
+        eventName: "subagent.blocked",
+        status: "pending",
+        output: `${updated.roleId} subagent needs resume after parent goal resumed.`,
+      });
+      updatedCount += 1;
+    }
+    return updatedCount;
   }
 
   async function runHostedToolLoop(params: {
     session: Session;
     turn: Turn;
+    turnPermissions: SubagentTurnPermissions;
     provider: ChatProvider;
     model: string;
     messages: HostedMessages;
@@ -1298,6 +3148,8 @@ export function createTurnRunner(deps: {
     const nativeToolDefinitionByName = new Map(nativeToolDefinitions.map((definition) => [definition.name, definition]));
     const textFallbackMode = hostedToolInstructionModeForProvider(hostedToolFlags, params.provider);
     const profileSkillMode = profileSkillInstructionModeForProvider(params.provider, params.profileSkillRuntime);
+    const initialEventIds = new Set(params.resourceEvents.map((item) => item.id));
+    const deliveredSubagentAsideKeys = new Set<string>();
     async function appendContextUsage(input: {
       messages: HostedMessages;
       usage?: unknown;
@@ -1315,8 +3167,24 @@ export function createTurnRunner(deps: {
         includeCompletion: input.includeCompletion,
       });
     }
+    async function appendPendingSubagentAsides(): Promise<boolean> {
+      if (!subagentToolsAvailable()) return false;
+      const snapshot = await store.snapshot();
+      const asideMessages = subagentModelAsideMessages({
+        session,
+        events: snapshot.events,
+        initialEventIds,
+        deliveredKeys: deliveredSubagentAsideKeys,
+      });
+      if (asideMessages.length === 0) return false;
+      for (const content of asideMessages) {
+        messages.push({ role: "user", content });
+      }
+      return true;
+    }
     for (let index = 0; index < maxHostedWorkspaceToolRounds; index += 1) {
       throwIfInterrupted(params.signal);
+      await appendPendingSubagentAsides();
       await appendContextUsage({ messages });
       let assistantText = "";
       let reasoningText = "";
@@ -1375,6 +3243,7 @@ export function createTurnRunner(deps: {
         const nativeResults = await executeNativeToolCalls({
           session,
           turnId: params.turn.id,
+          turnPermissions: params.turnPermissions,
           provider: params.provider,
           model: params.model,
           signal: params.signal,
@@ -1432,6 +3301,24 @@ export function createTurnRunner(deps: {
       const requests = extractedRequests.filter(
         (request) => textFallbackMode !== "resource_text_fallback" || RESOURCE_TEXT_FALLBACK_ACTIONS.has(request.action),
       );
+      const deniedSubagentPolicyResults = deniedTextFallbackRequests
+        .map((request) => {
+          const blocker = subagentWorkspaceToolPolicyBlocker(session, request);
+          return blocker
+            ? formatWorkspaceToolResultForModel({
+                ok: false,
+                action: request.action,
+                output: blocker,
+                data: {
+                  code: "subagent_tool_policy_blocked",
+                  toolPolicy: "read_only",
+                  subagentRunId: session.subagentRunId ?? null,
+                  subagentRoleId: session.subagentRoleId ?? null,
+                },
+              })
+            : null;
+        })
+        .filter((result): result is string => Boolean(result));
       if (skillReadRequests.length > 0) {
         messages.push(assistantMessage);
         await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
@@ -1456,6 +3343,19 @@ export function createTurnRunner(deps: {
         });
         continue;
       }
+      if (deniedSubagentPolicyResults.length > 0 && requests.length === 0) {
+        messages.push(assistantMessage);
+        await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+        messages.push({
+          role: "user",
+          content: [
+            "Workspace tool result:",
+            deniedSubagentPolicyResults.join("\n\n"),
+            "Continue without mutating the workspace. If the assignment requires writes, report the isolation blocker.",
+          ].join("\n\n"),
+        });
+        continue;
+      }
       if (deniedTextFallbackRequests.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
         await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
@@ -1472,12 +3372,16 @@ export function createTurnRunner(deps: {
         continue;
       }
       if (requests.length === 0) {
+        messages.push(assistantMessage);
+        if (await appendPendingSubagentAsides()) {
+          await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+          continue;
+        }
         if (
           workspaceToolResultCount === 0 &&
           !toolRequiredCorrectionSent &&
           requiresWorkspaceToolForPrompt(session, params.userPrompt)
         ) {
-          messages.push(assistantMessage);
           await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
           messages.push({
             role: "user",
@@ -1488,7 +3392,7 @@ export function createTurnRunner(deps: {
         }
         await appendAssistantText(session, params.turn.id, assistantText);
         await appendContextUsage({
-          messages: [...messages, assistantMessage],
+          messages,
           usage: latestUsage,
           includeCompletion: true,
         });
@@ -1510,6 +3414,21 @@ export function createTurnRunner(deps: {
           userPrompt: params.userPrompt,
         });
         const validationIssues = validateWorkspaceToolRequest(toolRequest);
+        const policyBlocker = subagentWorkspaceToolPolicyBlocker(session, toolRequest);
+        if (policyBlocker) {
+          toolResults.push(formatWorkspaceToolResultForModel({
+            ok: false,
+            action: toolRequest.action,
+            output: policyBlocker,
+            data: {
+              code: "subagent_tool_policy_blocked",
+              toolPolicy: "read_only",
+              subagentRunId: session.subagentRunId ?? null,
+              subagentRoleId: session.subagentRoleId ?? null,
+            },
+          }));
+          continue;
+        }
         if (validationIssues.length > 0) {
           const key = `${toolRequest.action}:${validationIssues.map((issue) => `${issue.path}:${issue.expected}`).join("|")}`;
           const count = (invalidRequestCounts.get(key) ?? 0) + 1;
@@ -1558,6 +3477,124 @@ export function createTurnRunner(deps: {
     return session;
   }
 
+  function subagentModelAsideMessages(input: {
+    session: Session;
+    events: RuntimeEvent[];
+    initialEventIds: Set<string>;
+    deliveredKeys: Set<string>;
+  }): string[] {
+    const messages: string[] = [];
+    for (const item of input.events) {
+      const key = subagentAsideEventKey(item);
+      if (input.deliveredKeys.has(key)) continue;
+      const content = input.session.subagentRunId
+        ? childSubagentMailboxAside(input.session, item)
+        : parentSubagentReceiptAside({
+            session: input.session,
+            event: item,
+            initialEventIds: input.initialEventIds,
+          });
+      if (!content) continue;
+      input.deliveredKeys.add(key);
+      messages.push(content);
+    }
+    return messages;
+  }
+
+  function parentSubagentReceiptAside(input: {
+    session: Session;
+    event: RuntimeEvent;
+    initialEventIds: Set<string>;
+  }): string | null {
+    const item = input.event;
+    if (item.sessionId !== input.session.id) return null;
+    if (input.initialEventIds.has(item.id)) return null;
+    if (!PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS.has(item.name)) return null;
+    const run = subagentRunFromRuntimeEvent(item);
+    if (!run || run.parentSessionId !== input.session.id) return null;
+    const report = run.report;
+    const details = [
+      "Subagent update:",
+      `event: ${item.name}`,
+      `run: ${run.id}`,
+      `role: ${run.roleId}`,
+      `status: ${run.status}`,
+      run.childSessionId ? `child session: ${run.childSessionId}` : null,
+      item.output ? `receipt: ${item.output}` : null,
+      report?.summary ? `summary: ${truncateForModelAside(report.summary, 1200)}` : null,
+      report?.blockers.length ? `blockers: ${report.blockers.slice(0, 4).join(" | ")}` : null,
+      report?.testsRun.length ? `tests: ${report.testsRun.slice(0, 4).join(" | ")}` : null,
+      report?.patchRef ? `patch: ${report.patchRef.kind}:${report.patchRef.id} (${report.patchRef.label})` : null,
+      report?.diffRef ? `diff: ${report.diffRef.kind}:${report.diffRef.id} (${report.diffRef.label})` : null,
+      "Use this pushed receipt. Do not poll unless you need a fresh diagnostic snapshot.",
+    ].filter(Boolean);
+    return details.join("\n");
+  }
+
+  function childSubagentMailboxAside(session: Session, item: RuntimeEvent): string | null {
+    if (item.sessionId !== session.id || item.name !== "subagent.message") return null;
+    const data = recordFromUnknown(item.data);
+    const parsed = SubagentMessageSchema.safeParse(data?.message);
+    if (!parsed.success) return null;
+    const message = parsed.data;
+    const deliveredToRunId = typeof data?.deliveredToRunId === "string" ? data.deliveredToRunId : null;
+    if (deliveredToRunId && session.subagentRunId && deliveredToRunId !== session.subagentRunId) return null;
+    const priority = message.priority ?? "normal";
+    return [
+      `Subagent mailbox ${priority === "interrupt" ? "interrupt" : "update"}:`,
+      `message: ${message.id}`,
+      `kind: ${message.kind}`,
+      `from: ${message.fromRunId}`,
+      message.toRunId ? `to run: ${message.toRunId}` : null,
+      message.toRole ? `to role: ${message.toRole}` : null,
+      `body: ${truncateForModelAside(message.body, 2000)}`,
+      message.refs.length
+        ? `refs: ${message.refs.slice(0, 8).map((ref) => `${ref.kind}:${ref.id} (${ref.label})`).join(", ")}`
+        : null,
+      priority === "interrupt"
+        ? "Treat this as high-priority steering at this safe model boundary."
+        : "Use this message as goal-scoped coordination context.",
+    ].filter(Boolean).join("\n");
+  }
+
+  function subagentRunFromRuntimeEvent(item: RuntimeEvent): SubagentRun | null {
+    const data = recordFromUnknown(item.data);
+    const parsed = SubagentRunSchema.safeParse(data?.run);
+    return parsed.success ? parsed.data : null;
+  }
+
+  function subagentAsideEventKey(item: RuntimeEvent): string {
+    return typeof item.sequence === "number" ? `seq:${item.sequence}` : `id:${item.id}`;
+  }
+
+  function truncateForModelAside(value: string, maxLength: number): string {
+    const trimmed = value.trim();
+    if (trimmed.length <= maxLength) return trimmed;
+    return `${trimmed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
+  }
+
+  function subagentWorkspaceToolPolicyBlocker(session: Session, request: WorkspaceToolRequest): string | null {
+    const policy = subagentToolPolicyForSession(session);
+    if (policy !== "read_only") return null;
+    if (READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS.has(request.action)) return null;
+    return [
+      `Workspace action ${request.action} is blocked by the read_only subagent tool policy.`,
+      "Use read/search/status/diff tools only, or report that this child assignment needs a write-capable isolated workspace.",
+    ].join(" ");
+  }
+
+  function subagentToolPolicyForSession(session: Session): SubagentRoleSettings["toolPolicy"] | null {
+    if (!session.subagentRunId) return null;
+    const subagent = recordFromUnknown(recordFromUnknown(session.metadata)?.subagent);
+    const toolPolicy = typeof subagent?.toolPolicy === "string" ? subagent.toolPolicy : null;
+    if (toolPolicy === "read_only" || toolPolicy === "workspace_write" || toolPolicy === "full_tools") return toolPolicy;
+    return "read_only";
+  }
+
+  function recordFromUnknown(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  }
+
   function workspaceToolCorrectionMessage(
     textFallbackMode: HostedToolInstructionMode,
     nativeToolsAvailable: boolean,
@@ -1581,6 +3618,7 @@ export function createTurnRunner(deps: {
   async function executeNativeToolCalls(params: {
     session: Session;
     turnId: string;
+    turnPermissions: SubagentTurnPermissions;
     provider: ChatProvider;
     model: string;
     signal: AbortSignal;
@@ -1661,6 +3699,7 @@ export function createTurnRunner(deps: {
         const result = await definition.execute({
           session: params.session,
           turnId: params.turnId,
+          turnPermissions: params.turnPermissions,
           provider: params.provider,
           model: params.model,
           callId: toolCall.id,
@@ -2477,11 +4516,18 @@ export function createTurnRunner(deps: {
 
   async function sendTurn(sessionId: string, payload: unknown): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
+    let turnPermissions = turnPermissionsFromSendTurnInput(input);
     const existingTurn = (await activeInProgressTurn(sessionId)) ?? (await findInProgressTurn(sessionId));
     if (existingTurn) {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    let subagentContinuation = await prepareSubagentContinuationTurn({
+      session,
+      request: input,
+      requestedTurnPermissions: turnPermissions,
+    });
+    if (subagentContinuation) turnPermissions = subagentContinuation.turnPermissions;
     const activeProvider = input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider;
     const activeModelId = input.modelRef?.modelId ?? input.model ?? session.modelRef?.modelId ?? null;
     const turnModelRef: ChatModelRef | null = activeModelId
@@ -2493,9 +4539,10 @@ export function createTurnRunner(deps: {
     const priorEvents = (await store.snapshot()).events.filter((item) => item.sessionId === sessionId);
 
     const startedAt = now();
+    const effectiveUsageAttribution = input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
     const createPipelineMetadata = {
       ...(input.metadata ? input.metadata : {}),
-      ...(input.usageAttribution ? { usageAttribution: input.usageAttribution } : {}),
+      ...(effectiveUsageAttribution ? { usageAttribution: effectiveUsageAttribution } : {}),
       ...(input.createPipelineRequest ? { createPipelineRequest: input.createPipelineRequest } : {}),
       ...(input.createPipeline ? { createPipeline: input.createPipeline } : {}),
     };
@@ -2530,6 +4577,10 @@ export function createTurnRunner(deps: {
     const controller = new AbortController();
     const activeTurn: ActiveTurn = { session, turn, controller };
     activeTurns.set(sessionId, activeTurn);
+    await markSubagentContinuationRunning({
+      context: subagentContinuation,
+      childTurnId: turn.id,
+    });
 
     try {
       const attachmentContexts = await materializeChatAttachments({
@@ -2932,6 +4983,7 @@ export function createTurnRunner(deps: {
         session = await runHostedToolLoop({
           session,
           turn,
+          turnPermissions,
           provider: "openpond",
           model,
           messages,
@@ -3036,6 +5088,7 @@ export function createTurnRunner(deps: {
         session = await runHostedToolLoop({
           session,
           turn,
+          turnPermissions,
           provider: session.provider,
           model: runtimeModel ?? "default",
           messages,
@@ -3099,6 +5152,10 @@ export function createTurnRunner(deps: {
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         model: codexModel,
+        approvalPolicy: turnPermissions.approvalPolicy,
+        sandbox: turnPermissions.sandbox,
+        codexPermissionMode: turnPermissions.codexPermissionMode,
+        codexReasoningEffort: turnPermissions.codexReasoningEffort,
       });
       activeTurn.codexRuntime = runtime;
       throwIfInterrupted(controller.signal);
@@ -3107,8 +5164,8 @@ export function createTurnRunner(deps: {
         prompt: providerPrompt,
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
-        approvalPolicy: input.approvalPolicy,
-        sandbox: input.sandbox,
+        approvalPolicy: turnPermissions.approvalPolicy,
+        sandbox: turnPermissions.sandbox,
       });
       activeTurn.codexTurnId = providerTurn.turnId;
       if (controller.signal.aborted) {
@@ -3136,6 +5193,11 @@ export function createTurnRunner(deps: {
       }
       return failTurn(session, turn.id, message);
     } finally {
+      await finalizeSubagentContinuationTurn({
+        context: subagentContinuation,
+        childSession: session,
+        childTurnId: turn.id,
+      }).catch(() => undefined);
       if (activeTurns.get(sessionId)?.turn.id === turn.id) activeTurns.delete(sessionId);
     }
   }
@@ -3373,6 +5435,153 @@ export function createTurnRunner(deps: {
       });
     }
     return resolved;
+  }
+
+  async function resolveSubagentPatchApplyApproval(
+    approvalId: string,
+    payload: unknown,
+  ): Promise<Approval | null> {
+    const input = ResolveApprovalRequestSchema.parse(payload);
+    const approval = await store.getApproval(approvalId);
+    if (!approval || approval.kind !== "subagent_patch_apply") return null;
+    if (approval.status !== "pending") throw new Error("Approval not found or already resolved");
+    if (!store.getSubagentRun || !store.upsertSubagentRun) {
+      throw new Error("Subagent runtime dependencies are not available.");
+    }
+    const runId = String(approval.providerRequestId);
+    const run = await store.getSubagentRun(runId);
+    if (!run) throw new Error(`Subagent run ${runId} was not found.`);
+    const session = await getSession(approval.sessionId);
+    const parentTurnId = approval.turnId ?? run.parentTurnId;
+    if (!parentTurnId) throw new Error("Subagent patch approval is missing its parent turn.");
+    const accepted = input.decision === "accept" || input.decision === "acceptForSession";
+    const status = subagentPatchApprovalStatusForDecision(input.decision);
+    let nextRun = run;
+    if (accepted) {
+      const applyResult = await applySubagentPatchApproval({
+        approval,
+        run,
+      });
+      nextRun = SubagentRunSchema.parse({
+        ...run,
+        report: run.report
+          ? {
+              ...run.report,
+              followUpNeeded: false,
+            }
+          : run.report,
+        metadata: {
+          ...(run.metadata ?? {}),
+          workspaceHandoff: {
+            ...(workspaceHandoffFromRun(run) ?? {}),
+            applyResult,
+          },
+        },
+      });
+      await store.upsertSubagentRun(nextRun);
+    } else {
+      nextRun = SubagentRunSchema.parse({
+        ...run,
+        metadata: {
+          ...(run.metadata ?? {}),
+          workspaceHandoff: {
+            ...(workspaceHandoffFromRun(run) ?? {}),
+            applyResult: {
+              status: input.decision === "cancel" ? "cancelled" : "declined",
+              approvalId: approval.id,
+              decidedAt: now(),
+            },
+          },
+        },
+      });
+      await store.upsertSubagentRun(nextRun);
+    }
+    const resolved: Approval = {
+      ...approval,
+      status,
+    };
+    await upsertApproval(resolved);
+    await appendRuntimeEvent(
+      event({
+        sessionId: approval.sessionId,
+        turnId: approval.turnId ?? undefined,
+        name: "approval.resolved",
+        source: "server",
+        action: "subagent_patch_apply",
+        appId: session.appId,
+        status: accepted ? "completed" : "failed",
+        output: approval.title,
+        data: {
+          approvalId,
+          status,
+          decision: input.decision,
+          runId: nextRun.id,
+          childSessionId: nextRun.childSessionId,
+        },
+      }),
+    );
+    await appendSubagentReceipt({
+      parentSession: session,
+      parentTurnId,
+      run: nextRun,
+      eventName: "subagent.reported",
+      status: accepted ? "completed" : "failed",
+      output: accepted
+        ? `${run.roleId} subagent patch applied to the parent workspace.`
+        : `${run.roleId} subagent patch was ${status}.`,
+    });
+    if (accepted) {
+      await appendWorkspaceDiffEvent(session, parentTurnId).catch(() => undefined);
+    }
+    return resolved;
+  }
+
+  function subagentPatchApprovalStatusForDecision(decision: ResolveApprovalRequest["decision"]): Approval["status"] {
+    if (decision === "accept" || decision === "acceptForSession") return "accepted";
+    if (decision === "cancel") return "cancelled";
+    return "declined";
+  }
+
+  async function applySubagentPatchApproval(input: {
+    approval: Approval;
+    run: SubagentRun;
+  }): Promise<Record<string, unknown>> {
+    const handoff = workspaceHandoffFromRun(input.run);
+    if (!handoff || !truthyRecordBoolean(handoff, "changed")) {
+      throw new Error("Subagent run has no captured patch to apply.");
+    }
+    const patchPath = stringFromRecord(handoff, "patchPath");
+    const parentRepoPath = stringFromRecord(handoff, "parentRepoPath");
+    const workspaceRoot = stringFromRecord(handoff, "workspaceRoot");
+    if (!patchPath || !parentRepoPath || !workspaceRoot) {
+      throw new Error("Subagent patch handoff is missing patchPath, parentRepoPath, or workspaceRoot.");
+    }
+    assertPathInside({ rootPath: workspaceRoot, targetPath: patchPath, label: "Subagent patch" });
+    const checkResult = await runWorkspaceCommand("git", ["apply", "--check", patchPath], parentRepoPath);
+    if (checkResult.code !== 0) {
+      throw new Error(
+        checkResult.stderr.trim() ||
+        checkResult.stdout.trim() ||
+        "Subagent patch does not apply cleanly to the parent workspace.",
+      );
+    }
+    const applyResult = await runWorkspaceCommand("git", ["apply", patchPath], parentRepoPath);
+    if (applyResult.code !== 0) {
+      throw new Error(
+        applyResult.stderr.trim() ||
+        applyResult.stdout.trim() ||
+        "Subagent patch failed to apply to the parent workspace.",
+      );
+    }
+    return {
+      status: "applied",
+      approvalId: input.approval.id,
+      appliedAt: now(),
+      parentRepoPath,
+      patchPath,
+      checkStdout: checkResult.stdout.trim() || null,
+      applyStdout: applyResult.stdout.trim() || null,
+    };
   }
 
   function shouldApplyLocalCreatePipelineAsync(snapshot: CreatePipelineSnapshot): boolean {
@@ -3688,7 +5897,13 @@ export function createTurnRunner(deps: {
     });
   }
 
-  return { sendTurn, interruptSessionTurn, updateTurnCreatePipeline, resolveCreatePipelineApproval };
+  return {
+    sendTurn,
+    interruptSessionTurn,
+    updateTurnCreatePipeline,
+    resolveCreatePipelineApproval,
+    resolveSubagentPatchApplyApproval,
+  };
 }
 
 function shouldRunCreatePipelinePlanner(snapshot: CreatePipelineSnapshot): boolean {

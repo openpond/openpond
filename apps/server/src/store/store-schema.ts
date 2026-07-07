@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 8;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 9;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -210,4 +210,43 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS local_agent_schedule_runs_schedule_idx
     ON local_agent_schedule_runs(schedule_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS subagent_runs (
+    id TEXT PRIMARY KEY,
+    parent_session_id TEXT NOT NULL,
+    parent_turn_id TEXT,
+    parent_goal_id TEXT,
+    child_session_id TEXT,
+    role_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS subagent_runs_parent_session_status_idx
+    ON subagent_runs(parent_session_id, status, updated_at DESC);
+
+  CREATE INDEX IF NOT EXISTS subagent_runs_parent_goal_status_idx
+    ON subagent_runs(parent_goal_id, status, updated_at DESC);
+
+  CREATE INDEX IF NOT EXISTS subagent_runs_child_session_idx
+    ON subagent_runs(child_session_id);
+
+  CREATE TABLE IF NOT EXISTS subagent_messages (
+    id TEXT PRIMARY KEY,
+    parent_goal_id TEXT,
+    from_run_id TEXT NOT NULL,
+    to_run_id TEXT,
+    to_role TEXT,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS subagent_messages_parent_goal_created_idx
+    ON subagent_messages(parent_goal_id, created_at);
+
+  CREATE INDEX IF NOT EXISTS subagent_messages_receiver_created_idx
+    ON subagent_messages(to_run_id, to_role, created_at);
 `;

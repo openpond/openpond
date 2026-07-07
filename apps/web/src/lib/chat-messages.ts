@@ -175,6 +175,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       item.name === "workspace_action_result" ||
       item.name === "approval.requested" ||
       item.name === "turn.interrupted" ||
+      item.name.startsWith("subagent.") ||
       isCodexGoalContextEvent(item)
     ) {
       if (item.turnId && createPipelineTurnIds.has(item.turnId)) {

@@ -79,6 +79,7 @@ export function RightChatPanelStack({
   onModelChange,
   onOpenFileInSidebar,
   onOpenProfileSettings,
+  onOpenSession,
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
@@ -115,6 +116,7 @@ export function RightChatPanelStack({
   onModelChange: (panelId: string, model: string) => void;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
+  onOpenSession?: (sessionId: string) => void;
   onProviderChange: (panelId: string, provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (panelId: string, prompt: string) => void;
@@ -294,9 +296,10 @@ export function RightChatPanelStack({
             onCodexReasoningEffortChange={onCodexReasoningEffortChange}
             onOpenPondCommandAccessModeChange={(mode) => onOpenPondCommandAccessModeChange(mode, panel.session)}
             onModelChange={(model) => onModelChange(panel.id, model)}
-            onOpenFileInSidebar={onOpenFileInSidebar}
-            onOpenProfileSettings={onOpenProfileSettings}
-            onProviderChange={(provider) => onProviderChange(panel.id, provider)}
+          onOpenFileInSidebar={onOpenFileInSidebar}
+          onOpenProfileSettings={onOpenProfileSettings}
+          onOpenSession={onOpenSession}
+          onProviderChange={(provider) => onProviderChange(panel.id, provider)}
             onProviderSetupOpen={onProviderSetupOpen}
             onPromptChange={(prompt) => onPromptChange(panel.id, prompt)}
             onProjectTargetChange={onProjectTargetChange}
@@ -344,6 +347,7 @@ function RightChatPane({
   onModelChange,
   onOpenFileInSidebar,
   onOpenProfileSettings,
+  onOpenSession,
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
@@ -376,6 +380,7 @@ function RightChatPane({
   onModelChange: (model: string) => void;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
+  onOpenSession?: (sessionId: string) => void;
   onProviderChange: (provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (prompt: string) => void;
@@ -459,6 +464,7 @@ function RightChatPane({
                 onOpenBrowserLink={handleOpenBrowserLink}
                 onOpenFileInSidebar={onOpenFileInSidebar}
                 onOpenProfileSettings={onOpenProfileSettings}
+                onOpenSession={onOpenSession}
                 workspaceRootPath={panel.workspaceRootPath}
                 showFooter={row.showFooter}
               />

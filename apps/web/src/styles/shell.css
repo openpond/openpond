@@ -312,9 +312,10 @@
 .app-toast {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  top: 58px;
   z-index: 80;
-  max-width: min(360px, calc(100vw - 44px));
+  width: min(420px, calc(100vw - 44px));
+  max-width: calc(100vw - 44px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   background: #202020;
@@ -338,6 +339,7 @@
 
 .app-toast span {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .app-toast button {
@@ -357,6 +359,8 @@
 }
 
 .app-toast .app-toast-close {
+  display: grid;
+  place-items: center;
   width: 26px;
   height: 26px;
   padding: 0;

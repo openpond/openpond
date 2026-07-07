@@ -620,7 +620,8 @@
   font-size: 12px;
 }
 
-.settings-select-field input {
+.settings-select-field input,
+.settings-select-field select {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -633,7 +634,12 @@
   font-size: 13px;
 }
 
-.settings-select-field input:focus {
+.settings-select-field select {
+  appearance: none;
+}
+
+.settings-select-field input:focus,
+.settings-select-field select:focus {
   border-color: rgba(58, 163, 255, 0.45);
 }
 
@@ -665,6 +671,74 @@
   color: #8d8d8d;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.settings-check-row.compact {
+  padding: 0;
+}
+
+.settings-check-row.inline {
+  max-width: none;
+}
+
+.subagent-role-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.subagent-role-row {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px;
+}
+
+.subagent-role-row.disabled {
+  opacity: 0.64;
+}
+
+.subagent-role-header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.subagent-role-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.subagent-role-title strong,
+.subagent-role-title small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-role-title strong {
+  color: #f2f2f2;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.subagent-role-title small {
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.subagent-role-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 12px;
+  min-width: 0;
 }
 
 .settings-radio-group {
@@ -884,6 +958,10 @@
 
   .provider-card-grid,
   .provider-dialog-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .subagent-role-controls {
     grid-template-columns: minmax(0, 1fr);
   }
 

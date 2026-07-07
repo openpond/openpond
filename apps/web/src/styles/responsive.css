@@ -60,8 +60,7 @@
   }
 
   .composer.dock,
-  .composer-stack.dock,
-  .error-line {
+  .composer-stack.dock {
     width: calc(100% - 28px);
     max-width: none;
   }

@@ -11,7 +11,14 @@ import type {
   HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
-import type { ProviderSecrets } from "./provider-secrets.js";
+import {
+  credentialFromRefreshResponse,
+  refreshOpenAiSubscriptionToken,
+} from "./openai-subscription-auth.js";
+import type {
+  ProviderChatGptSubscriptionCredential,
+  ProviderSecrets,
+} from "./provider-secrets.js";
 
 export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
   "openai",
@@ -37,13 +44,17 @@ export type OpenAiCompatibleStreamDelta =
 export type OpenAiCompatibleResolvedProvider = {
   providerId: OpenAiCompatibleProviderId;
   baseUrl: string;
-  apiKey: string;
   model: string;
+  auth:
+    | { type: "api_key"; apiKey: string }
+    | { type: "chatgpt_subscription"; credential: ProviderChatGptSubscriptionCredential };
 };
 
 const DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS = 30_000;
 const PROVIDER_RESPONSE_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
 const PROVIDER_ERROR_BODY_LIMIT_BYTES = 64 * 1024;
+const OPENAI_CODEX_RESPONSES_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
+const OPENAI_SUBSCRIPTION_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 export function isOpenAiCompatibleProviderId(
   providerId: ProviderId,
@@ -68,14 +79,9 @@ export function resolveOpenAiCompatibleProvider(input: {
   if (!baseUrl) throw new Error(`Provider ${input.providerId} requires a base URL.`);
 
   const secret = input.secrets.providers[input.providerId];
-  const apiKey =
-    secret?.source === "local_secret"
-      ? secret.value?.trim() ?? ""
-      : secret?.source === "env" && secret.envVar
-        ? process.env[secret.envVar]?.trim() ?? ""
-        : "";
-  if (!apiKey) {
-    throw new Error(`Provider ${input.providerId} has no connected API key.`);
+  const auth = resolveProviderAuth(input.providerId, secret);
+  if (!auth) {
+    throw new Error(missingApiKeyMessage(input.providerId, input.settings));
   }
 
   const model =
@@ -89,9 +95,35 @@ export function resolveOpenAiCompatibleProvider(input: {
   return {
     providerId: input.providerId,
     baseUrl,
-    apiKey,
+    auth,
     model,
   };
+}
+
+function resolveProviderAuth(
+  providerId: OpenAiCompatibleProviderId,
+  secret: ProviderSecrets["providers"][string] | undefined,
+): OpenAiCompatibleResolvedProvider["auth"] | null {
+  if (providerId === "openai" && secret?.source === "chatgpt_subscription" && secret.oauth?.refreshToken) {
+    return { type: "chatgpt_subscription", credential: secret.oauth };
+  }
+  const apiKey =
+    secret?.source === "local_secret"
+      ? secret.value?.trim() ?? ""
+      : secret?.source === "env" && secret.envVar
+        ? process.env[secret.envVar]?.trim() ?? ""
+        : "";
+  if (!apiKey) return null;
+  return { type: "api_key", apiKey };
+}
+
+function missingApiKeyMessage(providerId: OpenAiCompatibleProviderId, settings: ProviderSettings): string {
+  const providerName = settings.statuses[providerId]?.displayName?.trim() || providerId;
+  const setupHint = `Add an API key in Settings > Providers.`;
+  if (providerId === "openai") {
+    return `${providerName} has no connected API key. The raw OpenAI provider uses Platform API credentials. ${setupHint}`;
+  }
+  return `${providerName} has no connected API key. ${setupHint}`;
 }
 
 export async function listOpenAiCompatibleProviderModels(input: {
@@ -109,12 +141,15 @@ export async function listOpenAiCompatibleProviderModels(input: {
     ...input,
     requireModel: false,
   });
+  if (provider.auth.type === "chatgpt_subscription") {
+    return subscriptionModelsFromSettings(input.settings, provider.providerId);
+  }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
   let response: Response;
   try {
     response = await fetch(providerEndpointUrl(provider.baseUrl, "models"), {
       method: "GET",
-      headers: providerHeaders(provider.apiKey, "application/json"),
+      headers: providerHeaders(provider.auth.apiKey, "application/json"),
       signal: requestSignal.signal,
     });
   } finally {
@@ -191,14 +226,29 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   signal?: AbortSignal;
   requestTimeoutMs?: number;
   errorBodyLimitBytes?: number;
+  saveChatGptSubscriptionCredential?: (
+    providerId: OpenAiCompatibleProviderId,
+    credential: ProviderChatGptSubscriptionCredential,
+  ) => Promise<void>;
 }): AsyncGenerator<OpenAiCompatibleStreamDelta, void, unknown> {
   const provider = resolveOpenAiCompatibleProvider(input);
+  if (provider.auth.type === "chatgpt_subscription") {
+    const subscriptionProvider = {
+      ...provider,
+      auth: provider.auth,
+    };
+    yield* streamOpenAiSubscriptionResponses({
+      ...input,
+      provider: subscriptionProvider,
+    });
+    return;
+  }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
   let response: Response;
   try {
     response = await fetch(providerEndpointUrl(provider.baseUrl, "chat/completions"), {
       method: "POST",
-      headers: providerHeaders(provider.apiKey, "text/event-stream"),
+      headers: providerHeaders(provider.auth.apiKey, "text/event-stream"),
       body: JSON.stringify(buildChatCompletionBody({
         providerId: provider.providerId,
         model: provider.model,
@@ -229,6 +279,83 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   }
 }
 
+async function* streamOpenAiSubscriptionResponses(input: {
+  provider: OpenAiCompatibleResolvedProvider & {
+    auth: { type: "chatgpt_subscription"; credential: ProviderChatGptSubscriptionCredential };
+  };
+  modelId?: string | null;
+  messages: HostedChatMessage[];
+  tools?: HostedChatTool[];
+  toolChoice?: HostedChatToolChoice;
+  requestId?: string;
+  signal?: AbortSignal;
+  requestTimeoutMs?: number;
+  errorBodyLimitBytes?: number;
+  saveChatGptSubscriptionCredential?: (
+    providerId: OpenAiCompatibleProviderId,
+    credential: ProviderChatGptSubscriptionCredential,
+  ) => Promise<void>;
+}): AsyncGenerator<OpenAiCompatibleStreamDelta, void, unknown> {
+  const credential = await usableSubscriptionCredential({
+    providerId: input.provider.providerId,
+    credential: input.provider.auth.credential,
+    saveChatGptSubscriptionCredential: input.saveChatGptSubscriptionCredential,
+  });
+  if (!credential.accessToken) throw new Error("OpenAI ChatGPT subscription credential has no access token.");
+  const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(OPENAI_CODEX_RESPONSES_ENDPOINT, {
+      method: "POST",
+      headers: subscriptionHeaders(credential, input.requestId),
+      body: JSON.stringify(buildResponsesBody({
+        model: input.provider.model,
+        messages: input.messages,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+      })),
+      signal: requestSignal.signal,
+    });
+  } finally {
+    requestSignal.cleanup();
+  }
+  if (!response.ok || !response.body) {
+    const errorDetail = await readProviderError(response, input.errorBodyLimitBytes);
+    throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${response.status} ${errorDetail}`);
+  }
+  const seenToolArgumentDeltas = new Set<string>();
+  for await (const raw of parseSse(response.body, input.signal)) {
+    if (raw && typeof raw === "object" && "error" in raw) {
+      throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${errorMessageFromPayload(raw)}`);
+    }
+    for (const delta of responseDeltasFromChunk(raw, seenToolArgumentDeltas)) {
+      yield delta;
+    }
+  }
+}
+
+async function usableSubscriptionCredential(input: {
+  providerId: OpenAiCompatibleProviderId;
+  credential: ProviderChatGptSubscriptionCredential;
+  saveChatGptSubscriptionCredential?: (
+    providerId: OpenAiCompatibleProviderId,
+    credential: ProviderChatGptSubscriptionCredential,
+  ) => Promise<void>;
+}): Promise<ProviderChatGptSubscriptionCredential> {
+  if (
+    input.credential.accessToken &&
+    input.credential.expiresAt > Date.now() + OPENAI_SUBSCRIPTION_TOKEN_REFRESH_MARGIN_MS
+  ) {
+    return input.credential;
+  }
+  const refreshed = credentialFromRefreshResponse(
+    await refreshOpenAiSubscriptionToken(input.credential.refreshToken),
+    input.credential,
+  );
+  await input.saveChatGptSubscriptionCredential?.(input.providerId, refreshed);
+  return refreshed;
+}
+
 function buildChatCompletionBody(input: {
   providerId: OpenAiCompatibleProviderId;
   model: string;
@@ -251,6 +378,95 @@ function buildChatCompletionBody(input: {
     body.tool_choice = input.toolChoice;
   }
   return body;
+}
+
+function buildResponsesBody(input: {
+  model: string;
+  messages: HostedChatMessage[];
+  tools?: HostedChatTool[];
+  toolChoice?: HostedChatToolChoice;
+}): Record<string, unknown> {
+  const projected = responsesInputFromMessages(input.messages);
+  const body: Record<string, unknown> = {
+    model: input.model,
+    input: projected.input,
+    stream: true,
+    store: false,
+  };
+  if (projected.instructions) body.instructions = projected.instructions;
+  const tools = responsesTools(input.tools);
+  if (tools.length > 0) body.tools = tools;
+  const toolChoice = responsesToolChoice(input.toolChoice);
+  if (toolChoice !== undefined) body.tool_choice = toolChoice;
+  return body;
+}
+
+function responsesInputFromMessages(messages: HostedChatMessage[]): {
+  instructions: string | null;
+  input: unknown[];
+} {
+  const instructions: string[] = [];
+  const input: unknown[] = [];
+  for (const message of messages) {
+    const content = typeof message.content === "string" ? message.content : "";
+    if (message.role === "system") {
+      if (content.trim()) instructions.push(content.trim());
+      continue;
+    }
+    if (message.role === "tool") {
+      input.push({
+        type: "function_call_output",
+        call_id: message.tool_call_id,
+        output: content,
+      });
+      continue;
+    }
+    if (content.trim()) {
+      input.push({
+        type: "message",
+        role: message.role,
+        content: [
+          {
+            type: message.role === "assistant" ? "output_text" : "input_text",
+            text: content,
+          },
+        ],
+      });
+    }
+    for (const toolCall of message.tool_calls ?? []) {
+      const fn = toolCall.function && typeof toolCall.function === "object" ? toolCall.function : {};
+      input.push({
+        type: "function_call",
+        call_id: toolCall.id,
+        name: fn.name,
+        arguments: typeof fn.arguments === "string" ? fn.arguments : "",
+      });
+    }
+  }
+  return {
+    instructions: instructions.join("\n\n") || null,
+    input,
+  };
+}
+
+function responsesTools(tools: HostedChatTool[] | undefined): unknown[] {
+  return (tools ?? [])
+    .filter((tool) => tool.type === "function" && tool.function?.name)
+    .map((tool) => ({
+      type: "function",
+      name: tool.function!.name,
+      description: tool.function!.description,
+      parameters: tool.function!.parameters ?? {},
+    }));
+}
+
+function responsesToolChoice(toolChoice: HostedChatToolChoice | undefined): unknown {
+  if (toolChoice === undefined) return undefined;
+  if (typeof toolChoice === "string") return toolChoice;
+  return {
+    type: "function",
+    name: toolChoice.function.name,
+  };
 }
 
 function mergeSystemMessages(messages: HostedChatMessage[]): HostedChatMessage[] {
@@ -313,6 +529,41 @@ function providerHeaders(apiKey: string, accept: string): Headers {
   headers.set("Content-Type", "application/json");
   headers.set("Accept", accept);
   return headers;
+}
+
+function subscriptionHeaders(
+  credential: ProviderChatGptSubscriptionCredential,
+  requestId: string | undefined,
+): Headers {
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${credential.accessToken}`);
+  headers.set("Content-Type", "application/json");
+  headers.set("Accept", "text/event-stream");
+  headers.set("originator", "openpond");
+  headers.set("User-Agent", "openpond-app");
+  if (requestId) headers.set("session-id", requestId);
+  if (credential.accountId) headers.set("ChatGPT-Account-Id", credential.accountId);
+  return headers;
+}
+
+function subscriptionModelsFromSettings(
+  settings: ProviderSettings,
+  providerId: OpenAiCompatibleProviderId,
+): ProviderModel[] {
+  const cached = settings.modelCaches[providerId]?.models ?? [];
+  return cached.length > 0
+    ? cached
+    : [
+        ProviderModelSchema.parse({
+          id: "gpt-5.5",
+          providerId,
+          displayName: "GPT-5.5",
+          contextWindow: 400000,
+          outputLimit: 128000,
+          source: "curated",
+          capabilities: capabilitiesForModelId("gpt-5.5"),
+        }),
+      ];
 }
 
 function modelsFromPayload(providerId: OpenAiCompatibleProviderId, payload: unknown): ProviderModel[] {
@@ -586,6 +837,93 @@ function streamDeltasFromChunk(raw: unknown): OpenAiCompatibleStreamDelta[] {
     if (finishReason) deltas.push({ type: "finish", finishReason, raw });
   }
   return deltas;
+}
+
+function responseDeltasFromChunk(
+  raw: unknown,
+  seenToolArgumentDeltas: Set<string>,
+): OpenAiCompatibleStreamDelta[] {
+  if (!raw || typeof raw !== "object") return [];
+  const record = raw as Record<string, unknown>;
+  const type = stringValue(record.type);
+  if (type === "response.output_text.delta") {
+    const text = streamTextValue(record.delta);
+    return text ? [{ type: "text_delta", text, raw }] : [];
+  }
+  if (type === "response.reasoning_text.delta" || type === "response.reasoning_summary_text.delta") {
+    const text = streamTextValue(record.delta);
+    return text ? [{ type: "reasoning_delta", text, raw }] : [];
+  }
+  if (type === "response.output_item.added") {
+    const item = record.item && typeof record.item === "object" ? (record.item as Record<string, unknown>) : null;
+    if (item?.type !== "function_call") return [];
+    return [
+      {
+        type: "tool_call_delta",
+        toolCalls: [
+          {
+            id: stringValue(item.call_id) ?? stringValue(item.id) ?? undefined,
+            type: "function",
+            function: {
+              name: stringValue(item.name) ?? undefined,
+              arguments: typeof item.arguments === "string" ? item.arguments : "",
+            },
+            index: numberValue(record.output_index) ?? numberValue(item.output_index) ?? 0,
+          },
+        ],
+        raw,
+      },
+    ];
+  }
+  if (type === "response.function_call_arguments.delta") {
+    const key = stringValue(record.item_id) ?? String(numberValue(record.output_index) ?? 0);
+    seenToolArgumentDeltas.add(key);
+    return [
+      {
+        type: "tool_call_delta",
+        toolCalls: [
+          {
+            id: stringValue(record.call_id) ?? stringValue(record.item_id) ?? undefined,
+            type: "function",
+            function: {
+              arguments: streamTextValue(record.delta) ?? "",
+            },
+            index: numberValue(record.output_index) ?? 0,
+          },
+        ],
+        raw,
+      },
+    ];
+  }
+  if (type === "response.function_call_arguments.done") {
+    const key = stringValue(record.item_id) ?? String(numberValue(record.output_index) ?? 0);
+    if (seenToolArgumentDeltas.has(key)) return [];
+    return [
+      {
+        type: "tool_call_delta",
+        toolCalls: [
+          {
+            id: stringValue(record.call_id) ?? stringValue(record.item_id) ?? undefined,
+            type: "function",
+            function: {
+              arguments: typeof record.arguments === "string" ? record.arguments : "",
+            },
+            index: numberValue(record.output_index) ?? 0,
+          },
+        ],
+        raw,
+      },
+    ];
+  }
+  if (type === "response.completed") {
+    const response = record.response && typeof record.response === "object" ? (record.response as Record<string, unknown>) : {};
+    const output: OpenAiCompatibleStreamDelta[] = [];
+    const usage = response.usage && typeof response.usage === "object" ? response.usage : null;
+    if (usage) output.push({ type: "usage", usage, raw });
+    output.push({ type: "finish", finishReason: "stop", raw });
+    return output;
+  }
+  return [];
 }
 
 function parseToolCalls(value: unknown): HostedChatToolCall[] {

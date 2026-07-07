@@ -111,6 +111,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const controlKind = controlActivityKind(item);
   const receipt = activityReceipt(item);
   const meta = activityMeta(item);
+  const openSession = activityOpenSession(item);
   return {
     id: item.id,
     label: activityLabel(item),
@@ -122,6 +123,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
+    ...(openSession ? { openSession } : {}),
     state: activityState(item),
     ...(imagePreview ? { imagePreview } : {}),
   };
@@ -218,6 +220,13 @@ function activityLabel(item: RuntimeEvent): string {
   if (item.name === "assistant.reasoning.delta") return "Reasoning";
   if (isCodexGoalContextEvent(item)) return "Goal context";
   if (item.name === "turn.interrupted") return "Turn aborted";
+  if (item.name === "subagent.started") return item.status === "started" ? "Subagent running" : "Started subagent";
+  if (item.name === "subagent.reported") return "Subagent reported";
+  if (item.name === "subagent.progress") return "Subagent progress";
+  if (item.name === "subagent.completed") return "Subagent completed";
+  if (item.name === "subagent.failed") return "Subagent failed";
+  if (item.name === "subagent.blocked") return "Subagent blocked";
+  if (item.name === "subagent.message") return "Subagent message";
   if (isViewImageEvent(item) && item.name === "tool.started") return "Reading image";
   if (isViewImageEvent(item) && item.name === "tool.completed") return "Read image";
   if (item.action === "resource_search" && item.name === "tool.started") return "Searching resources";
@@ -521,6 +530,22 @@ function activityReceipt(item: RuntimeEvent): ActivityItem["receipt"] | undefine
         totalUsd: receipt.totalUsd,
       }
     : undefined;
+}
+
+function activityOpenSession(item: RuntimeEvent): ActivityItem["openSession"] | undefined {
+  if (!item.name.startsWith("subagent.")) return undefined;
+  const data = asRecord(item.data);
+  const run = asRecord(data?.run);
+  const childSessionId = stringValue(data, ["childSessionId"]) ?? stringValue(run, ["childSessionId"]);
+  if (!childSessionId) return undefined;
+  const roleId = stringValue(run, ["roleId"]) ?? stringValue(data, ["roleId"]);
+  const status = stringValue(run, ["status"]) ?? stringValue(data, ["status"]);
+  return {
+    sessionId: childSessionId,
+    label: "Open conversation",
+    ...(roleId ? { roleId } : {}),
+    ...(status ? { status } : {}),
+  };
 }
 
 function receiptFromData(data: Record<string, unknown> | null): { id: string; status: string; totalUsd: string } | null {

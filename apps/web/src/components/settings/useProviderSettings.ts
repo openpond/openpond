@@ -112,6 +112,39 @@ export function useProviderSettings({
     });
   }
 
+  async function startOpenAiSubscriptionAuth(method: "browser" | "device") {
+    return runProviderAction("openai", "credential", async () => {
+      const result = await api.startOpenAiSubscriptionAuth(connection!, { method });
+      if (result.method === "browser") {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+        setValidationMessage("OpenAI ChatGPT login opened in your browser. Return here after authorization.");
+      } else {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+        setValidationMessage(`OpenAI device login started. Enter code ${result.userCode}.`);
+      }
+      void pollOpenAiSubscriptionAuth(result.expiresAt);
+      return result;
+    });
+  }
+
+  async function pollOpenAiSubscriptionAuth(expiresAt: number) {
+    if (!connection) return;
+    while (Date.now() < expiresAt) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      try {
+        const nextProviders = await api.providerSettings(connection);
+        onProviders(nextProviders);
+        const credential = nextProviders.statuses.openai?.credential;
+        if (credential?.connected && credential.source === "chatgpt_subscription") {
+          setValidationMessage("OpenAI ChatGPT subscription connected.");
+          return;
+        }
+      } catch {
+        // The normal settings error path is noisy for background polling.
+      }
+    }
+  }
+
   async function refreshProviderModels(provider: ChatProvider) {
     await runProviderAction(provider, "models", async () => {
       const result = await api.refreshProviderModels(connection!, provider, { force: true });
@@ -155,6 +188,7 @@ export function useProviderSettings({
     saveProviderCredential,
     saveProviders,
     setDefaultModel,
+    startOpenAiSubscriptionAuth,
     validateProvider,
   };
 }

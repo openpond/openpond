@@ -200,6 +200,7 @@ describe("connected app bundles", () => {
       "github.repo.read",
       "github.issue.read",
       "github.pull_request.read",
+      "github.issue.create",
       "github.issue.comment",
       "github.issue.update",
       "github.pull_request.comment",
@@ -242,6 +243,12 @@ describe("connected app bundles", () => {
       capabilityIds: ["x.search.read"],
       requiresReadback: false,
       input: { requiredKeys: ["ref"] },
+    });
+    expect(connectedAppProviderOperationById("github", "github.issue.create")).toMatchObject({
+      operation: "write",
+      capabilityIds: ["github.issue.write"],
+      requiresReadback: true,
+      input: { requiredKeys: ["repo", "title", "body"] },
     });
   });
 });

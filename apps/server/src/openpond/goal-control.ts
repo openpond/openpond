@@ -7,7 +7,7 @@ import {
 } from "@openpond/contracts";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 
-export type OpenPondGoalControlAction = "start" | "restart" | "pause" | "resume" | "stop";
+export type OpenPondGoalControlAction = "start" | "restart" | "pause" | "resume" | "complete" | "stop";
 export type OpenPondGoalControlMode = "local" | "remote" | "auto";
 export type ResolvedOpenPondGoalControlMode = Exclude<OpenPondGoalControlMode, "auto">;
 
@@ -142,6 +142,22 @@ export function runOpenPondGoalControl(input: {
     return controlResult({ action, goal, previousGoal: targetGoal, nextStep: "OpenPond goal resumed." });
   }
 
+  if (action === "complete") {
+    assertTransitionAllowed(action, normalizedPreviousStatus);
+    const goal = createControlledGoal({
+      id: stringValue(targetGoal.id) ?? `goal_${randomUUID()}`,
+      action,
+      objective,
+      reason,
+      mode,
+      status: "completed",
+      targetGoal,
+      previousStatus,
+      now,
+    });
+    return controlResult({ action, goal, previousGoal: targetGoal, nextStep: "OpenPond goal completed." });
+  }
+
   const goal = createControlledGoal({
     id: stringValue(targetGoal.id) ?? `goal_${randomUUID()}`,
     action,
@@ -217,7 +233,7 @@ function preservedUsage(goal: Record<string, unknown> | null): Pick<
 }
 
 function assertTransitionAllowed(
-  action: "pause" | "resume",
+  action: "pause" | "resume" | "complete",
   previousStatus: OpenPondGoalStatus | null,
 ): void {
   if (!previousStatus) return;
@@ -229,6 +245,9 @@ function assertTransitionAllowed(
   }
   if (action === "resume" && ["completed", "failed", "cancelled"].includes(previousStatus)) {
     throw new Error(`Cannot resume a ${previousStatus} OpenPond goal. Restart it instead.`);
+  }
+  if (action === "complete" && ["completed", "failed", "cancelled"].includes(previousStatus)) {
+    throw new Error(`Cannot complete a ${previousStatus} OpenPond goal. Restart it instead.`);
   }
 }
 

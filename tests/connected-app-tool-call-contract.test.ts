@@ -32,6 +32,12 @@ describe("connected app tool-call contract", () => {
     expect(ConnectedAppToolCallRequestSchema.parse(request)).toEqual(request);
   });
 
+  test("accepts GitHub issue creation writes", () => {
+    expect(ConnectedAppToolCallRequestSchema.parse(githubIssueCreateRequest())).toEqual(
+      githubIssueCreateRequest(),
+    );
+  });
+
   test("rejects native ingestion and descriptor-only providers", () => {
     const slack = ConnectedAppToolCallRequestSchema.safeParse({
       ...googleSearchRequest(),
@@ -183,6 +189,29 @@ function googleWriteRequest() {
         patch: "Hello",
       },
       explicitUserIntent: "User asked to edit google:doc:budget.",
+    },
+  } as const;
+}
+
+function githubIssueCreateRequest() {
+  return {
+    provider: "github",
+    operation: "write",
+    toolName: "connected_app_write",
+    sessionId: "session_1",
+    turnId: "turn_1",
+    userPrompt: "submit issue",
+    connectionIds: ["conn_github"],
+    capabilityIds: ["github.issue.write"],
+    args: {
+      provider: "github",
+      operation: "github.issue.create",
+      input: {
+        repo: "openpond/openpond",
+        title: "Slash issue command",
+        body: "Add a slash command that files issues.",
+      },
+      explicitUserIntent: "User asked to submit a new issue to openpond/openpond.",
     },
   } as const;
 }

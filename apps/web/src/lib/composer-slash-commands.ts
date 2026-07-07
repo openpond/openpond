@@ -6,6 +6,7 @@ export type ComposerSlashCommandId =
   | "goal-local"
   | "goal-remote"
   | "insights"
+  | "submit-issue"
   | "sync-cloud";
 
 export type ComposerSlashCommand = {
@@ -68,6 +69,12 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/insights",
     label: "Open insights",
     description: "Scan agent flow health.",
+  },
+  {
+    id: "submit-issue",
+    command: "/submit-issue",
+    label: "Submit issue",
+    description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
   },
   {
     id: "sync-cloud",
@@ -134,7 +141,7 @@ export function parseComposerDirectCommandPrompt(prompt: string): ParsedComposer
 export function composerSlashCommandMatches({
   commands = COMPOSER_SLASH_COMMANDS,
   prompt,
-  limit = 8,
+  limit = 10,
 }: {
   commands?: ComposerSlashCommand[];
   prompt: string;

@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type {
   ChatAttachment,
   ConnectedAppStatusRow,
@@ -16,7 +26,7 @@ import {
   type RightChatPanel,
   type ShowAppToast,
 } from "./app/app-state";
-import { api } from "./api";
+import { api, type ClientConnection } from "./api";
 import { AppSettingsController, AppShellController } from "./components/app-shell/AppControllers";
 import { useProjectConfirmDialog } from "./components/app-shell/ProjectConfirmDialog";
 import { isDesktopShell, isMacPlatform } from "./components/app-shell/WindowControls";
@@ -73,6 +83,10 @@ import {
 import { contextWindowStatusFromUsage } from "./lib/context-window";
 import type { ComposerSubmitOptions } from "./components/chat/Composer";
 import type { ComposerSlashCommand } from "./lib/composer-slash-commands";
+import {
+  buildSubmitIssueSlashPrompt,
+  hasGitHubIssueSubmitConnection,
+} from "./lib/submit-issue-command";
 import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
 import type { WorkspaceDiffTabRequest } from "./components/workspace-diff/workspace-diff-panel-model";
 import {
@@ -150,6 +164,7 @@ function promptForRightChatCommand(command: ComposerSlashCommand, prompt: string
   if (command.id === "create") return `/create ${args}`;
   if (command.id === "edit") return `/edit ${args}`;
   if (command.id === "skill") return `/skill ${args}`;
+  if (command.id === "submit-issue") return buildSubmitIssueSlashPrompt(args);
   return `Goal: ${args}`;
 }
 
@@ -260,8 +275,71 @@ export function App() {
     setCommitDraft,
     setBranchDialogOpen,
     setBranchDialogName,
-    setError,
+    setError: setErrorState,
   } = appSetters;
+  const connectionRef = useRef<ClientConnection | null>(null);
+  const latestErrorRef = useRef<string | null>(initialAppState.error);
+  const errorToastIdRef = useRef<number | null>(null);
+  const toastSequenceRef = useRef(0);
+  const showToast = useCallback<ShowAppToast>(
+    (
+      message: string,
+      tone: "success" | "error" | "info" = "info",
+      options: Pick<AppToast, "actionLabel" | "onAction" | "persistent"> = {},
+    ) => {
+      const id = Date.now() + ++toastSequenceRef.current;
+      appDispatch({ type: "showToast", toast: { id, message, tone, ...options } });
+      return id;
+    },
+    [],
+  );
+  const openDiagnosticsSettings = useCallback(() => {
+    appDispatch({
+      type: "patch",
+      patch: {
+        settingsSection: "diagnostics",
+        sidebarOpen: true,
+        view: "settings",
+      },
+    });
+  }, []);
+  const setError = useCallback<Dispatch<SetStateAction<string | null>>>(
+    (value) => {
+      const current = latestErrorRef.current;
+      const next = typeof value === "function" ? value(current) : value;
+      if (Object.is(current, next)) return;
+
+      latestErrorRef.current = next;
+      setErrorState(next);
+      if (!next) {
+        if (errorToastIdRef.current !== null) {
+          appDispatch({ type: "clearToast", toastId: errorToastIdRef.current });
+          errorToastIdRef.current = null;
+        }
+        return;
+      }
+
+      errorToastIdRef.current = showToast(next, "error", {
+        actionLabel: "Settings",
+        onAction: openDiagnosticsSettings,
+        persistent: true,
+      });
+      const connection = connectionRef.current;
+      if (!connection) return;
+      void api
+        .recordClientDiagnostic(connection, {
+          message: next,
+          surface: "app",
+          context: {
+            href: window.location.href,
+          },
+        })
+        .catch((diagnosticError) => {
+          console.warn("Unable to record client diagnostic.", diagnosticError);
+        });
+    },
+    [openDiagnosticsSettings, setErrorState, showToast],
+  );
   const {
     appPreferences,
     applyBootstrapPayload,
@@ -288,6 +366,13 @@ export function App() {
     setSelectedProjectId,
     setSelectedSessionId,
   });
+  connectionRef.current = connection;
+  useEffect(() => {
+    latestErrorRef.current = error;
+    if (error || errorToastIdRef.current === null) return;
+    appDispatch({ type: "clearToast", toastId: errorToastIdRef.current });
+    errorToastIdRef.current = null;
+  }, [error]);
   useEffect(() => {
     let active = true;
     if (!connection) {
@@ -472,16 +557,6 @@ export function App() {
     toast,
   });
 
-  const showToast = useCallback<ShowAppToast>(
-    (
-      message: string,
-      tone: "success" | "error" | "info" = "info",
-      options: Pick<AppToast, "actionLabel" | "onAction" | "persistent"> = {},
-    ) => {
-      appDispatch({ type: "showToast", toast: { id: Date.now(), message, tone, ...options } });
-    },
-    [],
-  );
   const {
     cloudBusy,
     cloudError,
@@ -841,6 +916,7 @@ export function App() {
     cloudProjectRows,
     cloudWorkItemsByProjectId,
     projectSessionRowsByProjectId,
+    childSessionRowsByParentId,
     sidebarProjectIdBySessionId,
     chatRows,
     visibleChatRows,
@@ -848,6 +924,7 @@ export function App() {
     chatMessages,
     contextUsage,
     goalRuntime,
+    subagentRuntime,
   } = useSidebarData({
     localProjects: bootstrap?.localProjects ?? [],
     cloudProjects: bootstrap?.cloudProjects ?? [],
@@ -917,7 +994,7 @@ export function App() {
     });
   }, [activeTerminalScope]);
   const terminalSummaries = useMemo(() => terminalScopeSummaries(terminalTabs), [terminalTabs]);
-  const codexHistoryPrefetchSessionIds = useMemo(() => {
+  const codexHistoryPrefetchSessionKey = useMemo(() => {
     const ids: string[] = [];
     const seen = new Set<string>();
     const addSession = (session: { id: string } | null | undefined) => {
@@ -943,7 +1020,7 @@ export function App() {
     for (const session of pinnedSessions) addSession(session);
     for (const session of visibleChatRows) addSession(session);
 
-    return ids.slice(0, 8);
+    return ids.slice(0, 8).join("\n");
   }, [
     expandedProjectIds,
     pinnedSessions,
@@ -980,34 +1057,26 @@ export function App() {
     });
   }, [applySidebarCodexHistoryPayload, codexHistoryEvents, selectedSession, selectedSessionId]);
   useEffect(() => {
-    if (!connection || codexHistoryPrefetchSessionIds.length === 0) return undefined;
+    if (!connection || !codexHistoryPrefetchSessionKey) return undefined;
     let cancelled = false;
     const timers: number[] = [];
+    const prefetchConnection = connection;
+    const sessionIds = codexHistoryPrefetchSessionKey.split("\n").filter(Boolean);
 
-    const scheduleRefresh = (sessionId: string) => {
-      const timer = window.setTimeout(() => {
-        loadSidebarThread(sessionId, true);
-      }, 2500);
-      timers.push(timer);
-    };
-
-    const loadSidebarThread = (sessionId: string, force: boolean) => {
-      void loadCodexHistoryThreadPayload(connection, sessionId, { force })
+    const loadSidebarThread = (sessionId: string) => {
+      void loadCodexHistoryThreadPayload(prefetchConnection, sessionId)
         .then((payload) => {
           if (cancelled) return;
           applySidebarCodexHistoryPayload(payload);
-          if (payload.session.status === "active" || latestGoalRuntimeFromEvents(payload.events)?.tone === "active") {
-            scheduleRefresh(sessionId);
-          }
         })
         .catch(() => undefined);
     };
 
-    codexHistoryPrefetchSessionIds.forEach((sessionId, index) => {
+    sessionIds.forEach((sessionId, index) => {
       const prefetch = () => {
-        const cachedPayload = cachedCodexHistoryThreadPayload(connection, sessionId);
+        const cachedPayload = cachedCodexHistoryThreadPayload(prefetchConnection, sessionId);
         if (cachedPayload) applySidebarCodexHistoryPayload(cachedPayload);
-        loadSidebarThread(sessionId, Boolean(cachedPayload));
+        if (!cachedPayload) loadSidebarThread(sessionId);
       };
       if (index === 0) {
         prefetch();
@@ -1020,7 +1089,7 @@ export function App() {
       cancelled = true;
       for (const timer of timers) window.clearTimeout(timer);
     };
-  }, [applySidebarCodexHistoryPayload, codexHistoryPrefetchSessionIds, connection]);
+  }, [applySidebarCodexHistoryPayload, codexHistoryPrefetchSessionKey, connection]);
   const sidebarSessionById = useMemo(
     () => new Map(sidebarSessions.map((session) => [session.id, session])),
     [sidebarSessions],
@@ -1080,6 +1149,21 @@ export function App() {
     sidebarSessionById,
     sidebarSessions,
   ]);
+  const sidebarSubagentRuntimeBySessionId = useMemo(() => {
+    const next = new Map(runtimeIndexes.latestSubagentRuntimeBySessionId);
+    if (selectedSessionId) {
+      if (subagentRuntime) {
+        next.set(selectedSessionId, subagentRuntime);
+      } else {
+        next.delete(selectedSessionId);
+      }
+    }
+    return next;
+  }, [
+    runtimeIndexes.latestSubagentRuntimeBySessionId,
+    selectedSessionId,
+    subagentRuntime,
+  ]);
   const { runningSessionIds, selectedSessionRunning } = useRunningSessionState({
     goalRuntime,
     goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
@@ -1087,6 +1171,7 @@ export function App() {
     selectedSession,
     selectedSessionId,
     sidebarSessions,
+    subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
   });
   const selectedTurnCompletionState = useMemo(
     () => latestTurnCompletionState(sessionEvents),
@@ -1953,6 +2038,10 @@ export function App() {
         showToast(`${command.command} tasks do not accept attachments yet. Add file context in the task thread.`, "error");
         return false;
       }
+      if (command?.id === "submit-issue" && !hasGitHubIssueSubmitConnection(connectedAppMentions)) {
+        showToast("Connect the GitHub app before using /submit-issue.", "error");
+        return false;
+      }
       const session = panel.sessionId
         ? sidebarSessions.find((candidate) => candidate.id === panel.sessionId) ?? null
         : null;
@@ -1987,6 +2076,14 @@ export function App() {
         openPondCommandAccessMode: panelOpenPondCommandAccessMode,
         chatMessages: buildCachedChatMessages(sessionEvents),
         displayPrompt: options.displayPrompt,
+        usageAttribution: command?.id === "submit-issue"
+          ? {
+              surface: "chat",
+              workflowKind: "slash_command",
+              commandName: command.command,
+              commandSource: "composer_selection",
+            }
+          : undefined,
         onCodexHistoryOptimisticEvent: appendRightCodexHistoryEvent,
         clearPrompt: options.preservePrompt ? () => undefined : () => updateRightChatPrompt(panelId, ""),
         onSessionCreated: (createdSession) => {
@@ -2007,6 +2104,7 @@ export function App() {
     },
     [
       codexHistoryEvents,
+      connectedAppMentions,
       rightChatHistoryEvents,
       rightChatPanels,
       runtimeIndexes,
@@ -2026,6 +2124,14 @@ export function App() {
     setView("profile");
     setSidebarOpen(true);
   }, [setSectionMenuOpen, setSidebarOpen, setView]);
+  const diagnosticEvents = useMemo(
+    () =>
+      mergeRuntimeEventLists(
+        bootstrap?.diagnostics ?? EMPTY_RUNTIME_EVENTS,
+        events.filter((event) => event.name === "diagnostic"),
+      ),
+    [bootstrap?.diagnostics, events],
+  );
 
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
@@ -2037,6 +2143,7 @@ export function App() {
         settings={{
           payload: bootstrap,
           connection,
+          diagnostics: diagnosticEvents,
           initialSection: settingsSection,
           onPayload: applyBootstrapPayload,
           onError: setError,
@@ -2132,10 +2239,12 @@ export function App() {
         workspaceStates,
         cloudWorkItemsByProjectId,
         projectSessionRowsByProjectId,
+        childSessionRowsByParentId,
         sidebarProjectIdBySessionId,
         terminalSummaries,
         runningSessionIds,
         goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
+        subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
         visibleChatRows,
         chatRows,
         expandedProjectIds,
@@ -2242,6 +2351,7 @@ export function App() {
         chatMessages: visibleChatMessages,
         contextWindowStatus,
         goalRuntime,
+        subagentRuntime,
         prompt,
         steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
@@ -2331,7 +2441,6 @@ export function App() {
         onLoadMoreChatHistory: loadMoreSelectedChatHistory,
         canSyncWorkspace: canSyncActiveWorkspace,
         startMessage,
-        error,
         onPayload: applyBootstrapPayload,
         onError: setError,
         setView,

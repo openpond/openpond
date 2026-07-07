@@ -5,6 +5,7 @@ import type { AppView, PinnedSidebarItem, SettingsSection, SidebarDragItem, Side
 import type { TerminalScopeSummary } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 
 export type SidebarProps = {
   view: AppView;
@@ -33,10 +34,12 @@ export type SidebarProps = {
   workspaceStates: Record<string, WorkspaceState>;
   cloudWorkItemsByProjectId: Record<string, CloudWorkItem[]>;
   projectSessionRowsByProjectId: Record<string, Session[]>;
+  childSessionRowsByParentId?: Record<string, Session[]>;
   sidebarProjectIdBySessionId: Record<string, string>;
   terminalSummaries: Record<string, TerminalScopeSummary>;
   runningSessionIds: ReadonlySet<string>;
   goalRuntimeBySessionId?: ReadonlyMap<string, GoalRuntimeStatus>;
+  subagentRuntimeBySessionId?: ReadonlyMap<string, SubagentRuntimeStatus>;
   visibleChatRows: Session[];
   chatRows: Session[];
   expandedProjectIds: ReadonlySet<string>;

@@ -4,11 +4,13 @@ import {
   ContextUsageSnapshotSchema,
   ModelUsageRecordSchema,
   ResolveApprovalRequestSchema,
+  SubagentRunSchema,
   type ContextUsageSnapshot,
   type Approval,
   type ModelUsageRecord,
   type RuntimeEvent,
   type Session,
+  type SubagentRun,
   type Turn,
 } from "@openpond/contracts";
 import {
@@ -58,6 +60,7 @@ export function createCodexBridge(deps: {
         data: { decision: input.decision, approvalId },
       })
     );
+    await safeMirrorSubagentApprovalResolved(approval);
     pending.resolve(toCodexApprovalResult(pending.request, input.decision));
     return approval;
   }
@@ -102,6 +105,7 @@ export function createCodexBridge(deps: {
         data: approval,
       })
     );
+    await safeMirrorSubagentApprovalRequested(approval);
     return new Promise<CodexServerRequestResult>((resolve) => {
       pendingApprovals.set(approval.id, { approval, request, resolve });
     });
@@ -520,6 +524,184 @@ export function createCodexBridge(deps: {
         }),
       );
     }
+  }
+
+  async function safeMirrorSubagentApprovalRequested(approval: Approval): Promise<void> {
+    try {
+      await mirrorSubagentApprovalRequested(approval);
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: approval.sessionId,
+          turnId: approval.turnId ?? undefined,
+          name: "diagnostic",
+          source: "server",
+          status: "failed",
+          output: textFromUnknown(error) || "Failed to mirror subagent approval request.",
+          data: {
+            kind: "subagent_approval_mirror_failed",
+            approvalId: approval.id,
+            phase: "requested",
+          },
+        }),
+      ).catch(() => undefined);
+    }
+  }
+
+  async function safeMirrorSubagentApprovalResolved(approval: Approval): Promise<void> {
+    try {
+      await mirrorSubagentApprovalResolved(approval);
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: approval.sessionId,
+          turnId: approval.turnId ?? undefined,
+          name: "diagnostic",
+          source: "server",
+          status: "failed",
+          output: textFromUnknown(error) || "Failed to mirror subagent approval resolution.",
+          data: {
+            kind: "subagent_approval_mirror_failed",
+            approvalId: approval.id,
+            phase: "resolved",
+          },
+        }),
+      ).catch(() => undefined);
+    }
+  }
+
+  async function mirrorSubagentApprovalRequested(approval: Approval): Promise<void> {
+    const context = await subagentApprovalContext(approval);
+    if (!context) return;
+    const blocker = `Waiting for approval: ${approval.title}`;
+    const run = SubagentRunSchema.parse({
+      ...context.run,
+      status: "blocked",
+      error: blocker,
+      report: {
+        ...(context.run.report ?? {}),
+        summary: context.run.report?.summary || "Subagent is waiting for approval in the child conversation.",
+        blockers: uniqueStrings([...(context.run.report?.blockers ?? []), blocker]),
+        followUpNeeded: true,
+      },
+      metadata: {
+        ...(context.run.metadata ?? {}),
+        pendingApproval: subagentApprovalReceipt(approval),
+      },
+    });
+    await store.upsertSubagentRun(run);
+    await appendRuntimeEvent(
+      event({
+        sessionId: context.childSession.parentSessionId ?? context.run.parentSessionId,
+        turnId: context.childSession.parentTurnId ?? context.run.parentTurnId ?? approval.turnId ?? undefined,
+        name: "subagent.blocked",
+        source: "server",
+        action: approval.kind,
+        appId: context.childSession.appId,
+        status: "pending",
+        output: `Subagent ${context.run.roleId} is waiting for approval: ${approval.title}`,
+        data: {
+          run,
+          approval: subagentApprovalReceipt(approval),
+          childSessionId: context.childSession.id,
+          parentGoalId: run.parentGoalId,
+        },
+      }),
+    );
+  }
+
+  async function mirrorSubagentApprovalResolved(approval: Approval): Promise<void> {
+    const context = await subagentApprovalContext(approval);
+    if (!context) return;
+    const accepted = approval.status === "accepted" || approval.status === "accepted_for_session";
+    const resolvedApproval = subagentApprovalReceipt(approval);
+    const metadata = {
+      ...(context.run.metadata ?? {}),
+      lastApproval: resolvedApproval,
+    };
+    delete (metadata as Record<string, unknown>).pendingApproval;
+    const run = SubagentRunSchema.parse({
+      ...context.run,
+      status: accepted ? "running" : "blocked",
+      error: accepted ? null : `Approval ${approval.status}: ${approval.title}`,
+      report: accepted
+        ? clearApprovalOnlyReport(context.run.report)
+        : {
+            ...(context.run.report ?? {}),
+            summary: context.run.report?.summary || "Subagent approval was not accepted.",
+            blockers: uniqueStrings([
+              ...(context.run.report?.blockers ?? []),
+              `Approval ${approval.status}: ${approval.title}`,
+            ]),
+            followUpNeeded: true,
+          },
+      metadata,
+    });
+    await store.upsertSubagentRun(run);
+    await appendRuntimeEvent(
+      event({
+        sessionId: context.childSession.parentSessionId ?? context.run.parentSessionId,
+        turnId: context.childSession.parentTurnId ?? context.run.parentTurnId ?? approval.turnId ?? undefined,
+        name: accepted ? "subagent.started" : "subagent.blocked",
+        source: "server",
+        action: approval.kind,
+        appId: context.childSession.appId,
+        status: accepted ? "started" : "failed",
+        output: accepted
+          ? `Subagent ${context.run.roleId} approval accepted; child run is continuing.`
+          : `Subagent ${context.run.roleId} approval ${approval.status}: ${approval.title}`,
+        data: {
+          run,
+          approval: resolvedApproval,
+          childSessionId: context.childSession.id,
+          parentGoalId: run.parentGoalId,
+        },
+      }),
+    );
+  }
+
+  async function subagentApprovalContext(approval: Approval): Promise<{
+    childSession: Session;
+    run: SubagentRun;
+  } | null> {
+    if (typeof store.getSubagentRun !== "function" || typeof store.upsertSubagentRun !== "function") {
+      return null;
+    }
+    const snapshot = await store.snapshot();
+    const sessions = Array.isArray(snapshot.sessions) ? snapshot.sessions : [];
+    const childSession = sessions.find((session) => session.id === approval.sessionId);
+    if (!childSession?.parentSessionId || !childSession.subagentRunId) return null;
+    const run = await store.getSubagentRun(childSession.subagentRunId);
+    if (!run) return null;
+    return { childSession, run };
+  }
+
+  function subagentApprovalReceipt(approval: Approval): Record<string, unknown> {
+    return {
+      id: approval.id,
+      sessionId: approval.sessionId,
+      turnId: approval.turnId,
+      kind: approval.kind,
+      title: approval.title,
+      status: approval.status,
+      createdAt: approval.createdAt,
+    };
+  }
+
+  function clearApprovalOnlyReport(runReport: SubagentRun["report"]): SubagentRun["report"] {
+    if (!runReport) return null;
+    const blockers = runReport.blockers.filter((blocker) => !blocker.startsWith("Waiting for approval:"));
+    if (
+      !runReport.summary ||
+      runReport.summary === "Subagent is waiting for approval in the child conversation."
+    ) {
+      return blockers.length > 0 ? { ...runReport, blockers, followUpNeeded: true } : null;
+    }
+    return { ...runReport, blockers };
+  }
+
+  function uniqueStrings(values: readonly string[]): string[] {
+    return [...new Set(values.filter((value) => value.trim()))];
   }
 }
 

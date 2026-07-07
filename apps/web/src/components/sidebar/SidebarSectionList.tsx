@@ -15,6 +15,7 @@ import {
 import type { AppView, SidebarProjectItem } from "../../lib/app-models";
 import { SIDEBAR_CHAT_PAGE_SIZE, SIDEBAR_SECTION_LIMIT } from "../../lib/app-models";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
+import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
 import {
@@ -28,6 +29,7 @@ import {
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
 const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
+const EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID = new Map<string, SubagentRuntimeStatus>();
 
 export type SidebarProjectClickAction = "select_draft_project" | "toggle_project";
 
@@ -67,6 +69,7 @@ export function SidebarSectionList({
   cloudProjectRows,
   workspaceStates = {},
   cloudWorkItemsByProjectId,
+  childSessionRowsByParentId = {},
   clearSidebarDrag,
   commitPinnedDrop,
   commitPinnedPreviewDrop,
@@ -94,6 +97,7 @@ export function SidebarSectionList({
   restoreSession,
   runningSessionIds,
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
+  subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
   sectionMenuOpen,
   selectCloudWorkItem,
   selectedCloudWorkItemId,
@@ -126,6 +130,7 @@ export function SidebarSectionList({
 }: SidebarProps) {
   const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<Record<string, number>>({});
   const [expandedCloudProjectWorkItemIds, setExpandedCloudProjectWorkItemIds] = useState<Set<string>>(() => new Set());
+  const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] = useState<Set<string>>(() => new Set());
   const projectsSectionRows =
     projectRows ?? [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
 
@@ -201,6 +206,29 @@ export function SidebarSectionList({
     setView("chat");
   }
 
+  function childSessionsFor(session: Session): Session[] {
+    return childSessionRowsByParentId[session.id] ?? [];
+  }
+
+  function childSessionsExpanded(parentSession: Session, childSessions: Session[]): boolean {
+    return (
+      expandedChildSessionParentIds.has(parentSession.id) ||
+      childSessions.some((session) => session.id === selectedSessionId)
+    );
+  }
+
+  function toggleChildSessions(parentSessionId: string) {
+    setExpandedChildSessionParentIds((current) => {
+      const next = new Set(current);
+      if (next.has(parentSessionId)) {
+        next.delete(parentSessionId);
+      } else {
+        next.add(parentSessionId);
+      }
+      return next;
+    });
+  }
+
   function terminalIndicatorForSession(sessionId: string) {
     return sidebarTerminalIndicator(terminalSummaries[terminalScopeKey({ kind: "session", id: sessionId })]);
   }
@@ -226,20 +254,26 @@ export function SidebarSectionList({
     return (
       <div className="sidebar-project-children">
         {visibleSessions.map((session) => (
-          <SidebarSessionRow
-            key={session.id}
-            session={session}
-            selected={view === "chat" && selectedSessionId === session.id}
-            hideIcon
-            nested
-            running={runningSessionIds.has(session.id)}
-            goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-            terminalIndicator={terminalIndicatorForSession(session.id)}
-            onSelect={() => selectSession(session)}
-            onTogglePin={() => toggleSessionPinned(session)}
-            onDockRight={() => dockSessionRight(session)}
-            onArchive={() => archiveSession(session)}
-          />
+          <div key={session.id} className="sidebar-session-group">
+            <SidebarSessionRow
+              session={session}
+              selected={view === "chat" && selectedSessionId === session.id}
+              hideIcon
+              nested
+              running={runningSessionIds.has(session.id)}
+              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+              subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+              terminalIndicator={terminalIndicatorForSession(session.id)}
+              childSessionCount={childSessionsFor(session).length}
+              childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+              onToggleChildSessions={() => toggleChildSessions(session.id)}
+              onSelect={() => selectSession(session)}
+              onTogglePin={() => toggleSessionPinned(session)}
+              onDockRight={() => dockSessionRight(session)}
+              onArchive={() => archiveSession(session)}
+            />
+            {renderChildSessionRows(session, { nested: true })}
+          </div>
         ))}
         {sessions.length > SIDEBAR_SECTION_LIMIT && (canShowMoreProjectChats || canShowLessProjectChats) && (
           <div
@@ -319,6 +353,36 @@ export function SidebarSectionList({
     setChatRowsVisibleCount((count) => previousSidebarChatVisibleCount(count, chatRows.length));
   }
 
+  function renderChildSessionRows(parentSession: Session, options: { nested?: boolean } = {}) {
+    const childSessions = childSessionsFor(parentSession);
+    if (childSessions.length === 0 || !childSessionsExpanded(parentSession, childSessions)) return null;
+    const groupClassName = ["sidebar-child-session-group", options.nested ? "nested" : ""]
+      .filter(Boolean)
+      .join(" ");
+
+    return (
+      <div className={groupClassName}>
+        {childSessions.map((session) => (
+          <SidebarSessionRow
+            key={session.id}
+            session={session}
+            selected={view === "chat" && selectedSessionId === session.id}
+            hideIcon
+            nested
+            running={runningSessionIds.has(session.id)}
+            goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+            subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+            terminalIndicator={terminalIndicatorForSession(session.id)}
+            onSelect={() => selectSession(session)}
+            onTogglePin={() => toggleSessionPinned(session)}
+            onDockRight={() => dockSessionRight(session)}
+            onArchive={() => archiveSession(session)}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="sidebar-scroll">
       <SidebarSection label="Pinned" collapsed={pinnedCollapsed} onToggleCollapsed={onTogglePinnedCollapsed}>
@@ -363,33 +427,39 @@ export function SidebarSectionList({
             );
           }
           return (
-            <SidebarSessionRow
-              key={row.key}
-              session={row.session}
-              selected={view === "chat" && selectedSessionId === row.id}
-              hideIcon
-              placeholder={isDraggedRow}
-              running={runningSessionIds.has(row.session.id)}
-              goalRuntime={goalRuntimeBySessionId.get(row.session.id) ?? null}
-              terminalIndicator={terminalIndicatorForSession(row.session.id)}
-              onSelect={() => selectSession(row.session)}
-              onTogglePin={() => toggleSessionPinned(row.session)}
-              onDockRight={() => dockSessionRight(row.session)}
-              onArchive={() => archiveSession(row.session)}
-              onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
-              onDragEnd={clearSidebarDrag}
-              onDragOver={(event) => {
-                if (isDraggedRow) return;
-                previewPinnedDrop(event, { type: "session", id: row.id });
-              }}
-              onDrop={(event) => {
-                if (isDraggedRow) {
-                  commitPinnedPreviewDrop();
-                  return;
-                }
-                commitPinnedDrop(event, { type: "session", id: row.id });
-              }}
-            />
+            <div key={row.key} className="sidebar-session-group">
+              <SidebarSessionRow
+                session={row.session}
+                selected={view === "chat" && selectedSessionId === row.id}
+                hideIcon
+                placeholder={isDraggedRow}
+                running={runningSessionIds.has(row.session.id)}
+                goalRuntime={goalRuntimeBySessionId.get(row.session.id) ?? null}
+                subagentRuntime={subagentRuntimeBySessionId.get(row.session.id) ?? null}
+                terminalIndicator={terminalIndicatorForSession(row.session.id)}
+                childSessionCount={childSessionsFor(row.session).length}
+                childSessionsExpanded={childSessionsExpanded(row.session, childSessionsFor(row.session))}
+                onToggleChildSessions={() => toggleChildSessions(row.session.id)}
+                onSelect={() => selectSession(row.session)}
+                onTogglePin={() => toggleSessionPinned(row.session)}
+                onDockRight={() => dockSessionRight(row.session)}
+                onArchive={() => archiveSession(row.session)}
+                onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
+                onDragEnd={clearSidebarDrag}
+                onDragOver={(event) => {
+                  if (isDraggedRow) return;
+                  previewPinnedDrop(event, { type: "session", id: row.id });
+                }}
+                onDrop={(event) => {
+                  if (isDraggedRow) {
+                    commitPinnedPreviewDrop();
+                    return;
+                  }
+                  commitPinnedDrop(event, { type: "session", id: row.id });
+                }}
+              />
+              {!isDraggedRow && renderChildSessionRows(row.session)}
+            </div>
           );
         })}
       </SidebarSection>
@@ -586,37 +656,49 @@ export function SidebarSectionList({
       >
         {visibleChatRows.map((session) =>
           session.archived ? (
-            <SidebarSessionRow
-              key={session.id}
-              session={session}
-              selected={false}
-              archived
-              hideIcon
-              running={runningSessionIds.has(session.id)}
-              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-              terminalIndicator={terminalIndicatorForSession(session.id)}
-              onSelect={() => {
-                restoreSession(session);
-                selectSession(session);
-              }}
-              onTogglePin={() => toggleSessionPinned(session)}
-              onDockRight={() => dockSessionRight(session)}
-              onArchive={() => restoreSession(session)}
-            />
+            <div key={session.id} className="sidebar-session-group">
+              <SidebarSessionRow
+                session={session}
+                selected={false}
+                archived
+                hideIcon
+                running={runningSessionIds.has(session.id)}
+                goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+                subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+                terminalIndicator={terminalIndicatorForSession(session.id)}
+                childSessionCount={childSessionsFor(session).length}
+                childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+                onToggleChildSessions={() => toggleChildSessions(session.id)}
+                onSelect={() => {
+                  restoreSession(session);
+                  selectSession(session);
+                }}
+                onTogglePin={() => toggleSessionPinned(session)}
+                onDockRight={() => dockSessionRight(session)}
+                onArchive={() => restoreSession(session)}
+              />
+              {renderChildSessionRows(session)}
+            </div>
           ) : (
-            <SidebarSessionRow
-              key={session.id}
-              session={session}
-              selected={view === "chat" && selectedSessionId === session.id}
-              hideIcon
-              running={runningSessionIds.has(session.id)}
-              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-              terminalIndicator={terminalIndicatorForSession(session.id)}
-              onSelect={() => selectSession(session)}
-              onTogglePin={() => toggleSessionPinned(session)}
-              onDockRight={() => dockSessionRight(session)}
-              onArchive={() => archiveSession(session)}
-            />
+            <div key={session.id} className="sidebar-session-group">
+              <SidebarSessionRow
+                session={session}
+                selected={view === "chat" && selectedSessionId === session.id}
+                hideIcon
+                running={runningSessionIds.has(session.id)}
+                goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+                subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+                terminalIndicator={terminalIndicatorForSession(session.id)}
+                childSessionCount={childSessionsFor(session).length}
+                childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+                onToggleChildSessions={() => toggleChildSessions(session.id)}
+                onSelect={() => selectSession(session)}
+                onTogglePin={() => toggleSessionPinned(session)}
+                onDockRight={() => dockSessionRight(session)}
+                onArchive={() => archiveSession(session)}
+              />
+              {renderChildSessionRows(session)}
+            </div>
           )
         )}
         {chatRows.length === 0 && <div className="empty-row">No chats</div>}

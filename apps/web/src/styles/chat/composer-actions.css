@@ -74,23 +74,3 @@
 .composer-queue-control:disabled {
   opacity: 0.42;
 }
-
-.error-line {
-  display: inline-flex;
-  align-items: center;
-  justify-self: center;
-  gap: 7px;
-  max-width: min(736px, calc(100% - 108px));
-  margin: 0 0 10px;
-  padding: 8px 12px;
-  border-radius: 15px;
-  background: rgba(248, 113, 113, 0.1);
-  color: #ff9d9d;
-  font-size: 12px;
-}
-
-.main-pane.chat-start .error-line {
-  position: absolute;
-  right: 24px;
-  bottom: 20px;
-}
