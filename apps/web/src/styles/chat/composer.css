@@ -623,10 +623,13 @@
   gap: 4px;
   max-width: min(320px, 100%);
   min-width: 0;
-  color: #9dccff;
+  border-radius: 5px;
+  background: #2b2b2b;
+  color: #e8e8e8;
+  padding: 2px 6px 2px 5px;
   font-size: inherit;
   font-weight: 550;
-  line-height: 1;
+  line-height: 1.2;
   vertical-align: -1px;
   white-space: nowrap;
   cursor: text;
@@ -650,7 +653,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #9dccff;
+  color: #cfcfcf;
   padding: 0;
   line-height: 0;
 }
@@ -696,10 +699,13 @@
   gap: 4px;
   max-width: min(340px, 100%);
   min-width: 0;
-  color: #9dccff;
+  border-radius: 5px;
+  background: #2b2b2b;
+  color: #e8e8e8;
+  padding: 2px 6px;
   font-size: inherit;
   font-weight: 550;
-  line-height: 1;
+  line-height: 1.2;
   vertical-align: -1px;
   white-space: nowrap;
   cursor: text;
@@ -707,7 +713,7 @@
 }
 
 .composer-repo-link.openpond {
-  color: #b9e8ff;
+  color: #e8e8e8;
 }
 
 .composer-connected-app-mention {
@@ -716,10 +722,13 @@
   gap: 4px;
   max-width: min(260px, 100%);
   min-width: 0;
-  color: #9dccff;
+  border-radius: 5px;
+  background: #2b2b2b;
+  color: #e8e8e8;
+  padding: 2px 6px;
   font-size: inherit;
   font-weight: 650;
-  line-height: 1;
+  line-height: 1.2;
   vertical-align: -1px;
   white-space: nowrap;
   cursor: text;
