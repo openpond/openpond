@@ -5,6 +5,8 @@ export type ComposerSteerDraft = {
   updatedAt: string;
 };
 
+export type ComposerSteerDraftScopeState = Record<string, ComposerSteerDraft[]>;
+
 export type ComposerSteerAutoDispatchInput = {
   autoDispatchReady: boolean;
   hasQueuedDrafts: boolean;
@@ -79,6 +81,29 @@ export function composerSteerDraftsAfterSubmit(
   sent: boolean,
 ): ComposerSteerDraft[] {
   return sent ? removeComposerSteerDraft(drafts, draftId) : drafts;
+}
+
+export function composerSteerDraftsForScope(
+  draftsByScope: ComposerSteerDraftScopeState,
+  scopeKey: string,
+  initialDrafts: ComposerSteerDraft[] = [],
+): ComposerSteerDraft[] {
+  return draftsByScope[scopeKey] ?? initialDrafts;
+}
+
+export function updateComposerSteerDraftScope(
+  draftsByScope: ComposerSteerDraftScopeState,
+  scopeKey: string,
+  updateDrafts: (drafts: ComposerSteerDraft[]) => ComposerSteerDraft[],
+  initialDrafts: ComposerSteerDraft[] = [],
+): ComposerSteerDraftScopeState {
+  const currentDrafts = composerSteerDraftsForScope(draftsByScope, scopeKey, initialDrafts);
+  const nextDrafts = updateDrafts(currentDrafts);
+  if (Object.is(currentDrafts, nextDrafts)) return draftsByScope;
+  return {
+    ...draftsByScope,
+    [scopeKey]: nextDrafts,
+  };
 }
 
 export function composerSteerEditTarget(input: ComposerSteerEditTargetInput): ComposerSteerEditTarget {

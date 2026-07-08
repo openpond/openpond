@@ -277,6 +277,7 @@ export const PROVIDER_OPTIONS: Array<DropdownOption & { value: ChatProvider }> =
 ];
 export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
   "openai",
+  "xai",
   "openrouter",
   "deepseek",
   "zai",

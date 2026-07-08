@@ -7,10 +7,12 @@ import { Composer } from "../apps/web/src/components/chat/Composer";
 import { ComposerSteerQueue } from "../apps/web/src/components/chat/ComposerSteerQueue";
 import {
   composerSteerDraftsAfterSubmit,
+  composerSteerDraftsForScope,
   composerSteerEditTarget,
   composerSteerPreview,
   createComposerSteerDraft,
   shouldAutoDispatchComposerSteer,
+  updateComposerSteerDraftScope,
   type ComposerSteerDraft,
 } from "../apps/web/src/components/chat/composer-steer-queue";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
@@ -278,6 +280,30 @@ describe("composer steer queue", () => {
     expect(composerSteerDraftsAfterSubmit(drafts, "draft_a", true).map((item) => item.id)).toEqual([
       "draft_b",
     ]);
+  });
+
+  test("keeps queued drafts isolated by composer scope", () => {
+    const firstScopeDraft = draft("draft_scope_a", "stay with conversation A");
+    const secondScopeDraft = draft("draft_scope_b", "stay with conversation B");
+
+    const withFirstScope = updateComposerSteerDraftScope(
+      {},
+      "session_a",
+      (current) => [...current, firstScopeDraft],
+    );
+    const withBothScopes = updateComposerSteerDraftScope(
+      withFirstScope,
+      "session_b",
+      (current) => [...current, secondScopeDraft],
+    );
+
+    expect(composerSteerDraftsForScope(withBothScopes, "session_a").map((item) => item.prompt)).toEqual([
+      "stay with conversation A",
+    ]);
+    expect(composerSteerDraftsForScope(withBothScopes, "session_b").map((item) => item.prompt)).toEqual([
+      "stay with conversation B",
+    ]);
+    expect(composerSteerDraftsForScope(withBothScopes, "session_c")).toEqual([]);
   });
 });
 

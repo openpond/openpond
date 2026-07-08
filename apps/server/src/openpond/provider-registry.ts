@@ -205,6 +205,31 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
     ],
   },
   {
+    id: "xai",
+    displayName: "xAI / Grok",
+    credentialModes: ["local-byok"],
+    routing: { localRuntime: true, localByok: true },
+    capabilities: {
+      chatCompletions: true,
+      streaming: true,
+      modelDiscovery: "provider",
+      toolCalling: true,
+      reasoning: true,
+      structuredOutput: true,
+    },
+    defaultBaseUrl: "https://api.x.ai/v1",
+    defaultModel: "grok-4.5",
+    modelCacheSource: "curated",
+    models: [
+      {
+        id: "grok-4.5",
+        displayName: "Grok 4.5",
+        contextWindow: 500_000,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+    ],
+  },
+  {
     id: "google",
     displayName: "Google Gemini",
     credentialModes: ["local-byok"],

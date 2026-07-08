@@ -229,6 +229,31 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(models[0]?.capabilities.reasoning).toBe(true);
   });
 
+  test("marks Grok models as reasoning capable when discovered", async () => {
+    globalThis.fetch = async () =>
+      jsonResponse({
+        data: [
+          {
+            id: "grok-4.5",
+            name: "Grok 4.5",
+          },
+        ],
+      });
+
+    const models = await listOpenAiCompatibleProviderModels({
+      ...providerState("https://api.x.ai/v1", "xai"),
+      providerId: "xai",
+      modelId: "grok-4.5",
+    });
+
+    expect(models[0]).toMatchObject({
+      id: "grok-4.5",
+      providerId: "xai",
+      displayName: "Grok 4.5",
+      capabilities: { reasoning: true },
+    });
+  });
+
   test("explains raw OpenAI provider credentials", () => {
     expect(() =>
       resolveOpenAiCompatibleProvider({
@@ -447,7 +472,7 @@ describe("OpenAI-compatible provider adapter", () => {
 
 function providerState(
   baseUrl = "https://provider.example/v1",
-  providerId: "openai" | "openrouter" | "zai" = "openrouter",
+  providerId: "openai" | "openrouter" | "xai" | "zai" = "openrouter",
   apiKey: string | null = "sk-test",
 ): { settings: ReturnType<typeof buildProviderSettings>; secrets: ProviderSecrets } {
   const file: ProvidersFile = {

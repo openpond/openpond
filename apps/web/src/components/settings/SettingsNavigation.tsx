@@ -33,6 +33,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
     items: [
       { section: "account", label: "Account", Icon: UserCircle },
       { section: "profile", label: "Profile", Icon: Bot },
+      { section: "providers", label: "Providers", Icon: MessageSquare },
       { section: "wallet", label: "Wallet", Icon: CreditCard },
       { section: "usage", label: "Usage", Icon: ChartColumnStacked },
       { section: "defaults", label: "Defaults", Icon: SlidersHorizontal },
@@ -50,7 +51,6 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     items: [
       { section: "editor", label: "Editor", Icon: Code2 },
-      { section: "providers", label: "Providers", Icon: MessageSquare },
       { section: "remote", label: "Remote", Icon: RadioTower },
       { section: "personalization", label: "Personalization", Icon: SquarePen },
       { section: "diagnostics", label: "Diagnostics", Icon: ScrollText },

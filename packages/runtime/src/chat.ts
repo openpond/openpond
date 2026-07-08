@@ -47,6 +47,7 @@ function displayNameForHostedModel(id: string): string {
 
 function displayNameForHostedProvider(id: string): string {
   if (id === "openpond") return "OpenPond Chat";
+  if (id === "xai") return "xAI / Grok";
   if (id === "openrouter") return "OpenRouter";
   if (id === "custom-openai-compatible") return "Local / Custom OpenAI-compatible";
   return id.replace(/[-_/]+/g, " ");

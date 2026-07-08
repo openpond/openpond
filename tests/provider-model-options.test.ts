@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { visibleProviderModelOptions } from "../apps/web/src/components/settings/ProviderSettingsSection";
+import {
+  providerRowsForSubscriptionFilter,
+  providerSupportsSubscription,
+  visibleProviderModelOptions,
+} from "../apps/web/src/components/settings/ProviderSettingsSection";
+import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
 
 describe("provider model option capping", () => {
   test("caps large provider model lists", () => {
@@ -23,5 +28,16 @@ describe("provider model option capping", () => {
     expect(visible).toContain("model-199");
     expect(visible).toContain("model-150");
     expect(visible).toHaveLength(10);
+  });
+
+  test("filters providers to subscription-capable credential modes", () => {
+    const settings = buildProviderSettings({
+      file: { version: 1, providers: {}, modelCaches: {} },
+    });
+
+    expect(providerSupportsSubscription(settings.statuses.openai)).toBe(true);
+    expect(providerSupportsSubscription(settings.statuses.xai)).toBe(false);
+    expect(providerRowsForSubscriptionFilter(settings, true)).toEqual(["openai"]);
+    expect(providerRowsForSubscriptionFilter(settings, false)).toContain("xai");
   });
 });

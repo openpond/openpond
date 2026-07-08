@@ -610,6 +610,84 @@ export function createCommandModelToolDefinition(deps: {
   };
 }
 
+const DEFAULT_WEB_FETCH_MAX_BYTES = 20000;
+const MAX_WEB_FETCH_BYTES = 100000;
+
+export function createWebFetchModelToolDefinition(input: {
+  fetchImpl?: typeof fetch;
+} = {}): ModelToolDefinition {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  return {
+    name: "web_fetch",
+    description:
+      "Fetch and extract readable text from a known HTTP(S) URL. Use this when the user provides a URL or a search result has an exact page to inspect; use web_search when discovering unknown pages by query.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        url: {
+          type: "string",
+          minLength: 1,
+          description: "HTTP or HTTPS URL to fetch.",
+        },
+        maxBytes: {
+          type: "integer",
+          minimum: 1,
+          maximum: MAX_WEB_FETCH_BYTES,
+          description: "Maximum UTF-8 bytes of extracted text to return. Defaults to 20000.",
+        },
+      },
+      required: ["url"],
+    },
+    execute: async (context) => {
+      const url = normalizeWebFetchUrl(stringArg(context.args, "url"));
+      const maxBytes = normalizeWebFetchMaxBytes(context.args.maxBytes);
+      const response = await fetchImpl(url, {
+        method: "GET",
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.8",
+          "User-Agent": "OpenPond-WebFetch/1.0",
+        },
+        redirect: "follow",
+        signal: context.signal,
+      });
+      const finalUrl = response.url || url;
+      const contentType = response.headers.get("content-type") ?? "";
+      const rawText = await response.text();
+      const extracted = extractReadableWebFetchText(rawText, contentType);
+      const limited = limitUtf8Text(extracted.text, maxBytes);
+      const result = {
+        url: finalUrl,
+        status: response.status,
+        ok: response.ok,
+        contentType,
+        title: extracted.title,
+        text: limited.text,
+        truncated: limited.truncated,
+        fetchedAt: new Date().toISOString(),
+      };
+      return {
+        toolCallId: context.callId,
+        name: "web_fetch",
+        ok: response.ok,
+        contentText: JSON.stringify(
+          {
+            ok: response.ok,
+            action: "web_fetch",
+            output: response.ok
+              ? `Fetched ${finalUrl}${limited.truncated ? " (truncated)" : ""}.`
+              : `Fetch failed with HTTP ${response.status} for ${finalUrl}.`,
+            data: { result },
+          },
+          null,
+          2,
+        ),
+        data: { result },
+      };
+    },
+  };
+}
+
 export function createWebSearchModelToolDefinition(deps: {
   executeWebSearch: WebSearchExecutor;
 }): ModelToolDefinition {
@@ -676,6 +754,68 @@ export function createWebSearchModelToolDefinition(deps: {
       };
     },
   };
+}
+
+function normalizeWebFetchUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("web_fetch url must use http or https");
+  }
+  url.hash = "";
+  return url.toString();
+}
+
+function normalizeWebFetchMaxBytes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_WEB_FETCH_MAX_BYTES;
+  }
+  return Math.min(Math.floor(value), MAX_WEB_FETCH_BYTES);
+}
+
+function extractReadableWebFetchText(rawText: string, contentType: string): { title: string | null; text: string } {
+  if (/\bjson\b/i.test(contentType)) {
+    return { title: null, text: rawText.trim() };
+  }
+  if (!/html|xml/i.test(contentType)) {
+    return { title: null, text: rawText.replace(/\s+/g, " ").trim() };
+  }
+  const title = decodeHtmlEntities(
+    rawText.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim() ?? "",
+  ) || null;
+  const withoutNoise = rawText
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|section|article|header|footer|main|li|h[1-6]|blockquote|pre|tr)>/gi, "\n")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+  const text = decodeHtmlEntities(withoutNoise)
+    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { title, text };
+}
+
+function limitUtf8Text(value: string, maxBytes: number): { text: string; truncated: boolean } {
+  const bytes = Buffer.byteLength(value, "utf8");
+  if (bytes <= maxBytes) return { text: value, truncated: false };
+  let end = Math.min(value.length, maxBytes);
+  while (end > 0 && Buffer.byteLength(value.slice(0, end), "utf8") > maxBytes) end -= 1;
+  return { text: value.slice(0, end).trimEnd(), truncated: true };
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)));
 }
 
 function webSearchResultForModel(result: WebSearchResult): Omit<WebSearchResult, "results"> & {

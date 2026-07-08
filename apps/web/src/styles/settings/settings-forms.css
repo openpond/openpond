@@ -192,9 +192,12 @@
   color: #bdbdbd;
 }
 
-.provider-state-pill.muted,
-.provider-row-status.muted {
+.provider-state-pill.muted {
   background: rgba(255, 255, 255, 0.08);
+  color: #bdbdbd;
+}
+
+.provider-row-status.muted {
   color: #bdbdbd;
 }
 
@@ -226,6 +229,19 @@
   overflow-y: auto;
   scrollbar-color: #343434 #161616;
   scrollbar-width: thin;
+}
+
+.provider-subscription-filter {
+  max-width: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 16px 12px;
+}
+
+.provider-manager-empty {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 22px 16px;
 }
 
 .provider-manager-scroll::-webkit-scrollbar,
@@ -360,6 +376,10 @@
   color: #ffad7d;
 }
 
+.provider-row-status .settings-spin {
+  flex: 0 0 auto;
+}
+
 .provider-details-button {
   width: 86px;
 }
@@ -466,6 +486,12 @@
   padding: 10px 12px;
   color: #ffad7d;
   font-size: 13px;
+}
+
+.provider-dialog-note.xai-provider-note {
+  border-color: rgba(58, 163, 255, 0.2);
+  background: rgba(58, 163, 255, 0.08);
+  color: #9bd0ff;
 }
 
 .provider-dialog-note code {

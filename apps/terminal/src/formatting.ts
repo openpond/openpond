@@ -39,6 +39,7 @@ const TERMINAL_MODEL_OPTIONS: TerminalModelOption[] = [
 
 const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
   "openai",
+  "xai",
   "openrouter",
   "deepseek",
   "zai",

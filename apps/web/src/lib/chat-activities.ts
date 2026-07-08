@@ -239,6 +239,8 @@ function activityLabel(item: RuntimeEvent): string {
   if (item.action === "resource_search" && item.name === "tool.completed") return "Searched resources";
   if (item.action === "resource_read" && item.name === "tool.started") return "Reading resource";
   if (item.action === "resource_read" && item.name === "tool.completed") return "Read resource";
+  if (item.action === "web_fetch" && item.name === "tool.started") return "Fetching web page";
+  if (item.action === "web_fetch" && item.name === "tool.completed") return "Fetched web page";
   if (item.action === "web_search" && item.name === "tool.started") return "Searching web";
   if (item.action === "web_search" && item.name === "tool.completed") return "Searched web";
   if (item.action === "openpond_action_search" && item.name === "tool.started") return "Searching actions";

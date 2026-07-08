@@ -5,6 +5,7 @@ import {
   createOpenPondActionModelToolDefinitions,
   createOpenPondProfileSkillModelToolDefinitions,
   createResourceModelToolDefinitions,
+  createWebFetchModelToolDefinition,
   createWebSearchModelToolDefinition,
 } from "../apps/server/src/openpond/model-tool-registry";
 import {
@@ -1393,6 +1394,25 @@ describe("model tool registry", () => {
     expect(result.contentText).toContain("Write customer-facing release notes.");
     expect(missing.ok).toBe(false);
     expect(missing.contentText).toContain("not in the active enabled skill catalog");
+  });
+
+  test("fetches known web URLs and extracts readable text", async () => {
+    const tool = createWebFetchModelToolDefinition({
+      fetchImpl: async () => new Response(
+        "<html><head><title>Example page</title><style>.hidden{}</style></head><body><h1>Hello &amp; welcome</h1><script>ignored()</script><p>Readable text.</p></body></html>",
+        { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    });
+
+    const result = await tool.execute(actionContext({ url: "https://example.com/docs#section", maxBytes: 1000 }));
+
+    expect(result.ok).toBe(true);
+    expect(result.name).toBe("web_fetch");
+    expect(result.contentText).toContain("Example page");
+    expect(result.contentText).toContain("Hello & welcome");
+    expect(result.contentText).toContain("Readable text.");
+    expect(result.contentText).not.toContain("ignored()");
+    expect(result.contentText).not.toContain("#section");
   });
 
   test("keeps full web search URLs in event data while hiding them from model-facing content", async () => {

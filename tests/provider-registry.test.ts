@@ -60,6 +60,14 @@ describe("local BYOK provider registry", () => {
     expect(settings.providers.openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(settings.statuses.openrouter?.available).toBe(false);
     expect(settings.statuses.openrouter?.credential.connected).toBe(false);
+    expect(settings.providers.xai?.baseUrl).toBe("https://api.x.ai/v1");
+    expect(settings.providers.xai?.defaultModel).toBe("grok-4.5");
+    expect(settings.modelCaches.xai?.models[0]).toMatchObject({
+      id: "grok-4.5",
+      displayName: "Grok 4.5",
+      contextWindow: 500000,
+      capabilities: { reasoning: true, structuredOutput: true },
+    });
     expect(settings.statuses.codex?.credential.source).toBe("codex_login");
     expect(settings.statuses.codex?.available).toBe(true);
     expect(settings.modelCaches.openrouter?.models.map((model) => model.id)).toContain(

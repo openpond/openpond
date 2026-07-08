@@ -18,4 +18,18 @@ describe("SettingsNavigation", () => {
     expect(markup.indexOf("Usage")).toBeLessThan(markup.indexOf("Defaults"));
     expect(markup.indexOf("Usage")).toBeLessThan(markup.indexOf("Harness"));
   });
+
+  test("shows providers directly below profile", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SettingsNavigation, {
+        section: "providers",
+        onBack: () => undefined,
+        onSectionChange: () => undefined,
+      }),
+    );
+
+    expect(markup.indexOf("Profile")).toBeLessThan(markup.indexOf("Providers"));
+    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Wallet"));
+    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Harness"));
+  });
 });

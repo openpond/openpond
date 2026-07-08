@@ -124,6 +124,7 @@ import {
   createOpenPondActionModelToolDefinitions,
   createOpenPondProfileSkillModelToolDefinitions,
   createResourceModelToolDefinitions,
+  createWebFetchModelToolDefinition,
   createWebSearchModelToolDefinition,
   enabledModelToolDefinitions,
   modelToolDefinitionToHostedTool,
@@ -262,6 +263,7 @@ export type HostedToolRolloutFlags = {
 const VERIFIED_NATIVE_TOOL_PROVIDERS = new Set<ChatProvider>([
   "openpond",
   "openai",
+  "xai",
   "openrouter",
   "deepseek",
   "zai",
@@ -906,6 +908,9 @@ export function createTurnRunner(deps: {
     }
     if (hostedToolFlags.resourceTools) {
       definitions.push(...createResourceModelToolDefinitions({ executeWorkspaceTool, runtimeEvents }));
+    }
+    if (hostedToolFlags.webSearchTool) {
+      definitions.push(createWebFetchModelToolDefinition());
     }
     if (hostedToolFlags.webSearchTool && executeWebSearch) {
       definitions.push(createWebSearchModelToolDefinition({ executeWebSearch }));

@@ -5,6 +5,7 @@ export const PROVIDER_IDS = [
   "codex",
   "anthropic",
   "openai",
+  "xai",
   "google",
   "openrouter",
   "deepseek",

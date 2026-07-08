@@ -210,6 +210,7 @@ function buildOpenPondCapabilityIndexContext(
           "- browser_control: use openpond_browser_* native tools to open, snapshot, move the cursor, click, type, press keys, and scroll in the desktop in-app browser when visible browser interaction is needed.",
         ]
       : []),
+    "- web_fetch: fetch and read a known HTTP(S) URL when the user provides a link or exact page; use web_search for discovery by query.",
     "- web_search: search current or external information when web search is available and the answer depends on current facts.",
     "- action_run: search and run scoped project or profile actions from the allowed action catalog.",
     "- profile_skill: load existing profile skills for reusable instruction workflows, not app-native controls or permissions.",

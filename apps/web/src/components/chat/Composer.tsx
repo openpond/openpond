@@ -64,13 +64,16 @@ import {
 } from "./ComposerCreatePipelineStrip";
 import { ComposerSteerQueue } from "./ComposerSteerQueue";
 import {
+  composerSteerDraftsForScope,
   composerSteerDraftsAfterSubmit,
   composerSteerEditTarget,
   createComposerSteerDraft,
   removeComposerSteerDraft,
   shouldAutoDispatchComposerSteer,
+  updateComposerSteerDraftScope,
   updateComposerSteerDraft,
   type ComposerSteerDraft,
+  type ComposerSteerDraftScopeState,
 } from "./composer-steer-queue";
 import { slashMenuAnchorStyle } from "./ComposerLayout";
 import {
@@ -162,6 +165,8 @@ type ActiveSlashContext = {
   query: string;
   start: number;
 };
+
+const EMPTY_STEER_DRAFTS: ComposerSteerDraft[] = [];
 
 const SUBMIT_ISSUE_COMMAND = COMPOSER_SLASH_COMMANDS.find(
   (command) => command.id === "submit-issue",
@@ -308,7 +313,7 @@ export function Composer({
   busy,
   running = busy,
   submissionScopeKey = "default",
-  initialSteerDrafts = [],
+  initialSteerDrafts = EMPTY_STEER_DRAFTS,
   steerAutoDispatchReady = false,
   steerAutoDispatchBlocked = false,
   showProjectFooter = true,
@@ -345,9 +350,9 @@ export function Composer({
   const autoFocusAppliedRef = useRef(false);
   const focusRequestAppliedRef = useRef(0);
   const submittingScopeKeysRef = useRef<Set<string>>(new Set());
-  const previousRunningRef = useRef(running);
-  const autoDispatchWaitingForStartedTurnRef = useRef(false);
-  const suppressNextAutoDispatchRef = useRef(false);
+  const previousRunningScopeKeysRef = useRef<Set<string>>(running ? new Set([submissionScopeKey]) : new Set());
+  const autoDispatchWaitingForStartedTurnScopeKeysRef = useRef<Set<string>>(new Set());
+  const suppressNextAutoDispatchScopeKeysRef = useRef<Set<string>>(new Set());
   const [cursorIndex, setCursorIndex] = useState(prompt.length);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [skillIndex, setSkillIndex] = useState(0);
@@ -364,8 +369,10 @@ export function Composer({
   const [selectedActionMentionText, setSelectedActionMentionText] = useState<string | null>(null);
   const [serializingAttachmentScopeKey, setSerializingAttachmentScopeKey] = useState<string | null>(null);
   const [goalDetailsOpen, setGoalDetailsOpen] = useState(false);
-  const [steerDrafts, setSteerDrafts] = useState<ComposerSteerDraft[]>(() => initialSteerDrafts);
-  const [sendingSteerDraftId, setSendingSteerDraftId] = useState<string | null>(null);
+  const [steerDraftsByScope, setSteerDraftsByScope] = useState<ComposerSteerDraftScopeState>(() => ({
+    [submissionScopeKey]: initialSteerDrafts,
+  }));
+  const [sendingSteerDraft, setSendingSteerDraft] = useState<{ draftId: string; scopeKey: string } | null>(null);
   const [editingSteerDraftId, setEditingSteerDraftId] = useState<string | null>(null);
   const [editSteerDraftValue, setEditSteerDraftValue] = useState("");
   const [submitIssueDialogOpen, setSubmitIssueDialogOpen] = useState(false);
@@ -469,8 +476,12 @@ export function Composer({
     submittingScopeKeysRef.current.delete(scopeKey);
   }
 
+  function isSubmittingScope(scopeKey: string): boolean {
+    return submittingScopeKeysRef.current.has(scopeKey);
+  }
+
   function isSubmittingCurrentScope(): boolean {
-    return submittingScopeKeysRef.current.has(submissionScopeKey);
+    return isSubmittingScope(submissionScopeKey);
   }
 
   function clearSerializingAttachmentsForScope(scopeKey: string) {
@@ -590,10 +601,31 @@ export function Composer({
   const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
   const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
   const showWorkspaceFooterControls = projectTarget.value !== "none";
+  const steerDrafts = composerSteerDraftsForScope(
+    steerDraftsByScope,
+    submissionScopeKey,
+    initialSteerDrafts,
+  );
+  const sendingSteerDraftId =
+    sendingSteerDraft?.scopeKey === submissionScopeKey ? sendingSteerDraft.draftId : null;
   const editingSteerDraft = useMemo(
     () => steerDrafts.find((draft) => draft.id === editingSteerDraftId) ?? null,
     [editingSteerDraftId, steerDrafts],
   );
+
+  function updateSteerDraftsForScope(
+    scopeKey: string,
+    updateDrafts: (drafts: ComposerSteerDraft[]) => ComposerSteerDraft[],
+  ) {
+    setSteerDraftsByScope((current) =>
+      updateComposerSteerDraftScope(
+        current,
+        scopeKey,
+        updateDrafts,
+        scopeKey === submissionScopeKey ? initialSteerDrafts : [],
+      )
+    );
+  }
 
   useLayoutEffect(() => {
     inputRef.current?.resize();
@@ -773,9 +805,10 @@ export function Composer({
   }
 
   async function stopCurrentTurn() {
-    suppressNextAutoDispatchRef.current = true;
+    const scopeKey = submissionScopeKey;
+    suppressNextAutoDispatchScopeKeysRef.current.add(scopeKey);
     const stopped = await onStop();
-    if (stopped === false) suppressNextAutoDispatchRef.current = false;
+    if (stopped === false) suppressNextAutoDispatchScopeKeysRef.current.delete(scopeKey);
     return stopped;
   }
 
@@ -955,7 +988,8 @@ export function Composer({
   function queueCurrentSteerDraft() {
     const value = prompt.trim();
     if (!value || queueDraftDisabled) return;
-    setSteerDrafts((current) => [...current, createComposerSteerDraft(value)]);
+    const scopeKey = submissionScopeKey;
+    updateSteerDraftsForScope(scopeKey, (current) => [...current, createComposerSteerDraft(value)]);
     clearComposerPrompt();
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(0);
@@ -963,12 +997,16 @@ export function Composer({
   }
 
   async function submitQueuedSteerDraft(draftId: string, source: "auto" | "manual" = "manual"): Promise<boolean> {
-    if (isSubmittingCurrentScope() || sendingSteerDraftId) return false;
-    const draft = steerDrafts.find((candidate) => candidate.id === draftId);
-    if (!draft) return false;
     const submissionScope = submissionScopeKey;
+    if (isSubmittingScope(submissionScope) || sendingSteerDraft?.scopeKey === submissionScope) return false;
+    const draft = composerSteerDraftsForScope(
+      steerDraftsByScope,
+      submissionScope,
+      initialSteerDrafts,
+    ).find((candidate) => candidate.id === draftId);
+    if (!draft) return false;
     if (!beginSubmissionForScope(submissionScope)) return false;
-    setSendingSteerDraftId(draftId);
+    setSendingSteerDraft({ draftId, scopeKey: submissionScope });
     setAttachmentError(null);
     try {
       if (running) {
@@ -980,16 +1018,21 @@ export function Composer({
         promptOverride: draft.prompt,
       });
       if (sent) {
-        if (source === "auto") autoDispatchWaitingForStartedTurnRef.current = true;
+        if (source === "auto") autoDispatchWaitingForStartedTurnScopeKeysRef.current.add(submissionScope);
       }
-      setSteerDrafts((current) => composerSteerDraftsAfterSubmit(current, draftId, sent));
+      updateSteerDraftsForScope(
+        submissionScope,
+        (current) => composerSteerDraftsAfterSubmit(current, draftId, sent),
+      );
       return sent;
     } catch (error) {
       setAttachmentError(error instanceof Error ? error.message : String(error));
       return false;
     } finally {
       finishSubmissionForScope(submissionScope);
-      setSendingSteerDraftId(null);
+      setSendingSteerDraft((current) =>
+        current?.scopeKey === submissionScope && current.draftId === draftId ? null : current
+      );
     }
   }
 
@@ -999,7 +1042,7 @@ export function Composer({
       setEditingSteerDraftId(null);
       setEditSteerDraftValue("");
     }
-    setSteerDrafts((current) => removeComposerSteerDraft(current, draftId));
+    updateSteerDraftsForScope(submissionScopeKey, (current) => removeComposerSteerDraft(current, draftId));
   }
 
   function editQueuedSteerDraft(draft: ComposerSteerDraft) {
@@ -1010,7 +1053,7 @@ export function Composer({
       prompt,
     });
     if (editTarget === "load_composer") {
-      setSteerDrafts((current) => removeComposerSteerDraft(current, draft.id));
+      updateSteerDraftsForScope(submissionScopeKey, (current) => removeComposerSteerDraft(current, draft.id));
       onPromptChange(draft.prompt);
       setCursorIndex(draft.prompt.length);
       window.requestAnimationFrame(() => {
@@ -1029,7 +1072,7 @@ export function Composer({
 
   function saveQueuedSteerEdit() {
     if (!editingSteerDraft || !editSteerDraftValue.trim()) return;
-    setSteerDrafts((current) =>
+    updateSteerDraftsForScope(submissionScopeKey, (current) =>
       updateComposerSteerDraft(current, editingSteerDraft.id, editSteerDraftValue.trim())
     );
     cancelQueuedSteerEdit();
@@ -1038,7 +1081,9 @@ export function Composer({
   function replaceComposerWithQueuedSteerEdit() {
     if (!editingSteerDraft || !editSteerDraftValue.trim()) return;
     const nextPrompt = editSteerDraftValue.trim();
-    setSteerDrafts((current) => removeComposerSteerDraft(current, editingSteerDraft.id));
+    updateSteerDraftsForScope(submissionScopeKey, (current) =>
+      removeComposerSteerDraft(current, editingSteerDraft.id)
+    );
     cancelQueuedSteerEdit();
     onPromptChange(nextPrompt);
     setCursorIndex(nextPrompt.length);
@@ -1139,31 +1184,41 @@ export function Composer({
   }
 
   useEffect(() => {
+    const scopeKey = submissionScopeKey;
     if (running) {
-      autoDispatchWaitingForStartedTurnRef.current = false;
-      previousRunningRef.current = true;
+      autoDispatchWaitingForStartedTurnScopeKeysRef.current.delete(scopeKey);
+      previousRunningScopeKeysRef.current.add(scopeKey);
       return;
     }
-    if (suppressNextAutoDispatchRef.current || steerAutoDispatchBlocked) {
-      suppressNextAutoDispatchRef.current = false;
-      previousRunningRef.current = false;
+    if (suppressNextAutoDispatchScopeKeysRef.current.has(scopeKey) || steerAutoDispatchBlocked) {
+      suppressNextAutoDispatchScopeKeysRef.current.delete(scopeKey);
+      previousRunningScopeKeysRef.current.delete(scopeKey);
       return;
     }
-    if (previousRunningRef.current && !steerAutoDispatchReady) return;
+    const wasRunning = previousRunningScopeKeysRef.current.has(scopeKey);
+    if (wasRunning && !steerAutoDispatchReady) return;
     const shouldDispatch = shouldAutoDispatchComposerSteer({
       autoDispatchReady: steerAutoDispatchReady && !createPipelineRuntime,
       hasQueuedDrafts: steerDrafts.length > 0,
       running,
-      sending: Boolean(sendingSteerDraftId) || isSubmittingCurrentScope(),
-      waitingForStartedTurn: autoDispatchWaitingForStartedTurnRef.current,
-      wasRunning: previousRunningRef.current,
+      sending: Boolean(sendingSteerDraftId) || isSubmittingScope(scopeKey),
+      waitingForStartedTurn: autoDispatchWaitingForStartedTurnScopeKeysRef.current.has(scopeKey),
+      wasRunning,
     });
-    previousRunningRef.current = false;
+    previousRunningScopeKeysRef.current.delete(scopeKey);
     if (!shouldDispatch) return;
     const nextDraft = steerDrafts[0];
     if (!nextDraft) return;
     void submitQueuedSteerDraft(nextDraft.id, "auto");
-  }, [createPipelineRuntime, running, sendingSteerDraftId, steerAutoDispatchBlocked, steerAutoDispatchReady, steerDrafts]);
+  }, [
+    createPipelineRuntime,
+    running,
+    sendingSteerDraftId,
+    steerAutoDispatchBlocked,
+    steerAutoDispatchReady,
+    steerDrafts,
+    submissionScopeKey,
+  ]);
 
   function insertDictationTranscript(text: string) {
     const cursor = cursorIndex;

@@ -5,7 +5,10 @@ import { asRecord, parseMaybeJson, stringValue } from "./chat-message-utils";
 const MAX_MESSAGE_SOURCES = 8;
 
 export function webSearchSourcesFromEvent(item: RuntimeEvent): ChatSource[] {
-  if (item.name !== "tool.completed" || item.action !== "web_search" || item.status === "failed") {
+  if (item.name !== "tool.completed" || item.status === "failed") {
+    return [];
+  }
+  if (item.action !== "web_search" && item.action !== "web_fetch") {
     return [];
   }
 
@@ -45,7 +48,9 @@ function extractWebSearchResult(value: unknown, depth = 0): SearchResultProjecti
     ? record.results
     : Array.isArray(record.items)
       ? record.items
-      : null;
+      : stringValue(record, ["url"])
+        ? [record]
+        : null;
   if (results) {
     return {
       provider: stringValue(record, ["provider"]),

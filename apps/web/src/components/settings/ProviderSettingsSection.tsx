@@ -50,6 +50,7 @@ const CREDENTIAL_SOURCE_OPTIONS: Array<DropdownOption & { value: ProviderCredent
   { value: "env", label: "Environment variable", description: "Read by the local server" },
 ];
 const MAX_PROVIDER_MODEL_DATALIST_OPTIONS = 120;
+const SUBSCRIPTION_CREDENTIAL_MODES = new Set(["chatgpt-subscription"]);
 
 function splitModelOverrides(value: string): string[] {
   return value
@@ -92,7 +93,7 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
   const modelLabel = status.defaultModel ? chatModelLabel(status.defaultModel, settings, status.id) : "";
   const modelCountLabel = modelCount === 1 ? "1 model" : `${modelCount} models`;
   const credentialLabel =
-    status.id === "openai" && status.credential.connected
+    status.credential.connected && status.routing.localByok
       ? status.credential.source === "chatgpt_subscription"
         ? "Subscription"
         : "API key"
@@ -108,6 +109,19 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
 
 function canToggleProvider(providerId: ChatProvider): boolean {
   return providerId !== "openpond" && isRunnableChatProvider(providerId);
+}
+
+export function providerSupportsSubscription(status: ProviderStatus | null | undefined): boolean {
+  return Boolean(status?.credentialModes.some((mode) => SUBSCRIPTION_CREDENTIAL_MODES.has(mode)));
+}
+
+export function providerRowsForSubscriptionFilter(
+  settings: ProviderSettings | null | undefined,
+  subscriptionsOnly: boolean,
+): ChatProvider[] {
+  const rows = PROVIDER_IDS.filter((providerId) => Boolean(settings?.statuses[providerId]));
+  if (!subscriptionsOnly) return rows;
+  return rows.filter((providerId) => providerSupportsSubscription(settings?.statuses[providerId]));
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -152,11 +166,28 @@ export function ProviderSettingsSection({
   validateProvider,
 }: ProviderSettingsSectionProps) {
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const providerRows = useMemo(
-    () => PROVIDER_IDS.filter((providerId) => Boolean(providers?.statuses[providerId])),
+  const [showSubscriptionProvidersOnly, setShowSubscriptionProvidersOnly] = useState(false);
+  const allProviderRows = useMemo(
+    () => providerRowsForSubscriptionFilter(providers, false),
     [providers],
   );
+  const providerRows = useMemo(
+    () => providerRowsForSubscriptionFilter(providers, showSubscriptionProvidersOnly),
+    [providers, showSubscriptionProvidersOnly],
+  );
+  const subscriptionProviderCount = useMemo(
+    () => allProviderRows.filter((providerId) => providerSupportsSubscription(providers?.statuses[providerId])).length,
+    [allProviderRows, providers],
+  );
+  const subscriptionProviderCountLabel =
+    subscriptionProviderCount === 1
+      ? "1 provider supports subscription credentials"
+      : `${subscriptionProviderCount} providers support subscription credentials`;
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
+  function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
+    setDetailsProviderId(providerId);
+    if (loadModels) void loadProviderModels(providerId);
+  }
 
   return (
     <section className="account-settings">
@@ -166,51 +197,69 @@ export function ProviderSettingsSection({
         <div className="provider-manager-panel">
           <div className="account-list-heading">
             <span>Model providers</span>
-            <small>{providerRows.length} configured presets</small>
+            <small>{providerRows.length} of {allProviderRows.length} presets</small>
           </div>
-          <div className="provider-manager-scroll" role="list">
-            {providerRows.map((providerId) => {
-              const status = providers.statuses[providerId]!;
-              const cache = providers.modelCaches[providerId];
-              const needsModelLoad =
-                status.modelIds.length > 0 && (cache?.models.length ?? 0) < status.modelIds.length;
-              const rowBusy = providerBusy === `${providerId}:config`;
-              const toggleEnabled = canToggleProvider(providerId);
-              const checked = providerId === "openpond" || Boolean(providers.providers[providerId]?.enabled);
-              return (
-                <div className="provider-manager-row" role="listitem" key={providerId}>
-                  <label className="provider-toggle" aria-label={`Enable ${status.displayName}`}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={!toggleEnabled || rowBusy}
-                      onChange={(event) =>
-                        void saveProviderConfig(providerId, { enabled: event.currentTarget.checked })
-                      }
-                    />
-                    <span />
-                  </label>
-                  <div className="provider-row-main">
-                    <strong>{status.displayName}</strong>
+          <label className="settings-check-row compact provider-subscription-filter">
+            <input
+              type="checkbox"
+              checked={showSubscriptionProvidersOnly}
+              onChange={(event) => setShowSubscriptionProvidersOnly(event.currentTarget.checked)}
+            />
+            <span>
+              <strong>Subscriptions only</strong>
+              <small>{subscriptionProviderCountLabel}</small>
+            </span>
+          </label>
+          {providerRows.length > 0 ? (
+            <div className="provider-manager-scroll" role="list">
+              {providerRows.map((providerId) => {
+                const status = providers.statuses[providerId]!;
+                const cache = providers.modelCaches[providerId];
+                const needsModelLoad =
+                  status.modelIds.length > 0 && (cache?.models.length ?? 0) < status.modelIds.length;
+                const rowBusy = providerBusy?.startsWith(`${providerId}:`) ?? false;
+                const toggleEnabled = canToggleProvider(providerId);
+                const checked = providerId === "openpond" || Boolean(providers.providers[providerId]?.enabled);
+                return (
+                  <div className="provider-manager-row" role="listitem" key={providerId}>
+                    <label className="provider-toggle" aria-label={`Enable ${status.displayName}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!toggleEnabled || rowBusy}
+                        onChange={(event) => {
+                          openProviderDetails(providerId, false);
+                          void saveProviderConfig(providerId, { enabled: event.currentTarget.checked });
+                        }}
+                      />
+                      <span />
+                    </label>
+                    <div className="provider-row-main">
+                      <strong>{status.displayName}</strong>
+                    </div>
+                    <div className={`provider-row-status ${providerStateTone(status)}`}>
+                      {rowBusy ? <Loader2 size={13} className="settings-spin" /> : null}
+                      <span>{providerMeta(status, providers)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="settings-secondary provider-details-button"
+                      onClick={() => {
+                        openProviderDetails(providerId, needsModelLoad);
+                      }}
+                    >
+                      Details
+                    </button>
                   </div>
-                  <div className={`provider-row-status ${providerStateTone(status)}`}>
-                    {rowBusy ? <Loader2 size={13} className="settings-spin" /> : null}
-                    <span>{providerMeta(status, providers)}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="settings-secondary provider-details-button"
-                    onClick={() => {
-                      setDetailsProviderId(providerId);
-                      if (needsModelLoad) void loadProviderModels(providerId);
-                    }}
-                  >
-                    Details
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-account-list provider-manager-empty">
+              <strong>No subscription providers</strong>
+              <span>Turn off the filter to show API-key providers.</span>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -459,6 +508,7 @@ function LocalByokProviderDetails({
   const modelsBusy = providerBusy === `${providerId}:models`;
   const subscriptionBusy = providerBusy === "openai:credential";
   const openAiProvider = providerId === "openai";
+  const xAiProvider = providerId === "xai";
   const visibleModelOptions = useMemo(
     () =>
       visibleProviderModelOptions(
@@ -613,6 +663,15 @@ function LocalByokProviderDetails({
             <span>
               ChatGPT subscription auth opens OpenAI login and stores a refresh token locally. API keys remain available
               below for raw Platform billing.
+            </span>
+          </div>
+        ) : null}
+        {xAiProvider ? (
+          <div className="provider-dialog-note xai-provider-note">
+            <KeyRound size={15} />
+            <span>
+              xAI API access uses an API key with API credits or invoiced billing. Grok app subscriptions do not
+              authenticate API requests here.
             </span>
           </div>
         ) : null}
