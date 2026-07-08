@@ -50,6 +50,13 @@ import {
   mergeRuntimeEventsIntoSessionPageCache,
 } from "./lib/runtime-event-lists";
 import {
+  cloneRightSidebarConversationState,
+  defaultRightSidebarConversationStateForSwitch,
+  rightSidebarConversationState,
+  rightSidebarConversationStatesEqual,
+  type RightSidebarConversationState,
+} from "./lib/right-sidebar-conversation-state";
+import {
   cachedCodexHistoryThreadPayload,
   CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT,
   CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
@@ -89,7 +96,13 @@ import {
   hasGitHubIssueSubmitConnection,
 } from "./lib/submit-issue-command";
 import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
-import type { WorkspaceDiffTabRequest } from "./components/workspace-diff/workspace-diff-panel-model";
+import {
+  cloneWorkspaceDiffPanelViewState,
+  defaultWorkspaceDiffPanelViewState,
+  workspaceDiffPanelViewStatesEqual,
+  type WorkspaceDiffPanelViewState,
+  type WorkspaceDiffTabRequest,
+} from "./components/workspace-diff/workspace-diff-panel-model";
 import {
   hybridWorkspaceSessionMetadata,
   isCloudWorkspaceKind,
@@ -181,13 +194,20 @@ export function App() {
   );
   const [cloudSetupDialog, setCloudSetupDialog] = useState<CloudSetupDialogState | null>(null);
   const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(null);
+  const [workspaceDiffPanelViewState, setWorkspaceDiffPanelViewState] = useState<WorkspaceDiffPanelViewState>(
+    defaultWorkspaceDiffPanelViewState,
+  );
   const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [rightChatHistoryEvents, setRightChatHistoryEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [codexHistorySidebarEvents, setCodexHistorySidebarEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [pendingChatUserMessages, setPendingChatUserMessages] = useState<Record<string, PendingChatUserMessage>>({});
   const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<Record<string, ChatHistoryLoadState>>({});
+  const [mainComposerFocusRequestId, setMainComposerFocusRequestId] = useState(0);
   const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
+  const rightSidebarStateByConversationRef = useRef<Map<string, RightSidebarConversationState>>(new Map());
+  const workspaceDiffPanelStateByConversationRef = useRef<Map<string, WorkspaceDiffPanelViewState>>(new Map());
+  const activeRightSidebarConversationRef = useRef<string | null>(null);
   const rememberCloudWorkspaceState = useCallback((state: WorkspaceState) => {
     rememberWorkspaceStateRef.current?.(state);
   }, []);
@@ -619,10 +639,14 @@ export function App() {
   });
 
   const resolveApproval = useApprovalResolver({ connection, setError });
+  const requestMainComposerFocus = useCallback(() => {
+    setMainComposerFocusRequestId((current) => current + 1);
+  }, []);
   const beginNewChat = useBeginNewChat({
     appDispatch,
     expandProject,
     linkedProjectByAppId,
+    requestComposerFocus: requestMainComposerFocus,
     setMentionedAppId,
   });
 
@@ -1225,10 +1249,11 @@ export function App() {
       projectRows,
       visibleProjectRows,
     });
+  const rightPanelDiffBacked = rightPanelMode === "changes" || rightPanelMode === "goal";
   const shouldLoadWorkspaceDiff = Boolean(
     viewWorkspaceAppId &&
       (view === "chat" || view === "profile") &&
-      (commitDialogOpen || (diffPanelOpen && rightPanelMode !== "browser")),
+      (commitDialogOpen || (diffPanelOpen && rightPanelDiffBacked)),
   );
 
   const {
@@ -1318,6 +1343,59 @@ export function App() {
   const browserConversationId =
     selectedSessionId ??
     `draft:${selectedProjectId ?? selectedAppId ?? selectedCloudProject?.id ?? "general"}`;
+  const currentRightSidebarConversationState = useMemo(
+    () =>
+      rightSidebarConversationState({
+        diffPanelExpanded,
+        diffPanelOpen,
+        rightChatPanels,
+        rightPanelMode,
+      }),
+    [diffPanelExpanded, diffPanelOpen, rightChatPanels, rightPanelMode],
+  );
+  useEffect(() => {
+    const activeConversationId = activeRightSidebarConversationRef.current;
+    if (!activeConversationId) return;
+    rightSidebarStateByConversationRef.current.set(
+      activeConversationId,
+      cloneRightSidebarConversationState(currentRightSidebarConversationState),
+    );
+    workspaceDiffPanelStateByConversationRef.current.set(
+      activeConversationId,
+      cloneWorkspaceDiffPanelViewState(workspaceDiffPanelViewState),
+    );
+  }, [browserConversationId, currentRightSidebarConversationState, workspaceDiffPanelViewState]);
+  useEffect(() => {
+    const previousConversationId = activeRightSidebarConversationRef.current;
+    if (previousConversationId === browserConversationId) return;
+
+    activeRightSidebarConversationRef.current = browserConversationId;
+    const restoredState =
+      rightSidebarStateByConversationRef.current.get(browserConversationId) ??
+      defaultRightSidebarConversationStateForSwitch({
+        keepOpen: currentRightSidebarConversationState.diffPanelOpen,
+      });
+    const restoredWorkspaceDiffPanelState =
+      workspaceDiffPanelStateByConversationRef.current.get(browserConversationId) ??
+      defaultWorkspaceDiffPanelViewState();
+    setWorkspaceDiffPanelViewState((current) =>
+      workspaceDiffPanelViewStatesEqual(current, restoredWorkspaceDiffPanelState)
+        ? current
+        : cloneWorkspaceDiffPanelViewState(restoredWorkspaceDiffPanelState),
+    );
+    if (rightSidebarConversationStatesEqual(currentRightSidebarConversationState, restoredState)) return;
+    appDispatch({
+      type: "patch",
+      patch: cloneRightSidebarConversationState(restoredState),
+    });
+  }, [browserConversationId, currentRightSidebarConversationState]);
+  const handleWorkspaceDiffPanelViewStateChange = useCallback((state: WorkspaceDiffPanelViewState) => {
+    setWorkspaceDiffPanelViewState((current) =>
+      workspaceDiffPanelViewStatesEqual(current, state)
+        ? current
+        : cloneWorkspaceDiffPanelViewState(state),
+    );
+  }, []);
   const openSessionInChat = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
     setSelectedAppId(null);
@@ -2004,7 +2082,11 @@ export function App() {
       const workspaceRootPath = session?.cwd ?? null;
       const activeWorkspaceAppIdForPanel =
         session?.appId ??
-        (session?.workspaceKind === "local_project" ? session.workspaceId ?? null : null);
+        session?.localProjectId ??
+        (session?.workspaceKind === "local_project" ? session.workspaceId ?? null : null) ??
+        (session?.cwd && !isCloudWorkspaceKind(session.workspaceKind)
+          ? localPathWorkspaceId(session.cwd)
+          : null);
       const panelMessages = buildCachedChatMessages(panelEvents);
       return {
         ...panel,
@@ -2380,6 +2462,7 @@ export function App() {
         subagentRuntime,
         selectedSessionId,
         prompt,
+        mainComposerFocusRequestId,
         steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
         mentionApps: chatMentionApps,
@@ -2412,12 +2495,15 @@ export function App() {
         rightPanelMode,
         rightPanelTabRequest,
         rightChatPanels: rightChatPanelViews,
+        workspaceDiffPanelViewState,
         browserConversationId,
         terminalScope: viewTerminalScope,
         terminalTabs,
         terminalCwd,
         pendingTerminalCommand,
         terminalOpen,
+        onToggleTerminal: () => setTerminalOpen((open) => !open),
+        onWorkspaceDiffPanelViewStateChange: handleWorkspaceDiffPanelViewStateChange,
         insightsItems: insights.items,
         insightsRuns: insights.runs,
         insightsNextScanAt: insights.nextScanAt,

@@ -150,4 +150,32 @@ describe("Workspace diff panel", () => {
     expect(markup).toContain("value20");
     expect(markup).not.toContain("value880");
   });
+
+  test("renders workspace breadcrumbs from repo-relative paths", () => {
+    const markup = renderToStaticMarkup(
+      createElement(UnifiedDiffPreview, {
+        file: diffFile("/home/glu/Projects/all/openpond/docs/notes.md", ""),
+        wordWrap: false,
+        workspaceName: "openpond",
+        workspaceRootPath: "/home/glu/Projects/all/openpond",
+      }),
+    );
+
+    expect(markup).toContain('class="workspace-file-breadcrumbs" title="openpond &gt; docs/notes.md"');
+    expect(markup).not.toContain('title="openpond &gt; /home');
+  });
+
+  test("does not prefix outside absolute paths with the workspace name", () => {
+    const markup = renderToStaticMarkup(
+      createElement(UnifiedDiffPreview, {
+        file: diffFile("/tmp/notes.md", ""),
+        wordWrap: false,
+        workspaceName: "openpond",
+        workspaceRootPath: "/home/glu/Projects/all/openpond",
+      }),
+    );
+
+    expect(markup).toContain('class="workspace-file-breadcrumbs" title="/tmp/notes.md"');
+    expect(markup).not.toContain('title="openpond &gt; /tmp');
+  });
 });

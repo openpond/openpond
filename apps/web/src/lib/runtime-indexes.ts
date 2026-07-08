@@ -1,6 +1,10 @@
 import type { Approval, ContextUsageSnapshot, RuntimeEvent } from "@openpond/contracts";
 import { latestContextUsageFromEvents } from "./context-window";
-import { latestGoalRuntimeFromEvents, type GoalRuntimeStatus } from "./goal-runtime";
+import {
+  latestGoalRuntimeFromEvents,
+  latestKnownActiveGoalRuntimeFromEvents,
+  type GoalRuntimeStatus,
+} from "./goal-runtime";
 import { latestCreatePipelineRuntimeFromEvents } from "./create-pipeline-runtime";
 import { latestSubagentRuntimeFromEvents, type SubagentRuntimeStatus } from "./subagent-runtime";
 
@@ -128,6 +132,12 @@ function appendRuntimeEventIndexes(
     const subagentRuntime = latestSubagentRuntimeFromEvents(sessionEvents, sessionId);
     if (subagentRuntime) {
       latestSubagentRuntimeBySessionId.set(sessionId, subagentRuntime);
+      preserveGoalRuntimeForSubagent({
+        sessionEvents,
+        sessionId,
+        latestGoalRuntimeBySessionId,
+        activeGoalSessionIds,
+      });
       if (subagentRuntime.activeCount > 0) {
         activeSubagentSessionIds.add(sessionId);
       } else {
@@ -178,7 +188,15 @@ function runtimeEventDerivedIndexes(
     const subagentRuntime = latestSubagentRuntimeFromEvents(sessionEvents, sessionId);
     if (!subagentRuntime) continue;
     latestSubagentRuntimeBySessionId.set(sessionId, subagentRuntime);
-    if (subagentRuntime.activeCount > 0) activeSubagentSessionIds.add(sessionId);
+    preserveGoalRuntimeForSubagent({
+      sessionEvents,
+      sessionId,
+      latestGoalRuntimeBySessionId,
+      activeGoalSessionIds,
+    });
+    if (subagentRuntime.activeCount > 0) {
+      activeSubagentSessionIds.add(sessionId);
+    }
   }
 
   return {
@@ -189,6 +207,19 @@ function runtimeEventDerivedIndexes(
     activeGoalSessionIds,
     activeSubagentSessionIds,
   };
+}
+
+function preserveGoalRuntimeForSubagent(input: {
+  sessionEvents: RuntimeEvent[];
+  sessionId: string;
+  latestGoalRuntimeBySessionId: Map<string, GoalRuntimeStatus>;
+  activeGoalSessionIds: Set<string>;
+}): void {
+  if (input.latestGoalRuntimeBySessionId.has(input.sessionId)) return;
+  const goalRuntime = latestKnownActiveGoalRuntimeFromEvents(input.sessionEvents);
+  if (!goalRuntime) return;
+  input.latestGoalRuntimeBySessionId.set(input.sessionId, goalRuntime);
+  if (goalRuntime.tone === "active") input.activeGoalSessionIds.add(input.sessionId);
 }
 
 function buildApprovalIndexes(approvals: Approval[]): Pick<

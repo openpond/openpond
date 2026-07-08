@@ -64,6 +64,9 @@ export function useDefaultsSettings({
     preferences.subagents.maxConcurrentRunsPerWorkspaceTarget,
   );
   const [subagentsMaxTokens, setSubagentsMaxTokens] = useState<number | null>(preferences.subagents.maxTokens);
+  const [subagentsHeartbeatIntervalSeconds, setSubagentsHeartbeatIntervalSeconds] = useState(
+    preferences.subagents.heartbeatIntervalSeconds,
+  );
   const [saving, setSaving] = useState(false);
   const subagentsDefaultModelRef = subagentsUseDefaultModel
     ? null
@@ -75,6 +78,7 @@ export function useDefaultsSettings({
     subagentsMaxConcurrentRunsPerProvider !== preferences.subagents.maxConcurrentRunsPerProvider ||
     subagentsMaxConcurrentRunsPerWorkspaceTarget !== preferences.subagents.maxConcurrentRunsPerWorkspaceTarget ||
     subagentsMaxTokens !== preferences.subagents.maxTokens ||
+    subagentsHeartbeatIntervalSeconds !== preferences.subagents.heartbeatIntervalSeconds ||
     JSON.stringify(subagentRoles) !== JSON.stringify(preferences.subagents.roles);
 
   useEffect(() => {
@@ -97,6 +101,7 @@ export function useDefaultsSettings({
     setSubagentsMaxConcurrentRunsPerProvider(preferences.subagents.maxConcurrentRunsPerProvider);
     setSubagentsMaxConcurrentRunsPerWorkspaceTarget(preferences.subagents.maxConcurrentRunsPerWorkspaceTarget);
     setSubagentsMaxTokens(preferences.subagents.maxTokens);
+    setSubagentsHeartbeatIntervalSeconds(preferences.subagents.heartbeatIntervalSeconds);
   }, [
     preferences.defaultChatProvider,
     preferences.defaultChatModel,
@@ -254,6 +259,7 @@ export function useDefaultsSettings({
               ? null
               : clampInteger(subagentsMaxConcurrentRunsPerWorkspaceTarget, 1, 32),
             maxTokens: subagentsMaxTokens === null ? null : clampInteger(subagentsMaxTokens, 1, 50_000_000),
+            heartbeatIntervalSeconds: clampInteger(subagentsHeartbeatIntervalSeconds, 10, 3600),
           },
         })
       );
@@ -284,6 +290,7 @@ export function useDefaultsSettings({
     subagentsMaxConcurrentRunsPerProvider,
     subagentsMaxConcurrentRunsPerWorkspaceTarget,
     subagentsMaxTokens,
+    subagentsHeartbeatIntervalSeconds,
     subagentsDirty,
     saving,
     chooseDefaultProjectDirectory,
@@ -310,6 +317,8 @@ export function useDefaultsSettings({
     setSubagentsMaxConcurrentRunsPerWorkspaceTarget: (value: number | null) =>
       setSubagentsMaxConcurrentRunsPerWorkspaceTarget(value === null ? null : clampInteger(value, 1, 32)),
     setSubagentsMaxTokens: (value: number | null) => setSubagentsMaxTokens(value),
+    setSubagentsHeartbeatIntervalSeconds: (value: number) =>
+      setSubagentsHeartbeatIntervalSeconds(clampInteger(value, 10, 3600)),
     setSubagentRoleBackground,
     setSubagentRoleEnabled,
     setSubagentRoleIsolationMode,

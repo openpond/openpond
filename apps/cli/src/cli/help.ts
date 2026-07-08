@@ -126,6 +126,12 @@ export function printHelp(): void {
     "  openpond goal answer <question-id> --choice <choice-id>|--answer <text> [--goal-id <id>] [--cwd <path>] [--goal-storage global|workspace]"
   );
   console.log("  openpond goal approve|reject|pause|resume|cancel <goal-id>");
+  console.log(
+    "  openpond harness desktop run <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]"
+  );
+  console.log(
+    "  openpond harness desktop attach <scenario...> [--server <url>] [--devtools-port <port>] [--token-file <path>]"
+  );
   console.log("  openpond agent list --team-id <id>");
   console.log(
     "  openpond agent inspect|build|validate|eval|traces [--cwd <project>]"

@@ -20,6 +20,28 @@ describe("chat file links", () => {
     });
   });
 
+  test("converts file URLs under the workspace to repo-relative paths", () => {
+    expect(
+      normalizeChatFilePath("file:///home/glu/Projects/all/openpond-app/docs/plan.md", {
+        workspaceRootPath: "/home/glu/Projects/all/openpond-app",
+      }),
+    ).toEqual({
+      displayPath: "file:///home/glu/Projects/all/openpond-app/docs/plan.md",
+      path: "docs/plan.md",
+    });
+  });
+
+  test("converts absolute workspace file refs to repo-relative paths", () => {
+    expect(
+      normalizeChatFilePath("workspace:file:/home/glu/Projects/all/openpond-app/docs/plan.md", {
+        workspaceRootPath: "/home/glu/Projects/all/openpond-app",
+      }),
+    ).toEqual({
+      displayPath: "workspace:file:/home/glu/Projects/all/openpond-app/docs/plan.md",
+      path: "docs/plan.md",
+    });
+  });
+
   test("detects likely file paths in prose", () => {
     const content = "Open apps/web/src/components/chat/MarkdownText.tsx, then update tests/chat-file-links.test.ts.";
     const first = matchChatFilePathAt(content, content.indexOf("apps/"));
@@ -31,6 +53,29 @@ describe("chat file links", () => {
     expect(second).toMatchObject({
       displayPath: "tests/chat-file-links.test.ts",
       path: "tests/chat-file-links.test.ts",
+    });
+  });
+
+  test("detects workspace file resource refs", () => {
+    const content = "Read workspace:file:apps/web/src/components/chat/MarkdownText.tsx before editing.";
+    const match = matchChatFilePathAt(content, content.indexOf("workspace:file:"));
+    expect(match).toMatchObject({
+      displayPath: "workspace:file:apps/web/src/components/chat/MarkdownText.tsx",
+      path: "apps/web/src/components/chat/MarkdownText.tsx",
+    });
+  });
+
+  test("normalizes sandbox file resource refs", () => {
+    expect(normalizeChatFilePath("sandbox:file:/workspace/app/src/index.ts")).toEqual({
+      displayPath: "sandbox:file:/workspace/app/src/index.ts",
+      path: "src/index.ts",
+    });
+  });
+
+  test("normalizes sandbox workspace-root resource refs", () => {
+    expect(normalizeChatFilePath("sandbox:file:/workspace/src/index.ts")).toEqual({
+      displayPath: "sandbox:file:/workspace/src/index.ts",
+      path: "src/index.ts",
     });
   });
 

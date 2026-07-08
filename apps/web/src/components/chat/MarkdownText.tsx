@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
+import { normalizeChatFilePath } from "../../lib/chat-file-links";
 import { useLocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
 import { useWorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { ImageLightbox } from "../common/ImageLightbox";
@@ -90,6 +91,18 @@ export function MarkdownText({
     <div className="markdown-message">
       {blocks.map((block, index) => {
         if (block.type === "code") {
+          const fileReferenceLines = fileReferenceCodeBlockLines(block.content, workspaceRootPath);
+          if (fileReferenceLines) {
+            return (
+              <div className="markdown-file-reference-block" key={index}>
+                {fileReferenceLines.map((line, lineIndex) => (
+                  <div className="markdown-file-reference-line" key={lineIndex}>
+                    {renderInline(line, context)}
+                  </div>
+                ))}
+              </div>
+            );
+          }
           return (
             <pre className="markdown-code-block" key={index}>
               <code>{block.content}</code>
@@ -166,6 +179,20 @@ export function MarkdownText({
       />
     </div>
   );
+}
+
+function fileReferenceCodeBlockLines(content: string, workspaceRootPath: string | null): string[] | null {
+  const lines = content.split("\n");
+  const normalizedLines: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const withoutBullet = trimmed.replace(/^(?:[-*]|\d+[.)])\s+/, "").trim();
+    const candidate = withoutBullet.replace(/^`+|`+$/g, "").trim();
+    if (!candidate || !normalizeChatFilePath(candidate, { workspaceRootPath })) return null;
+    normalizedLines.push(candidate);
+  }
+  return normalizedLines.length > 0 ? normalizedLines : null;
 }
 
 function MarkdownImageHoverPreview({ preview }: { preview: ImageLinkPreview }) {

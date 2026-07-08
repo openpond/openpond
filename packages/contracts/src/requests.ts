@@ -406,7 +406,7 @@ export const UpdateAppPreferencesRequestSchema = z.object({
   advancedWorkspaceControls: z.boolean().optional(),
   contextCompaction: ContextCompactionPreferencesSchema.optional(),
   sidebarWidth: z.number().int().min(244).max(560).optional(),
-  diffPanelWidth: z.number().int().min(320).max(920).optional(),
+  diffPanelWidth: z.number().int().min(320).max(2400).optional(),
   sidebarSectionsCollapsed: SidebarSectionsCollapsedSchema.optional(),
   editor: WorkspaceEditorPreferencesSchema.optional(),
 });

@@ -1,4 +1,5 @@
 .composer {
+  container-type: inline-size;
   display: grid;
   min-width: 0;
   position: relative;

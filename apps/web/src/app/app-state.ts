@@ -33,7 +33,7 @@ export type ShowAppToast = (
 export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";
 
 export type NewProjectMode = "local" | "cloud" | "existing-local";
-export type RightPanelMode = "changes" | "browser" | "goal" | "chat";
+export type RightPanelMode = "home" | "changes" | "browser" | "goal" | "chat";
 export type RightChatPanel = {
   id: string;
   sessionId: string | null;

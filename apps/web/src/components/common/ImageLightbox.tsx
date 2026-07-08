@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "../icons";
+import { Download, X } from "../icons";
 
 export function ImageLightbox({
   open,
@@ -29,6 +29,27 @@ export function ImageLightbox({
 
   if (!open || !src) return null;
 
+  const downloadFileName = (() => {
+    const fromTitle = title.split("/").pop()?.trim();
+    if (fromTitle && /\.[A-Za-z0-9]+$/.test(fromTitle)) return fromTitle;
+    try {
+      const url = new URL(src, window.location.href);
+      const fromUrl = url.pathname.split("/").pop()?.trim();
+      if (fromUrl && /\.[A-Za-z0-9]+$/.test(fromUrl)) return fromUrl;
+    } catch { /* ignore */ }
+    return "image.png";
+  })();
+
+  const handleDownload = () => {
+    const anchor = document.createElement("a");
+    anchor.href = src;
+    anchor.download = downloadFileName;
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  };
+
   return (
     <div
       className="image-lightbox-backdrop"
@@ -45,9 +66,19 @@ export function ImageLightbox({
       >
         <header className="image-lightbox-header">
           <span title={title}>{title}</span>
-          <button type="button" aria-label="Close image preview" onClick={onClose}>
-            <X size={16} />
-          </button>
+          <div className="image-lightbox-actions">
+            <button
+              type="button"
+              aria-label="Download image"
+              title="Download"
+              onClick={handleDownload}
+            >
+              <Download size={16} />
+            </button>
+            <button type="button" aria-label="Close image preview" title="Close" onClick={onClose}>
+              <X size={16} />
+            </button>
+          </div>
         </header>
         <div className="image-lightbox-frame">
           {failed ? (

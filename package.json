@@ -45,6 +45,7 @@
     "smoke": "bun tests/smoke.ts",
     "smoke:codex": "OPENPOND_APP_LIVE_CODEX=1 bun tests/codex-live-smoke.ts",
     "smoke:desktop:dev": "bun scripts/smoke-dev-desktop.ts",
+    "verify:desktop:compaction": "bun scripts/verify-context-compaction-desktop.ts",
     "smoke:desktop:packaged": "bun scripts/smoke-packaged-desktop.ts",
     "smoke:desktop:packaged:validate": "bun scripts/validate-packaged-smoke-reports.ts",
     "cli": "bun run --cwd apps/cli cli",

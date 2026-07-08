@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { hostedAutoCompactionDecision } from "../apps/server/dist/openpond/context-compaction.js";
+import { hostedAutoCompactionDecision } from "../apps/server/dist/openpond/context-compaction/index.js";
 import { buildChatMessagesForProvider } from "../apps/server/dist/openpond/hosted-chat.js";
 
 describe("hosted context projection", () => {

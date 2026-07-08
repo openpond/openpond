@@ -59,6 +59,7 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   subagentsMaxConcurrentRunsPerProvider: number | null;
   subagentsMaxConcurrentRunsPerWorkspaceTarget: number | null;
   subagentsMaxTokens: number | null;
+  subagentsHeartbeatIntervalSeconds: number;
   providers: ProviderSettings | null;
   changeSubagentsProvider: (provider: ChatProvider) => void;
   setSubagentsEnabled: (value: boolean) => void;
@@ -68,6 +69,7 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   setSubagentsMaxConcurrentRunsPerProvider: (value: number | null) => void;
   setSubagentsMaxConcurrentRunsPerWorkspaceTarget: (value: number | null) => void;
   setSubagentsMaxTokens: (value: number | null) => void;
+  setSubagentsHeartbeatIntervalSeconds: (value: number) => void;
   setSubagentRoleEnabled: (roleId: string, enabled: boolean) => void;
   setSubagentRoleIsolationMode: (roleId: string, isolationMode: SubagentIsolationMode) => void;
   setSubagentRoleMaxConcurrentRuns: (roleId: string, value: number) => void;
@@ -316,6 +318,7 @@ export function SubagentsSettingsSection({
   subagentsMaxConcurrentRunsPerProvider,
   subagentsMaxConcurrentRunsPerWorkspaceTarget,
   subagentsMaxTokens,
+  subagentsHeartbeatIntervalSeconds,
   preferences,
   providers,
   saving,
@@ -328,6 +331,7 @@ export function SubagentsSettingsSection({
   setSubagentsMaxConcurrentRunsPerProvider,
   setSubagentsMaxConcurrentRunsPerWorkspaceTarget,
   setSubagentsMaxTokens,
+  setSubagentsHeartbeatIntervalSeconds,
   setSubagentRoleEnabled,
   setSubagentRoleIsolationMode,
   setSubagentRoleMaxConcurrentRuns,
@@ -357,6 +361,7 @@ export function SubagentsSettingsSection({
       maxConcurrentRunsPerProvider: subagentsMaxConcurrentRunsPerProvider,
       maxConcurrentRunsPerWorkspaceTarget: subagentsMaxConcurrentRunsPerWorkspaceTarget,
       maxTokens: subagentsMaxTokens,
+      heartbeatIntervalSeconds: subagentsHeartbeatIntervalSeconds,
     },
     preferences,
   );
@@ -619,6 +624,17 @@ export function SubagentsSettingsSection({
                 onChange={(event) => setSubagentsMaxTokens(nullableNumber(event.target.value))}
               />
             </label>
+            <label className="settings-select-field">
+              <span>Heartbeat seconds</span>
+              <input
+                type="number"
+                min={10}
+                max={3600}
+                value={subagentsHeartbeatIntervalSeconds}
+                disabled={saving || !subagentsEnabled}
+                onChange={(event) => setSubagentsHeartbeatIntervalSeconds(numberOrDefault(event.target.value, 60))}
+              />
+            </label>
           </div>
         </section>
       </form>
@@ -742,6 +758,7 @@ function subagentSettingsEqual(
     maxConcurrentRunsPerProvider: number | null;
     maxConcurrentRunsPerWorkspaceTarget: number | null;
     maxTokens: number | null;
+    heartbeatIntervalSeconds: number;
   },
   preferences: BootstrapPayload["preferences"],
 ): boolean {
@@ -753,6 +770,7 @@ function subagentSettingsEqual(
     current.maxConcurrentRunsPerProvider === saved.maxConcurrentRunsPerProvider &&
     current.maxConcurrentRunsPerWorkspaceTarget === saved.maxConcurrentRunsPerWorkspaceTarget &&
     current.maxTokens === saved.maxTokens &&
+    current.heartbeatIntervalSeconds === saved.heartbeatIntervalSeconds &&
     JSON.stringify(current.roles) === JSON.stringify(saved.roles)
   );
 }

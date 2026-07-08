@@ -115,6 +115,7 @@ type ComposerProps = {
   steerAutoDispatchBlocked?: boolean;
   showProjectFooter?: boolean;
   autoFocus?: boolean;
+  focusRequestId?: number;
   connection: ClientConnection | null;
   providerSettings?: ProviderSettings | null;
   provider: ChatProvider;
@@ -272,6 +273,7 @@ export function Composer({
   steerAutoDispatchBlocked = false,
   showProjectFooter = true,
   autoFocus = false,
+  focusRequestId = 0,
   connection,
   providerSettings = null,
   provider,
@@ -301,6 +303,7 @@ export function Composer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const autoFocusAppliedRef = useRef(false);
+  const focusRequestAppliedRef = useRef(0);
   const submittingScopeKeysRef = useRef<Set<string>>(new Set());
   const previousRunningRef = useRef(running);
   const autoDispatchWaitingForStartedTurnRef = useRef(false);
@@ -556,6 +559,14 @@ export function Composer({
       inputRef.current?.focusAtPromptIndex(prompt.length);
     });
   }, [autoFocus, inputDisabled, prompt.length]);
+
+  useEffect(() => {
+    if (!focusRequestId || focusRequestAppliedRef.current === focusRequestId || inputDisabled) return;
+    focusRequestAppliedRef.current = focusRequestId;
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(prompt.length);
+    });
+  }, [focusRequestId, inputDisabled, prompt.length]);
 
   useEffect(() => {
     setMentionIndex(0);

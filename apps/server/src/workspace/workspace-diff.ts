@@ -376,7 +376,7 @@ export async function loadWorkspaceImageFile(storeDir: string, app: OpenPondApp,
 
 export async function loadWorkspaceImageFileAtPath(repoPath: string, filePath: string): Promise<WorkspaceImageFile> {
   const initialized = await isGitRepo(repoPath);
-  const normalizedPath = normalizeWorkspaceImageRequestPath(repoPath, filePath);
+  const normalizedPath = normalizeWorkspaceFileRequestPath(repoPath, filePath);
   if (!normalizedPath) throw new Error("Image not found");
   if (initialized && !(await isVisibleGitWorkspaceFile(repoPath, normalizedPath))) throw new Error("Image not found");
   const image = await readWorkspaceImageFile(repoPath, normalizedPath);
@@ -384,8 +384,8 @@ export async function loadWorkspaceImageFileAtPath(repoPath: string, filePath: s
   return image;
 }
 
-function normalizeWorkspaceImageRequestPath(repoPath: string, filePath: string): string | null {
-  const cleaned = cleanWorkspaceImageRequestPath(filePath);
+function normalizeWorkspaceFileRequestPath(repoPath: string, filePath: string): string | null {
+  const cleaned = cleanWorkspaceFileRequestPath(filePath);
   if (!cleaned) return null;
   if (!path.isAbsolute(cleaned)) return normalizeWorkspaceFilePath(cleaned);
   const relative = path.relative(path.resolve(repoPath), path.resolve(cleaned));
@@ -393,7 +393,7 @@ function normalizeWorkspaceImageRequestPath(repoPath: string, filePath: string):
   return normalizeWorkspaceFilePath(relative);
 }
 
-function cleanWorkspaceImageRequestPath(value: string): string | null {
+function cleanWorkspaceFileRequestPath(value: string): string | null {
   let cleaned = value.trim();
   if (!cleaned) return null;
   cleaned = cleaned.replace(/^['"`]+|['"`]+$/g, "");
@@ -413,7 +413,7 @@ function cleanWorkspaceImageRequestPath(value: string): string | null {
 
 export async function loadWorkspaceFileAtPath(repoPath: string, filePath: string): Promise<WorkspaceDiffFile> {
   const initialized = await isGitRepo(repoPath);
-  const normalizedPath = normalizeWorkspaceFilePath(filePath);
+  const normalizedPath = normalizeWorkspaceFileRequestPath(repoPath, filePath);
   if (!normalizedPath) throw new Error("File not found");
   if (isGeneratedWorkspacePath(normalizedPath)) throw new Error("File not found");
   if (initialized) {

@@ -367,7 +367,7 @@ describe("BYOK turn runner dispatch", () => {
         capturedStreamInput = {
           providerId: input.providerId,
           modelId: input.modelId,
-          messages: input.messages,
+          messages: input.messages.map((message) => ({ ...message })),
         };
         yield { reasoningText: "The user is saying hello.", raw: { ok: true } };
         yield { text: "BYOK", raw: { ok: true } };

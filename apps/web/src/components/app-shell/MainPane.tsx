@@ -53,6 +53,7 @@ import type { CreatePipelineReviewActionInput } from "../chat/create-pipeline-ty
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 import type { RightPanelMode, ShowAppToast } from "../../app/app-state";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
+import { normalizeChatFilePath } from "../../lib/chat-file-links";
 import {
   buildChatTimelineRows,
   shouldShowThinkingIndicator,
@@ -74,8 +75,13 @@ import {
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
+import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
-import type { WorkspaceDiffTabRequest, WorkspaceFileSourceSwitcher } from "../workspace-diff/workspace-diff-panel-model";
+import type {
+  WorkspaceDiffPanelViewState,
+  WorkspaceDiffTabRequest,
+  WorkspaceFileSourceSwitcher,
+} from "../workspace-diff/workspace-diff-panel-model";
 
 const WorkspaceDiffPanel = lazy(() =>
   import("../workspace-diff/WorkspaceDiffPanel").then((module) => ({ default: module.WorkspaceDiffPanel })),
@@ -109,6 +115,7 @@ type MainPaneProps = {
   subagentRuntime: SubagentRuntimeStatus | null;
   selectedSessionId: string | null;
   prompt: string;
+  mainComposerFocusRequestId: number;
   steerAutoDispatchBlocked: boolean;
   steerAutoDispatchReady: boolean;
   mentionApps: OpenPondApp[];
@@ -141,12 +148,15 @@ type MainPaneProps = {
   rightPanelMode: RightPanelMode;
   rightPanelTabRequest: WorkspaceDiffTabRequest | null;
   rightChatPanels: RightChatPanelView[];
+  workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;
   browserConversationId: string;
   terminalScope: TerminalScope;
   terminalTabs: TerminalTab[];
   terminalCwd: string | null;
   pendingTerminalCommand: TerminalQueuedCommand | null;
   terminalOpen: boolean;
+  onToggleTerminal: () => void;
+  onWorkspaceDiffPanelViewStateChange: (state: WorkspaceDiffPanelViewState) => void;
   insightsItems: InsightItem[];
   insightsRuns: InsightRun[];
   insightsNextScanAt: string | null;
@@ -452,6 +462,7 @@ export function MainPane({
   subagentRuntime,
   selectedSessionId,
   prompt,
+  mainComposerFocusRequestId,
   steerAutoDispatchBlocked,
   steerAutoDispatchReady,
   mentionApps,
@@ -484,12 +495,15 @@ export function MainPane({
   rightPanelMode,
   rightPanelTabRequest,
   rightChatPanels,
+  workspaceDiffPanelViewState,
   browserConversationId,
   terminalScope,
   terminalTabs,
   terminalCwd,
   pendingTerminalCommand,
   terminalOpen,
+  onToggleTerminal,
+  onWorkspaceDiffPanelViewStateChange,
   insightsItems,
   insightsRuns,
   insightsNextScanAt,
@@ -649,7 +663,9 @@ export function MainPane({
   const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
-  const showRightPanel = showDiffPanel || showBrowserPanel || showRightChatPanel;
+  const showRightHomePanel =
+    (view === "chat" || view === "cloud" || view === "profile") && diffPanelOpen && rightPanelMode === "home";
+  const showRightPanel = showDiffPanel || showBrowserPanel || showRightChatPanel || showRightHomePanel;
   const rightPanelExpanded = showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
   const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
   const billingTarget = billingTargetForContext({
@@ -1082,14 +1098,17 @@ export function MainPane({
     },
     [browserConversationId, onShowBrowserPanel],
   );
+  const workspaceRootPath = workspaceTarget.value === "local"
+    ? workspaceState?.repoPath ?? workspaceTarget.detail
+    : workspaceState?.repoPath ?? null;
   const handleOpenFileInSidebar = useCallback(
     (path: string) => {
+      const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
       onShowDiffPanel();
-      setOpenDiffFileRequest({ id: Date.now(), path });
+      setOpenDiffFileRequest({ id: Date.now(), path: normalizedFile?.path ?? path });
     },
-    [onShowDiffPanel],
+    [onShowDiffPanel, workspaceRootPath],
   );
-  const workspaceRootPath = workspaceTarget.value === "local" ? workspaceTarget.detail : null;
   useLayoutEffect(() => {
     if (view !== "chat" || !showChatThread || typeof window === "undefined") return undefined;
     const element = composerStackRef.current;
@@ -1232,6 +1251,7 @@ export function MainPane({
       sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
       sourceSwitcher={rightSidebarSourceSwitcher}
       tabRequest={rightPanelTabRequest}
+      viewState={workspaceDiffPanelViewState}
       workspaceName={rightSidebarUsesSandbox ? selectedCloudWorkItem?.title ?? "Sandbox" : workspaceName}
       workspaceInitialized={rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
       workspaceError={rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
@@ -1241,6 +1261,7 @@ export function MainPane({
       onToggleExpanded={onToggleDiffPanelExpanded}
       onOpenBrowser={onShowBrowserPanel}
       onOpenBrowserUrl={handleOpenBrowserLink}
+      onViewStateChange={onWorkspaceDiffPanelViewStateChange}
       onCloseSideChat={onCloseRightChatPanel}
       onOpenSideChat={view === "chat" ? onAddRightChat : undefined}
       onSelectSideChat={() => onShowRightChatPanel()}
@@ -1314,7 +1335,22 @@ export function MainPane({
       onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
     />
   ) : null;
-  const rightPanel = rightChatPanel ?? diffPanel ?? browserPanel;
+  const homePanel = showRightHomePanel ? (
+    <RightSidebarHomePanel
+      expanded={diffPanelExpanded}
+      terminalOpen={terminalOpen}
+      sideChatAvailable={view === "chat"}
+      onClose={onCloseRightPanel}
+      onOpenBrowser={onShowBrowserPanel}
+      onOpenFiles={onShowFilesPanel}
+      onOpenReview={onShowDiffPanel}
+      onOpenSideChat={onAddRightChat}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
+      onToggleTerminal={onToggleTerminal}
+    />
+  ) : null;
+  const rightPanel = rightChatPanel ?? diffPanel ?? browserPanel ?? homePanel;
   const terminalPanel = (
     <AppTerminalPanel
       open={terminalOpen}
@@ -1504,6 +1540,7 @@ export function MainPane({
               ) : null}
               <Composer
                 mode="dock"
+                focusRequestId={mainComposerFocusRequestId}
                 prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
@@ -1568,6 +1605,7 @@ export function MainPane({
               <Composer
                 mode="start"
                 autoFocus
+                focusRequestId={mainComposerFocusRequestId}
                 prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}

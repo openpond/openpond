@@ -25,8 +25,9 @@ import {
 import { DEFAULT_HOST, DEFAULT_PORT, VERSION } from "./constants.js";
 import { runOpenPondServerCli } from "./cli.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
-import { runHostedContextCompaction } from "./openpond/context-compaction.js";
-import { hostedContextProvider } from "./openpond/context-usage.js";
+import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
+import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
+import { trustedProviderContextLimit } from "./openpond/context-usage.js";
 import { createLogger } from "./logger.js";
 import {
   appDataDir,
@@ -89,6 +90,10 @@ import { createInsightsService } from "./insights/create-edit-insights.js";
 import { createInsightsBackgroundLoop } from "./insights/insights-background-loop.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
 import { createLocalAgentScheduleLoop } from "./agents/local-agent-scheduler.js";
+import {
+  createScriptedOpenPondChatStream,
+  scriptedOpenPondModelsEnabled,
+} from "./openpond/scripted-chat-provider.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
@@ -104,8 +109,10 @@ export async function createOpenPondServer(
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
   const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds);
-  const streamOpenPondHostedChatTurn =
-    options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn;
+  const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
+    options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
+    { enabled: scriptedOpenPondModelsEnabled() },
+  );
   const executeWebSearch = createWebSearchExecutorFromEnv();
   const executeConnectedAppTool = createCloudConnectedAppToolExecutor();
   const attachmentRootDir = path.join(storeDir, "attachments");
@@ -577,8 +584,10 @@ export async function createOpenPondServer(
   async function runRecordedManualHostedContextCompaction(input: {
     session: Awaited<ReturnType<typeof getSession>>;
     events: RuntimeEvent[];
-    provider: "openpond";
+    provider: ChatProvider;
     model: string | null;
+    maxContextTokens?: number | null;
+    route: "openpond_hosted" | "local_byok";
     requestId: string;
   }) {
     const usageState: {
@@ -601,6 +610,7 @@ export async function createOpenPondServer(
         events: input.events,
         provider: input.provider,
         model: input.model,
+        maxContextTokens: input.maxContextTokens,
         streamCompactionChatTurn: async function* (streamInput) {
           usageState.recorder = await startProviderRequestUsageRecorder({
             session: input.session,
@@ -613,11 +623,42 @@ export async function createOpenPondServer(
             upsert: safeUpsertModelUsageRecord,
           });
           try {
-            for await (const delta of streamOpenPondHostedChatTurn({
-              model: streamInput.model,
+            if (input.route === "openpond_hosted") {
+              for await (const delta of streamOpenPondHostedChatTurn({
+                model: streamInput.model,
+                messages: streamInput.messages,
+                requestId: streamInput.requestId,
+                signal: streamInput.signal,
+              })) {
+                if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
+                if (delta.type === "reasoning_delta" && delta.text) {
+                  usageState.recorder.observeDelta({ reasoningText: delta.text });
+                }
+                if (delta.type === "usage") usageState.recorder.observeDelta({ usage: delta.usage });
+                if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
+                if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
+                if (delta.type === "usage") yield { usage: delta.usage, raw: delta.raw };
+              }
+              return;
+            }
+
+            const state = await localByokRuntimeState();
+            for await (const delta of streamOpenAiCompatibleChatCompletion({
+              providerId: streamInput.provider,
+              settings: state.settings,
+              secrets: state.secrets,
+              modelId: streamInput.model,
               messages: streamInput.messages,
               requestId: streamInput.requestId,
               signal: streamInput.signal,
+              saveChatGptSubscriptionCredential: async (providerId, credential) => {
+                await writeProviderChatGptSubscriptionCredential({
+                  paths: providerSecretPaths,
+                  providerId,
+                  credential,
+                  timestamp: now(),
+                });
+              },
             })) {
               if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
               if (delta.type === "reasoning_delta" && delta.text) {
@@ -651,6 +692,7 @@ export async function createOpenPondServer(
     if (session.status === "active")
       throw new Error("Cannot compact context while a turn is running.");
     if (session.status === "closed") throw new Error("Cannot compact a closed session.");
+    const requestedModel = input.model ?? session.modelRef?.modelId ?? null;
 
     const priorEvents = (await store.snapshot()).events.filter(
       (item) => item.sessionId === sessionId,
@@ -665,7 +707,7 @@ export async function createOpenPondServer(
       data: {
         version: 1,
         provider: session.provider,
-        model: input.model ?? null,
+        model: requestedModel,
         reason: input.reason,
       },
     });
@@ -676,7 +718,7 @@ export async function createOpenPondServer(
         const runtime = await ensureCodexRuntime(session, {
           approvalPolicy: "on-request",
           sandbox: "workspace-write",
-          model: input.model ?? null,
+          model: requestedModel,
           codexPermissionMode: "default",
         });
         const compacted = await runtime.client.compactThread({ threadId: runtime.threadId });
@@ -686,7 +728,7 @@ export async function createOpenPondServer(
                 session,
                 runtime.threadId,
                 input.reason,
-                input.model ?? null,
+                requestedModel,
               )
             : null;
         return {
@@ -698,15 +740,28 @@ export async function createOpenPondServer(
         };
       }
 
-      const provider = hostedContextProvider(session.provider);
-      if (!provider)
-        throw new Error(`Context compaction is not supported for ${session.provider}.`);
-      const model = input.model ?? null;
+      const adapter = resolveContextCompactionAdapter(session.provider);
+      if (adapter.kind !== "app_summary") throw new Error(adapter.reason);
+      const state = adapter.route === "local_byok" ? await localByokRuntimeState() : null;
+      const maxContextTokens = adapter.route === "local_byok"
+        ? trustedProviderContextLimit({
+            provider: session.provider,
+            model: requestedModel,
+            settings: state?.settings ?? null,
+          })
+        : null;
+      if (adapter.route === "local_byok" && !maxContextTokens) {
+        throw new Error(
+          `Context compaction for ${session.provider} requires a selected model with a trusted context window.`,
+        );
+      }
       const result = await runRecordedManualHostedContextCompaction({
         session,
         events: priorEvents,
-        provider,
-        model,
+        provider: adapter.provider,
+        model: requestedModel,
+        maxContextTokens,
+        route: adapter.route,
         requestId: `${session.id}:context-compaction:${startedEvent.id}`,
       });
       const completedEvent = event({
@@ -718,7 +773,7 @@ export async function createOpenPondServer(
         output: "Compacted conversation context",
         data: {
           version: 1,
-          provider,
+          provider: adapter.provider,
           model: result.model,
           reason: input.reason,
           mode: "summary",
@@ -726,12 +781,16 @@ export async function createOpenPondServer(
           compactedThroughEventId: result.compactedThroughEventId,
           compactedThroughTurnId: result.compactedThroughTurnId,
           preservedFromEventId: result.preservedFromEventId,
+          preservedEventIds: result.preservedEventIds,
+          preservedResourceRefs: result.preservedResourceRefs,
           sourceEventCount: result.sourceEventCount,
           preservedEventCount: result.preservedEventCount,
+          fileLedger: result.fileLedger,
           inputTokensBefore: result.inputTokensBefore,
           inputTokensAfter: result.inputTokensAfter,
           maxContextTokens: result.maxContextTokens,
           tokenSource: result.tokenSource,
+          metrics: result.metrics,
         },
       });
       await appendRuntimeEvent(completedEvent);
@@ -748,7 +807,7 @@ export async function createOpenPondServer(
       await appendCompactionFailed(
         session,
         session.provider,
-        input.model ?? null,
+        requestedModel,
         input.reason,
         error,
       );

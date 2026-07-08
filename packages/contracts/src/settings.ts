@@ -201,7 +201,7 @@ export const AppPreferencesSchema = z.object({
     ContextCompactionPreferencesSchema.parse({}),
   ),
   sidebarWidth: z.number().int().min(244).max(560).default(332),
-  diffPanelWidth: z.number().int().min(320).max(920).default(560),
+  diffPanelWidth: z.number().int().min(320).max(2400).default(560),
   sidebarSectionsCollapsed: SidebarSectionsCollapsedSchema.optional().default(() => SidebarSectionsCollapsedSchema.parse({})),
   editor: WorkspaceEditorPreferencesSchema.optional().default(() => WorkspaceEditorPreferencesSchema.parse({})),
 });

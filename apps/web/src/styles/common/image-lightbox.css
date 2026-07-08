@@ -41,7 +41,13 @@
   white-space: nowrap;
 }
 
-.image-lightbox-header button {
+.image-lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.image-lightbox-actions button {
   display: grid;
   place-items: center;
   width: 28px;
@@ -52,7 +58,7 @@
   color: #9c9c9c;
 }
 
-.image-lightbox-header button:hover {
+.image-lightbox-actions button:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #f4f4f4;
 }

@@ -58,6 +58,7 @@ const PATH_WITH_SLASH = new RegExp(
   String.raw`^(?:(?:\.{1,2}|~)?[\\/]|[A-Za-z]:[\\/])?(?:${SEGMENT}[\\/])+${SEGMENT}(?::\d+(?::\d+)?)?`,
 );
 const SINGLE_FILE = new RegExp(String.raw`^${SEGMENT}(?::\d+(?::\d+)?)?`);
+const RESOURCE_FILE_REF = /^(?:workspace|sandbox):file:[^\s<>()]+/;
 
 export function matchChatFilePathAt(
   content: string,
@@ -65,9 +66,11 @@ export function matchChatFilePathAt(
   options: ChatFilePathOptions = {},
 ): ChatFilePathMatch | null {
   if (!isPathBoundary(content[start - 1])) return null;
-  const slashMatch = PATH_WITH_SLASH.exec(content.slice(start));
-  const singleMatch = slashMatch ? null : SINGLE_FILE.exec(content.slice(start));
-  const raw = trimTrailingPathPunctuation((slashMatch ?? singleMatch)?.[0] ?? "");
+  const slice = content.slice(start);
+  const resourceMatch = RESOURCE_FILE_REF.exec(slice);
+  const slashMatch = resourceMatch ? null : PATH_WITH_SLASH.exec(slice);
+  const singleMatch = resourceMatch || slashMatch ? null : SINGLE_FILE.exec(slice);
+  const raw = trimTrailingPathPunctuation((resourceMatch ?? slashMatch ?? singleMatch)?.[0] ?? "");
   if (!raw) return null;
   const normalized = normalizeChatFilePath(raw, options);
   if (!normalized) return null;
@@ -80,12 +83,33 @@ export function normalizeChatFilePath(
 ): Omit<ChatFilePathMatch, "end"> | null {
   const displayPath = trimTrailingPathPunctuation(value.trim().replace(/^['"`]+|['"`]+$/g, ""));
   if (!displayPath || /^https?:\/\//i.test(displayPath)) return null;
-  const pathWithoutLine = displayPath.replace(/:\d+(?::\d+)?$/, "");
+  const pathWithResourceRef = normalizeFileUrlPath(normalizeResourceFileRefPath(displayPath));
+  const pathWithoutLine = pathWithResourceRef.replace(/:\d+(?::\d+)?$/, "");
   if (!isLikelyFilePath(pathWithoutLine)) return null;
   return {
     displayPath,
     path: normalizeWorkspacePath(pathWithoutLine, options.workspaceRootPath),
   };
+}
+
+function normalizeResourceFileRefPath(path: string): string {
+  const resourceMatch = /^(workspace|sandbox):file:(.*)$/i.exec(path);
+  if (!resourceMatch) return path;
+  const kind = resourceMatch[1]?.toLowerCase();
+  let value = resourceMatch[2] ?? "";
+  if (kind === "sandbox") {
+    value = value.replace(/^\/workspace\/app\//, "").replace(/^\/workspace\//, "");
+  }
+  return value;
+}
+
+function normalizeFileUrlPath(path: string): string {
+  if (!/^file:\/\//i.test(path)) return path;
+  try {
+    return decodeURIComponent(new URL(path).pathname);
+  } catch {
+    return path.replace(/^file:\/\//i, "");
+  }
 }
 
 function normalizeWorkspacePath(path: string, workspaceRootPath: string | null | undefined): string {

@@ -91,10 +91,25 @@ describe("sidebar session project inference", () => {
     expect(resolve(session({ cwd: "/tmp/project/packages/api" }), projects)).toBe("parent");
   });
 
-  test("does not infer non-Codex sessions from cwd", () => {
+  test("infers non-Codex local sessions from cwd", () => {
     const projects = [project({ id: "project_1" })];
 
-    expect(resolve(session({ provider: "openpond", cwd: "/tmp/project" }), projects)).toBeNull();
+    expect(resolve(session({ provider: "openai", cwd: "/tmp/project" }), projects)).toBe("project_1");
+  });
+
+  test("does not infer sandbox app sessions from cwd", () => {
+    const projects = [project({ id: "project_1" })];
+
+    expect(
+      resolve(
+        session({
+          provider: "openpond",
+          workspaceKind: "sandbox_app",
+          cwd: "/tmp/project",
+        }),
+        projects,
+      ),
+    ).toBeNull();
   });
 
   test("keeps Cloud workspace sessions out of sidebar project children", () => {

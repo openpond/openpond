@@ -134,6 +134,10 @@ describe("workspace diff", () => {
     const summary = await loadWorkspaceDiffAtPath(repoPath, "workspace-test");
     const detail = await loadWorkspaceFileAtPath(repoPath, "docs/working-docs/plan.md");
     const basenameDetail = await loadWorkspaceFileAtPath(repoPath, "plan.md");
+    const absoluteDetail = await loadWorkspaceFileAtPath(
+      repoPath,
+      path.join(repoPath, "docs", "working-docs", "plan.md"),
+    );
 
     expect(summary.files).toEqual([]);
     expect(summary.repoFiles).not.toContain("docs/working-docs/plan.md");
@@ -146,6 +150,10 @@ describe("workspace diff", () => {
       content: "# Plan\n\nDetailed notes.\n",
     });
     expect(basenameDetail).toMatchObject({
+      path: "docs/working-docs/plan.md",
+      content: "# Plan\n\nDetailed notes.\n",
+    });
+    expect(absoluteDetail).toMatchObject({
       path: "docs/working-docs/plan.md",
       content: "# Plan\n\nDetailed notes.\n",
     });

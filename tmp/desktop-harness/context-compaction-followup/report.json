@@ -1,0 +1,78 @@
+{
+  "ok": true,
+  "generatedAt": "2026-07-08T18:26:19.117Z",
+  "mode": "isolated",
+  "repoRoot": "/home/glu/Projects/all/openpond",
+  "artifactsDir": "/home/glu/Projects/all/openpond/tmp/desktop-harness/context-compaction-followup",
+  "scenarios": [
+    {
+      "name": "context-compaction-followup",
+      "ok": true,
+      "mode": "isolated",
+      "startedAt": "2026-07-08T18:25:56.893Z",
+      "completedAt": "2026-07-08T18:26:18.966Z",
+      "durationMs": 22073,
+      "events": [
+        "assistant.delta",
+        "turn.completed",
+        "assistant.delta",
+        "turn.completed",
+        "session.compaction.started",
+        "session.compaction.completed",
+        "assistant.delta",
+        "turn.completed"
+      ],
+      "eventIds": [
+        "fa98cfd9-b5f0-4d9d-b58c-3da985dfda5a",
+        "dccff80c-7f41-472a-b8e8-d1c38ddaa4ba",
+        "79fdf29d-1933-4416-a612-ec3aab6679b9",
+        "59592dab-a954-4067-bdec-8c2464b10aca",
+        "804ff762-1d24-4c1a-9edc-c57d34f5bd51",
+        "04967358-3ea9-4cd2-a104-dd5bbc4ac8f8",
+        "d194af06-9757-40d5-ba1e-e4fcf6fcf1c5",
+        "187c6e77-4722-47b4-87df-2468c8c417fa"
+      ],
+      "rendererAssertions": {
+        "firstSeedTurnVisible": true,
+        "secondSeedTurnVisible": true,
+        "manualCompactionVisible": true,
+        "postCompactionFollowUpVisible": true,
+        "contextCompactionUsageRecorded": true
+      },
+      "metadata": {
+        "parentSessionId": "d039a05c-e941-4602-9075-7ac8efb4efc2",
+        "title": "context-compaction-followup-mrces84e",
+        "modelRef": {
+          "providerId": "openpond",
+          "modelId": "openpond-scripted-chat-two-turns"
+        },
+        "compactionStartedEventId": "804ff762-1d24-4c1a-9edc-c57d34f5bd51",
+        "summaryEventId": "04967358-3ea9-4cd2-a104-dd5bbc4ac8f8",
+        "compactedThroughEventId": "59592dab-a954-4067-bdec-8c2464b10aca",
+        "compactedThroughTurnId": "8488e309-5264-4104-9414-dbc1f5deaa20",
+        "preservedEventIds": [
+          "d54148d8-c71f-4da6-83de-3a083e4bc3fd",
+          "7ff47583-919c-4181-b243-b73b8f0ece94",
+          "79fdf29d-1933-4416-a612-ec3aab6679b9",
+          "378878e2-b095-4d34-86c9-7b8c6eb8b6e3",
+          "59592dab-a954-4067-bdec-8c2464b10aca"
+        ],
+        "firstTurnId": "11514bd6-a4f5-4a2e-8769-f92a733020bd",
+        "secondTurnId": "8488e309-5264-4104-9414-dbc1f5deaa20",
+        "followUpTurnId": "ec48068d-da5f-4fc3-a390-30d41c21a72e",
+        "inputTokensBefore": 123,
+        "inputTokensAfter": 102,
+        "maxContextTokens": 128000,
+        "tokenSource": "heuristic",
+        "runtimeEventCount": 18
+      },
+      "screenshots": [
+        "/home/glu/Projects/all/openpond/tmp/desktop-harness/context-compaction-followup/context-compaction-followup/context-compaction-complete.png",
+        "/home/glu/Projects/all/openpond/tmp/desktop-harness/context-compaction-followup/context-compaction-followup/context-compaction-followup-complete.png"
+      ]
+    }
+  ],
+  "timings": {
+    "totalMs": 24518
+  }
+}

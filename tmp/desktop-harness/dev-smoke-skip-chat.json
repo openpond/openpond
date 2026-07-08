@@ -1,0 +1,69 @@
+{
+  "ok": true,
+  "mode": "dev",
+  "platform": "linux",
+  "renderer": {
+    "href": "http://127.0.0.1:41903/",
+    "title": "OpenPond App",
+    "readyState": "complete",
+    "connectedScreenGone": true,
+    "hasSidebar": true,
+    "hasContentShell": true,
+    "hasComposer": true
+  },
+  "bridge": {
+    "platform": "linux",
+    "hasBrowserBridge": true,
+    "browserControlConnected": true
+  },
+  "server": {
+    "url": "http://127.0.0.1:42291",
+    "health": "openpond-app-server"
+  },
+  "account": {
+    "handle": "account-b712f540"
+  },
+  "profile": {
+    "mode": "local",
+    "repoPath": "/home/glu/.openpond/profiles/user-uwf921-repo",
+    "activeProfile": "user-uwf921",
+    "gitDirty": true,
+    "gitHead": "5816bb3dc6e2",
+    "actions": [
+      "chat",
+      "chat",
+      "run-accounting-report",
+      "chat",
+      "run-report"
+    ],
+    "agents": [
+      {
+        "id": "default",
+        "enabled": true,
+        "path": "agent/agent.ts"
+      },
+      {
+        "id": "mock-accounting-reporter",
+        "enabled": true,
+        "path": "agents/mock-accounting-reporter"
+      },
+      {
+        "id": "mock-accounting",
+        "enabled": true,
+        "path": "agents/mock-accounting"
+      }
+    ]
+  },
+  "chat": null,
+  "timings": {
+    "totalSmokeMs": 11049,
+    "devtoolsTargetMs": 1298,
+    "rendererBridgeMs": 1903,
+    "serverHealthMs": 15
+  },
+  "shutdown": {
+    "exitedAfterClose": true,
+    "exitCode": 0,
+    "signalCode": null
+  }
+}

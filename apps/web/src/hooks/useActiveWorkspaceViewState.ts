@@ -63,8 +63,8 @@ export function useActiveWorkspaceViewState({
   const selectedSessionPendingCloudStart = selectedSession
     ? isPendingCloudStartSession(selectedSession)
     : false;
-  const selectedSessionCodexWorkspaceId =
-    selectedSession?.provider === "codex" && selectedSession.cwd && !selectedSessionCloudWorkspace
+  const selectedSessionLocalPathWorkspaceId =
+    selectedSession?.cwd && (!selectedSessionCloudWorkspace || selectedSessionHybridWorkspace)
       ? localPathWorkspaceId(selectedSession.cwd)
       : null;
   const providerSettings = bootstrap?.providers ?? null;
@@ -85,9 +85,12 @@ export function useActiveWorkspaceViewState({
           ? "sandbox"
           : selectedSessionProjectId
             ? "local_project"
-            : selectedSessionCodexWorkspaceId
-              ? "local_project"
-              : (selectedSession.workspaceKind ?? (selectedSession.appId ? "sandbox_app" : null))
+            : (selectedSession.workspaceKind ??
+                (selectedSession.appId
+                  ? "sandbox_app"
+                  : selectedSessionLocalPathWorkspaceId
+                    ? "local_project"
+                    : null))
       : selectedCloudProject
         ? "sandbox"
         : selectedProject
@@ -102,7 +105,7 @@ export function useActiveWorkspaceViewState({
         ? null
         : selectedSessionProjectId
           ? selectedSessionProjectId
-          : (selectedSessionCodexWorkspaceId ?? selectedSession.workspaceId ?? selectedSession.appId)
+          : (selectedSession.workspaceId ?? selectedSession.appId ?? selectedSessionLocalPathWorkspaceId)
       : selectedCloudProject
         ? null
         : (selectedProject?.id ?? selectedAppId);
@@ -114,9 +117,9 @@ export function useActiveWorkspaceViewState({
         : selectedSessionPendingCloudStart
           ? null
           : (selectedSessionProjectId ??
-              selectedSessionCodexWorkspaceId ??
               selectedSession.workspaceId ??
-              selectedSession.appId)
+              selectedSession.appId ??
+              selectedSessionLocalPathWorkspaceId)
       : selectedCloudProject
         ? null
         : (selectedProject?.id ?? selectedAppId);
@@ -175,7 +178,7 @@ export function useActiveWorkspaceViewState({
     localTargetName,
     selectedCodexHistoryPending,
     selectedSessionCloudWorkspace,
-    selectedSessionCodexWorkspaceId,
+    selectedSessionLocalPathWorkspaceId,
     selectedSessionPendingCloudStart,
     selectedSessionProjectId,
     startMessage,

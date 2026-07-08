@@ -1,4 +1,5 @@
 .main-pane {
+  --right-panel-chat-reserve: 520px;
   --terminal-panel-height: clamp(220px, 38vh, 430px);
   position: relative;
   display: grid;
@@ -20,7 +21,8 @@
 }
 
 .main-pane.chat-active.diff-open {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, max(320px, min(var(--diff-panel-width), calc(100% - 520px))));
+  --right-panel-chat-reserve: 440px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, max(320px, min(var(--diff-panel-width), calc(100% - var(--right-panel-chat-reserve)))));
 }
 
 .main-pane.chat-active.diff-open .chat-column,
@@ -40,7 +42,8 @@
 }
 
 .main-pane.chat-start.diff-open {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, max(320px, min(var(--diff-panel-width), calc(100% - 520px))));
+  --right-panel-chat-reserve: 440px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, max(320px, min(var(--diff-panel-width), calc(100% - var(--right-panel-chat-reserve)))));
   place-items: stretch;
   padding: 0;
 }

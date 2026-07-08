@@ -76,15 +76,12 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       const closing = content.indexOf("`", index + 1);
       if (closing > index + 1) {
         const codeContent = content.slice(index + 1, closing);
-        const imagePath = context.onOpenFileInSidebar && isStandaloneInlineCode(content, index, closing + 1)
+        const imagePath = context.onOpenFileInSidebar && isStandaloneInlineCodeFileLink(codeContent, content, index, closing + 1)
           ? normalizeChatFilePath(codeContent, { workspaceRootPath: context.workspaceRootPath })
           : null;
-        const image = imagePath
-          ? imageLinkForFilePath(imagePath.path, imagePath.displayPath, context)
-          : null;
         flushText(index);
-        nodes.push(image
-          ? renderFileLink(<code>{codeContent}</code>, imagePath!.path, imagePath!.displayPath, context, nodes.length)
+        nodes.push(imagePath
+          ? renderFileLink(imagePath.displayPath, imagePath.path, imagePath.displayPath, context, nodes.length)
           : <code key={nodes.length}>{codeContent}</code>);
         index = closing + 1;
         textStart = index;
@@ -154,6 +151,15 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       continue;
     }
 
+    const bareLink = matchBareLinkAt(content, index);
+    if (bareLink) {
+      flushText(index);
+      nodes.push(renderLink(bareLink.href, bareLink.href, context, nodes.length));
+      index = bareLink.end;
+      textStart = index;
+      continue;
+    }
+
     const filePath = context.onOpenFileInSidebar
       ? matchChatFilePathAt(content, index, { workspaceRootPath: context.workspaceRootPath })
       : null;
@@ -194,8 +200,26 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
   return nodes;
 }
 
-function isStandaloneInlineCode(content: string, start: number, end: number): boolean {
+function matchBareLinkAt(content: string, start: number): { href: string; end: number } | null {
+  const previous = start > 0 ? content[start - 1] : "";
+  if (previous && !/[\s([{<]/.test(previous)) return null;
+  const slice = content.slice(start);
+  const match = /^(?:https?:\/\/|www\.)[^\s<>()]+(?:\([^\s<>()]*\)[^\s<>()]*)*/i.exec(slice);
+  if (!match) return null;
+  let href = match[0];
+  while (/[.,;:!?]$/.test(href)) href = href.slice(0, -1);
+  if (!href) return null;
+  const normalizedHref = /^www\./i.test(href) ? `https://${href}` : href;
+  return { href: normalizedHref, end: start + href.length };
+}
+
+function isStandaloneInlineCodeFileLink(codeContent: string, content: string, start: number, end: number): boolean {
+  if (isResourceFileRef(codeContent)) return true;
   return !content.slice(0, start).trim() && !content.slice(end).trim();
+}
+
+function isResourceFileRef(value: string): boolean {
+  return /^(?:workspace|sandbox):file:/i.test(value.trim());
 }
 
 function renderLink(label: string, href: string, context: MarkdownContext, key: number): ReactNode {
@@ -518,7 +542,7 @@ function htmlAttributeValue(tag: string, name: string): string | null {
 }
 
 function isLinkLikeHref(value: string): boolean {
-  return /^(https?:\/\/|file:\/\/|\/|\.{1,2}\/)/i.test(value);
+  return /^(https?:\/\/|file:\/\/|(?:workspace|sandbox):file:|\/|\.{1,2}\/)/i.test(value);
 }
 
 function imageLinkForHref(

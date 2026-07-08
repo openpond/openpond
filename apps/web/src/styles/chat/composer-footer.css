@@ -134,6 +134,47 @@
   opacity: 0.42;
 }
 
+@container (max-width: 620px) {
+  .composer .composer-create-control,
+  .composer .context-status-shell {
+    display: none;
+  }
+
+  .composer .permission-select.compact .dropdown-trigger {
+    justify-content: center;
+    gap: 0;
+    width: 29px;
+    padding: 0;
+  }
+
+  .composer .permission-select.compact .dropdown-trigger > span,
+  .composer .permission-select.compact .dropdown-trigger > svg:last-child {
+    display: none;
+  }
+
+  .composer .dropdown-select.compact:not(.permission-select) .dropdown-trigger,
+  .composer .codex-model-trigger {
+    max-width: 104px;
+    gap: 5px;
+    padding-inline: 6px;
+  }
+}
+
+@container (max-width: 460px) {
+  .composer .composer-primary-controls {
+    gap: 5px;
+    right: 10px;
+    left: 10px;
+  }
+
+  .composer .dropdown-select.compact:not(.permission-select) .dropdown-trigger,
+  .composer .codex-model-trigger {
+    max-width: 82px;
+    gap: 4px;
+    padding-inline: 5px;
+  }
+}
+
 .composer-file-input {
   display: none;
 }

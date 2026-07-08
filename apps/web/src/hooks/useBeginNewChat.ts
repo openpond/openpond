@@ -4,35 +4,17 @@ import type { OpenPondApp } from "@openpond/contracts";
 import type { AppAction } from "../app/app-state";
 import { projectSelectionKey } from "../lib/app-models";
 
-function focusNewChatComposer() {
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      const input = document.querySelector<HTMLElement>(
-        ".main-pane .composer-stack.start .composer-inline-input, .main-pane .composer-stack.dock .composer-inline-input",
-      );
-      if (!input) return;
-      input.focus();
-      const selection = window.getSelection();
-      if (!selection) return;
-      const range = document.createRange();
-      range.selectNodeContents(input);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    });
-  });
-}
-
 export function useBeginNewChat({
   appDispatch,
   expandProject,
   linkedProjectByAppId,
+  requestComposerFocus,
   setMentionedAppId,
 }: {
   appDispatch: Dispatch<AppAction>;
   expandProject: (projectId: string) => void;
   linkedProjectByAppId: Map<string, string>;
+  requestComposerFocus: () => void;
   setMentionedAppId: Dispatch<SetStateAction<string | null>>;
 }) {
   return useCallback(
@@ -43,12 +25,13 @@ export function useBeginNewChat({
         setMentionedAppId(null);
         appDispatch({ type: "selectProject", projectId: projectKey });
         expandProject(projectKey);
+        requestComposerFocus();
         return;
       }
       setMentionedAppId(null);
       appDispatch({ type: "beginNewChat", appId: app?.id ?? null });
-      focusNewChatComposer();
+      requestComposerFocus();
     },
-    [appDispatch, expandProject, linkedProjectByAppId, setMentionedAppId],
+    [appDispatch, expandProject, linkedProjectByAppId, requestComposerFocus, setMentionedAppId],
   );
 }

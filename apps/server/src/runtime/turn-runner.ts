@@ -81,7 +81,7 @@ import {
   type ContextCompactionStreamDelta,
   type HostedCompactionResult,
   type HostedCompactionProvider,
-} from "../openpond/context-compaction.js";
+} from "../openpond/context-compaction/index.js";
 import { buildChatMessagesForProvider } from "../openpond/hosted-chat.js";
 import {
   extractWorkspaceToolRequests,
@@ -4730,13 +4730,16 @@ export function createTurnRunner(deps: {
           compactedThroughEventId: result.compactedThroughEventId,
           compactedThroughTurnId: result.compactedThroughTurnId,
           preservedFromEventId: result.preservedFromEventId,
+          preservedEventIds: result.preservedEventIds,
           preservedResourceRefs: result.preservedResourceRefs,
           sourceEventCount: result.sourceEventCount,
           preservedEventCount: result.preservedEventCount,
+          fileLedger: result.fileLedger,
           inputTokensBefore: result.inputTokensBefore,
           inputTokensAfter: result.inputTokensAfter,
           maxContextTokens: result.maxContextTokens,
           tokenSource: result.tokenSource,
+          metrics: result.metrics,
           projectedTokens: decision.projectedTokens,
           thresholdTokens: decision.thresholdTokens,
           usableContextTokens: decision.usableContextTokens,

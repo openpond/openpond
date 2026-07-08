@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPond Desktop Harness"
+  short_description: "Author and run desktop harness scenarios"
+  default_prompt: "Use $openpond-desktop-harness to add or validate an OpenPond desktop harness scenario."

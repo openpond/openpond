@@ -37,6 +37,7 @@ import {
 import { printHelp } from "./help";
 import { runOpenPondServerCommand, runOpenPondTerminalCommand } from "./app-layer";
 import { runOpenPondEditCommand, runOpenPondExtendCommand } from "./extend";
+import { runHarnessCommand } from "./harness";
 import { runGoalCommand } from "../goal/cli";
 import { runOpChatCommand } from "./opchat";
 import { runOrganizationsCommand } from "./organizations";
@@ -346,6 +347,27 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       goalId: "string",
     },
     handler: ({ options, rest }) => runGoalCommand(options, rest),
+  },
+  {
+    name: "harness",
+    usage: "openpond harness desktop <run|attach> <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]",
+    optionSchema: {
+      artifactsDir: "string",
+      attach: "boolean",
+      cwd: "string",
+      devtoolsPort: "integer",
+      grep: "string",
+      isolated: "boolean",
+      json: "string",
+      jsonPath: "string",
+      keepHome: "boolean",
+      none: "boolean",
+      server: "string",
+      timeoutMs: "integer",
+      token: "string",
+      tokenFile: "string",
+    },
+    handler: ({ options, rest }) => runHarnessCommand(options, rest),
   },
   {
     name: "sandbox",

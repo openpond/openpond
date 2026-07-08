@@ -3,7 +3,12 @@ import { ChevronRight, ChevronUp } from "../icons";
 import type { WorkspaceDiffFile, WorkspaceLspActionResponse, WorkspaceLspDiagnostic } from "@openpond/contracts";
 import { SyntaxLine, languageForPath } from "../chat/workspaceSyntax";
 import { MarkdownText } from "../chat/MarkdownText";
-import { isMarkdownPath } from "./workspace-diff-panel-model";
+import {
+  isAbsoluteWorkspaceDiffPath,
+  isDocumentPath,
+  isMarkdownPath,
+  normalizeWorkspaceDiffPath,
+} from "./workspace-diff-panel-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
 
 const FILE_TRUNCATED_MARKER = "\n\n[file truncated]";
@@ -18,17 +23,25 @@ const DIFF_VIRTUAL_OVERSCAN_ROWS = 12;
 function FileBreadcrumbs({
   path,
   workspaceName,
+  workspaceRootPath,
   onSelectPath,
 }: {
   path: string;
   workspaceName: string | null;
+  workspaceRootPath?: string | null;
   onSelectPath?: (path: string | null) => void;
 }) {
-  const parts = path.split("/").filter(Boolean);
-  const root = workspaceName?.trim() || "Workspace";
+  const displayPath = normalizeWorkspaceDiffPath(path, workspaceRootPath);
+  const absolute = isAbsoluteWorkspaceDiffPath(displayPath);
+  const root = absolute ? absoluteBreadcrumbRoot(displayPath) : workspaceName?.trim() || "Workspace";
+  const pathWithoutAbsoluteRoot = absolute && root !== "/" && displayPath.startsWith(`${root}/`)
+    ? displayPath.slice(root.length + 1)
+    : displayPath;
+  const parts = pathWithoutAbsoluteRoot.split("/").filter(Boolean);
+  const selectableFolders = Boolean(onSelectPath && !absolute);
   return (
-    <span className="workspace-file-breadcrumbs" title={`${root} > ${path}`}>
-      {onSelectPath ? (
+    <span className="workspace-file-breadcrumbs" title={absolute ? displayPath : `${root} > ${displayPath}`}>
+      {onSelectPath && !absolute ? (
         <button type="button" onClick={() => onSelectPath(null)}>
           {root}
         </button>
@@ -41,7 +54,7 @@ function FileBreadcrumbs({
         return (
           <span className="workspace-file-breadcrumb-segment" key={`${index}-${part}`}>
             <ChevronRight size={13} />
-            {onSelectPath && !isFileName ? (
+            {onSelectPath && selectableFolders && !isFileName ? (
               <button type="button" onClick={() => onSelectPath(folderPath)}>
                 {part}
               </button>
@@ -53,6 +66,11 @@ function FileBreadcrumbs({
       })}
     </span>
   );
+}
+
+function absoluteBreadcrumbRoot(path: string): string {
+  const windowsDrive = /^[A-Za-z]:\//.exec(path);
+  return windowsDrive ? windowsDrive[0].slice(0, -1) : "/";
 }
 
 export function FilePreview({
@@ -79,6 +97,7 @@ export function FilePreview({
   wordDiffs = false,
   wordWrap,
   workspaceName,
+  workspaceRootPath,
 }: {
   collapsed?: boolean;
   diagnostics?: WorkspaceLspDiagnostic[];
@@ -103,6 +122,7 @@ export function FilePreview({
   wordDiffs?: boolean;
   wordWrap: boolean;
   workspaceName: string | null;
+  workspaceRootPath?: string | null;
 }) {
   const displayContent = draftContent ?? file.content ?? "";
   const lines = useMemo(() => displayContent.split("\n").slice(0, 800), [displayContent]);
@@ -110,13 +130,19 @@ export function FilePreview({
   const hasContent = draftContent != null || file.content != null;
   const contentIsTruncated = displayContent.endsWith(FILE_TRUNCATED_MARKER);
   const shouldRenderMarkdown = renderMarkdown && hasContent && isMarkdownPath(file.path);
+  const shouldRenderDocument = hasContent && isDocumentPath(file.path) && isLikelyBase64Document(displayContent);
 
   if (imageSrc) {
     return (
       <div className="workspace-file-preview">
         <div className="workspace-diff-file-heading">
           <div>
-            <FileBreadcrumbs path={file.path} workspaceName={workspaceName} onSelectPath={onSelectBreadcrumbPath} />
+            <FileBreadcrumbs
+              path={file.path}
+              workspaceName={workspaceName}
+              workspaceRootPath={workspaceRootPath}
+              onSelectPath={onSelectBreadcrumbPath}
+            />
             <span className="diff-addition">+{file.additions}</span>
             <span className="diff-deletion">-{file.deletions}</span>
           </div>
@@ -145,6 +171,7 @@ export function FilePreview({
         wordDiffs={wordDiffs}
         wordWrap={wordWrap}
         workspaceName={workspaceName}
+        workspaceRootPath={workspaceRootPath}
       />
     ) : (
       <UnifiedDiffPreview
@@ -154,6 +181,7 @@ export function FilePreview({
         loading={loading}
         wordWrap={wordWrap}
         workspaceName={workspaceName}
+        workspaceRootPath={workspaceRootPath}
         onSelectBreadcrumbPath={onSelectBreadcrumbPath}
       />
     );
@@ -162,7 +190,12 @@ export function FilePreview({
     <div className={`workspace-file-preview ${wordWrap ? "wrap" : ""}`}>
       <div className="workspace-diff-file-heading">
         <div>
-          <FileBreadcrumbs path={file.path} workspaceName={workspaceName} onSelectPath={onSelectBreadcrumbPath} />
+          <FileBreadcrumbs
+            path={file.path}
+            workspaceName={workspaceName}
+            workspaceRootPath={workspaceRootPath}
+            onSelectPath={onSelectBreadcrumbPath}
+          />
           <span className="diff-addition">+{file.additions}</span>
           <span className="diff-deletion">-{file.deletions}</span>
         </div>
@@ -175,6 +208,8 @@ export function FilePreview({
         <div className="workspace-markdown-preview">
           <MarkdownText content={displayContent} />
         </div>
+      ) : shouldRenderDocument ? (
+        <DocumentPreview file={file} contentBase64={displayContent} />
       ) : editable && !contentIsTruncated ? (
         <Suspense fallback={<div className="workspace-diff-code-empty">Loading editor</div>}>
           <MonacoFileEditor
@@ -211,6 +246,7 @@ export function UnifiedDiffPreview({
   loading = false,
   wordWrap,
   workspaceName,
+  workspaceRootPath,
   onSelectBreadcrumbPath,
 }: {
   collapsed?: boolean;
@@ -219,6 +255,7 @@ export function UnifiedDiffPreview({
   loading?: boolean;
   wordWrap: boolean;
   workspaceName?: string | null;
+  workspaceRootPath?: string | null;
   onSelectBreadcrumbPath?: (path: string | null) => void;
 }) {
   const rows = useMemo(() => parsePatchRows(file.patch, hideWhiteSpace), [file.patch, hideWhiteSpace]);
@@ -230,6 +267,7 @@ export function UnifiedDiffPreview({
           <FileBreadcrumbs
             path={file.path}
             workspaceName={workspaceName ?? null}
+            workspaceRootPath={workspaceRootPath}
             onSelectPath={onSelectBreadcrumbPath}
           />
           <span className="diff-addition">+{file.additions}</span>
@@ -275,6 +313,7 @@ export function SplitDiffPreview({
   wordDiffs,
   wordWrap,
   workspaceName,
+  workspaceRootPath,
   onSelectBreadcrumbPath,
 }: {
   collapsed: boolean;
@@ -284,6 +323,7 @@ export function SplitDiffPreview({
   wordDiffs: boolean;
   wordWrap: boolean;
   workspaceName: string | null;
+  workspaceRootPath?: string | null;
   onSelectBreadcrumbPath?: (path: string | null) => void;
 }) {
   const rows = useMemo(() => parsePatchRows(file.patch, hideWhiteSpace), [file.patch, hideWhiteSpace]);
@@ -292,7 +332,12 @@ export function SplitDiffPreview({
     <div className={`workspace-diff-preview split ${wordWrap ? "wrap" : ""} ${wordDiffs ? "word-diffs" : ""}`}>
       <div className="workspace-diff-file-heading">
         <div>
-          <FileBreadcrumbs path={file.path} workspaceName={workspaceName} onSelectPath={onSelectBreadcrumbPath} />
+          <FileBreadcrumbs
+            path={file.path}
+            workspaceName={workspaceName}
+            workspaceRootPath={workspaceRootPath}
+            onSelectPath={onSelectBreadcrumbPath}
+          />
           <span className="diff-addition">+{file.additions}</span>
           <span className="diff-deletion">-{file.deletions}</span>
         </div>
@@ -335,6 +380,59 @@ export function SplitDiffPreview({
   );
 }
 
+
+function DocumentPreview({ file, contentBase64 }: { file: WorkspaceDiffFile; contentBase64: string }) {
+  const objectUrl = useMemo(() => {
+    const bytes = base64ToUint8Array(contentBase64);
+    if (!bytes) return null;
+    const blob = new Blob([new Uint8Array(bytes)], { type: documentMimeType(file.path) });
+    return URL.createObjectURL(blob);
+  }, [contentBase64, file.path]);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [objectUrl]);
+
+  if (!objectUrl) {
+    return <div className="workspace-diff-code-empty">Document preview unavailable.</div>;
+  }
+
+  return (
+    <div className="workspace-document-preview">
+      <div className="workspace-document-preview-card">
+        <strong>{file.path.split("/").pop()}</strong>
+        <span>Word document</span>
+        <a href={objectUrl} download={file.path.split("/").pop() || "document"}>
+          Download document
+        </a>
+      </div>
+      <iframe src={objectUrl} title={`${file.path} preview`} />
+    </div>
+  );
+}
+
+function documentMimeType(path: string): string {
+  return /\.docx$/i.test(path)
+    ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    : "application/msword";
+}
+
+function isLikelyBase64Document(value: string): boolean {
+  return value.length > 0 && /^[A-Za-z0-9+/=\s]+$/.test(value);
+}
+
+function base64ToUint8Array(value: string): Uint8Array | null {
+  try {
+    const binary = atob(value.replace(/\s/g, ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
 
 type PatchRow =
   | { kind: "spacer"; label: string }

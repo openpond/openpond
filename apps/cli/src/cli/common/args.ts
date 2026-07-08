@@ -31,7 +31,10 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   account: "string",
   agentId: "string",
   apiBaseUrl: "string",
+  app: "string",
   approvalPolicy: "string",
+  artifactsDir: "string",
+  attach: "boolean",
   async: "boolean",
   baseUrl: "string",
   baseurl: "string",
@@ -50,6 +53,8 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   env: "string",
   expectedManifestHash: "string",
   force: "boolean",
+  devtoolsPort: "integer",
+  grep: "string",
   goalStorage: "string",
   help: "boolean",
   hostedCheckKind: "string",
@@ -64,7 +69,10 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   hostedSourceChecks: "boolean",
   hostedSourceProjectId: "string",
   idleTimeoutSeconds: "integer",
+  isolated: "boolean",
   json: "boolean",
+  jsonPath: "string",
+  keepHome: "boolean",
   limit: "integer",
   maxOutputBytes: "integer",
   maxDurationSeconds: "integer",
@@ -74,8 +82,10 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   message: "string",
   messageFile: "string",
   nonInteractive: "boolean",
+  none: "boolean",
   path: "string",
   port: "integer",
+  packaged: "boolean",
   profile: "string",
   projectId: "string",
   publishHostedSource: "boolean",
@@ -83,6 +93,7 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   sandboxApiUrl: "string",
   sandboxApiurl: "string",
   respondAsync: "boolean",
+  server: "string",
   setupTimeoutSeconds: "integer",
   since: "integer",
   sourceCheckDispatch: "string",
@@ -93,10 +104,18 @@ const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
   timeoutMs: "integer",
   timeoutSec: "integer",
   timeoutSeconds: "integer",
+  token: "string",
+  tokenFile: "string",
   tui: "boolean",
   version: "boolean",
   workItemId: "string",
   yes: "boolean",
+};
+
+const CLI_COMMAND_TYPED_OPTIONS: Partial<Record<Command, Record<string, CliOptionValueKind>>> = {
+  harness: {
+    json: "string",
+  },
 };
 
 const CLI_POSITIVE_INTEGER_OPTIONS = new Set(["maxOutputBytes", "timeoutSec"]);
@@ -127,8 +146,8 @@ export function parseArgs(argv: string[]): {
       const value =
         separatorIndex >= 0
           ? next.slice(separatorIndex + 1)
-          : readOptionValue(args, key);
-      setParsedOption(options, optionValues, key, value);
+          : readOptionValue(args, key, command);
+      setParsedOption(options, optionValues, key, value, command);
     } else if (isShortOptionToken(next)) {
       parseShortOptionToken(next, args, options, optionValues);
     } else {
@@ -191,8 +210,8 @@ function parseShortOptionToken(
   setParsedOption(options, optionValues, key, value);
 }
 
-function readOptionValue(args: string[], key: string): string {
-  const kind = CLI_TYPED_OPTIONS[key];
+function readOptionValue(args: string[], key: string, command?: Command): string {
+  const kind = typedOptionKind(key, command);
   if (kind === "boolean") {
     if (args[0] && isBooleanLiteral(args[0])) return args.shift()!;
     return "true";
@@ -212,15 +231,16 @@ function setParsedOption(
   options: ParsedCliOptions,
   optionValues: Record<string, string[]>,
   key: string,
-  value: string
+  value: string,
+  command?: Command
 ): void {
-  validateParsedOptionValue(key, value);
+  validateParsedOptionValue(key, value, command);
   options[key] = value;
   (optionValues[key] ??= []).push(value);
 }
 
-function validateParsedOptionValue(key: string, value: string): void {
-  const kind = CLI_TYPED_OPTIONS[key];
+function validateParsedOptionValue(key: string, value: string, command?: Command): void {
+  const kind = typedOptionKind(key, command);
   if (!kind) return;
   if (kind === "boolean") {
     if (!isBooleanLiteral(value)) {
@@ -251,6 +271,14 @@ function validateParsedOptionValue(key: string, value: string): void {
       throw new CliUsageError(error instanceof Error ? error.message : String(error));
     }
   }
+}
+
+function typedOptionKind(key: string, command?: Command): CliOptionValueKind | undefined {
+  if (command) {
+    const commandKind = CLI_COMMAND_TYPED_OPTIONS[command]?.[key];
+    if (commandKind) return commandKind;
+  }
+  return CLI_TYPED_OPTIONS[key];
 }
 
 function cliOptionLabel(key: string): string {

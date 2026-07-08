@@ -55,8 +55,14 @@ export function sidebarProjectIdForSession(
     return session.cloudProjectId;
   }
 
-  if (session.provider !== "codex" || !session.cwd) return null;
-  if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") return null;
+  if (!session.cwd) return null;
+  if (
+    session.workspaceKind === "sandbox" ||
+    session.workspaceKind === "sandbox_template" ||
+    session.workspaceKind === "sandbox_app"
+  ) {
+    return null;
+  }
 
   const cwd = normalizeSidebarPath(session.cwd);
   if (!cwd) return null;
@@ -93,8 +99,14 @@ export function sidebarProjectKeyForSession(
     return projectSelectionKey("cloud", session.cloudProjectId);
   }
 
-  if (session.provider !== "codex" || !session.cwd) return null;
-  if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") return null;
+  if (!session.cwd) return null;
+  if (
+    session.workspaceKind === "sandbox" ||
+    session.workspaceKind === "sandbox_template" ||
+    session.workspaceKind === "sandbox_app"
+  ) {
+    return null;
+  }
 
   const cwd = normalizeSidebarPath(session.cwd);
   if (!cwd) return null;

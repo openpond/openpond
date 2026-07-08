@@ -24,7 +24,7 @@ export async function readSandboxFile(
     throw new Error(staleSandboxReadbackMessage(path, status?.sandbox ?? null, message, { hasReadbackArtifact }));
   }
   const content = result.file.isBinary
-    ? null
+    ? result.file.contentsBase64 || null
     : `${result.contents}${result.file.truncated ? FILE_TRUNCATED_MARKER : ""}`;
   return {
     path: result.file.path,

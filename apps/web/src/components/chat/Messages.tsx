@@ -160,6 +160,7 @@ export const MessageRow = memo(function MessageRow({
           actionRun={message.actionRun}
           onOpenBrowserLink={onOpenBrowserLink}
           onOpenFileInSidebar={onOpenFileInSidebar}
+          workspaceRootPath={workspaceRootPath}
         />
       ) : null}
       {message.changeSummary && (

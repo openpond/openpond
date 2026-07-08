@@ -14,7 +14,25 @@ import { WorkspaceDiffTabs, WorkspaceDiffToolbar } from "./WorkspaceDiffPanelChr
 import { FilePreview } from "./WorkspaceFilePreview";
 import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, sandboxSourceReadbackDiffFromEvents, saveSandboxFile } from "./workspace-diff-file-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
-import { WORKSPACE_TEMPLATE_CONFIG_PATH, isDirectoryLikeDiffFile, isMarkdownPath, placeholderFile, type DiffTab, type FileDraft, type SandboxFileSource, type WorkspaceDiffRefreshOptions, type WorkspaceDiffSideChatTab, type WorkspaceDiffTabRequest, type WorkspaceFileSourceSwitcher } from "./workspace-diff-panel-model";
+import {
+  WORKSPACE_TEMPLATE_CONFIG_PATH,
+  cloneWorkspaceDiffPanelViewState,
+  defaultWorkspaceDiffPanelViewState,
+  isDirectoryLikeDiffFile,
+  isMarkdownPath,
+  normalizeWorkspaceDiffPanelViewState,
+  normalizeWorkspaceDiffPath,
+  placeholderFile,
+  workspaceDiffPanelViewStatesEqual,
+  type DiffTab,
+  type FileDraft,
+  type SandboxFileSource,
+  type WorkspaceDiffPanelViewState,
+  type WorkspaceDiffRefreshOptions,
+  type WorkspaceDiffSideChatTab,
+  type WorkspaceDiffTabRequest,
+  type WorkspaceFileSourceSwitcher,
+} from "./workspace-diff-panel-model";
 import { editorDiagnosticStatus as resolveEditorDiagnosticStatus, readEditorControlsVisible, writeEditorControlsVisible } from "./workspace-diff-editor-state";
 
 const WORKSPACE_DIFF_REFRESH_INTERVAL_MS = 3_000;
@@ -38,10 +56,12 @@ export function WorkspaceDiffPanel({
   sideChatTabs,
   sourceSwitcher,
   tabRequest,
+  viewState,
   onRefresh,
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
+  onViewStateChange,
   onCloseSideChat,
   onOpenSideChat,
   onSelectSideChat,
@@ -64,11 +84,13 @@ export function WorkspaceDiffPanel({
   sideChatTabs?: WorkspaceDiffSideChatTab[];
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   tabRequest?: WorkspaceDiffTabRequest | null;
+  viewState?: WorkspaceDiffPanelViewState | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
   onOpenBrowser: () => void;
   onOpenBrowserUrl: (href: string, options?: { newTab?: boolean }) => void;
+  onViewStateChange?: (state: WorkspaceDiffPanelViewState) => void;
   onCloseSideChat?: (panelId: string) => void;
   onOpenSideChat?: () => void;
   onSelectSideChat?: (panelId: string) => void;
@@ -92,10 +114,12 @@ export function WorkspaceDiffPanel({
       sideChatTabs={sideChatTabs ?? []}
       sourceSwitcher={sourceSwitcher ?? null}
       tabRequest={tabRequest ?? null}
+      viewState={viewState ?? null}
       onRefresh={onRefresh}
       onResizeStart={onResizeStart}
       onToggleExpanded={onToggleExpanded}
       onOpenBrowser={onOpenBrowser}
+      onViewStateChange={onViewStateChange}
       onCloseSideChat={onCloseSideChat}
       onOpenSideChat={onOpenSideChat}
       onSelectSideChat={onSelectSideChat}
@@ -118,9 +142,10 @@ function detailedWorkspaceFile(
   displayed: WorkspaceDiffFile | undefined,
   path: string,
 ): WorkspaceDiffFile {
-  if (current && loaded?.content != null && current.content == null) {
+  if (current && loaded?.content != null) {
     return { ...current, content: loaded.content };
   }
+  if (loaded && !current && hasWorkspaceFileDetail(loaded)) return loaded;
   if (current && hasWorkspaceFileDetail(current)) return current;
   if (loaded && hasWorkspaceFileDetail(loaded)) return loaded;
   return current ?? loaded ?? displayed ?? placeholderFile(path);
@@ -210,10 +235,12 @@ function WorkspaceDiffPanelInner({
   sideChatTabs,
   sourceSwitcher,
   tabRequest,
+  viewState,
   onRefresh,
   onResizeStart,
   onToggleExpanded,
   onOpenBrowser,
+  onViewStateChange,
   onCloseSideChat,
   onOpenSideChat,
   onSelectSideChat,
@@ -235,23 +262,26 @@ function WorkspaceDiffPanelInner({
   sideChatTabs: WorkspaceDiffSideChatTab[];
   sourceSwitcher: WorkspaceFileSourceSwitcher | null;
   tabRequest: WorkspaceDiffTabRequest | null;
+  viewState: WorkspaceDiffPanelViewState | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
   onOpenBrowser: () => void;
+  onViewStateChange?: (state: WorkspaceDiffPanelViewState) => void;
   onCloseSideChat?: (panelId: string) => void;
   onOpenSideChat?: () => void;
   onSelectSideChat?: (panelId: string) => void;
   goalDetails: WorkspaceGoalDetails | null;
   sandboxFileSource: SandboxFileSource | null;
 }) {
-  const [activeTab, setActiveTab] = useState<DiffTab>("files");
+  const initialViewState = viewState ?? defaultWorkspaceDiffPanelViewState();
+  const [activeTab, setActiveTab] = useState<DiffTab>(initialViewState.activeTab);
   const [menuOpen, setMenuOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [openFilePaths, setOpenFilePaths] = useState<string[]>(() => [...initialViewState.openFilePaths]);
+  const [selectedPath, setSelectedPath] = useState<string | null>(initialViewState.selectedPath);
   const [wordWrap, setWordWrap] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [loadFullFiles, setLoadFullFiles] = useState(false);
@@ -271,12 +301,15 @@ function WorkspaceDiffPanelInner({
   const [lspCheckingPath, setLspCheckingPath] = useState<string | null>(null);
   const [fileLoadingPath, setFileLoadingPath] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [fileReloadRequest, setFileReloadRequest] = useState<{ id: number; path: string } | null>(null);
   const [fileSaveErrors, setFileSaveErrors] = useState<Record<string, string>>({});
   const [savingPath, setSavingPath] = useState<string | null>(null);
   const [previewImagePath, setPreviewImagePath] = useState<string | null>(null);
   const [templateConfigPath, setTemplateConfigPath] = useState<string | null>(null);
   const activeEditorPreferences = editorPreferences ?? DEFAULT_APP_PREFERENCES.editor;
   const loadedFilesRef = useRef(loadedFiles);
+  const appliedViewStateRef = useRef<WorkspaceDiffPanelViewState>(cloneWorkspaceDiffPanelViewState(initialViewState));
+  const reportedViewStateRef = useRef<WorkspaceDiffPanelViewState>(cloneWorkspaceDiffPanelViewState(initialViewState));
   const lastOpenFileRequestIdRef = useRef<number | null>(null);
   const refreshRef = useRef(onRefresh);
   const refreshBusyRef = useRef(false);
@@ -360,6 +393,7 @@ function WorkspaceDiffPanelInner({
       ? sandboxDiff
       : sandboxSourceReadbackDiff ?? sandboxDiff
     : diff;
+  const workspaceRootPath = displayDiff?.repoPath ?? null;
   const checkpointStatus = useMemo(
     () => latestSandboxCheckpointStatus(runtimeEvents, sandboxId),
     [runtimeEvents, sandboxId],
@@ -426,6 +460,14 @@ function WorkspaceDiffPanelInner({
     if (!query) return paths;
     return paths.filter((path) => path.toLowerCase().includes(query));
   }, [repoFiles, searchQuery]);
+  const currentViewState = useMemo<WorkspaceDiffPanelViewState>(
+    () => ({
+      activeTab,
+      openFilePaths,
+      selectedPath,
+    }),
+    [activeTab, openFilePaths, selectedPath],
+  );
 
   useEffect(() => {
     loadedFilesRef.current = loadedFiles;
@@ -471,6 +513,25 @@ function WorkspaceDiffPanelInner({
   }, [onRefresh]);
 
   useEffect(() => {
+    if (!viewState) return;
+    const next = normalizeWorkspaceDiffPanelViewState(viewState, workspaceRootPath);
+    if (workspaceDiffPanelViewStatesEqual(appliedViewStateRef.current, next)) return;
+    appliedViewStateRef.current = next;
+    reportedViewStateRef.current = next;
+    setActiveTab(next.activeTab);
+    setOpenFilePaths(next.openFilePaths);
+    setSelectedPath(next.selectedPath);
+  }, [viewState, workspaceRootPath]);
+
+  useEffect(() => {
+    if (workspaceDiffPanelViewStatesEqual(reportedViewStateRef.current, currentViewState)) return;
+    const next = cloneWorkspaceDiffPanelViewState(currentViewState);
+    reportedViewStateRef.current = next;
+    appliedViewStateRef.current = next;
+    onViewStateChange?.(next);
+  }, [currentViewState, onViewStateChange]);
+
+  useEffect(() => {
     if (sandboxMode || !connection || !appId || !workspaceInitialized || diff || workspaceError) return;
     if (refreshBusyRef.current) return;
 
@@ -502,6 +563,7 @@ function WorkspaceDiffPanelInner({
       setLspCheckingPath(null);
       setFileLoadingPath(null);
       setFileError(null);
+      setFileReloadRequest(null);
       setFileSaveErrors({});
       setSavingPath(null);
       setPreviewImagePath(null);
@@ -634,8 +696,9 @@ function WorkspaceDiffPanelInner({
       setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
       return undefined;
     }
+    const forceReload = fileReloadRequest?.path === selectedDetailPath;
     const diffFile = fileForPath(selectedDetailPath);
-    if (diffFile?.content != null || (diffFile?.patch && !loadFullFiles)) {
+    if (!forceReload && (diffFile?.content != null || (diffFile?.patch && !loadFullFiles))) {
       setFileError(null);
       setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
       return undefined;
@@ -672,7 +735,12 @@ function WorkspaceDiffPanelInner({
         setFileError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
-        if (!cancelled) setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
+        if (!cancelled) {
+          setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
+          setFileReloadRequest((current) =>
+            current && current.id === fileReloadRequest?.id && current.path === selectedDetailPath ? null : current,
+          );
+        }
       });
 
     return () => {
@@ -682,6 +750,7 @@ function WorkspaceDiffPanelInner({
     activeTab,
     appId,
     connection,
+    fileReloadRequest,
     loadFullFiles,
     runtimeEvents,
     sandboxFileSource?.emptyMessage,
@@ -691,10 +760,19 @@ function WorkspaceDiffPanelInner({
   ]);
 
   function openFile(path: string) {
-    setOpenFilePaths((current) => (current.includes(path) ? current : [...current, path]));
-    setSelectedPath(path);
+    const normalizedPath = normalizeWorkspaceDiffPath(path, workspaceRootPath);
+    if (!normalizedPath) return;
+    setLoadedFiles((current) => {
+      if (!(normalizedPath in current)) return current;
+      const next = { ...current };
+      delete next[normalizedPath];
+      return next;
+    });
+    setFileReloadRequest({ id: Date.now(), path: normalizedPath });
+    setOpenFilePaths((current) => (current.includes(normalizedPath) ? current : [...current, normalizedPath]));
+    setSelectedPath(normalizedPath);
     setActiveTab("file");
-    if (!sandboxMode && connection && appId && isWorkspaceImagePath(path)) setPreviewImagePath(path);
+    if (!sandboxMode && connection && appId && isWorkspaceImagePath(normalizedPath)) setPreviewImagePath(normalizedPath);
     setAddMenuOpen(false);
     setSearchOpen(false);
     setSearchQuery("");
@@ -1198,6 +1276,7 @@ function WorkspaceDiffPanelInner({
               wordDiffs={wordDiffs}
               wordWrap={wordWrap}
               workspaceName={workspaceName}
+              workspaceRootPath={workspaceRootPath}
             />
           )}
         </>

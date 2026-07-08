@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "generatedAt": "2026-07-08T16:48:46.737Z",
+  "mode": "none",
+  "repoRoot": "/home/glu/Projects/all/openpond",
+  "artifactsDir": "/home/glu/Projects/all/openpond/tmp/desktop-harness/2026-07-08T16-48-46-728Z",
+  "scenarios": [
+    {
+      "name": "fixture-pass",
+      "ok": true,
+      "mode": "none",
+      "startedAt": "2026-07-08T16:48:46.736Z",
+      "completedAt": "2026-07-08T16:48:46.737Z",
+      "durationMs": 1,
+      "events": [
+        "turn.started"
+      ],
+      "rendererAssertions": {
+        "parentChatVisible": true
+      },
+      "metadata": {
+        "parentSessionId": "session_fixture_parent"
+      },
+      "screenshots": []
+    }
+  ],
+  "timings": {
+    "totalMs": 9
+  }
+}

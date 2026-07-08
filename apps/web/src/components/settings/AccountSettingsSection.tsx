@@ -5,6 +5,7 @@ import { ExternalLink, KeyRound, Plus, RefreshCw } from "../icons";
 import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
+import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
 import {
   AccountEndpointDialog,
   type AccountEndpointUpdate,
@@ -42,6 +43,8 @@ type AccountSettingsSectionProps = {
 
 type AccountRow = AccountState["accounts"][number];
 const DEFAULT_OPENPOND_API_KEYS_URL = "https://openpond.ai/settings/api-keys";
+const ACCOUNT_SCOPE_CHANGE_BODY =
+  "Changing the active OpenPond account rechecks cloud projects, hosted agents, default team, and profile sync for that account. Local projects stay on this machine; projects uploaded from another account will need to be synced again for this account.";
 
 export function AccountSettingsSection({
   payload,
@@ -75,6 +78,11 @@ export function AccountSettingsSection({
   const [environmentConnectEnabled, setEnvironmentConnectEnabled] = useState(false);
   const [environmentConnectDialogOpen, setEnvironmentConnectDialogOpen] = useState(false);
   const [savingEndpointKey, setSavingEndpointKey] = useState<string | null>(null);
+  const {
+    confirmAction: confirmAccountAction,
+    confirmDialog: accountConfirmDialog,
+    resolveConfirmDialog: resolveAccountConfirmDialog,
+  } = useConfirmDialog();
   const activeCandidate = accounts.find((candidate) => candidate.isActive) ?? accounts[0] ?? null;
   const defaultTeamId = payload?.preferences.defaultTeamId?.trim() || null;
   const visibleDefaultTeamId = pendingDefaultTeamId ?? defaultTeamId;
@@ -231,18 +239,28 @@ export function AccountSettingsSection({
     }
   }
 
-  function submitAccountForm(event: FormEvent<HTMLFormElement>) {
+  async function confirmAccountScopeChange(confirmLabel = "Continue"): Promise<boolean> {
+    if (!shouldWarnAccountScopeChange) return true;
+    return confirmAccountAction({
+      title: "Change active OpenPond account?",
+      body: ACCOUNT_SCOPE_CHANGE_BODY,
+      confirmLabel,
+      cancelLabel: "Cancel",
+    });
+  }
+
+  async function submitAccountForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (environmentConnectEnabled) {
       setEnvironmentConnectDialogOpen(true);
       return;
     }
-    if (!confirmAccountScopeChange(shouldWarnAccountScopeChange)) return;
-    void saveAccount(event);
+    if (!(await confirmAccountScopeChange(submitLabel))) return;
+    await saveAccount(event);
   }
 
   async function saveEnvironmentConnect(input: AccountEndpointUpdate) {
-    if (!confirmAccountScopeChange(shouldWarnAccountScopeChange)) return;
+    if (!(await confirmAccountScopeChange("Save account"))) return;
     await saveEnvironmentAccount({
       apiKey: input.apiKey ?? "",
       handle: input.handle,
@@ -256,7 +274,7 @@ export function AccountSettingsSection({
 
   async function updateAccountEndpoints(input: AccountEndpointUpdate) {
     if (!connection || !endpointDialogAccount) throw new Error("OpenPond server connection is not ready.");
-    if (endpointDialogAccount.isActive && !confirmAccountScopeChange(shouldWarnAccountScopeChange)) return;
+    if (endpointDialogAccount.isActive && !(await confirmAccountScopeChange("Save endpoints"))) return;
     const endpointKey = accountListKey(endpointDialogAccount);
     setSavingEndpointKey(endpointKey);
     onError(null);
@@ -279,6 +297,13 @@ export function AccountSettingsSection({
     } finally {
       setSavingEndpointKey(null);
     }
+  }
+
+  async function useSavedAccount(candidate: AccountRow) {
+    const candidateHandle = candidate.handle?.trim() || "";
+    if (!candidateHandle) return;
+    if (!(await confirmAccountScopeChange("Switch account"))) return;
+    await switchAccount(candidateHandle, candidate.baseUrl);
   }
 
   return (
@@ -334,7 +359,7 @@ export function AccountSettingsSection({
       </div>
     </div>
 
-    <form className="account-login-form" onSubmit={submitAccountForm}>
+    <form className="account-login-form" onSubmit={(event) => void submitAccountForm(event)}>
       {(signedOut || authError) ? (
         <div className="account-signin-panel">
           <KeyRound size={18} />
@@ -434,10 +459,7 @@ export function AccountSettingsSection({
                   className="inline-action"
                   disabled={saving || !candidateHandle}
                   type="button"
-                  onClick={() => {
-                    if (!confirmAccountScopeChange(shouldWarnAccountScopeChange)) return;
-                    void switchAccount(candidateHandle, candidate.baseUrl);
-                  }}
+                  onClick={() => void useSavedAccount(candidate)}
                 >
                   Use
                 </button>
@@ -500,6 +522,7 @@ export function AccountSettingsSection({
         onSave={saveEnvironmentConnect}
       />
     ) : null}
+    <ConfirmDialog state={accountConfirmDialog} onResolve={resolveAccountConfirmDialog} />
   </section>
   );
 }
@@ -543,11 +566,4 @@ function customEnvironmentName(value?: string | null): string {
 function isCustomAccountEnvironment(value?: string | null): boolean {
   const normalized = value?.trim().toLowerCase();
   return Boolean(normalized && normalized !== "production");
-}
-
-function confirmAccountScopeChange(enabled: boolean): boolean {
-  if (!enabled || typeof window === "undefined") return true;
-  return window.confirm(
-    "Changing the active OpenPond account rechecks cloud projects, hosted agents, default team, and profile sync for that account. Local projects stay on this machine; projects uploaded from another account will need to be synced again for this account.",
-  );
 }

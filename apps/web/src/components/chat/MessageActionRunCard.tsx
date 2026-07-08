@@ -2,15 +2,18 @@ import type { ReactNode } from "react";
 import { ArrowUpRight, CheckCircle2, CircleDashed, FileText, GitBranch, Workflow, XCircle } from "../icons";
 import type { ActionRunRef, ActionRunSummary } from "../../lib/app-models";
 import { isGenericChatLabel, shortProfileAgentLabel } from "../../lib/profile-agent-labels";
+import { normalizeChatFilePath } from "../../lib/chat-file-links";
 
 export function ActionRunCard({
   actionRun,
   onOpenBrowserLink,
   onOpenFileInSidebar,
+  workspaceRootPath = null,
 }: {
   actionRun: ActionRunSummary;
   onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
   onOpenFileInSidebar?: (path: string) => void;
+  workspaceRootPath?: string | null;
 }) {
   const StatusIcon = actionRunStatusIcon(actionRun.status);
   const meta = actionRunMeta(actionRun);
@@ -47,6 +50,7 @@ export function ActionRunCard({
               refItem={ref}
               onOpenBrowserLink={onOpenBrowserLink}
               onOpenFileInSidebar={onOpenFileInSidebar}
+              workspaceRootPath={workspaceRootPath}
             />
           ))}
         </div>
@@ -99,13 +103,18 @@ function ActionRunRefRow({
   refItem,
   onOpenBrowserLink,
   onOpenFileInSidebar,
+  workspaceRootPath,
 }: {
   refItem: ActionRunRef;
   onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
   onOpenFileInSidebar?: (path: string) => void;
+  workspaceRootPath?: string | null;
 }) {
+  const normalizedFile = onOpenFileInSidebar
+    ? normalizeChatFilePath(refItem.target, { workspaceRootPath })
+    : null;
   const canOpenBrowser = isHttpUrl(refItem.target) && onOpenBrowserLink;
-  const canOpenFile = !isHttpUrl(refItem.target) && !hasUriScheme(refItem.target) && onOpenFileInSidebar;
+  const canOpenFile = Boolean(normalizedFile && onOpenFileInSidebar);
   return (
     <div className={`action-run-ref ${refItem.kind}`}>
       <span>{refItem.label}</span>
@@ -125,7 +134,9 @@ function ActionRunRefRow({
           type="button"
           title={`Open ${refItem.target}`}
           aria-label={`Open ${refItem.label}`}
-          onClick={() => onOpenFileInSidebar(refItem.target)}
+          onClick={() => {
+            if (normalizedFile && onOpenFileInSidebar) onOpenFileInSidebar(normalizedFile.path);
+          }}
         >
           <ArrowUpRight size={13} />
         </button>
@@ -170,8 +181,4 @@ function actionRunMeta(actionRun: ActionRunSummary): Array<{
 
 function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
-}
-
-function hasUriScheme(value: string): boolean {
-  return /^[a-z][a-z0-9+.-]*:/i.test(value);
 }

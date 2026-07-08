@@ -279,6 +279,55 @@ describe("runtime indexes", () => {
     expect([...indexes.activeSubagentSessionIds]).toEqual(["s1"]);
   });
 
+  test("keeps latest active goal runtime while a goal-scoped subagent is still running", () => {
+    const indexes = buildRuntimeIndexes(
+      [
+        runtimeEvent({ id: "turn_started", sessionId: "s1", turnId: "turn_1", name: "turn.started" }),
+        runtimeEvent({
+          id: "goal_active",
+          sessionId: "s1",
+          turnId: "turn_1",
+          name: "diagnostic",
+          data: {
+            kind: "thread_goal",
+            provider: "openpond",
+            goal: {
+              id: "goal_1",
+              objective: "Keep the subagent goal visible",
+              status: "running",
+              timeUsedSeconds: 73,
+            },
+          },
+        }),
+        runtimeEvent({ id: "turn_done", sessionId: "s1", turnId: "turn_1", name: "turn.completed" }),
+        runtimeEvent({
+          id: "subagent_running",
+          sessionId: "s1",
+          turnId: "turn_1",
+          name: "subagent.started",
+          status: "started",
+          data: {
+            run: subagentRun({
+              id: "run_1",
+              parentSessionId: "s1",
+              status: "running",
+              startedAt: "2026-07-01T10:00:02.000Z",
+            }),
+          },
+        }),
+      ],
+      [],
+    );
+
+    expect(latestGoalRuntimeForSession(indexes, "s1")).toMatchObject({
+      objective: "Keep the subagent goal visible",
+      actionLabel: "Pursuing goal",
+      tone: "active",
+    });
+    expect([...indexes.activeGoalSessionIds]).toEqual(["s1"]);
+    expect(latestSubagentRuntimeForSession(indexes, "s1")?.activeCount).toBe(1);
+  });
+
   test("preserves unchanged session event arrays when appending events", () => {
     const firstEvents = [
       runtimeEvent({ id: "s1_delta", sessionId: "s1", name: "assistant.delta", output: "one" }),

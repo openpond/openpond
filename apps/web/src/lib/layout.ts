@@ -5,7 +5,8 @@ const MIN_SIDEBAR_WIDTH = 244;
 const MAX_SIDEBAR_WIDTH = 560;
 export const DEFAULT_DIFF_PANEL_WIDTH = 560;
 const MIN_DIFF_PANEL_WIDTH = 320;
-const MAX_DIFF_PANEL_WIDTH = 920;
+const MAX_DIFF_PANEL_WIDTH = 2400;
+const MIN_CHAT_WIDTH_WITH_RIGHT_PANEL = 440;
 
 export function clampSidebarWidth(value: number): number {
   const viewportMax = typeof window === "undefined" ? MAX_SIDEBAR_WIDTH : Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, window.innerWidth - 420));
@@ -16,7 +17,10 @@ export function clampDiffPanelWidth(value: number): number {
   const viewportMax =
     typeof window === "undefined"
       ? MAX_DIFF_PANEL_WIDTH
-      : Math.min(MAX_DIFF_PANEL_WIDTH, Math.max(MIN_DIFF_PANEL_WIDTH, window.innerWidth - 360));
+      : Math.min(
+          MAX_DIFF_PANEL_WIDTH,
+          Math.max(MIN_DIFF_PANEL_WIDTH, window.innerWidth - MIN_CHAT_WIDTH_WITH_RIGHT_PANEL),
+        );
   return Math.min(viewportMax, Math.max(MIN_DIFF_PANEL_WIDTH, Math.round(value)));
 }
 

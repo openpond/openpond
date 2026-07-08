@@ -9,9 +9,10 @@ metadata:
 
 Use this root skill as the default entrypoint when importing this repository into agent skill systems.
 
-## Primary reusable skill
+## Primary reusable skills
 
 - `skills/openpond-cli/SKILL.md`
+- `skills/openpond-desktop-harness/SKILL.md`
 
 ## Suggested install commands
 
@@ -25,3 +26,4 @@ Use this root skill as the default entrypoint when importing this repository int
 - Deployment watch workflows (`openpond deploy watch`)
 - Tool discovery and execution (`openpond tool list`, `openpond tool run`)
 - CLI-driven deploy and tool validation loop
+- Desktop harness scenario authoring, execution, and proof workflow

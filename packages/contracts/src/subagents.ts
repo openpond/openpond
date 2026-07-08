@@ -141,6 +141,7 @@ export const SubagentPreferencesSchema = z.object({
   maxConcurrentRunsPerProvider: z.number().int().min(1).max(32).nullable().default(2),
   maxConcurrentRunsPerWorkspaceTarget: z.number().int().min(1).max(32).nullable().default(2),
   maxTokens: z.number().int().min(1).max(50_000_000).nullable().default(null),
+  heartbeatIntervalSeconds: z.number().int().min(10).max(3600).default(60),
 }).transform((preferences) => ({
   ...preferences,
   roles: normalizeSubagentRoleSettings(preferences.roles),

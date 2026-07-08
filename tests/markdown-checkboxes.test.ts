@@ -95,7 +95,8 @@ describe("markdown checkbox rendering", () => {
 
     expect(markup).toContain("markdown-file-image-reference");
     expect(markup).toContain("markdown-file-image-preview ready");
-    expect(markup).toContain("<code>apps/web/public/openpond-icon.png</code>");
+    expect(markup).toContain(">apps/web/public/openpond-icon.png</a>");
+    expect(markup).not.toContain("<code>apps/web/public/openpond-icon.png</code>");
     expect(markup).toContain('src="/openpond-icon.png"');
     expect(markup).toContain('src="/connected-apps/github.svg"');
   });
@@ -155,6 +156,57 @@ describe("markdown checkbox rendering", () => {
     expect(markup).toContain("markdown-image-link");
     expect(markup).not.toContain("markdown-inline-image");
     expect(markup).not.toContain("<img");
+  });
+
+
+  test("renders inline code resource file refs as clickable file links", () => {
+    const markup = renderMarkdown("Open `workspace:file:apps/web/src/components/chat/MarkdownText.tsx` next.", {
+      onOpenFileInSidebar: () => {},
+    });
+
+    expect(markup).toContain('class="markdown-file-link"');
+    expect(markup).toContain('>workspace:file:apps/web/src/components/chat/MarkdownText.tsx</a>');
+    expect(markup).not.toContain('<code>workspace:file:apps/web/src/components/chat/MarkdownText.tsx</code>');
+  });
+
+  test("renders angle-bracket resource file refs as clickable file links", () => {
+    const markup = renderMarkdown("Open <workspace:file:apps/web/src/components/chat/MarkdownText.tsx> next.", {
+      onOpenFileInSidebar: () => {},
+    });
+
+    expect(markup).toContain('class="markdown-file-link"');
+    expect(markup).toContain('>workspace:file:apps/web/src/components/chat/MarkdownText.tsx</a>');
+  });
+
+  test("renders file-only fenced code blocks as file reference links", () => {
+    const markup = renderMarkdown("```\nworkspace:file:apps/web/src/components/chat/MarkdownText.tsx\napps/web/src/lib/chat-file-links.ts\n```", {
+      onOpenFileInSidebar: () => {},
+    });
+
+    expect(markup).toContain('class="markdown-file-reference-block"');
+    expect(markup).toContain('class="markdown-file-link"');
+    expect(markup).toContain('>workspace:file:apps/web/src/components/chat/MarkdownText.tsx</a>');
+    expect(markup).toContain('>apps/web/src/lib/chat-file-links.ts</a>');
+    expect(markup).not.toContain('markdown-code-block');
+    expect(markup).not.toContain('<code>workspace:file:apps/web/src/components/chat/MarkdownText.tsx</code>');
+  });
+
+  test("keeps mixed fenced code blocks as code", () => {
+    const markup = renderMarkdown("```ts\nconst file = 'apps/web/src/lib/chat-file-links.ts';\n```", {
+      onOpenFileInSidebar: () => {},
+    });
+
+    expect(markup).toContain('class="markdown-code-block"');
+    expect(markup).not.toContain('markdown-file-reference-block');
+  });
+
+  test("renders bare urls as clickable links", () => {
+    const markup = renderMarkdown("Open https://example.com/path?x=1, or www.openpond.ai/docs.");
+
+    expect(markup).toContain('href="https://example.com/path?x=1"');
+    expect(markup).toContain('>https://example.com/path?x=1</a>,');
+    expect(markup).toContain('href="https://www.openpond.ai/docs"');
+    expect(markup).toContain('>https://www.openpond.ai/docs</a>.');
   });
 
   test("renders numbered headings that are missing the markdown space", () => {

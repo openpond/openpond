@@ -197,6 +197,9 @@ export function ComposerPrimaryControls({
           icon={<Shield size={14} />}
           placement={dropdownPlacement}
           label="Codex permissions"
+          tooltip={CODEX_PERMISSION_MODE_OPTIONS.find(
+            (option) => option.value === codexPermissionMode,
+          )?.label}
           value={codexPermissionMode}
           options={CODEX_PERMISSION_MODE_OPTIONS}
           disabled={busy}
@@ -209,6 +212,11 @@ export function ComposerPrimaryControls({
           icon={<SquareTerminal size={14} />}
           placement={dropdownPlacement}
           label="Command access"
+          tooltip={OPENPOND_COMMAND_ACCESS_MODE_OPTIONS.find(
+            (option) =>
+              option.value ===
+              (openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode),
+          )?.label}
           value={openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode}
           options={OPENPOND_COMMAND_ACCESS_MODE_OPTIONS}
           disabled={busy}
