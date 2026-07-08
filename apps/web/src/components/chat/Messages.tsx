@@ -173,7 +173,6 @@ export const MessageRow = memo(function MessageRow({
         <CreatePipelineStatusReceipt
           request={message.createPipelineRequest}
           snapshot={message.createPipeline ?? null}
-          progressActivities={message.createPipelineDebugActivities}
         />
       )}
       {showFooter && (
@@ -265,8 +264,7 @@ function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): bool
     previous.insightsRunPrompt === next.insightsRunPrompt &&
     previous.changeSummary === next.changeSummary &&
     previous.createPipelineRequest === next.createPipelineRequest &&
-    previous.createPipeline === next.createPipeline &&
-    previous.createPipelineDebugActivities === next.createPipelineDebugActivities
+    previous.createPipeline === next.createPipeline
   );
 }
 

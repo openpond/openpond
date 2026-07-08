@@ -519,6 +519,11 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
     onPromptChange(nextState.text, nextCursor);
   }
 
+  function syncAfterProgrammaticInsert() {
+    syncFromDom();
+    window.requestAnimationFrame(syncFromDom);
+  }
+
   function updateCursorFromSelection() {
     const root = rootRef.current;
     if (!root) return;
@@ -541,6 +546,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
         if ((event.nativeEvent as InputEvent).inputType !== "insertParagraph") return;
         event.preventDefault();
         insertPlainText("\n");
+        syncAfterProgrammaticInsert();
       }}
       onInput={syncFromDom}
       onKeyDown={(event) => {
@@ -550,7 +556,10 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       onMouseUp={updateCursorFromSelection}
       onPaste={(event) => {
         event.preventDefault();
-        insertPlainText(event.clipboardData.getData("text/plain"));
+        const text = event.clipboardData.getData("text/plain");
+        if (!text) return;
+        insertPlainText(text);
+        syncAfterProgrammaticInsert();
       }}
     />
   );

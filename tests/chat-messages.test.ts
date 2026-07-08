@@ -809,6 +809,16 @@ describe("chat message projection", () => {
         },
       }),
       runtimeEvent({
+        id: "create_plan_approval_requested",
+        name: "approval.requested",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        action: "create_plan",
+        status: "pending",
+        output: "Approve create plan",
+        data: { id: "approval_create_plan" },
+      }),
+      runtimeEvent({
         id: "assistant_source_apply",
         name: "assistant.delta",
         sessionId: "session_1",
@@ -840,17 +850,14 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant", "activity_group"]);
     expect(messages[1]?.createPipelineRequest?.objective).toBe("Create a release notes agent");
     expect(messages[1]?.createPipeline?.state).toBe("applying_source");
     expect(messages[1]?.content).toBeUndefined();
     expect(messages[1]?.actionRun).toBeUndefined();
-    expect(messages[1]?.createPipelineDebugActivities).toHaveLength(2);
-    expect(messages[1]?.createPipelineDebugActivities?.[0]).toMatchObject({
-      label: "assistant delta",
-      content: "I will inspect the existing profile and create files now.",
-    });
-    expect(messages[1]?.createPipelineDebugActivities?.[1]).toMatchObject({
+    expect(messages[2]?.content).toBe("I will inspect the existing profile and create files now.");
+    expect(messages[3]?.activities).toHaveLength(1);
+    expect(messages[3]?.activities?.[0]).toMatchObject({
       label: "Started",
       content: "sed -n '1,200p' profiles/default/settings/profile.yaml",
       detail: "large provider diagnostic output",

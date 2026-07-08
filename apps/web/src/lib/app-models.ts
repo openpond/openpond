@@ -197,7 +197,6 @@ export type ChatMessage = {
   insightsRunPrompt?: InsightsRunPromptSummary;
   createPipelineRequest?: CreatePipelineRequest | null;
   createPipeline?: CreatePipelineSnapshot | null;
-  createPipelineDebugActivities?: ActivityItem[];
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;

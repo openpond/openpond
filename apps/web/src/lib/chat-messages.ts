@@ -11,7 +11,6 @@ import {
 import type { ChatMessage } from "./app-models";
 import { appendActionRunMessage, actionRunSummaryFromEvent } from "./chat-action-runs";
 import {
-  appendActivityToList,
   appendActivityMessage,
   appendCompactionStatus,
   codexControlMessage,
@@ -37,7 +36,6 @@ export function buildCachedChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
 export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
-  const createPipelineTurnIds = createPipelineTurnIdSet(items);
   const pendingSourcesByTurnId = new Map<string, ChatMessage["sources"]>();
 
   for (const item of items) {
@@ -108,14 +106,10 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
 
     if (item.name === "assistant.delta") {
-      if (item.turnId && createPipelineTurnIds.has(item.turnId)) {
-        appendCreatePipelineDebugActivity(messages, item);
-        continue;
-      }
       const content = item.output ?? "";
       if (!content) continue;
       const previous = messages[messages.length - 1];
-      if (previous?.role === "assistant" && previous.turnId === item.turnId) {
+      if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createPipelineRequest) {
         previous.content = `${previous.content ?? ""}${content}`;
         previous.timestamp = item.timestamp;
         previous.sources = mergeChatSources(
@@ -137,10 +131,6 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
 
     if (item.name === "assistant.reasoning.delta") {
-      if (item.turnId && createPipelineTurnIds.has(item.turnId)) {
-        appendCreatePipelineDebugActivity(messages, item);
-        continue;
-      }
       appendReasoningMessage(messages, item);
       continue;
     }
@@ -178,8 +168,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       item.name.startsWith("subagent.") ||
       isCodexGoalContextEvent(item)
     ) {
-      if (item.turnId && createPipelineTurnIds.has(item.turnId)) {
-        appendCreatePipelineDebugActivity(messages, item);
+      if (isCreatePlanApprovalEvent(item)) {
         continue;
       }
       const actionRun = actionRunSummaryFromEvent(item);
@@ -195,10 +184,6 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
 
     if (item.name === "workspace.diff") {
-      if (item.turnId && createPipelineTurnIds.has(item.turnId)) {
-        appendCreatePipelineDebugActivity(messages, item);
-        continue;
-      }
       const summary = parseWorkspaceDiffSummary(item.data);
       if (!summary || summary.filesChanged === 0) continue;
       const assistant = findLast(
@@ -258,32 +243,12 @@ function appendReasoningMessage(messages: ChatMessage[], item: RuntimeEvent): vo
   });
 }
 
-function appendCreatePipelineDebugActivity(messages: ChatMessage[], item: RuntimeEvent): void {
-  const createMessage = findLast(
-    messages,
-    (candidate) => candidate.turnId === item.turnId && Boolean(candidate.createPipelineRequest),
-  );
-  if (!createMessage) return;
-  createMessage.createPipelineDebugActivities = appendActivityToList(
-    createMessage.createPipelineDebugActivities ?? [],
-    item,
-  );
-  createMessage.timestamp = item.timestamp;
-}
-
-function createPipelineTurnIdSet(items: RuntimeEvent[]): Set<string> {
-  const turnIds = new Set<string>();
-  for (const item of items) {
-    if (!item.turnId) continue;
-    if (item.name === "turn.started" && extractCreatePipeline(item.args).request) {
-      turnIds.add(item.turnId);
-      continue;
-    }
-    if (item.name === "create_pipeline.updated" && extractCreatePipeline(item.data).request) {
-      turnIds.add(item.turnId);
-    }
-  }
-  return turnIds;
+function isCreatePlanApprovalEvent(item: RuntimeEvent): boolean {
+  if (item.name !== "approval.requested") return false;
+  if (item.action === "create_plan") return true;
+  const data = asRecord(item.data);
+  const approval = asRecord(data?.approval);
+  return data?.kind === "create_plan" || approval?.kind === "create_plan";
 }
 
 function parseWorkspaceDiffSummary(value: unknown): WorkspaceDiffSummary | null {

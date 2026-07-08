@@ -1,7 +1,13 @@
 # Subagent Lifecycle Working Notes
 
-Status: working notes  
+Status: active follow-up plan for subagent heartbeat, stale detection, and cleanup/archive lifecycle.  
+Latest checkpoint: 2026-07-08. The core subagent stack is already implemented, including child sessions, run/message contracts, background execution, explicit child-to-parent mailbox handoffs, parent wake metadata, goal completion gating for unresolved required child runs, and baseline desktop harness coverage. The remaining work is the runtime-owned heartbeat/watcher, reliable last-activity exposure, stale/orphan handling, explicit cleanup/archive policy, richer derived buckets, and heartbeat-specific verification. `heartbeatIntervalSeconds` exists in preferences and the Settings UI, but no watcher consumes it yet.
 Purpose: capture near-term direction for OpenPond subagents, especially in light of stronger agentic models such as GPT-5.6-class systems.
+
+Related docs:
+
+- [Subagent Orchestration Investigation](working-docs/agent-harness/2026-07-07-subagent-orchestration.md)
+- [Verifiable Desktop Harness](working-docs/agent-harness/2026-07-08-verifiable-desktop-harness.md)
 
 ## Current read
 
@@ -13,12 +19,31 @@ OpenPond already has a substantial subagent implementation. The important primit
 - Isolated execution through worktrees or sandbox forks.
 - Structured child reports with findings, artifacts, patch refs, tests, blockers, and confidence.
 - UI/runtime aggregation for active, blocked, completed, and graph-style task state.
+- Explicit child-to-parent mailbox handoffs with bounded parent wake/enqueue behavior.
+- Goal completion gating for unresolved required child runs.
+- A `heartbeatIntervalSeconds` preference and Settings input, but no runtime heartbeat service yet.
 
 The recommendation is not to add subagents as a new concept. The next improvement should be lifecycle hygiene and product polish around the subagent system that already exists.
 
+## Current code anchors
+
+- `packages/contracts/src/subagents.ts`: owns subagent preferences, role/run/report/message schemas, status enum, and `heartbeatIntervalSeconds`. `SubagentRun` still lacks an exposed `updatedAt`/last-activity field.
+- `apps/server/src/store/store.ts`: persists `subagent_runs.updated_at` and orders `listSubagentRuns(...)` by that column. There is no dedicated active/stale query yet.
+- `apps/server/src/runtime/turn-runner.ts`: owns `openpond_subagent_start/status/join/cancel/send_message`, explicit child-to-parent wake routing, goal completion gating, goal-resume `needs_resume` marking, child-turn finalization, and cancel-time git-worktree cleanup.
+- `apps/web/src/lib/subagent-runtime.ts`: derives active, blocked, completed, required-open counts, evidence, blockers, usage, and task graph from `subagent.*` events. It does not yet expose separate required active/blocking/unresolved counts or archived/terminal buckets.
+- `apps/web/src/components/goal/GoalDetailsView.tsx`: shows current subagent aggregate state and task graph in the Goal details panel.
+- `tests/desktop-scenarios/README.md` and `package.json`: document the existing deterministic desktop subagent scenarios and `bun run test:desktop:subagents`. Heartbeat/stale/settings scenarios are still new work.
+
+## Boundaries
+
+- Do not rebuild the core subagent concept, contracts, tools, or child-session model.
+- Do not use the heartbeat to make the parent model poll or wake for routine progress.
+- Treat `needs review` and `archived` as UI/lifecycle buckets unless the contract intentionally adds them as persisted run statuses.
+- Keep thread-scoped subagents working without a goal; goal state should add durable lifecycle context, not become the active orchestrator.
+
 ## Main direction
 
-Make subagents feel like managed workers under a durable goal scope, coordinated from a user-facing thread, not loose side chats.
+Make subagents feel like managed workers under a durable thread or goal scope, coordinated from a user-facing thread, not loose side chats.
 
 The cleaner split is:
 
@@ -154,23 +179,25 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 
 ### Phase 0: Product decision and naming
 
-- [x] Keep goals; do not remake the goal abstraction.
-- [x] Treat the parent thread/session as the orchestrator behavior.
-- [x] Treat goals as passive durable lifecycle containers.
-- [x] Treat heartbeat as runtime infrastructure, not a model tool.
+- [x] Keep goals; do not remake the goal abstraction. Done: current implementation already uses `parentGoalId` as optional durable scope.
+- [x] Treat the parent thread/session as the orchestrator behavior. Done: parent sessions own model interaction and subagent tool calls.
+- [x] Treat goals as passive durable lifecycle containers. Done: current goal handling gates completion/resume but does not run as a hidden orchestrator.
+- [x] Treat heartbeat as runtime infrastructure, not a model tool. Done: this is a product decision; implementation still pending.
 - [ ] Rename/clarify user-facing copy where subagents sound exclusively goal-owned.
-- [ ] Decide whether UI should call this feature “heartbeat,” “watcher,” or hide the term behind “background monitoring.”
+- [ ] Decide whether UI should keep saying “heartbeat,” use “watcher,” or hide the term behind “background monitoring.” Current Settings copy says `Heartbeat seconds`.
 
 ### Phase 1: Settings surface and contracts
 
-- [x] Add `heartbeatIntervalSeconds` to subagent preferences.
-- [x] Default to `60` seconds.
-- [x] Bound accepted values to `10–3600` seconds.
-- [x] Add settings-page input for heartbeat seconds.
+- [x] Add `heartbeatIntervalSeconds` to subagent preferences. Done: `SubagentPreferencesSchema` includes the setting.
+- [x] Default to `60` seconds. Done: contract default is `60`.
+- [x] Bound accepted values to `10–3600` seconds. Done: contract and numeric Settings input enforce the same range.
+- [x] Add settings-page input for heartbeat seconds. Done: Subagents Settings shows `Heartbeat seconds`.
 - [ ] Confirm persisted defaults are applied consistently for new users, existing users, and missing preference records.
 - [ ] Add help text that this controls runtime checks, not parent model wake frequency.
 
 ### Phase 2: Runtime watcher foundation
+
+This phase is not covered by the existing subagent queue or child-to-parent mailbox wake. It should introduce a runtime watcher that observes stored run state and emits/wakes only on policy-relevant lifecycle transitions.
 
 - [ ] Add a runtime subagent watcher/heartbeat service.
 - [ ] Start the watcher only when non-terminal child runs exist.
@@ -181,8 +208,10 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 
 ### Phase 3: Status and stale detection
 
+- [x] Store internal update timestamps for subagent rows. Done: SQLite stores `subagent_runs.updated_at` and orders list results by it.
+- [x] Provide a generic run listing query. Done: `listSubagentRuns({ parentSessionId, parentGoalId, childSessionId, status, limit })` exists.
 - [ ] Expose reliable `updatedAt`/last-activity data for subagent runs.
-- [ ] Add a query like `listActiveSubagentRuns(...)`.
+- [ ] Add a query like `listActiveSubagentRuns(...)` or a watcher-local helper that centralizes active status selection.
 - [ ] Add a query like `listStaleSubagentRuns({ olderThanMs, statuses })`.
 - [ ] Define stale as derived state first unless a persisted `stale` status becomes necessary.
 - [ ] Mark stale optional runs as attention-needed or cancellable.
@@ -190,24 +219,29 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 
 ### Phase 4: Wake routing policy
 
-- [ ] Queue parent wake when a child asks the parent a question.
-- [ ] Queue parent wake when a required child blocks or fails.
-- [ ] Queue parent wake when all required children complete.
+Existing explicit child-to-parent mailbox messages already queue or defer a bounded parent wake. The remaining rows below are for heartbeat-derived lifecycle events.
+
+- [x] Queue parent wake for explicit child-to-parent mailbox handoffs. Done: `openpond_subagent_send_message` records parent wake delivery metadata and enqueues an idle parent follow-up.
+- [x] Do not wake parent for ordinary routine lifecycle receipts by default. Done for current mailbox/lifecycle behavior; heartbeat must preserve this.
+- [x] Make wake reasons explicit for mailbox handoffs. Done: delivery metadata records queued, deferred, already-queued, missing-parent, active-parent, and loop-limit reasons.
+- [ ] Queue parent wake when a required child blocks or fails and the watcher observes that transition.
+- [ ] Queue parent wake when all required children complete and watcher policy says synthesis is needed.
 - [ ] Queue parent wake on stale/timeout threshold.
-- [ ] Do not wake parent for ordinary progress-only updates by default.
-- [ ] Make wake reasons explicit and visible in runtime events.
+- [ ] Make watcher wake reasons explicit and visible in runtime events.
 - [ ] Ensure parent model turns do not poll on a sleep loop.
 
 ### Phase 5: Goal-aware derived state
 
-- [ ] If `parentGoalId` exists, update goal-visible derived child state.
+- [x] Gate goal completion on unresolved required children. Done: `openpond_goal_control complete` fails while required child runs are not completed.
+- [x] Mark queued/running goal child runs as `needs_resume` when the parent goal resumes. Done: goal resume appends parent-visible `subagent.blocked` receipts for affected child runs.
+- [x] Keep core thread-scoped subagents working when no goal exists. Done: `parentGoalId` is nullable and child runs always have `parentSessionId`.
+- [ ] If `parentGoalId` exists, update watcher-derived goal-visible child state.
 - [ ] Track required active, required blocking, and required unresolved counts separately.
-- [ ] Gate goal completion on unresolved required children.
-- [ ] Keep thread-scoped subagents working when no goal exists.
-- [ ] Make goal completion/stopping policies apply to linked child runs.
+- [ ] Make goal completion/stopping cleanup/archive policies apply to linked child runs.
 
 ### Phase 6: Cleanup and archive behavior
 
+- [x] Clean git-worktree isolated workspace on explicit cancellation. Done: `openpond_subagent_cancel` interrupts the child and calls git-worktree cleanup unless `cleanupWorkspace` is false.
 - [ ] Add or harden `cleanupSubagentRun(runId, reason, policy)`.
 - [ ] Cleanup temporary worktrees/sandbox forks after safe terminal states.
 - [ ] Retain reports, artifacts, patch refs, tests, and important messages.
@@ -217,8 +251,9 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 
 ### Phase 7: UI and observability
 
+- [x] Show current active, blocked, completed, required-open, usage, evidence, checks, and task graph state. Done: current runtime projection and Goal details panel render these aggregates.
 - [ ] Show heartbeat/watcher-derived status without implying the model is awake.
-- [ ] Show active, blocked, unresolved, terminal, and archived buckets.
+- [ ] Show active, blocking, unresolved, terminal, and archived buckets as lifecycle/UI buckets.
 - [ ] Show latest meaningful update from structured state.
 - [ ] Add “cleanup/archive” controls where appropriate.
 - [ ] Add operational events for stale detected, wake queued, wake skipped, workspace retained, archived, and superseded.
@@ -227,11 +262,12 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 
 Use the verifiable desktop harness as the primary end-to-end product test path for this addition. See `docs/working-docs/agent-harness/2026-07-08-verifiable-desktop-harness.md` and the `openpond-desktop-harness` skill for scenario authoring rules.
 
+- [x] Baseline desktop subagent scenario suite exists. Done: `bun run test:desktop:subagents` runs visible lifecycle, running state, child-to-parent handoff wake, blocked approval, and goal-scoped details scenarios.
 - [ ] Unit test preference bounds/defaults.
 - [ ] Unit test watcher start/stop behavior.
 - [ ] Unit test wake policy cases.
 - [ ] Unit test stale detection.
-- [ ] Integration test: parent starts child, parent idles, child completes, parent wake is queued.
+- [ ] Integration test: parent starts child, parent idles, child completes, watcher queues a policy-driven parent wake when appropriate.
 - [ ] Integration test: no goal present, subagent still works under parent session.
 - [ ] Integration test: goal present, derived required counts update.
 - [ ] Integration test: goal stop cancels/cleans active child runs.
@@ -349,12 +385,13 @@ This helps both UI and operational debugging.
 
 ## Product shape
 
-The user should not experience subagents as many random chats. They should experience them as a goal-local worker panel.
+The user should not experience subagents as many random chats. They should experience them as a thread-local, goal-aware worker panel.
 
 Recommended UX:
 
 - Compact worker list by default.
-- Status chips: queued, running, blocked, needs review, completed, failed, cancelled, archived.
+- Status chips from persisted run state: queued, running, blocked, needs resume, completed, failed, cancelled.
+- UI/lifecycle buckets where useful: needs review, unresolved, terminal, archived.
 - Required/optional marker.
 - Latest meaningful update.
 - Final report preview.
@@ -363,14 +400,15 @@ Recommended UX:
 
 ## Near-term implementation slice
 
-A practical first slice:
+A practical first slice from the current code:
 
-1. Add or expose reliable `updatedAt`/heartbeat data for subagent runs.
-2. Add a store query such as `listStaleSubagentRuns({ olderThanMs, statuses })`.
-3. Add a cleanup/archive service such as `cleanupSubagentRun(runId, reason, policy)`.
-4. Wire parent goal stop/complete to child cancellation/archive/cleanup.
-5. Update UI aggregation to separate active, blocking, unresolved, and terminal child states.
-6. Add event coverage for cleanup/archive/stale transitions.
+1. Add `updatedAt` or equivalent last-activity data to the subagent run contract/API projection.
+2. Add active/stale run helpers such as `listActiveSubagentRuns(...)` and `listStaleSubagentRuns({ olderThanMs, statuses })`.
+3. Add the watcher service that consumes `heartbeatIntervalSeconds`, starts only when active children exist, and emits explicit watcher events.
+4. Add a cleanup/archive service such as `cleanupSubagentRun(runId, reason, policy)`.
+5. Wire parent goal stop/complete to child cancellation/archive/cleanup.
+6. Update UI aggregation to separate required active, required blocking, required unresolved, terminal, and archived buckets.
+7. Add event coverage for cleanup/archive/stale/watcher-wake transitions.
 
 ## Desktop harness verification plan
 
@@ -381,13 +419,21 @@ Reference: `docs/working-docs/agent-harness/2026-07-08-verifiable-desktop-harnes
 Recommended scenario additions under `tests/desktop-scenarios/`:
 
 - `subagent-heartbeat-settings`: proves the Settings page exposes and persists `heartbeatIntervalSeconds` with bounds/default behavior and help text.
-- `subagent-heartbeat-parent-wake`: proves a child can finish or ask the parent a question while the parent is idle, the watcher records the meaningful event, and a parent wake is queued once.
+- `subagent-watch-completion-wake`: proves a child can finish while the parent is idle, the watcher records the meaningful event, and a parent wake is queued once when policy requires synthesis.
 - `subagent-heartbeat-no-progress-wake`: proves ordinary progress-only updates do not resume the parent model on every heartbeat.
 - `subagent-heartbeat-thread-scoped`: proves subagents with `parentSessionId` and no `parentGoalId` are still watched and visible.
 - `subagent-heartbeat-goal-derived-state`: proves goal-scoped children update goal-visible required/active/blocking/completed counts while the goal remains a passive tracker.
 - `subagent-heartbeat-stale`: proves stale or timed-out children are surfaced with the correct required/optional policy.
 
+Existing `subagent-handoff-parent-wake.ts` already proves explicit mailbox handoff wake behavior. Do not duplicate that scenario for the watcher unless the watcher is observing a non-message lifecycle event.
+
 Each scenario should record runtime events, bootstrap/session evidence, visible renderer assertions, and screenshot/JSON artifacts. Prefer scripted OpenPond models and event waits over sleeps or live provider calls.
+
+## Validation
+
+- Current evidence: 2026-07-08 doc alignment reviewed the current subagent contracts, store, runtime, UI projection, Goal details, existing desktop scenarios, and package scripts named in `Current code anchors`.
+- Pending: all heartbeat/watcher/stale/cleanup implementation proof is still captured in Phase 8.
+- Not run for this doc update: typecheck, unit tests, or desktop harness scenarios.
 
 ## Open questions
 
@@ -397,6 +443,7 @@ Each scenario should record runtime events, bootstrap/session evidence, visible 
 - Should read/write subagent workspaces be retained until patch approval is resolved?
 - What is the default retention period for child messages, workspaces, and artifacts?
 - Should stronger models be used mainly as parent supervisors, specialist workers, reviewers, or all three depending on budget?
+- Should this top-level notes file stay at `docs/subagent-lifecycle-working-notes.md`, or be promoted under `docs/working-docs/agent-harness/` once implementation starts?
 
 ## Opinionated recommendation
 

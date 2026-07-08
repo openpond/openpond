@@ -147,6 +147,8 @@ import type {
   ProfileSkillInstructionMode,
 } from "../openpond/hosted-turn-helpers.js";
 import {
+  mentionedConnectedAppRefsFromPrompt,
+  promptMentionsConnectedAppProvider,
   resolveMentionedConnectedAppContexts,
   type ResolvedConnectedAppContext,
 } from "../openpond/connected-app-context.js";
@@ -418,30 +420,44 @@ type ConnectedAppIntegrationConnectionLookup = (input: {
 
 export async function resolveConnectedAppContextsForTurn(input: {
   refs: MentionedConnectedAppRef[] | undefined;
+  prompt?: string | null;
   cloudTeamId?: string | null;
   listIntegrationConnections: ConnectedAppIntegrationConnectionLookup;
 }): Promise<ResolvedConnectedAppContext[]> {
-  if (!input.refs || input.refs.length === 0) return [];
+  const explicitRefs = input.refs ?? [];
+  if (explicitRefs.length === 0 && !promptMentionsConnectedAppProvider(input.prompt)) return [];
   const cloudTeamId = input.cloudTeamId?.trim() ?? "";
   const primaryResult = await input.listIntegrationConnections({
     ...(cloudTeamId ? { teamId: cloudTeamId } : {}),
     status: "active",
   });
+  const primaryRefs = explicitRefs.length > 0
+    ? explicitRefs
+    : mentionedConnectedAppRefsFromPrompt({
+        prompt: input.prompt,
+        connections: primaryResult.connections,
+      });
   const primaryContexts = withConnectedAppToolNames(
     resolveMentionedConnectedAppContexts({
-      mentionedRefs: input.refs,
+      mentionedRefs: primaryRefs,
       connections: primaryResult.connections,
     }),
   );
-  if (!cloudTeamId || mentionedConnectedAppRefsResolved(input.refs, primaryContexts)) {
+  if (!cloudTeamId || (primaryRefs.length > 0 && mentionedConnectedAppRefsResolved(primaryRefs, primaryContexts))) {
     return primaryContexts;
   }
 
   try {
     const aggregateResult = await input.listIntegrationConnections({ status: "active" });
+    const aggregateRefs = explicitRefs.length > 0
+      ? explicitRefs
+      : mentionedConnectedAppRefsFromPrompt({
+          prompt: input.prompt,
+          connections: aggregateResult.connections,
+        });
     const aggregateContexts = withConnectedAppToolNames(
       resolveMentionedConnectedAppContexts({
-        mentionedRefs: input.refs,
+        mentionedRefs: aggregateRefs,
         connections: aggregateResult.connections,
       }),
     );
@@ -870,6 +886,20 @@ export function createTurnRunner(deps: {
         }),
       );
     }
+    definitions.push(
+      ...createConnectedAppSkillModelToolDefinitions({
+        connectedApps: connectedApps.map((app) => ({
+          provider: app.provider,
+          label: app.label,
+        })),
+      }),
+    );
+    definitions.push(
+      ...createConnectedAppProviderModelToolDefinitions({
+        connectedApps,
+        executeConnectedAppTool,
+      }),
+    );
     definitions.push(...createBrowserModelToolDefinitions(browserToolExecutor));
     if (executeOpenPondCommand) {
       definitions.push(createCommandModelToolDefinition({ executeCommand: executeOpenPondCommand }));
@@ -888,20 +918,6 @@ export function createTurnRunner(deps: {
         }),
       );
     }
-    definitions.push(
-      ...createConnectedAppSkillModelToolDefinitions({
-        connectedApps: connectedApps.map((app) => ({
-          provider: app.provider,
-          label: app.label,
-        })),
-      }),
-    );
-    definitions.push(
-      ...createConnectedAppProviderModelToolDefinitions({
-        connectedApps,
-        executeConnectedAppTool,
-      }),
-    );
     if (hostedToolFlags.dynamicActionTools) {
       definitions.push(
         ...createOpenPondActionModelToolDefinitions({
@@ -3829,9 +3845,14 @@ export function createTurnRunner(deps: {
         upsert: safeUpsertModelUsageRecord,
       });
       try {
+        const toolChoice = hostedToolChoiceForLoop({
+          connectedApps: params.connectedApps,
+          nativeToolDefinitions: nativeToolDefinitionByName,
+          roundIndex: index,
+        });
         for await (const delta of params.stream(
           messages,
-          nativeTools.length > 0 ? { tools: nativeTools, toolChoice: "auto" } : undefined,
+          nativeTools.length > 0 ? { tools: nativeTools, toolChoice } : undefined,
         )) {
           throwIfInterrupted(params.signal);
           usageRecorder.observeDelta(delta);
@@ -4244,6 +4265,21 @@ export function createTurnRunner(deps: {
 
   function recordFromUnknown(value: unknown): Record<string, unknown> | null {
     return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  }
+
+  function hostedToolChoiceForLoop(input: {
+    connectedApps: ResolvedConnectedAppContext[];
+    nativeToolDefinitions: Map<string, ModelToolDefinition>;
+    roundIndex: number;
+  }): HostedChatToolChoice {
+    if (
+      input.roundIndex === 0 &&
+      input.connectedApps.length > 0 &&
+      input.nativeToolDefinitions.has("connected_app_skill_read")
+    ) {
+      return { type: "function", function: { name: "connected_app_skill_read" } };
+    }
+    return "auto";
   }
 
   function workspaceToolCorrectionMessage(
@@ -5142,13 +5178,20 @@ export function createTurnRunner(deps: {
 
   async function connectedAppsForTurn(input: {
     refs: MentionedConnectedAppRef[] | undefined;
+    prompt: string;
     session: Session;
     turnId: string;
   }): Promise<ResolvedConnectedAppContext[]> {
-    if (!listIntegrationConnections || !input.refs || input.refs.length === 0) return [];
+    if (
+      !listIntegrationConnections ||
+      ((!input.refs || input.refs.length === 0) && !promptMentionsConnectedAppProvider(input.prompt))
+    ) {
+      return [];
+    }
     try {
       return await resolveConnectedAppContextsForTurn({
         refs: input.refs,
+        prompt: input.prompt,
         cloudTeamId: input.session.cloudTeamId,
         listIntegrationConnections,
       });
@@ -5164,7 +5207,7 @@ export function createTurnRunner(deps: {
           output: "Connected app references could not be resolved for this turn.",
           data: {
             kind: "connected_app_resolution",
-            providerCount: input.refs.length,
+            providerCount: input.refs?.length ?? 0,
             error: textFromUnknown(error) || "Unknown connected app resolution error.",
           },
         }),
@@ -5587,6 +5630,7 @@ export function createTurnRunner(deps: {
       const mentionedApps = await mentionedAppsForTurn(input.mentionedAppIds);
       const connectedApps = await connectedAppsForTurn({
         refs: input.mentionedConnectedApps,
+        prompt: providerPrompt,
         session,
         turnId: turn.id,
       });

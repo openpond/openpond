@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OpenPond</h1>
-  <p><strong>Use your LLM subscription in the cloud without paying API prices.</strong></p>
+  <p><strong>Frontier-grade agent orchestration for any model, provider, or subscription.</strong></p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
     <a href="apps/cli"><img alt="npm package status" src="https://img.shields.io/badge/npm-unpublished-lightgrey?logo=npm&logoColor=white" /></a>
@@ -9,30 +9,32 @@
   </p>
 </div>
 
+OpenPond is a local-first orchestration harness for running serious agent work across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
 
-The OpenPond harness lets you use the LLM subscriptions you already pay for while running agent work in hosted sandboxes through [OpenPond Cloud](docs/public/cloud.md).
+It gives chats, agents, subagents, skills, goal loops, approvals, connected apps, and hosted sandboxes a shared, source-owned runtime. Keep chat control, model settings, approvals, and source review local; send execution to [OpenPond Cloud](docs/public/cloud.md) when work needs clean compute, long-running processes, replayable runs, or teammate handoff.
 
-Keep chat, approvals, model settings, and source review local. Let hosted sandboxes handle file reads, file writes, shell commands, dependency installs, hosted actions, and long-running execution.
+- **Model agnostic by design:** route work through Codex, BYOK providers, hosted models, open source models, or subscription-backed model access without locking the agent to one vendor.
+- **Frontier-grade orchestration:** coordinate agents, subagents, tools, goals, approvals, browser control, connected apps, and sandbox execution as one inspectable workflow.
+- **Source-owned by default:** agents and skills start as ordinary files in a local profile repo, then sync to OpenPond Cloud when you want cross-device or hosted execution.
+- **Local control, cloud execution:** review prompts, diffs, settings, and approvals locally while hosted sandboxes handle file reads, file writes, shell commands, dependency installs, actions, and long-running work.
 
-- **Use subscription-based models in the cloud:** bring your BYOK providers or LLM subscriptions without defaulting to API-priced hosted model calls.
-- **Ship durable agents to teammates:** create git-backed agents from chat, then use them in the desktop app, OpenPond Web, Slack, or Microsoft Teams.
-- **Own the source:** agents and skills start in a local profile repo and can sync to OpenPond Cloud when you want cross-device or hosted execution.
-
-No login required for local work. BYOK for any model. First-class Codex support.
+No login required for local work. Bring your own keys, models, providers, subscriptions, and runtimes. First-class Codex support.
 
 ## Features
 
 | Product | Capability |
 | --- | --- |
+| Orchestration | Run chats, agents, subagents, skills, tools, approvals, browser control, connected apps, and goal loops through one durable execution harness. |
+| Model access [(docs)](docs/public/model-access.md) | Bring Codex, BYOK providers, hosted OpenPond models, open source models, or subscription-backed model access to the same agent workflow. |
 | Agents [(docs)](docs/public/creating-agents.md) | Create durable agents from any chat; agent code is saved locally to your profile, with one-click cloud push when you want access from Slack, another computer, or OpenPond Web. |
-| BYOK [(docs)](docs/public/model-access.md) | Chat with hosted OpenPond models, BYOK providers in the desktop app, OpenAI Codex, and open source model paths. |
+| Goal loops [(docs)](docs/public/goals.md) | Build composable, bounded task loops with continuation, budgets, completion evidence, and explicit stop conditions for long-running work. |
 | Insights Agent [(docs)](docs/public/continuous-insights.md) | Run every 5 minutes by default to review your entire setup, track chat logs, runs, errors, and follow-ups, and turn useful work into explicit next steps. |
-| Advanced goal loops [(docs)](docs/public/goals.md) | Build composable, bounded task loops with continuation, budgets, and completion evidence; Insights Agent and skill creation both run on this goal system. |
 | OpenPond Cloud [(docs)](docs/public/cloud.md) | Move between local projects, hosted workspaces, Hybrid sandbox execution, replayable runs, and cloud compute through [openpond.ai](https://openpond.ai). |
 | OpenPond Connect [(docs)](docs/public/openpond-connect.md) | Connect Google Drive, Twitter/X, Slack, docs, calendars, and other provider-backed systems through [openpond.ai](https://openpond.ai) without committing secrets. |
 
 ## More Features
 
+- Subagent orchestration for splitting work across focused executors with their own context, tools, continuation state, and evidence.
 - Skill creation for reusable profile-backed behavior and project-specific workflows.
 - Auto compaction to keep long-running work moving without losing important context.
 - YOLO mode for trusted workspaces where explicit approval prompts should not slow down execution.
@@ -50,7 +52,7 @@ No login required for local work. BYOK for any model. First-class Codex support.
 
 OpenPond agents and skills start local by default. When you create one from chat, OpenPond writes it into your active profile repo as ordinary source files, keeps it git-backed, and updates the profile catalog so the desktop app, CLI, TUI, and local chats can discover it.
 
-Agents are full source packages for durable workflows: code, actions, instructions, evals, generated OpenPond artifacts, and setup requirements. Skills are lighter reusable instruction packages. A profile skill is intentionally just a `SKILL.md`; if the workflow needs code, tools, scripts, fixtures, or evals, make it an agent instead.
+Agents are full source packages for durable workflows: code, actions, instructions, evals, generated OpenPond artifacts, and setup requirements. They can call tools, coordinate subagents, run goal loops, and move between local and hosted execution without becoming hidden chat state. Skills are lighter reusable instruction packages. A profile skill is intentionally just a `SKILL.md`; if the workflow needs code, tools, scripts, fixtures, or evals, make it an agent instead.
 
 Sync the same profile repo with [OpenPond Cloud](docs/public/cloud.md) when you want it to work everywhere: OpenPond Web, another computer, hosted sandboxes, Slack, or Microsoft Teams can all run against the same git-backed source instead of a hidden chat transcript.
 
@@ -86,9 +88,9 @@ See [Creating durable agents](docs/public/creating-agents.md), [Agent SDK](docs/
 
 ## Local <> Cloud
 
-OpenPond lets you keep the harness local without forcing the work to run on your laptop. In local mode, the desktop app owns the chat, approvals, BYOK provider settings, and source review, while [OpenPond Cloud](docs/public/cloud.md) can provide the sandbox where execution actually happens.
+OpenPond lets you keep orchestration local without forcing execution to run on your laptop. In local mode, the desktop app owns the chat, approvals, model and provider settings, subagent placement, and source review, while [OpenPond Cloud](docs/public/cloud.md) can provide the sandbox where execution actually happens.
 
-Think of it as local control with cloud hands. Your configured model path or LLM subscription can drive the agent, but file reads, file writes, shell commands, dependency installs, hosted actions, and long-running work happen inside an OpenPond sandbox. Your local workspace stays reviewable, and the sandbox gives the agent a clean environment built for replay, preservation, and handoff.
+Think of it as local control with cloud execution. Your configured model path, BYOK provider, open source runtime, Codex session, or LLM subscription can drive the agent, while file reads, file writes, shell commands, dependency installs, hosted actions, and long-running work happen inside an OpenPond sandbox. Your local workspace stays reviewable, and the sandbox gives the agent a clean environment built for replay, preservation, and handoff.
 
 That split is useful when a teammate needs an agent in Slack, Microsoft Teams, OpenPond Web, or another machine: the same git-backed source and profile catalog can sync to the cloud, then run in hosted infrastructure without requiring the teammate to clone the repo, install dependencies, or understand the local setup.
 

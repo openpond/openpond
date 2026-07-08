@@ -35,7 +35,7 @@ function text(value: unknown): string | null {
 }
 
 function selectedByForPrompt(input: { displayPrompt?: string | null; prompt: string }): "mention" | "slash" {
-  if (input.displayPrompt && input.displayPrompt !== input.prompt && /(?:^|\s)@[A-Za-z0-9_-]+/.test(input.displayPrompt)) {
+  if (input.displayPrompt && /(?:^|\s)@[A-Za-z0-9_-]+/.test(input.displayPrompt)) {
     return "mention";
   }
   return "slash";
@@ -189,11 +189,13 @@ export function buildOpenPondProfileActionRunInput({
 export function buildOpenPondAppActionRunInput({
   action,
   attachments = [],
+  displayPrompt,
   prompt,
   teamId,
 }: {
   action: SandboxActionCatalogEntry;
   attachments?: ChatAttachment[];
+  displayPrompt?: string | null;
   prompt: string;
   teamId: string;
 }) {
@@ -212,7 +214,8 @@ export function buildOpenPondAppActionRunInput({
       source: "openpond_app",
       selectedActionId: action.id,
       selectedActionLabel: action.label ?? action.name ?? action.id,
-      selectedBy: "slash",
+      selectedBy: selectedByForPrompt({ displayPrompt, prompt }),
+      ...(displayPrompt && displayPrompt !== prompt ? { displayPrompt } : {}),
     },
   };
 }
@@ -220,10 +223,12 @@ export function buildOpenPondAppActionRunInput({
 export function buildOpenPondAgentRunInput({
   agent,
   attachments = [],
+  displayPrompt,
   prompt,
 }: {
   agent: OpenPondAgentSlashCommandInfo;
   attachments?: ChatAttachment[];
+  displayPrompt?: string | null;
   prompt: string;
 }) {
   return {
@@ -242,7 +247,8 @@ export function buildOpenPondAgentRunInput({
       selectedAgentName: agent.agentName,
       selectedActionId: `agent:${agent.agentId}`,
       selectedActionLabel: agent.agentName,
-      selectedBy: "slash",
+      selectedBy: selectedByForPrompt({ displayPrompt, prompt }),
+      ...(displayPrompt && displayPrompt !== prompt ? { displayPrompt } : {}),
     },
     workflowMode: agent.workflowMode,
   };

@@ -6,7 +6,9 @@ import type { CloudProject, LocalProject, OpenPondApp } from "@openpond/contract
 import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import {
   Composer,
+  hasComposerSubmittableInput,
   promptWithSelectedInvocationText,
+  selectedActionDisplayPrompt,
   type ComposerProjectTargetState,
 } from "../apps/web/src/components/chat/Composer";
 import { SubmitIssueDialog } from "../apps/web/src/components/chat/SubmitIssueDialog";
@@ -14,6 +16,7 @@ import { workspaceTargetOptionStatusText } from "../apps/web/src/components/chat
 import { ComposerInvocationPill } from "../apps/web/src/components/chat/ComposerInvocationPill";
 import { ComposerPrimaryControls } from "../apps/web/src/components/chat/ComposerPrimaryControls";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
+import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-commands";
 import { buildOpenPondAgentSlashCommand } from "../apps/web/src/lib/openpond-action-run";
 import { openPondActionProjectTarget } from "../apps/web/src/lib/openpond-action-project";
 import type { SandboxAgent } from "../apps/web/src/lib/sandbox-types";
@@ -194,6 +197,67 @@ describe("composer slash behavior", () => {
     expect(promptWithSelectedInvocationText("Please check  today", "@business", 13)).toBe(
       "Please check @business today",
     );
+  });
+
+  test("uses an @agent display prompt for selected actions without typed prompt text", () => {
+    const action = buildOpenPondAgentSlashCommand(
+      sandboxAgent({ id: "sales-demo", name: "Sales Demo" }),
+      "Revenue Workspace",
+    );
+
+    expect(
+      selectedActionDisplayPrompt({
+        action,
+        prompt: "",
+        selectedActionMentionText: null,
+        selectedInvocationPosition: 0,
+      }),
+    ).toBe("@sales-demo");
+    expect(
+      selectedActionDisplayPrompt({
+        action,
+        prompt: "Summarize top salesmen",
+        selectedActionMentionText: null,
+        selectedInvocationPosition: 0,
+      }),
+    ).toBe("@sales-demo Summarize top salesmen");
+    expect(
+      selectedActionDisplayPrompt({
+        action,
+        prompt: "Summarize top salesmen",
+        selectedActionMentionText: "@sale",
+        selectedInvocationPosition: 0,
+      }),
+    ).toBe("@sale Summarize top salesmen");
+  });
+
+  test("treats a selected invocation as submittable input", () => {
+    const action = buildOpenPondAgentSlashCommand(sandboxAgent(), "Cloud Repo");
+
+    expect(
+      hasComposerSubmittableInput({
+        attachmentCount: 0,
+        prompt: "",
+        selectedAction: action,
+        selectedCommand: null,
+      }),
+    ).toBe(true);
+    expect(
+      hasComposerSubmittableInput({
+        attachmentCount: 0,
+        prompt: "",
+        selectedAction: null,
+        selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
+      }),
+    ).toBe(true);
+    expect(
+      hasComposerSubmittableInput({
+        attachmentCount: 0,
+        prompt: "",
+        selectedAction: null,
+        selectedCommand: null,
+      }),
+    ).toBe(false);
   });
 
   test("renders selected commands as removable invocation pills without the slash", () => {

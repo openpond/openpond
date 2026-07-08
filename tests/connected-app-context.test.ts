@@ -4,6 +4,7 @@ import { resolveConnectedAppContextsForTurn } from "../apps/server/src/runtime/t
 import { createHostedTurnHelpers } from "../apps/server/src/openpond/hosted-turn-helpers";
 import {
   buildConnectedAppIndexContext,
+  mentionedConnectedAppRefsFromPrompt,
   resolveMentionedConnectedAppContexts,
 } from "../apps/server/src/openpond/connected-app-context";
 
@@ -26,6 +27,39 @@ const xRef: MentionedConnectedAppRef = {
 };
 
 describe("connected app server context", () => {
+  test("infers structured refs from prompt mentions and active trusted connections", () => {
+    const refs = mentionedConnectedAppRefsFromPrompt({
+      prompt: "@x find recent 0xglu posts",
+      connections: [
+        {
+          id: "conn_x_social",
+          teamId: "team_social",
+          provider: "x",
+          providerAccountName: "0xglu",
+          scopes: ["tweet.read", "users.read"],
+          status: "active",
+        },
+        {
+          id: "conn_google",
+          provider: "google",
+          status: "active",
+        },
+      ],
+    });
+
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      kind: "integration",
+      provider: "x",
+      appIds: ["x"],
+      setupSurfaces: ["oauth_connector"],
+      connectionIds: ["conn_x_social"],
+    });
+    expect(refs[0]?.capabilities).toEqual(
+      expect.arrayContaining(["x.profile.read", "x.search.read"]),
+    );
+  });
+
   test("re-resolves mentioned refs against active trusted connections", () => {
     const contexts = resolveMentionedConnectedAppContexts({
       mentionedRefs: [
@@ -214,6 +248,39 @@ describe("connected app server context", () => {
     });
     expect(contexts[0]?.toolNames).toEqual(
       expect.arrayContaining(["connected_app_skill_read", "connected_app_search"]),
+    );
+  });
+
+  test("resolves prompt-inferred connected apps when the client omitted structured refs", async () => {
+    const calls: unknown[] = [];
+    const contexts = await resolveConnectedAppContextsForTurn({
+      refs: undefined,
+      prompt: "@x find recent 0xglu posts",
+      listIntegrationConnections: async (input) => {
+        calls.push(input);
+        return {
+          teamId: null,
+          connections: [
+            {
+              id: "conn_x_social",
+              provider: "x",
+              providerAccountName: "0xglu",
+              status: "active",
+            },
+          ],
+        };
+      },
+    });
+
+    expect(calls).toEqual([{ status: "active" }]);
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      provider: "x",
+      accountLabels: ["0xglu"],
+      connectionIds: ["conn_x_social"],
+    });
+    expect(contexts[0]?.toolNames).toEqual(
+      expect.arrayContaining(["connected_app_skill_read", "connected_app_search", "connected_app_read"]),
     );
   });
 });

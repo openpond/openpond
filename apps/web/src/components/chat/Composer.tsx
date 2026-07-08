@@ -253,6 +253,46 @@ export function promptWithSelectedInvocationText(
   return `${before}${prefix}${invocation}${suffix}${after}`.replace(/\s+/g, " ").trim();
 }
 
+function synthesizedActionMentionText(action: SandboxActionCatalogEntry): string | null {
+  const token = normalizeMentionToken(composerActionCatalogLabel(action) || action.name || action.id);
+  return token ? `@${token}` : null;
+}
+
+export function selectedActionDisplayPrompt({
+  action,
+  prompt,
+  selectedActionMentionText,
+  selectedInvocationPosition,
+}: {
+  action: SandboxActionCatalogEntry | null;
+  prompt: string;
+  selectedActionMentionText: string | null;
+  selectedInvocationPosition: number | null;
+}): string | null {
+  if (!action) return null;
+  const explicitMention = selectedActionMentionText?.trim();
+  const mentionText = explicitMention?.startsWith("@")
+    ? explicitMention
+    : synthesizedActionMentionText(action);
+  return mentionText
+    ? promptWithSelectedInvocationText(prompt, mentionText, selectedInvocationPosition)
+    : null;
+}
+
+export function hasComposerSubmittableInput({
+  attachmentCount,
+  prompt,
+  selectedAction,
+  selectedCommand,
+}: {
+  attachmentCount: number;
+  prompt: string;
+  selectedAction: SandboxActionCatalogEntry | null;
+  selectedCommand: ComposerSlashCommand | null;
+}): boolean {
+  return Boolean(prompt.trim() || attachmentCount > 0 || selectedAction || selectedCommand);
+}
+
 export function Composer({
   mode,
   prompt,
@@ -349,7 +389,6 @@ export function Composer({
     "--context-fill": `${Math.round(((contextWindowStatus.percent ?? 0) / 100) * 360)}deg`,
     "--context-bar-fill": `${contextWindowStatus.percent ?? 0}%`,
   } as CSSProperties;
-  const hasComposerInput = Boolean(prompt.trim() || attachments.length > 0);
   const selectedAction = useMemo(
     () => actionCatalog.find((action) => action.id === selectedActionId) ?? null,
     [actionCatalog, selectedActionId],
@@ -358,6 +397,18 @@ export function Composer({
     () => COMPOSER_SLASH_COMMANDS.find((command) => command.id === selectedCommandId) ?? null,
     [selectedCommandId],
   );
+  const selectedDisplayPrompt = selectedActionDisplayPrompt({
+    action: selectedAction,
+    prompt,
+    selectedActionMentionText,
+    selectedInvocationPosition,
+  });
+  const hasComposerInput = hasComposerSubmittableInput({
+    attachmentCount: attachments.length,
+    prompt,
+    selectedAction,
+    selectedCommand,
+  });
   const selectedInvocationToken = useMemo<ComposerInlineToken | null>(() => {
     const position = Math.max(0, Math.min(selectedInvocationPosition ?? 0, prompt.length));
     if (selectedCommand) {
@@ -1028,15 +1079,20 @@ export function Composer({
         } finally {
           clearSerializingAttachmentsForScope(submissionScope);
         }
-        const displayPrompt =
-          selectedAction && selectedActionMentionText
-            ? promptWithSelectedInvocationText(prompt, selectedActionMentionText, selectedInvocationPosition)
-            : null;
+        const promptOverride =
+          selectedAction && selectedDisplayPrompt && !prompt.trim()
+            ? selectedDisplayPrompt
+            : undefined;
         const sent = await onSubmit(
           payloads,
           selectedAction,
           selectedCommand,
-          displayPrompt ? { displayPrompt } : undefined,
+          selectedDisplayPrompt || promptOverride
+            ? {
+                ...(selectedDisplayPrompt ? { displayPrompt: selectedDisplayPrompt } : {}),
+                ...(promptOverride ? { promptOverride } : {}),
+              }
+            : undefined,
         );
         settleStagedAttachments(stagedAttachments, sent ? "dispose" : "restore");
         if (sent) clearSelectedInvocation();

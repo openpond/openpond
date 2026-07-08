@@ -40,6 +40,7 @@ import {
 } from "../apps/web/src/lib/create-pipeline-request";
 import {
   buildOpenPondAppActionRunInput,
+  buildOpenPondAgentRunInput,
   buildOpenPondProfileActionRunInput,
 } from "../apps/web/src/lib/openpond-action-run";
 import { latestReadyLocalCreatePipelineProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
@@ -992,6 +993,43 @@ describe("OpenPond App action channel", () => {
     });
   });
 
+  test("builds direct agent run payloads with the visible @agent prompt", () => {
+    expect(
+      buildOpenPondAgentRunInput({
+        agent: {
+          agentId: "sales-demo",
+          agentName: "Sales Demo",
+          teamId: "team_1",
+          projectId: "project_1",
+          projectName: "Revenue Workspace",
+          selectedEntrypoint: { scope: "entire_manifest", name: null },
+          workflowMode: "feature",
+        },
+        displayPrompt: "@sales-demo Summarize top salesmen",
+        prompt: "Summarize top salesmen",
+      }),
+    ).toEqual({
+      teamId: "team_1",
+      triggerType: "manual",
+      entrypoint: { scope: "entire_manifest", name: null },
+      input: {
+        prompt: "Summarize top salesmen",
+        message: "Summarize top salesmen",
+        source: "openpond_app",
+      },
+      metadata: {
+        source: "openpond_app",
+        selectedAgentId: "sales-demo",
+        selectedAgentName: "Sales Demo",
+        selectedActionId: "agent:sales-demo",
+        selectedActionLabel: "Sales Demo",
+        selectedBy: "mention",
+        displayPrompt: "@sales-demo Summarize top salesmen",
+      },
+      workflowMode: "feature",
+    });
+  });
+
   test("keeps profile action input clean while carrying the visible mention prompt", () => {
     expect(
       buildOpenPondProfileActionRunInput({
@@ -1286,23 +1324,6 @@ describe("OpenPond App action channel", () => {
           turnId: "turn_1",
           createPipelineRequest: requestWithActionShape,
           createPipeline: snapshot,
-          createPipelineDebugActivities: [
-            {
-              id: "debug_assistant_1",
-              label: "assistant delta",
-              content: "I will inspect the profile source now.",
-              timestamp,
-            },
-            {
-              id: "debug_command_1",
-              label: "Started",
-              content: "bun run inspect",
-              detail: "inspect completed",
-              kind: "command",
-              state: "completed",
-              timestamp,
-            },
-          ],
         },
       }),
     );
@@ -1313,6 +1334,7 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("Chat plus direct action");
     expect(html).toContain("agents/release-notes-agent");
     expect(html).toContain("4 checks");
+    expect(html).not.toContain("Show progress");
     expect(html).not.toContain("Agent plan review");
     expect(html).not.toContain("Debug details");
     expect(html).not.toContain("Confirm plan");

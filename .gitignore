@@ -55,6 +55,10 @@ apps/cli/runs/
 docs/working-docs/
 docs/staging/
 
+# Local generated run output
+jobs/
+tmp/
+
 # Logs
 *.log
 tmp-*.png

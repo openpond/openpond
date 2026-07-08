@@ -12,6 +12,7 @@ import {
   SubagentRunSchema,
   type Approval,
   type AppPreferences,
+  type ConnectedAppConnectionLike,
   type ModelUsageRecord,
   type RuntimeEvent,
   type Session,
@@ -21,6 +22,48 @@ import {
 } from "../packages/contracts/src";
 
 describe("turn runner subagent native tools", () => {
+  test("prioritizes connected app instruction tools for prompt-only @x mentions", async () => {
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_start",
+      toolArgs: {
+        roleId: "research",
+        objective: "unused",
+      },
+      preferences: preferences(),
+      disableDefaultToolCall: true,
+      textBySessionId: {
+        session_1: ["Connected app request handled."],
+      },
+      integrationConnections: [
+        {
+          id: "conn_x_social",
+          provider: "x",
+          providerAccountName: "0xglu",
+          status: "active",
+        },
+      ],
+      enableWebSearchTool: true,
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "@x find me the most recent 0xglu posts and summarize them",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const firstStream = harness.streamInputs[0];
+    expect(firstStream.toolChoice).toEqual({
+      type: "function",
+      function: { name: "connected_app_skill_read" },
+    });
+    const toolNames = (firstStream.tools ?? []).map((tool: any) => tool.function?.name);
+    expect(toolNames).toEqual(
+      expect.arrayContaining(["connected_app_skill_read", "connected_app_search", "connected_app_read"]),
+    );
+    expect(toolNames.indexOf("connected_app_skill_read")).toBeLessThan(toolNames.indexOf("web_search"));
+    expect(toolNames).toContain("web_search");
+  });
+
   test("starts a linked child conversation and blocks write-capable subagents without a git workspace", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
@@ -2043,6 +2086,8 @@ function createSubagentHarness(input: {
     },
   ) => { name: string; args: Record<string, unknown>; id?: string } | null | Promise<{ name: string; args: Record<string, unknown>; id?: string } | null>;
   disableDefaultToolCall?: boolean;
+  enableWebSearchTool?: boolean;
+  integrationConnections?: ConnectedAppConnectionLike[];
   forkSandboxForSubagent?: (input: {
     sandboxId: string;
     payload: Record<string, unknown>;
@@ -2265,6 +2310,15 @@ function createSubagentHarness(input: {
         output: "workspace tool executed",
       };
     },
+    executeWebSearch: input.enableWebSearchTool
+      ? async () => ({
+          query: "fallback",
+          provider: "test",
+          searchedAt: "2026-07-07T10:00:00.000Z",
+          results: [],
+          truncated: false,
+        })
+      : undefined,
     loadPersonalizationSoul: async () => "",
     loadAppPreferences: async () => input.preferences,
     maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
@@ -2282,6 +2336,12 @@ function createSubagentHarness(input: {
       });
     },
     appendHostedContextUsage: async () => undefined,
+    listIntegrationConnections: input.integrationConnections
+      ? async () => ({
+          teamId: null,
+          connections: input.integrationConnections!,
+        })
+      : undefined,
     streamLocalByokChatTurn: async function* (streamInput) {
       streamInputs.push(streamInput);
       streamPass += 1;

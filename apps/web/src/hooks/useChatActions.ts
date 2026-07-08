@@ -649,6 +649,7 @@ export function useChatActions({
               buildOpenPondAgentRunInput({
                 agent: selectedAgent,
                 attachments,
+                displayPrompt: displayPromptForTurn,
                 prompt: actionPromptForRun,
               }),
             );
@@ -751,6 +752,7 @@ export function useChatActions({
             buildOpenPondAppActionRunInput({
               action: selectedActionForTurn,
               attachments,
+              displayPrompt: displayPromptForTurn,
               prompt: actionPromptForRun,
               teamId: actionProjectTarget.teamId,
             }),

@@ -208,11 +208,12 @@ export function SidebarSessionRow({
   onRename?: (session: Session, title: string) => void;
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
-  const goalRunning = goalRuntime?.tone === "active";
+  const goalQueued = goalRuntime?.status === "queued";
+  const goalRunning = goalRuntime?.tone === "active" && !goalQueued;
   const subagentRunning = (subagentRuntime?.activeCount ?? 0) > 0;
   const hasChildSessions = childSessionCount > 0 && Boolean(onToggleChildSessions);
   const effectiveHideIcon = hideIcon && !hasChildSessions;
-  const rowRunning = subagentRunning || goalRunning || (running ?? session.status === "active");
+  const rowRunning = subagentRunning || goalRunning || (!goalQueued && (running ?? session.status === "active"));
   const runningLabel = subagentRunning && subagentRuntime
     ? subagentRuntime.label
     : goalRunning && goalRuntime
@@ -294,7 +295,9 @@ export function SidebarSessionRow({
           {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
           {rowRunning ? (
             <span
-              className={`sidebar-running-dot${subagentRunning ? " subagent" : goalRunning ? " goal" : ""}`}
+              className={`sidebar-running-dot${
+                subagentRunning ? " subagent" : goalRunning ? " goal" : ""
+              }`}
               style={runningDotStyle}
               aria-label={runningLabel}
             />
@@ -390,7 +393,9 @@ function SidebarSessionRunningPopover({
       <div className="sidebar-project-location-list">
         <div className={`sidebar-project-location-row ${rowKind}`}>
           <span className="sidebar-project-location-icon running" aria-hidden="true">
-            <span className={`sidebar-running-popover-dot${subagentRuntime ? " subagent" : goalRuntime ? " goal" : ""}`} />
+            <span className={`sidebar-running-popover-dot${
+              subagentRuntime ? " subagent" : goalRuntime ? " goal" : ""
+            }`} />
           </span>
           <span className="sidebar-project-location-copy">
             <span className="sidebar-session-running-objective">{objective}</span>

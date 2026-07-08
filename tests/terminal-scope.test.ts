@@ -282,6 +282,38 @@ describe("sidebar terminal indicators", () => {
     expect(markup).not.toContain('data-tooltip="Pursuing goal: Review command access doc"');
   });
 
+  test("renders queued goals without a sidebar running dot", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture(),
+        selected: false,
+        hideIcon: true,
+        running: true,
+        goalRuntime: {
+          objective: "Wait for continuation worker",
+          status: "queued",
+          timeUsedSeconds: 0,
+          tokensUsed: null,
+          tokenBudget: null,
+          actionLabel: "Goal queued",
+          timeLabel: "0s",
+          label: "Goal 0s",
+          detail: "Queued",
+          tooltip: "Goal runtime: 0 seconds. Queued. Wait for continuation worker",
+          tone: "active",
+        },
+        onSelect: () => undefined,
+        onTogglePin: () => undefined,
+        onArchive: () => undefined,
+      }),
+    );
+
+    expect(markup).not.toContain("sidebar-running-dot");
+    expect(markup).not.toContain("sidebar-session-running-popover");
+    expect(markup).not.toContain("Goal queued");
+    expect(markup).not.toContain("Wait for continuation worker");
+  });
+
   test("truncates long goal objectives in the running tooltip body", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarSessionRow, {
