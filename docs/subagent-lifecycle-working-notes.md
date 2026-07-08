@@ -225,6 +225,8 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 
 ### Phase 8: Verification
 
+Use the verifiable desktop harness as the primary end-to-end product test path for this addition. See `docs/working-docs/agent-harness/2026-07-08-verifiable-desktop-harness.md` and the `openpond-desktop-harness` skill for scenario authoring rules.
+
 - [ ] Unit test preference bounds/defaults.
 - [ ] Unit test watcher start/stop behavior.
 - [ ] Unit test wake policy cases.
@@ -233,7 +235,13 @@ Use this as the working checklist for the heartbeat/lifecycle cleanup addition. 
 - [ ] Integration test: no goal present, subagent still works under parent session.
 - [ ] Integration test: goal present, derived required counts update.
 - [ ] Integration test: goal stop cancels/cleans active child runs.
-- [ ] Run typecheck and relevant test suite.
+- [ ] Desktop harness scenario: heartbeat setting persists in Settings and makes clear it controls runtime checks, not parent model wake frequency.
+- [ ] Desktop harness scenario: parent starts a child, parent turn idles, watcher observes completion, and parent wake is queued only for a meaningful event.
+- [ ] Desktop harness scenario: child progress-only updates do not wake the parent model every heartbeat interval.
+- [ ] Desktop harness scenario: thread-scoped subagent without a goal is still watched and reports status correctly.
+- [ ] Desktop harness scenario: goal-scoped subagent updates goal-visible derived counts/status without making the goal an active orchestrator.
+- [ ] Desktop harness scenario: stale/timeout child is surfaced as attention-needed or blocking according to required/optional policy.
+- [ ] Run typecheck, focused unit tests, and relevant desktop harness scenarios.
 
 ## Cleanup priorities
 
@@ -363,6 +371,23 @@ A practical first slice:
 4. Wire parent goal stop/complete to child cancellation/archive/cleanup.
 5. Update UI aggregation to separate active, blocking, unresolved, and terminal child states.
 6. Add event coverage for cleanup/archive/stale transitions.
+
+## Desktop harness verification plan
+
+Use the verifiable desktop harness as the acceptance test for subagent heartbeat/lifecycle additions, not just backend unit tests. The harness is the right proof layer because the feature spans settings, runtime events, parent/child sessions, optional goals, UI status, and parent wake behavior.
+
+Reference: `docs/working-docs/agent-harness/2026-07-08-verifiable-desktop-harness.md`.
+
+Recommended scenario additions under `tests/desktop-scenarios/`:
+
+- `subagent-heartbeat-settings`: proves the Settings page exposes and persists `heartbeatIntervalSeconds` with bounds/default behavior and help text.
+- `subagent-heartbeat-parent-wake`: proves a child can finish or ask the parent a question while the parent is idle, the watcher records the meaningful event, and a parent wake is queued once.
+- `subagent-heartbeat-no-progress-wake`: proves ordinary progress-only updates do not resume the parent model on every heartbeat.
+- `subagent-heartbeat-thread-scoped`: proves subagents with `parentSessionId` and no `parentGoalId` are still watched and visible.
+- `subagent-heartbeat-goal-derived-state`: proves goal-scoped children update goal-visible required/active/blocking/completed counts while the goal remains a passive tracker.
+- `subagent-heartbeat-stale`: proves stale or timed-out children are surfaced with the correct required/optional policy.
+
+Each scenario should record runtime events, bootstrap/session evidence, visible renderer assertions, and screenshot/JSON artifacts. Prefer scripted OpenPond models and event waits over sleeps or live provider calls.
 
 ## Open questions
 

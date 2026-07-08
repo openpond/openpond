@@ -72,9 +72,12 @@ describe("runtime indexes", () => {
     expect(runtimeEventsForSession(indexes, "missing")).toEqual([]);
     expect(indexes.eventsBySessionId.has("server_diag")).toBe(false);
     expect(latestContextUsageForSession(indexes, "s1")?.usedTokens).toBe(42);
-    expect(latestGoalRuntimeForSession(indexes, "s1")).toBeNull();
+    expect(latestGoalRuntimeForSession(indexes, "s1")).toMatchObject({
+      objective: "Stale active goal",
+      tone: "active",
+    });
     expect(latestGoalRuntimeForSession(indexes, "s2")?.tone).toBe("active");
-    expect([...indexes.activeGoalSessionIds]).toEqual(["s2"]);
+    expect([...indexes.activeGoalSessionIds]).toEqual(["s1", "s2"]);
   });
 
   test("indexes approvals by id, status, session, and latest pending approval", () => {

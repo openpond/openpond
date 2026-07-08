@@ -113,7 +113,11 @@ import {
   redactBrowserToolArguments,
   type BrowserHarnessToolExecutor,
 } from "../openpond/browser-tool-registry.js";
-import { runOpenPondGoalControl } from "../openpond/goal-control.js";
+import {
+  runOpenPondGoalControl,
+  type OpenPondGoalControlAction,
+  type OpenPondGoalControlGoal,
+} from "../openpond/goal-control.js";
 import {
   createConnectedAppSkillModelToolDefinitions,
   createCommandModelToolDefinition,
@@ -238,6 +242,7 @@ const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
 ]);
 const SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES = 3;
 const SUBAGENT_PARENT_WAKE_MAX_CHAIN = 4;
+const GOAL_CONTINUATION_IDLE_WAIT_MS = 10_000;
 
 export type HostedToolMode = "auto" | "native" | "text_fallback" | "disabled";
 
@@ -607,6 +612,7 @@ export function createTurnRunner(deps: {
   planCreatePipeline?: CreatePipelinePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;
+  enableGoalContinuations?: boolean;
   maxHostedWorkspaceToolRounds: number;
   maxRepeatedInvalidToolRequests: number;
   hostedToolFlags?: Partial<HostedToolRolloutFlags>;
@@ -656,10 +662,12 @@ export function createTurnRunner(deps: {
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
   } = deps;
+  const enableGoalContinuations = deps.enableGoalContinuations ?? true;
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new Map<string, ActiveTurn>();
   const createPipelineApplyJobs = new Map<string, BackgroundWorkReceipt>();
   const subagentParentWakeJobs = new Map<string, BackgroundWorkReceipt>();
+  const goalContinuationJobs = new Map<string, BackgroundWorkReceipt>();
 
   function interruptedError(): Error {
     const error = new Error("Stopped by user");
@@ -3467,6 +3475,14 @@ export function createTurnRunner(deps: {
     const nextStep = resumedSubagentCount > 0
       ? `${result.nextStep} ${resumedSubagentCount} active ${resumedSubagentCount === 1 ? "subagent needs" : "subagents need"} resume.`
       : result.nextStep;
+    if (shouldQueueOpenPondGoalContinuation(result.action, result.goal)) {
+      queueOpenPondGoalContinuation({
+        session: context.session,
+        sourceTurnId: context.turnId,
+        action: result.action,
+        goal: result.goal,
+      });
+    }
     return {
       goalId: result.goal.id,
       action: result.action,
@@ -3475,6 +3491,176 @@ export function createTurnRunner(deps: {
       mode: result.mode,
       nextStep,
     };
+  }
+
+  function shouldQueueOpenPondGoalContinuation(
+    action: OpenPondGoalControlAction,
+    goal: OpenPondGoalControlGoal,
+  ): boolean {
+    return enableGoalContinuations &&
+      (action === "start" || action === "restart" || action === "resume") &&
+      goal.status === "queued";
+  }
+
+  function queueOpenPondGoalContinuation(input: {
+    session: Session;
+    sourceTurnId: string;
+    action: OpenPondGoalControlAction;
+    goal: OpenPondGoalControlGoal;
+  }): void {
+    const key = `${input.session.id}:${input.goal.id}:${input.sourceTurnId}:${input.action}`;
+    if (goalContinuationJobs.has(key)) return;
+    const receipt = turnFollowUpQueue.enqueue(
+      {
+        label: `Continue goal: ${input.goal.objective.slice(0, 80)}`,
+        metadata: {
+          key,
+          sessionId: input.session.id,
+          sourceTurnId: input.sourceTurnId,
+          goalId: input.goal.id,
+          action: input.action,
+        },
+      },
+      async () => {
+        try {
+          await waitForSessionIdle(input.session.id, GOAL_CONTINUATION_IDLE_WAIT_MS);
+          const latestGoal = await latestOpenPondGoalForContinuation(input.session.id);
+          if (!latestGoal || latestGoal.id !== input.goal.id || !isContinuableOpenPondGoal(latestGoal)) {
+            await appendRuntimeEvent(
+              event({
+                sessionId: input.session.id,
+                turnId: input.sourceTurnId,
+                name: "goal.continuation.skipped",
+                source: "server",
+                appId: input.session.appId,
+                status: "completed",
+                output: "Goal continuation skipped because the goal is no longer active.",
+                data: {
+                  goalId: input.goal.id,
+                  latestGoalId: latestGoal?.id ?? null,
+                  latestStatus: latestGoal?.status ?? null,
+                },
+              }),
+            );
+            return;
+          }
+
+          await appendRuntimeEvent(
+            event({
+              sessionId: input.session.id,
+              turnId: input.sourceTurnId,
+              name: "goal.continuation.started",
+              source: "server",
+              appId: input.session.appId,
+              status: "started",
+              output: "Goal continuation queued.",
+              data: {
+                goalId: latestGoal.id,
+                action: input.action,
+              },
+            }),
+          );
+          await sendTurn(input.session.id, {
+            prompt: openPondGoalContinuationPrompt(latestGoal),
+            metadata: {
+              goalContinuation: {
+                goalId: latestGoal.id,
+                sourceTurnId: input.sourceTurnId,
+                action: input.action,
+              },
+              threadGoal: latestGoal,
+            },
+            usageAttribution: {
+              surface: "goal",
+              workflowKind: "goal_control",
+              goalId: latestGoal.id,
+              commandName: "/goal",
+              commandSource: "model_tool",
+            },
+          });
+        } catch (error) {
+          await appendRuntimeEvent(
+            event({
+              sessionId: input.session.id,
+              turnId: input.sourceTurnId,
+              name: "goal.continuation.failed",
+              source: "server",
+              appId: input.session.appId,
+              status: "failed",
+              output: textFromUnknown(error) || "Goal continuation failed.",
+              error: textFromUnknown(error) || undefined,
+              data: {
+                goalId: input.goal.id,
+                action: input.action,
+              },
+            }),
+          ).catch(() => undefined);
+        } finally {
+          goalContinuationJobs.delete(key);
+        }
+      },
+    );
+    goalContinuationJobs.set(key, receipt);
+  }
+
+  async function waitForSessionIdle(sessionId: string, timeoutMs: number): Promise<void> {
+    const started = Date.now();
+    while ((await activeInProgressTurn(sessionId)) || (await findInProgressTurn(sessionId))) {
+      if (Date.now() - started >= timeoutMs) {
+        throw new Error("Timed out waiting for the current turn to finish before continuing the goal.");
+      }
+      await delay(100);
+    }
+  }
+
+  async function latestOpenPondGoalForContinuation(sessionId: string): Promise<OpenPondGoalControlGoal | null> {
+    const snapshot = await store.snapshot();
+    for (let index = snapshot.events.length - 1; index >= 0; index -= 1) {
+      const item = snapshot.events[index]!;
+      if (item.sessionId !== sessionId || item.name !== "diagnostic") continue;
+      const data = recordFromUnknown(item.data);
+      if (!data) continue;
+      if (data.kind === "thread_goal_cleared" && openPondGoalProvider(data, null)) return null;
+      if (data.kind !== "thread_goal" || !openPondGoalProvider(data, null)) continue;
+      const goal = recordFromUnknown(data.goal);
+      if (!goal) continue;
+      const id = stringFromRecord(goal, "id");
+      const objective = stringFromRecord(goal, "objective");
+      const status = stringFromRecord(goal, "status");
+      if (!id || !objective || !status) continue;
+      return {
+        ...(goal as OpenPondGoalControlGoal),
+        id,
+        objective,
+        status: status as OpenPondGoalControlGoal["status"],
+        provider: "openpond",
+      };
+    }
+    return null;
+  }
+
+  function openPondGoalProvider(data: Record<string, unknown>, fallback: string | null): boolean {
+    const provider = stringFromRecord(data, "provider") ?? fallback;
+    return provider === null || provider === "openpond";
+  }
+
+  function isContinuableOpenPondGoal(goal: OpenPondGoalControlGoal): boolean {
+    return goal.provider === "openpond" && (goal.status === "queued" || goal.status === "running");
+  }
+
+  function openPondGoalContinuationPrompt(goal: OpenPondGoalControlGoal): string {
+    return [
+      "<goal_context>",
+      "Continue the active OpenPond goal now.",
+      "",
+      `Goal ID: ${goal.id}`,
+      `Objective: ${goal.objective}`,
+      "",
+      "Make concrete progress in this turn using the available tools and workspace context.",
+      "If the goal is complete, call openpond_goal_control with action complete and include the evidence in the reason.",
+      "If you cannot continue productively without user input or an external change, explain the blocker clearly and do not start an empty loop.",
+      "</goal_context>",
+    ].join("\n");
   }
 
   async function assertGoalSubagentsResolvedForCompletion(input: {

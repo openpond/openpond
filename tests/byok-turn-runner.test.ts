@@ -1120,6 +1120,65 @@ describe("BYOK turn runner dispatch", () => {
     }
   });
 
+  test("queues the first continuation turn when native goal control starts a goal", async () => {
+    const harness = createNativeGoalControlHarness({
+      enableGoalContinuations: true,
+      sessionOverrides: {
+        workspaceKind: "local_project",
+        cwd: "/tmp/openpond-goal-workspace",
+      },
+      toolArgs: {
+        action: "start",
+        objective: "Implement the lifecycle watcher.",
+        mode: "auto",
+        reason: "User asked OpenPond to pursue durable work.",
+      },
+      finalText: "Goal started.",
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "start this goal",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const completed = harness.events.find(
+      (event) => event.name === "tool.completed" && event.action === "openpond_goal_control",
+    );
+    const goalId = (completed?.data as any)?.result?.goalId;
+    expect(goalId).toMatch(/^goal_/);
+
+    await harness.turnFollowUpQueue.drain();
+
+    expect(harness.turns).toHaveLength(2);
+    const continuationTurn = harness.turns[1]!;
+    expect(continuationTurn.status).toBe("completed");
+    expect(continuationTurn.prompt).toContain("<goal_context>");
+    expect(continuationTurn.prompt).toContain("Implement the lifecycle watcher.");
+    expect(continuationTurn.metadata).toMatchObject({
+      goalContinuation: {
+        goalId,
+        sourceTurnId: turn.id,
+        action: "start",
+      },
+      threadGoal: {
+        id: goalId,
+        status: "queued",
+        objective: "Implement the lifecycle watcher.",
+      },
+    });
+    expect(harness.events.some(
+      (event) => event.name === "goal.continuation.started" && (event.data as any)?.goalId === goalId,
+    )).toBe(true);
+    const continuationStream = harness.streamInputs.find((streamInput) =>
+      streamInput.messages.some(
+        (message: { role?: string; content?: string }) =>
+          message.role === "user" && message.content?.includes("Continue the active OpenPond goal now."),
+      ),
+    );
+    expect(continuationStream).toBeTruthy();
+  });
+
   test("restarts the current OpenPond goal through native goal control", async () => {
     const harness = createNativeGoalControlHarness({
       sessionOverrides: {
@@ -2480,6 +2539,7 @@ function createNativeGoalControlHarness(input: {
   failOnPass?: number;
   preferences?: AppPreferences;
   providerSettings?: ProviderSettings;
+  enableGoalContinuations?: boolean;
 }) {
   const providerId = input.providerId ?? "openrouter";
   const modelId = input.modelId ?? (providerId === "openpond" ? "openpond-chat" : "test/model");
@@ -2499,6 +2559,7 @@ function createNativeGoalControlHarness(input: {
   const approvals: Approval[] = [];
   const streamInputs: any[] = [];
   const usageRecords: ModelUsageRecord[] = [];
+  const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up-goal-control-native" });
   let streamPass = 0;
   const runner = createTurnRunner({
     attachmentRootDir: "/tmp/openpond-test-attachments",
@@ -2642,7 +2703,8 @@ function createNativeGoalControlHarness(input: {
       streamInputs.push(streamInput);
       yield* harnessStreamDeltas();
     },
-    turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up-goal-control-native" }),
+    turnFollowUpQueue,
+    enableGoalContinuations: input.enableGoalContinuations ?? false,
     maxHostedWorkspaceToolRounds: 3,
     maxRepeatedInvalidToolRequests: 2,
   });
@@ -2692,6 +2754,7 @@ function createNativeGoalControlHarness(input: {
     approvals,
     streamInputs,
     usageRecords,
+    turnFollowUpQueue,
   };
 }
 

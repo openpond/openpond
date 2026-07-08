@@ -54,6 +54,7 @@ import {
   defaultRightSidebarConversationStateForSwitch,
   rightSidebarConversationState,
   rightSidebarConversationStatesEqual,
+  rightSidebarWorkspacePanelStateKey,
   type RightSidebarConversationState,
 } from "./lib/right-sidebar-conversation-state";
 import {
@@ -206,8 +207,9 @@ export function App() {
   const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
   const rightSidebarStateByConversationRef = useRef<Map<string, RightSidebarConversationState>>(new Map());
-  const workspaceDiffPanelStateByConversationRef = useRef<Map<string, WorkspaceDiffPanelViewState>>(new Map());
+  const workspaceDiffPanelStateByScopeRef = useRef<Map<string, WorkspaceDiffPanelViewState>>(new Map());
   const activeRightSidebarConversationRef = useRef<string | null>(null);
+  const activeWorkspaceDiffPanelStateKeyRef = useRef<string | null>(null);
   const rememberCloudWorkspaceState = useCallback((state: WorkspaceState) => {
     rememberWorkspaceStateRef.current?.(state);
   }, []);
@@ -1343,6 +1345,27 @@ export function App() {
   const browserConversationId =
     selectedSessionId ??
     `draft:${selectedProjectId ?? selectedAppId ?? selectedCloudProject?.id ?? "general"}`;
+  const workspaceDiffPanelSourceKey = useMemo(() => {
+    if (view === "cloud" && selectedCloudWorkItem?.id) return `cloud-work:${selectedCloudWorkItem.id}`;
+    if (viewWorkspaceId) return `${viewWorkspaceKind ?? "workspace"}:${viewWorkspaceId}`;
+    if (viewWorkspaceAppId) return `app:${viewWorkspaceAppId}`;
+    if (selectedSession?.cwd && !isCloudWorkspaceKind(selectedSession.workspaceKind)) {
+      return `cwd:${selectedSession.cwd}`;
+    }
+    return "none";
+  }, [
+    selectedCloudWorkItem?.id,
+    selectedSession?.cwd,
+    selectedSession?.workspaceKind,
+    view,
+    viewWorkspaceAppId,
+    viewWorkspaceId,
+    viewWorkspaceKind,
+  ]);
+  const workspaceDiffPanelStateKey = rightSidebarWorkspacePanelStateKey({
+    conversationId: browserConversationId,
+    workspaceSourceKey: workspaceDiffPanelSourceKey,
+  });
   const currentRightSidebarConversationState = useMemo(
     () =>
       rightSidebarConversationState({
@@ -1360,11 +1383,7 @@ export function App() {
       activeConversationId,
       cloneRightSidebarConversationState(currentRightSidebarConversationState),
     );
-    workspaceDiffPanelStateByConversationRef.current.set(
-      activeConversationId,
-      cloneWorkspaceDiffPanelViewState(workspaceDiffPanelViewState),
-    );
-  }, [browserConversationId, currentRightSidebarConversationState, workspaceDiffPanelViewState]);
+  }, [browserConversationId, currentRightSidebarConversationState]);
   useEffect(() => {
     const previousConversationId = activeRightSidebarConversationRef.current;
     if (previousConversationId === browserConversationId) return;
@@ -1375,20 +1394,34 @@ export function App() {
       defaultRightSidebarConversationStateForSwitch({
         keepOpen: currentRightSidebarConversationState.diffPanelOpen,
       });
-    const restoredWorkspaceDiffPanelState =
-      workspaceDiffPanelStateByConversationRef.current.get(browserConversationId) ??
-      defaultWorkspaceDiffPanelViewState();
-    setWorkspaceDiffPanelViewState((current) =>
-      workspaceDiffPanelViewStatesEqual(current, restoredWorkspaceDiffPanelState)
-        ? current
-        : cloneWorkspaceDiffPanelViewState(restoredWorkspaceDiffPanelState),
-    );
     if (rightSidebarConversationStatesEqual(currentRightSidebarConversationState, restoredState)) return;
     appDispatch({
       type: "patch",
       patch: cloneRightSidebarConversationState(restoredState),
     });
   }, [browserConversationId, currentRightSidebarConversationState]);
+  useEffect(() => {
+    const activeStateKey = activeWorkspaceDiffPanelStateKeyRef.current;
+    if (!activeStateKey) return;
+    workspaceDiffPanelStateByScopeRef.current.set(
+      activeStateKey,
+      cloneWorkspaceDiffPanelViewState(workspaceDiffPanelViewState),
+    );
+  }, [workspaceDiffPanelStateKey, workspaceDiffPanelViewState]);
+  useEffect(() => {
+    const previousStateKey = activeWorkspaceDiffPanelStateKeyRef.current;
+    if (previousStateKey === workspaceDiffPanelStateKey) return;
+
+    activeWorkspaceDiffPanelStateKeyRef.current = workspaceDiffPanelStateKey;
+    const restoredWorkspaceDiffPanelState =
+      workspaceDiffPanelStateByScopeRef.current.get(workspaceDiffPanelStateKey) ??
+      defaultWorkspaceDiffPanelViewState();
+    setWorkspaceDiffPanelViewState((current) =>
+      workspaceDiffPanelViewStatesEqual(current, restoredWorkspaceDiffPanelState)
+        ? current
+        : cloneWorkspaceDiffPanelViewState(restoredWorkspaceDiffPanelState),
+    );
+  }, [workspaceDiffPanelStateKey]);
   const handleWorkspaceDiffPanelViewStateChange = useCallback((state: WorkspaceDiffPanelViewState) => {
     setWorkspaceDiffPanelViewState((current) =>
       workspaceDiffPanelViewStatesEqual(current, state)

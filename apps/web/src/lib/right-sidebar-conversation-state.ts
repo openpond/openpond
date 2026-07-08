@@ -76,3 +76,10 @@ export function rightSidebarConversationStatesEqual(
     );
   });
 }
+
+export function rightSidebarWorkspacePanelStateKey(input: {
+  conversationId: string;
+  workspaceSourceKey: string;
+}): string {
+  return `${input.conversationId}\u0000${input.workspaceSourceKey || "none"}`;
+}

@@ -7,6 +7,7 @@ import {
   defaultRightSidebarConversationStateForSwitch,
   rightSidebarConversationState,
   rightSidebarConversationStatesEqual,
+  rightSidebarWorkspacePanelStateKey,
 } from "../apps/web/src/lib/right-sidebar-conversation-state";
 import {
   cloneWorkspaceDiffPanelViewState,
@@ -112,5 +113,30 @@ describe("right sidebar conversation state", () => {
       openFilePaths: ["docs/notes.md", "apps/web/src/App.tsx"],
       selectedPath: "docs/notes.md",
     });
+  });
+
+  test("scopes workspace file panel state by conversation and workspace source", () => {
+    expect(
+      rightSidebarWorkspacePanelStateKey({
+        conversationId: "session_1",
+        workspaceSourceKey: "cwd:/tmp/project-a",
+      }),
+    ).not.toBe(
+      rightSidebarWorkspacePanelStateKey({
+        conversationId: "session_1",
+        workspaceSourceKey: "cwd:/tmp/project-b",
+      }),
+    );
+    expect(
+      rightSidebarWorkspacePanelStateKey({
+        conversationId: "session_1",
+        workspaceSourceKey: "cwd:/tmp/project-a",
+      }),
+    ).not.toBe(
+      rightSidebarWorkspacePanelStateKey({
+        conversationId: "session_2",
+        workspaceSourceKey: "cwd:/tmp/project-a",
+      }),
+    );
   });
 });

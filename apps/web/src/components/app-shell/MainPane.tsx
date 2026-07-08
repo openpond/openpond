@@ -412,8 +412,13 @@ function usageAttributionForComposerSlashCommand(
   };
 }
 
-function isLocalComposerSlashCommand(command: ParsedComposerSlashCommand): boolean {
-  return command.command === "goal-local" || command.command === "skill" || command.command === "sync-cloud";
+export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSlashCommand): boolean {
+  return (
+    command.command === "goal" ||
+    command.command === "goal-local" ||
+    command.command === "skill" ||
+    command.command === "sync-cloud"
+  );
 }
 
 export function shouldRunCreatePipelineCommandLocally(input: {
@@ -774,7 +779,7 @@ export function MainPane({
             });
           }
           if (
-            isLocalComposerSlashCommand(command) ||
+            shouldSubmitComposerSlashCommandToChat(command) ||
             shouldRunCreatePipelineCommandLocally({
               command,
               profile: bootstrap?.profile,

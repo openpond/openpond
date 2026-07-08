@@ -58,6 +58,18 @@ describe("desktop harness runner", () => {
     expect(filterScenarios(scenarios, "missing")).toEqual([]);
   });
 
+  test("loads the subagent desktop scenario suite", async () => {
+    const scenarios = await loadScenarios(["tests/desktop-scenarios/subagent-suite.ts"], root);
+
+    expect(scenarios.map((scenario) => scenario.name)).toEqual([
+      "subagent-visible-lifecycle",
+      "subagent-running-state",
+      "subagent-handoff-parent-wake",
+      "subagent-blocked-approval",
+      "goal-scoped-subagent-details",
+    ]);
+  });
+
   test("writes a successful JSON report with scenario evidence", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "openpond-desktop-harness-test-"));
     try {

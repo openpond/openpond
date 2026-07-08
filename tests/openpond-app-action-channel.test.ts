@@ -17,6 +17,7 @@ import { GoalDetailsView } from "../apps/web/src/components/goal/GoalDetailsView
 import { WorkspaceDiffTabs } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanelChrome";
 import {
   sandboxIdFromWorkspaceName,
+  shouldSubmitComposerSlashCommandToChat,
   shouldRunCreatePipelineCommandLocally,
 } from "../apps/web/src/components/app-shell/MainPane";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
@@ -195,6 +196,19 @@ describe("OpenPond App action channel", () => {
       args: "add a crash report",
     });
     expect(parseComposerSlashCommandPrompt("/unknown summarize files")).toBeNull();
+  });
+
+  test("routes plain goal slash commands through chat unless remote is explicit", () => {
+    const goalCommand = parseComposerSlashCommandPrompt("/goal smoke goal");
+    const localGoalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
+    const remoteGoalCommand = parseComposerSlashCommandPrompt("/goal-remote smoke goal");
+    expect(goalCommand).not.toBeNull();
+    expect(localGoalCommand).not.toBeNull();
+    expect(remoteGoalCommand).not.toBeNull();
+
+    expect(shouldSubmitComposerSlashCommandToChat(goalCommand!)).toBe(true);
+    expect(shouldSubmitComposerSlashCommandToChat(localGoalCommand!)).toBe(true);
+    expect(shouldSubmitComposerSlashCommandToChat(remoteGoalCommand!)).toBe(false);
   });
 
   test("builds GitHub-connected submit issue prompts for openpond", () => {

@@ -116,7 +116,7 @@ function appendRuntimeEventIndexes(
       latestContextUsageBySessionId.delete(sessionId);
     }
 
-    const goalRuntime = latestCreatePipelineRuntimeFromEvents(sessionEvents) ?? latestGoalRuntimeFromEvents(sessionEvents);
+    const goalRuntime = latestVisibleGoalRuntimeFromEvents(sessionEvents);
     if (goalRuntime) {
       latestGoalRuntimeBySessionId.set(sessionId, goalRuntime);
       if (goalRuntime.tone === "active") {
@@ -179,7 +179,7 @@ function runtimeEventDerivedIndexes(
     const contextUsage = latestContextUsageFromEvents(sessionEvents);
     if (contextUsage) latestContextUsageBySessionId.set(sessionId, contextUsage);
 
-    const goalRuntime = latestCreatePipelineRuntimeFromEvents(sessionEvents) ?? latestGoalRuntimeFromEvents(sessionEvents);
+    const goalRuntime = latestVisibleGoalRuntimeFromEvents(sessionEvents);
     if (!goalRuntime) continue;
     latestGoalRuntimeBySessionId.set(sessionId, goalRuntime);
     if (goalRuntime.tone === "active") activeGoalSessionIds.add(sessionId);
@@ -220,6 +220,14 @@ function preserveGoalRuntimeForSubagent(input: {
   if (!goalRuntime) return;
   input.latestGoalRuntimeBySessionId.set(input.sessionId, goalRuntime);
   if (goalRuntime.tone === "active") input.activeGoalSessionIds.add(input.sessionId);
+}
+
+function latestVisibleGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntimeStatus | null {
+  return (
+    latestCreatePipelineRuntimeFromEvents(events) ??
+    latestGoalRuntimeFromEvents(events) ??
+    latestKnownActiveGoalRuntimeFromEvents(events)
+  );
 }
 
 function buildApprovalIndexes(approvals: Approval[]): Pick<

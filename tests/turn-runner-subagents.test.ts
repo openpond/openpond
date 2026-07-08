@@ -2368,6 +2368,7 @@ function createSubagentHarness(input: {
     },
     turnFollowUpQueue,
     subagentQueue,
+    enableGoalContinuations: false,
     maxHostedWorkspaceToolRounds: 3,
     maxRepeatedInvalidToolRequests: 2,
   });
