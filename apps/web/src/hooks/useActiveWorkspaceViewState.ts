@@ -17,9 +17,9 @@ import {
   localWorkspaceStateNote,
   uploadSyncStateNote,
 } from "../lib/project-workflow-state";
+import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import {
-  cloudProjectLabel,
   isHybridWorkspaceSession,
   isCloudWorkspaceKind,
   isPendingCloudStartSession,
@@ -68,6 +68,10 @@ export function useActiveWorkspaceViewState({
       ? localPathWorkspaceId(selectedSession.cwd)
       : null;
   const providerSettings = bootstrap?.providers ?? null;
+  const selectedProjectConfirmedCloudProject = confirmedLinkedCloudProject(
+    selectedProject,
+    bootstrap?.cloudProjects ?? [],
+  );
   const activeProvider =
     selectedSession?.modelRef?.providerId ??
     selectedSession?.provider ??
@@ -148,12 +152,12 @@ export function useActiveWorkspaceViewState({
   const cloudTargetName =
     (activeWorkspaceLocation === "cloud" ? workspaceName : null) ??
     selectedCloudProject?.name ??
-    cloudProjectLabel(selectedProject) ??
+    selectedProjectConfirmedCloudProject?.name ??
     selectedProject?.name ??
     "Cloud workspace";
   const cloudLinked = Boolean(
     selectedCloudProject?.id ||
-      selectedProject?.linkedSandboxProject?.projectId ||
+      selectedProjectConfirmedCloudProject?.id ||
       selectedSession?.cloudProjectId ||
       activeWorkspaceLocation === "cloud",
   );
@@ -210,6 +214,12 @@ export function useWorkspaceTargetState({
   workspaceStates: Record<string, WorkspaceState>;
   workspaceBusy: boolean;
 }) {
+  const selectedProjectConfirmedCloudProject = confirmedLinkedCloudProject(
+    selectedProject,
+    bootstrap?.cloudProjects ?? [],
+  );
+  const selectedProjectRawCloudLinked = Boolean(selectedProject?.linkedSandboxProject?.projectId);
+  const selectedProjectCloudLinkTrusted = !selectedProjectRawCloudLinked || Boolean(selectedProjectConfirmedCloudProject);
   const projectTarget = useMemo<ComposerProjectTargetState>(() => {
     const localOptions = (bootstrap?.localProjects ?? []).map((project) => ({
       value: `local:${project.id}`,
@@ -256,7 +266,7 @@ export function useWorkspaceTargetState({
   const cloudSetupAvailable = Boolean(cloudLinked || selectedProject);
   const hybridLinked = Boolean(
     selectedCloudProject?.id ||
-      selectedProject?.linkedSandboxProject?.projectId ||
+      selectedProjectConfirmedCloudProject?.id ||
       selectedSession?.cloudProjectId ||
       isHybridWorkspaceSession(selectedSession),
   );
@@ -264,16 +274,19 @@ export function useWorkspaceTargetState({
   const localStateNote = localWorkspaceStateNote(selectedLocalWorkspaceState, {
     branch: selectedProject?.linkedSandboxProject?.defaultBranch ?? null,
     path: selectedProject?.workspacePath ?? selectedSession?.cwd ?? null,
-    linkedCloudSourceKnown: selectedProject?.linkedSandboxProject?.projectId
+    linkedCloudSourceKnown: selectedProject?.linkedSandboxProject?.projectId && selectedProjectCloudLinkTrusted
       ? Boolean(selectedProject.linkedSandboxProject.lastUploadedCommit) || !selectedLocalWorkspaceState?.headCommit
       : true,
   });
   const cloudStateNote = cloudWorkspaceStateNote(
     selectedProject,
-    selectedCloudProject,
+    selectedCloudProject ?? selectedProjectConfirmedCloudProject,
     selectedLocalWorkspaceState,
+    { cloudLinkTrusted: selectedProjectCloudLinkTrusted },
   );
-  const uploadStateNote = uploadSyncStateNote(selectedProject, selectedLocalWorkspaceState);
+  const uploadStateNote = uploadSyncStateNote(selectedProject, selectedLocalWorkspaceState, {
+    cloudLinkTrusted: selectedProjectCloudLinkTrusted,
+  });
   const workspaceTarget = useMemo<WorkspaceTargetState>(
     () => {
       const localOption = {

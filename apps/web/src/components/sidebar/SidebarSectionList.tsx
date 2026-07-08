@@ -399,6 +399,8 @@ export function SidebarSectionList({
                   expanded={expandedProjectIds.has(row.id)}
                   workspaceState={row.item.kind === "local" ? workspaceStates[row.item.project.id] ?? null : null}
                   cloudWorkItems={cloudWorkItemsByProjectId[row.item.id] ?? []}
+                  cloudLinkTrusted={row.item.cloudLinkTrusted}
+                  cloudLinkWarning={row.item.cloudLinkWarning}
                   placeholder={isDraggedRow}
                   terminalIndicator={terminalIndicatorForProject(row.item.id)}
                   onSelect={() => selectProjectRow(row.item)}
@@ -597,6 +599,8 @@ export function SidebarSectionList({
               expanded={expandedProjectIds.has(item.id)}
               workspaceState={item.kind === "local" ? workspaceStates[item.project.id] ?? null : null}
               cloudWorkItems={cloudWorkItemsByProjectId[item.id] ?? []}
+              cloudLinkTrusted={item.cloudLinkTrusted}
+              cloudLinkWarning={item.cloudLinkWarning}
               terminalIndicator={terminalIndicatorForProject(item.id)}
               onSelect={() => selectProjectRow(item)}
               onNewChat={() => beginProjectChat(item)}

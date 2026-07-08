@@ -20,6 +20,7 @@ import {
   type WorkspaceLocation,
   type WorkspaceTargetValue,
 } from "../lib/workspace-location";
+import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
 
 type CloudWorkspaceSetupControls = {
   changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
@@ -38,6 +39,7 @@ export function useCloudWorkspaceSetup({
   applyBootstrapPayload,
   busy,
   cloudSetupDialog,
+  cloudProjects,
   connection,
   defaultTeamId,
   expandProject,
@@ -64,6 +66,7 @@ export function useCloudWorkspaceSetup({
   applyBootstrapPayload: (payload: BootstrapPayload) => void;
   busy: boolean;
   cloudSetupDialog: CloudSetupDialogState | null;
+  cloudProjects: CloudProject[];
   connection: ClientConnection | null;
   defaultTeamId: string | null;
   expandProject: (projectId: string) => void;
@@ -162,6 +165,7 @@ export function useCloudWorkspaceSetup({
         return;
       }
       setWorkspaceBusy(true);
+      const confirmedCloudProject = confirmedLinkedCloudProject(project, cloudProjects);
       setCloudSetupDialog((current) =>
         current
           ? {
@@ -197,8 +201,8 @@ export function useCloudWorkspaceSetup({
           workspaceId: project.id,
           workspaceName: project.name,
           localProjectId: project.id,
-          cloudProjectId: project.linkedSandboxProject?.projectId ?? null,
-          cloudTeamId: project.linkedSandboxProject?.teamId ?? null,
+          cloudProjectId: confirmedCloudProject?.id ?? null,
+          cloudTeamId: confirmedCloudProject?.teamId ?? null,
           cwd: project.workspacePath,
           title: `Sync ${project.name} to Cloud`,
         });
@@ -276,6 +280,7 @@ export function useCloudWorkspaceSetup({
       appDispatch,
       applyBootstrapPayload,
       cloudSetupDialog,
+      cloudProjects,
       connection,
       defaultTeamId,
       expandProject,
@@ -331,12 +336,7 @@ export function useCloudWorkspaceSetup({
       if (target === "queue_cloud") {
         const linkedCloudProject =
           selectedCloudProject ??
-          (selectedProject?.linkedSandboxProject?.projectId
-            ? {
-                id: selectedProject.linkedSandboxProject.projectId,
-                name: selectedProject.linkedSandboxProject.projectName ?? selectedProject.name,
-              }
-            : null);
+          confirmedLinkedCloudProject(selectedProject, cloudProjects);
         if (!linkedCloudProject) {
           if (selectedProject) {
             openCloudSetupForLocalProject(selectedProject, visibleWorkspaceState?.currentBranch ?? null);
@@ -449,6 +449,7 @@ export function useCloudWorkspaceSetup({
       appDispatch,
       busy,
       connection,
+      cloudProjects,
       expandProject,
       localProjectById,
       openCloudSetupForLocalProject,

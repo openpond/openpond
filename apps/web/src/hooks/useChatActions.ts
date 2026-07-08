@@ -85,6 +85,7 @@ import {
   isHybridWorkspaceSession,
   type WorkspaceTargetValue,
 } from "../lib/workspace-location";
+import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
 
 type UseChatActionsInput = {
   applyBootstrapPayload: (payload: BootstrapPayload) => void;
@@ -107,6 +108,8 @@ type UseChatActionsInput = {
   selectedApp: OpenPondApp | null;
   selectedActionCatalog: SandboxActionCatalogEntry[];
   openPondActionCatalog: SandboxActionCatalogEntry[];
+  cloudProjects: CloudProject[];
+  accountScopeKey?: string | null;
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
   selectedProjectLinkedOpenPondApp: LocalProjectOpenPondLink | null;
@@ -267,6 +270,8 @@ export function useChatActions({
   selectedApp,
   selectedActionCatalog,
   openPondActionCatalog,
+  cloudProjects,
+  accountScopeKey,
   selectedCloudProject,
   selectedProject,
   selectedProjectLinkedOpenPondApp,
@@ -322,11 +327,12 @@ export function useChatActions({
   }
 
   async function sandboxAgentForProject(projectId: string, teamId: string): Promise<SandboxAgent | null> {
-    const cachedAgents = readSandboxAgentsFromMemory(teamId);
+    const cachedAgents = readSandboxAgentsFromMemory(teamId, accountScopeKey);
     const agents =
       cachedAgents ??
       (await preloadSandboxAgents({
         teamId,
+        accountKey: accountScopeKey,
         fetchAgents: async (nextTeamId) => {
           const agentsPayload = await api.listSandboxAgents(connection!, { teamId: nextTeamId });
           return agentsPayload.agents;
@@ -369,6 +375,7 @@ export function useChatActions({
     const organization = await resolveSyncCloudOrganization();
     const branch = project.linkedSandboxProject?.defaultBranch?.trim() || "main";
     const projectKey = projectSelectionKey("local", project.id);
+    const confirmedCloudProject = confirmedLinkedCloudProject(project, cloudProjects);
     const session = await api.createSession(connection, {
       provider: "openpond",
       modelRef: modelRefForTurn("openpond", DEFAULT_OPENPOND_CHAT_MODEL, providerSettings),
@@ -379,8 +386,8 @@ export function useChatActions({
       workspaceId: project.id,
       workspaceName: project.name,
       localProjectId: project.id,
-      cloudProjectId: project.linkedSandboxProject?.projectId ?? null,
-      cloudTeamId: project.linkedSandboxProject?.teamId ?? null,
+      cloudProjectId: confirmedCloudProject?.id ?? null,
+      cloudTeamId: confirmedCloudProject?.teamId ?? null,
       cwd: project.workspacePath,
       title: `Sync ${project.name} to Cloud`,
     });
@@ -473,6 +480,7 @@ export function useChatActions({
         if (!project) {
           throw new Error("Select a project to use this.");
         }
+        const confirmedCloudProject = confirmedLinkedCloudProject(project, cloudProjects);
         const projectKey = projectSelectionKey("local", project.id);
         const sessionProvider = input.providerForTurn;
         session = await api.createSession(connection, {
@@ -488,8 +496,8 @@ export function useChatActions({
           workspaceId: project.id,
           workspaceName: project.name,
           localProjectId: project.id,
-          cloudProjectId: project.linkedSandboxProject?.projectId ?? null,
-          cloudTeamId: project.linkedSandboxProject?.teamId ?? null,
+          cloudProjectId: confirmedCloudProject?.id ?? null,
+          cloudTeamId: confirmedCloudProject?.teamId ?? null,
           cwd: project.workspacePath,
           title: input.command.slice(0, 64),
         });
@@ -683,7 +691,11 @@ export function useChatActions({
           return true;
         }
 
-        const actionProjectTarget = openPondActionProjectTarget({ selectedCloudProject, selectedProject });
+        const actionProjectTarget = openPondActionProjectTarget({
+          cloudProjects,
+          selectedCloudProject,
+          selectedProject,
+        });
         if (!actionProjectTarget) {
           throw new Error("Select a Project linked to an OpenPond Cloud Project before running an action.");
         }
@@ -794,9 +806,12 @@ export function useChatActions({
         const sessionAppId = selectedProjectLinkedOpenPondAppForTurn?.appId ?? selectedAppForTurn?.id ?? null;
         const sessionAppName = selectedProjectLinkedOpenPondAppForTurn?.appName ?? selectedAppForTurn?.name ?? null;
         const cloudProject = selectedCloudProjectForTurn;
-        const linkedSandboxProject = selectedProjectForTurn?.linkedSandboxProject ?? null;
+        const confirmedCloudProject = explicitTurnContext
+          ? null
+          : confirmedLinkedCloudProject(selectedProjectForTurn, cloudProjects);
         const hybridWorkspaceTarget = hybridTargetForTurn
           ? resolveHybridWorkspaceTarget({
+              cloudProjects,
               selectedCloudProject: cloudProject,
               selectedProject: selectedProjectForTurn,
             })
@@ -839,8 +854,8 @@ export function useChatActions({
                 workspaceId: selectedProjectForTurn?.id ?? (selectedAppForTurn ? sessionAppId : undefined),
                 workspaceName: cloudProject?.name ?? selectedProjectForTurn?.name ?? sessionAppName,
                 localProjectId: selectedProjectForTurn?.id ?? null,
-                cloudProjectId: cloudProject?.id ?? linkedSandboxProject?.projectId ?? null,
-                cloudTeamId: cloudProject?.teamId ?? linkedSandboxProject?.teamId ?? null,
+                cloudProjectId: cloudProject?.id ?? confirmedCloudProject?.id ?? null,
+                cloudTeamId: cloudProject?.teamId ?? confirmedCloudProject?.teamId ?? null,
                 cwd: selectedProjectForTurn ? selectedProjectForTurn.workspacePath : null,
                 title: value.slice(0, 64),
               },

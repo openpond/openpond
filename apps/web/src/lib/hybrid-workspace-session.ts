@@ -5,6 +5,7 @@ import type {
   CreateSessionRequest,
   LocalProject,
 } from "@openpond/contracts";
+import { confirmedLinkedCloudProject } from "./cloud-link-trust";
 import { hybridWorkspaceSessionMetadata } from "./workspace-location";
 
 export type HybridWorkspaceTarget =
@@ -22,15 +23,26 @@ export type HybridWorkspaceTarget =
     };
 
 export function resolveHybridWorkspaceTarget({
+  cloudProjects,
   selectedCloudProject,
   selectedProject,
 }: {
+  cloudProjects?: CloudProject[] | null;
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
 }): HybridWorkspaceTarget {
   const linkedSandboxProject = selectedProject?.linkedSandboxProject ?? null;
-  const cloudProjectId = selectedCloudProject?.id ?? linkedSandboxProject?.projectId ?? null;
-  const cloudTeamId = selectedCloudProject?.teamId ?? linkedSandboxProject?.teamId ?? null;
+  const confirmedCloudProject = cloudProjects
+    ? confirmedLinkedCloudProject(selectedProject, cloudProjects)
+    : null;
+  const cloudProjectId =
+    selectedCloudProject?.id ??
+    confirmedCloudProject?.id ??
+    (cloudProjects ? null : linkedSandboxProject?.projectId ?? null);
+  const cloudTeamId =
+    selectedCloudProject?.teamId ??
+    confirmedCloudProject?.teamId ??
+    (cloudProjects ? null : linkedSandboxProject?.teamId ?? null);
   if (!cloudProjectId || !cloudTeamId) {
     return {
       kind: "missing_cloud_project",
@@ -45,6 +57,7 @@ export function resolveHybridWorkspaceTarget({
     localProjectId: selectedProject?.id ?? null,
     workspaceName:
       selectedCloudProject?.name ??
+      confirmedCloudProject?.name ??
       linkedSandboxProject?.projectName ??
       selectedProject?.name ??
       "Hybrid workspace",

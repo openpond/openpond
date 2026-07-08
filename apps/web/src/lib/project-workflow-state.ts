@@ -46,9 +46,13 @@ export function cloudWorkspaceStateNote(
   localProject: LocalProject | null | undefined,
   cloudProject: CloudProject | null | undefined,
   state?: WorkspaceState | null,
+  options: { cloudLinkTrusted?: boolean } = {},
 ): string {
   const linked = localProject?.linkedSandboxProject ?? null;
   if (!linked?.projectId && !cloudProject) return "upload required";
+  if (linked?.projectId && options.cloudLinkTrusted === false) {
+    return "uploaded to a different account";
+  }
 
   const branch = linked?.defaultBranch ?? cloudProject?.defaultBranch ?? "main";
   const linkedManifestHash = linked?.manifestHash ?? null;
@@ -68,8 +72,12 @@ export function cloudWorkspaceStateNote(
 export function uploadSyncStateNote(
   localProject: LocalProject | null | undefined,
   state: WorkspaceState | null | undefined,
+  options: { cloudLinkTrusted?: boolean } = {},
 ): string {
   if (!localProject) return "select a local project";
+  if (localProject.linkedSandboxProject?.projectId && options.cloudLinkTrusted === false) {
+    return "sync to this account";
+  }
   if (!state) return localProject.linkedSandboxProject ? "sync source to cloud" : "push local source to cloud";
   if (state.error) return "repo status unavailable";
   if (!state.initialized) return "local repo unavailable";
@@ -104,6 +112,7 @@ export function projectCapabilityNote(input: {
   localProject?: LocalProject | null;
   cloudProject?: CloudProject | null;
   workspaceState?: WorkspaceState | null;
+  cloudLinkTrusted?: boolean;
 }): string {
   if (input.kind === "cloud") {
     const branch = input.cloudProject?.defaultBranch ?? "main";
@@ -112,12 +121,15 @@ export function projectCapabilityNote(input: {
   }
 
   const localProject = input.localProject ?? null;
-  const hasCloud = Boolean(localProject?.linkedSandboxProject?.projectId || localProject?.linkedOpenPondApp?.appId);
+  const hasCloud = Boolean(
+    (input.cloudLinkTrusted !== false && localProject?.linkedSandboxProject?.projectId) ||
+      localProject?.linkedOpenPondApp?.appId,
+  );
   if (!input.workspaceState) return hasCloud ? "Local + Cloud" : "Local";
   const local = localWorkspaceStateNote(input.workspaceState, {
     branch: localProject?.linkedSandboxProject?.defaultBranch ?? null,
     path: localProject?.workspacePath ?? null,
-    linkedCloudSourceKnown: localProject?.linkedSandboxProject?.projectId
+    linkedCloudSourceKnown: localProject?.linkedSandboxProject?.projectId && input.cloudLinkTrusted !== false
       ? Boolean(localProject.linkedSandboxProject.lastUploadedCommit) || !input.workspaceState.headCommit
       : true,
   });

@@ -34,8 +34,16 @@ export function cloudWorkspaceReadyMessage(
   return `Recreated ${target}.`;
 }
 
+export function cloudSessionBelongsToAccount(session: Session, cloudProjects: CloudProject[]): boolean {
+  if (!session.cloudProjectId || !session.cloudTeamId) return true;
+  return cloudProjects.some(
+    (project) => project.id === session.cloudProjectId && project.teamId === session.cloudTeamId,
+  );
+}
+
 export function useCloudSessionReady({
   applyBootstrapPayload,
+  cloudProjects,
   connection,
   localProjectById,
   selectedCloudProject,
@@ -45,6 +53,7 @@ export function useCloudSessionReady({
   visibleWorkspaceState,
 }: {
   applyBootstrapPayload: (payload: BootstrapPayload) => void;
+  cloudProjects: CloudProject[];
   connection: ClientConnection | null;
   localProjectById: Map<string, LocalProject>;
   selectedCloudProject: CloudProject | null;
@@ -59,6 +68,13 @@ export function useCloudSessionReady({
       const localProject =
         selectedProject ??
         (session.localProjectId ? (localProjectById.get(session.localProjectId) ?? null) : null);
+      if (
+        session.cloudProjectId &&
+        session.cloudTeamId &&
+        !cloudSessionBelongsToAccount(session, cloudProjects)
+      ) {
+        throw new Error("This Cloud session belongs to a different OpenPond account. Sync or select a Project in the current account.");
+      }
       if (!session.workspaceId) showToast(cloudWorkspaceStartingMessage(session), "info");
       setWorkspaceBusy(true);
       try {
@@ -85,6 +101,7 @@ export function useCloudSessionReady({
     },
     [
       applyBootstrapPayload,
+      cloudProjects,
       connection,
       localProjectById,
       selectedCloudProject,

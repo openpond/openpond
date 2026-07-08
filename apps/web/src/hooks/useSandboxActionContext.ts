@@ -31,6 +31,7 @@ export function useSandboxActionContext({
   cloudProjects,
   connection,
   defaultTeamId,
+  accountScopeKey,
   localProjects,
   profileActionCatalogEntries,
   selectedCloudProject,
@@ -40,6 +41,7 @@ export function useSandboxActionContext({
   cloudProjects: CloudProject[];
   connection: ClientConnection | null;
   defaultTeamId: string | null;
+  accountScopeKey?: string | null;
   localProjects: LocalProject[];
   profileActionCatalogEntries: OpenPondActionCatalogEntry[];
   selectedCloudProject: CloudProject | null;
@@ -52,14 +54,19 @@ export function useSandboxActionContext({
     if (defaultTeamId) ids.add(defaultTeamId);
     for (const project of cloudProjects) ids.add(project.teamId);
     for (const project of localProjects) {
-      if (project.linkedSandboxProject?.teamId) ids.add(project.linkedSandboxProject.teamId);
+      const linkedProject = cloudProjects.find(
+        (candidate) =>
+          candidate.id === project.linkedSandboxProject?.projectId &&
+          candidate.teamId === project.linkedSandboxProject?.teamId,
+      );
+      if (linkedProject?.teamId) ids.add(linkedProject.teamId);
     }
     return [...ids].sort();
   }, [cloudProjects, defaultTeamId, localProjects]);
   const slashAgentTeamIdKey = slashAgentTeamIds.join("\0");
   const selectedActionProjectTarget = useMemo(
-    () => openPondActionProjectTarget({ selectedCloudProject, selectedProject }),
-    [selectedCloudProject, selectedProject],
+    () => openPondActionProjectTarget({ cloudProjects, selectedCloudProject, selectedProject }),
+    [cloudProjects, selectedCloudProject, selectedProject],
   );
 
   useEffect(() => {
@@ -69,13 +76,14 @@ export function useSandboxActionContext({
     }
 
     let cancelled = false;
-    const cachedAgents = slashAgentTeamIds.flatMap((teamId) => readSandboxAgentsFromMemory(teamId) ?? []);
+    const cachedAgents = slashAgentTeamIds.flatMap((teamId) => readSandboxAgentsFromMemory(teamId, accountScopeKey) ?? []);
     setSlashAgents(uniqueActiveAgents(cachedAgents));
 
     void Promise.all(
       slashAgentTeamIds.map((teamId) =>
         preloadSandboxAgents({
           teamId,
+          accountKey: accountScopeKey,
           fetchAgents: async (nextTeamId) => {
             const payload = await api.listSandboxAgents(connection, { teamId: nextTeamId });
             return payload.agents;
@@ -93,7 +101,7 @@ export function useSandboxActionContext({
     return () => {
       cancelled = true;
     };
-  }, [connection, slashAgentTeamIdKey]);
+  }, [accountScopeKey, connection, slashAgentTeamIdKey]);
 
   useEffect(() => {
     if (!connection || !selectedActionProjectTarget) {
@@ -101,7 +109,7 @@ export function useSandboxActionContext({
       return undefined;
     }
 
-    const cachedProjects = readSandboxProjectsFromMemory(selectedActionProjectTarget.teamId);
+    const cachedProjects = readSandboxProjectsFromMemory(selectedActionProjectTarget.teamId, accountScopeKey);
     if (cachedProjects) {
       setSelectedSandboxProject(
         cachedProjects.find((project) => project.id === selectedActionProjectTarget.id) ?? null,
@@ -111,6 +119,7 @@ export function useSandboxActionContext({
     let cancelled = false;
     void preloadSandboxProjects({
       teamId: selectedActionProjectTarget.teamId,
+      accountKey: accountScopeKey,
       fetchProjects: async (teamId) => {
         const payload = await api.listSandboxProjects(connection, { teamId });
         return payload.projects;
@@ -129,7 +138,7 @@ export function useSandboxActionContext({
     return () => {
       cancelled = true;
     };
-  }, [connection, selectedActionProjectTarget?.id, selectedActionProjectTarget?.teamId]);
+  }, [accountScopeKey, connection, selectedActionProjectTarget?.id, selectedActionProjectTarget?.teamId]);
 
   const selectedProjectActionCatalog = useMemo(
     () => actionCatalogForProject(selectedSandboxProject),

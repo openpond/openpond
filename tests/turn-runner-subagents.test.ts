@@ -8,6 +8,7 @@ import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import {
   AppPreferencesSchema,
   ModelUsageRecordSchema,
+  SubagentMessageSchema,
   SubagentRunSchema,
   type Approval,
   type AppPreferences,
@@ -747,6 +748,202 @@ describe("turn runner subagent native tools", () => {
     });
   });
 
+  test("delivers child subagent messages back to the parent chat", async () => {
+    const researchRun = SubagentRunSchema.parse({
+      id: "run_research",
+      parentSessionId: "session_1",
+      parentTurnId: "turn_prior",
+      parentGoalId: "goal_1",
+      childSessionId: "session_child_research",
+      roleId: "research",
+      objective: "Research the patch",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+      isolationMode: "copy_on_write",
+      toolPolicy: "read_only",
+      background: true,
+      peerMessages: "goal_scoped",
+      status: "running",
+      required: true,
+      createdAt: "2026-07-07T10:00:00.000Z",
+      startedAt: "2026-07-07T10:00:01.000Z",
+    });
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_send_message",
+      toolArgs: {
+        kind: "status",
+        body: "Child status ping for the parent chat.",
+      },
+      preferences: preferences(),
+      initialRuns: [researchRun],
+      initialEvents: [activeGoalEvent()],
+    });
+    harness.sessions.set(
+      "session_child_research",
+      baseSession({
+        id: "session_child_research",
+        parentSessionId: "session_1",
+        parentTurnId: "turn_prior",
+        parentGoalId: "goal_1",
+        subagentRunId: "run_research",
+        subagentRoleId: "research",
+      }),
+    );
+
+    const turn = await harness.runner.sendTurn("session_child_research", {
+      prompt: "Send a status ping to the parent chat",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(harness.messages).toHaveLength(1);
+    expect(harness.messages[0]).toMatchObject({
+      fromRunId: "run_research",
+      toRunId: null,
+      toRole: null,
+      kind: "status",
+      body: "Child status ping for the parent chat.",
+      delivery: {
+        status: "delivered",
+        deliveredRunIds: [],
+        acknowledgedRunIds: [],
+        deliveredParentSessionId: "session_1",
+        acknowledgedParentSessionId: "session_1",
+        wakeRequestedParentSessionId: "session_1",
+        wakeQueuedParentSessionId: "session_1",
+        wakeParentReason: "parent_wake_queued",
+      },
+    });
+    expect(harness.events.find(
+      (event) => event.sessionId === "session_1" && event.name === "subagent.message",
+    )).toMatchObject({
+      status: "completed",
+      output: "Subagent run_research sent status.",
+      data: {
+        delivery: {
+          status: "delivered",
+          deliveredParentSessionId: "session_1",
+          acknowledgedParentSessionId: "session_1",
+          wakeQueuedParentSessionId: "session_1",
+        },
+      },
+    });
+    const completed = harness.events.find(
+      (event) => event.name === "tool.completed" && event.action === "openpond_subagent_send_message",
+    );
+    expect((completed?.data as any)?.result).toMatchObject({
+      delivery: {
+        status: "delivered",
+        deliveredParentSessionId: "session_1",
+        acknowledgedParentSessionId: "session_1",
+        wakeQueuedParentSessionId: "session_1",
+      },
+      nextStep: "Message persisted, delivered to the parent chat at the runtime boundary. Main agent wake queued for this parent handoff.",
+    });
+    await harness.turnFollowUpQueue.drain();
+    const wakeTurn = harness.turns.find(
+      (candidate) => candidate.sessionId === "session_1" && (candidate.metadata as any)?.subagentParentWake?.messageId === harness.messages[0]?.id,
+    );
+    expect(wakeTurn).toMatchObject({
+      sessionId: "session_1",
+      status: "completed",
+      metadata: {
+        subagentParentWake: {
+          fromRunId: "run_research",
+          childSessionId: "session_child_research",
+          childRoleId: "research",
+          kind: "status",
+        },
+      },
+    });
+    const wakeInput = harness.streamInputs.find((input) => input.requestId === wakeTurn?.id);
+    expect(JSON.stringify(wakeInput)).toContain("A research subagent sent a status handoff to this main chat.");
+    expect(JSON.stringify(wakeInput)).toContain("Child status ping for the parent chat.");
+  });
+
+  test("defers repeated child-to-parent handoff wakes at the loop limit", async () => {
+    const priorWakeTurns = Array.from({ length: 4 }, (_item, index) =>
+      turnFixture({
+        id: `turn_parent_wake_${index}`,
+        sessionId: "session_1",
+        prompt: `Prior parent wake ${index}`,
+        metadata: {
+          subagentParentWake: {
+            messageId: `message_prior_${index}`,
+            fromRunId: "run_research",
+            childSessionId: "session_child_research",
+            childRoleId: "research",
+            kind: "handoff",
+          },
+        },
+      }),
+    );
+    const researchRun = SubagentRunSchema.parse({
+      id: "run_research",
+      parentSessionId: "session_1",
+      parentTurnId: "turn_prior",
+      parentGoalId: "goal_1",
+      childSessionId: "session_child_research",
+      roleId: "research",
+      objective: "Research the patch",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+      isolationMode: "copy_on_write",
+      toolPolicy: "read_only",
+      background: true,
+      peerMessages: "goal_scoped",
+      status: "running",
+      required: true,
+      createdAt: "2026-07-07T10:00:00.000Z",
+      startedAt: "2026-07-07T10:00:01.000Z",
+    });
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_send_message",
+      toolArgs: {
+        kind: "handoff",
+        body: "This should be delivered but should not wake the parent again.",
+      },
+      preferences: preferences(),
+      initialTurns: priorWakeTurns,
+      initialRuns: [researchRun],
+      initialEvents: [activeGoalEvent()],
+    });
+    harness.sessions.set(
+      "session_child_research",
+      baseSession({
+        id: "session_child_research",
+        parentSessionId: "session_1",
+        parentTurnId: "turn_prior",
+        parentGoalId: "goal_1",
+        subagentRunId: "run_research",
+        subagentRoleId: "research",
+      }),
+    );
+
+    const turn = await harness.runner.sendTurn("session_child_research", {
+      prompt: "Send another parent handoff",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+    await harness.turnFollowUpQueue.drain();
+
+    expect(turn.status).toBe("completed");
+    expect(harness.messages[0]).toMatchObject({
+      delivery: {
+        status: "delivered",
+        deliveredParentSessionId: "session_1",
+        wakeRequestedParentSessionId: "session_1",
+        wakeDeferredParentSessionId: "session_1",
+        wakeParentReason: "parent_wake_loop_limit:4",
+      },
+    });
+    const parentWakeTurns = harness.turns.filter(
+      (candidate) => candidate.sessionId === "session_1" && (candidate.metadata as any)?.subagentParentWake?.fromRunId === "run_research",
+    );
+    expect(parentWakeTurns).toHaveLength(4);
+    const completed = harness.events.find(
+      (event) => event.name === "tool.completed" && event.action === "openpond_subagent_send_message",
+    );
+    expect((completed?.data as any)?.result.nextStep).toContain("Main agent wake deferred (parent_wake_loop_limit:4).");
+  });
+
   test("pushes subagent progress and completion receipts into the active parent model context", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
@@ -809,6 +1006,71 @@ describe("turn runner subagent native tools", () => {
     expect(JSON.stringify(parentInputs)).toContain("Subagent update:");
     expect(JSON.stringify(parentInputs)).toContain("event: subagent.completed");
     expect(JSON.stringify(parentInputs)).toContain("Child result pushed without parent polling.");
+  });
+
+  test("injects child-to-parent handoffs into an active parent model context", async () => {
+    let injectedHandoff = false;
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_status",
+      toolArgs: {},
+      preferences: preferences(),
+      initialEvents: [activeGoalEvent()],
+      onStreamInput: async (_streamInput, context) => {
+        if (context.requestSession?.id !== "session_1" || injectedHandoff) return;
+        injectedHandoff = true;
+        const message = SubagentMessageSchema.parse({
+          id: "message_child_handoff",
+          parentGoalId: "goal_1",
+          fromRunId: "run_research",
+          toRunId: null,
+          toRole: null,
+          kind: "handoff",
+          priority: "normal",
+          body: "Research found a blocker that the main agent should handle now.",
+          refs: [],
+          delivery: {
+            status: "delivered",
+            deliveredRunIds: [],
+            acknowledgedRunIds: [],
+            deliveredParentSessionId: "session_1",
+            acknowledgedParentSessionId: "session_1",
+            wakeRequestedParentSessionId: "session_1",
+            wakeDeferredParentSessionId: "session_1",
+            wakeParentReason: "parent_turn_active",
+          },
+          createdAt: "2026-07-07T10:00:01.000Z",
+        });
+        context.events.push({
+          id: "event_child_handoff",
+          sessionId: "session_1",
+          turnId: context.requestTurn?.id ?? "turn_parent",
+          name: "subagent.message",
+          timestamp: "2026-07-07T10:00:01.000Z",
+          source: "server",
+          status: "completed",
+          output: "Subagent run_research sent handoff.",
+          data: {
+            message,
+            delivery: message.delivery,
+            deliveredRunIds: [],
+          },
+        });
+      },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "Check subagent status and react to handoffs",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const parentInputs = harness.streamInputs.filter((input) => input.requestId === turn.id);
+    expect(JSON.stringify(parentInputs)).toContain("Subagent handoff:");
+    expect(JSON.stringify(parentInputs)).toContain("Research found a blocker that the main agent should handle now.");
+    const parentWakeTurns = harness.turns.filter(
+      (candidate) => candidate.sessionId === "session_1" && (candidate.metadata as any)?.subagentParentWake,
+    );
+    expect(parentWakeTurns).toHaveLength(0);
   });
 
   test("injects interrupt-priority subagent messages into the child model context at the next boundary", async () => {
@@ -1697,6 +1959,7 @@ function createSubagentHarness(input: {
   toolArgs: Record<string, unknown>;
   preferences: AppPreferences;
   initialEvents?: RuntimeEvent[];
+  initialTurns?: Turn[];
   initialRuns?: SubagentRun[];
   initialUsageRecords?: ModelUsageRecord[];
   sessionOverrides?: Partial<Session>;
@@ -1743,7 +2006,7 @@ function createSubagentHarness(input: {
   const sessions = new Map<string, Session>([
     ["session_1", baseSession(input.sessionOverrides)],
   ]);
-  const turns: Turn[] = [];
+  const turns: Turn[] = [...(input.initialTurns ?? [])];
   const events: RuntimeEvent[] = [...(input.initialEvents ?? [])];
   const approvals: Approval[] = [];
   const runs: SubagentRun[] = [...(input.initialRuns ?? [])];
@@ -1761,6 +2024,7 @@ function createSubagentHarness(input: {
   let streamPass = 0;
   const injectedFlags: Record<string, boolean> = {};
   const subagentQueue = createBackgroundWorkerQueue({ queueId: "subagent-test" });
+  const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up-subagent-test" });
 
   const runner = createTurnRunner({
     attachmentRootDir: "/tmp/openpond-test-attachments",
@@ -2053,7 +2317,7 @@ function createSubagentHarness(input: {
       const usage = requestTurn?.sessionId ? input.usageBySessionId?.[requestTurn.sessionId] : null;
       if (usage) yield { usage, raw: { pass: streamPass, usage: true } };
     },
-    turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up-subagent-test" }),
+    turnFollowUpQueue,
     subagentQueue,
     maxHostedWorkspaceToolRounds: 3,
     maxRepeatedInvalidToolRequests: 2,
@@ -2072,6 +2336,7 @@ function createSubagentHarness(input: {
     sandboxForkRequests,
     streamInputs,
     subagentQueue,
+    turnFollowUpQueue,
   };
 }
 

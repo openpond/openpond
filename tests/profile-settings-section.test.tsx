@@ -268,4 +268,20 @@ describe("ProfileSettingsSection", () => {
     expect(html).toContain(">Edit<");
     expect(html).toContain(">Create<");
   });
+
+  test("marks hosted profile sync as account-scoped when the default team changes", () => {
+    const payload = profilePayload();
+    payload.preferences.defaultTeamId = "team_2";
+
+    const html = renderToStaticMarkup(
+      createElement(ProfileSettingsSection, {
+        payload,
+        connection: null,
+        onPayload: noop,
+        onError: noop,
+      }),
+    );
+
+    expect(html).toContain("Sync acct");
+  });
 });

@@ -1,5 +1,6 @@
 import type { CloudProject, LocalProject } from "@openpond/contracts";
 import { projectSelectionKey } from "./app-models";
+import { confirmedLinkedCloudProject } from "./cloud-link-trust";
 
 export type OpenPondActionProjectTarget = {
   id: string;
@@ -10,6 +11,7 @@ export type OpenPondActionProjectTarget = {
 };
 
 export function openPondActionProjectTarget(input: {
+  cloudProjects?: CloudProject[] | null;
   selectedCloudProject: CloudProject | null | undefined;
   selectedProject: LocalProject | null | undefined;
 }): OpenPondActionProjectTarget | null {
@@ -25,11 +27,15 @@ export function openPondActionProjectTarget(input: {
 
   const linked = input.selectedProject?.linkedSandboxProject ?? null;
   if (!linked?.projectId || !linked.teamId) return null;
+  const checkedCloudProject = input.cloudProjects
+    ? confirmedLinkedCloudProject(input.selectedProject, input.cloudProjects)
+    : null;
+  if (input.cloudProjects && !checkedCloudProject) return null;
   return {
-    id: linked.projectId,
-    teamId: linked.teamId,
-    name: linked.projectName ?? input.selectedProject?.name ?? "Cloud Project",
-    selectionKey: projectSelectionKey("cloud", linked.projectId),
+    id: checkedCloudProject?.id ?? linked.projectId,
+    teamId: checkedCloudProject?.teamId ?? linked.teamId,
+    name: checkedCloudProject?.name ?? linked.projectName ?? input.selectedProject?.name ?? "Cloud Project",
+    selectionKey: projectSelectionKey("cloud", checkedCloudProject?.id ?? linked.projectId),
     localProjectId: input.selectedProject?.id ?? null,
   };
 }

@@ -26,6 +26,10 @@ import {
   runtimeEventsForSession,
   type RuntimeIndexes,
 } from "../lib/runtime-indexes";
+import {
+  confirmedLinkedCloudProject,
+  localProjectCloudLinkWarning,
+} from "../lib/cloud-link-trust";
 
 type UseSidebarDataInput = {
   localProjects: LocalProject[];
@@ -162,16 +166,19 @@ export function useSidebarData({
       visibleLocalProjects
         .map((project, index) => {
           const id = projectSelectionKey("local", project.id);
+          const cloudLinkWarning = localProjectCloudLinkWarning(project, cloudProjects);
           return {
             id,
             kind: "local" as const,
             project,
             pinned: Boolean(appPreferences[id]?.pinned),
             order: appPreferences[id]?.order ?? index,
+            cloudLinkTrusted: !cloudLinkWarning,
+            cloudLinkWarning,
           };
         })
         .sort(sortSidebarProjectRows),
-    [appPreferences, visibleLocalProjects],
+    [appPreferences, cloudProjects, visibleLocalProjects],
   );
   const cloudProjectRows = useMemo<SidebarProjectItem[]>(
     () =>
@@ -184,6 +191,8 @@ export function useSidebarData({
             project,
             pinned: Boolean(appPreferences[id]?.pinned),
             order: appPreferences[id]?.order ?? index,
+            cloudLinkTrusted: true,
+            cloudLinkWarning: null,
           };
         })
         .sort(sortSidebarProjectRows),
@@ -192,11 +201,11 @@ export function useSidebarData({
   const localProjectKeyByLinkedCloudProjectId = useMemo(() => {
     const rows = new Map<string, string>();
     for (const project of visibleLocalProjects) {
-      const cloudProjectId = project.linkedSandboxProject?.projectId;
-      if (cloudProjectId) rows.set(cloudProjectId, projectSelectionKey("local", project.id));
+      const cloudProject = confirmedLinkedCloudProject(project, cloudProjects);
+      if (cloudProject) rows.set(cloudProject.id, projectSelectionKey("local", project.id));
     }
     return rows;
-  }, [visibleLocalProjects]);
+  }, [cloudProjects, visibleLocalProjects]);
   const cloudOnlyProjectRows = useMemo(
     () => cloudProjectRows.filter((item) => !localProjectKeyByLinkedCloudProjectId.has(item.project.id)),
     [cloudProjectRows, localProjectKeyByLinkedCloudProjectId],

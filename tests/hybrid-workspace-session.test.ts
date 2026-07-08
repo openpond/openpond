@@ -87,6 +87,28 @@ describe("hybrid workspace session request", () => {
       message: "Upload/sync this Project to Cloud before using Hybrid.",
     });
   });
+
+  test("rejects a local link that is not present in the current account cloud projects", () => {
+    expect(
+      resolveHybridWorkspaceTarget({
+        cloudProjects: [cloudProject({ id: "current_account_project" })],
+        selectedCloudProject: null,
+        selectedProject: localProject({
+          linkedSandboxProject: {
+            projectId: "old_account_project",
+            projectName: "Old Repo",
+            teamId: "team_1",
+            defaultBranch: "main",
+            projectSlug: "old-repo",
+            lastUploadedCommit: "abc123",
+          },
+        }),
+      }),
+    ).toEqual({
+      kind: "missing_cloud_project",
+      message: "Upload/sync this Project to Cloud before using Hybrid.",
+    });
+  });
 });
 
 function cloudProject(overrides: Partial<CloudProject> = {}): CloudProject {

@@ -20,7 +20,10 @@ export function createOpenPondCache(deps: {
   isClosing: () => boolean;
 }) {
   const { store, appendRuntimeEvent, isClosing } = deps;
-  let refreshPromise: Promise<OpenPondCachedData> | null = null;
+  let refreshPromise: {
+    scope: string | null;
+    promise: Promise<OpenPondCachedData>;
+  } | null = null;
 
   function openPondCacheScope(account: AccountState): string {
     const activeProfile = account.activeProfile;
@@ -70,10 +73,13 @@ export function createOpenPondCache(deps: {
     };
   }
 
-  async function refreshOpenPondCache(): Promise<OpenPondCachedData> {
-    if (refreshPromise) return refreshPromise;
+  async function refreshOpenPondCache(expectedScope?: string | null): Promise<OpenPondCachedData> {
+    const normalizedExpectedScope = expectedScope?.trim() || null;
+    if (refreshPromise && (!normalizedExpectedScope || refreshPromise.scope === normalizedExpectedScope)) {
+      return refreshPromise.promise;
+    }
 
-    refreshPromise = (async () => {
+    const promise = (async () => {
       const result = await loadOpenPondApps();
       const account = AccountStateSchema.parse(result.account);
       const apps = result.apps.map((app) => OpenPondAppSchema.parse(app));
@@ -98,15 +104,16 @@ export function createOpenPondCache(deps: {
         appsMeta: metaFromCache(appsEntry, "fresh", false, result.error),
       };
     })().finally(() => {
-      refreshPromise = null;
+      if (refreshPromise?.promise === promise) refreshPromise = null;
     });
 
-    return refreshPromise;
+    refreshPromise = { scope: normalizedExpectedScope, promise };
+    return promise;
   }
 
-  function refreshOpenPondCacheInBackground(): void {
-    if (refreshPromise || isClosing()) return;
-    void refreshOpenPondCache().catch((error) => {
+  function refreshOpenPondCacheInBackground(scope: string): void {
+    if (refreshPromise?.scope === scope || isClosing()) return;
+    void refreshOpenPondCache(scope).catch((error) => {
       if (isClosing()) return;
       void appendRuntimeEvent(
         event({
@@ -136,24 +143,25 @@ export function createOpenPondCache(deps: {
     );
 
     if (options.force) {
-      return refreshOpenPondCache();
+      return refreshOpenPondCache(scope);
     }
 
     if (context.token && (needsFreshAccountProfile || !hasCache)) {
-      refreshOpenPondCacheInBackground();
+      refreshOpenPondCacheInBackground(scope);
     }
 
+    const refreshingThisScope = Boolean(refreshPromise && refreshPromise.scope === scope);
     return {
       account: cachedAccount?.payload ?? context.accountState,
       apps: await mergeScaffoldApps(scope, cachedApps?.payload ?? []),
       appsError: cachedApps?.error ?? null,
-      accountMeta: metaFromCache(cachedAccount, cachedAccount ? "cache" : "empty", Boolean(refreshPromise)),
-      appsMeta: metaFromCache(cachedApps, cachedApps ? "cache" : "empty", Boolean(refreshPromise)),
+      accountMeta: metaFromCache(cachedAccount, cachedAccount ? "cache" : "empty", refreshingThisScope),
+      appsMeta: metaFromCache(cachedApps, cachedApps ? "cache" : "empty", refreshingThisScope),
     };
   }
 
   async function waitForOpenPondRefresh(): Promise<void> {
-    await refreshPromise?.catch(() => undefined);
+    await refreshPromise?.promise.catch(() => undefined);
   }
 
   return {

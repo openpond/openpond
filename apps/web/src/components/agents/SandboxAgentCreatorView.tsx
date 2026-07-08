@@ -41,7 +41,9 @@ export function SandboxAgentCreatorView({
   const normalizedDefaultTeamId = defaultTeamId?.trim() ?? "";
   const firstOrganization = organizations[0] ?? null;
   const selectedTeamId = normalizedDefaultTeamId || firstOrganization?.teamId || "";
-  const cachedAgentsLoaded = Boolean(selectedTeamId && readSandboxAgentsFromMemory(selectedTeamId) !== null);
+  const cachedAgentsLoaded = Boolean(
+    selectedTeamId && readSandboxAgentsFromMemory(selectedTeamId, organizationCacheKey) !== null,
+  );
   const agentsLoadedForSelectedTeam = cachedAgentsLoaded || loadedAgentsTeamId === selectedTeamId;
   const loadingInitialAgents =
     (!normalizedDefaultTeamId && (!organizationsLoaded || organizationsLoading)) ||
@@ -112,7 +114,7 @@ export function SandboxAgentCreatorView({
 
     let cancelled = false;
     let intervalId: number | null = null;
-    const cachedAgents = readSandboxAgentsFromMemory(selectedTeamId);
+    const cachedAgents = readSandboxAgentsFromMemory(selectedTeamId, organizationCacheKey);
     if (cachedAgents) {
       setAgents(cachedAgents);
       setLoadedAgentsTeamId(selectedTeamId);
@@ -127,6 +129,7 @@ export function SandboxAgentCreatorView({
       try {
         const nextAgents = await preloadSandboxAgents({
           teamId: selectedTeamId,
+          accountKey: organizationCacheKey,
           force,
           fetchAgents: async (teamId) => {
             const payload = await api.listSandboxAgents(connection, { teamId });
@@ -154,7 +157,7 @@ export function SandboxAgentCreatorView({
       cancelled = true;
       if (intervalId !== null) window.clearInterval(intervalId);
     };
-  }, [connection, selectedTeamId]);
+  }, [connection, organizationCacheKey, selectedTeamId]);
 
   if (!connection) {
     return (

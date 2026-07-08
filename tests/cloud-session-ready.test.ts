@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@openpond/contracts";
 import {
+  cloudSessionBelongsToAccount,
   cloudWorkspaceReadyMessage,
   cloudWorkspaceStartingMessage,
 } from "../apps/web/src/hooks/useCloudSessionReady";
@@ -28,6 +29,36 @@ describe("cloud session readiness copy", () => {
     expect(cloudWorkspaceReadyMessage("resumed", session)).toBe("Resumed Cloud workspace.");
     expect(cloudWorkspaceReadyMessage("restored", session)).toBe("Restored Cloud workspace.");
     expect(cloudWorkspaceReadyMessage("recreated", session)).toBe("Recreated Cloud workspace.");
+  });
+
+  test("detects Cloud sessions from a different account", () => {
+    const session = baseSession({
+      cloudProjectId: "old_account_project",
+      cloudTeamId: "team_1",
+    });
+
+    expect(
+      cloudSessionBelongsToAccount(session, [
+        {
+          id: "current_account_project",
+          teamId: "team_1",
+          name: "Current Project",
+          slug: "current-project",
+          sourceType: "internal_repo",
+          sourceLabel: "Current Project",
+          defaultBranch: "main",
+          internalRepoPath: null,
+          manifestPath: null,
+          manifestHash: null,
+          syncedAt: "2026-07-04T00:00:00.000Z",
+          agentSdk: null,
+          organizationName: "OpenPond",
+          organizationSlug: "openpond",
+          createdAt: "2026-07-04T00:00:00.000Z",
+          updatedAt: "2026-07-04T00:00:00.000Z",
+        },
+      ]),
+    ).toBe(false);
   });
 });
 

@@ -96,6 +96,8 @@ import {
   type WorkspaceTargetValue,
 } from "./lib/workspace-location";
 import { queuedCloudWorkSubmission } from "./lib/queued-cloud-work";
+import { openPondAccountScopeKey } from "./lib/account-scope";
+import { confirmedLinkedCloudProject } from "./lib/cloud-link-trust";
 import { latestTurnCompletionState } from "./lib/turn-completion-state";
 import {
   useActiveWorkspaceViewState,
@@ -503,6 +505,14 @@ export function App() {
     selectedSessionId,
     selectedSessionLinkedProject,
   });
+  const accountScopeKey = useMemo(
+    () => openPondAccountScopeKey(bootstrap?.account ?? null),
+    [bootstrap?.account],
+  );
+  const selectedProjectConfirmedCloudProject = useMemo(
+    () => confirmedLinkedCloudProject(selectedProject, bootstrap?.cloudProjects ?? []),
+    [bootstrap?.cloudProjects, selectedProject],
+  );
   const activeOpenPondCommandAccessMode =
     selectedSession?.provider === "codex"
       ? openPondCommandAccessMode
@@ -523,6 +533,7 @@ export function App() {
     cloudProjects: bootstrap?.cloudProjects ?? [],
     connection,
     defaultTeamId: appDefaults.defaultTeamId,
+    accountScopeKey,
     localProjects: bootstrap?.localProjects ?? [],
     profileActionCatalogEntries: bootstrap?.profile.actionCatalog ?? [],
     selectedCloudProject,
@@ -1426,6 +1437,7 @@ export function App() {
     commitNextStep,
     draftModel,
     draftProvider,
+    cloudProjects: bootstrap?.cloudProjects ?? [],
     selectedApp,
     selectedProject,
     selectedProjectLinkedOpenPondApp,
@@ -1454,6 +1466,7 @@ export function App() {
   });
   const ensureCloudSessionReady = useCloudSessionReady({
     applyBootstrapPayload,
+    cloudProjects: bootstrap?.cloudProjects ?? [],
     connection,
     localProjectById,
     selectedCloudProject,
@@ -1504,6 +1517,8 @@ export function App() {
     selectedApp,
     selectedActionCatalog,
     openPondActionCatalog,
+    cloudProjects: bootstrap?.cloudProjects ?? [],
+    accountScopeKey,
     selectedCloudProject,
     selectedProject,
     selectedProjectLinkedOpenPondApp,
@@ -1558,6 +1573,7 @@ export function App() {
     applyBootstrapPayload,
     busy,
     cloudSetupDialog,
+    cloudProjects: bootstrap?.cloudProjects ?? [],
     connection,
     defaultTeamId: appDefaults.defaultTeamId,
     expandProject,
@@ -1579,7 +1595,7 @@ export function App() {
     async (target: WorkspaceTargetValue) => {
       if (target === "queue_cloud") {
         const linkedCloudProjectId =
-          selectedCloudProject?.id ?? selectedProject?.linkedSandboxProject?.projectId ?? null;
+          selectedCloudProject?.id ?? selectedProjectConfirmedCloudProject?.id ?? null;
         if (!linkedCloudProjectId) {
           setPendingWorkspaceTarget(null);
           await changeWorkspaceTargetBase(target);
@@ -1591,9 +1607,9 @@ export function App() {
       }
       if (target === "hybrid") {
         const linkedCloudProjectId =
-          selectedCloudProject?.id ?? selectedProject?.linkedSandboxProject?.projectId ?? selectedSession?.cloudProjectId ?? null;
+          selectedCloudProject?.id ?? selectedProjectConfirmedCloudProject?.id ?? selectedSession?.cloudProjectId ?? null;
         const linkedCloudTeamId =
-          selectedCloudProject?.teamId ?? selectedProject?.linkedSandboxProject?.teamId ?? selectedSession?.cloudTeamId ?? null;
+          selectedCloudProject?.teamId ?? selectedProjectConfirmedCloudProject?.teamId ?? selectedSession?.cloudTeamId ?? null;
         if (accountPending) {
           showToast("Checking OpenPond account. Try again in a moment.", "info");
           return;
@@ -1622,7 +1638,7 @@ export function App() {
             workspaceId: null,
             workspaceName:
               selectedCloudProject?.name ??
-              selectedProject?.linkedSandboxProject?.projectName ??
+              selectedProjectConfirmedCloudProject?.name ??
               selectedProject?.name ??
               selectedSession.workspaceName ??
               "Hybrid workspace",
@@ -1656,9 +1672,9 @@ export function App() {
       selectedCloudProject?.name,
       selectedCloudProject?.teamId,
       selectedProject?.id,
-      selectedProject?.linkedSandboxProject?.projectId,
-      selectedProject?.linkedSandboxProject?.projectName,
-      selectedProject?.linkedSandboxProject?.teamId,
+      selectedProjectConfirmedCloudProject?.id,
+      selectedProjectConfirmedCloudProject?.name,
+      selectedProjectConfirmedCloudProject?.teamId,
       selectedProject?.name,
       selectedProject?.workspacePath,
       selectedSession,
@@ -1704,7 +1720,7 @@ export function App() {
         promptOverrideProvided: promptOverride !== undefined,
         attachmentCount: attachments.length,
         selectedCloudProjectId: selectedCloudProject?.id ?? null,
-        selectedProjectCloudProjectId: selectedProject?.linkedSandboxProject?.projectId ?? null,
+        selectedProjectCloudProjectId: selectedProjectConfirmedCloudProject?.id ?? null,
         selectedLocalProjectId: selectedProject?.id ?? null,
         selectedLocalProjectName: selectedProject?.name ?? null,
         selectedLocalWorkspacePath: selectedProject?.workspacePath ?? selectedProject?.path ?? null,
@@ -1746,7 +1762,7 @@ export function App() {
       pendingWorkspaceTarget,
       prompt,
       selectedCloudProject?.id,
-      selectedProject?.linkedSandboxProject?.projectId,
+      selectedProjectConfirmedCloudProject?.id,
       selectedProject?.linkedSandboxProject?.defaultBranch,
       selectedProject?.linkedSandboxProject?.lastUploadedCommit,
       selectedProject?.id,

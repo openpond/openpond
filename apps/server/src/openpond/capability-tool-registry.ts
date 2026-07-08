@@ -118,6 +118,12 @@ export type OpenPondSubagentMessageToolResult = {
     status: "pending" | "delivered" | "undelivered";
     deliveredRunIds: string[];
     acknowledgedRunIds: string[];
+    deliveredParentSessionId?: string | null;
+    acknowledgedParentSessionId?: string | null;
+    wakeRequestedParentSessionId?: string | null;
+    wakeQueuedParentSessionId?: string | null;
+    wakeDeferredParentSessionId?: string | null;
+    wakeParentReason?: string | null;
     wakeRequestedRunIds?: string[];
     wakeInterruptedRunIds?: string[];
     wakeDeferredRunIds?: string[];
@@ -245,7 +251,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_start",
       description:
-        "Start a background specialist child conversation for a bounded role and objective. Use this for independent research, review, testing, planning, docs, or coding subtasks that can report back with receipts.",
+        "Start an addressable specialist child conversation for a bounded role and objective. Use this for independent research, review, testing, planning, docs, or coding subtasks; the child can later hand important findings back to the parent through openpond_subagent_send_message.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -368,7 +374,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_send_message",
       description:
-        "Send a typed runtime-mediated message to a sibling child run or role under the same goal.",
+        "Send a typed runtime-mediated message to a sibling child run/role under the same goal, or from a child session back to the parent chat. From a child session, use this for blockers, decision requests, important findings, or final handoffs that should return control to the main agent.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -376,12 +382,12 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           toRunId: {
             type: "string",
             minLength: 1,
-            description: "Specific child run id to receive the message.",
+            description: "Specific child run id to receive the message. From a child session, omit target fields or use the parent session id to send to the parent chat and wake the main agent when idle.",
           },
           toRole: {
             type: "string",
             minLength: 1,
-            description: "Role id to receive the message when no exact run id is known.",
+            description: "Role id to receive the message when no exact run id is known. From a child session, omit target fields or use parent to send to the parent chat and wake the main agent when idle.",
           },
           kind: {
             type: "string",

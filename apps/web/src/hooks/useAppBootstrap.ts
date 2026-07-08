@@ -356,6 +356,7 @@ export function useAppBootstrap(params: {
     const preloadTeamAgents = (teamId: string) =>
       preloadSandboxAgents({
         teamId,
+        accountKey,
         fetchAgents: async (nextTeamId) => {
           const agentsPayload = await api.listSandboxAgents(connection, { teamId: nextTeamId });
           return agentsPayload.agents;
@@ -394,11 +395,6 @@ export function useAppBootstrap(params: {
 
         const firstTeamId = activeOrganizations[0]?.teamId;
         if (!firstTeamId) {
-          completeStartup();
-          return;
-        }
-        if (currentDefaultTeamId) {
-          await preloadTeamAgents(currentDefaultTeamId);
           completeStartup();
           return;
         }

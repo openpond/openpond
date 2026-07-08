@@ -411,6 +411,8 @@ export function SidebarProjectRow({
   expanded = false,
   workspaceState,
   cloudWorkItems = [],
+  cloudLinkTrusted = true,
+  cloudLinkWarning = null,
   placeholder,
   terminalIndicator,
   onSelect,
@@ -432,6 +434,8 @@ export function SidebarProjectRow({
   expanded?: boolean;
   workspaceState?: WorkspaceState | null;
   cloudWorkItems?: CloudWorkItem[];
+  cloudLinkTrusted?: boolean;
+  cloudLinkWarning?: string | null;
   placeholder?: boolean;
   terminalIndicator?: SidebarTerminalIndicator | null;
   onSelect: () => void;
@@ -450,7 +454,8 @@ export function SidebarProjectRow({
   const rowShellRef = useRef<HTMLDivElement | null>(null);
   const [locationsStyle, setLocationsStyle] = useState<ProjectLocationsPopoverStyle>({});
   const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onToggleSystemVisibility) || Boolean(onRemove);
-  const linkedCloud = kind === "local" && Boolean((project as LocalProject).linkedSandboxProject?.projectId);
+  const linkedCloud =
+    kind === "local" && cloudLinkTrusted !== false && Boolean((project as LocalProject).linkedSandboxProject?.projectId);
   const updateLocationsPosition = useCallback(() => {
     if (typeof window === "undefined") return;
     const rect = rowShellRef.current?.getBoundingClientRect();
@@ -541,6 +546,8 @@ export function SidebarProjectRow({
         project={project}
         workspaceState={workspaceState}
         cloudWorkItems={cloudWorkItems}
+        cloudLinkTrusted={cloudLinkTrusted}
+        cloudLinkWarning={cloudLinkWarning}
         onWorkspaceTargetSelect={onWorkspaceTargetSelect}
         style={locationsStyle}
       />
@@ -660,6 +667,8 @@ function SidebarProjectLocationsPopover({
   project,
   workspaceState,
   cloudWorkItems,
+  cloudLinkTrusted,
+  cloudLinkWarning,
   onWorkspaceTargetSelect,
   style,
 }: {
@@ -667,10 +676,19 @@ function SidebarProjectLocationsPopover({
   project: LocalProject | CloudProject;
   workspaceState?: WorkspaceState | null;
   cloudWorkItems?: CloudWorkItem[];
+  cloudLinkTrusted?: boolean;
+  cloudLinkWarning?: string | null;
   onWorkspaceTargetSelect?: (target: WorkspaceTargetValue) => void;
   style?: ProjectLocationsPopoverStyle;
 }) {
-  const rows = projectLocationRows(kind, project, workspaceState, cloudWorkItems ?? []);
+  const rows = projectLocationRows(
+    kind,
+    project,
+    workspaceState,
+    cloudWorkItems ?? [],
+    cloudLinkTrusted,
+    cloudLinkWarning,
+  );
   return (
     <aside className="sidebar-project-locations-popover" aria-label={`${project.name} status`} style={style}>
       <div className="sidebar-project-locations-title">{project.name}</div>
@@ -755,20 +773,25 @@ function projectLocationRows(
   project: LocalProject | CloudProject,
   workspaceState?: WorkspaceState | null,
   cloudWorkItems: CloudWorkItem[] = [],
+  cloudLinkTrusted: boolean = true,
+  cloudLinkWarning: string | null = null,
 ): ProjectLocationRow[] {
   if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject, cloudWorkItems);
-  return localProjectLocationRows(project as LocalProject, workspaceState, cloudWorkItems);
+  return localProjectLocationRows(project as LocalProject, workspaceState, cloudWorkItems, cloudLinkTrusted, cloudLinkWarning);
 }
 
 function localProjectLocationRows(
   project: LocalProject,
   workspaceState?: WorkspaceState | null,
   cloudWorkItems: CloudWorkItem[] = [],
+  cloudLinkTrusted: boolean = true,
+  cloudLinkWarning: string | null = null,
 ): ProjectLocationRow[] {
-  const localRepoNote = localRepoStatusNote(project, workspaceState);
+  const localRepoNote = localRepoStatusNote(project, workspaceState, cloudLinkTrusted);
   const localAttention = workspaceHasUnstagedChanges(workspaceState);
   const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
-  const cloudLinked = localProjectHasCloud(project);
+  const cloudLinked = localProjectHasCloud(project, cloudLinkTrusted);
+  const cloudWarning = cloudLinkTrusted === false && cloudLinkWarning;
   return [
     {
       key: "local",
@@ -779,8 +802,12 @@ function localProjectLocationRows(
     },
     {
       key: "cloud",
-      value: cloudLinked ? cloudProjectStatusValue(project, workspaceState, cloudStatus) : "not in cloud",
-      tone: cloudStatus?.tone ?? "cloud",
+      value: cloudWarning
+        ? cloudWarning
+        : cloudLinked
+          ? cloudProjectStatusValue(project, workspaceState, cloudStatus, cloudLinkTrusted)
+          : "not in cloud",
+      tone: cloudWarning ? "attention" : cloudStatus?.tone ?? "cloud",
       icon: <Cloud size={13} />,
       actionTarget: cloudLinked ? "cloud" : "upload_cloud",
     },
@@ -800,14 +827,18 @@ function cloudProjectLocationRows(project: CloudProject, cloudWorkItems: CloudWo
   ];
 }
 
-function localRepoStatusNote(project: LocalProject, state: WorkspaceState | null | undefined): string {
+function localRepoStatusNote(
+  project: LocalProject,
+  state: WorkspaceState | null | undefined,
+  cloudLinkTrusted: boolean,
+): string {
   const fallbackBranch = localProjectBranch(project, state);
   if (!state) return `${fallbackBranch} / available`;
   if (state.error) return `${fallbackBranch} / status unavailable`;
   if (!state.initialized) return `${fallbackBranch} / not checked out`;
   return localWorkspaceStateNote(state, {
     branch: project.linkedSandboxProject?.defaultBranch ?? null,
-    linkedCloudSourceKnown: project.linkedSandboxProject?.projectId
+    linkedCloudSourceKnown: project.linkedSandboxProject?.projectId && cloudLinkTrusted
       ? Boolean(project.linkedSandboxProject.lastUploadedCommit) || !state.headCommit
       : true,
   });
@@ -821,18 +852,22 @@ function localProjectBranch(project: LocalProject, state: WorkspaceState | null 
   return state?.currentBranch ?? state?.defaultBranch ?? project.linkedSandboxProject?.defaultBranch ?? "local";
 }
 
-function localProjectHasCloud(project: LocalProject): boolean {
-  return Boolean(project.linkedSandboxProject?.projectId || project.linkedOpenPondApp?.appId);
+function localProjectHasCloud(project: LocalProject, cloudLinkTrusted: boolean = true): boolean {
+  return Boolean(
+    (cloudLinkTrusted && project.linkedSandboxProject?.projectId) ||
+      project.linkedOpenPondApp?.appId,
+  );
 }
 
 function cloudProjectStatusValue(
   project: LocalProject,
   workspaceState: WorkspaceState | null | undefined,
   workItemStatus: CloudWorkItemsStatus | null,
+  cloudLinkTrusted: boolean,
 ): string {
   const branch = project.linkedSandboxProject?.defaultBranch ?? workspaceState?.defaultBranch ?? "main";
   if (workItemStatus) return `${branch} / ${workItemStatus.value}`;
-  return cloudWorkspaceStateNote(project, null, workspaceState);
+  return cloudWorkspaceStateNote(project, null, workspaceState, { cloudLinkTrusted });
 }
 
 function cloudProjectRowStatusValue(project: CloudProject, workItemStatus: CloudWorkItemsStatus | null): string {

@@ -152,6 +152,27 @@ describe("project workflow state labels", () => {
       }),
     ).toBe("Local + Cloud / main / upload required");
   });
+
+  test("treats linked cloud projects from a different account as needing current-account sync", () => {
+    const project = localProject({
+      linkedSandboxProject: sandboxProjectLink({
+        lastUploadedCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    });
+
+    expect(cloudWorkspaceStateNote(project, null, null, { cloudLinkTrusted: false })).toBe(
+      "uploaded to a different account",
+    );
+    expect(uploadSyncStateNote(project, null, { cloudLinkTrusted: false })).toBe("sync to this account");
+    expect(
+      projectCapabilityNote({
+        kind: "local",
+        localProject: project,
+        workspaceState: workspaceState(),
+        cloudLinkTrusted: false,
+      }),
+    ).toBe("Local / main / synced");
+  });
 });
 
 function localProject(overrides: Partial<LocalProject> = {}): LocalProject {

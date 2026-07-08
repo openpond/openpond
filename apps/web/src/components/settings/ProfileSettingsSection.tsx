@@ -147,6 +147,7 @@ export function ProfileSettingsSection({
             profileCommitMessage={profileCommitMessage}
             profileName={profileName}
             profilePath={profilePath}
+            selectedDefaultTeamId={selectedDefaultTeamId}
             syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
             setProfileCommitMessage={setProfileCommitMessage}
             setProfileName={setProfileName}
@@ -179,6 +180,7 @@ export function ProfileSettingsSection({
                     defaultAction={profile.summary.defaultAction}
                     key={agent.id}
                     profile={profile}
+                    selectedDefaultTeamId={selectedDefaultTeamId}
                   />
                 ))}
                 {localScheduleState.schedules.map((schedule) => (
@@ -215,6 +217,7 @@ export function ProfileSettingsSection({
             <ProfileSummaryDialog
               profile={profile}
               pendingCreatePlanReviews={pendingCreatePlanReviews}
+              selectedDefaultTeamId={selectedDefaultTeamId}
               onClose={() => setSummaryDialogOpen(false)}
             />
           ) : null}
@@ -236,6 +239,7 @@ export function ProfileSettingsSection({
               profileCommitMessage={profileCommitMessage}
               profileName={profileName}
               profilePath={profilePath}
+              selectedDefaultTeamId={selectedDefaultTeamId}
               syncDisabledReason="Load a local profile before syncing."
               setProfileCommitMessage={setProfileCommitMessage}
               setProfileName={setProfileName}
@@ -255,10 +259,12 @@ export function ProfileSettingsSection({
 function ProfileSummaryDialog({
   profile,
   pendingCreatePlanReviews,
+  selectedDefaultTeamId,
   onClose,
 }: {
   profile: ProfileState;
   pendingCreatePlanReviews: Approval[];
+  selectedDefaultTeamId: string;
   onClose: () => void;
 }) {
   return (
@@ -277,7 +283,11 @@ function ProfileSummaryDialog({
           <FileText size={18} />
         </div>
         <h2 id="profile-summary-dialog-title">Profile summary</h2>
-        <ProfileSummaryCard profile={profile} pendingCreatePlanReviews={pendingCreatePlanReviews} />
+        <ProfileSummaryCard
+          profile={profile}
+          pendingCreatePlanReviews={pendingCreatePlanReviews}
+          selectedDefaultTeamId={selectedDefaultTeamId}
+        />
         <div className="git-dialog-footer">
           <button className="git-dialog-secondary" type="button" onClick={onClose}>
             Close
@@ -291,9 +301,11 @@ function ProfileSummaryDialog({
 function ProfileSummaryCard({
   profile,
   pendingCreatePlanReviews,
+  selectedDefaultTeamId,
 }: {
   profile: ProfileState;
   pendingCreatePlanReviews: Approval[];
+  selectedDefaultTeamId: string;
 }) {
   return (
     <div className="account-list profile-summary-card">
@@ -313,12 +325,12 @@ function ProfileSummaryCard({
         </div>
         <div className="profile-metric-grid">
           <ProfileMetric label="Git" value={profileGitValue(profile)} />
-          <ProfileMetric label="Hosted" value={profileHostedValue(profile)} />
+          <ProfileMetric label="Hosted" value={profileHostedValue(profile, selectedDefaultTeamId)} />
           <ProfileMetric label="Catalog" value={profileCatalogValue(profile)} />
           <ProfileMetric label="Setup gate" value={profileSetupGateValue(profile)} />
           <ProfileMetric label="Default action" value={profile.summary.defaultAction ?? "None"} />
           <ProfileMetric label="Agents" value={`${profile.agents.length} tracked`} />
-          <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile)} />
+          <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile, selectedDefaultTeamId)} />
           <ProfileMetric label="Plan review" value={profilePlanReviewValue(pendingCreatePlanReviews)} />
         </div>
         {pendingCreatePlanReviews.length ? (
@@ -419,6 +431,7 @@ type ProfileControlsProps = {
   profileCommitMessage: string;
   profileName: string;
   profilePath: string;
+  selectedDefaultTeamId: string;
   syncDisabledReason: string | null;
   inline?: boolean;
   onOpenSummary?: () => void;
@@ -439,6 +452,7 @@ function ProfileControls({
   profileCommitMessage,
   profileName,
   profilePath,
+  selectedDefaultTeamId,
   syncDisabledReason,
   onOpenSummary,
   setProfileCommitMessage,
@@ -529,6 +543,7 @@ function ProfileControls({
           disabled={disabled}
           profile={profile}
           profileBusy={profileBusy}
+          selectedDefaultTeamId={selectedDefaultTeamId}
           syncDisabledReason={syncDisabledReason}
           submitProfilePush={submitProfilePush}
           onClose={() => setSyncDialogOpen(false)}
@@ -605,6 +620,7 @@ function ProfileSyncDialog({
   disabled,
   profile,
   profileBusy,
+  selectedDefaultTeamId,
   syncDisabledReason,
   submitProfilePush,
   onClose,
@@ -612,11 +628,12 @@ function ProfileSyncDialog({
   disabled: boolean;
   profile: ProfileState;
   profileBusy: string | null;
+  selectedDefaultTeamId: string;
   syncDisabledReason: string | null;
   submitProfilePush: () => void;
   onClose: () => void;
 }) {
-  const differences = profileSyncDifferences(profile);
+  const differences = profileSyncDifferences(profile, selectedDefaultTeamId);
   const outOfSyncCount = differences.reduce((count, difference) => count + difference.count, 0);
   const canSync = !disabled && !syncDisabledReason;
 
@@ -774,12 +791,14 @@ function ProfileAgentRow({
   agent,
   defaultAction,
   profile,
+  selectedDefaultTeamId,
 }: {
   agent: ProfileAgent;
   defaultAction: string | null;
   profile: ProfileState;
+  selectedDefaultTeamId: string;
 }) {
-  const rowStatus = profileAgentRowStatus(profile, agent);
+  const rowStatus = profileAgentRowStatus(profile, agent, selectedDefaultTeamId);
   return (
     <div className="product-row profile-agent-row">
       <div className="profile-agent-identity">
@@ -1043,13 +1062,21 @@ function profileGitValue(profile: NonNullable<BootstrapPayload["profile"]>): str
   return git.dirty ? `${branch} ${head} dirty` : `${branch} ${head}`;
 }
 
-function profileHostedValue(profile: NonNullable<BootstrapPayload["profile"]>): string {
+function profileHostedValue(
+  profile: NonNullable<BootstrapPayload["profile"]>,
+  selectedDefaultTeamId: string,
+): string {
+  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) return "Sync this account";
   if (!profile.hosted?.sourceCommitSha) return "Not pushed";
   const promotion = profile.hosted.promotionStatus ?? "uploaded";
   return `${promotion} ${shortSha(profile.hosted.sourceCommitSha)}`;
 }
 
-function profileHostedRunValue(profile: NonNullable<BootstrapPayload["profile"]>): string {
+function profileHostedRunValue(
+  profile: NonNullable<BootstrapPayload["profile"]>,
+  selectedDefaultTeamId: string,
+): string {
+  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) return "Sync this account";
   if (!profile.hosted?.sourceCommitSha) return "Not pushed";
   const status = profile.hosted.hostedRun?.status ?? profile.hosted.hostedRunStatus ?? "not_started";
   const runId = profile.hosted.hostedRun?.runId ?? profile.hosted.hostedRunId;
@@ -1091,11 +1118,20 @@ function profileSyncDisabledReason(profile: ProfileState, selectedDefaultTeamId:
   return null;
 }
 
-function profileSyncDifferences(profile: ProfileState): ProfileSyncDifference[] {
+function profileSyncDifferences(profile: ProfileState, selectedDefaultTeamId: string): ProfileSyncDifference[] {
   const differences: ProfileSyncDifference[] = [];
   const localHead = profile.summary.localHead ?? profile.git?.head ?? null;
   const pushedLocalHead = profile.hosted?.lastPushedLocalHead ?? null;
   const hostedUploadHead = profile.summary.hostedHead ?? profile.hosted?.sourceCommitSha ?? null;
+
+  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) {
+    differences.push({
+      label: "Account",
+      detail: "Hosted profile metadata was synced under a different default team.",
+      count: 1,
+      tone: "warning",
+    });
+  }
 
   if (!hostedUploadHead && !pushedLocalHead) {
     differences.push({
@@ -1194,7 +1230,11 @@ function profileSyncMessage(profile: NonNullable<BootstrapPayload["profile"]>): 
   return "Local profile source is ready.";
 }
 
-function profileAgentRowStatus(profile: ProfileState, agent: ProfileAgent): ProfileAgentRowStatus {
+function profileAgentRowStatus(
+  profile: ProfileState,
+  agent: ProfileAgent,
+  selectedDefaultTeamId: string,
+): ProfileAgentRowStatus {
   if (!agent.enabled) {
     return {
       check: { state: "disabled", label: "Disabled" },
@@ -1245,6 +1285,12 @@ function profileAgentRowStatus(profile: ProfileState, agent: ProfileAgent): Prof
       sync: { state: "loading", label: "Waiting" },
     };
   }
+  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) {
+    return {
+      check: { state: "ready", label: "Passed" },
+      sync: { state: "warning", label: "Sync acct" },
+    };
+  }
 
   const localHead = profile.summary.localHead ?? profile.git?.head ?? null;
   const pushedLocalHead = profile.hosted?.lastPushedLocalHead ?? null;
@@ -1265,6 +1311,11 @@ function profileAgentRowStatus(profile: ProfileState, agent: ProfileAgent): Prof
     check: { state: "ready", label: "Passed" },
     sync: { state: "ready", label: "Synced" },
   };
+}
+
+function profileHostedTeamMismatch(profile: ProfileState, selectedDefaultTeamId: string): boolean {
+  const hostedTeamId = profile.hosted?.teamId?.trim() ?? "";
+  return Boolean(hostedTeamId && selectedDefaultTeamId && hostedTeamId !== selectedDefaultTeamId);
 }
 
 function profileAgentChangeCount(profile: ProfileState, agent: ProfileAgent): number {

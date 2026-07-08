@@ -334,6 +334,8 @@ type SidebarProjectItemBase = {
   id: string;
   pinned: boolean;
   order: number;
+  cloudLinkTrusted?: boolean;
+  cloudLinkWarning?: string | null;
 };
 
 export type SidebarProjectItem =

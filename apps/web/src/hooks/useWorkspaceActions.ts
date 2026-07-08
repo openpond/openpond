@@ -3,6 +3,7 @@ import type {
   AppPreferences,
   BootstrapPayload,
   ChatProvider,
+  CloudProject,
   LocalProject,
   LocalProjectOpenPondLink,
   OpenPondApp,
@@ -18,6 +19,7 @@ import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs
 import { modelRefForTurn, normalizeBranchPrefix, projectSelectionKey } from "../lib/app-models";
 import type { AppView, SettingsSection } from "../lib/app-models";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
+import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
 
 type ShowToast = (
   message: string,
@@ -40,6 +42,7 @@ type UseWorkspaceActionsInput = {
   commitNextStep: CommitNextStep;
   draftModel: string;
   draftProvider: ChatProvider;
+  cloudProjects: CloudProject[];
   selectedApp: OpenPondApp | null;
   selectedProject: LocalProject | null;
   selectedProjectLinkedOpenPondApp: LocalProjectOpenPondLink | null;
@@ -88,6 +91,7 @@ export function useWorkspaceActions({
   commitNextStep,
   draftModel,
   draftProvider,
+  cloudProjects,
   selectedApp,
   selectedProject,
   selectedProjectLinkedOpenPondApp,
@@ -234,6 +238,7 @@ export function useWorkspaceActions({
       }
       return existingSession;
     }
+    const confirmedCloudProject = confirmedLinkedCloudProject(selectedProject, cloudProjects);
     const session = await api.createSession(connection, {
       provider: draftProvider,
       modelRef: modelRefForTurn(draftProvider, draftModel, bootstrap?.providers ?? null),
@@ -243,8 +248,8 @@ export function useWorkspaceActions({
       workspaceId: selectedProject?.id ?? selectedApp?.id ?? null,
       workspaceName: selectedProject?.name ?? selectedApp?.name ?? null,
       localProjectId: selectedProject?.id ?? null,
-      cloudProjectId: selectedProject?.linkedSandboxProject?.projectId ?? null,
-      cloudTeamId: selectedProject?.linkedSandboxProject?.teamId ?? null,
+      cloudProjectId: confirmedCloudProject?.id ?? null,
+      cloudTeamId: confirmedCloudProject?.teamId ?? null,
       cwd: selectedProject ? selectedProject.workspacePath : null,
       title: actionTitle,
     });
@@ -271,6 +276,7 @@ export function useWorkspaceActions({
     if (session.workspaceKind === "local_project" || session.appId !== selectedProjectLinkedOpenPondApp.appId) {
       return null;
     }
+    const confirmedCloudProject = confirmedLinkedCloudProject(selectedProject, cloudProjects);
     const updated = await api.patchSession(connection, session.id, {
       appId: selectedProjectLinkedOpenPondApp.appId,
       appName: selectedProjectLinkedOpenPondApp.appName,
@@ -278,8 +284,8 @@ export function useWorkspaceActions({
       workspaceId: selectedProject.id,
       workspaceName: selectedProject.name,
       localProjectId: selectedProject.id,
-      cloudProjectId: selectedProject.linkedSandboxProject?.projectId ?? null,
-      cloudTeamId: selectedProject.linkedSandboxProject?.teamId ?? null,
+      cloudProjectId: confirmedCloudProject?.id ?? null,
+      cloudTeamId: confirmedCloudProject?.teamId ?? null,
       cwd: selectedProject.workspacePath,
     });
     setSessions((current) => current.map((item) => (item.id === updated.id ? updated : item)));

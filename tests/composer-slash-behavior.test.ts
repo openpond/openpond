@@ -376,6 +376,29 @@ describe("composer slash behavior", () => {
     });
   });
 
+  test("does not resolve slash action target from a local project linked to a different account", () => {
+    expect(
+      openPondActionProjectTarget({
+        cloudProjects: [cloudProject({ id: "current_account_project" })],
+        selectedCloudProject: null,
+        selectedProject: localProject({
+          linkedSandboxProject: {
+            teamId: "team_1",
+            projectId: "old_account_project",
+            projectSlug: "old-repo",
+            projectName: "Old Repo",
+            sourceRepoUrl: null,
+            defaultBranch: "main",
+            manifestPath: null,
+            manifestHash: null,
+            syncedAt: NOW,
+            linkedAt: NOW,
+          },
+        }),
+      }),
+    ).toBeNull();
+  });
+
   test("regular chat composer shows connected apps as slash planning context", () => {
     const markup = renderToStaticMarkup(
       createElement(Composer, {
