@@ -16,7 +16,7 @@
   min-height: 0;
   overflow: auto;
   overflow-anchor: none;
-  padding: 22px max(48px, calc((100% - 960px) / 2)) calc(var(--chat-composer-reserve) + 28px);
+  padding: 22px max(40px, calc((100% - 736px) / 2)) calc(var(--chat-composer-reserve) + 28px);
   scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
   scrollbar-width: thin;
 }
@@ -58,7 +58,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 14px;
-  max-width: 960px;
+  max-width: 736px;
 }
 
 .user-message {
