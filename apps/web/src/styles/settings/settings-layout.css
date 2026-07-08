@@ -75,6 +75,24 @@
   margin-top: 10px;
 }
 
+.settings-nav-group {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-nav-heading {
+  padding: 3px 10px 5px;
+  color: #8a8a8a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .settings-nav-item {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);

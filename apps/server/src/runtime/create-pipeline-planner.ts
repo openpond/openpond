@@ -118,17 +118,42 @@ export async function runModelBackedCreatePipelinePlanner(
     request: input.request,
     previousSnapshot: input.previousSnapshot ?? null,
   });
-  let content = "";
-  for await (const delta of input.stream(messages)) {
-    if (delta.text) content += delta.text;
+  const content = await collectPlannerText(input.stream, messages);
+  let decision: PlannerDecision;
+  try {
+    decision = parsePlannerDecision(content);
+  } catch (error) {
+    const repairMessages = createPipelinePlannerRepairMessages({
+      messages,
+      invalidContent: content,
+      error,
+    });
+    const repairedContent = await collectPlannerText(input.stream, repairMessages);
+    try {
+      decision = parsePlannerDecision(repairedContent);
+    } catch (repairError) {
+      throw new Error(
+        `Create planner repair failed: ${plannerErrorSummary(repairError)}; initial error: ${plannerErrorSummary(error)}`,
+      );
+    }
   }
-  const decision = parsePlannerDecision(content);
   return createPipelineSnapshotFromPlannerDecision({
     request: input.request,
     previousSnapshot: input.previousSnapshot ?? null,
     decision,
     modelRef: input.modelRef ?? null,
   });
+}
+
+async function collectPlannerText(
+  stream: ModelBackedCreatePipelinePlannerInput["stream"],
+  messages: HostedChatMessage[],
+): Promise<string> {
+  let content = "";
+  for await (const delta of stream(messages)) {
+    if (delta.text) content += delta.text;
+  }
+  return content;
 }
 
 export function createPipelineSnapshotFromPlannerDecision(input: {
@@ -474,6 +499,32 @@ function createPipelinePlannerMessages(input: {
   ];
 }
 
+function createPipelinePlannerRepairMessages(input: {
+  messages: HostedChatMessage[];
+  invalidContent: string;
+  error: unknown;
+}): HostedChatMessage[] {
+  return [
+    ...input.messages,
+    {
+      role: "assistant",
+      content: truncatePlannerContent(input.invalidContent),
+    },
+    {
+      role: "user",
+      content: [
+        "The previous OpenPond Create planner decision failed schema validation.",
+        "Return only one corrected openpond.createPipeline.plannerDecision.v1 JSON object.",
+        "Keep the same user intent and plan. Only change fields needed to satisfy the schema.",
+        "Important: plan.requirements is only for setup/dependency rows. Use [] when no setup is required.",
+        "Never put feature requirements, acceptance criteria, user goals, or task bullets in plan.requirements.",
+        'Each plan.requirements item must be an object like {"kind":"integration","name":"GitHub","status":"required","detail":"Connection required before publish.","metadata":{}}.',
+        `Validation error: ${plannerErrorSummary(input.error)}`,
+      ].join("\n"),
+    },
+  ];
+}
+
 function parsePlannerDecision(content: string): PlannerDecision {
   const jsonText = extractJsonObject(content);
   if (!jsonText) {
@@ -487,6 +538,18 @@ function parsePlannerDecision(content: string): PlannerDecision {
     throw new Error(`Create planner returned invalid JSON: ${message}`);
   }
   return PlannerDecisionSchema.parse(payload);
+}
+
+function plannerErrorSummary(error: unknown): string {
+  if (error instanceof z.ZodError) return JSON.stringify(error.issues);
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function truncatePlannerContent(content: string): string {
+  const limit = 12000;
+  if (content.length <= limit) return content;
+  return `${content.slice(0, limit)}\n... [truncated invalid planner output]`;
 }
 
 function normalizePlannerQuestionKind(value: unknown): unknown {
@@ -651,6 +714,12 @@ const CREATE_PIPELINE_PLANNER_SYSTEM_PROMPT = [
   "",
   "If the request is actionable, return:",
   '{"schemaVersion":"openpond.createPipeline.plannerDecision.v1","decision":"plan","plan":{"agentId":"short-agent-id","agentName":"Short Agent Name","summary":"What will be created.","capturedContextSummary":"What context will be used.","actionShape":{"mode":"chat","label":"Chat only","detail":"Expose through default chat.","defaultActionKey":"chat","directActionHint":null,"artifactPolicy":"Persist trace and run summary."},"defaultChatAction":{"key":"chat","label":"Chat","required":true},"sourcePlan":[{"path":"agents/short-agent-id","operation":"create","reason":"Implement the approved agent."}],"requirements":[],"checks":[{"name":"inspect","command":"bun run agent:inspect","required":true},{"name":"build","command":"bun run build","required":true},{"name":"validate","command":"bun run agent:validate","required":true},{"name":"eval","command":"bun run agent:eval","required":true}]}}',
+  "",
+  "plan.requirements is only for setup/dependency rows, never feature requirements, acceptance criteria, user goals, or task bullets.",
+  "For self-contained demos, committed fixtures, mock CSV files, and normal chat behavior, use requirements: [] unless actual setup is needed.",
+  'Never emit strings in plan.requirements. Each item must be an object like {"kind":"integration","name":"GitHub","status":"required","detail":"Connection required before publish.","metadata":{}}.',
+  "Valid requirement kinds are npm_package, runtime_tool, setup_command, secret, integration, volume, target_project, and external_service.",
+  "Put functional details such as chat endpoints, mock data files, exports, and demo behavior in summary, capturedContextSummary, actionShape.detail, and sourcePlan reasons.",
   "",
   "Choose actionShape.mode as chat, direct_action, or chat_and_direct_actions from the user's actual need.",
   "Use direct actions for repeatable tool-like runs, artifacts, exports, transforms, or scheduled-style outputs.",

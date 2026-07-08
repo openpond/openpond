@@ -49,6 +49,7 @@ export function ActivityGroup({
   const openImageSrc = useActivityImageUrl(openImage, connection, activeWorkspaceAppId);
   const danger = activities.some((activity) => activity.controlKind === "turn_aborted");
   const summaryOpenSessions = subagentOpenSessions(activities);
+  const childMessageSummary = activities.length > 0 && activities.every((activity) => activity.subagentMessage);
 
   return (
     <article className="activity-group">
@@ -56,7 +57,7 @@ export function ActivityGroup({
         <button
           type="button"
           aria-expanded={expanded}
-          className={`activity-summary ${danger ? "danger" : ""}`}
+          className={`activity-summary ${danger ? "danger" : ""} ${childMessageSummary ? "child-message-summary" : ""}`}
           onClick={() => setExpanded((current) => !current)}
         >
           {summaryImage ? (
@@ -113,6 +114,14 @@ function ActivityDetailRow({
   onOpenSession?: (sessionId: string) => void;
 }) {
   const imageSrc = useActivityImageUrl(activity.imagePreview ?? null, connection, activeWorkspaceAppId);
+  if (activity.subagentMessage) {
+    return (
+      <SubagentMessageDetailRow
+        activity={activity}
+        onOpenSession={onOpenSession}
+      />
+    );
+  }
   return (
     <div
       className={`activity-detail-row ${activity.controlKind === "turn_aborted" ? "danger" : ""}`}
@@ -158,6 +167,72 @@ function ActivityDetailRow({
       </div>
     </div>
   );
+}
+
+function SubagentMessageDetailRow({
+  activity,
+  onOpenSession,
+}: {
+  activity: ActivityItem;
+  onOpenSession?: (sessionId: string) => void;
+}) {
+  const message = activity.subagentMessage;
+  if (!message) return null;
+  const title = message.direction === "received" ? "Child message received" : "Child message sent";
+  const facts = subagentMessageFacts(message);
+  return (
+    <div className={`activity-detail-row child-message ${message.direction}`} key={activity.id}>
+      <span>{title}</span>
+      <div className="activity-detail-main">
+        <div className="activity-child-message-card">
+          <p>{message.body}</p>
+          <div className="activity-child-message-facts" aria-label="Child message metadata">
+            {facts.map((fact) => (
+              <span key={fact.label}>
+                <small>{fact.label}</small>
+                <code title={fact.value}>{fact.value}</code>
+              </span>
+            ))}
+          </div>
+          {message.refs?.length ? (
+            <div className="activity-child-message-refs" aria-label="Child message references">
+              {message.refs.map((ref) => (
+                <span key={`${ref.kind}:${ref.id}`}>
+                  {ref.kind}:{ref.id} ({ref.label})
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {activity.openSession && onOpenSession ? (
+            <div className="activity-child-message-actions">
+              <SubagentAvatarButton
+                className="activity-subagent-detail-avatar"
+                openSession={activity.openSession}
+                onOpenSession={onOpenSession}
+              />
+              <span>Open child conversation</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function subagentMessageFacts(message: NonNullable<ActivityItem["subagentMessage"]>): Array<{ label: string; value: string }> {
+  return [
+    { label: "Message", value: message.messageId },
+    { label: "Kind", value: message.kind },
+    { label: "From", value: message.fromRunId },
+    message.roleId ? { label: "Role", value: message.roleId } : null,
+    message.childSessionId ? { label: "Child", value: message.childSessionId } : null,
+    message.parentGoalId ? { label: "Goal", value: message.parentGoalId } : null,
+    message.toRunId ? { label: "To run", value: message.toRunId } : null,
+    message.toRole ? { label: "To role", value: message.toRole } : null,
+    message.deliveryStatus ? { label: "Delivery", value: message.deliveryStatus } : null,
+    message.wakeReason ? { label: "Wake", value: message.wakeReason } : null,
+    message.createdAt ? { label: "Created", value: message.createdAt } : null,
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
 }
 
 function ActivitySummaryText({ summary }: { summary: string }) {

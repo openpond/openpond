@@ -132,6 +132,7 @@ export type SubagentRoleSettings = z.infer<typeof SubagentRoleSettingsSchema>;
 
 export const SubagentPreferencesSchema = z.object({
   enabled: z.boolean().default(true),
+  defaultModelRef: ChatModelRefSchema.nullable().default(null),
   roles: z
     .array(SubagentRoleSettingsSchema)
     .max(64)

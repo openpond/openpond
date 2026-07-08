@@ -577,6 +577,7 @@ export function createTurnRunner(deps: {
       actionCatalogInstructionMode?: "text_fallback" | "native_tool" | "none";
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
+      extraSystemContext?: string | null;
     }
   ) => Promise<string>;
   appendAssistantText: (session: Session, turnId: string, text: string) => Promise<void>;
@@ -955,7 +956,7 @@ export function createTurnRunner(deps: {
     const role = preferences.subagents.roles.find((candidate) => candidate.id === input.roleId);
     if (!role?.enabled) throw new Error(`Subagent role ${input.roleId} is not enabled.`);
     const parentModelRef = context.model ? { providerId: context.provider, modelId: context.model } : null;
-    const modelRef = role.modelRef ?? parentModelRef ?? preferences.defaultChatModelRef ?? {
+    const modelRef = role.modelRef ?? preferences.subagents.defaultModelRef ?? parentModelRef ?? preferences.defaultChatModelRef ?? {
       providerId: preferences.defaultChatProvider,
       modelId: preferences.defaultChatModel,
     };
@@ -1010,6 +1011,12 @@ export function createTurnRunner(deps: {
       runId,
     });
     const childSessionWorkspace = isolation.sessionWorkspace ?? {};
+    const childSystemContext = subagentChildSystemContext({
+      role,
+      objective: input.objective,
+      parentSession: context.session,
+      contextPack: input.context ?? null,
+    });
     const childSessionMetadata = {
       ...(recordFromUnknown(childSessionWorkspace.metadata) ?? {}),
       subagent: {
@@ -1022,6 +1029,7 @@ export function createTurnRunner(deps: {
         requestedIsolationMode: role.isolationMode,
         effectiveIsolationMode: isolation.effectiveIsolationMode,
         workspace: isolation.workspace,
+        systemContext: childSystemContext,
       },
     };
     const childSession = await deps.createSession({
@@ -1338,7 +1346,13 @@ export function createTurnRunner(deps: {
           appId: context.session.appId,
           status: "completed",
           output: `Subagent ${fromRunId} sent ${message.kind}.`,
-          data: { message, delivery, deliveredRunIds },
+          data: {
+            message,
+            delivery,
+            deliveredRunIds,
+            childSessionId: context.session.id,
+            roleId: context.session.subagentRoleId ?? null,
+          },
         }),
       );
     }
@@ -1741,9 +1755,7 @@ export function createTurnRunner(deps: {
     });
     try {
       let childPrompt = subagentChildPrompt({
-        role: input.role,
         objective: input.run.objective,
-        parentSession: input.parentSession,
         contextPack: input.contextPack,
       });
       let wakeResumeCount = 0;
@@ -2919,7 +2931,7 @@ export function createTurnRunner(deps: {
     throw new Error(`Subagent run ${run.id} is not linked to the current conversation.`);
   }
 
-  function subagentChildPrompt(input: {
+  function subagentChildSystemContext(input: {
     role: SubagentRoleSettings;
     objective: string;
     parentSession: Session;
@@ -2940,6 +2952,23 @@ export function createTurnRunner(deps: {
       "",
       "When finished, respond with a concise report: summary, findings, files or artifacts changed/read, tests or checks run, blockers, confidence, and follow-up needed.",
     ].filter(Boolean).join("\n");
+  }
+
+  function subagentChildPrompt(input: {
+    objective: string;
+    contextPack: string | null;
+  }): string {
+    return [
+      input.objective,
+      input.contextPack ? ["Context:", input.contextPack].join("\n") : null,
+    ].filter(Boolean).join("\n\n");
+  }
+
+  function subagentSystemContextForSession(session: Session): string | null {
+    if (!session.subagentRunId) return null;
+    const subagent = recordFromUnknown(recordFromUnknown(session.metadata)?.subagent);
+    const systemContext = typeof subagent?.systemContext === "string" ? subagent.systemContext.trim() : "";
+    return systemContext || null;
   }
 
   async function latestAssistantTextForSession(sessionId: string): Promise<string | null> {
@@ -5390,6 +5419,7 @@ export function createTurnRunner(deps: {
             signal: controller.signal,
           })
         : [];
+      const extraSystemContext = subagentSystemContextForSession(session);
       if (session.provider === "openpond") {
         const providerTurnId = `openpond-${turn.id}`;
         const model = turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
@@ -5404,6 +5434,7 @@ export function createTurnRunner(deps: {
           actionCatalogInstructionMode: actionCatalogInstructionModeForProvider("openpond"),
           profileSkillInstructionMode: profileSkillInstructionModeForProvider("openpond", profileSkillRuntime),
           browserControlAvailable: browserControlAvailable(session),
+          extraSystemContext,
         });
         const hostedPriorEvents = await maybeAutoCompactHostedContext({
           session,
@@ -5491,6 +5522,7 @@ export function createTurnRunner(deps: {
           actionCatalogInstructionMode: actionCatalogInstructionModeForProvider(session.provider),
           profileSkillInstructionMode: profileSkillInstructionModeForProvider(session.provider, profileSkillRuntime),
           browserControlAvailable: browserControlAvailable(session),
+          extraSystemContext,
         });
         const hostedPriorEvents = await maybeAutoCompactHostedContext({
           session,

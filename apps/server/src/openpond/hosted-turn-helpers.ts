@@ -49,6 +49,7 @@ export type HostedTurnHelpers = {
       actionCatalogInstructionMode?: ActionCatalogInstructionMode;
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
+      extraSystemContext?: string | null;
     }
   ): Promise<string>;
   appendAssistantText(session: Session, turnId: string, text: string): Promise<void>;
@@ -89,6 +90,7 @@ export function createHostedTurnHelpers(deps: {
       actionCatalogInstructionMode?: ActionCatalogInstructionMode;
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
+      extraSystemContext?: string | null;
     } = {}
   ): Promise<string> {
     const isHybridSession = isHybridWorkspaceSession(session);
@@ -127,6 +129,7 @@ export function createHostedTurnHelpers(deps: {
         connectedAppContext,
         actionCatalogContext,
         profileSkillContext,
+        options.extraSystemContext,
       ]
         .filter(Boolean)
         .join("\n\n")

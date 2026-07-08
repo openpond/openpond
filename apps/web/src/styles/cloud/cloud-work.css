@@ -610,9 +610,14 @@
 }
 
 .cloud-create-plan-actions button:first-child {
-  border-color: rgba(55, 178, 117, 0.38);
-  background: rgba(55, 178, 117, 0.16);
-  color: #c7f9df;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f4f4f5;
+}
+
+.cloud-create-plan-actions button:first-child:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .cloud-create-plan-actions button:hover:not(:disabled) {

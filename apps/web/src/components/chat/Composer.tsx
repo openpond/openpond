@@ -109,10 +109,12 @@ type ComposerProps = {
   createPipelineRuntime?: ComposerCreatePipelineRuntime | null;
   busy: boolean;
   running?: boolean;
+  submissionScopeKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];
   steerAutoDispatchReady?: boolean;
   steerAutoDispatchBlocked?: boolean;
   showProjectFooter?: boolean;
+  autoFocus?: boolean;
   connection: ClientConnection | null;
   providerSettings?: ProviderSettings | null;
   provider: ChatProvider;
@@ -264,10 +266,12 @@ export function Composer({
   createPipelineRuntime = null,
   busy,
   running = busy,
+  submissionScopeKey = "default",
   initialSteerDrafts = [],
   steerAutoDispatchReady = false,
   steerAutoDispatchBlocked = false,
   showProjectFooter = true,
+  autoFocus = false,
   connection,
   providerSettings = null,
   provider,
@@ -296,7 +300,8 @@ export function Composer({
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
-  const submittingRef = useRef(false);
+  const autoFocusAppliedRef = useRef(false);
+  const submittingScopeKeysRef = useRef<Set<string>>(new Set());
   const previousRunningRef = useRef(running);
   const autoDispatchWaitingForStartedTurnRef = useRef(false);
   const suppressNextAutoDispatchRef = useRef(false);
@@ -314,7 +319,7 @@ export function Composer({
   const [selectedCommandId, setSelectedCommandId] = useState<ComposerSlashCommand["id"] | null>(null);
   const [selectedInvocationPosition, setSelectedInvocationPosition] = useState<number | null>(null);
   const [selectedActionMentionText, setSelectedActionMentionText] = useState<string | null>(null);
-  const [serializingAttachments, setSerializingAttachments] = useState(false);
+  const [serializingAttachmentScopeKey, setSerializingAttachmentScopeKey] = useState<string | null>(null);
   const [goalDetailsOpen, setGoalDetailsOpen] = useState(false);
   const [steerDrafts, setSteerDrafts] = useState<ComposerSteerDraft[]>(() => initialSteerDrafts);
   const [sendingSteerDraftId, setSendingSteerDraftId] = useState<string | null>(null);
@@ -356,7 +361,7 @@ export function Composer({
       return {
         icon: selectedCommand.id === "create" ? "plus" : "workflow",
         key: `command:${selectedCommand.id}`,
-        label: selectedCommand.id,
+        label: selectedCommand.id === "create" ? "Make Agent" : selectedCommand.id,
         position,
         onRemove: () => {
           setSelectedCommandId(null);
@@ -380,6 +385,7 @@ export function Composer({
     }
     return null;
   }, [prompt.length, selectedAction, selectedCommand, selectedInvocationPosition]);
+  const serializingAttachments = serializingAttachmentScopeKey === submissionScopeKey;
   const steering = running && hasComposerInput;
   const sendDisabled = serializingAttachments || !hasComposerInput;
   const sendTooltip = serializingAttachments ? "Preparing files" : steering ? "Steer" : "Send";
@@ -397,6 +403,25 @@ export function Composer({
       : prompt.trim()
         ? "Queue steer draft"
         : "Type a draft to queue";
+
+  function beginSubmissionForScope(scopeKey = submissionScopeKey): boolean {
+    const activeScopes = submittingScopeKeysRef.current;
+    if (activeScopes.has(scopeKey)) return false;
+    activeScopes.add(scopeKey);
+    return true;
+  }
+
+  function finishSubmissionForScope(scopeKey: string) {
+    submittingScopeKeysRef.current.delete(scopeKey);
+  }
+
+  function isSubmittingCurrentScope(): boolean {
+    return submittingScopeKeysRef.current.has(submissionScopeKey);
+  }
+
+  function clearSerializingAttachmentsForScope(scopeKey: string) {
+    setSerializingAttachmentScopeKey((current) => (current === scopeKey ? null : current));
+  }
   const providerOptions = useMemo(
     () => {
       const options = providerOptionsFromSettings(providerSettings, { enabledOnly: true })
@@ -519,6 +544,18 @@ export function Composer({
   useLayoutEffect(() => {
     inputRef.current?.resize();
   }, [attachments.length, attachmentError, createPipelineRuntime, goalRuntime, prompt, selectedActionId, selectedCommandId, selectedInvocationPosition]);
+
+  useEffect(() => {
+    if (!autoFocus) {
+      autoFocusAppliedRef.current = false;
+      return;
+    }
+    if (autoFocusAppliedRef.current || inputDisabled) return;
+    autoFocusAppliedRef.current = true;
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(prompt.length);
+    });
+  }, [autoFocus, inputDisabled, prompt.length]);
 
   useEffect(() => {
     setMentionIndex(0);
@@ -864,10 +901,11 @@ export function Composer({
   }
 
   async function submitQueuedSteerDraft(draftId: string, source: "auto" | "manual" = "manual"): Promise<boolean> {
-    if (submittingRef.current || sendingSteerDraftId) return false;
+    if (isSubmittingCurrentScope() || sendingSteerDraftId) return false;
     const draft = steerDrafts.find((candidate) => candidate.id === draftId);
     if (!draft) return false;
-    submittingRef.current = true;
+    const submissionScope = submissionScopeKey;
+    if (!beginSubmissionForScope(submissionScope)) return false;
     setSendingSteerDraftId(draftId);
     setAttachmentError(null);
     try {
@@ -888,7 +926,7 @@ export function Composer({
       setAttachmentError(error instanceof Error ? error.message : String(error));
       return false;
     } finally {
-      submittingRef.current = false;
+      finishSubmissionForScope(submissionScope);
       setSendingSteerDraftId(null);
     }
   }
@@ -948,7 +986,7 @@ export function Composer({
   }
 
   async function submitComposer() {
-    if (submittingRef.current) return;
+    if (isSubmittingCurrentScope()) return;
     const parsedSubmitIssuePrompt = selectedAction || selectedCommand
       ? null
       : parseComposerSlashCommandPrompt(prompt);
@@ -961,10 +999,10 @@ export function Composer({
       return;
     }
     if (sendDisabled) return;
-    submittingRef.current = true;
+    const submissionScope = submissionScopeKey;
+    if (!beginSubmissionForScope(submissionScope)) return;
     setAddMenuOpen(false);
     setAttachmentError(null);
-    setSerializingAttachments(true);
     try {
       if (running) {
         const stopped = await onStop();
@@ -972,7 +1010,13 @@ export function Composer({
       }
       const stagedAttachments = stageAttachmentsForSubmit();
       try {
-        const payloads = await Promise.all(stagedAttachments.map(readComposerAttachmentPayload));
+        setSerializingAttachmentScopeKey(stagedAttachments.length > 0 ? submissionScope : null);
+        let payloads: ChatAttachment[];
+        try {
+          payloads = await Promise.all(stagedAttachments.map(readComposerAttachmentPayload));
+        } finally {
+          clearSerializingAttachmentsForScope(submissionScope);
+        }
         const displayPrompt =
           selectedAction && selectedActionMentionText
             ? promptWithSelectedInvocationText(prompt, selectedActionMentionText, selectedInvocationPosition)
@@ -992,14 +1036,15 @@ export function Composer({
     } catch (error) {
       setAttachmentError(error instanceof Error ? error.message : String(error));
     } finally {
-      submittingRef.current = false;
-      setSerializingAttachments(false);
+      finishSubmissionForScope(submissionScope);
+      clearSerializingAttachmentsForScope(submissionScope);
     }
   }
 
   async function submitIssueForm(input: SubmitIssueFormInput): Promise<boolean> {
-    if (submittingRef.current || submitIssueSubmitting) return false;
-    submittingRef.current = true;
+    if (isSubmittingCurrentScope() || submitIssueSubmitting) return false;
+    const submissionScope = submissionScopeKey;
+    if (!beginSubmissionForScope(submissionScope)) return false;
     setSubmitIssueSubmitting(true);
     setAddMenuOpen(false);
     setAttachmentError(null);
@@ -1021,7 +1066,7 @@ export function Composer({
       setAttachmentError(error instanceof Error ? error.message : String(error));
       return false;
     } finally {
-      submittingRef.current = false;
+      finishSubmissionForScope(submissionScope);
       setSubmitIssueSubmitting(false);
     }
   }
@@ -1042,7 +1087,7 @@ export function Composer({
       autoDispatchReady: steerAutoDispatchReady && !createPipelineRuntime,
       hasQueuedDrafts: steerDrafts.length > 0,
       running,
-      sending: Boolean(sendingSteerDraftId) || submittingRef.current,
+      sending: Boolean(sendingSteerDraftId) || isSubmittingCurrentScope(),
       waitingForStartedTurn: autoDispatchWaitingForStartedTurnRef.current,
       wasRunning: previousRunningRef.current,
     });

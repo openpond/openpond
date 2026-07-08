@@ -12,6 +12,7 @@ import type {
   LocalProjectOpenPondLink,
   OpenPondCommandAccessMode,
   OpenPondApp,
+  ProviderSettings,
   RuntimeEvent,
   Session,
   UsageRequestAttribution,
@@ -153,6 +154,21 @@ type SendPromptOptions = {
   usageAttribution?: UsageRequestAttribution;
   openPondCommandAccessMode?: OpenPondCommandAccessMode;
 };
+
+export function sendTurnModelSelectionPayload({
+  model,
+  provider,
+  providerSettings,
+}: {
+  model: string;
+  provider: ChatProvider;
+  providerSettings?: ProviderSettings | null;
+}) {
+  return {
+    model: modelForTurn(provider, model, providerSettings),
+    modelRef: modelRefForTurn(provider, model, providerSettings),
+  };
+}
 
 function appendRuntimeEventIfMissing(events: RuntimeEvent[], event: RuntimeEvent): RuntimeEvent[] {
   return events.some((candidate) => candidate.id === event.id) ? events : [...events, event];
@@ -322,7 +338,6 @@ export function useChatActions({
   function changeDraftProvider(provider: ChatProvider) {
     setDraftProvider(provider);
     setDraftModel((current) => normalizeChatModel(provider, current, providerSettings));
-    setSelectedSessionId(null);
     setView("chat");
   }
 
@@ -550,11 +565,12 @@ export function useChatActions({
     const turnChatMessages = options.chatMessages ?? chatMessages;
     const mentionedAppIdForTurn = options.session !== undefined ? null : mentionedAppId;
     const clearPromptForTurn =
-      options.clearPrompt ??
-      (() => {
-        setPrompt("");
-        setMentionedAppId(null);
-      });
+      options.clearPrompt === undefined
+        ? () => {
+            setPrompt("");
+            setMentionedAppId(null);
+          }
+        : options.clearPrompt;
     const actionMentionResolution = selectedAction
       ? null
       : resolveMentionedAction(value, selectedActionCatalog);
@@ -920,8 +936,14 @@ export function useChatActions({
           candidate.id === turnSessionId ? { ...candidate, status: "active" } : candidate
         )
       );
+      const turnProvider = providerForTurn;
+      const turnModelPayload = sendTurnModelSelectionPayload({
+        provider: turnProvider,
+        model: modelForTurnValue,
+        providerSettings,
+      });
       const codexTurnPermissions =
-        session.provider === "codex"
+        turnProvider === "codex"
           ? codexPermissionTurnInput(codexPermissionMode)
           : {
               approvalPolicy: "on-request" as const,
@@ -936,11 +958,10 @@ export function useChatActions({
           openPondActionCatalog.length > 0 ? openPondActionCatalog : undefined,
         createPipelineRequest,
         usageAttribution: usageAttributionForTurn,
-        model: modelForTurn(session.provider, modelForTurnValue, providerSettings),
-        modelRef: modelRefForTurn(session.provider, modelForTurnValue, providerSettings),
+        ...turnModelPayload,
         ...codexTurnPermissions,
-        codexPermissionMode: session.provider === "codex" ? codexPermissionMode : "default",
-        codexReasoningEffort: session.provider === "codex" ? codexReasoningEffort : undefined,
+        codexPermissionMode: turnProvider === "codex" ? codexPermissionMode : "default",
+        codexReasoningEffort: turnProvider === "codex" ? codexReasoningEffort : undefined,
       });
       const payload = await api.bootstrap(connection);
       applyBootstrapPayload(payload);

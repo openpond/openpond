@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, CreditCard, ExternalLink, FileText, Globe2, ImageIcon } from "../icons";
 import type { ChatAttachmentSummary } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
@@ -104,7 +104,7 @@ export const MessageRow = memo(function MessageRow({
         <div className={`user-message ${message.insightsRunPrompt ? "insights-run-message" : ""} ${hasAttachments ? "has-attachments" : ""} ${hasImageAttachments ? "has-image-attachments" : ""}`}>
           {message.attachments?.length ? <MessageAttachments attachments={message.attachments} connection={connection} /> : null}
           {message.insightsRunPrompt ? <InsightsRunPromptCard prompt={message.insightsRunPrompt} /> : null}
-          {message.content ? <div className="user-message-content">{message.content}</div> : null}
+          {message.content ? <UserMessageContent content={message.content} /> : null}
         </div>
       </article>
     );
@@ -198,6 +198,34 @@ export const MessageRow = memo(function MessageRow({
     </article>
   );
 }, areMessageRowPropsEqual);
+
+const USER_MESSAGE_COLLAPSE_LINE_LIMIT = 10;
+
+function UserMessageContent({ content }: { content: string }) {
+  const lines = useMemo(() => content.split(/\r?\n/), [content]);
+  const [expanded, setExpanded] = useState(false);
+  const shouldCollapse = lines.length > USER_MESSAGE_COLLAPSE_LINE_LIMIT;
+  const visibleContent = shouldCollapse && !expanded
+    ? lines.slice(0, USER_MESSAGE_COLLAPSE_LINE_LIMIT).join("\n")
+    : content;
+
+  return (
+    <div className={`user-message-content-wrap ${shouldCollapse ? "collapsible" : ""}`}>
+      <div className="user-message-content">{visibleContent}</div>
+      {shouldCollapse ? (
+        <button
+          type="button"
+          className="user-message-show-more"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          <span>{expanded ? "Show less" : "Show more"}</span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
   return (

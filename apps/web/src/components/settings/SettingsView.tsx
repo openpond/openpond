@@ -7,6 +7,12 @@ import { AccountSettingsSection } from "./AccountSettingsSection";
 import { DefaultsSettingsSection } from "./DefaultsSettingsSection";
 import { DiagnosticsSettingsSection } from "./DiagnosticsSettingsSection";
 import { EditorSettingsSection } from "./EditorSettingsSection";
+import {
+  ContextSettingsSection,
+  GoalsSettingsSection,
+  InsightsSettingsSection,
+  SubagentsSettingsSection,
+} from "./HarnessSettingsSections";
 import { PersonalizationSettingsSection } from "./PersonalizationSettingsSection";
 import { ProfileSettingsSection } from "./ProfileSettingsSection";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
@@ -94,10 +100,36 @@ export function SettingsView({
   const personalizationSettings = usePersonalizationSettings({ connection, onError, onPayload, personalization });
   const diagnosticsSettings = useDiagnosticsSettings({ onError, section });
   const remoteAccessSettings = useRemoteAccessSettings({ connection, enabled: section === "remote", onError, onToast });
+  const confirmSubagentsNavigation = useCallback(() => {
+    if (section !== "subagents" || !defaultsSettings.subagentsDirty) return true;
+    return window.confirm("You have unsaved changes. Leave Subagents without saving?");
+  }, [defaultsSettings.subagentsDirty, section]);
+  const changeSection = useCallback(
+    (nextSection: SettingsSection) => {
+      if (nextSection === section) return;
+      if (!confirmSubagentsNavigation()) return;
+      setSection(nextSection);
+    },
+    [confirmSubagentsNavigation, section],
+  );
+  const goBack = useCallback(() => {
+    if (!confirmSubagentsNavigation()) return;
+    onBack();
+  }, [confirmSubagentsNavigation, onBack]);
 
   useEffect(() => {
     setSection(initialSection);
   }, [initialSection]);
+
+  useEffect(() => {
+    if (section !== "subagents" || !defaultsSettings.subagentsDirty) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "You have unsaved changes.";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [defaultsSettings.subagentsDirty, section]);
 
   return (
     <div className={`settings-shell ${isMac ? "platform-macos" : ""}`}>
@@ -105,7 +137,7 @@ export function SettingsView({
       <div className="settings-window-controls">
         <WindowControls platform={connection?.platform} />
       </div>
-      <SettingsNavigation section={section} onBack={onBack} onSectionChange={setSection} />
+      <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
       <main className="settings-content">
         {section === "account" ? (
           <AccountSettingsSection
@@ -135,7 +167,19 @@ export function SettingsView({
             {...providerSettings}
           />
         ) : section === "defaults" ? (
-          <DefaultsSettingsSection
+          <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
+        ) : section === "goals" ? (
+          <GoalsSettingsSection preferences={preferences} {...defaultsSettings} />
+        ) : section === "context" ? (
+          <ContextSettingsSection preferences={preferences} {...defaultsSettings} />
+        ) : section === "insights" ? (
+          <InsightsSettingsSection
+            preferences={preferences}
+            providers={payload?.providers ?? null}
+            {...defaultsSettings}
+          />
+        ) : section === "subagents" ? (
+          <SubagentsSettingsSection
             preferences={preferences}
             providers={payload?.providers ?? null}
             {...defaultsSettings}

@@ -184,6 +184,73 @@ describe("model-backed create pipeline planner", () => {
     expect(snapshot.plan?.metadata.actionShapeDecisionSource).toBe("model_planner");
   });
 
+  test("repairs model planner decisions that put feature bullets in setup requirements", async () => {
+    const request = createPipelineRequest({
+      objective:
+        "chat endpoint that answers general questions. make a mock csv file for an accounting example. this is for a demo",
+    });
+    const plannerCalls: any[] = [];
+
+    const snapshot = await runModelBackedCreatePipelinePlanner({
+      request,
+      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+      requestId: "planner_requirement_repair_test",
+      signal: new AbortController().signal,
+      stream: async function* (messages) {
+        plannerCalls.push(messages);
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.createPipeline.plannerDecision.v1",
+            decision: "plan",
+            plan: {
+              agentId: "accounting-demo-chat",
+              agentName: "Accounting Demo Chat",
+              summary: "Create a demo chat agent with a mock accounting CSV fixture.",
+              capturedContextSummary: "The request asks for general question answering and demo accounting data.",
+              actionShape: {
+                mode: "chat",
+                label: "Chat only",
+                detail: "Answer general questions using a mock accounting CSV example when relevant.",
+                defaultActionKey: "chat",
+                directActionHint: null,
+                artifactPolicy: "Persist trace and run summary.",
+              },
+              sourcePlan: [
+                {
+                  path: "agents/accounting-demo-chat",
+                  operation: "create",
+                  reason: "Implement the demo chat endpoint and committed mock accounting CSV fixture.",
+                },
+              ],
+              requirements:
+                plannerCalls.length === 1
+                  ? [
+                      "chat endpoint that answers general questions",
+                      "make a mock csv file for an accounting example",
+                      "this is for a demo",
+                    ]
+                  : [],
+              checks: [
+                { name: "inspect", command: "bun run agent:inspect", required: true },
+                { name: "build", command: "bun run build", required: true },
+                { name: "validate", command: "bun run agent:validate", required: true },
+                { name: "eval", command: "bun run agent:eval", required: true },
+              ],
+            },
+          }),
+        };
+      },
+    });
+
+    expect(plannerCalls).toHaveLength(2);
+    expect(plannerCalls[0][0]?.content).toContain("Never emit strings in plan.requirements");
+    expect(plannerCalls[1].at(-1)?.content).toContain("failed schema validation");
+    expect(plannerCalls[1].at(-1)?.content).toContain("plan.requirements is only for setup/dependency rows");
+    expect(snapshot.state).toBe("awaiting_plan_approval");
+    expect(snapshot.plan?.requirements).toEqual([]);
+    expect(snapshot.plan?.summary).toContain("mock accounting CSV");
+  });
+
   test("server create turns invoke the planner before plan review", async () => {
     let session = baseSession();
     const turns: any[] = [];

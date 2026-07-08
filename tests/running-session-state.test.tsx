@@ -61,6 +61,49 @@ describe("running session state", () => {
     expect(html).toContain("selected=true");
     expect(html).toContain("running=chat_session");
   });
+
+  test("keeps active sessions visible as running when their events are not loaded", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const otherSession = session({ id: "other_session", status: "idle" });
+    const indexes = buildRuntimeIndexes([], []);
+
+    const activeHtml = renderRunningProbe(chatSession, [chatSession, otherSession], indexes);
+    const otherHtml = renderRunningProbe(otherSession, [chatSession, otherSession], indexes);
+
+    expect(activeHtml).toContain("selected=false");
+    expect(activeHtml).toContain("running=chat_session");
+    expect(otherHtml).toContain("selected=false");
+    expect(otherHtml).toContain("running=chat_session");
+  });
+
+  test("does not treat active session status alone as a selected running turn when loaded events are terminal", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const otherSession = session({ id: "other_session", status: "idle" });
+    const indexes = buildRuntimeIndexes(
+      [turnStartedEvent(chatSession.id), turnCompletedEvent(chatSession.id)],
+      [],
+    );
+
+    const activeHtml = renderRunningProbe(chatSession, [chatSession, otherSession], indexes);
+    const otherHtml = renderRunningProbe(otherSession, [chatSession, otherSession], indexes);
+
+    expect(activeHtml).toContain("selected=false");
+    expect(activeHtml).toContain("running=");
+    expect(activeHtml).not.toContain("chat_session");
+    expect(otherHtml).toContain("selected=false");
+    expect(otherHtml).toContain("running=");
+    expect(otherHtml).not.toContain("chat_session");
+  });
+
+  test("keeps active sessions with pending turns in the running set", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const indexes = buildRuntimeIndexes([turnStartedEvent(chatSession.id)], []);
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes);
+
+    expect(html).toContain("selected=true");
+    expect(html).toContain("running=chat_session");
+  });
 });
 
 function renderRunningProbe(
@@ -122,6 +165,30 @@ function activeGoalEvent(sessionId: string): RuntimeEvent {
         timeUsedSeconds: 10,
       },
     },
+  };
+}
+
+function turnStartedEvent(sessionId: string): RuntimeEvent {
+  return {
+    id: `${sessionId}_turn_started`,
+    sessionId,
+    turnId: `${sessionId}_turn`,
+    name: "turn.started",
+    timestamp: NOW,
+    source: "chat_action",
+    status: "started",
+  };
+}
+
+function turnCompletedEvent(sessionId: string): RuntimeEvent {
+  return {
+    id: `${sessionId}_turn_completed`,
+    sessionId,
+    turnId: `${sessionId}_turn`,
+    name: "turn.completed",
+    timestamp: NOW,
+    source: "server",
+    status: "completed",
   };
 }
 

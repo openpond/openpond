@@ -1,6 +1,7 @@
 import type { Approval, ContextUsageSnapshot, RuntimeEvent } from "@openpond/contracts";
 import { latestContextUsageFromEvents } from "./context-window";
 import { latestGoalRuntimeFromEvents, type GoalRuntimeStatus } from "./goal-runtime";
+import { latestCreatePipelineRuntimeFromEvents } from "./create-pipeline-runtime";
 import { latestSubagentRuntimeFromEvents, type SubagentRuntimeStatus } from "./subagent-runtime";
 
 export type ApprovalStatus = Approval["status"];
@@ -111,7 +112,7 @@ function appendRuntimeEventIndexes(
       latestContextUsageBySessionId.delete(sessionId);
     }
 
-    const goalRuntime = latestGoalRuntimeFromEvents(sessionEvents);
+    const goalRuntime = latestCreatePipelineRuntimeFromEvents(sessionEvents) ?? latestGoalRuntimeFromEvents(sessionEvents);
     if (goalRuntime) {
       latestGoalRuntimeBySessionId.set(sessionId, goalRuntime);
       if (goalRuntime.tone === "active") {
@@ -168,7 +169,7 @@ function runtimeEventDerivedIndexes(
     const contextUsage = latestContextUsageFromEvents(sessionEvents);
     if (contextUsage) latestContextUsageBySessionId.set(sessionId, contextUsage);
 
-    const goalRuntime = latestGoalRuntimeFromEvents(sessionEvents);
+    const goalRuntime = latestCreatePipelineRuntimeFromEvents(sessionEvents) ?? latestGoalRuntimeFromEvents(sessionEvents);
     if (!goalRuntime) continue;
     latestGoalRuntimeBySessionId.set(sessionId, goalRuntime);
     if (goalRuntime.tone === "active") activeGoalSessionIds.add(sessionId);

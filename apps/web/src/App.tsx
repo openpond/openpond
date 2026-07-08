@@ -62,6 +62,7 @@ import {
   latestKnownActiveGoalRuntimeFromEvents,
 } from "./lib/goal-runtime";
 import { isCodexHistorySessionId } from "./lib/sidebar-session-projects";
+import { latestCreatePipelineRuntimeFromEvents } from "./lib/create-pipeline-runtime";
 import {
   migrateDraftTerminalTabs,
   terminalScopeForSelection,
@@ -553,6 +554,7 @@ export function App() {
     connection,
     expandProject,
     linkedProjectByAppId,
+    providerSettings: bootstrap?.providers ?? null,
     selectedAppId,
     selectedSession,
     selectedSessionId,
@@ -1120,6 +1122,7 @@ export function App() {
             ? activeGoalRuntimeFromSessionMetadata(historySession.metadata)
             : null;
         const historyGoalRuntime =
+          latestCreatePipelineRuntimeFromEvents(historyEvents) ??
           latestGoalRuntimeFromEvents(historyEvents) ??
           (historySession?.status === "active"
             ? latestKnownActiveGoalRuntimeFromEvents(historyEvents) ?? metadataGoalRuntime
@@ -1136,6 +1139,7 @@ export function App() {
         next.set(selectedSessionId, goalRuntime);
       } else if (selectedSession?.status === "active" && codexHistoryEvents.length > 0) {
         const knownActiveGoalRuntime =
+          latestCreatePipelineRuntimeFromEvents(codexHistoryEvents) ??
           latestKnownActiveGoalRuntimeFromEvents(codexHistoryEvents) ??
           activeGoalRuntimeFromSessionMetadata(selectedSession.metadata);
         if (knownActiveGoalRuntime) {
@@ -1546,6 +1550,7 @@ export function App() {
   const {
     archiveSession,
     restoreSession,
+    renameSession,
     toggleProjectPinned,
     toggleSessionPinned,
   } = useSidebarMutations({
@@ -1984,9 +1989,13 @@ export function App() {
           )
         : runtimeEventsForSession(runtimeIndexes, panel.sessionId);
       const panelIndexes = isHistoryPanel ? buildRuntimeIndexes(panelEvents, []) : runtimeIndexes;
-      const panelPendingApproval = latestPendingApprovalForSession(panelIndexes, panel.sessionId);
-      const panelRunning = session ? runningSessionIds.has(session.id) : false;
       const panelTurnCompletionState = latestTurnCompletionState(panelEvents);
+      const panelPendingApproval = latestPendingApprovalForSession(panelIndexes, panel.sessionId);
+      const panelRunning = Boolean(
+        session &&
+          (runningSessionIds.has(session.id) ||
+            (!session.systemKind && session.status === "active" && panelTurnCompletionState === "pending")),
+      );
       const contextWindowStatusForPanel = contextWindowStatusFromUsage({
         provider,
         snapshot: latestContextUsageForSession(panelIndexes, panel.sessionId),
@@ -2307,6 +2316,7 @@ export function App() {
         toggleSessionPinned,
         archiveSession,
         restoreSession,
+        renameSession,
         expandProject,
         toggleProjectExpanded,
         startPinnedDrag,
@@ -2368,6 +2378,7 @@ export function App() {
         contextWindowStatus,
         goalRuntime,
         subagentRuntime,
+        selectedSessionId,
         prompt,
         steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,

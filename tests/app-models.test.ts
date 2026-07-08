@@ -4,6 +4,7 @@ import { ProviderSettingsSchema, SubagentPreferencesSchema, type AppPreferences 
 import {
   DEFAULT_APP_PREFERENCES,
   chatProviderLabel,
+  modelSelectionForSession,
   providerOptionsFromSettings,
   subagentModelRefForRole,
 } from "../apps/web/src/lib/app-models";
@@ -76,6 +77,53 @@ describe("app model labels", () => {
     ).toEqual({
       providerId: "zai",
       modelId: "glm-5.2",
+    });
+  });
+
+  test("initializes composer model selection from the selected session", () => {
+    const providerSettings = ProviderSettingsSchema.parse({
+      providers: {
+        openrouter: {
+          enabled: true,
+          defaultModel: "openrouter/default",
+          modelOverrides: ["openrouter/alternate"],
+        },
+      },
+      statuses: {
+        openrouter: {
+          id: "openrouter",
+          displayName: "OpenRouter",
+          enabled: true,
+          available: true,
+          defaultModel: "openrouter/default",
+        },
+      },
+    });
+
+    expect(
+      modelSelectionForSession(
+        {
+          provider: "openpond",
+          modelRef: { providerId: "openrouter", modelId: "openrouter/alternate" },
+        },
+        providerSettings,
+      ),
+    ).toEqual({
+      provider: "openrouter",
+      model: "openrouter/alternate",
+    });
+
+    expect(
+      modelSelectionForSession(
+        {
+          provider: "codex",
+          modelRef: null,
+        },
+        providerSettings,
+      ),
+    ).toEqual({
+      provider: "codex",
+      model: "gpt-5.5",
     });
   });
 });

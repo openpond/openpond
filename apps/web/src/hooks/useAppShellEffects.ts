@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { ChatProvider, Session, WorkspaceKind } from "@openpond/contracts";
+import type { ChatProvider, ProviderSettings, Session, WorkspaceKind } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import type { AppAction, AppToast } from "../app/app-state";
-import { normalizeChatModel, projectSelectionKey } from "../lib/app-models";
+import { modelSelectionForSession, normalizeChatModel, projectSelectionKey } from "../lib/app-models";
 import { isCloudWorkspaceKind, isHybridWorkspaceSession } from "../lib/workspace-location";
 
 export function shouldForceCloudWorkspaceProviderOpenPond(session: Session | null | undefined): boolean {
@@ -22,6 +22,7 @@ export function useAppShellEffects({
   connection,
   expandProject,
   linkedProjectByAppId,
+  providerSettings,
   selectedAppId,
   selectedSession,
   selectedSessionId,
@@ -42,6 +43,7 @@ export function useAppShellEffects({
   connection: ClientConnection | null;
   expandProject: (projectId: string) => void;
   linkedProjectByAppId: Map<string, string>;
+  providerSettings: ProviderSettings | null;
   selectedAppId: string | null;
   selectedSession: Session | null;
   selectedSessionId: string | null;
@@ -56,6 +58,8 @@ export function useAppShellEffects({
   setTerminalOpen: Dispatch<SetStateAction<boolean>>;
   toast: AppToast | null;
 }) {
+  const lastSyncedSessionIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!selectedAppId) return;
     const linkedProjectId =
@@ -102,6 +106,26 @@ export function useAppShellEffects({
   useEffect(() => {
     setDiffPanelExpanded(false);
   }, [activeWorkspaceId, activeWorkspaceKind, setDiffPanelExpanded]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      lastSyncedSessionIdRef.current = null;
+      return;
+    }
+    if (!selectedSession || selectedSession.id !== selectedSessionId) return;
+    if (lastSyncedSessionIdRef.current === selectedSession.id) return;
+
+    lastSyncedSessionIdRef.current = selectedSession.id;
+    const selection = modelSelectionForSession(selectedSession, providerSettings);
+    setDraftProvider(selection.provider);
+    setDraftModel(selection.model);
+  }, [
+    providerSettings,
+    selectedSession,
+    selectedSessionId,
+    setDraftModel,
+    setDraftProvider,
+  ]);
 
   useEffect(() => {
     if (!connection || !selectedSession || !shouldForceCloudWorkspaceProviderOpenPond(selectedSession)) return;

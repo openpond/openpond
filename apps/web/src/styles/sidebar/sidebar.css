@@ -427,12 +427,12 @@
 
 .sidebar-row.nested.iconless {
   grid-template-columns: minmax(0, 1fr) 54px;
-  padding-left: 4px;
+  padding-left: 10px;
 }
 
 .sidebar-row.nested.iconless.actions-3 {
   grid-template-columns: minmax(0, 1fr) 78px;
-  padding-left: 4px;
+  padding-left: 10px;
 }
 
 .sidebar-row.nested .row-label {

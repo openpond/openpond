@@ -46,6 +46,10 @@ export type SettingsSection =
   | "profile"
   | "wallet"
   | "defaults"
+  | "goals"
+  | "context"
+  | "insights"
+  | "subagents"
   | "editor"
   | "providers"
   | "remote"
@@ -72,6 +76,27 @@ export type ActivityItem = {
     label: string;
     roleId?: string;
     status?: string;
+  };
+  subagentMessage?: {
+    direction: "received" | "sent";
+    summary: string;
+    body: string;
+    messageId: string;
+    kind: string;
+    fromRunId: string;
+    toRunId?: string | null;
+    toRole?: string | null;
+    parentGoalId?: string | null;
+    childSessionId?: string | null;
+    roleId?: string | null;
+    deliveryStatus?: string | null;
+    wakeReason?: string | null;
+    createdAt?: string | null;
+    refs?: Array<{
+      kind: string;
+      id: string;
+      label: string;
+    }>;
   };
   state?: "running" | "completed" | "failed" | "pending";
   imagePreview?: {
@@ -563,6 +588,17 @@ export function normalizeChatModel(
   return defaultModelForProvider(provider, settings);
 }
 
+export function modelSelectionForSession(
+  session: Pick<Session, "provider" | "modelRef">,
+  settings?: ProviderSettings | null,
+): { provider: ChatProvider; model: string } {
+  const provider = session.modelRef?.providerId ?? session.provider;
+  return {
+    provider,
+    model: normalizeChatModel(provider, session.modelRef?.modelId, settings),
+  };
+}
+
 export function modelForTurn(
   provider: ChatProvider,
   model: string,
@@ -708,6 +744,7 @@ export function subagentModelRefForRole(
   const basePreferences = normalizePreferences(preferences);
   const role = subagentRoleSettingsFor(basePreferences, roleId);
   if (role?.modelRef) return role.modelRef;
+  if (basePreferences.subagents.defaultModelRef) return basePreferences.subagents.defaultModelRef;
   return (
     modelRefForTurn(
       basePreferences.defaultChatProvider,

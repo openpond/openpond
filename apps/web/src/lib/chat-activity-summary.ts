@@ -22,6 +22,7 @@ type ActivityCounters = {
   approvals: number;
   controlCount: number;
   editCount: number;
+  goalContextUpdates: number;
   imageCount: number;
   listedFiles: number;
   readFileCount: number;
@@ -31,6 +32,7 @@ type ActivityCounters = {
   searchedCode: number;
   subagentStatuses: Map<string, SubagentActivityStatus>;
   testsOrChecks: number;
+  turnInterruptions: number;
   webSearches: number;
 };
 
@@ -46,6 +48,9 @@ type CommandSummary = {
 };
 
 export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGroupSummary {
+  const childMessageSummary = summarizeChildMessageActivities(activities);
+  if (childMessageSummary) return childMessageSummary;
+
   const counters = emptyCounters();
   let fallbackLabel = "";
   const genericLabels: string[] = [];
@@ -101,6 +106,7 @@ function emptyCounters(): ActivityCounters {
     approvals: 0,
     controlCount: 0,
     editCount: 0,
+    goalContextUpdates: 0,
     imageCount: 0,
     listedFiles: 0,
     readFileCount: 0,
@@ -110,8 +116,38 @@ function emptyCounters(): ActivityCounters {
     searchedCode: 0,
     subagentStatuses: new Map(),
     testsOrChecks: 0,
+    turnInterruptions: 0,
     webSearches: 0,
   };
+}
+
+function summarizeChildMessageActivities(activities: ActivityItem[]): ActivityGroupSummary | null {
+  if (activities.length === 0) return null;
+  const messages = activities
+    .map((activity) => activity.subagentMessage)
+    .filter((message): message is NonNullable<ActivityItem["subagentMessage"]> => Boolean(message));
+  if (messages.length === 0 || messages.length !== activities.length) return null;
+  if (messages.length === 1) {
+    const message = messages[0]!;
+    return {
+      kind: "subagent",
+      text: `${message.direction === "received" ? "Child Message Received" : "Child Message Sent"}: ${message.summary}`,
+    };
+  }
+  const receivedCount = messages.filter((message) => message.direction === "received").length;
+  const sentCount = messages.length - receivedCount;
+  const parts = [
+    receivedCount > 0 ? countChildMessages(receivedCount, "received") : null,
+    sentCount > 0 ? countChildMessages(sentCount, "sent") : null,
+  ].filter((part): part is string => Boolean(part));
+  return {
+    kind: "subagent",
+    text: capitalize(formatList(parts)),
+  };
+}
+
+function countChildMessages(count: number, direction: "received" | "sent"): string {
+  return count === 1 ? `child message ${direction}` : `${count} child messages ${direction}`;
 }
 
 function applyCommandSummary(counters: ActivityCounters, summary: CommandSummary): void {
@@ -128,6 +164,8 @@ function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem
   const label = activity.label.toLowerCase();
   if (activity.controlKind) {
     counters.controlCount += 1;
+    if (activity.controlKind === "goal_context") counters.goalContextUpdates += 1;
+    if (activity.controlKind === "turn_aborted") counters.turnInterruptions += 1;
     return true;
   }
   if (label === "reasoning") {
@@ -262,7 +300,19 @@ function primaryClauses(counters: ActivityCounters): string[] {
   if (counters.imageCount > 0) clauses.push(countClause("read", counters.imageCount, "image"));
   if (counters.reasoningCount > 0) clauses.push("reasoned");
   if (counters.approvals > 0) clauses.push("requested approval");
-  if (clauses.length === 0 && counters.controlCount > 0) clauses.push("updated context");
+  clauses.push(...controlClauses(counters));
+  return clauses;
+}
+
+function controlClauses(counters: ActivityCounters): string[] {
+  const clauses: string[] = [];
+  if (counters.goalContextUpdates === 1) clauses.push("goal context updated");
+  if (counters.goalContextUpdates > 1) clauses.push(`${counters.goalContextUpdates} goal context updates`);
+  if (counters.turnInterruptions === 1) clauses.push("turn interrupted");
+  if (counters.turnInterruptions > 1) clauses.push(`${counters.turnInterruptions} turns interrupted`);
+  const otherControlUpdates = counters.controlCount - counters.goalContextUpdates - counters.turnInterruptions;
+  if (otherControlUpdates === 1) clauses.push("context updated");
+  if (otherControlUpdates > 1) clauses.push(`${otherControlUpdates} context updates`);
   return clauses;
 }
 

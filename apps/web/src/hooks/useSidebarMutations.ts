@@ -112,8 +112,15 @@ export function useSidebarMutations(params: {
     });
   }
 
+  function renameSession(session: Session, title: string) {
+    const trimmed = title.trim();
+    if (!trimmed || trimmed === session.title) return;
+    void patchSessionLocal(session, { title: trimmed });
+  }
+
   return {
     archiveSession,
+    renameSession,
     restoreSession,
     toggleProjectPinned,
     toggleSessionPinned,

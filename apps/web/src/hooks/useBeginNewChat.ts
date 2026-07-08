@@ -4,6 +4,26 @@ import type { OpenPondApp } from "@openpond/contracts";
 import type { AppAction } from "../app/app-state";
 import { projectSelectionKey } from "../lib/app-models";
 
+function focusNewChatComposer() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLElement>(
+        ".main-pane .composer-stack.start .composer-inline-input, .main-pane .composer-stack.dock .composer-inline-input",
+      );
+      if (!input) return;
+      input.focus();
+      const selection = window.getSelection();
+      if (!selection) return;
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+  });
+}
+
 export function useBeginNewChat({
   appDispatch,
   expandProject,
@@ -27,6 +47,7 @@ export function useBeginNewChat({
       }
       setMentionedAppId(null);
       appDispatch({ type: "beginNewChat", appId: app?.id ?? null });
+      focusNewChatComposer();
     },
     [appDispatch, expandProject, linkedProjectByAppId, setMentionedAppId],
   );

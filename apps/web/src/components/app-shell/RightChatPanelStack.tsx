@@ -486,6 +486,7 @@ function RightChatPane({
           createPipelineRuntime={null}
           busy={panel.running}
           running={panel.running}
+          submissionScopeKey={panel.sessionId ?? panel.id}
           steerAutoDispatchBlocked={panel.steerAutoDispatchBlocked}
           steerAutoDispatchReady={panel.steerAutoDispatchReady}
           showProjectFooter={false}

@@ -62,7 +62,7 @@ export function ComposerCreatePipelineStrip({
   return (
     <section className={`composer-create-strip ${tone}`} aria-label="Create pipeline status">
       <div className="composer-create-strip-heading">
-        {tone === "danger" ? <CircleAlert size={15} /> : state === "awaiting_questions" ? <HelpCircle size={15} /> : state === "applying_source" || state === "running_checks" ? <Loader2 size={15} /> : <FileText size={15} />}
+        {tone === "danger" ? <CircleAlert size={15} /> : state === "awaiting_questions" ? <HelpCircle size={15} /> : state === "applying_source" || state === "running_checks" ? <Loader2 className="composer-create-spin" size={15} /> : <FileText size={15} />}
         <span>{createPipelineTitle(state)}</span>
         <small>{runtime.request.operation}</small>
       </div>

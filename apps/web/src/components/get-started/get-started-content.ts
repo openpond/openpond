@@ -1,5 +1,6 @@
 export type GetStartedDeckId =
   | "goal"
+  | "orchestration"
   | "build"
   | "insights"
   | "profile"
@@ -13,6 +14,9 @@ export type GetStartedVisualKind =
   | "goal-evidence"
   | "goal-controls"
   | "goal-context"
+  | "subagent-router"
+  | "subagent-handoff"
+  | "subagent-settings"
   | "create-plan"
   | "source-tree"
   | "check-stack"
@@ -62,6 +66,40 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
         body: "A goal is saved state for a local session or hosted work item, not just prompt text.",
         detail: "Local and hosted goals use the same lifecycle language: objective, evidence, blockers, approvals, checks, and completion.",
         visual: "goal-state",
+        accent: cyan,
+      },
+    ],
+  },
+  {
+    id: "orchestration",
+    label: "Orchestration",
+    description: "How the main agent delegates bounded work to addressable sub agents.",
+    slides: [
+      {
+        id: "orchestration-delegate",
+        eyebrow: "Model routing",
+        title: "OpenAI GPT-5.6 can coordinate GLM coding",
+        body: "Use a strong orchestration model to split a goal into sub agents, then route coding, research, review, testing, docs, or planning to the role and model that fit.",
+        detail: "For example: OpenAI GPT-5.6 coordinates the goal, GLM handles coding in copy-on-write isolation, and every sub agent reports receipts back to the main chat.",
+        visual: "subagent-router",
+        accent: cyan,
+      },
+      {
+        id: "orchestration-handoff",
+        eyebrow: "Handoffs",
+        title: "Sub agents report back deliberately",
+        body: "Sub agents can send compact handoffs back to the parent chat when a blocker, decision, important finding, or final result should return control.",
+        detail: "The parent sees a short sub agent receipt and can respond, message the sub agent, join or cancel, update the goal, or route follow-up work.",
+        visual: "subagent-handoff",
+        accent: cyan,
+      },
+      {
+        id: "orchestration-settings",
+        eyebrow: "Harness settings",
+        title: "Configure each sub agent role",
+        body: "Sub agents have a default model plus per-role provider and model overrides, tool policies, isolation modes, concurrency caps, token caps, and peer-message rules.",
+        detail: "Copy-on-write is the default for write-capable sub agents so parallel edits stay reviewable before merge or handoff; roles can also use worktrees or no isolation.",
+        visual: "subagent-settings",
         accent: cyan,
       },
     ],

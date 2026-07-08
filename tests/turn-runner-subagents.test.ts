@@ -125,6 +125,8 @@ describe("turn runner subagent native tools", () => {
       expect(turn.status).toBe("completed");
       const run = harness.runs.find((candidate) => candidate.roleId === "coding");
       const childSession = [...harness.sessions.values()].find((session) => session.parentSessionId === "session_1");
+      const childTurn = harness.turns.find((candidate) => candidate.sessionId === childSession?.id);
+      const childStreamInput = harness.streamInputs.find((input) => input.requestId === childTurn?.id);
       const worktreePath = childSession?.cwd ?? "";
       expect(run).toMatchObject({
         status: "completed",
@@ -138,6 +140,12 @@ describe("turn runner subagent native tools", () => {
           },
         },
       });
+      expect(childTurn?.prompt).toBe("Create child notes in isolation");
+      expect(childTurn?.prompt).not.toContain("You are an OpenPond");
+      expect(JSON.stringify(childStreamInput)).toContain(
+        "You are an OpenPond coding subagent running in an addressable child conversation.",
+      );
+      expect(JSON.stringify(childStreamInput)).toContain("Use openpond_subagent_send_message to message the parent");
       expect(worktreePath).not.toBe(repoPath);
       expect(worktreePath).toContain("openpond-subagents");
       await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
@@ -531,6 +539,46 @@ describe("turn runner subagent native tools", () => {
     const turn = await harness.runner.sendTurn("session_1", {
       prompt: "Start a research subagent on the current parent model",
       modelRef: { providerId: "zai", modelId: "glm-5.2" },
+    });
+    await harness.subagentQueue.drain();
+
+    expect(turn.status).toBe("completed");
+    const childSession = harness.sessions.get("session_2");
+    expect(childSession).toMatchObject({
+      provider: "zai",
+      modelRef: { providerId: "zai", modelId: "glm-5.2" },
+      subagentRoleId: "research",
+    });
+    expect(harness.runs[0]).toMatchObject({
+      roleId: "research",
+      modelRef: { providerId: "zai", modelId: "glm-5.2" },
+      status: "completed",
+    });
+  });
+
+  test("uses the configured subagent default model before the parent turn model", async () => {
+    const basePreferences = preferences();
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_start",
+      toolArgs: {
+        roleId: "research",
+        objective: "Research using the subagent default model",
+      },
+      preferences: preferences({
+        subagents: {
+          ...basePreferences.subagents,
+          defaultModelRef: { providerId: "zai", modelId: "glm-5.2" },
+        },
+      }),
+      initialEvents: [activeGoalEvent()],
+      textBySessionId: {
+        session_2: ["Research complete."],
+      },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "Start a research subagent with the default subagent model",
+      modelRef: { providerId: "openrouter", modelId: "parent/model" },
     });
     await harness.subagentQueue.drain();
 
@@ -2220,7 +2268,8 @@ function createSubagentHarness(input: {
     loadPersonalizationSoul: async () => "",
     loadAppPreferences: async () => input.preferences,
     maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
-    hostedSystemPrompt: async () => "System prompt",
+    hostedSystemPrompt: async (_base, _soul, _session, options) =>
+      ["System prompt", options?.extraSystemContext].filter(Boolean).join("\n\n"),
     appendAssistantText: async (nextSession, turnId, text) => {
       events.push({
         id: `assistant_${events.length}`,

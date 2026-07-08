@@ -95,6 +95,7 @@ export function SidebarSectionList({
   moveProjectToCloud,
   removeProject,
   restoreSession,
+  renameSession,
   runningSessionIds,
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
@@ -271,6 +272,7 @@ export function SidebarSectionList({
               onTogglePin={() => toggleSessionPinned(session)}
               onDockRight={() => dockSessionRight(session)}
               onArchive={() => archiveSession(session)}
+              onRename={renameSession}
             />
             {renderChildSessionRows(session, { nested: true })}
           </div>
@@ -377,6 +379,7 @@ export function SidebarSectionList({
             onTogglePin={() => toggleSessionPinned(session)}
             onDockRight={() => dockSessionRight(session)}
             onArchive={() => archiveSession(session)}
+            onRename={renameSession}
           />
         ))}
       </div>
@@ -446,6 +449,7 @@ export function SidebarSectionList({
                 onTogglePin={() => toggleSessionPinned(row.session)}
                 onDockRight={() => dockSessionRight(row.session)}
                 onArchive={() => archiveSession(row.session)}
+                onRename={renameSession}
                 onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
                 onDragEnd={clearSidebarDrag}
                 onDragOver={(event) => {
@@ -680,6 +684,7 @@ export function SidebarSectionList({
                 onTogglePin={() => toggleSessionPinned(session)}
                 onDockRight={() => dockSessionRight(session)}
                 onArchive={() => restoreSession(session)}
+                onRename={renameSession}
               />
               {renderChildSessionRows(session)}
             </div>
@@ -700,6 +705,7 @@ export function SidebarSectionList({
                 onTogglePin={() => toggleSessionPinned(session)}
                 onDockRight={() => dockSessionRight(session)}
                 onArchive={() => archiveSession(session)}
+                onRename={renameSession}
               />
               {renderChildSessionRows(session)}
             </div>

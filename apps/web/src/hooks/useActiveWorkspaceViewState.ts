@@ -72,12 +72,8 @@ export function useActiveWorkspaceViewState({
     selectedProject,
     bootstrap?.cloudProjects ?? [],
   );
-  const activeProvider =
-    selectedSession?.modelRef?.providerId ??
-    selectedSession?.provider ??
-    (selectedCloudProject ? "openpond" : draftProvider);
+  const activeProvider = selectedCloudProject ? "openpond" : draftProvider;
   const activeModel =
-    selectedSession?.modelRef?.modelId ??
     normalizeChatModel(activeProvider, draftModel, providerSettings);
   const appDefaults = normalizePreferences(bootstrap?.preferences);
   const activeWorkspaceKind: WorkspaceKind | null = selectedCodexHistoryPending

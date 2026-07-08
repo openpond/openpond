@@ -107,6 +107,7 @@ type MainPaneProps = {
   contextWindowStatus: ContextWindowStatus;
   goalRuntime: GoalRuntimeStatus | null;
   subagentRuntime: SubagentRuntimeStatus | null;
+  selectedSessionId: string | null;
   prompt: string;
   steerAutoDispatchBlocked: boolean;
   steerAutoDispatchReady: boolean;
@@ -449,6 +450,7 @@ export function MainPane({
   contextWindowStatus,
   goalRuntime,
   subagentRuntime,
+  selectedSessionId,
   prompt,
   steerAutoDispatchBlocked,
   steerAutoDispatchReady,
@@ -658,6 +660,9 @@ export function MainPane({
   const showThinkingIndicator =
     view === "chat" && turnRunning && !pendingApproval && shouldShowThinkingIndicator(chatMessages);
   const showChatThread = forceChatThread || chatMessages.length > 0 || showThinkingIndicator;
+  const composerSubmissionScopeKey =
+    selectedSessionId ??
+    `draft:${view}:${activeWorkspaceKind ?? "none"}:${activeWorkspaceId ?? activeWorkspaceAppId ?? "none"}`;
   const createPipelineRuntime = useMemo<ComposerCreatePipelineRuntime | null>(() => {
     return latestCreateRuntime
       ? {
@@ -1510,6 +1515,7 @@ export function MainPane({
                 createPipelineRuntime={createPipelineRuntime}
                 busy={turnRunning}
                 running={turnRunning}
+                submissionScopeKey={composerSubmissionScopeKey}
                 steerAutoDispatchBlocked={steerAutoDispatchBlocked || Boolean(pendingApproval)}
                 steerAutoDispatchReady={steerAutoDispatchReady && !pendingApproval}
                 showProjectFooter={false}
@@ -1561,6 +1567,7 @@ export function MainPane({
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               <Composer
                 mode="start"
+                autoFocus
                 prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
@@ -1572,6 +1579,7 @@ export function MainPane({
                 createPipelineRuntime={createPipelineRuntime}
                 busy={turnRunning}
                 running={turnRunning}
+                submissionScopeKey={composerSubmissionScopeKey}
                 steerAutoDispatchBlocked={steerAutoDispatchBlocked || Boolean(pendingApproval)}
                 steerAutoDispatchReady={steerAutoDispatchReady && !pendingApproval}
                 connection={connection}

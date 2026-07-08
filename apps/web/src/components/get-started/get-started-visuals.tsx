@@ -66,6 +66,24 @@ export function GetStartedVisual({ accent, kind }: GetStartedVisualProps) {
           />
         </VisualShell>
       );
+    case "subagent-router":
+      return (
+        <VisualShell accent={accent}>
+          <SubagentRouterGraph />
+        </VisualShell>
+      );
+    case "subagent-handoff":
+      return (
+        <VisualShell accent={accent}>
+          <SubagentHandoffGraph />
+        </VisualShell>
+      );
+    case "subagent-settings":
+      return (
+        <VisualShell accent={accent}>
+          <SubagentSettingsGraph />
+        </VisualShell>
+      );
     case "create-plan":
       return (
         <VisualShell accent={accent}>
@@ -361,6 +379,60 @@ function ReviewGraph() {
       <DiagramNode title="review gate" detail="commit, push, publish" tone="gate">
         <MiniRows rows={["source diff", "check output", "setup rows"]} />
       </DiagramNode>
+    </div>
+  );
+}
+
+function SubagentRouterGraph() {
+  return (
+    <HubGraph
+      inputs={[
+        { title: "Goal", detail: "objective + state", tone: "state" },
+        { title: "OpenAI GPT-5.6", detail: "orchestration model", tone: "hosted" },
+      ]}
+      center={{ title: "Main agent", detail: "routes sub agents", tone: "gate" }}
+      outputs={[
+        { title: "GLM coding", detail: "copy-on-write edits" },
+        { title: "Research sub agent", detail: "findings + refs" },
+        { title: "Review sub agent", detail: "ranked findings" },
+        { title: "Test sub agent", detail: "validation evidence" },
+      ]}
+    />
+  );
+}
+
+function SubagentHandoffGraph() {
+  return (
+    <div className="get-started-subagent-handoff-graph">
+      <DiagramNode title="sub agent run" detail="bounded assignment" tone="hosted" />
+      <Connector label="send" />
+      <DiagramNode title="sub agent message" detail="short receipt + details" tone="gate">
+        <MiniRows rows={["summary", "message id", "run id"]} />
+      </DiagramNode>
+      <Connector label="wake" />
+      <DiagramNode title="parent decides" detail="reply, route, join, cancel" tone="state" />
+    </div>
+  );
+}
+
+function SubagentSettingsGraph() {
+  return (
+    <div className="get-started-subagent-settings-graph">
+      <DiagramNode title="default model" detail="shared sub agent model" tone="gate" />
+      <div className="get-started-subagent-role-table">
+        {[
+          ["coding", "GLM", "copy-on-write"],
+          ["research", "OpenAI", "read only"],
+          ["review", "default", "goal scoped"],
+        ].map(([role, tools, isolation]) => (
+          <div className="get-started-subagent-role-row" key={role}>
+            <strong>{role}</strong>
+            <span>{tools}</span>
+            <em>{isolation}</em>
+          </div>
+        ))}
+      </div>
+      <DiagramNode title="limits" detail="concurrency + token caps" tone="warn" />
     </div>
   );
 }

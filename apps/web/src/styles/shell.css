@@ -312,7 +312,7 @@
 .app-toast {
   position: fixed;
   right: 22px;
-  top: 58px;
+  bottom: 22px;
   z-index: 80;
   width: min(420px, calc(100vw - 44px));
   max-width: calc(100vw - 44px);
@@ -333,8 +333,8 @@
   border-color: rgba(99, 217, 138, 0.24);
 }
 
-.app-toast.error {
-  border-color: rgba(255, 122, 47, 0.28);
+.app-toast.error span {
+  color: #ff706a;
 }
 
 .app-toast span {

@@ -1,8 +1,21 @@
 import { useMemo } from "react";
 import type { Session } from "@openpond/contracts";
 import type { GoalRuntimeStatus } from "../lib/goal-runtime";
-import type { RuntimeIndexes } from "../lib/runtime-indexes";
+import { runtimeEventsForSession, type RuntimeIndexes } from "../lib/runtime-indexes";
 import type { SubagentRuntimeStatus } from "../lib/subagent-runtime";
+import { latestTurnCompletionState } from "../lib/turn-completion-state";
+
+function hasPendingTurn(session: Session, runtimeIndexes: RuntimeIndexes): boolean {
+  if (session.systemKind || session.status !== "active") return false;
+  return latestTurnCompletionState(runtimeEventsForSession(runtimeIndexes, session.id)) === "pending";
+}
+
+function shouldShowActiveSessionStatus(session: Session, runtimeIndexes: RuntimeIndexes): boolean {
+  if (session.systemKind || session.status !== "active") return false;
+  const events = runtimeEventsForSession(runtimeIndexes, session.id);
+  if (events.length === 0) return true;
+  return latestTurnCompletionState(events) === "pending";
+}
 
 export function useRunningSessionState({
   goalRuntime,
@@ -40,7 +53,7 @@ export function useRunningSessionState({
     }
     return next;
   }, [goalRuntime, goalRuntimeBySessionId, runtimeIndexes, selectedSession, selectedSessionId, sessionById]);
-  const runningSessionIds = useMemo(() => {
+  const eventBackedRunningSessionIds = useMemo(() => {
     const next = new Set(goalRunningSessionIds);
     for (const [sessionId, runtime] of subagentRuntimeBySessionId ?? []) {
       const session = sessionById.get(sessionId);
@@ -52,12 +65,25 @@ export function useRunningSessionState({
     }
     for (const session of sidebarSessions) {
       if (session.systemKind) continue;
-      if (session.status === "active") next.add(session.id);
+      if (hasPendingTurn(session, runtimeIndexes)) next.add(session.id);
+    }
+    if (selectedSession && hasPendingTurn(selectedSession, runtimeIndexes)) {
+      next.add(selectedSession.id);
     }
     return next;
-  }, [goalRunningSessionIds, runtimeIndexes, sidebarSessions, sessionById, subagentRuntimeBySessionId]);
+  }, [goalRunningSessionIds, runtimeIndexes, selectedSession, sidebarSessions, sessionById, subagentRuntimeBySessionId]);
+  const runningSessionIds = useMemo(() => {
+    const next = new Set(eventBackedRunningSessionIds);
+    for (const session of sidebarSessions) {
+      if (shouldShowActiveSessionStatus(session, runtimeIndexes)) next.add(session.id);
+    }
+    if (selectedSession && shouldShowActiveSessionStatus(selectedSession, runtimeIndexes)) {
+      next.add(selectedSession.id);
+    }
+    return next;
+  }, [eventBackedRunningSessionIds, runtimeIndexes, selectedSession, sidebarSessions]);
   const selectedSessionRunning = Boolean(
-    selectedSession && !selectedSession.systemKind && runningSessionIds.has(selectedSession.id),
+    selectedSession && !selectedSession.systemKind && eventBackedRunningSessionIds.has(selectedSession.id),
   );
 
   return {

@@ -46,6 +46,13 @@ export function useDefaultsSettings({
   );
   const [insightsEvidenceSources, setInsightsEvidenceSources] = useState(preferences.insightsEvidenceSources);
   const [subagentsEnabled, setSubagentsEnabled] = useState(preferences.subagents.enabled);
+  const [subagentsUseDefaultModel, setSubagentsUseDefaultModel] = useState(!preferences.subagents.defaultModelRef);
+  const [subagentsProvider, setSubagentsProvider] = useState<ChatProvider>(
+    preferences.subagents.defaultModelRef?.providerId ?? preferences.defaultChatProvider,
+  );
+  const [subagentsModel, setSubagentsModel] = useState(
+    preferences.subagents.defaultModelRef?.modelId ?? preferences.defaultChatModel,
+  );
   const [subagentRoles, setSubagentRoles] = useState(preferences.subagents.roles);
   const [subagentsMaxConcurrentRuns, setSubagentsMaxConcurrentRuns] = useState(
     preferences.subagents.maxConcurrentRuns,
@@ -58,6 +65,17 @@ export function useDefaultsSettings({
   );
   const [subagentsMaxTokens, setSubagentsMaxTokens] = useState<number | null>(preferences.subagents.maxTokens);
   const [saving, setSaving] = useState(false);
+  const subagentsDefaultModelRef = subagentsUseDefaultModel
+    ? null
+    : { providerId: subagentsProvider, modelId: subagentsModel.trim() };
+  const subagentsDirty =
+    subagentsEnabled !== preferences.subagents.enabled ||
+    !chatModelRefsEqual(subagentsDefaultModelRef, preferences.subagents.defaultModelRef) ||
+    subagentsMaxConcurrentRuns !== preferences.subagents.maxConcurrentRuns ||
+    subagentsMaxConcurrentRunsPerProvider !== preferences.subagents.maxConcurrentRunsPerProvider ||
+    subagentsMaxConcurrentRunsPerWorkspaceTarget !== preferences.subagents.maxConcurrentRunsPerWorkspaceTarget ||
+    subagentsMaxTokens !== preferences.subagents.maxTokens ||
+    JSON.stringify(subagentRoles) !== JSON.stringify(preferences.subagents.roles);
 
   useEffect(() => {
     setDefaultBranchPrefix(preferences.defaultBranchPrefix);
@@ -71,6 +89,9 @@ export function useDefaultsSettings({
     setInsightsModel(preferences.insightsModelRef?.modelId ?? preferences.defaultChatModel);
     setInsightsEvidenceSources(preferences.insightsEvidenceSources);
     setSubagentsEnabled(preferences.subagents.enabled);
+    setSubagentsUseDefaultModel(!preferences.subagents.defaultModelRef);
+    setSubagentsProvider(preferences.subagents.defaultModelRef?.providerId ?? preferences.defaultChatProvider);
+    setSubagentsModel(preferences.subagents.defaultModelRef?.modelId ?? preferences.defaultChatModel);
     setSubagentRoles(preferences.subagents.roles);
     setSubagentsMaxConcurrentRuns(preferences.subagents.maxConcurrentRuns);
     setSubagentsMaxConcurrentRunsPerProvider(preferences.subagents.maxConcurrentRunsPerProvider);
@@ -95,6 +116,19 @@ export function useDefaultsSettings({
     setInsightsModel((current) => normalizeChatModel(provider, current, providers));
   }
 
+  function changeSubagentsProvider(provider: ChatProvider) {
+    setSubagentsProvider(provider);
+    setSubagentsModel((current) => normalizeChatModel(provider, current, providers));
+  }
+
+  function subagentDefaultProvider() {
+    return subagentsUseDefaultModel ? preferences.defaultChatProvider : subagentsProvider;
+  }
+
+  function subagentDefaultModel() {
+    return subagentsUseDefaultModel ? preferences.defaultChatModel : subagentsModel;
+  }
+
   function updateSubagentRole(
     roleId: string,
     updater: (role: SubagentRoleSettings) => SubagentRoleSettings,
@@ -113,8 +147,8 @@ export function useDefaultsSettings({
   function setSubagentRoleUseDefaultModel(roleId: string, useDefault: boolean) {
     updateSubagentRole(roleId, (role) => {
       if (useDefault) return { ...role, modelRef: null };
-      const provider = role.modelRef?.providerId ?? preferences.defaultChatProvider;
-      const model = role.modelRef?.modelId ?? preferences.defaultChatModel;
+      const provider = role.modelRef?.providerId ?? subagentDefaultProvider();
+      const model = role.modelRef?.modelId ?? subagentDefaultModel();
       return {
         ...role,
         modelRef: modelRefForTurn(provider, model, providers) ?? null,
@@ -125,13 +159,13 @@ export function useDefaultsSettings({
   function changeSubagentRoleProvider(roleId: string, provider: ChatProvider) {
     updateSubagentRole(roleId, (role) => ({
       ...role,
-      modelRef: modelRefForTurn(provider, role.modelRef?.modelId ?? preferences.defaultChatModel, providers) ?? null,
+      modelRef: modelRefForTurn(provider, role.modelRef?.modelId ?? subagentDefaultModel(), providers) ?? null,
     }));
   }
 
   function setSubagentRoleModel(roleId: string, model: string) {
     updateSubagentRole(roleId, (role) => {
-      const provider = role.modelRef?.providerId ?? preferences.defaultChatProvider;
+      const provider = role.modelRef?.providerId ?? subagentDefaultProvider();
       const modelId = model.trim();
       return {
         ...role,
@@ -208,6 +242,9 @@ export function useDefaultsSettings({
           insightsEvidenceSources,
           subagents: {
             enabled: subagentsEnabled,
+            defaultModelRef: subagentsUseDefaultModel
+              ? null
+              : modelRefForTurn(subagentsProvider, subagentsModel, providers) ?? null,
             roles: subagentRoles,
             maxConcurrentRuns: clampInteger(subagentsMaxConcurrentRuns, 1, 32),
             maxConcurrentRunsPerProvider: subagentsMaxConcurrentRunsPerProvider === null
@@ -239,15 +276,20 @@ export function useDefaultsSettings({
     insightsModel,
     insightsEvidenceSources,
     subagentsEnabled,
+    subagentsUseDefaultModel,
+    subagentsProvider,
+    subagentsModel,
     subagentRoles,
     subagentsMaxConcurrentRuns,
     subagentsMaxConcurrentRunsPerProvider,
     subagentsMaxConcurrentRunsPerWorkspaceTarget,
     subagentsMaxTokens,
+    subagentsDirty,
     saving,
     chooseDefaultProjectDirectory,
     saveDefaults,
     changeInsightsProvider,
+    changeSubagentsProvider,
     changeSubagentRoleProvider,
     setAdvancedWorkspaceControls,
     setContextCompactionAutoEnabled,
@@ -257,6 +299,8 @@ export function useDefaultsSettings({
     setInsightsEnabled,
     setInsightsUseDefaultModel,
     setInsightsModel,
+    setSubagentsUseDefaultModel,
+    setSubagentsModel,
     setInsightsEvidenceSourceEnabled: (key: keyof InsightsEvidenceSourceSettings, enabled: boolean) =>
       setInsightsEvidenceSources((current) => ({ ...current, [key]: enabled })),
     setSubagentsEnabled,
@@ -282,4 +326,11 @@ export function useDefaultsSettings({
 function clampInteger(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function chatModelRefsEqual(
+  left: AppPreferences["subagents"]["defaultModelRef"],
+  right: AppPreferences["subagents"]["defaultModelRef"],
+): boolean {
+  return (left?.providerId ?? null) === (right?.providerId ?? null) && (left?.modelId ?? null) === (right?.modelId ?? null);
 }

@@ -172,6 +172,10 @@
   z-index: 1;
 }
 
+.provider-settings-form > .account-list-heading {
+  border-bottom: 0;
+}
+
 .provider-state-pill {
   display: inline-flex;
   align-items: center;
@@ -261,6 +265,7 @@
 }
 
 .provider-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -305,7 +310,7 @@
 }
 
 .provider-toggle input:focus-visible + span {
-  outline: 1px solid rgba(58, 163, 255, 0.55);
+  outline: 1px solid rgba(6, 182, 212, 0.6);
   outline-offset: 2px;
 }
 
@@ -636,24 +641,72 @@
 
 .settings-select-field select {
   appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #9b9b9b 50%) calc(100% - 16px) 50% / 5px 5px no-repeat,
+    linear-gradient(135deg, #9b9b9b 50%, transparent 50%) calc(100% - 11px) 50% / 5px 5px no-repeat,
+    #101010;
+  padding-right: 32px;
 }
 
 .settings-select-field input:focus,
 .settings-select-field select:focus {
-  border-color: rgba(58, 163, 255, 0.45);
+  border-color: rgba(6, 182, 212, 0.5);
 }
 
 .settings-check-row {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
   gap: 10px;
   max-width: 560px;
   padding: 2px 16px 16px;
   color: var(--text);
 }
 
-.settings-check-row input {
-  margin-top: 3px;
+.settings-check-row input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  outline: 0;
+  background: #101010;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, opacity 120ms ease;
+}
+
+.settings-check-row input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 5px;
+  margin-top: -1px;
+  border-bottom: 2px solid #061317;
+  border-left: 2px solid #061317;
+  transform: rotate(-45deg) scale(0);
+  transition: transform 120ms ease;
+}
+
+.settings-check-row input[type="checkbox"]:checked {
+  border-color: rgba(6, 182, 212, 0.88);
+  background: var(--cyan);
+}
+
+.settings-check-row input[type="checkbox"]:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.settings-check-row input[type="checkbox"]:focus-visible {
+  outline: 2px solid rgba(6, 182, 212, 0.35);
+  outline-offset: 2px;
+}
+
+.settings-check-row input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .settings-check-row span {
@@ -681,20 +734,118 @@
   max-width: none;
 }
 
-.subagent-role-list {
+.insights-settings .provider-settings-form > .settings-check-row {
+  padding: 12px 16px;
+}
+
+.insights-settings .settings-check-grid {
   display: grid;
   gap: 10px;
-  padding: 0 16px 16px;
+  padding: 14px 16px 16px;
+}
+
+.insights-settings .settings-check-grid .settings-check-row.compact {
+  max-width: none;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.subagents-settings {
+  max-width: 980px;
+}
+
+.subagent-settings-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.subagent-settings-title-row h1 {
+  margin: 0;
+}
+
+.subagent-settings-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.subagent-settings-form {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.subagent-settings-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.subagent-settings-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.subagent-settings-card-header > div {
+  min-width: 0;
+}
+
+.subagent-settings-card-header > div > span {
+  min-width: 0;
+  overflow: hidden;
+  color: #f2f2f2;
+  font-size: 14px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-settings-card-header > div > small {
+  min-width: 0;
+  color: #9b9b9b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.subagent-field-grid {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.subagent-field-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.subagent-field-grid.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.subagent-role-list {
+  display: grid;
+  min-width: 0;
 }
 
 .subagent-role-row {
   display: grid;
   gap: 12px;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
-  padding: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.subagent-role-row:first-child {
+  padding-top: 0;
 }
 
 .subagent-role-row.disabled {
@@ -702,11 +853,7 @@
 }
 
 .subagent-role-header {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .subagent-role-title {
@@ -715,30 +862,79 @@
   min-width: 0;
 }
 
-.subagent-role-title strong,
+.subagent-role-title span,
 .subagent-role-title small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.subagent-role-title strong {
+.subagent-role-title span {
   color: #f2f2f2;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 620;
+  white-space: nowrap;
 }
 
 .subagent-role-title small {
   color: #9b9b9b;
   font-size: 12px;
+  line-height: 1.35;
 }
 
 .subagent-role-controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-columns: minmax(220px, 1.25fr) repeat(3, minmax(140px, 0.75fr));
+  align-items: end;
   gap: 12px;
   min-width: 0;
+}
+
+.subagent-role-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.subagents-settings .provider-toggle {
+  width: 44px;
+  height: 30px;
+}
+
+.subagents-settings .provider-toggle > span {
+  width: 40px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.subagents-settings .provider-toggle > span::after {
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #a9a9a9;
+}
+
+.subagents-settings .provider-toggle input:checked + span {
+  border-color: rgba(6, 182, 212, 0.42);
+  background: rgba(6, 182, 212, 0.26);
+}
+
+.subagents-settings .provider-toggle input:checked + span::after {
+  transform: translateX(18px);
+  background: var(--cyan);
+}
+
+@media (max-width: 820px) {
+  .subagent-field-grid.two,
+  .subagent-field-grid.four,
+  .subagent-role-controls,
+  .subagent-role-budget-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .settings-radio-group {
@@ -940,6 +1136,19 @@
 .settings-icon-button:disabled,
 .inline-action:disabled {
   opacity: 0.5;
+}
+
+.subagent-save-button {
+  margin: 0;
+}
+
+.subagent-save-button.dirty:not(:disabled) {
+  background: var(--cyan);
+  color: #061317;
+}
+
+.subagent-save-button.dirty:hover:not(:disabled) {
+  background: #22d3ee;
 }
 
 .settings-spin {

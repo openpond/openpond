@@ -26,6 +26,7 @@ import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
+import { RenameChatDialog } from "./RenameChatDialog";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
@@ -179,6 +180,7 @@ export function SidebarSessionRow({
   onDragEnd,
   onDragOver,
   onDrop,
+  onRename,
 }: {
   session: Session;
   selected: boolean;
@@ -203,7 +205,9 @@ export function SidebarSessionRow({
   onDragEnd?: () => void;
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
+  onRename?: (session: Session, title: string) => void;
 }) {
+  const [renameOpen, setRenameOpen] = useState(false);
   const goalRunning = goalRuntime?.tone === "active";
   const subagentRunning = (subagentRuntime?.activeCount ?? 0) > 0;
   const hasChildSessions = childSessionCount > 0 && Boolean(onToggleChildSessions);
@@ -261,6 +265,7 @@ export function SidebarSessionRow({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onDoubleClick={onRename ? () => setRenameOpen(true) : undefined}
     >
       {effectiveHideIcon ? null : hasChildSessions ? (
         <button
@@ -312,9 +317,17 @@ export function SidebarSessionRow({
         </div>
       </div>
     </SidebarInteractiveRow>
-  );
+);
 
-  if (!rowRunning) return row;
+  const renameDialog = renameOpen && onRename ? (
+    <RenameChatDialog
+      session={session}
+      onSave={(title) => onRename(session, title)}
+      onClose={() => setRenameOpen(false)}
+    />
+  ) : null;
+
+  if (!rowRunning) return (<>{row}{renameDialog}</>);
 
   return (
     <div
@@ -324,6 +337,7 @@ export function SidebarSessionRow({
       onPointerEnter={updateRunningPopoverPosition}
     >
       {row}
+      {renameDialog}
       <SidebarSessionRunningPopover
         goalRuntime={!subagentRunning && goalRunning ? goalRuntime ?? null : null}
         id={runningPopoverId}
@@ -1009,6 +1023,7 @@ function SidebarInteractiveRow({
   onDragEnd,
   onDragOver,
   onDrop,
+  onDoubleClick,
 }: {
   children: ReactNode;
   className?: string;
@@ -1025,6 +1040,7 @@ function SidebarInteractiveRow({
   onDragEnd?: () => void;
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
+  onDoubleClick?: () => void;
 }) {
   const draggable = Boolean(onDragStart);
   return (
@@ -1047,6 +1063,7 @@ function SidebarInteractiveRow({
       aria-expanded={ariaExpanded}
       aria-describedby={ariaDescribedBy}
       onClick={onSelect}
+      onDoubleClick={onDoubleClick}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

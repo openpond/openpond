@@ -1707,5 +1707,29 @@ describe("chat message projection", () => {
     expect(messages[0]?.activities?.map((activity) => activity.label)).toEqual(["Goal context", "Turn aborted"]);
     expect(messages[0]?.activities?.[0]?.content).toBe("Keep the sidebar work in scope.");
     expect(messages[0]?.activities?.[1]?.content).toBe("The user interrupted the previous turn.");
+    expect(activityGroupSummary(messages[0]?.activities ?? [])).toBe("Goal context updated and turn interrupted");
+  });
+
+  test("summarizes single Codex control outcomes without generic context wording", () => {
+    const goalContextMessages = buildChatMessages([
+      runtimeEvent({
+        id: "goal_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "<goal_context>\nContinue after compaction.\n</goal_context>" },
+      }),
+    ]);
+    const interruptedMessages = buildChatMessages([
+      runtimeEvent({
+        id: "abort_1",
+        name: "turn.interrupted",
+        turnId: "turn_1",
+        output: "The user interrupted the previous turn.",
+        data: { kind: "turn_aborted" },
+      }),
+    ]);
+
+    expect(activityGroupSummary(goalContextMessages[0]?.activities ?? [])).toBe("Goal context updated");
+    expect(activityGroupSummary(interruptedMessages[0]?.activities ?? [])).toBe("Turn interrupted");
   });
 });

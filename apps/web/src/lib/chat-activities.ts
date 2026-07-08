@@ -112,10 +112,15 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const receipt = activityReceipt(item);
   const meta = activityMeta(item);
   const openSession = activityOpenSession(item);
+  const subagentMessage = activitySubagentMessage(item);
   return {
     id: item.id,
-    label: activityLabel(item),
-    content: activityContent(item, imagePreview),
+    label: subagentMessage
+      ? subagentMessage.direction === "received"
+        ? "Child message received"
+        : "Child message sent"
+      : activityLabel(item),
+    content: subagentMessage?.summary ?? activityContent(item, imagePreview),
     timestamp: item.timestamp,
     ...(kind ? { kind } : {}),
     ...(controlKind ? { kind: "control" as const, controlKind } : {}),
@@ -124,6 +129,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
     ...(openSession ? { openSession } : {}),
+    ...(subagentMessage ? { subagentMessage } : {}),
     state: activityState(item),
     ...(imagePreview ? { imagePreview } : {}),
   };
@@ -546,6 +552,66 @@ function activityOpenSession(item: RuntimeEvent): ActivityItem["openSession"] | 
     ...(roleId ? { roleId } : {}),
     ...(status ? { status } : {}),
   };
+}
+
+function activitySubagentMessage(item: RuntimeEvent): ActivityItem["subagentMessage"] | undefined {
+  if (item.name !== "subagent.message") return undefined;
+  const data = asRecord(item.data);
+  const message = asRecord(data?.message);
+  if (!message) return undefined;
+  const messageId = stringValue(message, ["id"]);
+  const kind = stringValue(message, ["kind"]);
+  const fromRunId = stringValue(message, ["fromRunId"]);
+  const body = stringValue(message, ["body"]);
+  if (!messageId || !kind || !fromRunId || !body) return undefined;
+
+  const delivery = asRecord(data?.delivery ?? message.delivery);
+  const deliveredParentSessionId = stringValue(delivery, ["deliveredParentSessionId"]);
+  const direction = deliveredParentSessionId === item.sessionId && !fromRunId.startsWith("parent:")
+    ? "received"
+    : "sent";
+  const refs = Array.isArray(message.refs)
+    ? message.refs.flatMap((value) => {
+        const ref = asRecord(value);
+        const refKind = stringValue(ref, ["kind"]);
+        const refId = stringValue(ref, ["id"]);
+        const refLabel = stringValue(ref, ["label"]);
+        return refKind && refId && refLabel ? [{ kind: refKind, id: refId, label: refLabel }] : [];
+      })
+    : [];
+
+  return {
+    direction,
+    summary: summarizeSubagentMessageBody(body),
+    body,
+    messageId,
+    kind,
+    fromRunId,
+    toRunId: stringValue(message, ["toRunId"]),
+    toRole: stringValue(message, ["toRole"]),
+    parentGoalId: stringValue(message, ["parentGoalId"]),
+    childSessionId: stringValue(data, ["childSessionId"]),
+    roleId: stringValue(data, ["roleId"]),
+    deliveryStatus: stringValue(delivery, ["status"]),
+    wakeReason: stringValue(delivery, ["wakeParentReason"]),
+    createdAt: stringValue(message, ["createdAt"]),
+    refs,
+  };
+}
+
+function summarizeSubagentMessageBody(body: string): string {
+  const normalized = body.replace(/\s+/g, " ").trim();
+  if (!normalized) return "No message body";
+  const sentence = /^(.*?[.!?])(?:\s|$)/.exec(normalized)?.[1] ?? normalized;
+  return truncateActivitySummary(sentence, 96);
+}
+
+function truncateActivitySummary(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  const sliced = value.slice(0, maxLength - 1);
+  const boundary = sliced.lastIndexOf(" ");
+  const end = boundary >= Math.floor(maxLength * 0.55) ? boundary : maxLength - 1;
+  return `${sliced.slice(0, end).trimEnd()}...`;
 }
 
 function receiptFromData(data: Record<string, unknown> | null): { id: string; status: string; totalUsd: string } | null {

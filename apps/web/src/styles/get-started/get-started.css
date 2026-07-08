@@ -374,6 +374,7 @@
 
 .get-started-flow-graph,
 .get-started-insights-loop,
+.get-started-subagent-handoff-graph,
 .get-started-review-graph,
 .get-started-sync-graph,
 .get-started-publish-graph {
@@ -385,6 +386,7 @@
 
 .get-started-flow-graph > .get-started-diagram-node,
 .get-started-insights-loop > .get-started-diagram-node,
+.get-started-subagent-handoff-graph > .get-started-diagram-node,
 .get-started-review-graph > .get-started-diagram-node,
 .get-started-sync-graph > .get-started-diagram-node,
 .get-started-publish-graph > .get-started-diagram-node {
@@ -557,6 +559,7 @@
 .get-started-apps-graph,
 .get-started-insights-list,
 .get-started-setup-graph,
+.get-started-subagent-settings-graph,
 .get-started-router-graph {
   display: grid;
   align-items: center;
@@ -737,6 +740,51 @@
   grid-template-columns: minmax(0, 1.18fr) minmax(128px, 0.62fr);
 }
 
+.get-started-subagent-settings-graph {
+  grid-template-columns: minmax(128px, 0.56fr) minmax(0, 1fr) minmax(128px, 0.56fr);
+}
+
+.get-started-subagent-role-table {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.get-started-subagent-role-row {
+  display: grid;
+  grid-template-columns: minmax(68px, 0.42fr) minmax(92px, 0.58fr) minmax(104px, 0.62fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 39px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 8px 9px;
+}
+
+.get-started-subagent-role-row strong,
+.get-started-subagent-role-row span,
+.get-started-subagent-role-row em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.get-started-subagent-role-row strong {
+  color: #eeeeee;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.get-started-subagent-role-row span,
+.get-started-subagent-role-row em {
+  color: #9a9a9a;
+  font-size: 11px;
+  font-style: normal;
+}
+
 .get-started-setup-table {
   display: grid;
   gap: 7px;
@@ -796,6 +844,7 @@
 
   .get-started-flow-graph,
   .get-started-insights-loop,
+  .get-started-subagent-handoff-graph,
   .get-started-review-graph,
   .get-started-sync-graph,
   .get-started-publish-graph {
@@ -857,6 +906,7 @@
   .get-started-apps-graph,
   .get-started-dual-source-graph,
   .get-started-setup-graph,
+  .get-started-subagent-settings-graph,
   .get-started-router-graph {
     grid-template-columns: minmax(0, 1fr);
   }
