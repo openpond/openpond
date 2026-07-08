@@ -172,6 +172,7 @@ export const MessageRow = memo(function MessageRow({
         <CreatePipelineStatusReceipt
           request={message.createPipelineRequest}
           snapshot={message.createPipeline ?? null}
+          progressActivities={message.createPipelineDebugActivities}
         />
       )}
       {showFooter && (
