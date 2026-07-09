@@ -61,10 +61,16 @@ describe("release workflow", () => {
     expect(packagedAppCandidates(root, "darwin")).toEqual([
       join(root, "release", "mac", "openpond.app"),
       join(root, "release", "mac", "openpond nightly.app"),
+      join(root, "release", "mac", "openpond-app.app"),
+      join(root, "release", "mac", "openpond-app-nightly.app"),
       join(root, "release", "mac-arm64", "openpond.app"),
       join(root, "release", "mac-arm64", "openpond nightly.app"),
+      join(root, "release", "mac-arm64", "openpond-app.app"),
+      join(root, "release", "mac-arm64", "openpond-app-nightly.app"),
       join(root, "release", "mac-universal", "openpond.app"),
       join(root, "release", "mac-universal", "openpond nightly.app"),
+      join(root, "release", "mac-universal", "openpond-app.app"),
+      join(root, "release", "mac-universal", "openpond-app-nightly.app"),
     ]);
     expect(
       launchTargetForPath(join(root, "release", "mac", "openpond nightly.app"), "darwin").command,
@@ -73,13 +79,21 @@ describe("release workflow", () => {
     expect(packagedAppCandidates(root, "win32")).toEqual([
       join(root, "release", "win-unpacked", "openpond.exe"),
       join(root, "release", "win-unpacked", "openpond nightly.exe"),
+      join(root, "release", "win-unpacked", "openpond-app.exe"),
+      join(root, "release", "win-unpacked", "openpond-app-nightly.exe"),
       join(root, "release", "win-ia32-unpacked", "openpond.exe"),
       join(root, "release", "win-ia32-unpacked", "openpond nightly.exe"),
+      join(root, "release", "win-ia32-unpacked", "openpond-app.exe"),
+      join(root, "release", "win-ia32-unpacked", "openpond-app-nightly.exe"),
       join(root, "release", "win-arm64-unpacked", "openpond.exe"),
       join(root, "release", "win-arm64-unpacked", "openpond nightly.exe"),
+      join(root, "release", "win-arm64-unpacked", "openpond-app.exe"),
+      join(root, "release", "win-arm64-unpacked", "openpond-app-nightly.exe"),
     ]);
 
     expect(packagedAppCandidates(root, "linux")).toEqual([
+      join(root, "release", "linux-unpacked", "openpond-app"),
+      join(root, "release", "linux-unpacked", "openpond-app-nightly"),
       join(root, "release", "linux-unpacked", "openpond"),
       join(root, "release", "linux-unpacked", "openpond nightly"),
       join(root, "release", "openpond-0.0.1.AppImage"),
@@ -94,6 +108,8 @@ describe("release workflow", () => {
       await writeFile(join(root, "release", "openpond-0.1.0-linux-x64.AppImage"), "");
 
       expect(packagedAppCandidates(root, "linux")).toEqual([
+        join(root, "release", "linux-unpacked", "openpond-app"),
+        join(root, "release", "linux-unpacked", "openpond-app-nightly"),
         join(root, "release", "linux-unpacked", "openpond"),
         join(root, "release", "linux-unpacked", "openpond nightly"),
         join(root, "release", "openpond-0.1.0-linux-x64.AppImage"),

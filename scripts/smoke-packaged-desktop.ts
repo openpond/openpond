@@ -296,20 +296,32 @@ export function packagedAppCandidates(
     return [
       path.join(root, "release", "mac", "openpond.app"),
       path.join(root, "release", "mac", "openpond nightly.app"),
+      path.join(root, "release", "mac", "openpond-app.app"),
+      path.join(root, "release", "mac", "openpond-app-nightly.app"),
       path.join(root, "release", "mac-arm64", "openpond.app"),
       path.join(root, "release", "mac-arm64", "openpond nightly.app"),
+      path.join(root, "release", "mac-arm64", "openpond-app.app"),
+      path.join(root, "release", "mac-arm64", "openpond-app-nightly.app"),
       path.join(root, "release", "mac-universal", "openpond.app"),
       path.join(root, "release", "mac-universal", "openpond nightly.app"),
+      path.join(root, "release", "mac-universal", "openpond-app.app"),
+      path.join(root, "release", "mac-universal", "openpond-app-nightly.app"),
     ];
   }
   if (platform === "win32") {
     return [
       path.join(root, "release", "win-unpacked", "openpond.exe"),
       path.join(root, "release", "win-unpacked", "openpond nightly.exe"),
+      path.join(root, "release", "win-unpacked", "openpond-app.exe"),
+      path.join(root, "release", "win-unpacked", "openpond-app-nightly.exe"),
       path.join(root, "release", "win-ia32-unpacked", "openpond.exe"),
       path.join(root, "release", "win-ia32-unpacked", "openpond nightly.exe"),
+      path.join(root, "release", "win-ia32-unpacked", "openpond-app.exe"),
+      path.join(root, "release", "win-ia32-unpacked", "openpond-app-nightly.exe"),
       path.join(root, "release", "win-arm64-unpacked", "openpond.exe"),
       path.join(root, "release", "win-arm64-unpacked", "openpond nightly.exe"),
+      path.join(root, "release", "win-arm64-unpacked", "openpond-app.exe"),
+      path.join(root, "release", "win-arm64-unpacked", "openpond-app-nightly.exe"),
     ];
   }
   const linuxAppImages = existingFiles(path.join(root, "release"))
@@ -317,6 +329,8 @@ export function packagedAppCandidates(
     .sort((left, right) => left.localeCompare(right))
     .map((file) => path.join(root, "release", file));
   return [
+    path.join(root, "release", "linux-unpacked", "openpond-app"),
+    path.join(root, "release", "linux-unpacked", "openpond-app-nightly"),
     path.join(root, "release", "linux-unpacked", "openpond"),
     path.join(root, "release", "linux-unpacked", "openpond nightly"),
     ...linuxAppImages,
