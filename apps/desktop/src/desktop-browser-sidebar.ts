@@ -696,7 +696,7 @@ export class BrowserSidebarManager {
 
   private async loadTab(conversationId: string, tabId: string, rawUrl: string): Promise<void> {
     const url = rawUrl ? normalizeBrowserUrl(rawUrl, rawUrl.startsWith("file://")) : "";
-    const runtime = await this.ensureRuntime(conversationId, tabId);
+    const runtime = await this.ensureRuntime(conversationId, tabId, { restoreStoredUrl: false });
     await this.store.updateTab(conversationId, tabId, { url, title: null, faviconUrl: null });
     if (url) await runtime.view.webContents.loadURL(url);
     await this.attachActive(conversationId);
@@ -719,14 +719,20 @@ export class BrowserSidebarManager {
     this.emitState(conversationId, conversation);
   }
 
-  private async ensureRuntime(conversationId: string, tabId: string): Promise<RuntimeTab> {
+  private async ensureRuntime(
+    conversationId: string,
+    tabId: string,
+    options: { restoreStoredUrl?: boolean } = {},
+  ): Promise<RuntimeTab> {
     const key = runtimeKey(conversationId, tabId);
     const existing = this.runtimes.get(key);
     if (existing) return existing;
     const runtime = this.createRuntime(conversationId, tabId);
     this.runtimes.set(key, runtime);
-    const tab = await this.tab({ conversationId, tabId });
-    if (tab?.url) void runtime.view.webContents.loadURL(tab.url).catch(() => undefined);
+    if (options.restoreStoredUrl !== false) {
+      const tab = await this.tab({ conversationId, tabId });
+      if (tab?.url) void runtime.view.webContents.loadURL(tab.url).catch(() => undefined);
+    }
     return runtime;
   }
 
