@@ -772,6 +772,7 @@ describe("BYOK turn runner dispatch", () => {
       "openpond_goal_control",
       "resource_search",
       "resource_read",
+      "web_fetch",
       "web_search",
       "openpond_action_search",
       "openpond_action_run",

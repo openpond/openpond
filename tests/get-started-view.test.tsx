@@ -22,6 +22,7 @@ describe("GetStartedView", () => {
     );
 
     expect(html).toContain("Goal loop");
+    expect(html).toContain("Orchestration");
     expect(html).toContain("Create/Edit Loop");
     expect(html).toContain("Insights Loop");
     expect(html).toContain("Profile");
@@ -78,16 +79,17 @@ describe("GetStartedView", () => {
     expect(html).not.toContain("<svg");
   });
 
-  test("trims repeated decks into six focused topics", () => {
+  test("trims repeated decks into seven focused topics", () => {
     expect(GET_STARTED_DECKS.map((deck) => deck.label)).toEqual([
       "Goal loop",
+      "Orchestration",
       "Create/Edit Loop",
       "Insights Loop",
       "Profile",
       "Local <> Hosted",
       "Connect 3rd party apps",
     ]);
-    expect(GET_STARTED_DECKS.flatMap((deck) => deck.slides)).toHaveLength(11);
+    expect(GET_STARTED_DECKS.flatMap((deck) => deck.slides)).toHaveLength(14);
   });
 
   test("frames create and edit as first-class goal-loop agents", () => {

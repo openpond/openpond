@@ -348,7 +348,7 @@ describe("turn runner workspace cwd", () => {
 
     assert.equal(resolved.status, "accepted");
     assert.equal(approvals[0].status, "accepted");
-    assert.equal(turns[0].createPipeline.state, "applying_source");
+    assertHostedCreateApplyBlocked(turns[0].createPipeline);
     assert.equal(turns[0].createPipeline.plan.status, "approved");
     assert.equal(events.some((event) => event.name === "approval.resolved"), true);
   });
@@ -611,7 +611,7 @@ describe("turn runner workspace cwd", () => {
       createPipelineRequest: request,
       createPipeline: createPipelineSnapshot(request, "applying_source", "approved"),
     });
-    assert.equal(approved.createPipeline.state, "applying_source");
+    assertHostedCreateApplyBlocked(approved.createPipeline);
     assert.equal(approved.createPipeline.plan.status, "approved");
     assert.equal(events.some((event) => event.name === "create_pipeline.updated"), true);
   });
@@ -1244,6 +1244,18 @@ function createLocalPipelineRequest(id = "create_request_local_update", paths = 
       targetProject: null,
     },
   };
+}
+
+function assertHostedCreateApplyBlocked(snapshot) {
+  assert.equal(snapshot.state, "blocked");
+  assert.equal(
+    snapshot.blockedReason,
+    "Approved hosted Create plans from this chat require the Cloud work item background flow. No local source mutation was performed.",
+  );
+  assert.equal(snapshot.metadata.createPipelineApproval.status, "blocked");
+  assert.equal(snapshot.metadata.createPipelineApproval.reason, "hosted_create_pipeline_apply_not_configured");
+  assert.equal(snapshot.metadata.createPipelineApproval.adapterKind, "hosted");
+  assert.ok(snapshot.metadata.createPipelineApproval.workspaceExecutionTarget);
 }
 
 async function writeGeneratedSupportSummaryAgent({ repoPath, sourcePath, agentId }) {

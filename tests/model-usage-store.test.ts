@@ -101,6 +101,8 @@ const expectedUsageAttributionKeys = [
   "localProjectId",
   "sessionId",
   "sourceEventSequence",
+  "subagentRoleId",
+  "subagentRunId",
   "surface",
   "turnId",
   "workflowKind",
@@ -209,6 +211,8 @@ function usageRecord(patch: Partial<ModelUsageRecord> = {}): ModelUsageRecord {
       localProjectId: "project_usage_1",
       cloudProjectId: null,
       sourceEventSequence: null,
+      subagentRoleId: null,
+      subagentRunId: null,
     },
     ...patch,
   };

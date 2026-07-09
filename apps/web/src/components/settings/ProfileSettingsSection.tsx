@@ -213,6 +213,12 @@ export function ProfileSettingsSection({
             profile={profile}
           />
 
+          <ProfileSummaryCard
+            profile={profile}
+            pendingCreatePlanReviews={pendingCreatePlanReviews}
+            selectedDefaultTeamId={selectedDefaultTeamId}
+          />
+
           {summaryDialogOpen ? (
             <ProfileSummaryDialog
               profile={profile}
@@ -481,7 +487,7 @@ function ProfileControls({
                   onClick={onOpenSummary}
                 >
                   <FileText size={14} />
-                  <span>Summary</span>
+                  <span>Details</span>
                 </button>
               ) : null}
               <button

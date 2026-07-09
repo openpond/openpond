@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createElement, type FormEvent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ChatProvider, InsightsEvidenceSourceSettings } from "@openpond/contracts";
 
-import { DefaultsSettingsSection } from "../apps/web/src/components/settings/DefaultsSettingsSection";
+import { ContextSettingsSection } from "../apps/web/src/components/settings/HarnessSettingsSections";
 import { DEFAULT_APP_PREFERENCES } from "../apps/web/src/lib/app-models";
 
-function renderDefaultsSettings(input: { autoEnabled?: boolean } = {}): string {
+function renderContextSettings(input: { autoEnabled?: boolean } = {}): string {
   const preferences = {
     ...DEFAULT_APP_PREFERENCES,
     contextCompaction: {
@@ -15,33 +14,12 @@ function renderDefaultsSettings(input: { autoEnabled?: boolean } = {}): string {
     },
   };
   return renderToStaticMarkup(
-    createElement(DefaultsSettingsSection, {
-      advancedWorkspaceControls: preferences.advancedWorkspaceControls,
+    createElement(ContextSettingsSection, {
       contextCompactionAutoEnabled: preferences.contextCompaction.autoEnabled,
-      defaultBranchPrefix: preferences.defaultBranchPrefix,
-      defaultNewProjectDirectory: preferences.defaultNewProjectDirectory,
-      goalStorageLocation: preferences.goalStorageLocation,
-      insightsEnabled: preferences.insightsEnabled,
-      insightsUseDefaultModel: true,
-      insightsProvider: preferences.defaultChatProvider,
-      insightsModel: preferences.defaultChatModel,
-      insightsEvidenceSources: preferences.insightsEvidenceSources,
       preferences,
-      providers: null,
       saving: false,
-      chooseDefaultProjectDirectory: () => undefined,
       saveDefaults: (_event: FormEvent<HTMLFormElement>) => undefined,
-      changeInsightsProvider: (_provider: ChatProvider) => undefined,
-      setAdvancedWorkspaceControls: (_value: boolean) => undefined,
       setContextCompactionAutoEnabled: (_value: boolean) => undefined,
-      setDefaultBranchPrefix: (_value: string) => undefined,
-      setDefaultNewProjectDirectory: (_value: string) => undefined,
-      setGoalStorageLocation: (_value: typeof preferences.goalStorageLocation) => undefined,
-      setInsightsEnabled: (_value: boolean) => undefined,
-      setInsightsUseDefaultModel: (_value: boolean) => undefined,
-      setInsightsModel: (_value: string) => undefined,
-      setInsightsEvidenceSourceEnabled: (_key: keyof InsightsEvidenceSourceSettings, _enabled: boolean) =>
-        undefined,
     }),
   );
 }
@@ -54,9 +32,9 @@ function autoCompactionInputMarkup(html: string): string {
   return html.slice(inputStart, inputEnd + 1);
 }
 
-describe("DefaultsSettingsSection", () => {
+describe("ContextSettingsSection", () => {
   test("surfaces auto context compaction as a default-on setting", () => {
-    const html = renderDefaultsSettings();
+    const html = renderContextSettings();
 
     expect(html).toContain("Context");
     expect(html).toContain("Auto compact long chats");
@@ -66,7 +44,7 @@ describe("DefaultsSettingsSection", () => {
   });
 
   test("renders the saved-off state", () => {
-    const html = renderDefaultsSettings({ autoEnabled: false });
+    const html = renderContextSettings({ autoEnabled: false });
 
     expect(html).toContain("Auto compact long chats");
     expect(autoCompactionInputMarkup(html)).not.toContain("checked");
