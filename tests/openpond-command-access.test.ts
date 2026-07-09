@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -53,6 +53,7 @@ describe("OpenPond command access service", () => {
     });
 
     try {
+      const expectedCwd = await realpath(cwd);
       const result = await service.executeCommand({
         session: session({ cwd, openPondCommandAccessMode: "full-access" }),
         command: `${JSON.stringify(process.execPath)} -e "console.log(process.cwd())"`,
@@ -61,7 +62,7 @@ describe("OpenPond command access service", () => {
 
       expect(result.ok).toBe(true);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe(cwd);
+      expect(result.stdout.trim()).toBe(expectedCwd);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -75,6 +76,7 @@ describe("OpenPond command access service", () => {
     });
 
     try {
+      const expectedCwd = await realpath(cwd);
       const result = await service.executeCommand({
         session: session({
           workspaceKind: undefined,
@@ -89,7 +91,7 @@ describe("OpenPond command access service", () => {
 
       expect(result.ok).toBe(true);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe(cwd);
+      expect(result.stdout.trim()).toBe(expectedCwd);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

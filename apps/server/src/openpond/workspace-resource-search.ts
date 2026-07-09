@@ -186,7 +186,7 @@ async function exactRipgrepItems(
     ],
     repoPath,
   );
-  if (result.code > 1) return null;
+  if (result.code !== 0) return null;
 
   const visible = new Set(files);
   const items = new Map(pathItems);

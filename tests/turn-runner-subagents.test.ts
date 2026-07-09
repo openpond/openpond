@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
@@ -384,6 +384,7 @@ describe("turn runner subagent native tools", () => {
       await writeFile(path.join(repoPath, "README.md"), "parent\n", "utf8");
       git(repoPath, ["add", "README.md"]);
       git(repoPath, ["commit", "-m", "Initial commit"]);
+      const expectedParentRepoPath = await realpath(repoPath);
 
       const harness = createSubagentHarness({
         toolName: "openpond_subagent_start",
@@ -459,7 +460,7 @@ describe("turn runner subagent native tools", () => {
       await expect(readFile(path.join(repoPath, "child-notes.md"), "utf8")).rejects.toThrow();
       expect((run?.metadata as any)?.subagentWorkspace).toMatchObject({
         implementation: "git_worktree",
-        parentRepoPath: repoPath,
+        parentRepoPath: expectedParentRepoPath,
         repoPath: worktreePath,
       });
       expect((run?.metadata as any)?.workspaceHandoff).toMatchObject({
@@ -478,7 +479,7 @@ describe("turn runner subagent native tools", () => {
         runId: run?.id,
         roleId: "coding",
         childSessionId: childSession?.id,
-        parentRepoPath: repoPath,
+        parentRepoPath: expectedParentRepoPath,
       });
       expect(
         harness.events.some(
@@ -497,7 +498,7 @@ describe("turn runner subagent native tools", () => {
       expect((appliedRun?.metadata as any)?.workspaceHandoff?.applyResult).toMatchObject({
         status: "applied",
         approvalId: approval?.id,
-        parentRepoPath: repoPath,
+        parentRepoPath: expectedParentRepoPath,
       });
       const appliedHandoff = (appliedRun?.metadata as any)?.workspaceHandoff;
       expect(appliedHandoff?.patchPath).toContain(path.join("openpond-test-attachments", "subagents"));
@@ -777,6 +778,7 @@ describe("turn runner subagent native tools", () => {
       );
       git(repoPath, ["add", ".gitignore", "package.json", "fixture.test.ts"]);
       git(repoPath, ["commit", "-m", "Initial commit"]);
+      const expectedParentRepoPath = await realpath(repoPath);
 
       const commandResults: Array<{ cwd: string | null; exitCode: number | null; stdout: string; stderr: string }> = [];
       const harness = createSubagentHarness({
@@ -860,7 +862,7 @@ describe("turn runner subagent native tools", () => {
         expect.objectContaining({
           path: "node_modules",
           status: "linked",
-          sourcePath: path.join(repoPath, "node_modules"),
+          sourcePath: path.join(expectedParentRepoPath, "node_modules"),
           targetPath: path.join(worktreePath, "node_modules"),
         }),
       );
