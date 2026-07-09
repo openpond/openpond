@@ -88,7 +88,7 @@ export default desktopScenario({
       throw new Error("Expected openpond_subagent_join to run in the queued parent wake turn, not the initial parent turn.");
     }
     await waitForCompletedTurn(harness, session.id, joinEvent, "queued parent wake turn completion");
-    const completedEvent = await harness.events.waitForSubagentCompleted(session.id, runId) as RuntimeEvent;
+    const submittedEvent = await harness.events.waitForSubagentSubmitted(session.id, runId) as RuntimeEvent;
 
     await harness.renderer.selectSession(session.id, { timeoutMs: 10_000 });
     await harness.renderer.assertText(title, { label: "handoff parent session after wake" });
@@ -96,7 +96,7 @@ export default desktopScenario({
     await harness.renderer.assertText(handoffBody, { label: "handoff body visible in parent" });
     await expandHandoffActivityDetails(harness);
     await harness.renderer.assertText("parent_wake_queued", { label: "handoff wake metadata value" });
-    await harness.renderer.assertText("Research subagent lifecycle complete for", {
+    await harness.renderer.assertText("Research subagent lifecycle submitted for review for", {
       label: "queued parent wake response",
     });
     harness.recordAssertion("parentHandoffVisible", true);
@@ -104,8 +104,8 @@ export default desktopScenario({
     harness.recordAssertion("queuedParentWakeTurnCompleted", true);
     await harness.screenshot("subagent-handoff-parent-wake-parent-metadata");
 
-    const completedRun = asRecord(asRecord(completedEvent.data)?.run);
-    const completedChildSessionId = stringFromRecord(completedRun, "childSessionId") ?? childSessionId;
+    const submittedRun = asRecord(asRecord(submittedEvent.data)?.run);
+    const submittedChildSessionId = stringFromRecord(submittedRun, "childSessionId") ?? childSessionId;
     const bootstrap = await harness.api.bootstrap<BootstrapPayload>();
     const parentStartEvents = bootstrap.events.filter((event) =>
       event.sessionId === session.id &&
@@ -124,10 +124,10 @@ export default desktopScenario({
     if (parentHandoffMessages.length !== 1) {
       throw new Error(`Expected exactly one parent handoff message event, found ${parentHandoffMessages.length}.`);
     }
-    const childSession = bootstrap.sessions.find((item) => item.id === completedChildSessionId);
-    if (!childSession) throw new Error(`Child session ${completedChildSessionId} was not present in bootstrap.`);
+    const childSession = bootstrap.sessions.find((item) => item.id === submittedChildSessionId);
+    if (!childSession) throw new Error(`Child session ${submittedChildSessionId} was not present in bootstrap.`);
     if (childSession.parentSessionId !== session.id) {
-      throw new Error(`Child session ${completedChildSessionId} was not linked to parent ${session.id}.`);
+      throw new Error(`Child session ${submittedChildSessionId} was not linked to parent ${session.id}.`);
     }
 
     await expandChildSessionGroup(harness, session.id);
@@ -137,13 +137,13 @@ export default desktopScenario({
     harness.recordAssertion("childSidebarRowVisible", true);
 
     await harness.renderer.selectSession(childSession.id);
-    await harness.renderer.assertText("Research subagent completed after sending the scripted parent handoff.", {
+    await harness.renderer.assertText("Research subagent submitted after sending the scripted parent handoff.", {
       label: "child handoff final text",
     });
     harness.recordAssertion("childConversationHandoffTextVisible", true);
     harness.recordMetadata({
       runId,
-      childSessionId: completedChildSessionId,
+      childSessionId: submittedChildSessionId,
       initialParentTurnId: startEvent.turnId ?? null,
       wakeParentTurnId: joinEvent.turnId ?? null,
       parentMessageEventId: messageEvent.id ?? null,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { RuntimeEvent, WorkspaceDiffFile, WorkspaceDiffSummary, WorkspaceEditorPreferences, WorkspaceKind, WorkspaceLspActionResponse, WorkspaceLspDiagnostic, WorkspaceLspServerStatus } from "@openpond/contracts";
+import type { RuntimeEvent, SubagentLifecycleAction, WorkspaceDiffFile, WorkspaceDiffSummary, WorkspaceEditorPreferences, WorkspaceKind, WorkspaceLspActionResponse, WorkspaceLspDiagnostic, WorkspaceLspServerStatus } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import { DEFAULT_APP_PREFERENCES } from "../../lib/app-models";
@@ -1121,6 +1121,17 @@ function WorkspaceDiffPanelInner({
       }),
     [activeDiagnostics, activeServers, editorDiagnosticsChecking, editorLspEnabled, showEditorCommandBar],
   );
+  const runSubagentLifecycleAction = useCallback(
+    async (input: { runId: string; action: SubagentLifecycleAction }) => {
+      if (!connection) throw new Error("OpenPond server connection is unavailable.");
+      await api.runSubagentLifecycleAction(connection, input.runId, {
+        action: input.action,
+        reason: "User requested from Goal details.",
+      });
+      await onRefresh({ silent: true });
+    },
+    [connection, onRefresh],
+  );
   return (
     <>
     <aside className={`workspace-diff-panel ${expanded ? "expanded" : ""}`} aria-label="Workspace diffs">
@@ -1195,6 +1206,7 @@ function WorkspaceDiffPanelInner({
           createRuntime={goalDetails?.createRuntime ?? null}
           goalRuntime={goalDetails?.goalRuntime ?? null}
           subagentRuntime={goalDetails?.subagentRuntime ?? null}
+          onRunSubagentLifecycleAction={connection ? runSubagentLifecycleAction : undefined}
         />
       ) : visibleTab === "summary" && summaryAvailable ? (
         <SandboxWorkspaceSummary

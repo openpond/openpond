@@ -4,6 +4,7 @@ import { openPondGoalStatusPresentation, type OpenPondGoalStatusTone } from "./o
 export type GoalRuntimeStatus = {
   objective: string;
   status: string;
+  subagents: GoalRuntimeSubagentState | null;
   timeUsedSeconds: number;
   tokensUsed: number | null;
   tokenBudget: number | null;
@@ -15,11 +16,57 @@ export type GoalRuntimeStatus = {
   tone: OpenPondGoalStatusTone;
 };
 
+export type GoalRuntimeSubagentRunSummary = {
+  id: string;
+  childSessionId: string | null;
+  roleId: string;
+  status: string;
+  required: boolean;
+  objective: string;
+  reviewStatus: string | null;
+  updatedAt: string | null;
+  cleanupStatus: string | null;
+  archiveStatus: string | null;
+  sessionArchived: boolean;
+  blockerCount: number;
+  validationAttemptCount: number;
+  changedFileCount: number;
+  followUpNeeded: boolean;
+};
+
+export type GoalRuntimeSubagentState = {
+  source: string;
+  updatedAt: string | null;
+  totalCount: number;
+  requiredCount: number;
+  optionalCount: number;
+  activeCount: number;
+  submittedForReviewCount: number;
+  needsRevisionCount: number;
+  needsUserInputCount: number;
+  acceptedCount: number;
+  blockingCount: number;
+  terminalCount: number;
+  cleanupNeededCount: number;
+  archivedCount: number;
+  unresolvedCount: number;
+  requiredActiveCount: number;
+  requiredSubmittedForReviewCount: number;
+  requiredNeedsRevisionCount: number;
+  requiredNeedsUserInputCount: number;
+  requiredAcceptedCount: number;
+  requiredBlockingCount: number;
+  requiredArchivedCount: number;
+  requiredUnresolvedCount: number;
+  runs: GoalRuntimeSubagentRunSummary[];
+};
+
 type ThreadGoalRecord = {
   objective: string;
   provider: string | null;
   status: string;
   statusLabel: string;
+  subagents: GoalRuntimeSubagentState | null;
   timeUsedSeconds: number;
   tokensUsed: number | null;
   tokenBudget: number | null;
@@ -104,6 +151,7 @@ function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
   return {
     objective: goal.objective,
     status: goal.status,
+    subagents: goal.subagents,
     timeUsedSeconds: goal.timeUsedSeconds,
     tokensUsed: goal.tokensUsed,
     tokenBudget: goal.tokenBudget,
@@ -126,11 +174,13 @@ function threadGoalFromRecord(
   const timeUsedSeconds = numberValue(record.timeUsedSeconds) ?? numberValue(record.time_used_seconds) ?? 0;
   const tokensUsed = numberValue(record.tokensUsed) ?? numberValue(record.tokens_used);
   const tokenBudget = numberValue(record.tokenBudget) ?? numberValue(record.token_budget);
+  const subagents = goalSubagentStateFromRecord(asRecord(record.subagents));
   return {
     objective,
     provider: normalizeProvider(provider) ?? normalizeProvider(stringValue(record.provider)),
     status,
     statusLabel: statusLabel(status),
+    subagents,
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed: tokensUsed === null ? null : Math.max(0, Math.floor(tokensUsed)),
     tokenBudget: tokenBudget === null ? null : Math.max(0, Math.floor(tokenBudget)),
@@ -153,9 +203,72 @@ function threadGoalFromGoalContext(value: string, provider: string | null = null
     provider: normalizeProvider(provider),
     status,
     statusLabel: statusLabel(status),
+    subagents: null,
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed,
     tokenBudget,
+  };
+}
+
+function goalSubagentStateFromRecord(record: Record<string, unknown> | null): GoalRuntimeSubagentState | null {
+  if (!record) return null;
+  return {
+    source: stringValue(record.source) ?? "subagent_runs",
+    updatedAt: stringValue(record.updatedAt),
+    totalCount: countValue(record.totalCount),
+    requiredCount: countValue(record.requiredCount),
+    optionalCount: countValue(record.optionalCount),
+    activeCount: countValue(record.activeCount),
+    submittedForReviewCount: countValue(record.submittedForReviewCount),
+    needsRevisionCount: countValue(record.needsRevisionCount),
+    needsUserInputCount: countValue(record.needsUserInputCount),
+    acceptedCount: countValue(record.acceptedCount),
+    blockingCount: countValue(record.blockingCount),
+    terminalCount: countValue(record.terminalCount),
+    cleanupNeededCount: countValue(record.cleanupNeededCount),
+    archivedCount: countValue(record.archivedCount),
+    unresolvedCount: countValue(record.unresolvedCount),
+    requiredActiveCount: countValue(record.requiredActiveCount),
+    requiredSubmittedForReviewCount: countValue(record.requiredSubmittedForReviewCount),
+    requiredNeedsRevisionCount: countValue(record.requiredNeedsRevisionCount),
+    requiredNeedsUserInputCount: countValue(record.requiredNeedsUserInputCount),
+    requiredAcceptedCount: countValue(record.requiredAcceptedCount),
+    requiredBlockingCount: countValue(record.requiredBlockingCount),
+    requiredArchivedCount: countValue(record.requiredArchivedCount),
+    requiredUnresolvedCount: countValue(record.requiredUnresolvedCount),
+    runs: Array.isArray(record.runs)
+      ? record.runs
+        .map((item) => goalSubagentRunSummaryFromRecord(asRecord(item)))
+        .filter((item): item is GoalRuntimeSubagentRunSummary => Boolean(item))
+      : [],
+  };
+}
+
+function goalSubagentRunSummaryFromRecord(
+  record: Record<string, unknown> | null,
+): GoalRuntimeSubagentRunSummary | null {
+  if (!record) return null;
+  const id = stringValue(record.id);
+  const roleId = stringValue(record.roleId);
+  const status = stringValue(record.status);
+  const objective = stringValue(record.objective);
+  if (!id || !roleId || !status || !objective) return null;
+  return {
+    id,
+    childSessionId: stringValue(record.childSessionId),
+    roleId,
+    status,
+    required: booleanValue(record.required),
+    objective,
+    reviewStatus: stringValue(record.reviewStatus),
+    updatedAt: stringValue(record.updatedAt),
+    cleanupStatus: stringValue(record.cleanupStatus),
+    archiveStatus: stringValue(record.archiveStatus),
+    sessionArchived: booleanValue(record.sessionArchived),
+    blockerCount: countValue(record.blockerCount),
+    validationAttemptCount: countValue(record.validationAttemptCount),
+    changedFileCount: countValue(record.changedFileCount),
+    followUpNeeded: booleanValue(record.followUpNeeded),
   };
 }
 
@@ -282,4 +395,9 @@ function normalizeProvider(value: string | null): string | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function countValue(value: unknown): number {
+  const parsed = numberValue(value);
+  return parsed === null ? 0 : Math.max(0, Math.floor(parsed));
 }

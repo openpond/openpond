@@ -53,13 +53,13 @@ export default desktopScenario({
     if (!runId) throw new Error("openpond_subagent_start did not return a runId.");
 
     await harness.events.waitForToolCompleted(session.id, "openpond_subagent_join") as RuntimeEvent;
-    const completedEvent = await harness.events.waitForSubagentCompleted(session.id, runId) as RuntimeEvent;
+    const submittedEvent = await harness.events.waitForSubagentSubmitted(session.id, runId) as RuntimeEvent;
     await waitForCompletedTurn(harness, session.id, startEvent, "parent subagent turn completion");
 
-    const completedRun = asRecord(asRecord(completedEvent.data)?.run);
-    const childSessionId = stringFromRecord(completedRun, "childSessionId") ??
+    const submittedRun = asRecord(asRecord(submittedEvent.data)?.run);
+    const childSessionId = stringFromRecord(submittedRun, "childSessionId") ??
       stringFromRecord(startResult, "childSessionId");
-    if (!childSessionId) throw new Error("Subagent completion did not include a child session id.");
+    if (!childSessionId) throw new Error("Subagent submission did not include a child session id.");
 
     const bootstrap = await harness.api.bootstrap<BootstrapPayload>();
     const childSession = bootstrap.sessions.find((item) => item.id === childSessionId);
@@ -68,7 +68,7 @@ export default desktopScenario({
       throw new Error(`Child session ${childSessionId} was not linked to parent ${session.id}.`);
     }
 
-    await harness.renderer.assertText("Subagent completed", { label: "parent subagent completed activity" });
+    await harness.renderer.assertText("Subagent submitted", { label: "parent subagent submitted activity" });
     await harness.renderer.assertText("Research subagent", { label: "research subagent activity label" });
     harness.recordAssertion("parentActivityVisible", true);
 
@@ -77,7 +77,7 @@ export default desktopScenario({
     harness.recordAssertion("childSidebarRowVisible", true);
 
     await harness.renderer.selectSession(childSessionId);
-    await harness.renderer.assertText("Research subagent completed the scripted lifecycle check.", {
+    await harness.renderer.assertText("Research subagent submitted the scripted lifecycle check.", {
       label: "child conversation final text",
     });
     harness.recordAssertion("childConversationLinked", true);

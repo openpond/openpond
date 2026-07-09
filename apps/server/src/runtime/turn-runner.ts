@@ -10,9 +10,14 @@ import {
   CreatePipelineSnapshotSchema,
   ResolveApprovalRequestSchema,
   SendTurnRequestSchema,
+  SubagentExplorationSteeringPolicySchema,
+  SubagentLifecycleActionRequestSchema,
   SubagentMessageDeliverySchema,
   SubagentMessageSchema,
+  SubagentProgressSchema,
+  SubagentReviewStateSchema,
   SubagentRunSchema,
+  SubagentWorkerBriefSchema,
   UpdateTurnCreatePipelineRequestSchema,
   type Approval,
   type AppPreferences,
@@ -33,11 +38,20 @@ import {
   type ResolveApprovalRequest,
   type RuntimeEvent,
   type Session,
+  type SubagentExplorationSteeringPolicy,
+  type SubagentLifecycleActionResponse,
   type SubagentMessage,
   type SubagentMessageDelivery,
   type SubagentMessagePriority,
+  type SubagentProgress,
+  type SubagentProgressPhase,
+  type SubagentRef,
+  type SubagentReviewRoutingPolicy,
+  type SubagentReviewRoutingReason,
   type SubagentRun,
   type SubagentRoleSettings,
+  type SubagentValidationAttempt,
+  type SubagentWorkerBrief,
   type Turn,
   type UsageRequestAttribution,
   type WorkspaceDiffSummary,
@@ -103,6 +117,7 @@ import {
   type OpenPondSubagentJoinToolInput,
   type OpenPondSubagentMessageToolInput,
   type OpenPondSubagentMessageToolResult,
+  type OpenPondSubagentReviewToolInput,
   type OpenPondSubagentStartToolInput,
   type OpenPondSubagentStatusToolInput,
   type OpenPondSubagentStatusToolResult,
@@ -117,6 +132,8 @@ import {
   runOpenPondGoalControl,
   type OpenPondGoalControlAction,
   type OpenPondGoalControlGoal,
+  type OpenPondGoalSubagentRunSummary,
+  type OpenPondGoalSubagentState,
 } from "../openpond/goal-control.js";
 import {
   createConnectedAppSkillModelToolDefinitions,
@@ -200,6 +217,11 @@ type SubagentSandboxForkRequest = {
   runId: string;
 };
 
+type SubagentSandboxCleanupRequest = {
+  sandboxId: string;
+  run: SubagentRun;
+};
+
 type HostedToolLoopStreamOptions = {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
@@ -234,18 +256,78 @@ const READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS = new Set<WorkspaceToolRequest["
   "sandbox_logs",
   "sandbox_receipts",
 ]);
+const SUBAGENT_READ_ACTIONS = new Set<string>([
+  "resource_read",
+  "read_files",
+  "sandbox_read_file",
+  "sandbox_list_files",
+  "git_status",
+  "git_diff",
+  "sandbox_git_status",
+  "sandbox_git_diff",
+  "sandbox_git_export_patch",
+  "web_fetch",
+]);
+const SUBAGENT_SEARCH_ACTIONS = new Set<string>([
+  "resource_search",
+  "search_files",
+  "sandbox_search_files",
+  "web_search",
+]);
+const SUBAGENT_MUTATING_ACTIONS = new Set<string>([
+  "write_file",
+  "write_files",
+  "edit_file",
+  "delete_file",
+  "sandbox_write_file",
+  "sandbox_edit_file",
+  "sandbox_delete_file",
+  "sandbox_mkdir",
+  "sandbox_move_file",
+  "sandbox_upload_file",
+  "sandbox_git_commit",
+  "sandbox_git_apply_patch_local",
+]);
+const SUBAGENT_COMMAND_ACTIONS = new Set<string>([
+  "exec_command",
+  "sandbox_exec",
+  "sandbox_run_action",
+  "run_sandbox_template",
+]);
 const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
   "subagent.progress",
   "subagent.reported",
+  "subagent.submitted",
+  "subagent.accepted",
+  "subagent.needs_revision",
   "subagent.completed",
   "subagent.failed",
   "subagent.blocked",
   "subagent.cancelled",
+  "subagent.workspace_retained",
+  "subagent.archived",
+  "subagent.superseded",
+  "subagent.dismissed",
   "subagent.message",
 ]);
 const SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES = 3;
 const SUBAGENT_PARENT_WAKE_MAX_CHAIN = 4;
 const GOAL_CONTINUATION_IDLE_WAIT_MS = 10_000;
+const SUBAGENT_RETAINED_WORKSPACE_RETENTION_DAYS = 7;
+const SUBAGENT_RETAINED_WORKSPACE_RETENTION_MS = SUBAGENT_RETAINED_WORKSPACE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+type SubagentWorkspaceRetentionTrigger =
+  | "auto_after_acceptance"
+  | "cancel_requested"
+  | "manual_cleanup"
+  | "patch_approval_declined"
+  | "patch_approval_cancelled";
+
+type SubagentCleanupPolicy =
+  | "auto_after_acceptance"
+  | "cancel_requested"
+  | "manual_cleanup"
+  | "retention_expired";
 
 export type HostedToolMode = "auto" | "native" | "text_fallback" | "disabled";
 
@@ -520,6 +602,22 @@ export function createTurnRunner(deps: {
       status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
       limit?: number;
     }): Promise<SubagentRun[]>;
+    listActiveSubagentRuns?(query?: {
+      parentSessionId?: string | null;
+      parentGoalId?: string | null;
+      childSessionId?: string | null;
+      status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+      limit?: number;
+    }): Promise<SubagentRun[]>;
+    listStaleSubagentRuns?(query: {
+      olderThanMs: number;
+      nowIso?: string | null;
+      parentSessionId?: string | null;
+      parentGoalId?: string | null;
+      childSessionId?: string | null;
+      status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+      limit?: number;
+    }): Promise<SubagentRun[]>;
     appendSubagentMessage?(message: SubagentMessage): Promise<SubagentMessage>;
     listSubagentMessages?(query?: {
       parentGoalId?: string | null;
@@ -559,6 +657,7 @@ export function createTurnRunner(deps: {
     options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null }
   ) => Promise<WorkspaceToolResult>;
   forkSandboxForSubagent?: (input: SubagentSandboxForkRequest) => Promise<unknown>;
+  cleanupSandboxForSubagent?: (input: SubagentSandboxCleanupRequest) => Promise<unknown>;
   executeOpenPondCommand?: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
@@ -630,6 +729,7 @@ export function createTurnRunner(deps: {
   planCreatePipeline?: CreatePipelinePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;
+  notifySubagentRunStateChanged?: (run: SubagentRun) => void;
   enableGoalContinuations?: boolean;
   maxHostedWorkspaceToolRounds: number;
   maxRepeatedInvalidToolRequests: number;
@@ -654,6 +754,7 @@ export function createTurnRunner(deps: {
     appendRuntimeEvent,
     executeWorkspaceTool,
     forkSandboxForSubagent,
+    cleanupSandboxForSubagent,
     executeOpenPondCommand,
     executeProfileAction,
     loadOpenPondProfileState,
@@ -677,6 +778,7 @@ export function createTurnRunner(deps: {
     planCreatePipeline,
     turnFollowUpQueue,
     subagentQueue,
+    notifySubagentRunStateChanged,
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
   } = deps;
@@ -742,6 +844,15 @@ export function createTurnRunner(deps: {
 
   function browserControlAvailable(session: Session): boolean {
     return browserToolExecutor?.available({ sessionId: session.id, conversationId: session.id }) ?? false;
+  }
+
+  async function subagentExplorationSteeringPolicyForSession(
+    session: Session,
+  ): Promise<SubagentExplorationSteeringPolicy> {
+    if (!session.subagentRoleId) return SubagentExplorationSteeringPolicySchema.parse({});
+    const preferences = await loadAppPreferences();
+    const role = preferences.subagents.roles.find((candidate) => candidate.id === session.subagentRoleId);
+    return role?.explorationSteering ?? SubagentExplorationSteeringPolicySchema.parse({});
   }
 
   function actionCatalogInstructionModeForProvider(
@@ -882,6 +993,7 @@ export function createTurnRunner(deps: {
                 statusSubagents: statusSubagentsFromModelTool,
                 joinSubagent: joinSubagentFromModelTool,
                 cancelSubagent: cancelSubagentFromModelTool,
+                reviewSubagent: reviewSubagentFromModelTool,
                 sendSubagentMessage: sendSubagentMessageFromModelTool,
               }
             : {}),
@@ -962,7 +1074,7 @@ export function createTurnRunner(deps: {
     return {
       createSession,
       queue: subagentQueue,
-      upsertRun: (run: SubagentRun) => store.upsertSubagentRun!(run),
+      upsertRun: upsertSubagentRunAndNotify,
       getRun: (runId: string) => store.getSubagentRun!(runId),
       listRuns: (query?: Parameters<NonNullable<typeof store.listSubagentRuns>>[0]) =>
         store.listSubagentRuns!(query),
@@ -970,6 +1082,12 @@ export function createTurnRunner(deps: {
       listUsageRecords: (query?: Parameters<NonNullable<typeof store.listModelUsageRecords>>[0]) =>
         store.listModelUsageRecords!(query),
     };
+  }
+
+  async function upsertSubagentRunAndNotify(run: SubagentRun): Promise<SubagentRun> {
+    const updated = await store.upsertSubagentRun!(run);
+    notifySubagentRunStateChanged?.(updated);
+    return updated;
   }
 
   async function startSubagentFromModelTool(
@@ -1040,11 +1158,17 @@ export function createTurnRunner(deps: {
       runId,
     });
     const childSessionWorkspace = isolation.sessionWorkspace ?? {};
+    const workerBrief = subagentWorkerBriefForStart({
+      role,
+      objective: input.objective,
+      provided: input.workerBrief ?? null,
+    });
     const childSystemContext = subagentChildSystemContext({
       role,
       objective: input.objective,
       parentSession: context.session,
       contextPack: input.context ?? null,
+      workerBrief,
     });
     const childSessionMetadata = {
       ...(recordFromUnknown(childSessionWorkspace.metadata) ?? {}),
@@ -1058,6 +1182,7 @@ export function createTurnRunner(deps: {
         requestedIsolationMode: role.isolationMode,
         effectiveIsolationMode: isolation.effectiveIsolationMode,
         workspace: isolation.workspace,
+        workerBrief,
         systemContext: childSystemContext,
       },
     };
@@ -1099,6 +1224,18 @@ export function createTurnRunner(deps: {
       peerMessages: role.peerMessages,
       status: isolationBlocker ? "blocked" : "queued",
       required: input.required ?? true,
+      workerBrief,
+      progress: SubagentProgressSchema.parse({
+        phase: isolationBlocker ? "report" : "orient",
+        currentBlocker: isolationBlocker,
+        latestMeaningfulActivity: isolationBlocker
+          ? "Subagent blocked before execution because isolation is unavailable."
+          : "Subagent run created with a structured worker brief.",
+        updatedAt: createdAt,
+      }),
+      review: SubagentReviewStateSchema.parse({
+        status: "pending",
+      }),
       createdAt,
       startedAt: null,
       completedAt: isolationBlocker ? createdAt : null,
@@ -1112,6 +1249,7 @@ export function createTurnRunner(deps: {
         : null,
       metadata: {
         context: input.context ?? null,
+        workerBrief,
         childTurnPermissions,
         tokenBudget: {
           totalMaxTokens: preferences.subagents.maxTokens,
@@ -1153,6 +1291,7 @@ export function createTurnRunner(deps: {
           parentSession: context.session,
           parentTurnId: context.turnId,
           contextPack: input.context ?? null,
+          workerBrief,
           childTurnPermissions,
         }),
       );
@@ -1191,9 +1330,11 @@ export function createTurnRunner(deps: {
     const run = await deps.getRun(input.runId);
     if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
     assertSubagentRunAccessible(context.session, run);
-    return subagentToolResultFromRun(run, run.status === "completed"
-      ? "Subagent completed; use its report and child conversation as evidence."
-      : "Subagent has not completed yet; continue parent work or check again later.");
+    return subagentToolResultFromRun(run, subagentRunAccepted(run)
+      ? "Subagent accepted; use its report and child conversation as evidence."
+      : run.status === "submitted_for_review"
+        ? "Subagent submitted a review packet; parent/reviewer should evaluate before treating it as accepted."
+        : "Subagent has not been accepted yet; continue parent work, review the packet, or check again later.");
   }
 
   async function cancelSubagentFromModelTool(
@@ -1204,8 +1345,8 @@ export function createTurnRunner(deps: {
     const run = await deps.getRun(input.runId);
     if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
     assertSubagentRunAccessible(context.session, run);
-    if (run.status === "completed") {
-      return subagentToolResultFromRun(run, "Subagent already completed; no cancellation was applied.");
+    if (subagentRunAccepted(run)) {
+      return subagentToolResultFromRun(run, "Subagent already accepted; no cancellation was applied.");
     }
     if (run.status === "cancelled") {
       return subagentToolResultFromRun(run, "Subagent was already cancelled.");
@@ -1250,9 +1391,20 @@ export function createTurnRunner(deps: {
         };
       }
     }
-    const cleanupResult = input.cleanupWorkspace === false
+    let cleanupResult: Record<string, unknown> | null = input.cleanupWorkspace === false
       ? { status: "skipped", reason: "cleanupWorkspace was false" }
-      : await cleanupSubagentWorkspace(nextRun);
+      : null;
+    if (input.cleanupWorkspace !== false) {
+      const cleanup = await cleanupSubagentRun({
+        run: nextRun,
+        parentSession: context.session,
+        parentTurnId: context.turnId,
+        reason: "cancel_requested",
+        policy: "cancel_requested",
+      });
+      nextRun = cleanup.run;
+      cleanupResult = cleanup.workspaceCleanup;
+    }
     nextRun = SubagentRunSchema.parse({
       ...nextRun,
       metadata: {
@@ -1282,6 +1434,216 @@ export function createTurnRunner(deps: {
         ? "Subagent cancelled and isolated workspace cleanup completed."
         : "Subagent cancelled.",
     );
+  }
+
+  async function reviewSubagentFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondSubagentReviewToolInput,
+  ): Promise<OpenPondSubagentToolResult> {
+    const deps = requireSubagentDeps();
+    const run = await deps.getRun(input.runId);
+    if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
+    assertSubagentRunAccessible(context.session, run);
+    if (context.session.id === run.childSessionId || context.session.subagentRunId === run.id) {
+      throw new Error("Child subagents cannot review their own submission.");
+    }
+    const dismissed = input.decision === "dismiss";
+    if (dismissed) {
+      if (!subagentDismissable(run)) {
+        throw new Error(`Subagent run ${run.id} is ${run.status}; only blocked, failed, or cancelled runs can be dismissed.`);
+      }
+    } else if (!subagentReviewable(run)) {
+      throw new Error(`Subagent run ${run.id} is ${run.status}; only submitted or revision-state runs can be reviewed.`);
+    }
+
+    const decidedAt = now();
+    const summary = input.summary?.trim() || run.report?.summary || run.review.summary || null;
+    const issues = uniqueNonEmptyStrings([...(run.review.issues ?? []), ...(input.issues ?? [])]);
+    const requiredCorrections = input.decision === "needs_revision"
+      ? uniqueNonEmptyStrings([
+          ...(run.review.requiredCorrections ?? []),
+          ...(input.requiredCorrections ?? []),
+          ...((input.requiredCorrections?.length ?? 0) === 0 && (input.issues?.length ?? 0) === 0
+            ? ["Revise the submitted work and submit a new review packet before acceptance."]
+            : []),
+        ])
+      : run.review.requiredCorrections;
+    const accepted = input.decision === "accept";
+    const needsRevision = input.decision === "needs_revision";
+    const needsUserInput = input.decision === "needs_user_input";
+    const latestMeaningfulActivity = accepted
+      ? "Parent/reviewer accepted the child review packet."
+      : needsRevision
+        ? "Parent/reviewer requested child revision."
+        : dismissed
+          ? "Parent/reviewer dismissed the child run after acknowledgement."
+          : "Parent/reviewer requested user input before accepting the child review packet.";
+    let nextRun = SubagentRunSchema.parse({
+      ...run,
+      status: accepted ? "accepted" : needsRevision ? "needs_revision" : needsUserInput ? "needs_user_input" : run.status,
+      completedAt: accepted ? decidedAt : dismissed ? run.completedAt ?? decidedAt : null,
+      report: run.report
+        ? {
+            ...run.report,
+            followUpNeeded: !accepted && !dismissed,
+          }
+        : run.report,
+      progress: SubagentProgressSchema.parse({
+        ...(run.progress ?? {}),
+        latestMeaningfulActivity,
+        currentBlocker: needsUserInput ? summary ?? latestMeaningfulActivity : null,
+        updatedAt: decidedAt,
+      }),
+      review: SubagentReviewStateSchema.parse({
+        ...(run.review ?? {}),
+        status: accepted ? "accepted" : needsRevision ? "needs_revision" : needsUserInput ? "needs_user_input" : "dismissed",
+        decidedAt,
+        reviewerSessionId: context.session.id,
+        summary,
+        issues,
+        requiredCorrections,
+        humanReviewRecommended: !accepted && !dismissed,
+      }),
+      metadata: {
+        ...(run.metadata ?? {}),
+        reviewDecision: {
+          decision: input.decision,
+          decidedAt,
+          reviewerSessionId: context.session.id,
+          reviewerRunId: context.session.subagentRunId ?? null,
+          messageChild: needsRevision ? input.messageChild !== false : false,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+
+    let correctionMessage: SubagentMessage | null = null;
+    if (needsRevision && input.messageChild !== false) {
+      correctionMessage = await appendSubagentReviewCorrectionMessage({
+        context,
+        run: nextRun,
+        summary,
+        issues,
+        requiredCorrections,
+        priority: input.priority ?? "interrupt",
+      });
+    }
+
+    const parentSession = run.parentSessionId === context.session.id
+      ? context.session
+      : await getSession(run.parentSessionId).catch(() => context.session);
+    await appendSubagentReceipt({
+      parentSession,
+      parentTurnId: run.parentTurnId ?? context.turnId,
+      run: nextRun,
+      eventName: accepted ? "subagent.accepted" : dismissed ? "subagent.dismissed" : "subagent.needs_revision",
+      status: accepted || dismissed ? "completed" : "failed",
+      output: accepted
+        ? `${run.roleId} subagent review packet accepted.`
+        : dismissed
+          ? `${run.roleId} subagent run dismissed after parent acknowledgement.`
+        : needsRevision
+          ? `${run.roleId} subagent needs revision.`
+          : `${run.roleId} subagent needs user input before acceptance.`,
+    });
+    if (accepted) {
+      const cleanup = await cleanupSubagentRun({
+        run: nextRun,
+        parentSession,
+        parentTurnId: run.parentTurnId ?? context.turnId,
+        reason: "accepted_review",
+        policy: "auto_after_acceptance",
+      });
+      nextRun = cleanup.run;
+    }
+
+    return subagentToolResultFromRun(
+      nextRun,
+      accepted
+        ? "Subagent accepted; use its report and child conversation as evidence."
+        : dismissed
+          ? "Subagent dismissed after explicit parent acknowledgement; it will not count as accepted work."
+        : needsRevision
+          ? correctionMessage
+            ? "Subagent marked needs_revision and corrective message delivered to the child."
+            : "Subagent marked needs_revision; corrective message was not delivered."
+          : "Subagent marked needs_user_input; ask the user for the missing decision before accepting.",
+    );
+  }
+
+  async function runSubagentLifecycleAction(
+    runId: string,
+    payload: unknown,
+  ): Promise<SubagentLifecycleActionResponse> {
+    const input = SubagentLifecycleActionRequestSchema.parse(payload);
+    const deps = requireSubagentDeps();
+    const run = await deps.getRun(runId);
+    if (!run) throw new Error(`Subagent run ${runId} was not found.`);
+    const parentSession = await getSession(run.parentSessionId);
+    const reason = input.reason ?? `Manual subagent ${input.action} requested.`;
+    let nextRun = run;
+    let workspaceCleanup: Record<string, unknown> | null = null;
+    let sessionArchive: Record<string, unknown> | null = null;
+
+    if (input.action === "cleanup" || input.action === "cleanup_and_archive") {
+      const cleanup = await cleanupSubagentRun({
+        run: nextRun,
+        parentSession,
+        parentTurnId: nextRun.parentTurnId ?? null,
+        reason,
+        policy: "manual_cleanup",
+      });
+      nextRun = cleanup.run;
+      workspaceCleanup = cleanup.workspaceCleanup;
+    }
+
+    if (input.action === "archive" || input.action === "cleanup_and_archive") {
+      const archived = await archiveSubagentChildSession({
+        parentSession,
+        parentTurnId: nextRun.parentTurnId ?? null,
+        run: nextRun,
+        reason,
+        policy: "manual_archive",
+      });
+      nextRun = archived.run;
+      sessionArchive = archived.sessionArchive;
+    }
+
+    return {
+      action: input.action,
+      run: nextRun,
+      workspaceCleanup,
+      sessionArchive,
+      nextStep: subagentLifecycleActionNextStep(input.action, workspaceCleanup, sessionArchive),
+    };
+  }
+
+  async function cleanupExpiredRetainedSubagentWorkspace(
+    runId: string,
+    payload: unknown = {},
+  ): Promise<SubagentLifecycleActionResponse> {
+    const input = recordFromUnknown(payload) ?? {};
+    const deps = requireSubagentDeps();
+    const run = await deps.getRun(runId);
+    if (!run) throw new Error(`Subagent run ${runId} was not found.`);
+    const parentSession = await getSession(run.parentSessionId);
+    const checkedAt = stringFromRecord(input, "checkedAt") ?? now();
+    const reason = stringFromRecord(input, "reason") ??
+      `Retained subagent workspace retention expired at ${checkedAt}.`;
+    const cleanup = await cleanupSubagentRun({
+      run,
+      parentSession,
+      parentTurnId: run.parentTurnId ?? null,
+      reason,
+      policy: "retention_expired",
+    });
+    return {
+      action: "cleanup",
+      run: cleanup.run,
+      workspaceCleanup: cleanup.workspaceCleanup,
+      sessionArchive: null,
+      nextStep: subagentLifecycleActionNextStep("cleanup", cleanup.workspaceCleanup, null),
+    };
   }
 
   async function sendSubagentMessageFromModelTool(
@@ -1754,6 +2116,7 @@ export function createTurnRunner(deps: {
     parentSession: Session;
     parentTurnId: string;
     contextPack: string | null;
+    workerBrief: SubagentWorkerBrief;
     childTurnPermissions: SubagentTurnPermissions;
   }): Promise<void> {
     const deps = requireSubagentDeps();
@@ -1764,6 +2127,13 @@ export function createTurnRunner(deps: {
       ...(latestBeforeStart ?? input.run),
       status: "running",
       startedAt,
+      progress: SubagentProgressSchema.parse({
+        ...((latestBeforeStart ?? input.run).progress ?? {}),
+        phase: "orient",
+        latestMeaningfulActivity: "Child subagent turn started.",
+        currentBlocker: null,
+        updatedAt: startedAt,
+      }),
     });
     await deps.upsertRun(run);
     await appendSubagentReceipt({
@@ -1786,6 +2156,7 @@ export function createTurnRunner(deps: {
       let childPrompt = subagentChildPrompt({
         objective: input.run.objective,
         contextPack: input.contextPack,
+        workerBrief: input.workerBrief,
       });
       let wakeResumeCount = 0;
       while (true) {
@@ -1811,6 +2182,10 @@ export function createTurnRunner(deps: {
         const latestAfterChild = await deps.getRun(run.id);
         if (latestAfterChild?.status === "cancelled") return;
         run = latestAfterChild ?? run;
+        run = await refreshSubagentRuntimeDerivedProgress({
+          run,
+          childSessionId: input.childSession.id,
+        });
         if (finalizedChildTurn.status === "interrupted") {
           const wake = subagentInterruptWakeForTurn(run, finalizedChildTurn.id);
           if (wake && wakeResumeCount < SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES) {
@@ -1842,22 +2217,96 @@ export function createTurnRunner(deps: {
         }
         break;
       }
-      const completedAt = now();
+      const submittedAt = now();
       const summary = await latestAssistantTextForSession(input.childSession.id);
       const usage = await subagentUsageTotalsForRun(input.run.id);
       const workspaceHandoff = await captureSubagentWorkspaceHandoff(run);
+      const derivedProgress = await subagentRuntimeDerivedProgress({
+        run,
+        childSessionId: input.childSession.id,
+        phase: "submitted",
+        latestMeaningfulActivity: "Child submitted a final report for parent review.",
+        currentBlocker: null,
+      });
+      const handoffChangedFiles = uniqueNonEmptyStrings([
+        ...(derivedProgress.changedFiles ?? []),
+        ...(workspaceHandoff?.changedFiles ?? []),
+      ]);
+      const submittedReport = {
+        summary: summary || "Child conversation completed.",
+        findings: [],
+        artifacts: workspaceHandoff?.artifacts ?? [],
+        patchRef: workspaceHandoff?.patchRef ?? null,
+        diffRef: workspaceHandoff?.diffRef ?? null,
+        testsRun: [],
+        blockers: [],
+        confidence: null,
+        followUpNeeded: workspaceHandoff?.changed ?? false,
+      };
+      const submittedProgress = SubagentProgressSchema.parse({
+        ...derivedProgress,
+        phase: "submitted",
+        changedFiles: handoffChangedFiles,
+        patchRefs: uniqueSubagentRefs([
+          ...(derivedProgress.patchRefs ?? []),
+          workspaceHandoff?.patchRef ?? null,
+          workspaceHandoff?.diffRef ?? null,
+        ]),
+        latestMeaningfulActivity: "Child submitted a final report for parent review.",
+        currentBlocker: derivedProgress.currentBlocker,
+        updatedAt: submittedAt,
+      });
+      const packetQuality = subagentReviewPacketQuality({
+        run,
+        finalSummary: summary,
+        report: submittedReport,
+        progress: submittedProgress,
+      });
+      const submittedReviewReport: NonNullable<SubagentRun["report"]> = {
+        ...submittedReport,
+        confidence: packetQuality.status === "weak" ? "low" : submittedReport.confidence,
+        followUpNeeded: submittedReport.followUpNeeded || packetQuality.status !== "reviewable",
+      };
+      const reviewRouting = subagentReviewRoutingRecommendation({
+        run,
+        reviewRoutingPolicy: input.role.reviewRouting,
+        packetQuality,
+        report: submittedReviewReport,
+        progress: submittedProgress,
+      });
+      const packetIncomplete = packetQuality.status === "incomplete";
+      const packetBlocker = packetQuality.issues[0] ?? "Child review packet is incomplete.";
       run = SubagentRunSchema.parse({
         ...run,
-        status: "completed",
-        completedAt,
+        status: packetIncomplete ? "blocked" : "submitted_for_review",
+        completedAt: packetIncomplete ? submittedAt : null,
+        error: packetIncomplete ? packetBlocker : null,
         report: {
-          summary: summary || "Child conversation completed.",
-          artifacts: workspaceHandoff?.artifacts ?? [],
-          patchRef: workspaceHandoff?.patchRef ?? null,
-          diffRef: workspaceHandoff?.diffRef ?? null,
-          blockers: [],
-          followUpNeeded: workspaceHandoff?.changed ?? false,
+          ...submittedReviewReport,
+          blockers: packetIncomplete
+            ? uniqueNonEmptyStrings([...submittedReviewReport.blockers, ...packetQuality.issues])
+            : submittedReviewReport.blockers,
         },
+        progress: SubagentProgressSchema.parse({
+          ...submittedProgress,
+          phase: packetIncomplete ? "report" : submittedProgress.phase,
+          latestMeaningfulActivity: packetIncomplete
+            ? "Child finished without a reviewable final report."
+            : submittedProgress.latestMeaningfulActivity,
+          currentBlocker: packetIncomplete ? packetBlocker : submittedProgress.currentBlocker,
+        }),
+        review: SubagentReviewStateSchema.parse({
+          ...(run.review ?? {}),
+          status: packetIncomplete ? "needs_user_input" : "submitted_for_review",
+          submittedAt,
+          summary: summary || submittedReport.summary,
+          issues: packetIncomplete
+            ? uniqueNonEmptyStrings([...(run.review?.issues ?? []), ...packetQuality.issues])
+            : run.review?.issues ?? [],
+          humanReviewRecommended: packetQuality.status !== "reviewable" || (workspaceHandoff?.changed ?? false),
+          ...reviewRouting,
+          packetQuality,
+        }),
         metadata: {
           ...(run.metadata ?? {}),
           usage,
@@ -1865,13 +2314,13 @@ export function createTurnRunner(deps: {
         },
       });
       await deps.upsertRun(run);
-      if (workspaceHandoff?.changed) {
+      if (workspaceHandoff?.changed && !packetIncomplete) {
         await appendSubagentReceipt({
           parentSession: input.parentSession,
           parentTurnId: input.parentTurnId,
           run,
           eventName: "subagent.reported",
-          status: "completed",
+          status: "pending",
           output: `${run.roleId} subagent produced an isolated patch for parent review.`,
         });
         await requestSubagentPatchApplyApproval({
@@ -1884,23 +2333,111 @@ export function createTurnRunner(deps: {
         parentSession: input.parentSession,
         parentTurnId: input.parentTurnId,
         run,
-        eventName: "subagent.completed",
-        status: "completed",
-        output: `${run.roleId} subagent completed.`,
+        eventName: packetIncomplete ? "subagent.blocked" : "subagent.submitted",
+        status: packetIncomplete ? "failed" : "pending",
+        output: packetIncomplete
+          ? `${run.roleId} subagent submitted an incomplete review packet: ${packetBlocker}`
+          : `${run.roleId} subagent submitted a review packet.`,
       });
     } catch (error) {
       const latestAfterError = await deps.getRun(run.id).catch(() => null);
       if (latestAfterError?.status === "cancelled") return;
       const message = textFromUnknown(error) || "Subagent failed.";
+      const failedAt = now();
+      const workspaceHandoff = await captureSubagentWorkspaceHandoff(run).catch(() => null);
+      const failedWithArtifacts = Boolean(workspaceHandoff?.changed || workspaceHandoff?.artifacts.length);
+      const derivedProgress = await subagentRuntimeDerivedProgress({
+        run,
+        childSessionId: input.childSession.id,
+        phase: "report",
+        latestMeaningfulActivity: failedWithArtifacts
+          ? "Child failed after producing recoverable artifacts."
+          : "Child failed before producing a final report.",
+        currentBlocker: message,
+      });
+      const validationAttempts = derivedProgress.validationAttempts ?? [];
+      const lastValidationAttempt = validationAttempts.at(-1) ?? null;
+      const failureBlockers = uniqueNonEmptyStrings([
+        message,
+        ...(derivedProgress.currentBlocker ? [derivedProgress.currentBlocker] : []),
+      ]);
+      const handoffChangedFiles = uniqueNonEmptyStrings([
+        ...(derivedProgress.changedFiles ?? []),
+        ...(workspaceHandoff?.changedFiles ?? []),
+      ]);
+      const failureHandoff = {
+        status: failedWithArtifacts ? "recoverable_artifacts" : "failed_without_artifacts",
+        capturedAt: failedAt,
+        error: message,
+        confidence: "low",
+        changedFiles: handoffChangedFiles,
+        patchRef: workspaceHandoff?.patchRef ?? null,
+        diffRef: workspaceHandoff?.diffRef ?? null,
+        artifacts: workspaceHandoff?.artifacts ?? [],
+        validationAttempts,
+        lastValidationAttempt,
+        blockers: failureBlockers,
+      };
+      const failureReport: NonNullable<SubagentRun["report"]> = {
+        summary: failedWithArtifacts
+          ? "Child conversation failed after producing recoverable artifacts."
+          : "Child conversation failed before producing a final report.",
+        findings: [],
+        artifacts: workspaceHandoff?.artifacts ?? [],
+        patchRef: workspaceHandoff?.patchRef ?? null,
+        diffRef: workspaceHandoff?.diffRef ?? null,
+        testsRun: uniqueNonEmptyStrings(validationAttempts.map((attempt) => attempt.command)),
+        blockers: failureBlockers,
+        confidence: "low",
+        followUpNeeded: true,
+      };
+      const failureProgress = SubagentProgressSchema.parse({
+        ...derivedProgress,
+        phase: "report",
+        changedFiles: handoffChangedFiles,
+        patchRefs: uniqueSubagentRefs([
+          ...(derivedProgress.patchRefs ?? []),
+          workspaceHandoff?.patchRef ?? null,
+          workspaceHandoff?.diffRef ?? null,
+        ]),
+        latestMeaningfulActivity: failedWithArtifacts
+          ? "Child failed after producing recoverable artifacts."
+          : "Child failed before producing a final report.",
+        currentBlocker: message,
+        updatedAt: failedAt,
+      });
+      const failureReviewRouting = failedWithArtifacts
+        ? subagentReviewRoutingRecommendation({
+            run,
+            reviewRoutingPolicy: input.role.reviewRouting,
+            packetQuality: run.review.packetQuality,
+            report: failureReport,
+            progress: failureProgress,
+            providerFailureAfterChanges: handoffChangedFiles.length > 0,
+          })
+        : null;
       run = SubagentRunSchema.parse({
         ...run,
-        status: "failed",
-        completedAt: now(),
+        status: failedWithArtifacts ? "failed_with_artifacts" : "failed",
+        completedAt: failedAt,
         error: message,
-        report: {
-          summary: "Child conversation failed before producing a final report.",
-          blockers: [message],
-          followUpNeeded: true,
+        report: failureReport,
+        progress: failureProgress,
+        review: failedWithArtifacts
+          ? SubagentReviewStateSchema.parse({
+              ...(run.review ?? {}),
+              status: "failed_with_artifacts",
+              submittedAt: failedAt,
+              summary: "Child failed after producing recoverable artifacts.",
+              issues: failureBlockers,
+              humanReviewRecommended: true,
+              ...(failureReviewRouting ?? {}),
+            })
+          : run.review,
+        metadata: {
+          ...(run.metadata ?? {}),
+          ...(workspaceHandoff ? { workspaceHandoff: workspaceHandoff.metadata } : {}),
+          failureHandoff,
         },
       });
       await deps.upsertRun(run);
@@ -1910,7 +2447,9 @@ export function createTurnRunner(deps: {
         run,
         eventName: "subagent.failed",
         status: "failed",
-        output: `${run.roleId} subagent failed: ${message}`,
+        output: failedWithArtifacts
+          ? `${run.roleId} subagent failed after producing recoverable artifacts: ${message}`
+          : `${run.roleId} subagent failed: ${message}`,
       });
     }
   }
@@ -1978,7 +2517,7 @@ export function createTurnRunner(deps: {
 
   async function appendSubagentReceipt(input: {
     parentSession: Session;
-    parentTurnId: string;
+    parentTurnId?: string | null;
     run: SubagentRun;
     eventName: Extract<RuntimeEvent["name"], `subagent.${string}`>;
     status: RuntimeEvent["status"];
@@ -1987,7 +2526,7 @@ export function createTurnRunner(deps: {
     await appendRuntimeEvent(
       event({
         sessionId: input.parentSession.id,
-        turnId: input.parentTurnId,
+        turnId: input.parentTurnId ?? undefined,
         name: input.eventName,
         source: "server",
         appId: input.parentSession.appId,
@@ -2000,6 +2539,117 @@ export function createTurnRunner(deps: {
         },
       }),
     );
+  }
+
+  async function appendSubagentReviewCorrectionMessage(input: {
+    context: ModelToolExecutionContext;
+    run: SubagentRun;
+    summary: string | null;
+    issues: string[];
+    requiredCorrections: string[];
+    priority: SubagentMessagePriority;
+  }): Promise<SubagentMessage | null> {
+    const deps = requireSubagentDeps();
+    const delivered = Boolean(input.run.childSessionId);
+    let delivery: SubagentMessageDelivery = {
+      status: delivered ? "delivered" : "undelivered",
+      deliveredRunIds: delivered ? [input.run.id] : [],
+      acknowledgedRunIds: delivered ? [input.run.id] : [],
+      deliveredParentSessionId: null,
+      acknowledgedParentSessionId: null,
+      wakeRequestedParentSessionId: null,
+      wakeQueuedParentSessionId: null,
+      wakeDeferredParentSessionId: null,
+      wakeParentReason: null,
+      wakeRequestedRunIds: [],
+      wakeInterruptedRunIds: [],
+      wakeDeferredRunIds: [],
+      reason: delivered ? null : "The reviewed child run has no child session for correction delivery.",
+    };
+    let message = SubagentMessageSchema.parse({
+      id: randomUUID(),
+      parentGoalId: input.run.parentGoalId,
+      fromRunId: input.context.session.subagentRunId ?? `parent:${input.context.session.id}`,
+      toRunId: input.run.id,
+      toRole: input.run.roleId,
+      kind: "status",
+      priority: input.priority,
+      body: subagentReviewCorrectionBody(input),
+      refs: [],
+      delivery,
+      createdAt: now(),
+    });
+    if (delivered) {
+      await deliverSubagentMessageToReceivers(input.context, message, [input.run]);
+    }
+    const wake = input.priority === "interrupt"
+      ? await wakeInterruptPrioritySubagentRuns(input.context, message, [input.run])
+      : null;
+    if (wake) {
+      delivery = SubagentMessageSchema.parse({
+        ...message,
+        delivery: {
+          ...delivery,
+          wakeRequestedRunIds: wake.requestedRunIds,
+          wakeInterruptedRunIds: wake.interruptedRunIds,
+          wakeDeferredRunIds: wake.deferredRunIds,
+        },
+      }).delivery!;
+      message = { ...message, delivery };
+    }
+    message = SubagentMessageSchema.parse({ ...message, delivery });
+    await deps.appendMessage(message);
+    await appendRuntimeEvent(
+      event({
+        sessionId: input.context.session.id,
+        turnId: input.context.turnId,
+        name: "subagent.message",
+        source: "provider",
+        appId: input.context.session.appId,
+        status: delivery.status === "delivered" ? "completed" : "pending",
+        output: input.priority === "interrupt"
+          ? "Interrupt subagent review correction sent."
+          : "Subagent review correction sent.",
+        data: { message, delivery, deliveredRunIds: delivery.deliveredRunIds },
+      }),
+    );
+    return message;
+  }
+
+  function subagentReviewCorrectionBody(input: {
+    summary: string | null;
+    issues: string[];
+    requiredCorrections: string[];
+  }): string {
+    return [
+      "Review decision: needs_revision.",
+      input.summary ? `Summary: ${input.summary}` : null,
+      input.issues.length ? `Issues:\n${input.issues.map((issue) => `- ${issue}`).join("\n")}` : null,
+      input.requiredCorrections.length
+        ? `Required corrections:\n${input.requiredCorrections.map((correction) => `- ${correction}`).join("\n")}`
+        : null,
+      "Revise the submission, run relevant validation, and submit a new review packet.",
+    ].filter(Boolean).join("\n\n");
+  }
+
+  function subagentReviewable(run: SubagentRun): boolean {
+    return (
+      run.status === "submitted_for_review" ||
+      run.status === "needs_revision" ||
+      run.status === "needs_user_input" ||
+      run.status === "failed_with_artifacts" ||
+      run.review.status === "submitted_for_review" ||
+      run.review.status === "needs_revision" ||
+      run.review.status === "needs_user_input" ||
+      run.review.status === "failed_with_artifacts"
+    );
+  }
+
+  function subagentDismissable(run: SubagentRun): boolean {
+    return run.status === "blocked" ||
+      run.status === "failed" ||
+      run.status === "failed_with_artifacts" ||
+      run.status === "cancelled";
   }
 
   async function requestSubagentPatchApplyApproval(input: {
@@ -2072,8 +2722,21 @@ export function createTurnRunner(deps: {
       toolPolicy: run.toolPolicy,
       background: run.background,
       peerMessages: run.peerMessages,
+      workerBrief: run.workerBrief,
+      progress: run.progress,
+      review: run.review,
+      report: run.report,
       nextStep,
     };
+  }
+
+  function subagentRunAccepted(run: SubagentRun): boolean {
+    if (run.status === "superseded") return false;
+    return run.status === "accepted" || run.status === "completed" || run.review.status === "accepted";
+  }
+
+  function subagentRunDismissed(run: SubagentRun): boolean {
+    return run.review.status === "dismissed";
   }
 
   function subagentRoleLabel(role: SubagentRoleSettings): string {
@@ -2090,6 +2753,643 @@ export function createTurnRunner(deps: {
       result.push(normalized);
     }
     return result;
+  }
+
+  function uniqueSubagentRefs(values: readonly (SubagentRef | null | undefined)[]): SubagentRef[] {
+    const seen = new Set<string>();
+    const result: SubagentRef[] = [];
+    for (const value of values) {
+      if (!value) continue;
+      const key = `${value.kind}:${value.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(value);
+    }
+    return result;
+  }
+
+  async function subagentRuntimeDerivedProgress(input: {
+    run: SubagentRun;
+    childSessionId: string;
+    phase?: SubagentProgressPhase | null;
+    latestMeaningfulActivity?: string | null;
+    currentBlocker?: string | null;
+  }): Promise<SubagentProgress> {
+    const snapshot = await store.snapshot();
+    return subagentProgressFromRuntimeEvents({
+      run: input.run,
+      events: snapshot.events.filter((item) => item.sessionId === input.childSessionId),
+      phase: input.phase ?? null,
+      latestMeaningfulActivity: input.latestMeaningfulActivity ?? null,
+      currentBlocker: input.currentBlocker ?? null,
+    });
+  }
+
+  async function refreshSubagentRuntimeDerivedProgress(input: {
+    run: SubagentRun;
+    childSessionId: string;
+    phase?: SubagentProgressPhase | null;
+    latestMeaningfulActivity?: string | null;
+    currentBlocker?: string | null;
+  }): Promise<SubagentRun> {
+    const deps = requireSubagentDeps();
+    const progress = await subagentRuntimeDerivedProgress(input);
+    if (JSON.stringify(progress) === JSON.stringify(input.run.progress)) return input.run;
+    const updated = SubagentRunSchema.parse({
+      ...input.run,
+      progress,
+    });
+    await deps.upsertRun(updated);
+    return updated;
+  }
+
+  function subagentProgressFromRuntimeEvents(input: {
+    run: SubagentRun;
+    events: RuntimeEvent[];
+    phase: SubagentProgressPhase | null;
+    latestMeaningfulActivity: string | null;
+    currentBlocker: string | null;
+  }): SubagentProgress {
+    const base = SubagentProgressSchema.parse(input.run.progress ?? {});
+    const inspectedFiles: string[] = [...base.inspectedFiles];
+    const inspectedResources: string[] = [...base.inspectedResources];
+    const changedFiles: string[] = [...base.changedFiles];
+    const validationAttempts: SubagentValidationAttempt[] = [...base.validationAttempts];
+    const readCounts = new Map<string, number>();
+    const searchCounts = new Map<string, number>();
+    const commandCounts = new Map<string, number>();
+    const startedArgsByToolCallId = new Map<string, Record<string, unknown>>();
+    const processedResultIds = new Set<string>();
+    const validationCommands = new Set(input.run.workerBrief.validationCommands.map(normalizeCommandKey));
+    let latestMeaningfulActivity = input.latestMeaningfulActivity ?? base.latestMeaningfulActivity ?? null;
+    let currentBlocker = input.currentBlocker ?? base.currentBlocker ?? null;
+    let updatedAt = base.updatedAt;
+    let lastInferredPhase: SubagentProgressPhase = base.phase ?? "orient";
+
+    for (const item of input.events) {
+      const data = recordFromUnknown(item.data);
+      if (item.name === "tool.started") {
+        const toolCallId = data ? stringFromRecord(data, "toolCallId") : null;
+        if (toolCallId) startedArgsByToolCallId.set(toolCallId, item.args ?? {});
+        continue;
+      }
+
+      if (
+        item.name !== "tool.completed" &&
+        item.name !== "workspace_action_result" &&
+        item.name !== "command.output"
+      ) {
+        continue;
+      }
+
+      const action = item.action ?? (data ? stringFromRecord(data, "tool") : null);
+      if (!action) continue;
+      const resultId = subagentProgressResultId(item, data);
+      if (processedResultIds.has(resultId)) continue;
+      processedResultIds.add(resultId);
+
+      const resultData = subagentProgressResultData(data);
+      const args = subagentProgressEventArgs(item, data, startedArgsByToolCallId);
+      if (item.timestamp) updatedAt = item.timestamp;
+
+      const resourceRefs = subagentResourceRefsFromEvent(data, resultData);
+      inspectedResources.push(...resourceRefs);
+      inspectedFiles.push(...resourceRefs.map(filePathFromResourceRef).filter((value): value is string => Boolean(value)));
+
+      if (SUBAGENT_SEARCH_ACTIONS.has(action)) {
+        const key = subagentSearchKey(action, args, resultData);
+        if (key) incrementCount(searchCounts, key);
+        const searchPaths = subagentPathsFromSearchResult(resultData);
+        inspectedFiles.push(...searchPaths);
+        latestMeaningfulActivity = searchPaths.length
+          ? `Searched workspace context and found ${searchPaths.length} file reference${searchPaths.length === 1 ? "" : "s"}.`
+          : `Searched workspace context: ${key ?? action}.`;
+        lastInferredPhase = "orient";
+      }
+
+      if (SUBAGENT_READ_ACTIONS.has(action)) {
+        const readTargets = uniqueNonEmptyStrings([
+          ...subagentPathsFromArgs(args),
+          ...subagentPathsFromReadResult(resultData),
+          ...resourceRefs,
+        ]);
+        inspectedFiles.push(...readTargets.map((value) => filePathFromResourceRef(value) ?? value));
+        const key = subagentReadKey(action, args, readTargets);
+        if (key) incrementCount(readCounts, key);
+        latestMeaningfulActivity = readTargets.length
+          ? `Inspected ${readTargets.slice(0, 3).join(", ")}.`
+          : `Inspected workspace context with ${action}.`;
+        lastInferredPhase = "orient";
+      }
+
+      if (SUBAGENT_MUTATING_ACTIONS.has(action)) {
+        const paths = uniqueNonEmptyStrings([
+          ...subagentPathsFromArgs(args),
+          ...subagentChangedPathsFromResult(resultData),
+        ]);
+        changedFiles.push(...paths);
+        if (paths.length > 0) {
+          latestMeaningfulActivity = `Changed ${paths.slice(0, 3).join(", ")}.`;
+        } else {
+          latestMeaningfulActivity = `Ran mutating workspace action ${action}.`;
+        }
+        lastInferredPhase = "edit";
+      }
+
+      if (SUBAGENT_COMMAND_ACTIONS.has(action)) {
+        const attempt = subagentValidationAttemptFromEvent({
+          action,
+          event: item,
+          args,
+          resultData,
+          validationCommands,
+        });
+        const command = attempt?.command ?? subagentCommandFromEvent(args, resultData);
+        if (command) incrementCount(commandCounts, normalizeCommandKey(command));
+        if (attempt) {
+          validationAttempts.push(attempt);
+          latestMeaningfulActivity = `Ran validation command: ${truncateForModelAside(attempt.command, 180)} (${attempt.status}).`;
+          currentBlocker = attempt.status === "failed"
+            ? `Validation failed: ${truncateForModelAside(attempt.command, 220)}`
+            : attempt.status === "passed"
+              ? null
+              : currentBlocker;
+          lastInferredPhase = "validate";
+        }
+      }
+
+      if (item.status === "failed" && !currentBlocker) {
+        currentBlocker = item.error ?? item.output ?? `${action} failed.`;
+        latestMeaningfulActivity = `${action} failed.`;
+        lastInferredPhase = "report";
+      }
+    }
+
+    const repeatedSearches = uniqueNonEmptyStrings([
+      ...base.repeatedSearches,
+      ...repeatedKeys(searchCounts),
+    ]);
+    const repeatedReads = uniqueNonEmptyStrings([
+      ...base.repeatedReads,
+      ...repeatedKeys(readCounts),
+    ]);
+    const repeatedCommands = uniqueNonEmptyStrings([
+      ...base.repeatedCommands,
+      ...repeatedKeys(commandCounts),
+    ]);
+    const dedupedValidationAttempts = uniqueValidationAttempts(validationAttempts);
+    const inferredPhase = input.phase ?? inferSubagentProgressPhase({
+      basePhase: base.phase,
+      lastInferredPhase,
+      hasValidation: dedupedValidationAttempts.length > 0,
+      hasChanges: changedFiles.length > 0 || base.patchRefs.length > 0,
+      hasBlocker: Boolean(currentBlocker),
+    });
+
+    return SubagentProgressSchema.parse({
+      ...base,
+      phase: inferredPhase,
+      inspectedFiles: uniqueNonEmptyStrings(inspectedFiles).slice(0, 500),
+      inspectedResources: uniqueNonEmptyStrings(inspectedResources).slice(0, 500),
+      repeatedSearches: repeatedSearches.slice(0, 200),
+      repeatedReads: repeatedReads.slice(0, 200),
+      repeatedCommands: repeatedCommands.slice(0, 200),
+      changedFiles: uniqueNonEmptyStrings(changedFiles).slice(0, 500),
+      validationAttempts: dedupedValidationAttempts.slice(-100),
+      latestMeaningfulActivity,
+      currentBlocker,
+      updatedAt,
+    });
+  }
+
+  function subagentProgressResultId(item: RuntimeEvent, data: Record<string, unknown> | null): string {
+    const workspaceToolCallId = data ? stringFromRecord(data, "workspaceToolCallId") : null;
+    if (workspaceToolCallId) return `workspace:${workspaceToolCallId}`;
+    const toolCallId = data ? stringFromRecord(data, "toolCallId") : null;
+    if (toolCallId) return `tool:${toolCallId}`;
+    return item.id;
+  }
+
+  function subagentProgressResultData(data: Record<string, unknown> | null): Record<string, unknown> | null {
+    return recordFromUnknown(data?.result) ?? data;
+  }
+
+  function subagentProgressEventArgs(
+    item: RuntimeEvent,
+    data: Record<string, unknown> | null,
+    startedArgsByToolCallId: Map<string, Record<string, unknown>>,
+  ): Record<string, unknown> {
+    if (item.args) return item.args;
+    const toolCallId = data ? stringFromRecord(data, "toolCallId") : null;
+    return toolCallId ? startedArgsByToolCallId.get(toolCallId) ?? {} : {};
+  }
+
+  function subagentResourceRefsFromEvent(
+    data: Record<string, unknown> | null,
+    resultData: Record<string, unknown> | null,
+  ): string[] {
+    const refs: string[] = [];
+    refs.push(...stringArrayFromUnknown(data?.resourceRefs));
+    const resource = recordFromUnknown(resultData?.resource);
+    const resourceRef = resource ? stringFromRecord(resource, "ref") : null;
+    if (resourceRef) refs.push(resourceRef);
+    const result = recordFromUnknown(resultData?.result);
+    const items = Array.isArray(result?.items) ? result.items : Array.isArray(resultData?.items) ? resultData.items : [];
+    for (const item of items) {
+      const ref = recordFromUnknown(item) ? stringFromRecord(recordFromUnknown(item)!, "ref") : null;
+      if (ref) refs.push(ref);
+    }
+    return uniqueNonEmptyStrings(refs);
+  }
+
+  function filePathFromResourceRef(ref: string): string | null {
+    const normalized = ref.trim();
+    for (const prefix of ["workspace:file:", "sandbox:file:"]) {
+      if (normalized.startsWith(prefix)) return normalized.slice(prefix.length).replace(/^\/workspace\//, "");
+    }
+    return null;
+  }
+
+  function subagentPathsFromArgs(args: Record<string, unknown>): string[] {
+    const paths: string[] = [];
+    paths.push(...stringArrayFromUnknown(args.paths));
+    for (const key of ["path", "fromPath", "toPath", "ref"]) {
+      const value = stringFromRecord(args, key);
+      if (value) paths.push(filePathFromResourceRef(value) ?? value);
+    }
+    const files = recordFromUnknown(args.files);
+    if (files) paths.push(...Object.keys(files));
+    return uniqueNonEmptyStrings(paths);
+  }
+
+  function subagentPathsFromSearchResult(resultData: Record<string, unknown> | null): string[] {
+    const paths: string[] = [];
+    const result = recordFromUnknown(resultData?.result);
+    for (const item of [
+      ...(Array.isArray(result?.items) ? result.items : []),
+      ...(Array.isArray(resultData?.items) ? resultData.items : []),
+      ...(Array.isArray(resultData?.matches) ? resultData.matches : []),
+    ]) {
+      const record = recordFromUnknown(item);
+      if (!record) continue;
+      const ref = stringFromRecord(record, "ref");
+      const pathValue = stringFromRecord(record, "path") ?? stringFromRecord(record, "filePath");
+      if (ref) paths.push(filePathFromResourceRef(ref) ?? ref);
+      if (pathValue) paths.push(pathValue);
+    }
+    return uniqueNonEmptyStrings(paths);
+  }
+
+  function subagentPathsFromReadResult(resultData: Record<string, unknown> | null): string[] {
+    const paths: string[] = [];
+    const resource = recordFromUnknown(resultData?.resource);
+    const resourceRef = resource ? stringFromRecord(resource, "ref") : null;
+    if (resourceRef) paths.push(filePathFromResourceRef(resourceRef) ?? resourceRef);
+    const file = recordFromUnknown(resultData?.file);
+    const filePath = file ? stringFromRecord(file, "path") : null;
+    if (filePath) paths.push(filePath);
+    for (const item of Array.isArray(resultData?.files) ? resultData.files : []) {
+      if (typeof item === "string") {
+        paths.push(item);
+        continue;
+      }
+      const record = recordFromUnknown(item);
+      const pathValue = record ? stringFromRecord(record, "path") ?? stringFromRecord(record, "filePath") : null;
+      if (pathValue) paths.push(pathValue);
+    }
+    const status = recordFromUnknown(resultData?.status) ?? resultData;
+    for (const item of Array.isArray(status?.files) ? status.files : []) {
+      const record = recordFromUnknown(item);
+      const pathValue = record ? stringFromRecord(record, "path") : null;
+      if (pathValue) paths.push(pathValue);
+    }
+    return uniqueNonEmptyStrings(paths);
+  }
+
+  function subagentChangedPathsFromResult(resultData: Record<string, unknown> | null): string[] {
+    const paths = subagentPathsFromReadResult(resultData);
+    const preview = recordFromUnknown(resultData?.preview);
+    for (const key of ["path", "filePath"]) {
+      const value = preview ? stringFromRecord(preview, key) : null;
+      if (value) paths.push(value);
+    }
+    return uniqueNonEmptyStrings(paths);
+  }
+
+  function subagentSearchKey(
+    action: string,
+    args: Record<string, unknown>,
+    resultData: Record<string, unknown> | null,
+  ): string | null {
+    const query = stringFromRecord(args, "query")
+      ?? stringFromRecord(recordFromUnknown(resultData?.result) ?? {}, "query")
+      ?? stringFromRecord(resultData ?? {}, "query");
+    return query ? `${action}:${query.trim().toLowerCase()}` : action;
+  }
+
+  function subagentReadKey(action: string, args: Record<string, unknown>, readTargets: string[]): string | null {
+    const ref = stringFromRecord(args, "ref");
+    if (ref) return `${action}:${ref}`;
+    if (readTargets.length > 0) return `${action}:${readTargets.join(",")}`;
+    return action;
+  }
+
+  function subagentValidationAttemptFromEvent(input: {
+    action: string;
+    event: RuntimeEvent;
+    args: Record<string, unknown>;
+    resultData: Record<string, unknown> | null;
+    validationCommands: Set<string>;
+  }): SubagentValidationAttempt | null {
+    const command = subagentCommandFromEvent(input.args, input.resultData);
+    if (!command || !shouldTrackSubagentValidationCommand(command, input.validationCommands)) return null;
+    const commandRecord = subagentCommandRecord(input.resultData);
+    const output = subagentCommandOutput(input.event, input.resultData, commandRecord);
+    const exitCode = numberFromRecord(input.resultData ?? {}, "exitCode")
+      ?? numberFromRecord(commandRecord ?? {}, "exitCode");
+    const status = subagentValidationStatus({
+      eventStatus: input.event.status ?? null,
+      commandStatus: commandRecord ? stringFromRecord(commandRecord, "status") : null,
+      exitCode,
+      output,
+      timedOut: Boolean(booleanFromRecord(input.resultData ?? {}, "timedOut")),
+      command,
+    });
+    const timing = recordFromUnknown(input.resultData?.workspaceToolTiming);
+    return {
+      command,
+      status,
+      exitCode,
+      outputSummary: summarizeSubagentCommandOutput(output),
+      startedAt: timing ? stringFromRecord(timing, "startedAt") : null,
+      completedAt: timing ? stringFromRecord(timing, "completedAt") ?? input.event.timestamp : input.event.timestamp,
+    };
+  }
+
+  function subagentCommandFromEvent(
+    args: Record<string, unknown>,
+    resultData: Record<string, unknown> | null,
+  ): string | null {
+    const commandRecord = subagentCommandRecord(resultData);
+    return (commandRecord ? stringFromRecord(commandRecord, "command") : null)
+      ?? stringFromRecord(resultData ?? {}, "command")
+      ?? stringFromRecord(args, "command");
+  }
+
+  function subagentCommandRecord(resultData: Record<string, unknown> | null): Record<string, unknown> | null {
+    return recordFromUnknown(resultData?.command) ?? recordFromUnknown(resultData?.process);
+  }
+
+  function subagentCommandOutput(
+    eventItem: RuntimeEvent,
+    resultData: Record<string, unknown> | null,
+    commandRecord: Record<string, unknown> | null,
+  ): string {
+    return uniqueNonEmptyStrings([
+      eventItem.output ?? "",
+      eventItem.error ?? "",
+      commandRecord ? stringFromRecord(commandRecord, "output") ?? "" : "",
+      stringFromRecord(resultData ?? {}, "output") ?? "",
+      stringFromRecord(resultData ?? {}, "stdout") ?? "",
+      stringFromRecord(resultData ?? {}, "stderr") ?? "",
+    ]).join("\n");
+  }
+
+  function shouldTrackSubagentValidationCommand(command: string, validationCommands: Set<string>): boolean {
+    const normalized = normalizeCommandKey(command);
+    if (validationCommands.has(normalized)) return true;
+    return /\b(bun|npm|pnpm|yarn)\s+(run\s+)?(test|typecheck|lint|build|check)\b/i.test(command) ||
+      /\b(vitest|jest|pytest|cargo\s+test|go\s+test|tsc|eslint|ruff|mypy)\b/i.test(command) ||
+      /\b(test|typecheck|lint|build|check)s?\b/i.test(command);
+  }
+
+  function subagentValidationStatus(input: {
+    eventStatus: RuntimeEvent["status"] | null;
+    commandStatus: string | null;
+    exitCode: number | null;
+    output: string;
+    timedOut: boolean;
+    command: string;
+  }): SubagentValidationAttempt["status"] {
+    const commandStatus = input.commandStatus?.toLowerCase() ?? "";
+    if (input.timedOut || commandStatus === "failed" || commandStatus === "timed_out" || commandStatus === "stopped") {
+      return "failed";
+    }
+    if (input.eventStatus === "failed") return "failed";
+    if (typeof input.exitCode === "number" && input.exitCode !== 0) return "failed";
+    if (subagentValidationOutputLooksFailed(input.output, input.command)) return "failed";
+    if (typeof input.exitCode === "number" && input.exitCode === 0) return "passed";
+    if (commandStatus === "succeeded" || commandStatus === "completed") return "passed";
+    if (subagentValidationOutputLooksPassed(input.output)) return "passed";
+    return "unknown";
+  }
+
+  function subagentValidationOutputLooksFailed(output: string, command: string): boolean {
+    const text = output.toLowerCase();
+    if (!text.trim()) return false;
+    if (/\b(?:cannot find module|typeerror:|syntaxerror:|referenceerror:|assertionerror|not ok)\b/i.test(output)) {
+      return true;
+    }
+    if (/\b(?:test|tests|suite|suites)\s+failed\b/i.test(output)) return true;
+    if (/\b[1-9]\d*\s+(?:fail|failed|failing|errors?)\b/i.test(output)) return true;
+    if (/\bfailed:\s*[1-9]\d*\b/i.test(output)) return true;
+    return shouldTrackSubagentValidationCommand(command, new Set()) &&
+      /\b(fail(?:ed|ure|ing)?|error:|errors?:)\b/i.test(output) &&
+      !/\b0\s+(?:fail|failed|failing|errors?)\b/i.test(output);
+  }
+
+  function subagentValidationOutputLooksPassed(output: string): boolean {
+    return /\b(all tests passed|tests? passed|0 fail|0 errors?|passed)\b/i.test(output);
+  }
+
+  function summarizeSubagentCommandOutput(output: string): string | null {
+    const trimmed = output.trim();
+    if (!trimmed) return null;
+    return truncateForModelAside(trimmed.replace(/\n{3,}/g, "\n\n"), 2000);
+  }
+
+  function normalizeCommandKey(command: string): string {
+    return command.trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function uniqueValidationAttempts(attempts: SubagentValidationAttempt[]): SubagentValidationAttempt[] {
+    const seen = new Set<string>();
+    const result: SubagentValidationAttempt[] = [];
+    for (const attempt of attempts) {
+      const key = [
+        normalizeCommandKey(attempt.command),
+        attempt.completedAt ?? "",
+        attempt.exitCode ?? "",
+        attempt.status,
+        attempt.outputSummary ?? "",
+      ].join("\u0000");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(attempt);
+    }
+    return result;
+  }
+
+  function inferSubagentProgressPhase(input: {
+    basePhase: SubagentProgressPhase;
+    lastInferredPhase: SubagentProgressPhase;
+    hasValidation: boolean;
+    hasChanges: boolean;
+    hasBlocker: boolean;
+  }): SubagentProgressPhase {
+    if (input.basePhase === "submitted") return "submitted";
+    if (input.hasBlocker) return "report";
+    if (input.lastInferredPhase !== "orient") return input.lastInferredPhase;
+    if (input.hasValidation) return "validate";
+    if (input.hasChanges) return "edit";
+    return input.basePhase ?? "orient";
+  }
+
+  function incrementCount(map: Map<string, number>, key: string): void {
+    const normalized = key.trim();
+    if (!normalized) return;
+    map.set(normalized, (map.get(normalized) ?? 0) + 1);
+  }
+
+  function repeatedKeys(map: Map<string, number>): string[] {
+    return [...map.entries()].filter(([, count]) => count > 1).map(([key]) => key);
+  }
+
+  function stringArrayFromUnknown(value: unknown): string[] {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+  }
+
+  type SubagentToolLoopSteeringTracker = {
+    policy: SubagentExplorationSteeringPolicy;
+    searches: Map<string, number>;
+    reads: Map<string, number>;
+    commands: Map<string, number>;
+    deliveredKeys: Set<string>;
+  };
+
+  function createSubagentToolLoopSteeringTracker(
+    policy: SubagentExplorationSteeringPolicy,
+  ): SubagentToolLoopSteeringTracker {
+    return {
+      policy,
+      searches: new Map(),
+      reads: new Map(),
+      commands: new Map(),
+      deliveredKeys: new Set(),
+    };
+  }
+
+  function subagentToolLoopSteeringMessagesForNativeResults(input: {
+    session: Session;
+    toolCalls: NativeModelToolCall[];
+    results: NativeModelToolResult[];
+    tracker: SubagentToolLoopSteeringTracker;
+  }): string[] {
+    if (!input.session.subagentRunId) return [];
+    const argsByToolCallId = new Map<string, Record<string, unknown>>();
+    for (const call of input.toolCalls) {
+      try {
+        argsByToolCallId.set(call.id, parseNativeToolArguments(call));
+      } catch {
+        argsByToolCallId.set(call.id, {});
+      }
+    }
+    return input.results.flatMap((result) =>
+      subagentToolLoopSteeringMessagesForAction({
+        session: input.session,
+        action: result.name,
+        args: argsByToolCallId.get(result.toolCallId) ?? {},
+        resultData: recordFromUnknown(result.data),
+        tracker: input.tracker,
+      }),
+    );
+  }
+
+  function subagentToolLoopSteeringMessagesForWorkspaceResult(input: {
+    session: Session;
+    request: WorkspaceToolRequest;
+    result: WorkspaceToolResult;
+    tracker: SubagentToolLoopSteeringTracker;
+  }): string[] {
+    if (!input.session.subagentRunId) return [];
+    return subagentToolLoopSteeringMessagesForAction({
+      session: input.session,
+      action: input.result.action,
+      args: input.request.args,
+      resultData: recordFromUnknown(input.result.data),
+      tracker: input.tracker,
+    });
+  }
+
+  function subagentToolLoopSteeringMessagesForAction(input: {
+    session: Session;
+    action: string;
+    args: Record<string, unknown>;
+    resultData: Record<string, unknown> | null;
+    tracker: SubagentToolLoopSteeringTracker;
+  }): string[] {
+    if (!input.tracker.policy.enabled) return [];
+    const repeated: Array<{ kind: "search" | "read" | "command"; key: string }> = [];
+    if (SUBAGENT_SEARCH_ACTIONS.has(input.action)) {
+      const key = subagentSearchKey(input.action, input.args, input.resultData);
+      if (key && incrementSteeringCount(input.tracker.searches, key) >= input.tracker.policy.repeatedSearchThreshold) {
+        repeated.push({ kind: "search", key });
+      }
+    }
+    if (SUBAGENT_READ_ACTIONS.has(input.action)) {
+      const readTargets = uniqueNonEmptyStrings([
+        ...subagentPathsFromArgs(input.args),
+        ...subagentPathsFromReadResult(input.resultData),
+      ]);
+      const key = subagentReadKey(input.action, input.args, readTargets);
+      if (key && incrementSteeringCount(input.tracker.reads, key) >= input.tracker.policy.repeatedReadThreshold) {
+        repeated.push({ kind: "read", key });
+      }
+    }
+    if (SUBAGENT_COMMAND_ACTIONS.has(input.action)) {
+      const command = subagentCommandFromEvent(input.args, input.resultData);
+      const key = command ? normalizeCommandKey(command) : null;
+      if (key && incrementSteeringCount(input.tracker.commands, key) >= input.tracker.policy.repeatedCommandThreshold) {
+        repeated.push({ kind: "command", key });
+      }
+    }
+    const messages: string[] = [];
+    for (const item of repeated) {
+      const deliveryKey = `${item.kind}:${item.key}`;
+      if (input.tracker.deliveredKeys.has(deliveryKey)) continue;
+      input.tracker.deliveredKeys.add(deliveryKey);
+      messages.push(subagentRepeatedExplorationSteeringMessage({
+        roleId: input.session.subagentRoleId ?? "child",
+        kind: item.kind,
+        key: item.key,
+      }));
+    }
+    return messages;
+  }
+
+  function incrementSteeringCount(map: Map<string, number>, key: string): number {
+    const count = (map.get(key) ?? 0) + 1;
+    map.set(key, count);
+    return count;
+  }
+
+  function subagentRepeatedExplorationSteeringMessage(input: {
+    roleId: string;
+    kind: "search" | "read" | "command";
+    key: string;
+  }): string {
+    const label = input.kind === "search"
+      ? "search"
+      : input.kind === "read"
+        ? "read"
+        : "command";
+    return [
+      "Runtime subagent steering:",
+      `${input.roleId} subagent repeated the same ${label} pattern: ${truncateForModelAside(input.key, 500)}.`,
+      "If this did not produce new information, stop repeating it and move to the next useful boundary: edit the target, run validation, submit a review packet, or report the blocker/question.",
+    ].join(" ");
   }
 
   type SubagentUsageBudgetSnapshot = {
@@ -2261,6 +3561,13 @@ export function createTurnRunner(deps: {
       startedAt: run.startedAt ?? now(),
       completedAt: null,
       error: null,
+      progress: SubagentProgressSchema.parse({
+        ...(run.progress ?? {}),
+        phase: "orient",
+        latestMeaningfulActivity: "Child follow-up turn started.",
+        currentBlocker: null,
+        updatedAt: now(),
+      }),
       metadata: {
         ...(run.metadata ?? {}),
         lastFollowUpTurnId: input.childTurnId,
@@ -2303,24 +3610,104 @@ export function createTurnRunner(deps: {
     const completed = turn.status === "completed";
     const interrupted = turn.status === "interrupted";
     const message = turn.error || (completed ? null : "Subagent follow-up failed.");
+    const submittedAt = now();
+    const derivedProgress = await subagentRuntimeDerivedProgress({
+      run: latestRun,
+      childSessionId: input.childSession.id,
+      phase: completed ? "submitted" : interrupted ? null : "report",
+      latestMeaningfulActivity: completed
+        ? "Child follow-up submitted a review packet."
+        : interrupted
+          ? "Child follow-up was interrupted and needs resume."
+        : "Child follow-up failed.",
+      currentBlocker: completed ? null : message,
+    });
+    const followUpReport = {
+      findings: latestRun.report?.findings ?? [],
+      artifacts: latestRun.report?.artifacts ?? [],
+      patchRef: latestRun.report?.patchRef ?? null,
+      diffRef: latestRun.report?.diffRef ?? null,
+      testsRun: latestRun.report?.testsRun ?? [],
+      confidence: latestRun.report?.confidence ?? null,
+      summary: summary || latestRun.report?.summary || (completed ? "Child conversation completed." : "Subagent follow-up did not complete."),
+      blockers: completed
+        ? latestRun.report?.blockers ?? []
+        : uniqueNonEmptyStrings([...(latestRun.report?.blockers ?? []), message ?? "Subagent follow-up did not complete."]),
+      followUpNeeded: !completed,
+    };
+    const followUpProgress = SubagentProgressSchema.parse({
+      ...derivedProgress,
+      phase: completed ? "submitted" : interrupted ? latestRun.progress.phase : "report",
+      latestMeaningfulActivity: completed
+        ? "Child follow-up submitted a review packet."
+        : interrupted
+          ? "Child follow-up was interrupted and needs resume."
+          : "Child follow-up failed.",
+      currentBlocker: completed ? derivedProgress.currentBlocker : message,
+      updatedAt: submittedAt,
+    });
+    const packetQuality = completed
+      ? subagentReviewPacketQuality({
+          run: latestRun,
+          finalSummary: summary,
+          report: followUpReport,
+          progress: followUpProgress,
+        })
+      : latestRun.review.packetQuality;
+    const followUpReviewReport: NonNullable<SubagentRun["report"]> = {
+      ...followUpReport,
+      confidence: followUpReport.confidence ?? (packetQuality.status === "weak" ? "low" : null),
+      followUpNeeded: followUpReport.followUpNeeded || packetQuality.status !== "reviewable",
+    };
+    const reviewRouting = completed
+      ? subagentReviewRoutingRecommendation({
+          run: latestRun,
+          reviewRoutingPolicy: context.role.reviewRouting,
+          packetQuality,
+          report: followUpReviewReport,
+          progress: followUpProgress,
+        })
+      : null;
+    const packetIncomplete = completed && packetQuality.status === "incomplete";
+    const packetBlocker = packetQuality.issues[0] ?? "Child review packet is incomplete.";
     const updated = SubagentRunSchema.parse({
       ...latestRun,
-      status: completed ? "completed" : interrupted ? "needs_resume" : "failed",
-      completedAt: completed ? now() : latestRun.completedAt,
-      error: completed ? null : message,
+      status: packetIncomplete ? "blocked" : completed ? "submitted_for_review" : interrupted ? "needs_resume" : "failed",
+      completedAt: packetIncomplete ? submittedAt : null,
+      error: packetIncomplete ? packetBlocker : completed ? null : message,
       report: {
-        ...(latestRun.report ?? {}),
-        summary: summary || latestRun.report?.summary || (completed ? "Child conversation completed." : "Subagent follow-up did not complete."),
-        blockers: completed
-          ? latestRun.report?.blockers ?? []
-          : uniqueNonEmptyStrings([...(latestRun.report?.blockers ?? []), message ?? "Subagent follow-up did not complete."]),
-        followUpNeeded: !completed,
+        ...followUpReviewReport,
+        blockers: packetIncomplete
+          ? uniqueNonEmptyStrings([...(followUpReviewReport.blockers ?? []), ...packetQuality.issues])
+          : followUpReviewReport.blockers,
       },
+      progress: SubagentProgressSchema.parse({
+        ...followUpProgress,
+        phase: packetIncomplete ? "report" : followUpProgress.phase,
+        latestMeaningfulActivity: packetIncomplete
+          ? "Child follow-up finished without a reviewable final report."
+          : followUpProgress.latestMeaningfulActivity,
+        currentBlocker: packetIncomplete ? packetBlocker : followUpProgress.currentBlocker,
+      }),
+      review: completed
+        ? SubagentReviewStateSchema.parse({
+            ...(latestRun.review ?? {}),
+            status: packetIncomplete ? "needs_user_input" : "submitted_for_review",
+            submittedAt,
+            summary: summary || followUpReport.summary,
+            issues: packetIncomplete
+              ? uniqueNonEmptyStrings([...(latestRun.review?.issues ?? []), ...packetQuality.issues])
+              : latestRun.review?.issues ?? [],
+            humanReviewRecommended: packetQuality.status !== "reviewable" || Boolean(latestRun.report?.patchRef ?? latestRun.report?.diffRef),
+            ...(reviewRouting ?? {}),
+            packetQuality,
+          })
+        : latestRun.review,
       metadata: {
         ...(latestRun.metadata ?? {}),
         usage,
         lastFollowUpTurnId: input.childTurnId,
-        lastFollowUpCompletedAt: now(),
+        lastFollowUpCompletedAt: submittedAt,
         turnBudget: {
           usedTurns: context.priorTurnCount + 1,
           maxTurns: context.maxTurns,
@@ -2334,10 +3721,12 @@ export function createTurnRunner(deps: {
         parentSession,
         parentTurnId: updated.parentTurnId ?? input.childTurnId,
         run: updated,
-        eventName: completed ? "subagent.completed" : "subagent.failed",
-        status: completed ? "completed" : "failed",
-        output: completed
-          ? `${updated.roleId} subagent follow-up completed.`
+        eventName: packetIncomplete ? "subagent.blocked" : completed ? "subagent.submitted" : "subagent.failed",
+        status: completed && !packetIncomplete ? "pending" : "failed",
+        output: packetIncomplete
+          ? `${updated.roleId} subagent follow-up submitted an incomplete review packet: ${packetBlocker}`
+          : completed
+            ? `${updated.roleId} subagent follow-up submitted for review.`
           : `${updated.roleId} subagent follow-up failed: ${message}`,
       });
     }
@@ -2474,6 +3863,14 @@ export function createTurnRunner(deps: {
 
   type LocalSubagentGitWorktree = Record<string, unknown> & {
     repoPath: string;
+  };
+
+  type LocalSubagentDependencyLink = {
+    path: string;
+    sourcePath: string;
+    targetPath: string;
+    status: "linked" | "missing" | "not_ignored" | "target_exists" | "failed";
+    error?: string;
   };
 
   async function prepareSubagentWorkspaceIsolation(input: {
@@ -2736,6 +4133,10 @@ export function createTurnRunner(deps: {
       await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
       throw new Error(addResult.stderr.trim() || addResult.stdout.trim() || "git worktree add failed");
     }
+    const dependencyLinks = await linkLocalSubagentDependencyArtifacts({
+      parentRepoPath,
+      worktreePath,
+    });
 
     return {
       mode: input.role.isolationMode,
@@ -2748,17 +4149,168 @@ export function createTurnRunner(deps: {
       branch,
       baseCommit,
       parentDirty: Boolean(statusResult.stdout.trim()),
+      dependencyLinks,
       createdAt: now(),
       cleanup: "manual_after_handoff",
     };
+  }
+
+  async function linkLocalSubagentDependencyArtifacts(input: {
+    parentRepoPath: string;
+    worktreePath: string;
+  }): Promise<LocalSubagentDependencyLink[]> {
+    const links: LocalSubagentDependencyLink[] = [];
+    const candidates = await localSubagentDependencyArtifactCandidates(input.parentRepoPath);
+    for (const relativePath of candidates) {
+      const sourcePath = path.join(input.parentRepoPath, ...relativePath.split("/"));
+      const targetPath = path.join(input.worktreePath, ...relativePath.split("/"));
+      const sourceStat = await safeLstat(sourcePath);
+      if (!sourceStat) {
+        links.push({ path: relativePath, sourcePath, targetPath, status: "missing" });
+        continue;
+      }
+      if (!sourceStat.isDirectory()) {
+        links.push({ path: relativePath, sourcePath, targetPath, status: "failed", error: "dependency artifact is not a directory" });
+        continue;
+      }
+      if (!(await gitPathIgnored(input.parentRepoPath, relativePath))) {
+        links.push({ path: relativePath, sourcePath, targetPath, status: "not_ignored" });
+        continue;
+      }
+      if (await safeLstat(targetPath)) {
+        links.push({ path: relativePath, sourcePath, targetPath, status: "target_exists" });
+        continue;
+      }
+      try {
+        await fs.mkdir(path.dirname(targetPath), { recursive: true });
+        await fs.symlink(sourcePath, targetPath, process.platform === "win32" ? "junction" : "dir");
+        links.push({ path: relativePath, sourcePath, targetPath, status: "linked" });
+      } catch (error) {
+        links.push({
+          path: relativePath,
+          sourcePath,
+          targetPath,
+          status: "failed",
+          error: textFromUnknown(error) || "Unable to link dependency artifact.",
+        });
+      }
+    }
+    return links;
+  }
+
+  async function localSubagentDependencyArtifactCandidates(parentRepoPath: string): Promise<string[]> {
+    const candidates = new Set<string>(["node_modules"]);
+    for (const workspaceDir of await localWorkspacePackageDirs(parentRepoPath)) {
+      const relativePath = path.posix.join(workspaceDir, "node_modules");
+      const sourcePath = path.join(parentRepoPath, ...relativePath.split("/"));
+      if (await safeLstat(sourcePath)) candidates.add(relativePath);
+    }
+    return [...candidates];
+  }
+
+  async function localWorkspacePackageDirs(parentRepoPath: string): Promise<string[]> {
+    const packageJson = await readJsonFile(path.join(parentRepoPath, "package.json"));
+    const workspaces = workspacePatternsFromPackageJson(packageJson);
+    const dirs: string[] = [];
+    for (const pattern of workspaces) {
+      for (const dir of await expandSimpleWorkspacePattern(parentRepoPath, pattern)) {
+        dirs.push(dir);
+      }
+    }
+    return [...new Set(dirs)].slice(0, 80);
+  }
+
+  function workspacePatternsFromPackageJson(value: unknown): string[] {
+    const record = recordFromUnknown(value);
+    const workspaces = record?.workspaces;
+    if (Array.isArray(workspaces)) {
+      return workspaces.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    }
+    const workspaceRecord = recordFromUnknown(workspaces);
+    const packages = workspaceRecord?.packages;
+    return Array.isArray(packages)
+      ? packages.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+  }
+
+  async function expandSimpleWorkspacePattern(parentRepoPath: string, pattern: string): Promise<string[]> {
+    const normalized = pattern.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+    if (!normalized || normalized.startsWith("!") || normalized.startsWith("/") || normalized.includes("..")) return [];
+    const segments = normalized.split("/").filter(Boolean);
+    let relDirs = [""];
+    for (const segment of segments) {
+      if (segment === "*") {
+        const expanded: string[] = [];
+        for (const relDir of relDirs) {
+          const absoluteDir = path.join(parentRepoPath, ...relDir.split("/").filter(Boolean));
+          const entries = await safeReaddir(absoluteDir);
+          for (const entry of entries) {
+            if (!entry.isDirectory() || entry.name === "node_modules" || entry.name === ".git") continue;
+            expanded.push(path.posix.join(relDir, entry.name));
+          }
+        }
+        relDirs = expanded;
+        continue;
+      }
+      if (segment.includes("*")) return [];
+      relDirs = relDirs.map((relDir) => path.posix.join(relDir, segment));
+    }
+    const existing: string[] = [];
+    for (const relDir of relDirs) {
+      const stat = await safeLstat(path.join(parentRepoPath, ...relDir.split("/").filter(Boolean)));
+      if (stat?.isDirectory()) existing.push(relDir);
+    }
+    return existing;
+  }
+
+  async function gitPathIgnored(repoPath: string, relativePath: string): Promise<boolean> {
+    const result = await runWorkspaceCommand("git", ["check-ignore", "-q", "--", relativePath], repoPath);
+    return result.code === 0;
+  }
+
+  async function readJsonFile(filePath: string): Promise<unknown> {
+    try {
+      return JSON.parse(await fs.readFile(filePath, "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  async function safeLstat(filePath: string): Promise<import("node:fs").Stats | null> {
+    try {
+      return await fs.lstat(filePath);
+    } catch {
+      return null;
+    }
+  }
+
+  async function safeReaddir(dirPath: string): Promise<import("node:fs").Dirent[]> {
+    try {
+      return await fs.readdir(dirPath, { withFileTypes: true });
+    } catch {
+      return [];
+    }
   }
 
   function safeSubagentPathSegment(value: string): string {
     return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) || "subagent";
   }
 
+  function changedFilesFromGitPorcelain(statusText: string): string[] {
+    return uniqueNonEmptyStrings(statusText
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter((line) => line && !line.startsWith("##"))
+      .map((line) => {
+        const entry = line.slice(3).trim();
+        const renamedPath = entry.includes(" -> ") ? entry.split(" -> ").at(-1) : entry;
+        return renamedPath?.replace(/^"|"$/g, "") ?? "";
+      }));
+  }
+
   async function captureSubagentWorkspaceHandoff(run: SubagentRun): Promise<{
     changed: boolean;
+    changedFiles: string[];
     artifacts: NonNullable<SubagentRun["report"]>["artifacts"];
     patchRef: NonNullable<SubagentRun["report"]>["patchRef"];
     diffRef: NonNullable<SubagentRun["report"]>["diffRef"];
@@ -2780,6 +4332,7 @@ export function createTurnRunner(deps: {
     if (diffResult.code !== 0) {
       return {
         changed: false,
+        changedFiles: [],
         artifacts: [],
         patchRef: null,
         diffRef: null,
@@ -2792,9 +4345,11 @@ export function createTurnRunner(deps: {
       };
     }
     const statusResult = await runWorkspaceCommand("git", ["status", "--porcelain=v1", "-b"], repoPath);
+    const changedFiles = statusResult.code === 0 ? changedFilesFromGitPorcelain(statusResult.stdout) : [];
     const patch = diffResult.stdout;
     const changed = Boolean(patch.trim());
-    const patchPath = path.join(workspaceRoot, "handoff.patch");
+    const patchArtifact = changed ? await durableSubagentPatchArtifact(run) : null;
+    const patchPath = patchArtifact?.patchPath ?? path.join(workspaceRoot, "handoff.patch");
     if (changed) await fs.writeFile(patchPath, patch, "utf8");
     const patchPreview = truncatePatch(patch);
     const patchRef = changed
@@ -2805,6 +4360,7 @@ export function createTurnRunner(deps: {
       : null;
     return {
       changed,
+      changedFiles,
       artifacts: patchRef ? [patchRef] : [],
       patchRef,
       diffRef,
@@ -2814,8 +4370,10 @@ export function createTurnRunner(deps: {
         repoPath,
         parentRepoPath,
         workspaceRoot,
+        patchRootPath: patchArtifact?.rootPath ?? workspaceRoot,
         branch: workspace.branch ?? null,
         baseCommit: workspace.baseCommit ?? null,
+        changedFiles,
         patchPath: changed ? patchPath : null,
         patchBytes: Buffer.byteLength(patch, "utf8"),
         patchPreview,
@@ -2832,11 +4390,29 @@ export function createTurnRunner(deps: {
     };
   }
 
+  async function durableSubagentPatchArtifact(run: SubagentRun): Promise<{
+    rootPath: string;
+    patchPath: string;
+  }> {
+    const rootPath = path.join(
+      attachmentRootDir,
+      "subagents",
+      safeSubagentPathSegment(run.parentSessionId),
+      safeSubagentPathSegment(run.id),
+    );
+    await fs.mkdir(rootPath, { recursive: true });
+    return {
+      rootPath,
+      patchPath: path.join(rootPath, "handoff.patch"),
+    };
+  }
+
   function captureSubagentSandboxForkHandoff(
     run: SubagentRun,
     workspace: Record<string, unknown>,
   ): {
     changed: boolean;
+    changedFiles: string[];
     artifacts: NonNullable<SubagentRun["report"]>["artifacts"];
     patchRef: NonNullable<SubagentRun["report"]>["patchRef"];
     diffRef: NonNullable<SubagentRun["report"]>["diffRef"];
@@ -2852,12 +4428,14 @@ export function createTurnRunner(deps: {
     };
     return {
       changed: true,
+      changedFiles: [],
       artifacts: [sandboxRef],
       patchRef: null,
       diffRef: null,
       metadata: {
         status: "captured",
         changed: true,
+        changedFiles: [],
         implementation: "sandbox_fork",
         target: "sandbox",
         sandboxId,
@@ -2882,7 +4460,9 @@ export function createTurnRunner(deps: {
 
   async function cleanupSubagentWorkspace(run: SubagentRun): Promise<Record<string, unknown> | null> {
     const workspace = subagentWorkspaceFromRun(run);
-    if (!workspace || workspace.implementation !== "git_worktree") return null;
+    if (!workspace) return null;
+    if (workspace.implementation === "sandbox_fork") return cleanupSubagentSandboxFork(run, workspace);
+    if (workspace.implementation !== "git_worktree") return null;
     const workspaceRoot = stringFromRecord(workspace, "workspaceRoot");
     const worktreePath = stringFromRecord(workspace, "worktreePath") ?? stringFromRecord(workspace, "repoPath");
     const parentRepoPath = stringFromRecord(workspace, "parentRepoPath");
@@ -2920,6 +4500,205 @@ export function createTurnRunner(deps: {
       result.reason = "workspaceRoot missing";
     }
     return result;
+  }
+
+  async function cleanupSubagentSandboxFork(
+    run: SubagentRun,
+    workspace: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const sandboxId = stringFromRecord(workspace, "sandboxId") ?? stringFromRecord(workspace, "workspaceId");
+    const deletedAt = now();
+    const result: Record<string, unknown> = {
+      status: "deleted",
+      deletedAt,
+      implementation: "sandbox_fork",
+      target: "sandbox",
+      sandboxId,
+      parentSandboxId: stringFromRecord(workspace, "parentSandboxId"),
+      sourceSandboxId: stringFromRecord(workspace, "sourceSandboxId"),
+      workspaceName: stringFromRecord(workspace, "workspaceName"),
+    };
+    if (!sandboxId) {
+      return {
+        ...result,
+        status: "skipped",
+        reason: "sandboxId missing",
+      };
+    }
+    if (!cleanupSandboxForSubagent) {
+      return {
+        ...result,
+        status: "skipped",
+        reason: "sandbox cleanup executor unavailable",
+      };
+    }
+    try {
+      const payload = await cleanupSandboxForSubagent({ sandboxId, run });
+      return {
+        ...result,
+        payload: sandboxCleanupPayloadSummary(payload),
+      };
+    } catch (error) {
+      return {
+        ...result,
+        status: "failed",
+        failedAt: now(),
+        error: textFromUnknown(error) || "Sandbox fork cleanup failed.",
+      };
+    }
+  }
+
+  function sandboxCleanupPayloadSummary(payload: unknown): Record<string, unknown> | null {
+    const record = recordFromUnknown(payload);
+    if (!record) return null;
+    const sandbox = recordFromUnknown(record.sandbox);
+    if (!sandbox) return null;
+    return {
+      sandboxId: stringFromRecord(sandbox, "id") ?? stringFromRecord(sandbox, "sandboxId"),
+      state: stringFromRecord(sandbox, "state"),
+      name: stringFromRecord(sandbox, "name") ?? stringFromRecord(sandbox, "title"),
+    };
+  }
+
+  async function cleanupSubagentRun(input: {
+    run: SubagentRun;
+    parentSession: Session;
+    parentTurnId?: string | null;
+    reason: string;
+    policy: SubagentCleanupPolicy;
+  }): Promise<{ run: SubagentRun; workspaceCleanup: Record<string, unknown> }> {
+    const deps = requireSubagentDeps();
+    const existingCleanup = recordFromUnknown(input.run.metadata?.lifecycleCleanup);
+    const existingWorkspaceCleanup = recordFromUnknown(existingCleanup?.workspaceCleanup);
+    if (existingWorkspaceCleanup && subagentWorkspaceCleanupAlreadyDone(existingWorkspaceCleanup)) {
+      return { run: input.run, workspaceCleanup: existingWorkspaceCleanup };
+    }
+
+    const requestedAt = now();
+    await appendSubagentReceipt({
+      parentSession: input.parentSession,
+      parentTurnId: input.parentTurnId,
+      run: input.run,
+      eventName: "subagent.cleanup",
+      status: "started",
+      output: `${input.run.roleId} subagent cleanup started.`,
+    });
+
+    let workspaceCleanup: Record<string, unknown>;
+    const retainReason = subagentCleanupRetainReason(input.run, input.policy);
+    if (retainReason) {
+      workspaceCleanup = subagentRetainedWorkspaceState({
+        retainedAt: now(),
+        reason: retainReason,
+        trigger: subagentWorkspaceRetentionTriggerForCleanupPolicy(input.policy),
+      });
+    } else {
+      workspaceCleanup = (await cleanupSubagentWorkspace(input.run)) ?? {
+        status: "skipped",
+        reason: "No cleanable isolated workspace.",
+        skippedAt: now(),
+      };
+    }
+
+    const completedAt = now();
+    const nextRun = SubagentRunSchema.parse({
+      ...input.run,
+      metadata: {
+        ...(input.run.metadata ?? {}),
+        lifecycleCleanup: {
+          reason: input.reason,
+          policy: input.policy,
+          requestedAt,
+          completedAt,
+          evidenceRetention: input.run.evidenceRetention,
+          ...(existingWorkspaceCleanup ? { previousWorkspaceCleanup: existingWorkspaceCleanup } : {}),
+          workspaceCleanup,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+    const status = stringFromRecord(workspaceCleanup, "status");
+    await appendSubagentReceipt({
+      parentSession: input.parentSession,
+      parentTurnId: input.parentTurnId,
+      run: nextRun,
+      eventName: "subagent.cleanup",
+      status: status === "failed" ? "failed" : "completed",
+      output: subagentCleanupOutput(nextRun, workspaceCleanup),
+    });
+    if (status === "retained") {
+      await appendSubagentReceipt({
+        parentSession: input.parentSession,
+        parentTurnId: input.parentTurnId,
+        run: nextRun,
+        eventName: "subagent.workspace_retained",
+        status: "completed",
+        output: `${nextRun.roleId} subagent workspace retained for inspection.`,
+      });
+    }
+    return { run: nextRun, workspaceCleanup };
+  }
+
+  function subagentCleanupRetainReason(
+    run: SubagentRun,
+    policy: SubagentCleanupPolicy,
+  ): string | null {
+    if (policy === "cancel_requested" || policy === "retention_expired") return null;
+    const handoff = workspaceHandoffFromRun(run);
+    const changed = handoff ? truthyRecordBoolean(handoff, "changed") : false;
+    const applyResult = recordFromUnknown(handoff?.applyResult);
+    const applied = applyResult ? stringFromRecord(applyResult, "status") === "applied" : false;
+    if (changed && !applied) return "Changed child workspace has not been applied; retain for inspection.";
+    if (run.status === "failed" || run.status === "failed_with_artifacts") {
+      return "Failed child workspace retained for inspection.";
+    }
+    return null;
+  }
+
+  function subagentRetainedWorkspaceState(input: {
+    retainedAt: string;
+    reason: string;
+    trigger: SubagentWorkspaceRetentionTrigger;
+  }): Record<string, unknown> {
+    return {
+      status: "retained",
+      reason: input.reason,
+      retainedAt: input.retainedAt,
+      retentionPolicy: {
+        kind: "retain_for_inspection",
+        retentionDays: SUBAGENT_RETAINED_WORKSPACE_RETENTION_DAYS,
+        expiresAt: addMillisecondsToIso(input.retainedAt, SUBAGENT_RETAINED_WORKSPACE_RETENTION_MS),
+        cleanupAfterExpiry: true,
+        trigger: input.trigger,
+      },
+    };
+  }
+
+  function subagentWorkspaceRetentionTriggerForCleanupPolicy(
+    policy: SubagentCleanupPolicy,
+  ): SubagentWorkspaceRetentionTrigger {
+    if (policy === "retention_expired") return "manual_cleanup";
+    return policy;
+  }
+
+  function addMillisecondsToIso(iso: string, ms: number): string {
+    const parsed = Date.parse(iso);
+    const base = Number.isFinite(parsed) ? parsed : Date.now();
+    return new Date(base + ms).toISOString();
+  }
+
+  function subagentCleanupOutput(run: SubagentRun, workspaceCleanup: Record<string, unknown>): string {
+    const status = stringFromRecord(workspaceCleanup, "status") ?? "unknown";
+    if (status === "removed") return `${run.roleId} subagent isolated workspace cleaned up.`;
+    if (status === "deleted") return `${run.roleId} subagent isolated sandbox fork deleted.`;
+    if (status === "retained") return `${run.roleId} subagent workspace retained for inspection.`;
+    if (status === "failed") return `${run.roleId} subagent cleanup failed.`;
+    return `${run.roleId} subagent cleanup ${status}.`;
+  }
+
+  function subagentWorkspaceCleanupAlreadyDone(workspaceCleanup: Record<string, unknown>): boolean {
+    const status = stringFromRecord(workspaceCleanup, "status");
+    return status === "removed" || status === "deleted";
   }
 
   function workspaceHandoffFromRun(run: SubagentRun): Record<string, unknown> | null {
@@ -2965,6 +4744,7 @@ export function createTurnRunner(deps: {
     objective: string;
     parentSession: Session;
     contextPack: string | null;
+    workerBrief: SubagentWorkerBrief;
   }): string {
     return [
       `You are an OpenPond ${input.role.id} subagent running in an addressable child conversation.`,
@@ -2979,18 +4759,108 @@ export function createTurnRunner(deps: {
       input.objective,
       input.contextPack ? ["", "Context:", input.contextPack].join("\n") : "",
       "",
-      "When finished, respond with a concise report: summary, findings, files or artifacts changed/read, tests or checks run, blockers, confidence, and follow-up needed.",
+      formatSubagentWorkerBrief(input.workerBrief),
+      "",
+      "When you decide the assignment is done, stop working and submit a concise review packet.",
+      "Your submission is not final acceptance; the parent or a reviewer will decide whether it is accepted, needs revision, or needs user input.",
+      "The review packet must include summary, findings, files or artifacts changed/read, tests or checks run, blockers, confidence, and follow-up needed.",
     ].filter(Boolean).join("\n");
   }
 
   function subagentChildPrompt(input: {
     objective: string;
     contextPack: string | null;
+    workerBrief: SubagentWorkerBrief;
   }): string {
     return [
       input.objective,
       input.contextPack ? ["Context:", input.contextPack].join("\n") : null,
+      formatSubagentWorkerBrief(input.workerBrief),
     ].filter(Boolean).join("\n\n");
+  }
+
+  function subagentWorkerBriefForStart(input: {
+    role: SubagentRoleSettings;
+    objective: string;
+    provided: SubagentWorkerBrief | null;
+  }): SubagentWorkerBrief {
+    const provided = SubagentWorkerBriefSchema.parse(input.provided ?? {});
+    return SubagentWorkerBriefSchema.parse({
+      plan: provided.plan.length > 0
+        ? provided.plan
+        : defaultSubagentBriefPlan(input.role.id),
+      targetFiles: provided.targetFiles,
+      acceptanceCriteria: provided.acceptanceCriteria.length > 0
+        ? provided.acceptanceCriteria
+        : defaultSubagentAcceptanceCriteria(input.objective),
+      validationCommands: provided.validationCommands,
+      stopConditions: provided.stopConditions.length > 0
+        ? provided.stopConditions
+        : defaultSubagentStopConditions(),
+    });
+  }
+
+  function defaultSubagentBriefPlan(roleId: string): string[] {
+    if (roleId === "coding") {
+      return [
+        "Orient on the relevant code and existing tests before editing.",
+        "Make the smallest scoped implementation that satisfies the assignment.",
+        "Run the focused validation commands from the brief, or explain why validation cannot run.",
+        "Submit a review packet with changed files, validation evidence, blockers, and risks.",
+      ];
+    }
+    if (roleId === "review") {
+      return [
+        "Inspect the supplied code, diff, report, or context.",
+        "Identify correctness, regression, and test risks before style concerns.",
+        "Submit ranked findings with concrete evidence and any required corrections.",
+      ];
+    }
+    if (roleId === "test") {
+      return [
+        "Inspect the target behavior and existing coverage.",
+        "Run or design focused validation for the assignment.",
+        "Submit command evidence, failures, gaps, and recommended next checks.",
+      ];
+    }
+    return [
+      "Orient on the assignment and supplied context.",
+      "Do the bounded specialist work for this role.",
+      "Submit a review packet with findings, evidence, blockers, and risks.",
+    ];
+  }
+
+  function defaultSubagentAcceptanceCriteria(objective: string): string[] {
+    return [
+      `Submit a reviewable result for: ${objective}`,
+      "Attach or cite changed files, artifacts, references, or evidence when relevant.",
+      "Report validation performed, or explain why validation is unavailable or not applicable.",
+      "List unresolved blockers, risks, and follow-up needed.",
+    ];
+  }
+
+  function defaultSubagentStopConditions(): string[] {
+    return [
+      "Stop and report a blocker if required context, permissions, dependencies, or workspace access are unavailable.",
+      "Stop and submit for review instead of repeating the same search, read, or command pattern without new information.",
+      "Stop and report recoverable artifacts if a provider, tool, or workspace failure occurs after meaningful work.",
+    ];
+  }
+
+  function formatSubagentWorkerBrief(brief: SubagentWorkerBrief): string {
+    return [
+      "Structured worker brief:",
+      formatSubagentBriefList("Plan", brief.plan),
+      formatSubagentBriefList("Target files", brief.targetFiles),
+      formatSubagentBriefList("Acceptance criteria", brief.acceptanceCriteria),
+      formatSubagentBriefList("Validation commands", brief.validationCommands),
+      formatSubagentBriefList("Stop conditions", brief.stopConditions),
+    ].filter(Boolean).join("\n");
+  }
+
+  function formatSubagentBriefList(label: string, values: readonly string[]): string | null {
+    if (values.length === 0) return null;
+    return [`${label}:`, ...values.map((value) => `- ${value}`)].join("\n");
   }
 
   function subagentSystemContextForSession(session: Session): string | null {
@@ -3007,6 +4877,151 @@ export function createTurnRunner(deps: {
       if (item?.name === "assistant.delta" && item.output?.trim()) return item.output.trim();
     }
     return null;
+  }
+
+  function subagentReviewPacketQuality(input: {
+    run: SubagentRun;
+    finalSummary: string | null;
+    report: NonNullable<SubagentRun["report"]>;
+    progress: SubagentProgress;
+  }): SubagentRun["review"]["packetQuality"] {
+    const issues: string[] = [];
+    const warnings: string[] = [];
+    const finalSummary = input.finalSummary?.trim() ?? "";
+    const requestedValidationCommandCount = input.run.workerBrief.validationCommands.length;
+    const validationAttemptCount = input.progress.validationAttempts.length;
+    const failedValidationCount = input.progress.validationAttempts.filter((attempt) => attempt.status === "failed").length;
+    const testsRunCount = input.report.testsRun?.length ?? 0;
+    const changedFileCount = input.progress.changedFiles.length;
+    const patchRefPresent = Boolean(input.report.patchRef);
+    const diffRefPresent = Boolean(input.report.diffRef);
+    const artifactCount = input.report.artifacts?.length ?? 0;
+    const findingCount = input.report.findings?.length ?? 0;
+    const blockerCount = uniqueNonEmptyStrings([
+      ...(input.report.blockers ?? []),
+      input.progress.currentBlocker ?? "",
+    ]).length;
+    const validationAttempted = validationAttemptCount > 0 || testsRunCount > 0;
+    const changed = changedFileCount > 0 || patchRefPresent || diffRefPresent;
+    const unvalidatedWorkspaceChanges = changed && !validationAttempted;
+    if (!finalSummary) {
+      issues.push("Final report summary is missing.");
+    }
+    if (requestedValidationCommandCount > 0 && !validationAttempted) {
+      warnings.push("Worker brief requested validation, but no validation attempt was observed.");
+    }
+    if (unvalidatedWorkspaceChanges) {
+      warnings.push("Workspace changes have no observed validation attempt.");
+    }
+    return {
+      status: issues.length > 0 ? "incomplete" : warnings.length > 0 ? "weak" : "reviewable",
+      issues,
+      warnings,
+      evidence: {
+        finalSummaryPresent: finalSummary.length > 0,
+        finalSummaryLength: finalSummary.length,
+        requestedValidationCommandCount,
+        validationAttemptCount,
+        failedValidationCount,
+        testsRunCount,
+        changedFileCount,
+        patchRefPresent,
+        diffRefPresent,
+        artifactCount,
+        findingCount,
+        blockerCount,
+        unvalidatedWorkspaceChanges,
+      },
+    };
+  }
+
+  function subagentReviewRoutingRecommendation(input: {
+    run: SubagentRun;
+    reviewRoutingPolicy: SubagentReviewRoutingPolicy;
+    packetQuality: SubagentRun["review"]["packetQuality"];
+    report: NonNullable<SubagentRun["report"]>;
+    progress: SubagentProgress;
+    providerFailureAfterChanges?: boolean;
+  }): Pick<
+    SubagentRun["review"],
+    "independentReviewRecommended" | "reviewerRoutingReasons" | "reviewerRoutingEvidence"
+  > {
+    const changedFiles = uniqueNonEmptyStrings([
+      ...(input.progress.changedFiles ?? []),
+      ...(input.report.patchRef ? [input.report.patchRef.label, input.report.patchRef.id] : []),
+      ...(input.report.diffRef ? [input.report.diffRef.label, input.report.diffRef.id] : []),
+    ]);
+    const validationAttemptCount = input.progress.validationAttempts.length + (input.report.testsRun?.length ?? 0);
+    const failedValidationCount = input.progress.validationAttempts.filter((attempt) => attempt.status === "failed").length;
+    const highRiskFileCount = changedFiles.filter((filePath) =>
+      subagentReviewHighRiskPath(filePath, input.reviewRoutingPolicy.highRiskPathPatterns)
+    ).length;
+    const missingRequestedValidation =
+      input.run.workerBrief.validationCommands.length > 0 && validationAttemptCount === 0;
+    const changedWithoutValidation = changedFiles.length > 0 && validationAttemptCount === 0;
+    const providerFailureAfterChanges = Boolean(input.providerFailureAfterChanges);
+    const userRequestedIndependentReview = subagentUserRequestedIndependentReview(input.run);
+    const reasons = uniqueSubagentReviewRoutingReasons([
+      input.packetQuality.status === "incomplete" ? "packet_quality_incomplete" : "",
+      input.packetQuality.status === "weak" ? "packet_quality_weak" : "",
+      input.report.confidence === "low" ? "low_confidence" : "",
+      failedValidationCount > 0 ? "validation_failed" : "",
+      missingRequestedValidation || changedWithoutValidation ? "validation_missing" : "",
+      changedFiles.length >= input.reviewRoutingPolicy.broadEditSurfaceFileThreshold ? "broad_edit_surface" : "",
+      highRiskFileCount > 0 ? "high_risk_files" : "",
+      providerFailureAfterChanges ? "provider_failure_after_changes" : "",
+      userRequestedIndependentReview ? "user_requested_independent_review" : "",
+    ]);
+    return {
+      independentReviewRecommended: reasons.length > 0,
+      reviewerRoutingReasons: reasons,
+      reviewerRoutingEvidence: {
+        packetQualityStatus: input.packetQuality.status,
+        confidence: input.report.confidence ?? null,
+        changedFileCount: changedFiles.length,
+        highRiskFileCount,
+        validationAttemptCount,
+        failedValidationCount,
+        missingRequestedValidation,
+        providerFailureAfterChanges,
+        userRequestedIndependentReview,
+      },
+    };
+  }
+
+  function uniqueSubagentReviewRoutingReasons(
+    reasons: Array<SubagentReviewRoutingReason | "" | null | undefined>,
+  ): SubagentReviewRoutingReason[] {
+    const seen = new Set<SubagentReviewRoutingReason>();
+    const result: SubagentReviewRoutingReason[] = [];
+    for (const reason of reasons) {
+      if (!reason || seen.has(reason)) continue;
+      seen.add(reason);
+      result.push(reason);
+    }
+    return result;
+  }
+
+  function subagentReviewHighRiskPath(value: string, patterns: readonly string[]): boolean {
+    const normalized = value.trim().replace(/\\/g, "/").toLowerCase();
+    if (!normalized) return false;
+    return patterns.some((pattern) => {
+      try {
+        return new RegExp(pattern).test(normalized);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  function subagentUserRequestedIndependentReview(run: SubagentRun): boolean {
+    const text = [
+      run.objective,
+      ...run.workerBrief.plan,
+      ...run.workerBrief.acceptanceCriteria,
+      ...run.workerBrief.stopConditions,
+    ].join("\n").toLowerCase();
+    return /\b(independent review|independent reviewer|separate review|separate reviewer|second reviewer|second pass review)\b/.test(text);
   }
 
   function activeThreadGoalId(events: RuntimeEvent[], sessionId: string): string | null {
@@ -3452,6 +5467,50 @@ export function createTurnRunner(deps: {
       goalId: result.goal.id,
       action: result.action,
     });
+    const resumedSubagentCount = await markGoalSubagentsNeedsResume({
+      context,
+      goalId: result.goal.id,
+      action: result.action,
+    });
+    const lifecycleSubagentResult = await applyGoalLifecycleToSubagents({
+      context,
+      goalId: result.goal.id,
+      action: result.action,
+    });
+    const supersededSubagentCount = await markGoalSubagentsSuperseded({
+      context,
+      action: result.action,
+      previousGoal: result.previousGoal,
+      supersededByGoal: result.goal,
+    });
+    const subagentLifecycle = {
+      ...lifecycleSubagentResult,
+      supersededCount: supersededSubagentCount,
+    };
+    const lifecycleNotes = [
+      resumedSubagentCount > 0
+        ? `${resumedSubagentCount} active ${resumedSubagentCount === 1 ? "subagent needs" : "subagents need"} resume.`
+        : null,
+      supersededSubagentCount > 0
+        ? `${supersededSubagentCount} linked ${supersededSubagentCount === 1 ? "subagent was" : "subagents were"} superseded.`
+        : null,
+      lifecycleSubagentResult.cancelledCount > 0
+        ? `${lifecycleSubagentResult.cancelledCount} linked ${lifecycleSubagentResult.cancelledCount === 1 ? "subagent was" : "subagents were"} cancelled.`
+        : null,
+      lifecycleSubagentResult.cleanedCount > 0
+        ? `${lifecycleSubagentResult.cleanedCount} linked ${lifecycleSubagentResult.cleanedCount === 1 ? "workspace was" : "workspaces were"} cleaned or retained by policy.`
+        : null,
+      lifecycleSubagentResult.archivedCount > 0
+        ? `${lifecycleSubagentResult.archivedCount} linked child ${lifecycleSubagentResult.archivedCount === 1 ? "session was" : "sessions were"} archived.`
+        : null,
+    ].filter(Boolean);
+    const nextStep = lifecycleNotes.length > 0
+      ? `${result.nextStep} ${lifecycleNotes.join(" ")}`
+      : result.nextStep;
+    const goal = await openPondGoalWithDerivedSubagentState({
+      context,
+      goal: result.goal,
+    });
     await appendRuntimeEvent(
       event({
         sessionId: context.session.id,
@@ -3460,15 +5519,16 @@ export function createTurnRunner(deps: {
         source: "provider",
         appId: context.session.appId,
         status: "completed",
-        output: result.nextStep,
+        output: nextStep,
         data: {
           kind: "goal_control",
           provider: "openpond",
           action: input.action,
           mode: result.mode,
           reason: input.reason,
-          goal: result.goal,
+          goal,
           previousGoal: result.previousGoal,
+          subagentLifecycle,
         },
       }),
     );
@@ -3480,38 +5540,150 @@ export function createTurnRunner(deps: {
         source: "provider",
         appId: context.session.appId,
         status: "completed",
-        output: result.goal.objective,
+        output: goal.objective,
         data: {
           kind: "thread_goal",
           provider: "openpond",
-          goal: result.goal,
+          goal,
         },
       }),
     );
-    const resumedSubagentCount = await markGoalSubagentsNeedsResume({
-      context,
-      goalId: result.goal.id,
-      action: result.action,
-    });
-    const nextStep = resumedSubagentCount > 0
-      ? `${result.nextStep} ${resumedSubagentCount} active ${resumedSubagentCount === 1 ? "subagent needs" : "subagents need"} resume.`
-      : result.nextStep;
-    if (shouldQueueOpenPondGoalContinuation(result.action, result.goal)) {
+    if (shouldQueueOpenPondGoalContinuation(result.action, goal)) {
       queueOpenPondGoalContinuation({
         session: context.session,
         sourceTurnId: context.turnId,
         action: result.action,
-        goal: result.goal,
+        goal,
       });
     }
     return {
-      goalId: result.goal.id,
+      goalId: goal.id,
       action: result.action,
       status: result.status,
-      objective: result.goal.objective,
+      objective: goal.objective,
       mode: result.mode,
       nextStep,
     };
+  }
+
+  async function openPondGoalWithDerivedSubagentState(input: {
+    context: ModelToolExecutionContext;
+    goal: OpenPondGoalControlGoal;
+  }): Promise<OpenPondGoalControlGoal> {
+    if (!subagentToolsAvailable()) return input.goal;
+    const subagents = await derivedGoalSubagentState({
+      parentSessionId: input.context.session.id,
+      parentGoalId: input.goal.id,
+    });
+    return {
+      ...input.goal,
+      subagents,
+    };
+  }
+
+  async function derivedGoalSubagentState(input: {
+    parentSessionId: string;
+    parentGoalId: string;
+  }): Promise<OpenPondGoalSubagentState> {
+    const deps = requireSubagentDeps();
+    const runs = await deps.listRuns({
+      parentSessionId: input.parentSessionId,
+      parentGoalId: input.parentGoalId,
+      limit: 1000,
+    });
+    const requiredRuns = runs.filter((run) => run.required);
+    const summaries = runs.map(goalSubagentRunSummary);
+    return {
+      source: "subagent_runs",
+      updatedAt: now(),
+      totalCount: runs.length,
+      requiredCount: requiredRuns.length,
+      optionalCount: runs.length - requiredRuns.length,
+      activeCount: runs.filter(goalSubagentRunActive).length,
+      submittedForReviewCount: runs.filter((run) => run.status === "submitted_for_review").length,
+      needsRevisionCount: runs.filter((run) => run.status === "needs_revision").length,
+      needsUserInputCount: runs.filter((run) => run.status === "needs_user_input").length,
+      acceptedCount: runs.filter(subagentRunAccepted).length,
+      blockingCount: runs.filter(goalSubagentRunBlocking).length,
+      terminalCount: runs.filter(goalSubagentRunTerminal).length,
+      cleanupNeededCount: runs.filter(goalSubagentRunCleanupNeeded).length,
+      archivedCount: runs.filter(goalSubagentRunArchived).length,
+      unresolvedCount: runs.filter((run) => !subagentRunResolvedForGoal(run)).length,
+      requiredActiveCount: requiredRuns.filter(goalSubagentRunActive).length,
+      requiredSubmittedForReviewCount: requiredRuns.filter((run) => run.status === "submitted_for_review").length,
+      requiredNeedsRevisionCount: requiredRuns.filter((run) => run.status === "needs_revision").length,
+      requiredNeedsUserInputCount: requiredRuns.filter((run) => run.status === "needs_user_input").length,
+      requiredAcceptedCount: requiredRuns.filter(subagentRunAccepted).length,
+      requiredBlockingCount: requiredRuns.filter(goalSubagentRunBlocking).length,
+      requiredArchivedCount: requiredRuns.filter(goalSubagentRunArchived).length,
+      requiredUnresolvedCount: requiredRuns.filter((run) => !subagentRunResolvedForGoal(run)).length,
+      runs: summaries,
+    };
+  }
+
+  function goalSubagentRunSummary(run: SubagentRun): OpenPondGoalSubagentRunSummary {
+    const cleanup = recordFromUnknown(run.metadata?.lifecycleCleanup);
+    const workspaceCleanup = recordFromUnknown(cleanup?.workspaceCleanup);
+    const childSessionArchive = recordFromUnknown(run.metadata?.childSessionArchive);
+    const archiveStatus = stringFromRecord(childSessionArchive ?? {}, "status");
+    return {
+      id: run.id,
+      childSessionId: run.childSessionId,
+      roleId: run.roleId,
+      status: run.status,
+      required: run.required,
+      objective: run.objective,
+      reviewStatus: run.review?.status ?? null,
+      updatedAt: run.updatedAt ?? run.completedAt ?? run.startedAt ?? run.createdAt ?? null,
+      cleanupStatus: stringFromRecord(workspaceCleanup ?? cleanup ?? {}, "status"),
+      archiveStatus,
+      sessionArchived: archiveStatus === "archived" || archiveStatus === "already_archived",
+      blockerCount: (run.report?.blockers.length ?? 0) + (run.error ? 1 : 0),
+      validationAttemptCount: run.progress?.validationAttempts.length ?? 0,
+      changedFileCount: run.progress?.changedFiles.length ?? 0,
+      followUpNeeded: run.report?.followUpNeeded ?? false,
+    };
+  }
+
+  function goalSubagentRunActive(run: SubagentRun): boolean {
+    return run.status === "queued" || run.status === "running" || run.status === "needs_resume";
+  }
+
+  function goalSubagentRunBlocking(run: SubagentRun): boolean {
+    if (subagentRunDismissed(run)) return false;
+    return run.status === "blocked" ||
+      run.status === "needs_user_input" ||
+      run.status === "failed_with_artifacts" ||
+      run.status === "failed" ||
+      run.status === "cancelled";
+  }
+
+  function goalSubagentRunTerminal(run: SubagentRun): boolean {
+    return subagentRunAccepted(run) ||
+      subagentRunDismissed(run) ||
+      run.status === "failed" ||
+      run.status === "failed_with_artifacts" ||
+      run.status === "cancelled" ||
+      run.status === "superseded";
+  }
+
+  function subagentRunResolvedForGoal(run: SubagentRun): boolean {
+    return subagentRunAccepted(run) || subagentRunDismissed(run) || run.status === "superseded";
+  }
+
+  function goalSubagentRunCleanupNeeded(run: SubagentRun): boolean {
+    if (!goalSubagentRunTerminal(run)) return false;
+    const metadata = recordFromUnknown(run.metadata);
+    if (!metadata?.subagentWorkspace && !metadata?.workspaceHandoff) return false;
+    const cleanup = recordFromUnknown(run.metadata?.lifecycleCleanup);
+    const workspaceCleanup = recordFromUnknown(cleanup?.workspaceCleanup);
+    return !workspaceCleanup;
+  }
+
+  function goalSubagentRunArchived(run: SubagentRun): boolean {
+    const childSessionArchive = recordFromUnknown(run.metadata?.childSessionArchive);
+    const archiveStatus = stringFromRecord(childSessionArchive ?? {}, "status");
+    return archiveStatus === "archived" || archiveStatus === "already_archived";
   }
 
   function shouldQueueOpenPondGoalContinuation(
@@ -3696,7 +5868,7 @@ export function createTurnRunner(deps: {
       parentGoalId: input.goalId,
       limit: 1000,
     });
-    const unresolved = runs.filter((run) => run.required && run.status !== "completed");
+    const unresolved = runs.filter((run) => run.required && !subagentRunResolvedForGoal(run));
     if (unresolved.length === 0) return;
     const details = unresolved.slice(0, 8).map((run) => `${run.roleId} ${run.status} (${run.id})`).join(", ");
     const hidden = unresolved.length > 8 ? `, +${unresolved.length - 8} more` : "";
@@ -3750,6 +5922,407 @@ export function createTurnRunner(deps: {
     return updatedCount;
   }
 
+  async function markGoalSubagentsSuperseded(input: {
+    context: ModelToolExecutionContext;
+    action: OpenPondGoalControlAction;
+    previousGoal: Record<string, unknown> | null;
+    supersededByGoal: OpenPondGoalControlGoal;
+  }): Promise<number> {
+    if (input.action !== "restart" || !subagentToolsAvailable()) return 0;
+    const previousGoal = recordFromUnknown(input.previousGoal);
+    const previousGoalId = stringFromRecord(previousGoal ?? {}, "id");
+    if (!previousGoalId) return 0;
+    const deps = requireSubagentDeps();
+    const runs = await deps.listRuns({
+      parentSessionId: input.context.session.id,
+      parentGoalId: previousGoalId,
+      limit: 1000,
+    });
+    const reason = `Parent goal ${previousGoalId} restarted; this child run was superseded.`;
+    let supersededCount = 0;
+    for (const run of runs) {
+      if (run.status === "superseded") continue;
+      const supersededAt = now();
+      let interruptResult: Record<string, unknown> | null = null;
+      if (run.childSessionId && subagentRunMayStillBeWorking(run)) {
+        try {
+          const interrupted = await interruptSessionTurn(run.childSessionId);
+          interruptResult = {
+            status: interrupted.status,
+            turnId: interrupted.id,
+          };
+        } catch (error) {
+          interruptResult = {
+            status: "not_active",
+            error: textFromUnknown(error) || "No active child turn to interrupt.",
+          };
+        }
+      }
+      const updated = SubagentRunSchema.parse({
+        ...run,
+        status: "superseded",
+        completedAt: supersededAt,
+        updatedAt: supersededAt,
+        error: null,
+        progress: SubagentProgressSchema.parse({
+          ...run.progress,
+          phase: "report",
+          latestMeaningfulActivity: "Parent goal restarted; child run superseded.",
+          currentBlocker: null,
+          updatedAt: supersededAt,
+        }),
+        report: {
+          ...(run.report ?? {}),
+          summary: run.report?.summary || "Subagent superseded by parent goal restart.",
+          followUpNeeded: false,
+        },
+        metadata: {
+          ...(run.metadata ?? {}),
+          superseded: {
+            status: "superseded",
+            reason,
+            supersededAt,
+            previousStatus: run.status,
+            previousGoalId,
+            supersededByGoalId: input.supersededByGoal.id,
+            requestedBySessionId: input.context.session.id,
+            requestedByTurnId: input.context.turnId,
+            interruptResult,
+          },
+        },
+      });
+      await deps.upsertRun(updated);
+      await appendSubagentReceipt({
+        parentSession: input.context.session,
+        parentTurnId: input.context.turnId,
+        run: updated,
+        eventName: "subagent.superseded",
+        status: "completed",
+        output: `${updated.roleId} subagent superseded by restarted parent goal.`,
+      });
+      supersededCount += 1;
+    }
+    return supersededCount;
+  }
+
+  async function applyGoalLifecycleToSubagents(input: {
+    context: ModelToolExecutionContext;
+    goalId: string;
+    action: OpenPondGoalControlAction;
+  }): Promise<{ cancelledCount: number; cleanedCount: number; archivedCount: number }> {
+    if (!subagentToolsAvailable() || (input.action !== "stop" && input.action !== "complete")) {
+      return { cancelledCount: 0, cleanedCount: 0, archivedCount: 0 };
+    }
+    const deps = requireSubagentDeps();
+    const runs = await deps.listRuns({
+      parentSessionId: input.context.session.id,
+      parentGoalId: input.goalId,
+      limit: 1000,
+    });
+    let cancelledCount = 0;
+    let cleanedCount = 0;
+    let archivedCount = 0;
+    for (const run of runs) {
+      if (input.action === "stop") {
+        if (subagentRunAccepted(run) || subagentRunDismissed(run)) {
+          const cleanup = await cleanupSubagentRun({
+            run,
+            parentSession: input.context.session,
+            parentTurnId: input.context.turnId,
+            reason: subagentRunDismissed(run) ? "goal_stopped_dismissed" : "goal_stopped",
+            policy: "auto_after_acceptance",
+          });
+          const archived = await archiveSubagentChildSession({
+            parentSession: input.context.session,
+            parentTurnId: input.context.turnId,
+            run: cleanup.run,
+            reason: "goal_stopped",
+            policy: "goal_stopped",
+          });
+          cleanedCount += 1;
+          if (archived.archived) archivedCount += 1;
+          continue;
+        }
+        if (subagentRunTerminalForGoalLifecycle(run)) continue;
+        const cancelled = await cancelSubagentRunForGoalLifecycle({
+          context: input.context,
+          run,
+          reason: `Parent goal ${input.goalId} stopped.`,
+        });
+        const archived = await archiveSubagentChildSession({
+          parentSession: input.context.session,
+          parentTurnId: input.context.turnId,
+          run: cancelled,
+          reason: "goal_stopped",
+          policy: "goal_stopped",
+        });
+        cancelledCount += 1;
+        cleanedCount += 1;
+        if (archived.archived) archivedCount += 1;
+        continue;
+      }
+      if (subagentRunAccepted(run) || subagentRunDismissed(run)) {
+        const cleanup = await cleanupSubagentRun({
+          run,
+          parentSession: input.context.session,
+          parentTurnId: input.context.turnId,
+          reason: subagentRunDismissed(run) ? "goal_completed_dismissed" : "goal_completed",
+          policy: "auto_after_acceptance",
+        });
+        const archived = await archiveSubagentChildSession({
+          parentSession: input.context.session,
+          parentTurnId: input.context.turnId,
+          run: cleanup.run,
+          reason: "goal_completed",
+          policy: "goal_completed",
+        });
+        cleanedCount += 1;
+        if (archived.archived) archivedCount += 1;
+        continue;
+      }
+      if (!run.required && !subagentRunTerminalForGoalLifecycle(run)) {
+        const cancelled = await cancelSubagentRunForGoalLifecycle({
+          context: input.context,
+          run,
+          reason: `Parent goal ${input.goalId} completed before optional subagent finished.`,
+        });
+        const archived = await archiveSubagentChildSession({
+          parentSession: input.context.session,
+          parentTurnId: input.context.turnId,
+          run: cancelled,
+          reason: "goal_completed_optional_cancel",
+          policy: "goal_completed",
+        });
+        cancelledCount += 1;
+        cleanedCount += 1;
+        if (archived.archived) archivedCount += 1;
+      }
+    }
+    return { cancelledCount, cleanedCount, archivedCount };
+  }
+
+  async function cancelSubagentRunForGoalLifecycle(input: {
+    context: ModelToolExecutionContext;
+    run: SubagentRun;
+    reason: string;
+  }): Promise<SubagentRun> {
+    const deps = requireSubagentDeps();
+    const cancelledAt = now();
+    let interruptResult: Record<string, unknown> | null = null;
+    if (input.run.childSessionId) {
+      try {
+        const interrupted = await interruptSessionTurn(input.run.childSessionId);
+        interruptResult = {
+          status: interrupted.status,
+          turnId: interrupted.id,
+        };
+      } catch (error) {
+        interruptResult = {
+          status: "not_active",
+          error: textFromUnknown(error) || "No active child turn to interrupt.",
+        };
+      }
+    }
+    let nextRun = SubagentRunSchema.parse({
+      ...input.run,
+      status: "cancelled",
+      completedAt: cancelledAt,
+      error: input.reason,
+      report: {
+        ...(input.run.report ?? {}),
+        summary: input.run.report?.summary || "Subagent cancelled by parent goal lifecycle.",
+        blockers: uniqueNonEmptyStrings([...(input.run.report?.blockers ?? []), input.reason]),
+        followUpNeeded: false,
+      },
+      metadata: {
+        ...(input.run.metadata ?? {}),
+        goalLifecycle: {
+          action: "cancelled_by_parent_goal",
+          reason: input.reason,
+          cancelledAt,
+          interruptResult,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+    const cleanup = await cleanupSubagentRun({
+      run: nextRun,
+      parentSession: input.context.session,
+      parentTurnId: input.context.turnId,
+      reason: "goal_lifecycle_cancel",
+      policy: "cancel_requested",
+    });
+    nextRun = SubagentRunSchema.parse({
+      ...cleanup.run,
+      metadata: {
+        ...(cleanup.run.metadata ?? {}),
+        goalLifecycle: {
+          ...(recordFromUnknown(cleanup.run.metadata?.goalLifecycle) ?? {}),
+          workspaceCleanup: cleanup.workspaceCleanup,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+    await appendSubagentReceipt({
+      parentSession: input.context.session,
+      parentTurnId: input.context.turnId,
+      run: nextRun,
+      eventName: "subagent.cancelled",
+      status: "completed",
+      output: `${nextRun.roleId} subagent cancelled by parent goal lifecycle.`,
+    });
+    return nextRun;
+  }
+
+  async function archiveSubagentChildSession(input: {
+    parentSession: Session;
+    parentTurnId?: string | null;
+    run: SubagentRun;
+    reason: string;
+    policy: "goal_completed" | "goal_stopped" | "manual_archive";
+  }): Promise<{ run: SubagentRun; sessionArchive: Record<string, unknown>; archived: boolean }> {
+    if (!input.run.childSessionId) {
+      return {
+        run: input.run,
+        sessionArchive: {
+          status: "skipped",
+          reason: "childSessionId missing",
+          evidenceRetention: input.run.evidenceRetention,
+        },
+        archived: false,
+      };
+    }
+
+    const deps = requireSubagentDeps();
+    const archivedAt = now();
+    let sessionArchive: Record<string, unknown>;
+    try {
+      const childSession = await getSession(input.run.childSessionId);
+      if (childSession.archived) {
+        sessionArchive = {
+          status: "already_archived",
+          sessionId: childSession.id,
+          archivedAt,
+          reason: input.reason,
+          policy: input.policy,
+          evidenceRetention: input.run.evidenceRetention,
+        };
+      } else {
+        const updatedSession = await updateSession(childSession.id, {
+          archived: true,
+          hiddenFromDefaultSidebar: true,
+          status: childSession.status === "active" ? "idle" : childSession.status,
+          metadata: {
+            ...(childSession.metadata ?? {}),
+            subagentArchive: {
+              status: "archived",
+              archivedAt,
+              reason: input.reason,
+              policy: input.policy,
+              parentSessionId: input.run.parentSessionId,
+              parentGoalId: input.run.parentGoalId ?? null,
+              runId: input.run.id,
+              roleId: input.run.roleId,
+              evidenceRetention: input.run.evidenceRetention,
+            },
+          },
+        });
+        sessionArchive = {
+          status: "archived",
+          sessionId: updatedSession.id,
+          archivedAt,
+          reason: input.reason,
+          policy: input.policy,
+          hiddenFromDefaultSidebar: updatedSession.hiddenFromDefaultSidebar === true,
+          previousStatus: childSession.status,
+          evidenceRetention: input.run.evidenceRetention,
+        };
+      }
+    } catch (error) {
+      sessionArchive = {
+        status: "failed",
+        sessionId: input.run.childSessionId,
+        failedAt: archivedAt,
+        reason: input.reason,
+        policy: input.policy,
+        error: textFromUnknown(error) || "Failed to archive child session.",
+        evidenceRetention: input.run.evidenceRetention,
+      };
+    }
+
+    const nextRun = SubagentRunSchema.parse({
+      ...input.run,
+      metadata: {
+        ...(input.run.metadata ?? {}),
+        childSessionArchive: {
+          ...sessionArchive,
+          evidenceRetention: input.run.evidenceRetention,
+        },
+      },
+    });
+    await deps.upsertRun(nextRun);
+    const status = stringFromRecord(sessionArchive, "status");
+    await appendSubagentReceipt({
+      parentSession: input.parentSession,
+      parentTurnId: input.parentTurnId ?? null,
+      run: nextRun,
+      eventName: "subagent.archived",
+      status: status === "failed" ? "failed" : "completed",
+      output: subagentArchiveOutput(nextRun, sessionArchive),
+    });
+    return {
+      run: nextRun,
+      sessionArchive,
+      archived: status === "archived" || status === "already_archived",
+    };
+  }
+
+  function subagentLifecycleActionNextStep(
+    action: SubagentLifecycleActionResponse["action"],
+    workspaceCleanup: Record<string, unknown> | null,
+    sessionArchive: Record<string, unknown> | null,
+  ): string {
+    const cleanupStatus = workspaceCleanup ? stringFromRecord(workspaceCleanup, "status") ?? "unknown" : null;
+    const archiveStatus = sessionArchive ? stringFromRecord(sessionArchive, "status") ?? "unknown" : null;
+    if (action === "cleanup") {
+      if (cleanupStatus === "removed" || cleanupStatus === "deleted") return "Subagent workspace cleanup completed.";
+      if (cleanupStatus === "retained") return "Subagent workspace retained for inspection.";
+      if (cleanupStatus === "failed") return "Subagent workspace cleanup failed.";
+      return "Subagent workspace cleanup recorded.";
+    }
+    if (action === "archive") {
+      if (archiveStatus === "archived" || archiveStatus === "already_archived") return "Subagent child session archived.";
+      if (archiveStatus === "failed") return "Subagent child session archive failed.";
+      return "Subagent child session archive recorded.";
+    }
+    return `Subagent lifecycle action completed. Cleanup: ${cleanupStatus ?? "not_requested"}. Archive: ${archiveStatus ?? "not_requested"}.`;
+  }
+
+  function subagentArchiveOutput(run: SubagentRun, sessionArchive: Record<string, unknown>): string {
+    const status = stringFromRecord(sessionArchive, "status") ?? "unknown";
+    if (status === "archived") return `${run.roleId} child session archived.`;
+    if (status === "already_archived") return `${run.roleId} child session was already archived.`;
+    if (status === "failed") return `${run.roleId} child session archive failed.`;
+    return `${run.roleId} child session archive ${status}.`;
+  }
+
+  function subagentRunTerminalForGoalLifecycle(run: SubagentRun): boolean {
+    return run.status === "cancelled" ||
+      run.status === "failed" ||
+      run.status === "failed_with_artifacts" ||
+      run.status === "superseded";
+  }
+
+  function subagentRunMayStillBeWorking(run: SubagentRun): boolean {
+    return run.status === "queued" ||
+      run.status === "running" ||
+      run.status === "blocked" ||
+      run.status === "submitted_for_review" ||
+      run.status === "needs_revision" ||
+      run.status === "needs_user_input" ||
+      run.status === "needs_resume";
+  }
+
   async function runHostedToolLoop(params: {
     session: Session;
     turn: Turn;
@@ -3798,6 +6371,9 @@ export function createTurnRunner(deps: {
     const profileSkillMode = profileSkillInstructionModeForProvider(params.provider, params.profileSkillRuntime);
     const initialEventIds = new Set(params.resourceEvents.map((item) => item.id));
     const deliveredSubagentAsideKeys = new Set<string>();
+    const subagentSteeringTracker = createSubagentToolLoopSteeringTracker(
+      await subagentExplorationSteeringPolicyForSession(session),
+    );
     async function appendContextUsage(input: {
       messages: HostedMessages;
       usage?: unknown;
@@ -3911,6 +6487,14 @@ export function createTurnRunner(deps: {
         await applyNativeToolUsageAttribution(params.turn, nativeResults);
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
+        }
+        for (const content of subagentToolLoopSteeringMessagesForNativeResults({
+          session,
+          toolCalls: nativeToolCalls,
+          results: nativeResults,
+          tracker: subagentSteeringTracker,
+        })) {
+          messages.push({ role: "user", content });
         }
         session = await getSession(session.id);
         await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
@@ -4056,6 +6640,7 @@ export function createTurnRunner(deps: {
       await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
 
       const toolResults: string[] = [];
+      const subagentSteeringMessages: string[] = [];
       for (const request of requests) {
         throwIfInterrupted(params.signal);
         const toolRequest = normalizeMentionedSandboxToolRequest({
@@ -4104,6 +6689,12 @@ export function createTurnRunner(deps: {
         workspaceToolResultCount += 1;
         session = await getSession(session.id);
         toolResults.push(formatWorkspaceToolResultForModel(result));
+        subagentSteeringMessages.push(...subagentToolLoopSteeringMessagesForWorkspaceResult({
+          session,
+          request: toolRequest,
+          result,
+          tracker: subagentSteeringTracker,
+        }));
       }
 
       messages.push({
@@ -4111,6 +6702,7 @@ export function createTurnRunner(deps: {
         content: [
           "Workspace tool result:",
           toolResults.join("\n\n"),
+          ...subagentSteeringMessages,
           "Continue. If another workspace action is required, respond with exactly one openpond_tool block. Otherwise answer the user normally without tool JSON.",
         ].join("\n\n"),
       });
@@ -4765,6 +7357,16 @@ export function createTurnRunner(deps: {
   function stringFromRecord(record: Record<string, unknown>, key: string): string | null {
     const value = record[key];
     return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  function numberFromRecord(record: Record<string, unknown>, key: string): number | null {
+    const value = record[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  function booleanFromRecord(record: Record<string, unknown>, key: string): boolean | null {
+    const value = record[key];
+    return typeof value === "boolean" ? value : null;
   }
 
   function nativeToolEventArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
@@ -6167,6 +8769,7 @@ export function createTurnRunner(deps: {
     if (!parentTurnId) throw new Error("Subagent patch approval is missing its parent turn.");
     const accepted = input.decision === "accept" || input.decision === "acceptForSession";
     const status = subagentPatchApprovalStatusForDecision(input.decision);
+    const decidedAt = now();
     let nextRun = run;
     if (accepted) {
       const applyResult = await applySubagentPatchApproval({
@@ -6175,12 +8778,26 @@ export function createTurnRunner(deps: {
       });
       nextRun = SubagentRunSchema.parse({
         ...run,
+        status: "accepted",
+        completedAt: decidedAt,
         report: run.report
           ? {
               ...run.report,
               followUpNeeded: false,
             }
           : run.report,
+        progress: SubagentProgressSchema.parse({
+          ...(run.progress ?? {}),
+          latestMeaningfulActivity: "Parent accepted the child review packet and applied the patch.",
+          currentBlocker: null,
+          updatedAt: decidedAt,
+        }),
+        review: SubagentReviewStateSchema.parse({
+          ...(run.review ?? {}),
+          status: "accepted",
+          decidedAt,
+          summary: run.report?.summary ?? run.review.summary ?? null,
+        }),
         metadata: {
           ...(run.metadata ?? {}),
           workspaceHandoff: {
@@ -6189,10 +8806,48 @@ export function createTurnRunner(deps: {
           },
         },
       });
-      await store.upsertSubagentRun(nextRun);
+      await upsertSubagentRunAndNotify(nextRun);
     } else {
+      const revisionMessage = input.decision === "cancel"
+        ? "Parent cancelled the patch approval."
+        : "Parent declined the patch approval; the child submission needs revision before acceptance.";
+      const workspaceRetention = subagentRetainedWorkspaceState({
+        retainedAt: decidedAt,
+        reason: input.decision === "cancel"
+          ? "Patch approval cancelled; child workspace retained for inspection."
+          : "Patch approval declined; child workspace retained for revision.",
+        trigger: input.decision === "cancel" ? "patch_approval_cancelled" : "patch_approval_declined",
+      });
       nextRun = SubagentRunSchema.parse({
         ...run,
+        status: input.decision === "cancel" ? "cancelled" : "needs_revision",
+        completedAt: input.decision === "cancel" ? decidedAt : null,
+        error: input.decision === "cancel" ? revisionMessage : run.error,
+        report: run.report
+          ? {
+              ...run.report,
+              followUpNeeded: input.decision !== "cancel",
+            }
+          : run.report,
+        progress: SubagentProgressSchema.parse({
+          ...(run.progress ?? {}),
+          latestMeaningfulActivity: revisionMessage,
+          currentBlocker: input.decision === "cancel" ? revisionMessage : null,
+          updatedAt: decidedAt,
+        }),
+        review: SubagentReviewStateSchema.parse({
+          ...(run.review ?? {}),
+          status: input.decision === "cancel" ? "needs_user_input" : "needs_revision",
+          decidedAt,
+          issues: uniqueNonEmptyStrings([...(run.review.issues ?? []), revisionMessage]),
+          requiredCorrections: input.decision === "cancel"
+            ? run.review.requiredCorrections
+            : uniqueNonEmptyStrings([
+                ...(run.review.requiredCorrections ?? []),
+                "Revise the submitted patch or provide a replacement plan before acceptance.",
+              ]),
+          humanReviewRecommended: true,
+        }),
         metadata: {
           ...(run.metadata ?? {}),
           workspaceHandoff: {
@@ -6200,12 +8855,13 @@ export function createTurnRunner(deps: {
             applyResult: {
               status: input.decision === "cancel" ? "cancelled" : "declined",
               approvalId: approval.id,
-              decidedAt: now(),
+              decidedAt,
+              workspaceRetention,
             },
           },
         },
       });
-      await store.upsertSubagentRun(nextRun);
+      await upsertSubagentRunAndNotify(nextRun);
     }
     const resolved: Approval = {
       ...approval,
@@ -6231,18 +8887,43 @@ export function createTurnRunner(deps: {
         },
       }),
     );
+    const subagentEventName = accepted
+      ? "subagent.accepted"
+      : input.decision === "cancel"
+        ? "subagent.cancelled"
+        : "subagent.needs_revision";
     await appendSubagentReceipt({
       parentSession: session,
       parentTurnId,
       run: nextRun,
-      eventName: "subagent.reported",
+      eventName: subagentEventName,
       status: accepted ? "completed" : "failed",
       output: accepted
         ? `${run.roleId} subagent patch applied to the parent workspace.`
         : `${run.roleId} subagent patch was ${status}.`,
     });
+    if (!accepted) {
+      await appendSubagentReceipt({
+        parentSession: session,
+        parentTurnId,
+        run: nextRun,
+        eventName: "subagent.workspace_retained",
+        status: "completed",
+        output: input.decision === "cancel"
+          ? `${run.roleId} subagent workspace retained after patch approval cancellation.`
+          : `${run.roleId} subagent workspace retained for patch revision.`,
+      });
+    }
     if (accepted) {
       await appendWorkspaceDiffEvent(session, parentTurnId).catch(() => undefined);
+      const cleanup = await cleanupSubagentRun({
+        run: nextRun,
+        parentSession: session,
+        parentTurnId,
+        reason: "accepted_patch_applied",
+        policy: "auto_after_acceptance",
+      });
+      nextRun = cleanup.run;
     }
     return resolved;
   }
@@ -6264,10 +8945,11 @@ export function createTurnRunner(deps: {
     const patchPath = stringFromRecord(handoff, "patchPath");
     const parentRepoPath = stringFromRecord(handoff, "parentRepoPath");
     const workspaceRoot = stringFromRecord(handoff, "workspaceRoot");
-    if (!patchPath || !parentRepoPath || !workspaceRoot) {
+    const patchRootPath = stringFromRecord(handoff, "patchRootPath") ?? workspaceRoot;
+    if (!patchPath || !parentRepoPath || !workspaceRoot || !patchRootPath) {
       throw new Error("Subagent patch handoff is missing patchPath, parentRepoPath, or workspaceRoot.");
     }
-    assertPathInside({ rootPath: workspaceRoot, targetPath: patchPath, label: "Subagent patch" });
+    assertPathInside({ rootPath: patchRootPath, targetPath: patchPath, label: "Subagent patch" });
     const checkResult = await runWorkspaceCommand("git", ["apply", "--check", patchPath], parentRepoPath);
     if (checkResult.code !== 0) {
       throw new Error(
@@ -6610,10 +9292,13 @@ export function createTurnRunner(deps: {
 
   return {
     sendTurn,
+    isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),
     interruptSessionTurn,
     updateTurnCreatePipeline,
     resolveCreatePipelineApproval,
     resolveSubagentPatchApplyApproval,
+    runSubagentLifecycleAction,
+    cleanupExpiredRetainedSubagentWorkspace,
   };
 }
 

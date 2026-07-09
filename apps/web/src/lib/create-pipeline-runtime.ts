@@ -45,6 +45,7 @@ function createPipelineRuntimeStatus(snapshot: CreatePipelineSnapshot): GoalRunt
   return {
     objective,
     status: snapshot.state,
+    subagents: null,
     timeUsedSeconds,
     tokensUsed: null,
     tokenBudget: null,

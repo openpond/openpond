@@ -138,6 +138,11 @@ type SubagentRunRow = PayloadRow & {
   updated_at: string;
 };
 
+type SubagentRunScopeRow = {
+  parent_session_id: string;
+  parent_goal_id: string | null;
+};
+
 type SubagentMessageRow = PayloadRow & {
   id: string;
   parent_goal_id: string | null;
@@ -147,6 +152,17 @@ type SubagentMessageRow = PayloadRow & {
   kind: SubagentMessage["kind"];
   created_at: string;
 };
+
+const NON_TERMINAL_SUBAGENT_STATUSES: readonly SubagentRun["status"][] = [
+  "queued",
+  "running",
+  "blocked",
+  "submitted_for_review",
+  "needs_revision",
+  "needs_user_input",
+  "failed_with_artifacts",
+  "needs_resume",
+];
 
 type ThreadDetailProjectionRow = PayloadRow & {
   session_id: string;
@@ -966,6 +982,35 @@ export class SqliteStore {
     return (await this.getSubagentRun(parsed.id)) ?? parsed;
   }
 
+  async recordRetainedWorkspaceExpiryWarning(
+    runId: string,
+    warning: Record<string, unknown>,
+  ): Promise<SubagentRun | null> {
+    await this.ready;
+    let updated: SubagentRun | null = null;
+    const write = this.writeQueue.then(async () => {
+      const row = await this.get<SubagentRunRow>("SELECT * FROM subagent_runs WHERE id = ?", [runId]);
+      if (!row) return;
+      const current = subagentRunFromRow(row);
+      updated = SubagentRunSchema.parse({
+        ...current,
+        metadata: {
+          ...(current.metadata ?? {}),
+          retainedWorkspaceExpiryWarning: warning,
+        },
+      });
+      await this.run(
+        `UPDATE subagent_runs
+         SET payload = ?
+         WHERE id = ?`,
+        [JSON.stringify(updated), runId],
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return updated;
+  }
+
   async getSubagentRun(id: string): Promise<SubagentRun | null> {
     await this.ready;
     await this.writeQueue;
@@ -1012,6 +1057,110 @@ export class SqliteStore {
       `SELECT * FROM subagent_runs
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY updated_at DESC, created_at DESC
+       ${limitSql}`,
+      params,
+    );
+    return rows.map(subagentRunFromRow);
+  }
+
+  async listActiveSubagentRuns(query: {
+    parentSessionId?: string | null;
+    parentGoalId?: string | null;
+    childSessionId?: string | null;
+    status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+    limit?: number;
+  } = {}): Promise<SubagentRun[]> {
+    return this.listSubagentRuns({
+      ...query,
+      status: query.status ?? NON_TERMINAL_SUBAGENT_STATUSES,
+    });
+  }
+
+  async listSubagentRunScopes(query: {
+    status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+    updatedAtFrom?: string | null;
+    limit?: number;
+  } = {}): Promise<Array<{ parentSessionId: string; parentGoalId: string | null }>> {
+    await this.ready;
+    await this.writeQueue;
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (query.status) {
+      const statuses = Array.isArray(query.status) ? query.status : [query.status];
+      if (statuses.length === 1) {
+        where.push("status = ?");
+        params.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+        params.push(...statuses);
+      }
+    }
+    if (query.updatedAtFrom) {
+      where.push("updated_at >= ?");
+      params.push(query.updatedAtFrom);
+    }
+    const limitSql = query.limit === undefined ? "" : "LIMIT ?";
+    if (query.limit !== undefined) params.push(Math.max(1, Math.min(1000, Math.trunc(query.limit))));
+    const rows = await this.all<SubagentRunScopeRow>(
+      `SELECT parent_session_id, parent_goal_id
+       FROM subagent_runs
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       GROUP BY parent_session_id, parent_goal_id
+       ORDER BY MAX(updated_at) DESC
+       ${limitSql}`,
+      params,
+    );
+    return rows.map((row) => ({
+      parentSessionId: row.parent_session_id,
+      parentGoalId: row.parent_goal_id,
+    }));
+  }
+
+  async listStaleSubagentRuns(query: {
+    olderThanMs: number;
+    nowIso?: string | null;
+    parentSessionId?: string | null;
+    parentGoalId?: string | null;
+    childSessionId?: string | null;
+    status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
+    limit?: number;
+  }): Promise<SubagentRun[]> {
+    await this.ready;
+    await this.writeQueue;
+    const nowMs = Date.parse(query.nowIso ?? now());
+    const cutoff = new Date(nowMs - Math.max(0, Math.trunc(query.olderThanMs))).toISOString();
+    const where: string[] = ["updated_at <= ?"];
+    const params: unknown[] = [cutoff];
+    if (query.parentSessionId) {
+      where.push("parent_session_id = ?");
+      params.push(query.parentSessionId);
+    }
+    if (query.parentGoalId) {
+      where.push("parent_goal_id = ?");
+      params.push(query.parentGoalId);
+    }
+    if (query.childSessionId) {
+      where.push("child_session_id = ?");
+      params.push(query.childSessionId);
+    }
+    const statuses = query.status
+      ? Array.isArray(query.status)
+        ? query.status
+        : [query.status]
+      : NON_TERMINAL_SUBAGENT_STATUSES;
+    if (statuses.length === 1) {
+      where.push("status = ?");
+      params.push(statuses[0]);
+    } else if (statuses.length > 1) {
+      where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+      params.push(...statuses);
+    }
+    const limitSql = query.limit === undefined ? "" : "LIMIT ?";
+    if (query.limit !== undefined) params.push(Math.max(1, Math.min(1000, Math.trunc(query.limit))));
+    const rows = await this.all<SubagentRunRow>(
+      `SELECT * FROM subagent_runs
+       WHERE ${where.join(" AND ")}
+       ORDER BY updated_at ASC, created_at ASC
        ${limitSql}`,
       params,
     );
@@ -2171,20 +2320,27 @@ function localAgentScheduleFromRow(row: LocalAgentScheduleRow): LocalAgentSchedu
 }
 
 function subagentRunFromRow(row: SubagentRunRow): SubagentRun {
-  return SubagentRunSchema.parse(JSON.parse(row.payload));
+  return SubagentRunSchema.parse({
+    ...JSON.parse(row.payload),
+    updatedAt: row.updated_at,
+  });
 }
 
 function subagentRunParams(run: SubagentRun, updatedAt: string): unknown[] {
+  const payload = SubagentRunSchema.parse({
+    ...run,
+    updatedAt,
+  });
   return [
-    run.id,
-    run.parentSessionId,
-    run.parentTurnId,
-    run.parentGoalId,
-    run.childSessionId,
-    run.roleId,
-    run.status,
-    JSON.stringify(run),
-    run.createdAt,
+    payload.id,
+    payload.parentSessionId,
+    payload.parentTurnId,
+    payload.parentGoalId,
+    payload.childSessionId,
+    payload.roleId,
+    payload.status,
+    JSON.stringify(payload),
+    payload.createdAt,
     updatedAt,
   ];
 }

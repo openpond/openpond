@@ -5,11 +5,14 @@ import { describe, expect, test } from "bun:test";
 import type { BootstrapPayload } from "@openpond/contracts";
 import {
   AppPreferencesSchema,
+  SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS,
   UpdateAppPreferencesRequestSchema,
   type AppPreferences,
 } from "@openpond/contracts";
 
+import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../apps/server/src/constants";
 import { createOpenPondServer } from "../apps/server/src/index";
+import { SqliteStore } from "../apps/server/src/store/store";
 
 async function api<T>(
   serverUrl: string,
@@ -41,6 +44,17 @@ describe("app preferences", () => {
     expect(preferences.subagents.maxConcurrentRuns).toBe(4);
     expect(preferences.subagents.maxConcurrentRunsPerProvider).toBe(2);
     expect(preferences.subagents.maxConcurrentRunsPerWorkspaceTarget).toBe(2);
+    expect(preferences.subagents.heartbeatIntervalSeconds).toBe(60);
+    expect(coding?.reviewRouting).toEqual({
+      broadEditSurfaceFileThreshold: 8,
+      highRiskPathPatterns: [...SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS],
+    });
+    expect(coding?.explorationSteering).toEqual({
+      enabled: true,
+      repeatedSearchThreshold: 2,
+      repeatedReadThreshold: 2,
+      repeatedCommandThreshold: 2,
+    });
     expect(coding).toMatchObject({
       enabled: true,
       isolationMode: "copy_on_write",
@@ -54,7 +68,172 @@ describe("app preferences", () => {
       toolPolicy: "read_only",
       background: true,
     });
+    expect(AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 10 } }).subagents.heartbeatIntervalSeconds).toBe(10);
+    expect(AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 3600 } }).subagents.heartbeatIntervalSeconds).toBe(3600);
+    expect(() => AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 9 } })).toThrow();
+    expect(() => AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 3601 } })).toThrow();
+    const tunedCoding = AppPreferencesSchema.parse({
+      subagents: {
+        roles: [{
+          id: "coding",
+          reviewRouting: {
+            broadEditSurfaceFileThreshold: 3,
+            highRiskPathPatterns: ["(^|/)src/critical(/|$)"],
+          },
+          explorationSteering: {
+            repeatedSearchThreshold: 4,
+            repeatedReadThreshold: 5,
+            repeatedCommandThreshold: 6,
+          },
+        }],
+      },
+    }).subagents.roles.find((role) => role.id === "coding");
+    expect(tunedCoding?.reviewRouting).toEqual({
+      broadEditSurfaceFileThreshold: 3,
+      highRiskPathPatterns: ["(^|/)src/critical(/|$)"],
+    });
+    expect(tunedCoding?.explorationSteering).toEqual({
+      enabled: true,
+      repeatedSearchThreshold: 4,
+      repeatedReadThreshold: 5,
+      repeatedCommandThreshold: 6,
+    });
+    expect(() =>
+      AppPreferencesSchema.parse({
+        subagents: {
+          roles: [{
+            id: "coding",
+            reviewRouting: {
+              highRiskPathPatterns: ["["],
+            },
+          }],
+        },
+      })
+    ).toThrow();
+    expect(() =>
+      AppPreferencesSchema.parse({
+        subagents: {
+          roles: [{
+            id: "coding",
+            explorationSteering: {
+              repeatedSearchThreshold: 1,
+            },
+          }],
+        },
+      })
+    ).toThrow();
   });
+
+  test("normalizes subagent defaults for new, legacy, and partial preference records", async () => {
+    const emptyStoreDir = await mkdtemp(join(tmpdir(), "openpond-subagent-empty-preferences-"));
+    const emptyServer = await createOpenPondServer({
+      port: 0,
+      storeDir: emptyStoreDir,
+      silent: true,
+      version: "subagent-empty-preferences-test",
+    });
+    try {
+      const bootstrap = await api<BootstrapPayload>(
+        emptyServer.url,
+        emptyServer.token,
+        "/v1/bootstrap?ensureProfile=0",
+      );
+      expect(bootstrap.preferences.subagents.heartbeatIntervalSeconds).toBe(60);
+      expect(bootstrap.preferences.subagents.roles.find((role) => role.id === "coding")).toMatchObject({
+        isolationMode: "copy_on_write",
+        toolPolicy: "workspace_write",
+        reviewRouting: {
+          broadEditSurfaceFileThreshold: 8,
+          highRiskPathPatterns: [...SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS],
+        },
+        explorationSteering: {
+          enabled: true,
+          repeatedSearchThreshold: 2,
+          repeatedReadThreshold: 2,
+          repeatedCommandThreshold: 2,
+        },
+      });
+    } finally {
+      await emptyServer.close();
+      await rm(emptyStoreDir, { recursive: true, force: true });
+    }
+
+    const legacyStoreDir = await mkdtemp(join(tmpdir(), "openpond-subagent-legacy-preferences-"));
+    const legacyStore = new SqliteStore(legacyStoreDir);
+    try {
+      await legacyStore.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, {
+        defaultChatProvider: "openrouter",
+        defaultChatModel: "test/model",
+        subagents: {
+          enabled: true,
+          roles: [
+            {
+              id: "coding",
+              toolPolicy: "workspace_write",
+            },
+          ],
+          maxConcurrentRuns: 3,
+        },
+      });
+    } finally {
+      await legacyStore.close();
+    }
+
+    const legacyServer = await createOpenPondServer({
+      port: 0,
+      storeDir: legacyStoreDir,
+      silent: true,
+      version: "subagent-legacy-preferences-test",
+    });
+    try {
+      const bootstrap = await api<BootstrapPayload>(
+        legacyServer.url,
+        legacyServer.token,
+        "/v1/bootstrap?ensureProfile=0",
+      );
+      expect(bootstrap.preferences.subagents.heartbeatIntervalSeconds).toBe(60);
+      expect(bootstrap.preferences.subagents.maxConcurrentRuns).toBe(3);
+      expect(bootstrap.preferences.subagents.roles.find((role) => role.id === "coding")).toMatchObject({
+        isolationMode: "copy_on_write",
+        maxConcurrentRuns: 1,
+        maxTurns: null,
+        maxTokens: null,
+        toolPolicy: "workspace_write",
+        background: true,
+        peerMessages: "goal_scoped",
+        reviewRouting: {
+          broadEditSurfaceFileThreshold: 8,
+          highRiskPathPatterns: [...SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS],
+        },
+        explorationSteering: {
+          enabled: true,
+          repeatedSearchThreshold: 2,
+          repeatedReadThreshold: 2,
+          repeatedCommandThreshold: 2,
+        },
+      });
+      expect(bootstrap.preferences.subagents.roles.find((role) => role.id === "review")).toBeTruthy();
+
+      const saved = await api<{ preferences: AppPreferences }>(
+        legacyServer.url,
+        legacyServer.token,
+        "/v1/preferences",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            defaultBranchPrefix: "feat/subagent-",
+          }),
+        },
+      );
+      expect(saved.preferences.defaultBranchPrefix).toBe("feat/subagent-");
+      expect(saved.preferences.subagents.heartbeatIntervalSeconds).toBe(60);
+      expect(saved.preferences.subagents.maxConcurrentRuns).toBe(3);
+      expect(saved.preferences.subagents.roles.find((role) => role.id === "review")).toBeTruthy();
+    } finally {
+      await legacyServer.close();
+      await rm(legacyStoreDir, { recursive: true, force: true });
+    }
+  }, 20_000);
 
   test("persists gpt-5.5 main chat with Z.ai coding subagent settings", async () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-subagent-preferences-"));
@@ -117,7 +296,7 @@ describe("app preferences", () => {
       await server.close();
       await rm(storeDir, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   test("persists the auto context compaction toggle through bootstrap", async () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-context-compaction-preferences-"));
@@ -160,7 +339,7 @@ describe("app preferences", () => {
       await server.close();
       await rm(storeDir, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   test("merges sequential partial preference patches without resetting unrelated preferences", async () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-partial-preferences-"));
@@ -214,5 +393,5 @@ describe("app preferences", () => {
       await server.close();
       await rm(storeDir, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 });

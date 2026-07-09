@@ -15,6 +15,7 @@ import {
   selectImplicitConnectedAppStatusTeamId,
   successfulConnectedAppStatusConnectionResults,
 } from "../apps/server/src/openpond/sandboxes";
+import { pipefailSandboxShellCommand } from "../apps/server/src/openpond/shell-command";
 import {
   pickSandboxChatDefaultRuntime,
   sandboxChatDefaultRuntimeMetadata,
@@ -70,6 +71,55 @@ describe("sandbox env normalization", () => {
 });
 
 describe("sandbox create normalization", () => {
+  test("wraps sandbox exec commands with pipefail before API execution", async () => {
+    const command = `${JSON.stringify(process.execPath)} -e "console.log('failing validation'); process.exit(7)" | tail -40`;
+    const requests: Array<{ method: string; pathname: string; body: unknown }> = [];
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+      requests.push({ method, pathname: url.pathname, body });
+      if (method === "POST" && url.pathname.endsWith("/exec")) {
+        return Response.json({
+          command: {
+            id: "command_pipefail",
+            command: body?.command,
+            status: "failed",
+            exitCode: 7,
+            output: "failing validation\n",
+          },
+        });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    };
+
+    const result = await sandboxRequestPayload({
+      type: "exec",
+      sandboxId: "sandbox_pipefail",
+      payload: { command, timeoutSeconds: 30 },
+    });
+
+    expect(requests).toEqual([
+      {
+        method: "POST",
+        pathname: "/v1/sandboxes/sandbox_pipefail/exec",
+        body: {
+          command: pipefailSandboxShellCommand(command),
+          timeoutSeconds: 30,
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      command: {
+        status: "failed",
+        exitCode: 7,
+        output: "failing validation\n",
+      },
+    });
+  });
+
   test("rejects inline sandbox runtime settings on raw sandbox create", () => {
     expect(() =>
       normalizeCreateInput({

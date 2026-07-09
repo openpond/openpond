@@ -36,7 +36,16 @@ type ActivityCounters = {
   webSearches: number;
 };
 
-type SubagentActivityStatus = "blocked" | "completed" | "failed" | "running";
+type SubagentActivityStatus =
+  | "accepted"
+  | "archived"
+  | "blocked"
+  | "completed"
+  | "failed"
+  | "needs revision"
+  | "running"
+  | "stale"
+  | "submitted";
 
 type CommandSummary = {
   countedAsRun: boolean;
@@ -177,20 +186,25 @@ function applyLabeledActivity(counters: ActivityCounters, activity: ActivityItem
     return true;
   }
   if (label.includes("subagent")) {
-    const status = label.includes("failed")
-      ? "failed"
-      : label.includes("blocked")
-        ? "blocked"
-        : label.includes("completed")
-          ? "completed"
-          : "running";
-    setSubagentStatus(counters, activity, status);
+    setSubagentStatus(counters, activity, subagentActivityStatusFromLabel(label));
     return true;
   }
   if (label.includes("image")) {
     counters.imageCount += 1;
-    return true;
-  }
+  return true;
+}
+
+function subagentActivityStatusFromLabel(label: string): SubagentActivityStatus {
+  if (label.includes("failed")) return "failed";
+  if (label.includes("blocked")) return "blocked";
+  if (label.includes("stale")) return "stale";
+  if (label.includes("needs revision")) return "needs revision";
+  if (label.includes("archived")) return "archived";
+  if (label.includes("accepted")) return "accepted";
+  if (label.includes("submitted")) return "submitted";
+  if (label.includes("completed")) return "completed";
+  return "running";
+}
   if (label.includes("web")) {
     counters.webSearches += 1;
     return true;
@@ -320,10 +334,15 @@ function subagentClause(counters: ActivityCounters): string | null {
   const counts = subagentStatusCounts(counters);
   if (counts.failed > 0) return countSubagentClause(counts.failed, "failed");
   if (counts.blocked > 0) return countSubagentClause(counts.blocked, "blocked");
-  if (counts.running > 0 && counts.completed === 0) {
+  if (counts.stale > 0) return countSubagentClause(counts.stale, "stale");
+  if (counts["needs revision"] > 0) return countSubagentClause(counts["needs revision"], "needs revision");
+  if (counts.submitted > 0) return countSubagentClause(counts.submitted, "submitted");
+  if (counts.running > 0 && counts.completed === 0 && counts.accepted === 0) {
     return countSubagentClause(counts.running, "running");
   }
+  if (counts.accepted > 0) return countSubagentClause(counts.accepted, "accepted");
   if (counts.completed > 0) return countSubagentClause(counts.completed, "completed");
+  if (counts.archived > 0) return countSubagentClause(counts.archived, "archived");
   return null;
 }
 
@@ -341,10 +360,15 @@ function setSubagentStatus(
 
 function subagentStatusCounts(counters: ActivityCounters): Record<SubagentActivityStatus, number> {
   const counts: Record<SubagentActivityStatus, number> = {
+    accepted: 0,
+    archived: 0,
     blocked: 0,
     completed: 0,
     failed: 0,
+    "needs revision": 0,
     running: 0,
+    stale: 0,
+    submitted: 0,
   };
   for (const status of counters.subagentStatuses.values()) counts[status] += 1;
   return counts;
@@ -352,12 +376,15 @@ function subagentStatusCounts(counters: ActivityCounters): Record<SubagentActivi
 
 function subagentStatusRank(status: SubagentActivityStatus): number {
   if (status === "running") return 1;
-  if (status === "completed") return 2;
-  if (status === "blocked") return 3;
-  return 4;
+  if (status === "submitted") return 2;
+  if (status === "accepted" || status === "completed" || status === "archived") return 3;
+  if (status === "needs revision") return 4;
+  if (status === "blocked") return 5;
+  if (status === "stale") return 6;
+  return 7;
 }
 
-function countSubagentClause(count: number, status: "blocked" | "completed" | "failed" | "running"): string {
+function countSubagentClause(count: number, status: SubagentActivityStatus): string {
   if (count === 1) return `subagent ${status}`;
   return `${count} subagents ${status}`;
 }

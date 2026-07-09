@@ -95,6 +95,29 @@ describe("OpenPond command access service", () => {
     }
   });
 
+  test("preserves failing pipeline status for validation commands", async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "openpond-command-access-pipefail-"));
+    const service = createOpenPondCommandAccessService({
+      upsertApproval: async (_approval) => undefined,
+      appendRuntimeEvent: async (_event) => undefined,
+    });
+
+    try {
+      const command = `${JSON.stringify(process.execPath)} -e "console.log('failing validation'); process.exit(7)" | tail -40`;
+      const result = await service.executeCommand({
+        session: session({ cwd, openPondCommandAccessMode: "full-access" }),
+        command,
+        source: "model_tool",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.exitCode).toBe(7);
+      expect(result.stdout.trim()).toBe("failing validation");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("disabled mode blocks commands without asking for approval", async () => {
     const approvals: Approval[] = [];
     const service = createOpenPondCommandAccessService({

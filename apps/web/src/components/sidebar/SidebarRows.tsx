@@ -411,7 +411,9 @@ function subagentPopoverDetail(runtime: SubagentRuntimeStatus): string {
   const parts = [
     runtime.activeCount > 0 ? `${runtime.activeCount} active` : null,
     runtime.blockedCount > 0 ? `${runtime.blockedCount} blocked` : null,
-    runtime.completedCount > 0 ? `${runtime.completedCount} completed` : null,
+    runtime.unresolvedCount > 0 ? `${runtime.unresolvedCount} unresolved` : null,
+    runtime.terminalCount > 0 ? `${runtime.terminalCount} terminal` : null,
+    runtime.archivedCount > 0 ? `${runtime.archivedCount} archived` : null,
   ].filter(Boolean);
   return parts.join(" · ") || "Subagent receipts available";
 }

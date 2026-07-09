@@ -11,6 +11,51 @@ export type OpenPondGoalControlAction = "start" | "restart" | "pause" | "resume"
 export type OpenPondGoalControlMode = "local" | "remote" | "auto";
 export type ResolvedOpenPondGoalControlMode = Exclude<OpenPondGoalControlMode, "auto">;
 
+export type OpenPondGoalSubagentRunSummary = {
+  id: string;
+  childSessionId: string | null;
+  roleId: string;
+  status: string;
+  required: boolean;
+  objective: string;
+  reviewStatus: string | null;
+  updatedAt: string | null;
+  cleanupStatus: string | null;
+  archiveStatus: string | null;
+  sessionArchived: boolean;
+  blockerCount: number;
+  validationAttemptCount: number;
+  changedFileCount: number;
+  followUpNeeded: boolean;
+};
+
+export type OpenPondGoalSubagentState = {
+  source: "subagent_runs";
+  updatedAt: string;
+  totalCount: number;
+  requiredCount: number;
+  optionalCount: number;
+  activeCount: number;
+  submittedForReviewCount: number;
+  needsRevisionCount: number;
+  needsUserInputCount: number;
+  acceptedCount: number;
+  blockingCount: number;
+  terminalCount: number;
+  cleanupNeededCount: number;
+  archivedCount: number;
+  unresolvedCount: number;
+  requiredActiveCount: number;
+  requiredSubmittedForReviewCount: number;
+  requiredNeedsRevisionCount: number;
+  requiredNeedsUserInputCount: number;
+  requiredAcceptedCount: number;
+  requiredBlockingCount: number;
+  requiredArchivedCount: number;
+  requiredUnresolvedCount: number;
+  runs: OpenPondGoalSubagentRunSummary[];
+};
+
 export type OpenPondGoalControlInput = {
   action: OpenPondGoalControlAction;
   objective?: string | null;
@@ -36,6 +81,7 @@ export type OpenPondGoalControlGoal = {
   timeUsedSeconds?: number;
   tokensUsed?: number | null;
   tokenBudget?: number | null;
+  subagents?: OpenPondGoalSubagentState;
 };
 
 export type OpenPondGoalControlResult = {

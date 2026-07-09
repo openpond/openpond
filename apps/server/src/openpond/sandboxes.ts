@@ -38,6 +38,7 @@ import {
 } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
+import { pipefailSandboxShellCommand } from "./shell-command.js";
 
 type SandboxRuntimeIntegrationLease = NonNullable<SandboxCreateInput["integrationLeases"]>[number];
 
@@ -2054,7 +2055,8 @@ function normalizeExecInput(payload: unknown): SandboxExecInput {
     typeof input.timeoutSeconds === "number" && Number.isFinite(input.timeoutSeconds)
       ? Math.max(1, Math.floor(input.timeoutSeconds))
       : undefined;
-  return timeoutSeconds ? { command, timeoutSeconds } : { command };
+  const pipefailCommand = pipefailSandboxShellCommand(command);
+  return timeoutSeconds ? { command: pipefailCommand, timeoutSeconds } : { command: pipefailCommand };
 }
 
 function normalizeProcessStartInput(payload: unknown): SandboxProcessStartInput {

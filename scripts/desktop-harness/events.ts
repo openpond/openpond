@@ -53,7 +53,7 @@ export class DesktopHarnessEventWaiter implements DesktopHarnessEvents {
     );
   }
 
-  waitForSubagentCompleted(
+  waitForSubagentSubmitted(
     sessionId: string,
     runId: string,
     options: { timeoutMs?: number } = {},
@@ -61,12 +61,13 @@ export class DesktopHarnessEventWaiter implements DesktopHarnessEvents {
     return this.waitFor(
       (event) =>
         event.sessionId === sessionId &&
-        event.name === "subagent.completed" &&
+        event.name === "subagent.submitted" &&
         event.data?.run &&
         typeof event.data.run === "object" &&
         !Array.isArray(event.data.run) &&
-        (event.data.run as Record<string, unknown>).id === runId,
-      `subagent.completed:${runId} in ${sessionId}`,
+        (event.data.run as Record<string, unknown>).id === runId &&
+        (event.data.run as Record<string, unknown>).status === "submitted_for_review",
+      `subagent.submitted:${runId} in ${sessionId}`,
       { ...options, sessionId },
     );
   }

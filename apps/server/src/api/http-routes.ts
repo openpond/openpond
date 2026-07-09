@@ -251,6 +251,7 @@ function normalizeRoutePath(pathValue: string): string {
     [/^\/v1\/sessions\/[^/]+\/turns\/interrupt$/, "/v1/sessions/:sessionId/turns/interrupt"],
     [/^\/v1\/sessions\/[^/]+\/compact$/, "/v1/sessions/:sessionId/compact"],
     [/^\/v1\/sessions\/[^/]+\/workspace-tools$/, "/v1/sessions/:sessionId/workspace-tools"],
+    [/^\/v1\/subagents\/[^/]+\/lifecycle$/, "/v1/subagents/:runId/lifecycle"],
     [/^\/v1\/approvals\/[^/]+$/, "/v1/approvals/:approvalId"],
   ];
   return patterns.find(([pattern]) => pattern.test(pathValue))?.[1] ?? pathValue;

@@ -1,11 +1,13 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   createPipelineActionShapeFromMetadata,
   type CreatePipelineRequest,
   type CreatePipelineSnapshot,
+  type SubagentLifecycleAction,
+  type SubagentRun,
 } from "@openpond/contracts";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
-import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
+import type { SubagentFinalResultSummary, SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { CircleAlert, FileText } from "../icons";
 
 export type GoalDetailsCreateRuntime = {
@@ -18,9 +20,15 @@ export type GoalDetailsViewProps = {
   createRuntime: GoalDetailsCreateRuntime | null;
   goalRuntime: GoalRuntimeStatus | null;
   subagentRuntime?: SubagentRuntimeStatus | null;
+  onRunSubagentLifecycleAction?: (input: { runId: string; action: SubagentLifecycleAction }) => Promise<void>;
 };
 
-export function GoalDetailsView({ createRuntime, goalRuntime, subagentRuntime = null }: GoalDetailsViewProps) {
+export function GoalDetailsView({
+  createRuntime,
+  goalRuntime,
+  subagentRuntime = null,
+  onRunSubagentLifecycleAction,
+}: GoalDetailsViewProps) {
   const title = createRuntime ? "Create Plan Details" : "Goal Details";
   const stateLabel = createRuntime
     ? createStateLabel(createRuntime.snapshot?.state ?? "planning")
@@ -43,7 +51,11 @@ export function GoalDetailsView({ createRuntime, goalRuntime, subagentRuntime = 
         {createRuntime ? (
           <CreateDetails runtime={createRuntime} />
         ) : goalRuntime || subagentRuntime ? (
-          <GoalRuntimeDetails goalRuntime={goalRuntime} subagentRuntime={subagentRuntime} />
+          <GoalRuntimeDetails
+            goalRuntime={goalRuntime}
+            subagentRuntime={subagentRuntime}
+            onRunSubagentLifecycleAction={onRunSubagentLifecycleAction}
+          />
         ) : (
           <EmptyDetails />
         )}
@@ -278,9 +290,11 @@ function CreateContextDetails({
 function GoalRuntimeDetails({
   goalRuntime,
   subagentRuntime,
+  onRunSubagentLifecycleAction,
 }: {
   goalRuntime: GoalRuntimeStatus | null;
   subagentRuntime: SubagentRuntimeStatus | null;
+  onRunSubagentLifecycleAction?: (input: { runId: string; action: SubagentLifecycleAction }) => Promise<void>;
 }) {
   return (
     <>
@@ -296,7 +310,12 @@ function GoalRuntimeDetails({
           />
         </DetailSection>
       ) : null}
-      {subagentRuntime ? <SubagentDetails runtime={subagentRuntime} /> : null}
+      {subagentRuntime ? (
+        <SubagentDetails
+          runtime={subagentRuntime}
+          onRunSubagentLifecycleAction={onRunSubagentLifecycleAction}
+        />
+      ) : null}
       <DetailSection title="Raw State">
         <details className="goal-details-raw">
           <summary>Show structured payload</summary>
@@ -307,16 +326,54 @@ function GoalRuntimeDetails({
   );
 }
 
-function SubagentDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {
+function SubagentDetails({
+  runtime,
+  onRunSubagentLifecycleAction,
+}: {
+  runtime: SubagentRuntimeStatus;
+  onRunSubagentLifecycleAction?: (input: { runId: string; action: SubagentLifecycleAction }) => Promise<void>;
+}) {
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const runLifecycleAction = async (runId: string, action: SubagentLifecycleAction) => {
+    if (!onRunSubagentLifecycleAction) return;
+    const key = `${runId}:${action}`;
+    setPendingAction(key);
+    setActionError(null);
+    try {
+      await onRunSubagentLifecycleAction({ runId, action });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPendingAction((current) => current === key ? null : current);
+    }
+  };
   return (
     <>
       <DetailSection title="Subagents">
         <DetailGrid
           rows={[
+            ["Background check", subagentWatcherLabel(runtime)],
+            ["Latest update", subagentLatestUpdateLabel(runtime)],
             ["Active", String(runtime.activeCount)],
             ["Blocked", String(runtime.blockedCount)],
-            ["Completed", String(runtime.completedCount)],
-            ["Required open", String(runtime.requiredOpenCount)],
+            ["Unresolved", String(runtime.unresolvedCount)],
+            ["Terminal", String(runtime.terminalCount)],
+            ["Archived", String(runtime.archivedCount)],
+            ["Review submitted", String(runtime.submittedCount)],
+            ["Review revision", String(runtime.needsRevisionCount)],
+            ["Review user input", String(runtime.needsUserInputCount)],
+            ["Review failed artifacts", String(runtime.failedWithArtifactsCount)],
+            ["Review accepted", String(runtime.acceptedCount)],
+            ["Required active", String(runtime.requiredActiveCount)],
+            ["Required submitted", String(runtime.requiredSubmittedForReviewCount)],
+            ["Required revision", String(runtime.requiredNeedsRevisionCount)],
+            ["Required user input", String(runtime.requiredNeedsUserInputCount)],
+            ["Required blocking", String(runtime.requiredBlockingCount)],
+            ["Required accepted", String(runtime.requiredAcceptedCount)],
+            ["Required terminal", String(runtime.requiredTerminalCount)],
+            ["Required archived", String(runtime.requiredArchivedCount)],
+            ["Required unresolved", String(runtime.requiredUnresolvedCount)],
             ["Usage", subagentUsageLabel(runtime.usage.totalTokens, runtime.usage.requestCount)],
             ["Evidence", String(runtime.evidenceRefs.length)],
             ["Checks", String(runtime.testsRunCount)],
@@ -343,14 +400,170 @@ function SubagentDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {
                 <strong>{subagentRoleLabel(run.roleId)}</strong>
                 <p>{run.objective}</p>
                 {run.report?.summary ? <small>{run.report.summary}</small> : null}
+                {onRunSubagentLifecycleAction ? (
+                  <SubagentLifecycleActions
+                    pendingAction={pendingAction}
+                    run={run}
+                    onRun={runLifecycleAction}
+                  />
+                ) : null}
               </div>
             </li>
           ))}
         </ul>
+        {actionError ? (
+          <div className="goal-details-alert">
+            <CircleAlert size={15} />
+            <span>{actionError}</span>
+          </div>
+        ) : null}
       </DetailSection>
+      {runtime.finalResults.length > 0 ? <SubagentFinalResultDetails results={runtime.finalResults} /> : null}
       {runtime.taskGraph.nodes.length > 0 ? <SubagentTaskGraphDetails runtime={runtime} /> : null}
     </>
   );
+}
+
+function SubagentFinalResultDetails({ results }: { results: SubagentFinalResultSummary[] }) {
+  return (
+    <DetailSection title="Child Results">
+      <ol className="goal-details-task-graph">
+        {results.slice(0, 6).map((result) => (
+          <li className="goal-details-task-node" key={result.runId}>
+            <div className="goal-details-task-node-header">
+              <span className={`goal-details-inline-state ${result.status}`}>{result.status}</span>
+              <div>
+                <strong>{subagentRoleLabel(result.roleId)}</strong>
+                <small>{result.objective}</small>
+              </div>
+            </div>
+            <p>{result.summary}</p>
+            <div className="goal-details-task-node-meta">
+              <span>{result.required ? "Required" : "Optional"}</span>
+              <span>{result.refs.length} refs</span>
+              <span>{result.testsRun.length + result.validationAttempts.length} checks</span>
+              <span>{result.blockers.length} blockers</span>
+              <span>{result.confidence ? `${createStateLabel(result.confidence)} confidence` : "Confidence unknown"}</span>
+              <span>{createStateLabel(result.packetQualityStatus)} packet</span>
+              <span>{result.independentReviewRecommended ? "Independent review recommended" : "Parent review"}</span>
+            </div>
+            {result.findings.length > 0 ? <small>Findings: {compactList(result.findings, 3)}</small> : null}
+            {result.changedFiles.length > 0 ? <small>Files: {compactList(result.changedFiles, 4)}</small> : null}
+            {result.testsRun.length > 0 ? <small>Tests: {compactList(result.testsRun, 3)}</small> : null}
+            {result.validationAttempts.length > 0 ? (
+              <small>Validation: {compactList(result.validationAttempts, 2)}</small>
+            ) : null}
+            {subagentPacketQualityEvidenceLabel(result) ? (
+              <small>Packet evidence: {subagentPacketQualityEvidenceLabel(result)}</small>
+            ) : null}
+            {result.reviewerRoutingReasons.length > 0 ? (
+              <small>Review routing: {compactList(result.reviewerRoutingReasons.map(createStateLabel), 3)}</small>
+            ) : null}
+            {result.refs.length > 0 ? <small>Refs: {compactList(result.refs.map(subagentRefLabel), 4)}</small> : null}
+            {result.blockers.length > 0 ? <small>Blockers: {compactList(result.blockers, 3)}</small> : null}
+            {result.workspaceRetention ? (
+              <small>Workspace: {subagentWorkspaceRetentionLabel(result.workspaceRetention)}</small>
+            ) : null}
+            {result.importantMessages.length > 0 ? (
+              <small>Messages: {compactList(result.importantMessages.map(subagentMessageLabel), 2)}</small>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </DetailSection>
+  );
+}
+
+function SubagentLifecycleActions({
+  pendingAction,
+  run,
+  onRun,
+}: {
+  pendingAction: string | null;
+  run: SubagentRun;
+  onRun: (runId: string, action: SubagentLifecycleAction) => Promise<void>;
+}) {
+  const actions = subagentLifecycleActionsForRun(run);
+  if (actions.length === 0) return null;
+  return (
+    <div className="goal-details-actions">
+      {actions.map((action) => {
+        const key = `${run.id}:${action}`;
+        const pending = pendingAction === key;
+        return (
+          <button
+            key={action}
+            type="button"
+            disabled={Boolean(pendingAction)}
+            onClick={() => void onRun(run.id, action)}
+          >
+            {pending ? "Working..." : subagentLifecycleActionLabel(action)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function subagentLifecycleActionsForRun(run: SubagentRun): SubagentLifecycleAction[] {
+  const actions: SubagentLifecycleAction[] = [];
+  const canCleanup = subagentRunCleanupEligible(run);
+  const canArchive = subagentRunArchiveEligible(run);
+  if (canCleanup) actions.push("cleanup");
+  if (canArchive) actions.push("archive");
+  return actions;
+}
+
+function subagentLifecycleActionLabel(action: SubagentLifecycleAction): string {
+  if (action === "cleanup") return "Clean";
+  if (action === "archive") return "Archive";
+  return "Clean + archive";
+}
+
+function subagentRunCleanupEligible(run: SubagentRun): boolean {
+  if (!subagentRunTerminalOrAccepted(run)) return false;
+  const metadata = asRecord(run.metadata);
+  if (!metadata?.subagentWorkspace && !metadata?.workspaceHandoff) return false;
+  const cleanup = asRecord(metadata.lifecycleCleanup);
+  const workspaceCleanup = asRecord(cleanup?.workspaceCleanup);
+  const status = stringValue(workspaceCleanup?.status);
+  return status !== "removed" && status !== "deleted" && status !== "retained" && status !== "skipped";
+}
+
+function subagentRunArchiveEligible(run: SubagentRun): boolean {
+  if (!run.childSessionId || !subagentRunTerminalOrAccepted(run)) return false;
+  const archive = asRecord(asRecord(run.metadata)?.childSessionArchive);
+  const status = stringValue(archive?.status);
+  return status !== "archived" && status !== "already_archived";
+}
+
+function subagentRunTerminalOrAccepted(run: SubagentRun): boolean {
+  return run.status === "accepted" ||
+    run.status === "completed" ||
+    run.status === "failed_with_artifacts" ||
+    run.status === "failed" ||
+    run.status === "cancelled" ||
+    run.status === "superseded" ||
+    run.review?.status === "accepted";
+}
+
+function subagentWatcherLabel(runtime: SubagentRuntimeStatus): string {
+  if (!runtime.watcher) return "Not checked";
+  const policy = runtime.watcher.wakeQueued
+    ? "parent wake queued"
+    : runtime.watcher.wakePolicy === "not_waking_parent_for_routine_tick"
+      ? "routine check"
+      : runtime.watcher.wakePolicy
+        ? createStateLabel(runtime.watcher.wakePolicy)
+        : "no parent wake";
+  const stale = runtime.watcher.staleCount > 0 ? ` · ${runtime.watcher.staleCount} stale` : "";
+  return `${formatTimestamp(runtime.watcher.checkedAt)} · ${policy}${stale}`;
+}
+
+function subagentLatestUpdateLabel(runtime: SubagentRuntimeStatus): string {
+  const update = runtime.latestMeaningfulUpdate;
+  if (!update) return "No structured update";
+  return `${subagentRoleLabel(update.roleId)} ${update.status}: ${update.message}`;
 }
 
 function SubagentTaskGraphDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {
@@ -413,6 +626,45 @@ function subagentRoleLabel(roleId: string): string {
   return roleId.slice(0, 1).toUpperCase() + roleId.slice(1).replace(/[-_]+/g, " ");
 }
 
+function subagentRefLabel(ref: SubagentFinalResultSummary["refs"][number]): string {
+  return `${ref.kind}: ${ref.label}`;
+}
+
+function subagentMessageLabel(message: SubagentFinalResultSummary["importantMessages"][number]): string {
+  return `${createStateLabel(message.kind)}: ${message.body}`;
+}
+
+function subagentPacketQualityEvidenceLabel(result: SubagentFinalResultSummary): string | null {
+  const evidence = result.packetQualityEvidence;
+  const parts = [
+    result.packetQualityStatus !== "reviewable" ? createStateLabel(result.packetQualityStatus) : null,
+    evidence.finalSummaryPresent ? null : "summary missing",
+    evidence.requestedValidationCommandCount > 0 && evidence.validationAttemptCount + evidence.testsRunCount === 0
+      ? "validation missing"
+      : null,
+    evidence.failedValidationCount > 0 ? `${evidence.failedValidationCount} failed validation` : null,
+    evidence.unvalidatedWorkspaceChanges ? "unvalidated workspace changes" : null,
+    evidence.changedFileCount > 0
+      ? `${evidence.changedFileCount} changed ${evidence.changedFileCount === 1 ? "file" : "files"}`
+      : null,
+  ].filter(Boolean) as string[];
+  return parts.length > 0 ? compactList(parts, 4) : null;
+}
+
+function subagentWorkspaceRetentionLabel(
+  retention: NonNullable<SubagentFinalResultSummary["workspaceRetention"]>,
+): string {
+  const expiry = retention.expiresAt ? `until ${formatTimestamp(retention.expiresAt)}` : "for inspection";
+  const trigger = retention.trigger ? ` · ${createStateLabel(retention.trigger)}` : "";
+  return `retained ${expiry}${trigger}`;
+}
+
+function compactList(values: string[], limit: number): string {
+  const visible = values.slice(0, limit);
+  const hidden = values.length - visible.length;
+  return hidden > 0 ? `${visible.join(", ")} +${hidden}` : visible.join(", ");
+}
+
 function formatTokenCount(tokens: number): string {
   if (tokens < 1000) return String(tokens);
   if (tokens >= 1_000_000) {
@@ -421,6 +673,17 @@ function formatTokenCount(tokens: number): string {
   }
   const value = tokens / 1000;
   return `${trimFixed(value, value < 10 ? 1 : 0)}k`;
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function trimFixed(value: number, digits: number): string {
@@ -473,6 +736,14 @@ function RefList({
       ))}
     </ul>
   );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function createStateLabel(value: string): string {

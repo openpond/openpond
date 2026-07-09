@@ -117,7 +117,113 @@ describe("scripted OpenPond chat provider", () => {
     expect(blockedDeltas.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
   });
 
-  test("polls subagent status until the native run reports completion", async () => {
+  test("scripts a bounded coding worker through real workspace and command tool steps", async () => {
+    const writeCommand =
+      "printf '%s\\n' 'bounded-worker-contract' 'copy-on-write child edit' > bounded-worker-contract-proof.txt";
+    const validationCommand =
+      "test -f bounded-worker-contract-proof.txt && grep -q bounded-worker-contract bounded-worker-contract-proof.txt";
+    const startDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_join")],
+    })));
+    const startCall = onlyToolCall(startDeltas);
+    expect(startCall.function?.name).toBe("openpond_subagent_start");
+    expect(JSON.parse(startCall.function?.arguments ?? "{}")).toMatchObject({
+      roleId: "coding",
+      required: true,
+      workerBrief: {
+        plan: expect.arrayContaining(["Inspect workspace context."]),
+        targetFiles: ["package.json", "bounded-worker-contract-proof.txt"],
+        validationCommands: [validationCommand],
+      },
+    });
+
+    const childSystem = {
+      role: "system" as const,
+      content: "You are an OpenPond coding subagent running in an addressable child conversation.",
+    };
+    const firstSearchDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      messages: [childSystem],
+      tools: [tool("resource_search"), tool("resource_read"), tool("exec_command")],
+    })));
+    expect(onlyToolCall(firstSearchDeltas).function?.name).toBe("resource_search");
+
+    const secondSearchDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      messages: [childSystem, toolResult("resource_search", { query: "package.json" })],
+      tools: [tool("resource_search"), tool("resource_read"), tool("exec_command")],
+    })));
+    expect(onlyToolCall(secondSearchDeltas).function?.name).toBe("resource_search");
+
+    const readDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      messages: [
+        childSystem,
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_search", { query: "package.json" }),
+      ],
+      tools: [tool("resource_search"), tool("resource_read"), tool("exec_command")],
+    })));
+    expect(onlyToolCall(readDeltas).function?.name).toBe("resource_read");
+
+    const writeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      messages: [
+        childSystem,
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_read", { ref: "workspace:file:package.json" }),
+      ],
+      tools: [tool("resource_search"), tool("resource_read"), tool("exec_command")],
+    })));
+    const writeCall = onlyToolCall(writeDeltas);
+    expect(writeCall.function?.name).toBe("exec_command");
+    expect(JSON.parse(writeCall.function?.arguments ?? "{}")).toMatchObject({
+      command: writeCommand,
+      timeoutSeconds: 30,
+    });
+
+    const validationDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      messages: [
+        childSystem,
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_read", { ref: "workspace:file:package.json" }),
+        toolResult("exec_command", { command: writeCommand, exitCode: 0 }),
+      ],
+      tools: [tool("resource_search"), tool("resource_read"), tool("exec_command")],
+    })));
+    const validationCall = onlyToolCall(validationDeltas);
+    expect(validationCall.function?.name).toBe("exec_command");
+    expect(validationCall.id).not.toBe(writeCall.id);
+    expect(JSON.parse(validationCall.function?.arguments ?? "{}")).toMatchObject({
+      command: validationCommand,
+      timeoutSeconds: 30,
+    });
+
+    const finalDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-bounded-worker",
+      messages: [
+        childSystem,
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_search", { query: "package.json" }),
+        toolResult("resource_read", { ref: "workspace:file:package.json" }),
+        toolResult("exec_command", { command: writeCommand, exitCode: 0 }),
+        toolResult("exec_command", {
+          command: validationCommand,
+          exitCode: 0,
+        }),
+      ],
+      tools: [tool("resource_search"), tool("resource_read"), tool("exec_command")],
+    })));
+    expect(textFromDeltas(finalDeltas)).toBe(
+      "Coding subagent submitted the bounded worker contract packet after editing and validation.",
+    );
+  });
+
+  test("polls subagent status until the native run reports submitted for review", async () => {
     const statusDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
       model: "openpond-scripted-subagent-lifecycle",
       messages: [
@@ -135,14 +241,14 @@ describe("scripted OpenPond chat provider", () => {
     expect(statusCall.function?.name).toBe("openpond_subagent_status");
     expect(JSON.parse(statusCall.function?.arguments ?? "{}")).toEqual({ runId: "run_scripted_2" });
 
-    const completedDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+    const submittedDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
       model: "openpond-scripted-subagent-lifecycle",
       messages: [
         { role: "user", content: "prove status polling" },
         toolResult("openpond_subagent_start", { runId: "run_scripted_2", status: "queued" }),
         toolResult("openpond_subagent_join", { runId: "run_scripted_2", status: "running" }),
         toolResult("openpond_subagent_status", {
-          runs: [{ runId: "run_scripted_2", status: "completed" }],
+          runs: [{ runId: "run_scripted_2", status: "submitted_for_review" }],
         }),
       ],
       tools: [
@@ -151,7 +257,7 @@ describe("scripted OpenPond chat provider", () => {
         tool("openpond_subagent_status"),
       ],
     })));
-    expect(textFromDeltas(completedDeltas)).toBe("Research subagent lifecycle complete for run_scripted_2.");
+    expect(textFromDeltas(submittedDeltas)).toBe("Research subagent lifecycle submitted for review for run_scripted_2.");
   });
 
   test("lets scripted handoff parent turns idle before the queued wake joins", async () => {
@@ -205,7 +311,7 @@ describe("scripted OpenPond chat provider", () => {
     expect(contextLightJoinCall.function?.name).toBe("openpond_subagent_join");
     expect(JSON.parse(contextLightJoinCall.function?.arguments ?? "{}")).toEqual({ runId: "run_handoff_2" });
 
-    const contextLightCompletedDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+    const contextLightSubmittedDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
       model: "openpond-scripted-subagent-handoff",
       messages: [
         {
@@ -217,11 +323,11 @@ describe("scripted OpenPond chat provider", () => {
             "Scripted child handoff from the desktop harness.",
           ].join("\n"),
         },
-        toolResult("openpond_subagent_join", { runId: "run_handoff_2", status: "completed" }),
+        toolResult("openpond_subagent_join", { runId: "run_handoff_2", status: "submitted_for_review" }),
       ],
       tools: [tool("openpond_subagent_start"), tool("openpond_subagent_join")],
     })));
-    expect(textFromDeltas(contextLightCompletedDeltas)).toBe("Research subagent lifecycle complete for run_handoff_2.");
+    expect(textFromDeltas(contextLightSubmittedDeltas)).toBe("Research subagent lifecycle submitted for review for run_handoff_2.");
   });
 
   test("scripts child handoff messages through the native subagent message tool", async () => {
@@ -248,7 +354,219 @@ describe("scripted OpenPond chat provider", () => {
       ],
       tools: [tool("openpond_subagent_send_message")],
     })));
-    expect(textFromDeltas(finalDeltas)).toBe("Research subagent completed after sending the scripted parent handoff.");
+    expect(textFromDeltas(finalDeltas)).toBe("Research subagent submitted after sending the scripted parent handoff.");
+  });
+
+  test("scripts watcher-submission parent wakes without starting duplicate children", async () => {
+    const initialParentDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-watch-submission",
+      messages: [
+        { role: "user", content: "start a child for watcher review" },
+        toolResult("openpond_subagent_start", { runId: "run_watch_1", status: "running" }),
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_join")],
+    })));
+    expect(textFromDeltas(initialParentDeltas)).toBe("Research subagent submitted for watcher review for run_watch_1.");
+    expect(initialParentDeltas.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
+
+    const wakeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-watch-submission",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Wake reasons: required_submitted_for_review",
+            "Review packets:",
+            "Run run_watch_1 (research)",
+          ].join("\n"),
+        },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_join")],
+    })));
+    expect(textFromDeltas(wakeDeltas)).toBe("Watcher lifecycle review wake received for run_watch_1.");
+    expect(wakeDeltas.some((delta) => delta.type === "tool_call_delta")).toBe(false);
+
+    const childDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-watch-submission",
+      messages: [
+        {
+          role: "system",
+          content: "You are an OpenPond research subagent running in an addressable child conversation.",
+        },
+        { role: "user", content: "submit watcher packet" },
+      ],
+      tools: [tool("openpond_subagent_send_message")],
+    })));
+    expect(textFromDeltas(childDeltas)).toBe("Research subagent submitted the scripted watcher review packet.");
+  });
+
+  test("scripts a parent review revision loop across lifecycle watcher wakes", async () => {
+    const firstWakeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-review-revision",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Wake reasons: required_submitted_for_review",
+            "Review packets:",
+            "Run run_revision_1 (research)",
+            "Status: submitted_for_review",
+          ].join("\n"),
+        },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_review")],
+    })));
+    const revisionCall = onlyToolCall(firstWakeDeltas);
+    expect(revisionCall.function?.name).toBe("openpond_subagent_review");
+    expect(JSON.parse(revisionCall.function?.arguments ?? "{}")).toMatchObject({
+      runId: "run_revision_1",
+      decision: "needs_revision",
+      requiredCorrections: ["Add the focused unchanged-insight regression proof and submit a revised packet."],
+    });
+
+    const revisionTextDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-review-revision",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Run run_revision_1 (research)",
+            "Status: submitted_for_review",
+          ].join("\n"),
+        },
+        toolResult("openpond_subagent_review", { runId: "run_revision_1", status: "needs_revision" }),
+        { role: "assistant", content: "Parent requested child revision for run_revision_1." },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_review")],
+    })));
+    expect(textFromDeltas(revisionTextDeltas)).toBe("Parent requested child revision for run_revision_1.");
+
+    const secondWakeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-review-revision",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Run run_revision_1 (research)",
+            "Status: submitted_for_review",
+          ].join("\n"),
+        },
+        toolResult("openpond_subagent_review", { runId: "run_revision_1", status: "needs_revision" }),
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Wake reasons: required_submitted_for_review",
+            "Review packets:",
+            "Run run_revision_1 (research)",
+            "Status: submitted_for_review",
+          ].join("\n"),
+        },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_review")],
+    })));
+    const acceptCall = onlyToolCall(secondWakeDeltas);
+    expect(acceptCall.function?.name).toBe("openpond_subagent_review");
+    expect(JSON.parse(acceptCall.function?.arguments ?? "{}")).toMatchObject({
+      runId: "run_revision_1",
+      decision: "accept",
+    });
+
+    const sparseRevisedWakeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-review-revision",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Wake reasons: required_submitted_for_review",
+            "Review packets:",
+            "Run run_revision_1 (research)",
+            "Status: submitted_for_review",
+            "Final report:",
+            "  Summary: Research subagent submitted the revised review packet with the requested regression proof.",
+          ].join("\n"),
+        },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_review")],
+    })));
+    const sparseAcceptCall = onlyToolCall(sparseRevisedWakeDeltas);
+    expect(sparseAcceptCall.function?.name).toBe("openpond_subagent_review");
+    expect(JSON.parse(sparseAcceptCall.function?.arguments ?? "{}")).toMatchObject({
+      runId: "run_revision_1",
+      decision: "accept",
+    });
+
+    const acceptedWakeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-review-revision",
+      messages: [
+        toolResult("openpond_subagent_review", { runId: "run_revision_1", status: "needs_revision" }),
+        toolResult("openpond_subagent_review", { runId: "run_revision_1", status: "accepted" }),
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Wake reasons: required_all_accepted",
+            "Review packets:",
+            "Run run_revision_1 (research)",
+            "Status: accepted",
+          ].join("\n"),
+        },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_review")],
+    })));
+    expect(acceptedWakeDeltas.some((delta) => delta.type === "tool_call_delta")).toBe(false);
+    expect(textFromDeltas(acceptedWakeDeltas)).toBe("Parent noted lifecycle status accepted for run_revision_1.");
+
+    const revisedChildDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-subagent-review-revision",
+      messages: [
+        {
+          role: "system",
+          content: "You are an OpenPond research subagent running in an addressable child conversation.",
+        },
+        {
+          role: "user",
+          content: "Review decision: needs_revision\n\nRequired corrections:\n- Add the focused unchanged-insight regression proof.",
+        },
+      ],
+      tools: [tool("openpond_subagent_send_message")],
+    })));
+    expect(textFromDeltas(revisedChildDeltas)).toBe(
+      "Research subagent submitted the revised review packet with the requested regression proof.",
+    );
+  });
+
+  test("scripts lifecycle watcher wakes for other subagent models without starting duplicate children", async () => {
+    const wakeDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-goal-subagent-running",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "The subagent lifecycle watcher found required child work that needs main-agent attention.",
+            "Parent session: session_goal",
+            "Goal: goal_scripted",
+            "Wake reasons:",
+            "required_submitted_for_review",
+            "Review packets:",
+            "Run run_goal_1 (research)",
+            "Status: submitted_for_review",
+          ].join("\n"),
+        },
+      ],
+      tools: [tool("openpond_subagent_start"), tool("openpond_subagent_join")],
+    })));
+
+    expect(wakeDeltas.some((delta) =>
+      delta.type === "tool_call_delta" &&
+      delta.toolCalls.some((call) => call.function?.name === "openpond_subagent_start")
+    )).toBe(false);
+    expect(textFromDeltas(wakeDeltas)).toBe("Watcher lifecycle review wake received for run_goal_1.");
   });
 
   test("treats subagent system-context turns as child turns even when parent-only tools are listed", async () => {
@@ -274,7 +592,7 @@ describe("scripted OpenPond chat provider", () => {
     expect(deltas.some((delta) =>
       delta.type === "tool_call_delta" && delta.toolCalls.some((call) => call.function?.name === "openpond_subagent_start")
     )).toBe(false);
-    expect(textFromDeltas(deltas)).toBe("Research subagent completed the scripted lifecycle check.");
+    expect(textFromDeltas(deltas)).toBe("Research subagent submitted the scripted lifecycle check.");
   });
 
   test("scripts parent cancellation through the native cancel tool", async () => {
@@ -360,7 +678,7 @@ describe("scripted OpenPond chat provider", () => {
     }
   }, 15_000);
 
-  test("server routes scripted subagent lifecycle through native tools and child completion", async () => {
+  test("server routes scripted subagent lifecycle through native tools and child submission", async () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-scripted-subagent-provider-"));
     const priorEnv = process.env[OPENPOND_HARNESS_SCRIPTED_MODELS_ENV];
     process.env[OPENPOND_HARNESS_SCRIPTED_MODELS_ENV] = "1";
@@ -390,7 +708,7 @@ describe("scripted OpenPond chat provider", () => {
         }),
       });
       const bootstrap = await waitForBootstrap(server.url, server.token, (candidate) =>
-        candidate.events.some((event) => event.sessionId === session.id && event.name === "subagent.completed"),
+        candidate.events.some((event) => event.sessionId === session.id && event.name === "subagent.submitted"),
       );
       const sessionEvents = bootstrap.events.filter((event) => event.sessionId === session.id);
       const startEvent = sessionEvents.find((event) =>
@@ -399,15 +717,16 @@ describe("scripted OpenPond chat provider", () => {
       const joinEvent = sessionEvents.find((event) =>
         event.name === "tool.completed" && event.action === "openpond_subagent_join"
       );
-      const completedEvent = sessionEvents.find((event) => event.name === "subagent.completed");
-      const run = completedEvent?.data && typeof completedEvent.data === "object" && !Array.isArray(completedEvent.data)
-        ? (completedEvent.data as { run?: { childSessionId?: string; status?: string; modelRef?: unknown } }).run
+      const submittedEvent = sessionEvents.find((event) => event.name === "subagent.submitted");
+      const run = submittedEvent?.data && typeof submittedEvent.data === "object" && !Array.isArray(submittedEvent.data)
+        ? (submittedEvent.data as { run?: { childSessionId?: string; status?: string; modelRef?: unknown; review?: { status?: string } } }).run
         : null;
 
       expect(turn.status).toBe("completed");
       expect(startEvent).toBeTruthy();
       expect(joinEvent).toBeTruthy();
-      expect(run?.status).toBe("completed");
+      expect(run?.status).toBe("submitted_for_review");
+      expect(run?.review?.status).toBe("submitted_for_review");
       expect(run?.modelRef).toEqual(modelRef);
       expect(bootstrap.sessions.some((item) =>
         item.id === run?.childSessionId &&

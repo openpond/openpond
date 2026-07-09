@@ -51,6 +51,10 @@ describe("OpenPond capability tool registry", () => {
         calls.push({ tool: "cancel", input });
         return subagentToolResult("cancelled");
       },
+      reviewSubagent: async (_context, input) => {
+        calls.push({ tool: "review", input });
+        return subagentToolResult("completed");
+      },
       sendSubagentMessage: async (_context, input) => {
         calls.push({ tool: "message", input });
         return subagentMessageToolResult();
@@ -61,12 +65,20 @@ describe("OpenPond capability tool registry", () => {
     const status = requireTool(definitions, "openpond_subagent_status");
     const join = requireTool(definitions, "openpond_subagent_join");
     const cancel = requireTool(definitions, "openpond_subagent_cancel");
+    const review = requireTool(definitions, "openpond_subagent_review");
     const message = requireTool(definitions, "openpond_subagent_send_message");
 
     const startResult = await start.execute(context({
       roleId: "coding",
       objective: "Fix the failing tests",
       context: "Use the current branch diff.",
+      workerBrief: {
+        plan: ["Inspect failing tests", "Patch the implementation"],
+        targetFiles: ["tests/failing.test.ts"],
+        acceptanceCriteria: ["Focused tests pass"],
+        validationCommands: ["bun test tests/failing.test.ts"],
+        stopConditions: ["Report a blocker if dependencies are missing"],
+      },
       required: false,
     }));
     const statusResult = await status.execute(context({ parentGoalId: "goal_1" }));
@@ -75,6 +87,12 @@ describe("OpenPond capability tool registry", () => {
       runId: "run_1",
       reason: "No longer needed.",
       cleanupWorkspace: false,
+    }));
+    const reviewResult = await review.execute(context({
+      runId: "run_1",
+      decision: "dismiss",
+      summary: "Acknowledged blocked child work.",
+      issues: ["Child is blocked on unavailable external approval."],
     }));
     const messageResult = await message.execute(context({
       toRole: "review",
@@ -90,6 +108,13 @@ describe("OpenPond capability tool registry", () => {
           roleId: "coding",
           objective: "Fix the failing tests",
           context: "Use the current branch diff.",
+          workerBrief: {
+            plan: ["Inspect failing tests", "Patch the implementation"],
+            targetFiles: ["tests/failing.test.ts"],
+            acceptanceCriteria: ["Focused tests pass"],
+            validationCommands: ["bun test tests/failing.test.ts"],
+            stopConditions: ["Report a blocker if dependencies are missing"],
+          },
           required: false,
         },
       },
@@ -101,6 +126,18 @@ describe("OpenPond capability tool registry", () => {
           runId: "run_1",
           reason: "No longer needed.",
           cleanupWorkspace: false,
+        },
+      },
+      {
+        tool: "review",
+        input: {
+          runId: "run_1",
+          decision: "dismiss",
+          summary: "Acknowledged blocked child work.",
+          issues: ["Child is blocked on unavailable external approval."],
+          requiredCorrections: null,
+          messageChild: null,
+          priority: null,
         },
       },
       {
@@ -131,6 +168,10 @@ describe("OpenPond capability tool registry", () => {
     expect(cancelResult).toMatchObject({
       name: "openpond_subagent_cancel",
       data: { status: "cancelled" },
+    });
+    expect(reviewResult).toMatchObject({
+      name: "openpond_subagent_review",
+      data: { status: "completed" },
     });
     expect(messageResult).toMatchObject({
       name: "openpond_subagent_send_message",

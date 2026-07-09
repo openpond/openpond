@@ -85,7 +85,7 @@ export default desktopScenario({
       label: "active goal strip status",
       timeoutMs: 10_000,
     });
-    await harness.renderer.assertText(/1 subagent (running|completed)/, {
+    await harness.renderer.assertText(/1 subagent (running|submitted)/, {
       label: "goal strip subagent count",
       timeoutMs: 10_000,
     });
@@ -103,27 +103,27 @@ export default desktopScenario({
     await harness.renderer.assertText("Goal Details", { label: "right sidebar goal details title" });
     await harness.renderer.assertText("Subagents", { label: "right sidebar subagent section" });
     await harness.renderer.assertText(goal.objective, { label: "right sidebar goal objective" });
-    await harness.renderer.assertText("Required open", { label: "right sidebar required-open row" });
+    await harness.renderer.assertText("Required submitted", { label: "right sidebar required-submitted row" });
     harness.recordAssertion("rightSidebarGoalDetailsVisible", true);
     harness.recordAssertion("rightSidebarSubagentDetailsVisible", true);
     await harness.screenshot("goal-scoped-subagent-details-active");
 
-    const completedEvent = await harness.events.waitForSubagentCompleted(session.id, runId) as RuntimeEvent;
+    const submittedEvent = await harness.events.waitForSubagentSubmitted(session.id, runId) as RuntimeEvent;
     await waitForCompletedTurn(harness, session.id, startEvent, "goal-scoped parent turn completion");
 
-    const completedRun = asRecord(asRecord(completedEvent.data)?.run);
-    const completedChildSessionId = stringFromRecord(completedRun, "childSessionId") ?? childSessionId;
+    const submittedRun = asRecord(asRecord(submittedEvent.data)?.run);
+    const submittedChildSessionId = stringFromRecord(submittedRun, "childSessionId") ?? childSessionId;
     const bootstrap = await harness.api.bootstrap<BootstrapPayload>();
-    const childSession = bootstrap.sessions.find((item) => item.id === completedChildSessionId);
-    if (!childSession) throw new Error(`Child session ${completedChildSessionId} was not present in bootstrap.`);
+    const childSession = bootstrap.sessions.find((item) => item.id === submittedChildSessionId);
+    if (!childSession) throw new Error(`Child session ${submittedChildSessionId} was not present in bootstrap.`);
 
-    await harness.renderer.assertText("Subagent completed", {
-      label: "goal-scoped subagent completed activity",
+    await harness.renderer.assertText("Subagent submitted", {
+      label: "goal-scoped subagent submitted activity",
     });
-    harness.recordAssertion("subagentCompletedVisible", true);
+    harness.recordAssertion("subagentSubmittedVisible", true);
     harness.recordMetadata({
       runId,
-      childSessionId: completedChildSessionId,
+      childSessionId: submittedChildSessionId,
       parentTurnId: startEvent.turnId ?? null,
       childParentGoalId: childSession.parentGoalId ?? null,
       runtimeEventCount: bootstrap.events.filter((event) => event.sessionId === session.id).length,

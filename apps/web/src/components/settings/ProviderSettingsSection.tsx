@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
   CircleAlert,
@@ -50,7 +50,10 @@ const CREDENTIAL_SOURCE_OPTIONS: Array<DropdownOption & { value: ProviderCredent
   { value: "env", label: "Environment variable", description: "Read by the local server" },
 ];
 const MAX_PROVIDER_MODEL_DATALIST_OPTIONS = 120;
+const SUBSCRIPTION_PROVIDER_IDS = new Set<ChatProvider>(["openai", "xai", "zai"]);
 const SUBSCRIPTION_CREDENTIAL_MODES = new Set(["chatgpt-subscription"]);
+const ZAI_CODING_PLAN_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
+export type ProviderCredentialTab = "api" | "subscription";
 
 function splitModelOverrides(value: string): string[] {
   return value
@@ -85,6 +88,24 @@ function credentialSummary(status: ProviderStatus): string {
   return status.credential.source;
 }
 
+function normalizeProviderBaseUrl(value: string | null | undefined): string {
+  return value?.trim().replace(/\/+$/, "") ?? "";
+}
+
+function usesZaiCodingPlan(status: ProviderStatus, settings: ProviderSettings): boolean {
+  return (
+    status.id === "zai" &&
+    normalizeProviderBaseUrl(settings.providers.zai?.baseUrl) === ZAI_CODING_PLAN_BASE_URL
+  );
+}
+
+export function providerCredentialLabel(status: ProviderStatus, settings: ProviderSettings): string {
+  if (!status.credential.connected || !status.routing.localByok) return "";
+  if (status.credential.source === "chatgpt_subscription") return "Subscription";
+  if (usesZaiCodingPlan(status, settings)) return "Coding Plan key";
+  return "API key";
+}
+
 function providerMeta(status: ProviderStatus, settings: ProviderSettings): string {
   const cache = settings.modelCaches[status.id];
   if (status.routing.localByok && status.enabled && !status.credential.connected) return "";
@@ -92,12 +113,7 @@ function providerMeta(status: ProviderStatus, settings: ProviderSettings): strin
   const modelCount = Math.max(cache?.models.length ?? 0, status.modelIds.length);
   const modelLabel = status.defaultModel ? chatModelLabel(status.defaultModel, settings, status.id) : "";
   const modelCountLabel = modelCount === 1 ? "1 model" : `${modelCount} models`;
-  const credentialLabel =
-    status.credential.connected && status.routing.localByok
-      ? status.credential.source === "chatgpt_subscription"
-        ? "Subscription"
-        : "API key"
-      : "";
+  const credentialLabel = providerCredentialLabel(status, settings);
   const parts = [
     providerStateLabel(status),
     credentialLabel,
@@ -112,7 +128,25 @@ function canToggleProvider(providerId: ChatProvider): boolean {
 }
 
 export function providerSupportsSubscription(status: ProviderStatus | null | undefined): boolean {
-  return Boolean(status?.credentialModes.some((mode) => SUBSCRIPTION_CREDENTIAL_MODES.has(mode)));
+  if (!status) return false;
+  return (
+    SUBSCRIPTION_PROVIDER_IDS.has(status.id) ||
+    status.credentialModes.some((mode) => SUBSCRIPTION_CREDENTIAL_MODES.has(mode))
+  );
+}
+
+export function providerCredentialTabs(status: ProviderStatus | null | undefined): ProviderCredentialTab[] {
+  return providerSupportsSubscription(status) ? ["api", "subscription"] : ["api"];
+}
+
+export function defaultProviderCredentialTab(
+  status: ProviderStatus | null | undefined,
+  settings: ProviderSettings | null | undefined,
+): ProviderCredentialTab {
+  if (!status || !settings || !providerSupportsSubscription(status)) return "api";
+  if (status.credential.source === "chatgpt_subscription") return "subscription";
+  if (usesZaiCodingPlan(status, settings)) return "subscription";
+  return "api";
 }
 
 export function providerRowsForSubscriptionFilter(
@@ -175,14 +209,6 @@ export function ProviderSettingsSection({
     () => providerRowsForSubscriptionFilter(providers, showSubscriptionProvidersOnly),
     [providers, showSubscriptionProvidersOnly],
   );
-  const subscriptionProviderCount = useMemo(
-    () => allProviderRows.filter((providerId) => providerSupportsSubscription(providers?.statuses[providerId])).length,
-    [allProviderRows, providers],
-  );
-  const subscriptionProviderCountLabel =
-    subscriptionProviderCount === 1
-      ? "1 provider supports subscription credentials"
-      : `${subscriptionProviderCount} providers support subscription credentials`;
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -195,21 +221,20 @@ export function ProviderSettingsSection({
 
       {providers ? (
         <div className="provider-manager-panel">
-          <div className="account-list-heading">
-            <span>Model providers</span>
+          <div className="account-list-heading provider-manager-heading">
+            <div className="provider-manager-title-row">
+              <span>Model providers</span>
+              <label className="settings-check-row compact provider-subscription-filter">
+                <input
+                  type="checkbox"
+                  checked={showSubscriptionProvidersOnly}
+                  onChange={(event) => setShowSubscriptionProvidersOnly(event.currentTarget.checked)}
+                />
+                <span>Subscriptions</span>
+              </label>
+            </div>
             <small>{providerRows.length} of {allProviderRows.length} presets</small>
           </div>
-          <label className="settings-check-row compact provider-subscription-filter">
-            <input
-              type="checkbox"
-              checked={showSubscriptionProvidersOnly}
-              onChange={(event) => setShowSubscriptionProvidersOnly(event.currentTarget.checked)}
-            />
-            <span>
-              <strong>Subscriptions only</strong>
-              <small>{subscriptionProviderCountLabel}</small>
-            </span>
-          </label>
           {providerRows.length > 0 ? (
             <div className="provider-manager-scroll" role="list">
               {providerRows.map((providerId) => {
@@ -325,12 +350,31 @@ function ProviderDetailsDialog({
 }) {
   const config = settings.providers[providerId];
   const cache = settings.modelCaches[providerId];
+  const credentialTabsId = useId();
+  const lastDialogProviderIdRef = useRef(providerId);
   const modelCount = Math.max(cache?.models.length ?? 0, status.modelIds.length);
   const localByok = status.routing.localByok && isRunnableChatProvider(providerId) && providerId !== "codex";
+  const credentialTabs = useMemo(() => (localByok ? providerCredentialTabs(status) : []), [localByok, status]);
+  const hasSubscriptionTab = credentialTabs.includes("subscription");
+  const [credentialTab, setCredentialTab] =
+    useState<ProviderCredentialTab>(() => defaultProviderCredentialTab(status, settings));
+  const showingSubscriptionDetails = localByok && credentialTab === "subscription" && hasSubscriptionTab;
+  const credentialPanelIdFor = (tab: ProviderCredentialTab) => `${credentialTabsId}-${tab}-panel`;
   const baseUrlLabel =
     providerId === "codex"
       ? "Codex app server"
       : config?.baseUrl ?? (providerId === "openpond" ? account?.chatApiBaseUrl : null) ?? "Not set";
+
+  useEffect(() => {
+    const providerChanged = lastDialogProviderIdRef.current !== providerId;
+    if (providerChanged) {
+      lastDialogProviderIdRef.current = providerId;
+      setCredentialTab(defaultProviderCredentialTab(status, settings));
+      return;
+    }
+    if (localByok && !credentialTabs.includes(credentialTab)) setCredentialTab("api");
+  }, [credentialTab, credentialTabs, localByok, providerId, settings, status]);
+
   return (
     <div className="git-dialog-backdrop provider-dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -353,27 +397,50 @@ function ProviderDetailsDialog({
           </div>
         </div>
 
+        {localByok ? (
+          <div className="provider-credential-tabs provider-mode-tabs" role="tablist" aria-label={`${status.displayName} mode`}>
+            {credentialTabs.map((tab) => (
+              <button
+                type="button"
+                role="tab"
+                id={`${credentialTabsId}-${tab}`}
+                key={tab}
+                className={credentialTab === tab ? "active" : undefined}
+                aria-selected={credentialTab === tab}
+                aria-controls={credentialPanelIdFor(tab)}
+                onClick={() => setCredentialTab(tab)}
+              >
+                {tab === "api" ? "API" : "Subscription"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <dl className="provider-dialog-stats">
           <div>
             <dt>Credential</dt>
             <dd title={credentialSummary(status)}>{credentialSummary(status)}</dd>
           </div>
-          <div>
-            <dt>Base URL</dt>
-            <dd title={baseUrlLabel}>{baseUrlLabel}</dd>
-          </div>
-          <div>
-            <dt>Model</dt>
-            <dd title={config?.defaultModel ?? status.defaultModel ?? undefined}>
-              {config?.defaultModel ?? status.defaultModel ?? "Not set"}
-            </dd>
-          </div>
-          <div>
-            <dt>Models</dt>
-            <dd title={cache?.lastError ?? undefined}>
-              {modelCount} cached · {formatDate(cache?.fetchedAt)}
-            </dd>
-          </div>
+          {!showingSubscriptionDetails ? (
+            <>
+              <div>
+                <dt>Base URL</dt>
+                <dd title={baseUrlLabel}>{baseUrlLabel}</dd>
+              </div>
+              <div>
+                <dt>Model</dt>
+                <dd title={config?.defaultModel ?? status.defaultModel ?? undefined}>
+                  {config?.defaultModel ?? status.defaultModel ?? "Not set"}
+                </dd>
+              </div>
+              <div>
+                <dt>Models</dt>
+                <dd title={cache?.lastError ?? undefined}>
+                  {modelCount} cached · {formatDate(cache?.fetchedAt)}
+                </dd>
+              </div>
+            </>
+          ) : null}
           {providerId === "codex" ? (
             <>
               <div>
@@ -404,6 +471,9 @@ function ProviderDetailsDialog({
           />
         ) : localByok && config && cache ? (
           <LocalByokProviderDetails
+            credentialTab={credentialTab}
+            credentialTabsId={credentialTabsId}
+            hasSubscriptionTab={hasSubscriptionTab}
             providerId={providerId}
             providerBusy={providerBusy}
             settings={settings}
@@ -461,6 +531,9 @@ function CodexProviderDetails({
 }
 
 function LocalByokProviderDetails({
+  credentialTab,
+  credentialTabsId,
+  hasSubscriptionTab,
   providerId,
   providerBusy,
   settings,
@@ -472,6 +545,9 @@ function LocalByokProviderDetails({
   onStartOpenAiSubscriptionAuth,
   onValidate,
 }: {
+  credentialTab: ProviderCredentialTab;
+  credentialTabsId: string;
+  hasSubscriptionTab: boolean;
   providerId: ChatProvider;
   providerBusy: string | null;
   settings: ProviderSettings;
@@ -509,6 +585,19 @@ function LocalByokProviderDetails({
   const subscriptionBusy = providerBusy === "openai:credential";
   const openAiProvider = providerId === "openai";
   const xAiProvider = providerId === "xai";
+  const zAiProvider = providerId === "zai";
+  const credentialPanelIdFor = (tab: ProviderCredentialTab) => `${credentialTabsId}-${tab}-panel`;
+  const credentialPanelId = credentialPanelIdFor(credentialTab);
+  const showingSubscriptionDetails = credentialTab === "subscription" && hasSubscriptionTab;
+  const keyCredentialMode = credentialTab === "subscription" && zAiProvider ? "coding-plan" : "api";
+  const keyCredentialLabel = keyCredentialMode === "coding-plan" ? "Coding Plan key" : "API key";
+  const keyCredentialPlaceholder =
+    status.credential.connected
+      ? keyCredentialMode === "coding-plan"
+        ? "Replace saved plan key"
+        : "Replace saved key"
+      : keyCredentialLabel;
+  const saveKeyLabel = keyCredentialMode === "coding-plan" ? "Save plan key" : "Save key";
   const visibleModelOptions = useMemo(
     () =>
       visibleProviderModelOptions(
@@ -573,130 +662,15 @@ function LocalByokProviderDetails({
     setCredentialValue("");
   }
 
-  return (
-    <div className="provider-dialog-body">
-      <form className="provider-card-form" onSubmit={(event) => void submitConfig(event)}>
-        <div className="provider-card-grid">
-          <label className="settings-select-field">
-            <span>Base URL</span>
-            <input
-              value={baseUrl}
-              disabled={configBusy}
-              placeholder="https://api.example.com/v1"
-              onChange={(event) => {
-                setDirtyConfigFields((current) => ({ ...current, baseUrl: true }));
-                setBaseUrl(event.currentTarget.value);
-              }}
-            />
-          </label>
-          <label className="settings-select-field">
-            <span>Default model</span>
-            <input
-              list={modelListId}
-              value={defaultModel}
-              disabled={configBusy}
-              placeholder="Model id"
-              onChange={(event) => {
-                setDirtyConfigFields((current) => ({ ...current, defaultModel: true }));
-                setDefaultModel(event.currentTarget.value);
-              }}
-            />
-            <datalist id={modelListId}>
-              {visibleModelOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </datalist>
-            {hiddenModelOptionCount > 0 ? (
-              <small>{hiddenModelOptionCount} more cached models hidden from suggestions</small>
-            ) : null}
-          </label>
-        </div>
-        <label className="settings-select-field provider-model-overrides">
-          <span>Manual models</span>
-          <textarea
-            value={modelOverrides}
-            disabled={configBusy}
-            placeholder="One model id per line"
-            onChange={(event) => {
-              setDirtyConfigFields((current) => ({ ...current, modelOverrides: true }));
-              setModelOverrides(event.currentTarget.value);
-            }}
-          />
-        </label>
-        <div className="settings-button-row">
-          <button className="settings-secondary" disabled={configBusy}>
-            {configBusy ? <Loader2 size={14} className="settings-spin" /> : <Save size={14} />}
-            <span>{configBusy ? "Saving" : "Save config"}</span>
-          </button>
-          <button
-            type="button"
-            className="settings-secondary"
-            disabled={modelsBusy}
-            onClick={() => void onRefreshModels(providerId)}
-          >
-            {modelsBusy ? <Loader2 size={14} className="settings-spin" /> : <RefreshCw size={14} />}
-            <span>{modelsBusy ? "Refreshing" : "Refresh models"}</span>
-          </button>
-          <button
-            type="button"
-            className="settings-secondary"
-            disabled={validateBusy || !defaultModel.trim()}
-            onClick={() =>
-              void onValidate(providerId, {
-                baseUrl: baseUrl.trim() || undefined,
-                modelId: defaultModel.trim() || undefined,
-              })
-            }
-          >
-            {validateBusy ? <Loader2 size={14} className="settings-spin" /> : <CheckCircle2 size={14} />}
-            <span>{validateBusy ? "Testing" : "Test"}</span>
-          </button>
-        </div>
-      </form>
-
-      <form className="provider-card-form credential-form" onSubmit={(event) => void submitCredential(event)}>
-        {openAiProvider ? (
-          <div className="provider-dialog-note codex-provider-note">
-            <KeyRound size={15} />
-            <span>
-              ChatGPT subscription auth opens OpenAI login and stores a refresh token locally. API keys remain available
-              below for raw Platform billing.
-            </span>
-          </div>
-        ) : null}
-        {xAiProvider ? (
-          <div className="provider-dialog-note xai-provider-note">
-            <KeyRound size={15} />
-            <span>
-              xAI API access uses an API key with API credits or invoiced billing. Grok app subscriptions do not
-              authenticate API requests here.
-            </span>
-          </div>
-        ) : null}
-        {openAiProvider ? (
-          <div className="settings-button-row">
-            <button
-              type="button"
-              className="settings-secondary"
-              disabled={subscriptionBusy}
-              onClick={() => void onStartOpenAiSubscriptionAuth("browser")}
-            >
-              {subscriptionBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
-              <span>{subscriptionBusy ? "Opening" : "Connect ChatGPT"}</span>
-            </button>
-            <button
-              type="button"
-              className="settings-secondary"
-              disabled={subscriptionBusy}
-              onClick={() => void onStartOpenAiSubscriptionAuth("device")}
-            >
-              {subscriptionBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
-              <span>Device code</span>
-            </button>
-          </div>
-        ) : null}
+  function renderKeyCredentialForm({ panel = true }: { panel?: boolean } = {}) {
+    return (
+      <form
+        className="provider-credential-panel"
+        id={panel ? credentialPanelId : undefined}
+        role={panel ? "tabpanel" : undefined}
+        aria-labelledby={panel ? `${credentialTabsId}-${credentialTab}` : undefined}
+        onSubmit={(event) => void submitCredential(event)}
+      >
         <div className="provider-card-grid credential-grid">
           <div className="settings-select-field">
             <span>Credential source</span>
@@ -720,12 +694,12 @@ function LocalByokProviderDetails({
             </label>
           ) : (
             <label className="settings-select-field">
-              <span>API key</span>
+              <span>{keyCredentialLabel}</span>
               <input
                 type="password"
                 value={credentialValue}
                 disabled={credentialBusy}
-                placeholder={status.credential.connected ? "Replace saved key" : "API key"}
+                placeholder={keyCredentialPlaceholder}
                 autoComplete="off"
                 onChange={(event) => setCredentialValue(event.currentTarget.value)}
               />
@@ -735,7 +709,7 @@ function LocalByokProviderDetails({
         <div className="settings-button-row">
           <button className="settings-secondary" disabled={credentialBusy || !credentialReady}>
             {credentialBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
-            <span>{credentialBusy ? "Saving" : "Save key"}</span>
+            <span>{credentialBusy ? "Saving" : saveKeyLabel}</span>
           </button>
           <button
             type="button"
@@ -748,6 +722,173 @@ function LocalByokProviderDetails({
           </button>
         </div>
       </form>
+    );
+  }
+
+  function renderSubscriptionPanel() {
+    if (openAiProvider) {
+      return (
+        <div
+          className="provider-subscription-panel"
+          id={credentialPanelId}
+          role="tabpanel"
+          aria-labelledby={`${credentialTabsId}-subscription`}
+        >
+          <div className="provider-dialog-note codex-provider-note">
+            <KeyRound size={15} />
+            <span>
+              ChatGPT subscription auth opens OpenAI login and stores a refresh token locally. API keys remain available
+              under the API tab for raw Platform billing.
+            </span>
+          </div>
+          <div className="settings-button-row">
+            <button
+              type="button"
+              className="settings-secondary"
+              disabled={subscriptionBusy}
+              onClick={() => void onStartOpenAiSubscriptionAuth("browser")}
+            >
+              {subscriptionBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
+              <span>{subscriptionBusy ? "Opening" : "Connect ChatGPT"}</span>
+            </button>
+            <button
+              type="button"
+              className="settings-secondary"
+              disabled={subscriptionBusy}
+              onClick={() => void onStartOpenAiSubscriptionAuth("device")}
+            >
+              {subscriptionBusy ? <Loader2 size={14} className="settings-spin" /> : <KeyRound size={14} />}
+              <span>Device code</span>
+            </button>
+            <button
+              type="button"
+              className="settings-icon-button ghost"
+              aria-label={`Delete ${status.displayName} credential`}
+              disabled={subscriptionBusy || !status.credential.connected}
+              onClick={() => void onDeleteCredential(providerId)}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (xAiProvider) {
+      return (
+        <div
+          className="provider-subscription-panel"
+          id={credentialPanelId}
+          role="tabpanel"
+          aria-labelledby={`${credentialTabsId}-subscription`}
+        >
+          <div className="provider-dialog-note xai-provider-note">
+            <KeyRound size={15} />
+            <span>
+              SuperGrok includes Grok app and Grok Build access. xAI API calls here still use an xAI Console API key
+              with API credits or invoiced billing, so there is no separate Connect SuperGrok step yet.
+            </span>
+          </div>
+        </div>
+      );
+    }
+    if (zAiProvider) {
+      return (
+        <div
+          className="provider-subscription-panel"
+          id={credentialPanelId}
+          role="tabpanel"
+          aria-labelledby={`${credentialTabsId}-subscription`}
+        >
+          <div className="provider-dialog-note subscription-provider-note">
+            <KeyRound size={15} />
+            <span>
+              GLM Coding Plan uses a plan API key with the dedicated Coding endpoint. General Z.ai API keys and balances
+              are separate.
+            </span>
+          </div>
+          {renderKeyCredentialForm({ panel: false })}
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className="provider-dialog-body">
+      {!showingSubscriptionDetails ? (
+        <form className="provider-card-form" onSubmit={(event) => void submitConfig(event)}>
+          <div className="provider-card-grid">
+            <label className="settings-select-field">
+              <span>Base URL</span>
+              <input
+                value={baseUrl}
+                disabled={configBusy}
+                placeholder="https://api.example.com/v1"
+                onChange={(event) => {
+                  setDirtyConfigFields((current) => ({ ...current, baseUrl: true }));
+                  setBaseUrl(event.currentTarget.value);
+                }}
+              />
+            </label>
+            <label className="settings-select-field">
+              <span>Default model</span>
+              <input
+                list={modelListId}
+                value={defaultModel}
+                disabled={configBusy}
+                placeholder="Model id"
+                onChange={(event) => {
+                  setDirtyConfigFields((current) => ({ ...current, defaultModel: true }));
+                  setDefaultModel(event.currentTarget.value);
+                }}
+              />
+              <datalist id={modelListId}>
+                {visibleModelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </datalist>
+              {hiddenModelOptionCount > 0 ? (
+                <small>{hiddenModelOptionCount} more cached models hidden from suggestions</small>
+              ) : null}
+            </label>
+          </div>
+          <div className="settings-button-row">
+            <button className="settings-secondary" disabled={configBusy}>
+              {configBusy ? <Loader2 size={14} className="settings-spin" /> : <Save size={14} />}
+              <span>{configBusy ? "Saving" : "Save config"}</span>
+            </button>
+            <button
+              type="button"
+              className="settings-secondary"
+              disabled={modelsBusy}
+              onClick={() => void onRefreshModels(providerId)}
+            >
+              {modelsBusy ? <Loader2 size={14} className="settings-spin" /> : <RefreshCw size={14} />}
+              <span>{modelsBusy ? "Refreshing" : "Refresh models"}</span>
+            </button>
+            <button
+              type="button"
+              className="settings-secondary"
+              disabled={validateBusy || !defaultModel.trim()}
+              onClick={() =>
+                void onValidate(providerId, {
+                  baseUrl: baseUrl.trim() || undefined,
+                  modelId: defaultModel.trim() || undefined,
+                })
+              }
+            >
+              {validateBusy ? <Loader2 size={14} className="settings-spin" /> : <CheckCircle2 size={14} />}
+              <span>{validateBusy ? "Testing" : "Test"}</span>
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="provider-card-form credential-form">
+        {showingSubscriptionDetails ? renderSubscriptionPanel() : renderKeyCredentialForm()}
+      </div>
     </div>
   );
 }

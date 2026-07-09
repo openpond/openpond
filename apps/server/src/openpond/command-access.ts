@@ -12,6 +12,7 @@ import {
 } from "@openpond/contracts";
 import { event, now, textFromUnknown } from "../utils.js";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
+import { pipefailLocalShellCommand } from "./shell-command.js";
 
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120;
 const MAX_COMMAND_TIMEOUT_SECONDS = 3600;
@@ -349,9 +350,10 @@ function runShellCommand(input: {
     let stdout = "";
     let stderr = "";
     let truncated = false;
-    const child = spawn(input.command, {
+    const shellCommand = pipefailLocalShellCommand(input.command);
+    const child = spawn(shellCommand.command, {
       cwd: input.cwd,
-      shell: true,
+      shell: shellCommand.shell,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });

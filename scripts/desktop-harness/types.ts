@@ -71,7 +71,7 @@ export type DesktopHarnessEvents = {
     action: string,
     options?: { timeoutMs?: number },
   ): Promise<DesktopHarnessRuntimeEvent>;
-  waitForSubagentCompleted(
+  waitForSubagentSubmitted(
     sessionId: string,
     runId: string,
     options?: { timeoutMs?: number },

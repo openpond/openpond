@@ -231,10 +231,45 @@
   scrollbar-width: thin;
 }
 
-.provider-subscription-filter {
+.provider-manager-heading {
+  align-items: center;
+}
+
+.provider-manager-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-check-row.provider-subscription-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  grid-template-columns: none;
   max-width: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 10px 16px 12px;
+  padding: 0;
+  color: #bdbdbd;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings-check-row.provider-subscription-filter > span {
+  display: block;
+  min-width: 0;
+}
+
+.settings-check-row.provider-subscription-filter input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: 4px;
+}
+
+.settings-check-row.provider-subscription-filter input[type="checkbox"]::before {
+  width: 7px;
+  height: 4px;
 }
 
 .provider-manager-empty {
@@ -475,6 +510,74 @@
   gap: 12px;
 }
 
+.provider-credential-tabs {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #101010;
+}
+
+.provider-mode-tabs {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  justify-self: stretch;
+  width: auto;
+  margin: 12px 20px 0;
+}
+
+.provider-credential-tabs button {
+  min-height: 30px;
+  min-width: 92px;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #9b9b9b;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.provider-mode-tabs button {
+  min-height: 40px;
+  min-width: 0;
+}
+
+.provider-credential-tabs button:last-child {
+  border-right: 0;
+}
+
+.provider-credential-tabs button:hover,
+.provider-credential-tabs button.active {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f5f5f5;
+}
+
+.provider-credential-tabs button:focus-visible {
+  outline: 2px solid rgba(6, 182, 212, 0.38);
+  outline-offset: -2px;
+}
+
+.provider-credential-panel,
+.provider-subscription-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.credential-form .provider-dialog-note {
+  margin: 0;
+}
+
+.provider-credential-panel .settings-button-row,
+.provider-subscription-panel .settings-button-row {
+  padding: 0;
+}
+
 .provider-dialog-note {
   display: flex;
   align-items: center;
@@ -488,7 +591,8 @@
   font-size: 13px;
 }
 
-.provider-dialog-note.xai-provider-note {
+.provider-dialog-note.xai-provider-note,
+.provider-dialog-note.subscription-provider-note {
   border-color: rgba(58, 163, 255, 0.2);
   background: rgba(58, 163, 255, 0.08);
   color: #9bd0ff;
@@ -649,6 +753,13 @@
 .settings-select-field span {
   color: #9b9b9b;
   font-size: 12px;
+}
+
+.settings-select-field small {
+  min-width: 0;
+  color: #8f8f8f;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .settings-select-field input,
@@ -1019,11 +1130,6 @@
 
 .settings-select-field textarea:focus {
   border-color: rgba(58, 163, 255, 0.45);
-}
-
-.settings-select-field.provider-model-overrides textarea {
-  min-height: 86px;
-  max-height: 150px;
 }
 
 .settings-button-row {

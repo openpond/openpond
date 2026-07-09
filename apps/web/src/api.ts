@@ -47,6 +47,8 @@ import type {
   SidebarAppPreference,
   SidebarAppPreferences,
   SwitchOpenPondAccountRequest,
+  SubagentLifecycleActionRequest,
+  SubagentLifecycleActionResponse,
   UpdateOpenPondAccountConfigRequest,
   ListCloudWorkItemsRequest,
   OpenCloudWorkItemRequest,
@@ -200,6 +202,19 @@ export const api = {
     const query = params.size ? `?${params.toString()}` : "";
     return apiFetch<RuntimeEventPagePayload>(connection, `/v1/events/page${query}`);
   },
+  runSubagentLifecycleAction: (
+    connection: ClientConnection,
+    runId: string,
+    input: SubagentLifecycleActionRequest,
+  ) =>
+    apiFetch<SubagentLifecycleActionResponse>(
+      connection,
+      `/v1/subagents/${encodeURIComponent(runId)}/lifecycle`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
   insights: (
     connection: ClientConnection,
     input: {

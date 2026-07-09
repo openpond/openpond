@@ -36,11 +36,78 @@ describe("subagent store", () => {
       });
       await store.upsertSubagentRun(completed);
 
-      expect(await store.getSubagentRun("subagent-run-coding")).toEqual(completed);
-      expect(await store.listSubagentRuns({ parentSessionId: "session-parent" })).toEqual([completed]);
-      expect(await store.listSubagentRuns({ parentGoalId: "goal-1", status: "completed" })).toEqual([completed]);
-      expect(await store.listSubagentRuns({ childSessionId: "session-child-coding" })).toEqual([completed]);
+      const persistedCompleted = await store.getSubagentRun("subagent-run-coding");
+      expect(persistedCompleted).toMatchObject({
+        ...completed,
+        updatedAt: expect.any(String),
+      });
+      expect(await store.listSubagentRuns({ parentSessionId: "session-parent" })).toEqual([persistedCompleted]);
+      expect(await store.listSubagentRuns({ parentGoalId: "goal-1", status: "completed" })).toEqual([persistedCompleted]);
+      expect(await store.listSubagentRuns({ childSessionId: "session-child-coding" })).toEqual([persistedCompleted]);
       expect(await store.listSubagentRuns({ parentGoalId: "goal-1", status: ["running", "blocked"] })).toEqual([]);
+
+      const warnedCompleted = await store.recordRetainedWorkspaceExpiryWarning("subagent-run-coding", {
+        status: "warned",
+        policy: "pre_cleanup_notice",
+        checkedAt: "2026-07-09T12:00:00.000Z",
+        warnedAt: "2026-07-09T12:00:00.000Z",
+        expiresAt: "2026-07-10T10:00:00.000Z",
+        warningBeforeMs: 86400000,
+        source: "lifecycleCleanup",
+        reason: "Retain for inspection.",
+        cleanupAfterExpiry: true,
+        trigger: "auto_after_acceptance",
+      });
+      expect(warnedCompleted).toMatchObject({
+        id: "subagent-run-coding",
+        updatedAt: persistedCompleted!.updatedAt,
+        metadata: {
+          retainedWorkspaceExpiryWarning: {
+            status: "warned",
+            expiresAt: "2026-07-10T10:00:00.000Z",
+          },
+        },
+      });
+      expect(await store.getSubagentRun("subagent-run-coding")).toMatchObject({
+        updatedAt: persistedCompleted!.updatedAt,
+        metadata: {
+          retainedWorkspaceExpiryWarning: {
+            warningBeforeMs: 86400000,
+          },
+        },
+      });
+
+      const running = subagentRun({
+        id: "subagent-run-review",
+        roleId: "review",
+        childSessionId: "session-child-review",
+        status: "running",
+      });
+      await store.upsertSubagentRun(running);
+      const activeRuns = await store.listActiveSubagentRuns({ parentSessionId: "session-parent" });
+      expect(activeRuns.map((run) => run.id)).toEqual(["subagent-run-review"]);
+      expect(activeRuns[0]).toMatchObject({
+        id: "subagent-run-review",
+        updatedAt: expect.any(String),
+      });
+      const threadScoped = subagentRun({
+        id: "subagent-run-thread",
+        parentGoalId: null,
+        roleId: "research",
+        status: "running",
+      });
+      await store.upsertSubagentRun(threadScoped);
+      const activeScopes = await store.listSubagentRunScopes({ status: ["queued", "running"] });
+      expect(activeScopes).toEqual(expect.arrayContaining([
+        { parentSessionId: "session-parent", parentGoalId: "goal-1" },
+        { parentSessionId: "session-parent", parentGoalId: null },
+      ]));
+      const staleRuns = await store.listStaleSubagentRuns({
+        parentSessionId: "session-parent",
+        olderThanMs: 1000,
+        nowIso: "9999-01-01T00:00:00.000Z",
+      });
+      expect(staleRuns.map((run) => run.id)).toEqual(["subagent-run-review", "subagent-run-thread"]);
 
       const question = subagentMessage({
         id: "subagent-message-1",

@@ -574,6 +574,7 @@ export function SubagentsSettingsSection({
           <div className="subagent-settings-card-header">
             <div>
               <span>Limits</span>
+              <small>Controls child worker concurrency and background status checks.</small>
             </div>
           </div>
           <div className="subagent-field-grid four">
@@ -625,7 +626,7 @@ export function SubagentsSettingsSection({
               />
             </label>
             <label className="settings-select-field">
-              <span>Heartbeat seconds</span>
+              <span>Background check seconds</span>
               <input
                 type="number"
                 min={10}
@@ -634,6 +635,7 @@ export function SubagentsSettingsSection({
                 disabled={saving || !subagentsEnabled}
                 onChange={(event) => setSubagentsHeartbeatIntervalSeconds(numberOrDefault(event.target.value, 60))}
               />
+              <small>OpenPond checks active child workers at this cadence. It does not wake the parent model every interval.</small>
             </label>
           </div>
         </section>
@@ -655,7 +657,7 @@ const SUBAGENT_TOOL_POLICY_OPTIONS: Array<{ value: SubagentToolPolicy; label: st
 ];
 
 const SUBAGENT_PEER_MESSAGE_OPTIONS: Array<{ value: SubagentPeerMessages; label: string }> = [
-  { value: "goal_scoped", label: "Goal scoped" },
+  { value: "goal_scoped", label: "Scoped handoffs" },
   { value: "disabled", label: "Disabled" },
 ];
 

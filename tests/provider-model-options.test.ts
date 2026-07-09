@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  defaultProviderCredentialTab,
+  providerCredentialLabel,
+  providerCredentialTabs,
   providerRowsForSubscriptionFilter,
   providerSupportsSubscription,
   visibleProviderModelOptions,
 } from "../apps/web/src/components/settings/ProviderSettingsSection";
 import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
+import type { ProviderSecrets } from "../apps/server/src/openpond/provider-secrets";
 
 describe("provider model option capping", () => {
   test("caps large provider model lists", () => {
@@ -30,14 +34,43 @@ describe("provider model option capping", () => {
     expect(visible).toHaveLength(10);
   });
 
-  test("filters providers to subscription-capable credential modes", () => {
+  test("filters providers to subscription providers", () => {
     const settings = buildProviderSettings({
       file: { version: 1, providers: {}, modelCaches: {} },
     });
 
     expect(providerSupportsSubscription(settings.statuses.openai)).toBe(true);
-    expect(providerSupportsSubscription(settings.statuses.xai)).toBe(false);
-    expect(providerRowsForSubscriptionFilter(settings, true)).toEqual(["openai"]);
+    expect(providerSupportsSubscription(settings.statuses.xai)).toBe(true);
+    expect(providerSupportsSubscription(settings.statuses.zai)).toBe(true);
+    expect(providerRowsForSubscriptionFilter(settings, true)).toEqual(["openai", "xai", "zai"]);
     expect(providerRowsForSubscriptionFilter(settings, false)).toContain("xai");
+    expect(providerCredentialTabs(settings.statuses.openai)).toEqual(["api", "subscription"]);
+    expect(providerCredentialTabs(settings.statuses.openrouter)).toEqual(["api"]);
+    expect(defaultProviderCredentialTab(settings.statuses.xai, settings)).toBe("api");
+    expect(defaultProviderCredentialTab(settings.statuses.zai, settings)).toBe("subscription");
+  });
+
+  test("labels Z.ai Coding Plan credentials as plan keys", () => {
+    const secrets: ProviderSecrets = {
+      version: 1,
+      providers: {
+        zai: {
+          source: "local_secret",
+          value: "zai-test-key",
+          envVar: null,
+          oauth: null,
+          createdAt: "2026-07-08T00:00:00.000Z",
+          updatedAt: "2026-07-08T00:00:00.000Z",
+          lastValidatedAt: null,
+          lastError: null,
+        },
+      },
+    };
+    const settings = buildProviderSettings({
+      file: { version: 1, providers: {}, modelCaches: {} },
+      secrets,
+    });
+
+    expect(providerCredentialLabel(settings.statuses.zai!, settings)).toBe("Coding Plan key");
   });
 });

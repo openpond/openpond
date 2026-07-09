@@ -28,6 +28,7 @@ export async function registerScriptedOpenPondModel(
 export async function configureResearchSubagentModel(
   harness: DesktopHarness,
   modelRef: ChatModelRef,
+  options: { heartbeatIntervalSeconds?: number } = {},
 ): Promise<void> {
   await harness.api.fetchJson("/v1/preferences", {
     method: "PATCH",
@@ -35,6 +36,7 @@ export async function configureResearchSubagentModel(
       subagents: {
         enabled: true,
         defaultModelRef: modelRef,
+        ...(options.heartbeatIntervalSeconds ? { heartbeatIntervalSeconds: options.heartbeatIntervalSeconds } : {}),
         roles: [
           {
             id: "research",

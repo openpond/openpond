@@ -75,23 +75,23 @@ export default desktopScenario({
     harness.recordAssertion("sidebarRunningDotVisible", true);
     await harness.screenshot("subagent-running-state-active");
 
-    const completedEvent = await harness.events.waitForSubagentCompleted(session.id, runId) as RuntimeEvent;
-    const completedRun = asRecord(asRecord(completedEvent.data)?.run);
-    const completedChildSessionId = stringFromRecord(completedRun, "childSessionId") ?? childSessionId;
+    const submittedEvent = await harness.events.waitForSubagentSubmitted(session.id, runId) as RuntimeEvent;
+    const submittedRun = asRecord(asRecord(submittedEvent.data)?.run);
+    const submittedChildSessionId = stringFromRecord(submittedRun, "childSessionId") ?? childSessionId;
     const bootstrap = await harness.api.bootstrap<BootstrapPayload>();
-    const childSession = bootstrap.sessions.find((item) => item.id === completedChildSessionId);
-    if (!childSession) throw new Error(`Child session ${completedChildSessionId} was not present in bootstrap.`);
+    const childSession = bootstrap.sessions.find((item) => item.id === submittedChildSessionId);
+    if (!childSession) throw new Error(`Child session ${submittedChildSessionId} was not present in bootstrap.`);
 
-    await harness.renderer.assertText("Subagent completed", {
-      label: "completed subagent activity row",
+    await harness.renderer.assertText("Subagent submitted", {
+      label: "submitted subagent activity row",
     });
     await expandChildSessionGroup(harness, session.id);
     await waitForSidebarSessionRow(harness, childSession.id, { timeoutMs: 10_000 });
-    harness.recordAssertion("subagentCompletionVisible", true);
+    harness.recordAssertion("subagentSubmissionVisible", true);
     harness.recordAssertion("childSidebarRowVisible", true);
     harness.recordMetadata({
       runId,
-      childSessionId: completedChildSessionId,
+      childSessionId: submittedChildSessionId,
       parentTurnId: startEvent.turnId ?? null,
       runtimeEventCount: bootstrap.events.filter((event) => event.sessionId === session.id).length,
     });

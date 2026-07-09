@@ -88,10 +88,10 @@ export default desktopScenario({
     }
     if (bootstrap.events.some((event) =>
       event.sessionId === session.id &&
-      event.name === "subagent.completed" &&
+      event.name === "subagent.submitted" &&
       stringFromRecord(asRecord(asRecord(event.data)?.run), "id") === runId
     )) {
-      throw new Error(`Blocked subagent ${runId} also emitted subagent.completed.`);
+      throw new Error(`Blocked subagent ${runId} also emitted subagent.submitted.`);
     }
     const pendingApprovals = bootstrap.approvals.filter((approval) =>
       approval.sessionId === session.id &&
@@ -109,7 +109,7 @@ export default desktopScenario({
     });
     harness.recordAssertion("subagentBlockedActivityVisible", true);
     harness.recordAssertion("isolationBlockerVisible", true);
-    harness.recordAssertion("blockedRunDidNotComplete", true);
+    harness.recordAssertion("blockedRunDidNotSubmit", true);
     harness.recordAssertion("noPendingApprovalCreated", true);
     await harness.screenshot("subagent-blocked-approval-parent");
 

@@ -131,6 +131,7 @@ export type HttpRouteDeps = {
   interruptSessionTurn: (sessionId: string) => Promise<unknown>;
   compactSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   executeWorkspaceTool: (sessionId: string, payload: unknown) => Promise<unknown>;
+  runSubagentLifecycleAction: (runId: string, payload: unknown) => Promise<unknown>;
   resolveApproval: (approvalId: string, payload: unknown) => Promise<unknown>;
 };
 

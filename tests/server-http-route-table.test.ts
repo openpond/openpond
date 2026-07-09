@@ -78,6 +78,12 @@ describe("server HTTP route table", () => {
           args: ["session-1", { prompt: "Hi" }],
         });
       await expect(
+        expectJsonRequest(origin, "POST", "/v1/subagents/run-1/lifecycle", 200, { action: "archive" }),
+      ).resolves.toMatchObject({
+        name: "runSubagentLifecycleAction",
+        args: ["run-1", { action: "archive" }],
+      });
+      await expect(
         expectJsonRequest(origin, "POST", "/v1/sessions/session-1/preflight-turns/failure", 200, {
           prompt: "Edit README",
           error: "Cloud sandbox sandbox_1 is error.",
@@ -115,6 +121,7 @@ describe("server HTTP route table", () => {
         "patchInsightPayload",
         "restartWorkspaceLspPayload",
         "sendTurn",
+        "runSubagentLifecycleAction",
         "recordPreflightTurnFailure",
         "interruptCodexHistoryTurnPayload",
       ]);

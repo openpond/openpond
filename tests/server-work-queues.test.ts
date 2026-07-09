@@ -14,7 +14,10 @@ import {
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 import type { CodexNotification } from "@openpond/codex-provider";
-import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
+import {
+  createBackgroundWorkerQueue,
+  createServerWorkQueues,
+} from "../apps/server/src/runtime/background-worker-queue";
 import { createCodexBridge } from "../apps/server/src/runtime/codex-bridge";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import { createWorkspaceSessionWorkflows } from "../apps/server/src/workspace/server-workspace-session-workflows";
@@ -27,6 +30,31 @@ afterEach(async () => {
 });
 
 describe("server work queues", () => {
+  test("keeps subagent lifecycle watcher work off the child execution queue", async () => {
+    const queues = createServerWorkQueues({ warn: () => undefined });
+    let releaseChild!: () => void;
+    const childWork = new Promise<void>((resolve) => {
+      releaseChild = resolve;
+    });
+
+    const childReceipt = queues.subagent.enqueue(
+      { label: "Long-running child" },
+      () => childWork,
+    );
+    const lifecycleReceipt = queues.subagentLifecycle.enqueue(
+      { label: "Lifecycle watcher tick" },
+      async () => undefined,
+    );
+
+    await queues.drain("subagent-lifecycle");
+
+    expect(lifecycleReceipt.status).toBe("completed");
+    expect(childReceipt.status).not.toBe("completed");
+
+    releaseChild();
+    await queues.drain();
+  });
+
   test("queues provider runtime notification ingestion through the Codex bridge", async () => {
     const queue = createBackgroundWorkerQueue({ queueId: "provider-runtime-ingestion" });
     const events: RuntimeEvent[] = [];

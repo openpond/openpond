@@ -12,6 +12,7 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     interruptSessionTurn,
     compactSession,
     executeWorkspaceTool,
+    runSubagentLifecycleAction,
     resolveApproval,
   } = deps;
   if (request.method === "POST" && requestUrl.pathname === "/v1/sessions") {
@@ -80,6 +81,18 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
       response,
       200,
       await executeWorkspaceTool(workspaceToolMatch[1]!, await readJson(request)),
+    );
+    return true;
+  }
+  const subagentLifecycleMatch = /^\/v1\/subagents\/([^/]+)\/lifecycle$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && subagentLifecycleMatch) {
+    sendJson(
+      response,
+      200,
+      await runSubagentLifecycleAction(
+        decodeURIComponent(subagentLifecycleMatch[1]!),
+        await readJson(request),
+      ),
     );
     return true;
   }

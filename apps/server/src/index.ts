@@ -15,6 +15,7 @@ import {
   type ModelUsageRecord,
   type RuntimeEvent,
   type ServerStatus,
+  type SubagentRun,
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import { loadOpenPondProfileState, readProfileSkill, runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "@openpond/cloud";
@@ -75,6 +76,7 @@ import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
+import { createSubagentLifecycleWatcher } from "./runtime/subagent-lifecycle-watcher.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { readChatAttachmentImageFile } from "./chat-attachments.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
@@ -382,12 +384,17 @@ export async function createOpenPondServer(
     updateSession,
   });
 
+  let notifySubagentLifecycleStateChanged: ((run: SubagentRun) => void) | null = null;
+
   const {
     sendTurn,
+    isSessionTurnActive,
     interruptSessionTurn,
     updateTurnCreatePipeline,
     resolveCreatePipelineApproval,
     resolveSubagentPatchApplyApproval,
+    runSubagentLifecycleAction,
+    cleanupExpiredRetainedSubagentWorkspace,
   } = createTurnRunner({
     attachmentRootDir,
     store,
@@ -408,6 +415,8 @@ export async function createOpenPondServer(
     executeWorkspaceTool,
     forkSandboxForSubagent: async ({ sandboxId, payload }) =>
       sandboxRequestPayload({ type: "fork", sandboxId, payload }),
+    cleanupSandboxForSubagent: async ({ sandboxId }) =>
+      sandboxRequestPayload({ type: "delete", sandboxId }),
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
     loadOpenPondProfileState,
@@ -460,6 +469,9 @@ export async function createOpenPondServer(
     streamOpenPondHostedChatTurn,
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
+    notifySubagentRunStateChanged: (run) => {
+      notifySubagentLifecycleStateChanged?.(run);
+    },
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
@@ -487,6 +499,26 @@ export async function createOpenPondServer(
     appendRuntimeEvent,
     logger,
   });
+  const subagentLifecycleWatcher = createSubagentLifecycleWatcher({
+    store,
+    queue: workQueues.subagentLifecycle,
+    parentWakeQueue: workQueues.turnFollowUp,
+    loadAppPreferences,
+    appendRuntimeEvent,
+    getSession,
+    sendTurn,
+    interruptSessionTurn,
+    cleanupExpiredRetainedWorkspace: async ({ run, checkedAt, retention }) =>
+      (await cleanupExpiredRetainedSubagentWorkspace(run.id, {
+        checkedAt,
+        retention,
+        reason: `Retained subagent workspace expired at ${retention.expiresAt}.`,
+      })).run,
+    isSessionActive: isSessionTurnActive,
+    isClosing: () => closing,
+    logger,
+  });
+  notifySubagentLifecycleStateChanged = subagentLifecycleWatcher.notifySubagentRunStateChanged;
 
   async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval> {
     const commandApproval = await openPondCommandAccess.resolveApproval(approvalId, payload);
@@ -1095,6 +1127,7 @@ export async function createOpenPondServer(
       interruptSessionTurn,
       compactSession,
       executeWorkspaceTool,
+      runSubagentLifecycleAction,
       resolveApproval,
     },
     terminalOptions: {
@@ -1109,6 +1142,7 @@ export async function createOpenPondServer(
   actualPort = await listenOpenPondHttpServer({ host, httpServer, logger, port, serverId });
   insightsBackgroundLoop.start();
   localAgentScheduleLoop.start();
+  subagentLifecycleWatcher.start();
 
   const status: ServerStatus = {
     id: serverId,
@@ -1131,6 +1165,7 @@ export async function createOpenPondServer(
       closing = true;
       insightsBackgroundLoop.stop();
       localAgentScheduleLoop.stop();
+      subagentLifecycleWatcher.stop();
       browserControlQueue.close();
       await closeEventSubscribers();
       terminalWebSockets.close();
