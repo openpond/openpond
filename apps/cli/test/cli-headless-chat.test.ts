@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
@@ -178,6 +178,7 @@ describe("CLI headless chat", () => {
     await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
     await mkdir(taskDir, { recursive: true });
     await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+    const expectedCwd = await realpath(taskDir);
 
     try {
       const result = await runProcessCommand(
@@ -213,7 +214,7 @@ describe("CLI headless chat", () => {
       expect(fake.turnRequests).toHaveLength(1);
       expect(fake.turnRequests[0]).toMatchObject({
         prompt: "Run trusted benchmark task",
-        cwd: taskDir,
+        cwd: expectedCwd,
         approvalPolicy: "never",
         sandbox: "danger-full-access",
       });
@@ -881,6 +882,7 @@ async function expectCliHeadlessChat(
   await mkdir(path.join(homeDir, ".openpond", "openpond-app"), { recursive: true });
   await mkdir(taskDir, { recursive: true });
   await writeFile(path.join(homeDir, ".openpond", "openpond-app", "token"), "test-token\n", "utf8");
+  const expectedCwd = await realpath(taskDir);
   const inputMode = options.inputMode ?? "message";
   const instructionFileName = "instruction.md";
   if (inputMode === "message-file") {
@@ -925,11 +927,11 @@ async function expectCliHeadlessChat(
     const printed = JSON.parse(result.stdout) as { status?: string; finalMessage?: string; cwd?: string };
     expect(printed.status).toBe("completed");
     expect(printed.finalMessage).toBe("CLI task complete.");
-    expect(printed.cwd).toBe(taskDir);
+    expect(printed.cwd).toBe(expectedCwd);
     expect(fake.turnRequests).toHaveLength(1);
     expect(fake.turnRequests[0]).toMatchObject({
       prompt: options.expectedPrompt,
-      cwd: taskDir,
+      cwd: expectedCwd,
       approvalPolicy: "never",
       sandbox: "workspace-write",
     });
