@@ -198,6 +198,9 @@ export function useTeamChat(input: {
         });
       }
       if (event.type === "ai_thread.created" || event.type === "ai_turn.updated") {
+        void refreshThread(event.threadId).catch((error) => {
+          setState((current) => ({ ...current, error: errorMessage(error) }));
+        });
         if (event.conversationId === aiConversationIdRef.current) {
           void refreshAiThread(event.conversationId).catch((error) => {
             setState((current) => ({ ...current, error: errorMessage(error) }));
@@ -217,7 +220,14 @@ export function useTeamChat(input: {
           .catch(() => undefined);
       }
     },
-    [input.connection, input.currentUserId, input.teamId, refreshAiThread, refreshThreads],
+    [
+      input.connection,
+      input.currentUserId,
+      input.teamId,
+      refreshAiThread,
+      refreshThread,
+      refreshThreads,
+    ],
   );
 
   const catchUpEvents = useCallback(async () => {
