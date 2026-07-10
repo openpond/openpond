@@ -14,6 +14,29 @@
   font-size: 13px;
 }
 
+.team-sidebar-workspace-meta {
+  display: flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  padding: 0 6px 3px 33px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.team-sidebar-workspace-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-sidebar-workspace-meta span + span::before {
+  content: "·";
+  padding-right: 6px;
+  color: #666;
+}
+
 .team-sidebar-row:hover,
 .team-sidebar-row.selected {
   background: rgba(255, 255, 255, 0.065);

@@ -29,6 +29,7 @@ import {
   type PendingAttachmentState,
   type TeamChatState,
 } from "./team-chat-state";
+import { teamChatErrorMessage } from "../lib/team-chat-error";
 
 const INITIAL_STATE: TeamChatState = {
   members: [],
@@ -256,9 +257,10 @@ export function useTeamChat(input: {
           new Date(session.expiresAt).getTime() - Date.now() - 30_000,
         );
         renewalTimer = window.setTimeout(() => void loadSession(), renewIn);
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          setState((current) => ({ ...current, error: errorMessage(error) }));
+          void catchUpEvents().catch(() => undefined);
+          renewalTimer = window.setTimeout(() => void loadSession(), 10_000);
         }
       }
     };
@@ -286,23 +288,24 @@ export function useTeamChat(input: {
           setState((current) => ({ ...current, error: errorMessage(error) }));
         });
       },
-      onError: (error) => {
-        setState((current) => ({
-          ...current,
-          error: current.error ?? errorMessage(error),
-        }));
+      onError: () => {
+        void catchUpEvents().catch(() => undefined);
       },
     });
-    const catchupTimer = window.setInterval(() => {
-      void catchUpEvents().catch((error) => {
-        setState((current) => ({ ...current, error: errorMessage(error) }));
-      });
-    }, 15_000);
     return () => {
-      window.clearInterval(catchupTimer);
       realtime.close();
     };
   }, [applyRealtimeEvent, catchUpEvents, realtimeSession, subscribedThreadIds]);
+
+  useEffect(() => {
+    if (!input.connection || !input.teamId || realtimeBootstrapTeamId !== input.teamId) {
+      return;
+    }
+    const catchupTimer = window.setInterval(() => {
+      void catchUpEvents().catch(() => undefined);
+    }, 15_000);
+    return () => window.clearInterval(catchupTimer);
+  }, [catchUpEvents, input.connection, input.teamId, realtimeBootstrapTeamId]);
 
   const selectThread = useCallback(
     async (threadId: string) => {
@@ -730,5 +733,5 @@ export function useTeamChat(input: {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return teamChatErrorMessage(error);
 }

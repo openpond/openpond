@@ -68,6 +68,24 @@ describe("OpenPond default organization selection", () => {
     expect(normalized?.kind).toBe("personal_default");
   });
 
+  test("preserves workspace billing context for desktop team surfaces", () => {
+    const normalized = normalizeOpenPondOrganization(
+      organization("team_shared", {
+        workspaceKind: "shared",
+        role: "member",
+        planKey: "pro",
+        effectiveAccessState: "grace",
+        canManageBilling: false,
+      }),
+    );
+
+    expect(normalized).toMatchObject({
+      planKey: "pro",
+      effectiveAccessState: "grace",
+      canManageBilling: false,
+    });
+  });
+
   test("recognizes the current API personal workspace name without metadata", () => {
     const normalized = normalizeOpenPondOrganization(
       organization("team_personal", {

@@ -1598,6 +1598,7 @@ export function App() {
         selectedCloudWorkItemId,
         selectedTeamThreadId: teamChat.selectedThreadId,
         teamChatEnabled: teamChatTeamId !== null,
+        teamChatOrganization,
         teamChatLoading: teamChat.loading,
         currentUserId: teamChat.currentUserId,
         teamMembers: teamChat.members,

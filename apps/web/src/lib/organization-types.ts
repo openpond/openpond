@@ -2,6 +2,14 @@ export type OpenPondOrganizationRole = "owner" | "admin" | "member";
 
 export type OpenPondOrganizationStatus = "active" | "disabled" | "archived";
 
+export type OpenPondOrganizationAccessState =
+  | "checkout_pending"
+  | "active"
+  | "grace"
+  | "suspended"
+  | "cancelling"
+  | "cancelled";
+
 export type OpenPondOrganization = {
   teamId: string;
   slug: string;
@@ -15,6 +23,9 @@ export type OpenPondOrganization = {
   isManagedClient?: boolean;
   primaryContactEmail: string | null;
   customDomain: string | null;
+  planKey?: string | null;
+  effectiveAccessState?: OpenPondOrganizationAccessState | null;
+  canManageBilling?: boolean;
   createdAt: string;
   updatedAt: string;
 };

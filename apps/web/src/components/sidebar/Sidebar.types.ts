@@ -21,6 +21,7 @@ import type { TerminalScopeSummary } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
+import type { OpenPondOrganization } from "../../lib/organization-types";
 
 export type SidebarProps = {
   view: AppView;
@@ -30,6 +31,7 @@ export type SidebarProps = {
   selectedCloudWorkItemId: string | null;
   selectedTeamThreadId: string | null;
   teamChatEnabled: boolean;
+  teamChatOrganization: OpenPondOrganization | null;
   teamChatLoading?: boolean;
   currentUserId: string | null;
   teamMembers: TeamChatMember[];

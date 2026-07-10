@@ -48,6 +48,17 @@ export function normalizeOpenPondOrganization(value: OpenPondOrganization): Open
     isManagedClient: raw.isManagedClient === true || raw.kind === "managed_client",
     primaryContactEmail: raw.primaryContactEmail ?? null,
     customDomain: raw.customDomain ?? null,
+    planKey: typeof raw.planKey === "string" ? raw.planKey : null,
+    effectiveAccessState:
+      raw.effectiveAccessState === "checkout_pending" ||
+      raw.effectiveAccessState === "active" ||
+      raw.effectiveAccessState === "grace" ||
+      raw.effectiveAccessState === "suspended" ||
+      raw.effectiveAccessState === "cancelling" ||
+      raw.effectiveAccessState === "cancelled"
+        ? raw.effectiveAccessState
+        : null,
+    canManageBilling: raw.canManageBilling === true || raw.role === "owner",
     createdAt: raw.createdAt ?? "",
     updatedAt: raw.updatedAt ?? "",
   };

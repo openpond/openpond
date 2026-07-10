@@ -19,6 +19,7 @@ import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
+import type { OpenPondOrganization } from "../../lib/organization-types";
 import {
   SidebarCloudWorkItemRow,
   SidebarProjectRow,
@@ -55,6 +56,7 @@ export function previousSidebarChatVisibleCount(currentCount: number, totalCount
 export function SidebarSectionList({
   addProjectFolder,
   archivedChatsOpen,
+  account,
   archiveSession,
   beginNewChat,
   chatsCollapsed,
@@ -99,6 +101,7 @@ export function SidebarSectionList({
   selectedCloudWorkItemId,
   selectedTeamThreadId,
   teamChatEnabled,
+  teamChatOrganization,
   teamChatLoading = false,
   currentUserId,
   teamMembers = [],
@@ -419,7 +422,31 @@ export function SidebarSectionList({
   return (
     <div className="sidebar-scroll">
       {teamChatEnabled ? (
-        <SidebarSection label="Team">
+        <SidebarSection
+          label={teamChatOrganization?.displayName ?? "Team"}
+          actions={
+            teamChatOrganization ? (
+              <button
+                type="button"
+                className="section-icon"
+                data-tooltip={teamChatOrganization.canManageBilling ? "Workspace billing" : "Workspace usage"}
+                aria-label={teamChatOrganization.canManageBilling ? "Open workspace billing" : "Open workspace usage"}
+                onClick={() => void openTeamWorkspaceSettings(account, teamChatOrganization)}
+              >
+                <Settings size={14} />
+              </button>
+            ) : null
+          }
+        >
+          {teamChatOrganization ? (
+            <div className="team-sidebar-workspace-meta">
+              <span>{teamPlanLabel(teamChatOrganization.planKey)}</span>
+              <span>{teamRoleLabel(teamChatOrganization.role)}</span>
+              {teamChatOrganization.effectiveAccessState && teamChatOrganization.effectiveAccessState !== "active" ? (
+                <span>{teamAccessLabel(teamChatOrganization.effectiveAccessState)}</span>
+              ) : null}
+            </div>
+          ) : null}
           {generalThread ? (
             <TeamSidebarRow
               label="general"
@@ -836,4 +863,36 @@ function TeamSidebarAvatar({ member }: { member: TeamChatMember }) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
   return <span className="team-sidebar-avatar fallback">{initials || "?"}</span>;
+}
+
+function teamPlanLabel(planKey: string | null | undefined): string {
+  if (!planKey) return "Workspace";
+  return `${planKey.charAt(0).toUpperCase()}${planKey.slice(1)}`;
+}
+
+function teamRoleLabel(role: OpenPondOrganization["role"]): string {
+  return `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
+}
+
+function teamAccessLabel(state: NonNullable<OpenPondOrganization["effectiveAccessState"]>): string {
+  if (state === "checkout_pending") return "Checkout pending";
+  return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+async function openTeamWorkspaceSettings(
+  account: SidebarProps["account"],
+  organization: OpenPondOrganization,
+): Promise<void> {
+  const baseUrl = (account?.activeProfile?.baseUrl ?? account?.baseUrl ?? "https://openpond.ai").replace(/\/+$/, "");
+  const tab = organization.canManageBilling ? "billing" : "usage";
+  const url = `${baseUrl}/sandboxes/${encodeURIComponent(organization.slug)}/billing?tab=${tab}`;
+  const browser = window.openpond?.browser;
+  if (browser?.openExternal) {
+    const result = await browser.openExternal({
+      conversationId: `team-workspace-${organization.teamId}`,
+      url,
+    });
+    if (result.ok) return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
