@@ -62,7 +62,7 @@ import {
   resolveSubagentDelegation,
   subagentSystemContextForSession,
 } from "./subagents/policies-and-prompts.js";
-import { createSubagentPatchApprovalRuntime } from "./subagents/patch-approval.js";
+import { applySubagentPatch, createSubagentPatchApprovalRuntime } from "./subagents/patch-approval.js";
 import { createSubagentWorkspaceRuntime } from "./subagents/workspace-runtime.js";
 import {
   createSubagentContinuationRuntime,
@@ -405,10 +405,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     },
     sendTurn,
   });
-  const {
-    requestSubagentPatchApplyApproval,
-    resolveSubagentPatchApplyApproval,
-  } = createSubagentPatchApprovalRuntime({
+  const { resolveSubagentPatchApplyApproval } = createSubagentPatchApprovalRuntime({
     getApproval: (approvalId) => store.getApproval(approvalId),
     getSubagentRun: store.getSubagentRun ? (runId) => store.getSubagentRun!(runId) : null,
     canPersistSubagentRun: Boolean(store.upsertSubagentRun),
@@ -431,7 +428,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentUsageAttribution,
     subagentUsageTotalsForRun,
     captureSubagentWorkspaceHandoff,
-    requestSubagentPatchApplyApproval,
+    applySubagentPatch,
+    appendWorkspaceDiffEvent,
     uniqueSubagentRefs,
     withSubagentInterruptWakeMetadata,
   });

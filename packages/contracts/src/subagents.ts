@@ -176,7 +176,7 @@ export const SubagentRoleSettingsSchema = z.object({
   id: SubagentRoleIdSchema,
   enabled: z.boolean().default(true),
   modelRef: ChatModelRefSchema.nullable().default(null),
-  isolationMode: SubagentIsolationModeSchema.default("copy_on_write"),
+  isolationMode: SubagentIsolationModeSchema.default("none"),
   maxConcurrentRuns: z.number().int().min(1).max(16).default(1),
   maxTurns: z.number().int().min(1).max(100).nullable().default(null),
   maxTokens: z.number().int().min(1).max(10_000_000).nullable().default(null),
@@ -193,6 +193,7 @@ export type SubagentRoleSettings = z.infer<typeof SubagentRoleSettingsSchema>;
 
 export const SubagentPreferencesSchema = z.object({
   enabled: z.boolean().default(true),
+  workspaceDefaultsVersion: z.literal(1).default(1),
   delegationMode: SubagentDelegationModeSchema.default("balanced"),
   defaultModelRef: ChatModelRefSchema.nullable().default(null),
   roles: z
@@ -201,7 +202,7 @@ export const SubagentPreferencesSchema = z.object({
     .default(() => defaultSubagentRoleSettings()),
   maxConcurrentRuns: z.number().int().min(1).max(32).default(4),
   maxConcurrentRunsPerProvider: z.number().int().min(1).max(32).nullable().default(2),
-  maxConcurrentRunsPerWorkspaceTarget: z.number().int().min(1).max(32).nullable().default(2),
+  maxConcurrentRunsPerWorkspaceTarget: z.number().int().min(1).max(32).nullable().default(1),
   maxTokens: z.number().int().min(1).max(50_000_000).nullable().default(null),
   heartbeatIntervalSeconds: z.number().int().min(10).max(3600).default(60),
 }).transform((preferences) => ({
@@ -482,7 +483,7 @@ export const SubagentRunSchema = z.object({
   roleId: SubagentRoleIdSchema,
   objective: z.string().trim().min(1).max(50_000),
   modelRef: ChatModelRefSchema.nullable().default(null),
-  isolationMode: SubagentIsolationModeSchema.default("copy_on_write"),
+  isolationMode: SubagentIsolationModeSchema.default("none"),
   toolPolicy: SubagentToolPolicySchema.default("read_only"),
   background: z.boolean().default(true),
   peerMessages: SubagentPeerMessagesSchema.default("goal_scoped"),

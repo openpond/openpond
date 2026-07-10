@@ -1430,7 +1430,6 @@ export function App() {
     showChangesPanel,
     showGoalSidebarTab,
     setupCloudProjectFromCloudView,
-    toggleChangesPanel,
   } = useAppPanelActions({
     account,
     browserConversationId,
@@ -1554,7 +1553,17 @@ export function App() {
     "--sidebar-width": `${sidebarWidth}px`,
     "--diff-panel-width": `${diffPanelWidth}px`,
   } as CSSProperties;
-  const changesPanelActive = diffPanelOpen && rightPanelMode === "changes";
+  const rightSidebarAvailableForView =
+    view === "chat" || view === "cloud" || view === "profile" || view === "team";
+  const toggleRightSidebar = useCallback(() => {
+    if (diffPanelOpen) {
+      setDiffPanelOpen(false);
+      return;
+    }
+    // Default an otherwise empty right sidebar to Workspace (home).
+    setRightPanelMode("home");
+    setDiffPanelOpen(true);
+  }, [diffPanelOpen, setDiffPanelOpen, setRightPanelMode]);
   const appShellClassName = [
     "app-shell",
     isMac ? "platform-macos" : "",
@@ -1709,12 +1718,12 @@ export function App() {
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
         showDiffControls: view === "chat" || view === "cloud" || Boolean(profileWorkspaceId),
-        diffPanelOpen: changesPanelActive,
+        diffPanelOpen,
         terminalOpen,
-        rightSidebarAvailable: view === "team" && Boolean(teamAiThreadId),
-        rightSidebarOpen: teamAiSidebarOpen,
-        onToggleDiffPanel: toggleChangesPanel,
-        onToggleRightSidebar: toggleTeamAiSidebar,
+        rightSidebarAvailable: rightSidebarAvailableForView,
+        rightSidebarOpen: diffPanelOpen,
+        onToggleDiffPanel: toggleRightSidebar,
+        onToggleRightSidebar: view === "team" && Boolean(teamAiThreadId) ? toggleTeamAiSidebar : toggleRightSidebar,
         onOpenSearch: () => {
           setSectionMenuOpen(null);
           setSearchOpen(true);

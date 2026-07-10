@@ -160,6 +160,81 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(deltas[1]).toMatchObject({ type: "finish", finishReason: "tool_calls" });
   });
 
+  test("enables ZAI preserved thinking and forwards reasoning content on tool continuations", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return streamResponse([
+        'data: {"choices":[{"delta":{"content":"done"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    };
+
+    const reasoningContent = "The resource result confirms the next implementation step.";
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "resource_read",
+          parameters: { type: "object" },
+        },
+      },
+    ] as const;
+    for await (const _delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState("https://provider.example/v1", "zai"),
+      providerId: "zai",
+      modelId: "glm-5.2",
+      messages: [
+        { role: "user", content: "inspect the resource" },
+        {
+          role: "assistant",
+          content: "",
+          reasoning_content: reasoningContent,
+          tool_calls: [
+            {
+              id: "call_resource",
+              type: "function",
+              function: { name: "resource_read", arguments: '{"ref":"workspace:file:README.md"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_resource", content: "README contents" },
+      ],
+      tools: [...tools],
+      toolChoice: "auto",
+    })) {
+      // Drain the stream.
+    }
+
+    expect(requests).toEqual([
+      {
+        model: "glm-5.2",
+        messages: [
+          { role: "user", content: "inspect the resource" },
+          {
+            role: "assistant",
+            content: "",
+            reasoning_content: reasoningContent,
+            tool_calls: [
+              {
+                id: "call_resource",
+                type: "function",
+                function: { name: "resource_read", arguments: '{"ref":"workspace:file:README.md"}' },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "call_resource", content: "README contents" },
+        ],
+        stream: true,
+        tools,
+        tool_stream: true,
+        thinking: { type: "enabled", clear_thinking: false },
+        tool_choice: "auto",
+      },
+    ]);
+  });
+
   test("lists and validates provider models from /models", async () => {
     const requests: string[] = [];
     globalThis.fetch = async (input) => {

@@ -5,6 +5,7 @@ import {
   activeProfileSkillInvocationContext,
   profileSkillInvocationMatchesForQuery,
   profileSkillInvocationText,
+  replaceActiveProfileSkillInvocation,
 } from "../apps/web/src/lib/profile-skill-invocations";
 
 function profileSkill(overrides: Partial<OpenPondProfileSkill> = {}): OpenPondProfileSkill {
@@ -58,5 +59,27 @@ describe("profile skill composer invocations", () => {
 
   test("builds the literal prompt invocation", () => {
     expect(profileSkillInvocationText(profileSkill())).toBe("$docker-cleanup");
+  });
+
+  test("replaces the typed cashtag fragment with the full skill name", () => {
+    expect(replaceActiveProfileSkillInvocation(
+      "please $dock",
+      { start: 7, end: 12, query: "dock" },
+      profileSkill(),
+    )).toEqual({
+      cursor: 23,
+      value: "please $docker-cleanup ",
+    });
+  });
+
+  test("preserves surrounding prompt text without introducing duplicate spaces", () => {
+    expect(replaceActiveProfileSkillInvocation(
+      "please $dock later",
+      { start: 7, end: 12, query: "dock" },
+      profileSkill(),
+    )).toEqual({
+      cursor: 22,
+      value: "please $docker-cleanup later",
+    });
   });
 });

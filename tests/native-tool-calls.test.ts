@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { NativeToolCallAccumulator } from "../apps/server/src/openpond/native-tool-calls";
+import {
+  assistantMessageForNativeToolCalls,
+  NativeToolCallAccumulator,
+} from "../apps/server/src/openpond/native-tool-calls";
 
 describe("native tool call accumulator", () => {
   test("accumulates streamed id, name, and argument chunks by index", () => {
@@ -37,5 +40,31 @@ describe("native tool call accumulator", () => {
         },
       },
     ]);
+  });
+
+  test("preserves exact reasoning content on assistant tool-call messages", () => {
+    const toolCalls = [
+      {
+        id: "call_1",
+        name: "resource_search",
+        argumentsJson: '{"scope":"workspace","query":"README"}',
+        hostedToolCall: {
+          id: "call_1",
+          type: "function",
+          function: {
+            name: "resource_search",
+            arguments: '{"scope":"workspace","query":"README"}',
+          },
+        },
+      },
+    ];
+    const reasoningContent = "First inspect README.\nThen decide whether another file is needed.";
+
+    expect(assistantMessageForNativeToolCalls("", toolCalls, { reasoningContent })).toEqual({
+      role: "assistant",
+      content: "",
+      reasoning_content: reasoningContent,
+      tool_calls: [toolCalls[0]!.hostedToolCall],
+    });
   });
 });

@@ -26,6 +26,25 @@ export function profileSkillInvocationText(skill: Pick<OpenPondProfileSkill, "na
   return `$${skill.name}`;
 }
 
+export function replaceActiveProfileSkillInvocation(
+  input: string,
+  context: ActiveProfileSkillInvocationContext,
+  skill: Pick<OpenPondProfileSkill, "name">,
+): { cursor: number; value: string } {
+  const start = Math.max(0, Math.min(context.start, input.length));
+  const end = Math.max(start, Math.min(context.end, input.length));
+  const before = input.slice(0, start);
+  const after = input.slice(end);
+  const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+  const trailingSpace = after ? (!/^\s/.test(after) ? " " : "") : " ";
+  const replacement = `${leadingSpace}${profileSkillInvocationText(skill)}${trailingSpace}`;
+
+  return {
+    cursor: before.length + replacement.length - (after ? trailingSpace.length : 0),
+    value: `${before}${replacement}${after}`,
+  };
+}
+
 export function profileSkillInvocationMatchesForQuery(
   skills: OpenPondProfileSkill[],
   query: string,

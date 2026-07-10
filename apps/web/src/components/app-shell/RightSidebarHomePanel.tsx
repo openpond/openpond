@@ -8,7 +8,6 @@ import {
   Minimize2,
   PanelRight,
   SquareTerminal,
-  X,
   type LucideIcon,
 } from "../icons";
 
@@ -25,7 +24,6 @@ export function RightSidebarHomePanel({
   expanded,
   terminalOpen,
   sideChatAvailable,
-  onClose,
   onOpenBrowser,
   onOpenFiles,
   onOpenReview,
@@ -37,7 +35,6 @@ export function RightSidebarHomePanel({
   expanded: boolean;
   terminalOpen: boolean;
   sideChatAvailable: boolean;
-  onClose: () => void;
   onOpenBrowser: () => void;
   onOpenFiles: () => void;
   onOpenReview: () => void;
@@ -94,9 +91,6 @@ export function RightSidebarHomePanel({
             onClick={onToggleExpanded}
           >
             {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          <button type="button" className="diff-icon-button" title="Close sidebar" aria-label="Close sidebar" onClick={onClose}>
-            <X size={14} />
           </button>
         </div>
       </div>

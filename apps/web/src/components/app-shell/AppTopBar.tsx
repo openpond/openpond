@@ -286,8 +286,8 @@ export function AppTopBar({
                 <button
                   type="button"
                   className={`topbar-diff-button ${diffPanelOpen ? "active" : ""}`}
-                  title={`${diffPanelOpen ? "Hide" : "Show"} changes sidebar, ${filesChanged} changed files`}
-                  aria-label={`${diffPanelOpen ? "Hide" : "Show"} changes sidebar`}
+                  title={`${diffPanelOpen ? "Hide" : "Show"} sidebar${filesChanged ? `, ${filesChanged} changed files` : ""}`}
+                  aria-label={`${diffPanelOpen ? "Hide" : "Show"} sidebar`}
                   aria-pressed={diffPanelOpen}
                   onClick={onToggleDiffPanel}
                 >
@@ -296,13 +296,13 @@ export function AppTopBar({
               )}
             </div>
           )}
-          {rightSidebarAvailable && onToggleRightSidebar ? (
+          {rightSidebarAvailable && onToggleRightSidebar && !showDiffControls ? (
             <div className="titlebar-actions">
               <button
                 type="button"
                 className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
-                title={`${rightSidebarOpen ? "Hide" : "Show"} AI thread sidebar`}
-                aria-label={`${rightSidebarOpen ? "Hide" : "Show"} AI thread sidebar`}
+                title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
+                aria-label={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
                 aria-pressed={rightSidebarOpen}
                 onClick={onToggleRightSidebar}
               >

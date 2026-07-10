@@ -673,9 +673,9 @@ export function SubagentsSettingsSection({
 }
 
 const SUBAGENT_ISOLATION_OPTIONS: Array<{ value: SubagentIsolationMode; label: string }> = [
+  { value: "none", label: "Direct workspace" },
   { value: "copy_on_write", label: "Copy-on-write" },
   { value: "worktree", label: "Worktree" },
-  { value: "none", label: "None" },
 ];
 
 const SUBAGENT_TOOL_POLICY_OPTIONS: Array<{ value: SubagentToolPolicy; label: string }> = [

@@ -1,6 +1,5 @@
-import type { Session, TeamChatMember, TeamChatThread } from "@openpond/contracts";
+import type { Session } from "@openpond/contracts";
 import { useEffect, useState } from "react";
-import "../../styles/sidebar/team-sidebar.css";
 import {
   Cloud,
   Eye,
@@ -19,7 +18,7 @@ import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
-import type { OpenPondOrganization } from "../../lib/organization-types";
+import { SidebarTeamSection } from "./SidebarTeamSection";
 import {
   SidebarCloudWorkItemRow,
   SidebarProjectRow,
@@ -56,7 +55,6 @@ export function previousSidebarChatVisibleCount(currentCount: number, totalCount
 export function SidebarSectionList({
   addProjectFolder,
   archivedChatsOpen,
-  account,
   archiveSession,
   beginNewChat,
   chatsCollapsed,
@@ -232,14 +230,6 @@ export function SidebarSectionList({
     setSelectedAppId(projectId ? null : session.appId);
     setSelectedProjectId(projectId);
     setView("chat");
-  }
-
-  const generalThread = teamThreads.find((thread) => thread.kind === "general") ?? null;
-  const dmThreadByUserId = new Map<string, TeamChatThread>();
-  for (const thread of teamThreads) {
-    if (thread.kind !== "dm") continue;
-    const other = thread.participants.find((participant) => participant.userId !== currentUserId);
-    if (other) dmThreadByUserId.set(other.userId, thread);
   }
 
   function childSessionsFor(session: Session): Session[] {
@@ -421,62 +411,18 @@ export function SidebarSectionList({
 
   return (
     <div className="sidebar-scroll">
-      {teamChatEnabled ? (
-        <SidebarSection
-          label={teamChatOrganization?.displayName ?? "Team"}
-          actions={
-            teamChatOrganization ? (
-              <button
-                type="button"
-                className="section-icon"
-                data-tooltip={teamChatOrganization.canManageBilling ? "Workspace billing" : "Workspace usage"}
-                aria-label={teamChatOrganization.canManageBilling ? "Open workspace billing" : "Open workspace usage"}
-                onClick={() => void openTeamWorkspaceSettings(account, teamChatOrganization)}
-              >
-                <Settings size={14} />
-              </button>
-            ) : null
-          }
-        >
-          {teamChatOrganization ? (
-            <div className="team-sidebar-workspace-meta">
-              <span>{teamPlanLabel(teamChatOrganization.planKey)}</span>
-              <span>{teamRoleLabel(teamChatOrganization.role)}</span>
-              {teamChatOrganization.effectiveAccessState && teamChatOrganization.effectiveAccessState !== "active" ? (
-                <span>{teamAccessLabel(teamChatOrganization.effectiveAccessState)}</span>
-              ) : null}
-            </div>
-          ) : null}
-          {generalThread ? (
-            <TeamSidebarRow
-              label="general"
-              selected={view === "team" && selectedTeamThreadId === generalThread.id}
-              unreadCount={generalThread.unreadCount}
-              onSelect={() => selectTeamThread(generalThread.id)}
-            />
-          ) : null}
-          {teamMembers
-            .filter((member) => member.userId !== currentUserId)
-            .map((member) => {
-              const thread = dmThreadByUserId.get(member.userId) ?? null;
-              return (
-                <TeamSidebarRow
-                  key={member.userId}
-                  member={member}
-                  label={member.name}
-                  selected={view === "team" && selectedTeamThreadId === thread?.id}
-                  unreadCount={thread?.unreadCount ?? 0}
-                  onSelect={() => openTeamDm(member.userId)}
-                />
-              );
-            })}
-          {!generalThread && teamMembers.length === 0 ? (
-            <div className="empty-row">
-              {teamChatLoading ? "Loading team..." : "Team unavailable"}
-            </div>
-          ) : null}
-        </SidebarSection>
-      ) : null}
+      <SidebarTeamSection
+        currentUserId={currentUserId}
+        enabled={teamChatEnabled}
+        loading={teamChatLoading}
+        members={teamMembers}
+        openTeamDm={openTeamDm}
+        organization={teamChatOrganization}
+        selectedTeamThreadId={selectedTeamThreadId}
+        selectTeamThread={selectTeamThread}
+        threads={teamThreads}
+        view={view}
+      />
 
       <SidebarSection label="Pinned" collapsed={pinnedCollapsed} onToggleCollapsed={onTogglePinnedCollapsed}>
         {pinnedRows.map((row) => {
@@ -827,72 +773,4 @@ export function SidebarSectionList({
       </SidebarSection>
     </div>
   );
-}
-
-function TeamSidebarRow({
-  label,
-  member,
-  selected,
-  unreadCount,
-  onSelect,
-}: {
-  label: string;
-  member?: TeamChatMember;
-  selected: boolean;
-  unreadCount: number;
-  onSelect: () => void;
-}) {
-  return (
-    <button type="button" className={`team-sidebar-row${selected ? " selected" : ""}`} onClick={onSelect}>
-      {member ? <TeamSidebarAvatar member={member} /> : <span className="team-sidebar-channel">#</span>}
-      <span className="team-sidebar-label">{label}</span>
-      {unreadCount > 0 ? (
-        <span className="team-sidebar-unread" aria-label={`${unreadCount} unread`}>
-          {unreadCount > 99 ? "99+" : unreadCount}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-function TeamSidebarAvatar({ member }: { member: TeamChatMember }) {
-  if (member.image) return <img className="team-sidebar-avatar" src={member.image} alt="" />;
-  const initials = member.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-  return <span className="team-sidebar-avatar fallback">{initials || "?"}</span>;
-}
-
-function teamPlanLabel(planKey: string | null | undefined): string {
-  if (!planKey) return "Workspace";
-  return `${planKey.charAt(0).toUpperCase()}${planKey.slice(1)}`;
-}
-
-function teamRoleLabel(role: OpenPondOrganization["role"]): string {
-  return `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
-}
-
-function teamAccessLabel(state: NonNullable<OpenPondOrganization["effectiveAccessState"]>): string {
-  if (state === "checkout_pending") return "Checkout pending";
-  return state.charAt(0).toUpperCase() + state.slice(1);
-}
-
-async function openTeamWorkspaceSettings(
-  account: SidebarProps["account"],
-  organization: OpenPondOrganization,
-): Promise<void> {
-  const baseUrl = (account?.activeProfile?.baseUrl ?? account?.baseUrl ?? "https://openpond.ai").replace(/\/+$/, "");
-  const tab = organization.canManageBilling ? "billing" : "usage";
-  const url = `${baseUrl}/sandboxes/${encodeURIComponent(organization.slug)}/billing?tab=${tab}`;
-  const browser = window.openpond?.browser;
-  if (browser?.openExternal) {
-    const result = await browser.openExternal({
-      conversationId: `team-workspace-${organization.teamId}`,
-      url,
-    });
-    if (result.ok) return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
 }

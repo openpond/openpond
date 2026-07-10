@@ -39,6 +39,7 @@ export type HostedChatToolChoice =
 export type HostedChatMessage = {
   role: HostedChatRole;
   content?: string | null;
+  reasoning_content?: string | null;
   name?: string;
   tool_call_id?: string;
   tool_calls?: HostedChatToolCall[];

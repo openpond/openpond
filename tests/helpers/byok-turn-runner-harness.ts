@@ -198,9 +198,10 @@ export function createNativeProfileSkillGoalHarness(input: {
 }
 
 export function createNativeGoalControlHarness(input: {
-  providerId?: "openpond" | "openrouter";
+  providerId?: "openpond" | "openrouter" | "zai";
   modelId?: string;
   toolArgs?: Record<string, unknown> | null;
+  reasoningTextOnToolCall?: string;
   initialEvents?: RuntimeEvent[];
   sessionOverrides?: Partial<Session>;
   finalText?: string;
@@ -384,6 +385,9 @@ export function createNativeGoalControlHarness(input: {
     const pass = streamPass;
     if (input.failOnPass === pass) throw new Error(`stream failed on pass ${pass}`);
     if (pass === 1 && input.toolArgs) {
+      if (input.reasoningTextOnToolCall) {
+        yield { reasoningText: input.reasoningTextOnToolCall, raw: { pass, reasoning: true } };
+      }
       yield {
         toolCalls: [
           {

@@ -57,9 +57,7 @@ export function createSubagentWorkspaceRuntime(deps: {
   const requireSubagentDeps = deps.requireSubagentPersistence;
   function subagentIsolationBlocker(role: SubagentRoleSettings): string | null {
     if (role.toolPolicy === "read_only") return null;
-    if (role.isolationMode === "none") {
-      return "write-capable subagents require an isolated workspace target.";
-    }
+    if (role.isolationMode === "none") return null;
     return `${role.isolationMode} isolation is not available for this workspace target.`;
   }
 
@@ -141,17 +139,25 @@ export function createSubagentWorkspaceRuntime(deps: {
         workspace: null,
       };
     }
-    const staticBlocker = subagentIsolationBlocker(input.role);
-    if (staticBlocker && input.role.isolationMode === "none") {
+    const target = resolveWorkspaceExecutionTarget({ session: input.parentSession });
+    if (input.role.isolationMode === "none" && target.target === "sandbox") {
+      const sandboxId = target.sandboxId ?? target.workspaceId;
       return {
         cwd: input.parentSession.cwd,
         effectiveIsolationMode: "none",
-        blocker: staticBlocker,
-        workspace: null,
+        blocker: null,
+        workspace: {
+          mode: "none",
+          implementation: "shared_workspace",
+          target: "sandbox",
+          sandboxId,
+          workspaceId: target.workspaceId,
+          workspaceKind: target.workspaceKind,
+          parentSandboxId: sandboxId,
+          cleanup: "none",
+        },
       };
     }
-
-    const target = resolveWorkspaceExecutionTarget({ session: input.parentSession });
     if (target.target === "sandbox") {
       return prepareSandboxSubagentWorkspaceIsolation({
         parentSession: input.parentSession,
@@ -171,6 +177,24 @@ export function createSubagentWorkspaceRuntime(deps: {
         effectiveIsolationMode: input.role.isolationMode,
         blocker: `${input.role.isolationMode} isolation requires a local git workspace, but this chat has no local workspace cwd.`,
         workspace: null,
+      };
+    }
+
+    if (input.role.isolationMode === "none") {
+      const rootResult = await runWorkspaceCommand("git", ["rev-parse", "--show-toplevel"], parentCwd).catch(() => null);
+      const parentRepoPath = rootResult?.code === 0 ? rootResult.stdout.trim() || parentCwd : parentCwd;
+      return {
+        cwd: parentCwd,
+        effectiveIsolationMode: "none",
+        blocker: null,
+        workspace: {
+          mode: "none",
+          implementation: "shared_workspace",
+          target: "local",
+          repoPath: parentCwd,
+          parentRepoPath,
+          cleanup: "none",
+        },
       };
     }
 
@@ -582,8 +606,19 @@ export function createSubagentWorkspaceRuntime(deps: {
     const workspaceRoot = typeof workspace.workspaceRoot === "string" ? workspace.workspaceRoot : null;
     if (!repoPath || !workspaceRoot) return null;
 
-    await runWorkspaceCommand("git", ["add", "-N", "."], repoPath).catch(() => null);
-    const diffResult = await runWorkspaceCommand("git", ["diff", "--binary", "HEAD"], repoPath);
+    const dependencyPaths = Array.isArray(workspace.dependencyLinks)
+      ? workspace.dependencyLinks
+          .map((entry) => recordFromUnknown(entry))
+          .map((entry) => entry ? stringFromRecord(entry, "path") : null)
+          .filter((entry): entry is string => Boolean(entry))
+      : [];
+    const dependencyExcludes = dependencyPaths.flatMap((dependencyPath) => [
+      `:(exclude)${dependencyPath}`,
+      `:(exclude)${dependencyPath}/**`,
+    ]);
+    const handoffPathspec = ["--", ".", ...dependencyExcludes];
+    await runWorkspaceCommand("git", ["add", "-N", ...handoffPathspec], repoPath).catch(() => null);
+    const diffResult = await runWorkspaceCommand("git", ["diff", "--binary", "HEAD", ...handoffPathspec], repoPath);
     if (diffResult.code !== 0) {
       return {
         changed: false,
@@ -638,7 +673,7 @@ export function createSubagentWorkspaceRuntime(deps: {
           ? {
               command: "git",
               args: parentRepoPath ? ["-C", parentRepoPath, "apply", patchPath] : ["apply", patchPath],
-              requiresUserReview: true,
+              requiresUserReview: false,
             }
           : null,
       },
@@ -904,4 +939,3 @@ export function createSubagentWorkspaceRuntime(deps: {
     subagentWorkspaceTargetKeyFromRun,
   };
 }
-

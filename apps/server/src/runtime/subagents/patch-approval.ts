@@ -16,7 +16,6 @@ import { stringFromRecord, uniqueNonEmptyStrings } from "../turns/value-utils.js
 import {
   assertPathInside,
   subagentRetainedWorkspaceState,
-  truncateApprovalTitle,
   truthyRecordBoolean,
   workspaceHandoffFromRun,
 } from "./workspace-state.js";
@@ -70,7 +69,7 @@ export function createSubagentPatchApprovalRuntime(deps: {
     const decidedAt = now();
     let nextRun: SubagentRun;
     if (accepted) {
-      const applyResult = await applySubagentPatchApproval({ approval, run });
+      const applyResult = await applySubagentPatch(run, { approvalId: approval.id });
       nextRun = SubagentRunSchema.parse({
         ...run,
         status: "accepted",
@@ -191,61 +190,7 @@ export function createSubagentPatchApprovalRuntime(deps: {
     return resolved;
   }
 
-  async function requestSubagentPatchApplyApproval(input: {
-    parentSession: Session;
-    parentTurnId: string;
-    run: SubagentRun;
-  }): Promise<Approval | null> {
-    const handoff = workspaceHandoffFromRun(input.run);
-    if (!handoff || !truthyRecordBoolean(handoff, "changed")) return null;
-    const patchPath = stringFromRecord(handoff, "patchPath");
-    const parentRepoPath = stringFromRecord(handoff, "parentRepoPath");
-    if (!patchPath || !parentRepoPath) return null;
-    const approvalId = `approval_subagent_patch_${input.run.id}`;
-    const existing = await deps.getApproval(approvalId);
-    if (existing) return existing;
-    const approval: Approval = {
-      id: approvalId,
-      sessionId: input.parentSession.id,
-      turnId: input.parentTurnId,
-      providerRequestId: input.run.id,
-      kind: "subagent_patch_apply",
-      title: `Apply ${input.run.roleId} subagent patch: ${truncateApprovalTitle(input.run.objective)}`,
-      detail: JSON.stringify({
-        runId: input.run.id,
-        roleId: input.run.roleId,
-        childSessionId: input.run.childSessionId,
-        parentGoalId: input.run.parentGoalId,
-        objective: input.run.objective,
-        summary: input.run.report?.summary ?? null,
-        parentRepoPath,
-        patchPath,
-        branch: handoff.branch ?? null,
-        baseCommit: handoff.baseCommit ?? null,
-        patchBytes: handoff.patchBytes ?? null,
-        patchPreview: handoff.patchPreview ?? null,
-        patchTruncated: handoff.patchTruncated ?? null,
-      }, null, 2),
-      status: "pending",
-      createdAt: now(),
-    };
-    await deps.upsertApproval(approval);
-    await deps.appendRuntimeEvent(event({
-      sessionId: input.parentSession.id,
-      turnId: input.parentTurnId,
-      name: "approval.requested",
-      source: "server",
-      action: "subagent_patch_apply",
-      appId: input.parentSession.appId,
-      status: "pending",
-      output: approval.title,
-      data: approval,
-    }));
-    return approval;
-  }
-
   return {
-    requestSubagentPatchApplyApproval,
     resolveSubagentPatchApplyApproval,
   };
 }
@@ -255,13 +200,13 @@ function approvalStatusForDecision(decision: ResolveApprovalRequest["decision"])
   return decision === "cancel" ? "cancelled" : "declined";
 }
 
-async function applySubagentPatchApproval(input: {
-  approval: Approval;
-  run: SubagentRun;
-}): Promise<Record<string, unknown>> {
-  const handoff = workspaceHandoffFromRun(input.run);
+export async function applySubagentPatch(
+  run: SubagentRun,
+  options: { approvalId?: string | null } = {},
+): Promise<Record<string, unknown> | null> {
+  const handoff = workspaceHandoffFromRun(run);
   if (!handoff || !truthyRecordBoolean(handoff, "changed")) {
-    throw new Error("Subagent run has no captured patch to apply.");
+    return null;
   }
   const patchPath = stringFromRecord(handoff, "patchPath");
   const parentRepoPath = stringFromRecord(handoff, "parentRepoPath");
@@ -281,7 +226,7 @@ async function applySubagentPatchApproval(input: {
   }
   return {
     status: "applied",
-    approvalId: input.approval.id,
+    ...(options.approvalId ? { approvalId: options.approvalId } : {}),
     appliedAt: now(),
     parentRepoPath,
     patchPath,

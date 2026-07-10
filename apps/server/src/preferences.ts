@@ -19,7 +19,8 @@ export function normalizeSidebarAppPreference(preference: SidebarAppPreference):
 }
 
 export function normalizeAppPreferences(value: unknown): AppPreferences {
-  const parsed = AppPreferencesSchema.safeParse(value ?? {});
+  const migrated = migrateSubagentWorkspaceDefaults(value);
+  const parsed = AppPreferencesSchema.safeParse(migrated ?? {});
   const preferences = parsed.success ? parsed.data : AppPreferencesSchema.parse({});
   const defaultTeamId = preferences.defaultTeamId?.trim() || null;
   const legacyCodexDefaultModel =
@@ -33,5 +34,35 @@ export function normalizeAppPreferences(value: unknown): AppPreferences {
       ? { codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT }
       : {}),
     defaultNewProjectDirectory: normalizeProjectDirectory(preferences.defaultNewProjectDirectory),
+  };
+}
+
+function migrateSubagentWorkspaceDefaults(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const preferences = value as Record<string, unknown>;
+  const subagents = preferences.subagents;
+  if (!subagents || typeof subagents !== "object" || Array.isArray(subagents)) return value;
+  const subagentPreferences = subagents as Record<string, unknown>;
+  if (subagentPreferences.workspaceDefaultsVersion === 1) return value;
+  const roles = Array.isArray(subagentPreferences.roles)
+    ? subagentPreferences.roles.map((role) => {
+        if (!role || typeof role !== "object" || Array.isArray(role)) return role;
+        const roleRecord = role as Record<string, unknown>;
+        return roleRecord.isolationMode === "copy_on_write"
+          ? { ...roleRecord, isolationMode: "none" }
+          : role;
+      })
+    : subagentPreferences.roles;
+  return {
+    ...preferences,
+    subagents: {
+      ...subagentPreferences,
+      workspaceDefaultsVersion: 1,
+      maxConcurrentRunsPerWorkspaceTarget:
+        subagentPreferences.maxConcurrentRunsPerWorkspaceTarget === 2
+          ? 1
+          : subagentPreferences.maxConcurrentRunsPerWorkspaceTarget,
+      ...(roles === undefined ? {} : { roles }),
+    },
   };
 }

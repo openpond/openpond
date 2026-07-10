@@ -65,10 +65,13 @@ export class NativeToolCallAccumulator {
 export function assistantMessageForNativeToolCalls(
   content: string,
   toolCalls: NativeModelToolCall[],
+  options: { reasoningContent?: string | null } = {},
 ): HostedChatMessage {
+  const reasoningContent = options.reasoningContent;
   return {
     role: "assistant",
-    content: content.trim() || null,
+    content: content.trim() || (reasoningContent ? "" : null),
+    ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
     tool_calls: toolCalls.map((toolCall) => toolCall.hostedToolCall),
   };
 }

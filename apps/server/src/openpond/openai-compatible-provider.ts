@@ -19,6 +19,7 @@ import type {
   ProviderChatGptSubscriptionCredential,
   ProviderSecrets,
 } from "./provider-secrets.js";
+import { reasoningContinuationMode } from "./reasoning-continuation.js";
 
 export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
   "openai",
@@ -374,6 +375,16 @@ function buildChatCompletionBody(input: {
   }
   if (input.providerId === "zai" && input.tools && input.tools.length > 0) {
     body.tool_stream = true;
+  }
+  if (
+    input.tools &&
+    input.tools.length > 0 &&
+    reasoningContinuationMode({ provider: input.providerId, model: input.model }) === "zai_preserved_thinking"
+  ) {
+    body.thinking = {
+      type: "enabled",
+      clear_thinking: false,
+    };
   }
   if (input.toolChoice !== undefined) {
     body.tool_choice = input.toolChoice;

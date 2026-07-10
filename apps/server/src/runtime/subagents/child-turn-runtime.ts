@@ -2,7 +2,6 @@ import {
   SubagentProgressSchema,
   SubagentReviewStateSchema,
   SubagentRunSchema,
-  type Approval,
   type RuntimeEvent,
   type Session,
   type SubagentProgress,
@@ -78,11 +77,8 @@ export function createSubagentChildTurnRuntime(deps: {
     requestCount: number;
   }>;
   captureSubagentWorkspaceHandoff(run: SubagentRun): Promise<WorkspaceHandoff | null>;
-  requestSubagentPatchApplyApproval(input: {
-    parentSession: Session;
-    parentTurnId: string;
-    run: SubagentRun;
-  }): Promise<Approval | null>;
+  applySubagentPatch(run: SubagentRun): Promise<Record<string, unknown> | null>;
+  appendWorkspaceDiffEvent(session: Session, turnId: string): Promise<void>;
   uniqueSubagentRefs(values: readonly (SubagentRef | null | undefined)[]): SubagentRef[];
   withSubagentInterruptWakeMetadata(
     metadata: Record<string, unknown> | undefined,
@@ -98,7 +94,8 @@ export function createSubagentChildTurnRuntime(deps: {
   const subagentUsageAttribution = deps.subagentUsageAttribution;
   const subagentUsageTotalsForRun = deps.subagentUsageTotalsForRun;
   const captureSubagentWorkspaceHandoff = deps.captureSubagentWorkspaceHandoff;
-  const requestSubagentPatchApplyApproval = deps.requestSubagentPatchApplyApproval;
+  const applySubagentPatch = deps.applySubagentPatch;
+  const appendWorkspaceDiffEvent = deps.appendWorkspaceDiffEvent;
   const uniqueSubagentRefs = deps.uniqueSubagentRefs;
   const withSubagentInterruptWakeMetadata = deps.withSubagentInterruptWakeMetadata;
   const store = { latestAssistantTextForSession: deps.latestAssistantTextForSession };
@@ -297,7 +294,7 @@ export function createSubagentChildTurnRuntime(deps: {
           issues: packetIncomplete
             ? uniqueNonEmptyStrings([...(run.review?.issues ?? []), ...packetQuality.issues])
             : run.review?.issues ?? [],
-          humanReviewRecommended: packetQuality.status !== "reviewable" || (workspaceHandoff?.changed ?? false),
+          humanReviewRecommended: packetQuality.status !== "reviewable",
           ...reviewRouting,
           packetQuality,
         }),
@@ -307,6 +304,48 @@ export function createSubagentChildTurnRuntime(deps: {
           ...(workspaceHandoff ? { workspaceHandoff: workspaceHandoff.metadata } : {}),
         },
       });
+      let patchApplyError: string | null = null;
+      if (workspaceHandoff?.changed && !packetIncomplete && workspaceHandoff.metadata.patchPath) {
+        try {
+          const applyResult = await applySubagentPatch(run);
+          if (applyResult) {
+            run = SubagentRunSchema.parse({
+              ...run,
+              metadata: {
+                ...(run.metadata ?? {}),
+                workspaceHandoff: {
+                  ...workspaceHandoff.metadata,
+                  applyResult,
+                },
+              },
+            });
+            await appendWorkspaceDiffEvent(input.parentSession, input.parentTurnId).catch(() => undefined);
+          }
+        } catch (error) {
+          patchApplyError = textFromUnknown(error) || "Unable to apply the isolated child patch.";
+          run = SubagentRunSchema.parse({
+            ...run,
+            status: "needs_revision",
+            error: patchApplyError,
+            progress: SubagentProgressSchema.parse({
+              ...run.progress,
+              latestMeaningfulActivity: "Child patch could not be integrated automatically.",
+              currentBlocker: patchApplyError,
+              updatedAt: now(),
+            }),
+            review: SubagentReviewStateSchema.parse({
+              ...run.review,
+              status: "needs_revision",
+              issues: uniqueNonEmptyStrings([...(run.review.issues ?? []), patchApplyError]),
+              requiredCorrections: uniqueNonEmptyStrings([
+                ...(run.review.requiredCorrections ?? []),
+                "Reconcile the child changes with the current shared workspace and resubmit.",
+              ]),
+              humanReviewRecommended: false,
+            }),
+          });
+        }
+      }
       await deps.upsertRun(run);
       if (workspaceHandoff?.changed && !packetIncomplete) {
         await appendSubagentReceipt({
@@ -314,23 +353,24 @@ export function createSubagentChildTurnRuntime(deps: {
           parentTurnId: input.parentTurnId,
           run,
           eventName: "subagent.reported",
-          status: "pending",
-          output: `${run.roleId} subagent produced an isolated patch for parent review.`,
-        });
-        await requestSubagentPatchApplyApproval({
-          parentSession: input.parentSession,
-          parentTurnId: input.parentTurnId,
-          run,
+          status: patchApplyError ? "failed" : "completed",
+          output: patchApplyError
+            ? `${run.roleId} subagent patch needs revision: ${patchApplyError}`
+            : workspaceHandoff.metadata.patchPath
+              ? `${run.roleId} subagent patch applied automatically to the shared workspace.`
+              : `${run.roleId} subagent produced isolated workspace changes for parent review.`,
         });
       }
       await appendSubagentReceipt({
         parentSession: input.parentSession,
         parentTurnId: input.parentTurnId,
         run,
-        eventName: packetIncomplete ? "subagent.blocked" : "subagent.submitted",
-        status: packetIncomplete ? "failed" : "pending",
+        eventName: packetIncomplete ? "subagent.blocked" : patchApplyError ? "subagent.needs_revision" : "subagent.submitted",
+        status: packetIncomplete || patchApplyError ? "failed" : "pending",
         output: packetIncomplete
           ? `${run.roleId} subagent submitted an incomplete review packet: ${packetBlocker}`
+          : patchApplyError
+            ? `${run.roleId} subagent needs revision after automatic integration failed.`
           : `${run.roleId} subagent submitted a review packet.`,
       });
     } catch (error) {
@@ -512,4 +552,3 @@ export function createSubagentChildTurnRuntime(deps: {
 
   return { runSubagentChildTurn };
 }
-

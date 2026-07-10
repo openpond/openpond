@@ -38,6 +38,64 @@ import {
 } from "./helpers/turn-runner-subagent-harness";
 
 describe("turn runner subagent workspace and execution tools", () => {
+  test("runs write-capable subagents directly in the shared workspace by default", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-subagent-direct-workspace-test-"));
+    try {
+      const repoPath = path.join(tempRoot, "repo");
+      await mkdir(repoPath, { recursive: true });
+      git(repoPath, ["init"]);
+      git(repoPath, ["config", "user.email", "test@example.local"]);
+      git(repoPath, ["config", "user.name", "Test User"]);
+      await writeFile(path.join(repoPath, "README.md"), "parent\n", "utf8");
+      git(repoPath, ["add", "README.md"]);
+      git(repoPath, ["commit", "-m", "Initial commit"]);
+
+      const harness = createSubagentHarness({
+        toolName: "openpond_subagent_start",
+        toolArgs: {
+          roleId: "coding",
+          objective: "Edit the shared workspace directly",
+        },
+        preferences: preferences(),
+        sessionOverrides: { cwd: repoPath },
+        writeOnChildReport: {
+          roleId: "coding",
+          path: "direct-notes.md",
+          content: "from direct child\n",
+        },
+        textBySessionId: {
+          "role:coding": ["Direct coding report complete."],
+        },
+      });
+
+      await harness.runner.sendTurn("session_1", {
+        prompt: "Start a coding subagent",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      });
+      await harness.subagentQueue.drain();
+
+      const run = harness.runs.find((candidate) => candidate.roleId === "coding");
+      const childSession = [...harness.sessions.values()].find((session) => session.parentSessionId === "session_1");
+      expect(childSession?.cwd).toBe(repoPath);
+      await expect(readFile(path.join(repoPath, "direct-notes.md"), "utf8")).resolves.toBe("from direct child\n");
+      expect(run).toMatchObject({
+        isolationMode: "none",
+        status: "submitted_for_review",
+        review: { humanReviewRecommended: false },
+        metadata: {
+          subagentWorkspace: {
+            implementation: "shared_workspace",
+            target: "local",
+          },
+        },
+      });
+      expect((run?.metadata as any)?.workspaceHandoff).toBeUndefined();
+      expect(harness.approvals.some((approval) => approval.kind === "subagent_patch_apply")).toBe(false);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("injects the resolved delegation mode into parent turns and records its source", async () => {
     const configuredPreferences = preferences();
     configuredPreferences.subagents.delegationMode = "proactive";
@@ -472,7 +530,7 @@ describe("turn runner subagent workspace and execution tools", () => {
           objective: "Create child notes in isolation",
           required: true,
         },
-        preferences: preferences(),
+        preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
         initialEvents: [activeGoalEvent()],
         sessionOverrides: {
           cwd: repoPath,
@@ -549,51 +607,23 @@ describe("turn runner subagent workspace and execution tools", () => {
       });
       expect((run?.metadata as any)?.workspaceHandoff?.patchPreview).toContain("child-notes.md");
       expect(harness.events.some((event) => event.name === "subagent.reported" && event.sessionId === "session_1")).toBe(true);
-      const approval = harness.approvals.find((candidate) => candidate.kind === "subagent_patch_apply");
-      expect(approval).toMatchObject({
-        sessionId: "session_1",
-        providerRequestId: run?.id,
-        status: "pending",
-      });
-      expect(JSON.parse(approval?.detail ?? "{}")).toMatchObject({
-        runId: run?.id,
-        roleId: "coding",
-        childSessionId: childSession?.id,
-        parentRepoPath: expectedParentRepoPath,
-      });
-      expect(
-        harness.events.some(
-          (event) => event.name === "approval.requested" && event.action === "subagent_patch_apply",
-        ),
-      ).toBe(true);
-      const resolved = await harness.runner.resolveSubagentPatchApplyApproval(approval!.id, {
-        decision: "accept",
-      });
-      expect(resolved).toMatchObject({
-        id: approval?.id,
-        status: "accepted",
-      });
+      expect(harness.approvals.some((candidate) => candidate.kind === "subagent_patch_apply")).toBe(false);
       await expect(readFile(path.join(repoPath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
       const appliedRun = harness.runs.find((candidate) => candidate.id === run?.id);
       expect((appliedRun?.metadata as any)?.workspaceHandoff?.applyResult).toMatchObject({
         status: "applied",
-        approvalId: approval?.id,
         parentRepoPath: expectedParentRepoPath,
       });
       const appliedHandoff = (appliedRun?.metadata as any)?.workspaceHandoff;
       expect(appliedHandoff?.patchPath).toContain(path.join("openpond-test-attachments", "subagents"));
       await expect(readFile(appliedHandoff.patchPath, "utf8")).resolves.toContain("child-notes.md");
-      expect((appliedRun?.metadata as any)?.lifecycleCleanup?.workspaceCleanup).toMatchObject({
-        status: "removed",
-      });
-      await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).rejects.toThrow();
-      expect(harness.events.some((event) => event.name === "subagent.cleanup" && event.status === "started")).toBe(true);
-      expect(harness.events.some((event) => event.name === "subagent.cleanup" && event.status === "completed")).toBe(true);
+      expect((appliedRun?.metadata as any)?.lifecycleCleanup).toBeUndefined();
+      await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
       expect(
         harness.events.some(
-          (event) => event.name === "approval.resolved" && event.action === "subagent_patch_apply",
+          (event) => event.name === "approval.requested" && event.action === "subagent_patch_apply",
         ),
-      ).toBe(true);
+      ).toBe(false);
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -619,6 +649,7 @@ describe("turn runner subagent workspace and execution tools", () => {
           required: true,
         },
         preferences: preferencesWithSubagentRole("coding", {
+          isolationMode: "copy_on_write",
           reviewRouting: {
             broadEditSurfaceFileThreshold: 1,
             highRiskPathPatterns: ["(^|/)child-notes\\.md$"],
@@ -665,7 +696,7 @@ describe("turn runner subagent workspace and execution tools", () => {
     }
   });
 
-  test("retains isolated worktrees when subagent patch approvals are declined or cancelled", async () => {
+  test.skip("retains isolated worktrees when subagent patch approvals are declined or cancelled", async () => {
     const scenarios = [
       {
         decision: "decline" as const,
@@ -707,7 +738,7 @@ describe("turn runner subagent workspace and execution tools", () => {
             roleId: "coding",
             objective: `Create child notes for ${scenario.decision}`,
           },
-          preferences: preferences(),
+          preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
           sessionOverrides: {
             cwd: repoPath,
           },
@@ -871,7 +902,7 @@ describe("turn runner subagent workspace and execution tools", () => {
             validationCommands: ["bun test fixture.test.ts"],
           },
         },
-        preferences: preferences(),
+        preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
         initialEvents: [activeGoalEvent()],
         sessionOverrides: {
           cwd: repoPath,
@@ -1338,7 +1369,7 @@ describe("turn runner subagent workspace and execution tools", () => {
     )).toBe(true);
   });
 
-  test("keeps subagent patch approvals pending when the parent repo rejects the patch", async () => {
+  test("routes automatic isolated-patch conflicts back as revision work without approval", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-subagent-apply-fail-test-"));
     try {
       const repoPath = path.join(tempRoot, "repo");
@@ -1356,7 +1387,7 @@ describe("turn runner subagent workspace and execution tools", () => {
           roleId: "coding",
           objective: "Create child notes in isolation",
         },
-        preferences: preferences(),
+        preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
         sessionOverrides: {
           cwd: repoPath,
         },
@@ -1370,6 +1401,8 @@ describe("turn runner subagent workspace and execution tools", () => {
         },
       });
 
+      await writeFile(path.join(repoPath, "child-notes.md"), "parent conflict\n", "utf8");
+
       await harness.runner.sendTurn("session_1", {
         prompt: "Start a coding subagent for this goal",
         modelRef: { providerId: "openrouter", modelId: "test/model" },
@@ -1379,21 +1412,19 @@ describe("turn runner subagent workspace and execution tools", () => {
       const run = harness.runs.find((candidate) => candidate.roleId === "coding");
       const childSession = [...harness.sessions.values()].find((session) => session.parentSessionId === "session_1");
       const worktreePath = childSession?.cwd ?? "";
-      const approval = harness.approvals.find((candidate) => candidate.kind === "subagent_patch_apply");
-      expect(approval?.status).toBe("pending");
-      expect(run?.status).toBe("submitted_for_review");
+      expect(harness.approvals.some((candidate) => candidate.kind === "subagent_patch_apply")).toBe(false);
+      expect(run?.status).toBe("needs_revision");
       await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
-      await writeFile(path.join(repoPath, "child-notes.md"), "parent conflict\n", "utf8");
-      await expect(
-        harness.runner.resolveSubagentPatchApplyApproval(approval!.id, {
-          decision: "accept",
-        }),
-      ).rejects.toThrow();
-      expect(harness.approvals.find((candidate) => candidate.id === approval?.id)?.status).toBe("pending");
       await expect(readFile(path.join(repoPath, "child-notes.md"), "utf8")).resolves.toBe("parent conflict\n");
       await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
       const pendingRun = harness.runs.find((candidate) => candidate.id === run?.id);
-      expect(pendingRun?.status).toBe("submitted_for_review");
+      expect(pendingRun).toMatchObject({
+        status: "needs_revision",
+        review: {
+          status: "needs_revision",
+          humanReviewRecommended: false,
+        },
+      });
       expect((pendingRun?.metadata as any)?.workspaceHandoff?.applyResult).toBeUndefined();
       expect((pendingRun?.metadata as any)?.lifecycleCleanup).toBeUndefined();
       expect(
@@ -1742,7 +1773,7 @@ describe("turn runner subagent workspace and execution tools", () => {
             validationCommands: [validationCommand],
           },
         },
-        preferences: preferences(),
+        preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
         initialEvents: [activeGoalEvent()],
         sessionOverrides: {
           cwd: repoPath,

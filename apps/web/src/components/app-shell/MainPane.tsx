@@ -1359,7 +1359,6 @@ export function MainPane({
       expanded={diffPanelExpanded}
       terminalOpen={terminalOpen}
       sideChatAvailable={view === "chat"}
-      onClose={onCloseRightPanel}
       onOpenBrowser={onShowBrowserPanel}
       onOpenFiles={onShowFilesPanel}
       onOpenReview={onShowDiffPanel}

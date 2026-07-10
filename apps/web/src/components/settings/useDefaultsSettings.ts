@@ -253,6 +253,7 @@ export function useDefaultsSettings({
           insightsEvidenceSources,
           subagents: {
             enabled: subagentsEnabled,
+            workspaceDefaultsVersion: preferences.subagents.workspaceDefaultsVersion,
             delegationMode: subagentDelegationMode,
             defaultModelRef: subagentsUseDefaultModel
               ? null

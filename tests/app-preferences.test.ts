@@ -36,7 +36,7 @@ describe("app preferences", () => {
     expect(patch).toEqual({ openPondCommandAccessMode: "full-access" });
   });
 
-  test("defaults subagent role settings with copy-on-write background workers", () => {
+  test("defaults subagent role settings to direct shared-workspace workers", () => {
     const preferences = AppPreferencesSchema.parse({});
     const coding = preferences.subagents.roles.find((role) => role.id === "coding");
     const research = preferences.subagents.roles.find((role) => role.id === "research");
@@ -44,7 +44,7 @@ describe("app preferences", () => {
     expect(preferences.subagents.delegationMode).toBe("balanced");
     expect(preferences.subagents.maxConcurrentRuns).toBe(4);
     expect(preferences.subagents.maxConcurrentRunsPerProvider).toBe(2);
-    expect(preferences.subagents.maxConcurrentRunsPerWorkspaceTarget).toBe(2);
+    expect(preferences.subagents.maxConcurrentRunsPerWorkspaceTarget).toBe(1);
     expect(preferences.subagents.heartbeatIntervalSeconds).toBe(60);
     expect(coding?.reviewRouting).toEqual({
       broadEditSurfaceFileThreshold: 8,
@@ -58,14 +58,14 @@ describe("app preferences", () => {
     });
     expect(coding).toMatchObject({
       enabled: true,
-      isolationMode: "copy_on_write",
+      isolationMode: "none",
       toolPolicy: "workspace_write",
       background: true,
       peerMessages: "goal_scoped",
       modelRef: null,
     });
     expect(research).toMatchObject({
-      isolationMode: "copy_on_write",
+      isolationMode: "none",
       toolPolicy: "read_only",
       background: true,
     });
@@ -143,7 +143,7 @@ describe("app preferences", () => {
       );
       expect(bootstrap.preferences.subagents.heartbeatIntervalSeconds).toBe(60);
       expect(bootstrap.preferences.subagents.roles.find((role) => role.id === "coding")).toMatchObject({
-        isolationMode: "copy_on_write",
+        isolationMode: "none",
         toolPolicy: "workspace_write",
         reviewRouting: {
           broadEditSurfaceFileThreshold: 8,
@@ -197,7 +197,7 @@ describe("app preferences", () => {
       expect(bootstrap.preferences.subagents.heartbeatIntervalSeconds).toBe(60);
       expect(bootstrap.preferences.subagents.maxConcurrentRuns).toBe(3);
       expect(bootstrap.preferences.subagents.roles.find((role) => role.id === "coding")).toMatchObject({
-        isolationMode: "copy_on_write",
+        isolationMode: "none",
         maxConcurrentRuns: 1,
         maxTurns: null,
         maxTokens: null,

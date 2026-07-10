@@ -608,6 +608,43 @@ describe("BYOK turn runner dispatch", () => {
     expect(harness.events.some((event) => event.name === "tool.completed" && event.action === "openpond_goal_control")).toBe(true);
   });
 
+  test("replays ZAI preserved thinking with assistant tool calls", async () => {
+    const reasoningContent = "I need to create the requested goal before I can report completion.";
+    const harness = createNativeGoalControlHarness({
+      providerId: "zai",
+      modelId: "glm-5.2",
+      toolArgs: {
+        action: "start",
+        objective: "Verify preserved thinking continuation.",
+        reason: "Regression test for a multi-round tool turn.",
+      },
+      reasoningTextOnToolCall: reasoningContent,
+      finalText: "Goal started.",
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "start a goal to verify preserved thinking",
+      modelRef: { providerId: "zai", modelId: "glm-5.2" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(harness.streamInputs).toHaveLength(2);
+    expect(harness.streamInputs[1].messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        content: "",
+        reasoning_content: reasoningContent,
+        tool_calls: expect.arrayContaining([
+          expect.objectContaining({ id: "call_goal_control" }),
+        ]),
+      }),
+      expect.objectContaining({
+        role: "tool",
+        tool_call_id: "call_goal_control",
+      }),
+    ]));
+  });
+
   test("records failed provider requests in the usage ledger", async () => {
     const harness = createNativeGoalControlHarness({
       toolArgs: null,

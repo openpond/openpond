@@ -140,6 +140,7 @@ export function createSubagentToolRuntime(deps: {
     sessionArchive: Record<string, unknown> | null,
   ): string;
 }) {
+  const workspaceWriteStartReservations = new Set<string>();
   const requireSubagentDeps = deps.requireSubagentDeps;
   const loadAppPreferences = deps.loadAppPreferences;
   const getSession = deps.getSession;
@@ -179,6 +180,12 @@ export function createSubagentToolRuntime(deps: {
       modelId: preferences.defaultChatModel,
     };
     const workspaceTargetKey = await subagentWorkspaceTargetKeyForSession(context.session);
+    const writeCapable = role.toolPolicy !== "read_only";
+    if (writeCapable && workspaceWriteStartReservations.has(workspaceTargetKey)) {
+      throw new Error(`Another write-capable subagent is starting for ${workspaceTargetKey}.`);
+    }
+    if (writeCapable) workspaceWriteStartReservations.add(workspaceTargetKey);
+    try {
     const activeRuns = await deps.listRuns({
       parentSessionId: context.session.id,
       status: ["queued", "running", "needs_resume"],
@@ -205,8 +212,14 @@ export function createSubagentToolRuntime(deps: {
       }
     }
     const workspaceTargetLimit = preferences.subagents.maxConcurrentRunsPerWorkspaceTarget;
-    if (workspaceTargetLimit !== null) {
-      const activeWorkspaceRuns = activeRuns.filter((run) => subagentWorkspaceTargetKeyFromRun(run) === workspaceTargetKey);
+    if (workspaceTargetLimit !== null && writeCapable) {
+      const allActiveRuns = await deps.listRuns({
+        status: ["queued", "running", "needs_resume"],
+        limit: 1000,
+      });
+      const activeWorkspaceRuns = allActiveRuns.filter(
+        (run) => run.toolPolicy !== "read_only" && subagentWorkspaceTargetKeyFromRun(run) === workspaceTargetKey,
+      );
       if (activeWorkspaceRuns.length >= workspaceTargetLimit) {
         throw new Error(
           `Subagent workspace target concurrency limit reached: ${activeWorkspaceRuns.length}/${workspaceTargetLimit} active runs for ${workspaceTargetKey}.`,
@@ -374,6 +387,9 @@ export function createSubagentToolRuntime(deps: {
     return subagentToolResultFromRun(run, isolationBlocker
       ? "Open the child conversation or wait for workspace isolation support before retrying write-capable work."
       : "Subagent queued in the background. This start call does not wait for completion; continue parent work and use pushed receipts, or call openpond_subagent_join only when an explicit blocking/diagnostic check is needed.");
+    } finally {
+      if (writeCapable) workspaceWriteStartReservations.delete(workspaceTargetKey);
+    }
   }
 
   async function statusSubagentsFromModelTool(

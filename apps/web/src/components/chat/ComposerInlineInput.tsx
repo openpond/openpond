@@ -496,7 +496,8 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
     const shouldRebuild =
       visualChanged ||
       prompt === "" ||
-      (document.activeElement !== root && (currentState.text !== prompt || currentState.tokenPosition !== tokenPosition(token, prompt)));
+      currentState.text !== prompt ||
+      currentState.tokenPosition !== tokenPosition(token, prompt);
     if (shouldRebuild) {
       rebuildEditorDom(root, prompt, token, connectedAppMentions);
       root.dataset.empty = prompt.length === 0 && !token ? "true" : "false";

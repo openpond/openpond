@@ -49,6 +49,7 @@ import type {
   ProfileSkillInstructionMode,
 } from "../../openpond/hosted-turn-helpers.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
+import { reasoningContentForToolContinuation } from "../../openpond/reasoning-continuation.js";
 import { event } from "../../utils.js";
 import { requiresWorkspaceToolForPrompt } from "../workspace-tool-requirements.js";
 import { startProviderRequestUsageRecorder } from "../model-usage-recorder.js";
@@ -366,7 +367,13 @@ export function createHostedToolLoopRuntime(deps: {
 
       const nativeToolCalls = nativeToolAccumulator.completed();
       if (nativeToolCalls.length > 0) {
-        messages.push(assistantMessageForNativeToolCalls(assistantText, nativeToolCalls));
+        messages.push(assistantMessageForNativeToolCalls(assistantText, nativeToolCalls, {
+          reasoningContent: reasoningContentForToolContinuation({
+            provider: params.provider,
+            model: params.model,
+            reasoningText,
+          }),
+        }));
         const nativeResults = await executeNativeToolCalls({
           session,
           turnId: params.turn.id,

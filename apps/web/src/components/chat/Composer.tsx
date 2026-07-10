@@ -51,7 +51,7 @@ import { formatSubmitIssueFormInput, type SubmitIssueFormInput } from "../../lib
 import {
   activeProfileSkillInvocationContext,
   profileSkillInvocationMatchesForQuery,
-  profileSkillInvocationText,
+  replaceActiveProfileSkillInvocation,
 } from "../../lib/profile-skill-invocations";
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import {
@@ -997,21 +997,12 @@ export function Composer({
 
   function selectProfileSkill(item: ComposerSkillMenuItem) {
     if (!activeSkillContext) return;
-    const start = Math.max(0, Math.min(activeSkillContext.start, prompt.length));
-    const end = Math.max(start, Math.min(activeSkillContext.end, prompt.length));
-    const before = prompt.slice(0, start);
-    const after = prompt.slice(end);
-    const prefix = before && !/\s$/.test(before) ? " " : "";
-    const suffix = after && !/^\s/.test(after) ? " " : "";
-    const invocation = `${profileSkillInvocationText(item)} `;
-    const inserted = `${prefix}${invocation}${suffix}`;
-    const nextPrompt = `${before}${inserted}${after}`;
-    const nextCursor = before.length + inserted.length;
+    const replacement = replaceActiveProfileSkillInvocation(prompt, activeSkillContext, item);
     setSkillMenuDismissedPrompt(null);
-    onPromptChange(nextPrompt);
-    setCursorIndex(nextCursor);
+    onPromptChange(replacement.value);
+    setCursorIndex(replacement.cursor);
     window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(nextCursor);
+      inputRef.current?.focusAtPromptIndex(replacement.cursor);
     });
   }
 
