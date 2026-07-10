@@ -398,7 +398,7 @@ function ProviderDetailsDialog({
         </div>
 
         {localByok ? (
-          <div className="provider-credential-tabs provider-mode-tabs" role="tablist" aria-label={`${status.displayName} mode`}>
+          <div className="surface-tabs provider-mode-tabs" role="tablist" aria-label={`${status.displayName} mode`}>
             {credentialTabs.map((tab) => (
               <button
                 type="button"

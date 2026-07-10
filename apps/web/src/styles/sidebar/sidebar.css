@@ -6,6 +6,20 @@
   padding: 12px 15px 6px;
 }
 
+.sidebar-wordmark {
+  display: block;
+  width: 118px;
+  height: auto;
+  max-height: 21px;
+  object-fit: contain;
+}
+
+.sidebar-wordmark-row {
+  display: flex;
+  justify-content: center;
+  padding: 2px 14px 8px;
+}
+
 .platform-macos.sidebar-open .sidebar-toolbar {
   padding: 0 15px 0 78px;
 }

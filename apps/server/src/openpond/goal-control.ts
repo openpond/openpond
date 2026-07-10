@@ -115,6 +115,18 @@ export function runOpenPondGoalControl(input: {
   const normalizedPreviousStatus = normalizeOpenPondGoalStatus(previousStatus);
 
   if (action === "start") {
+    if (targetGoalId) {
+      throw new Error(
+        "targetGoalId cannot be used with start. Continue the targeted goal, or use restart to begin a new attempt for it.",
+      );
+    }
+    if (targetGoal && !isTerminalGoalStatus(normalizedPreviousStatus)) {
+      const currentGoalId = stringValue(targetGoal.id) ?? "unknown";
+      const currentStatus = normalizedPreviousStatus ?? previousStatus ?? "active";
+      throw new Error(
+        `OpenPond goal ${currentGoalId} is already ${currentStatus}. Continue or control that goal instead of starting a second thread goal.`,
+      );
+    }
     const objective = cleanRequired(input.request.objective, "objective");
     const goal = createControlledGoal({
       id: `goal_${randomUUID()}`,
@@ -216,6 +228,10 @@ export function runOpenPondGoalControl(input: {
     now,
   });
   return controlResult({ action, goal, previousGoal: targetGoal, nextStep: "OpenPond goal stopped." });
+}
+
+function isTerminalGoalStatus(status: OpenPondGoalStatus | null): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
 }
 
 function controlResult(input: {

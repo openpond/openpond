@@ -8,9 +8,9 @@ import {
 import { SubagentPreferencesSchema } from "./subagents.js";
 
 export const DEFAULT_CHAT_PROVIDER = "openpond" as const;
-export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.5" as const;
+export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.6-sol" as const;
 export const DEFAULT_CODEX_PERMISSION_MODE = "default" as const;
-export const DEFAULT_CODEX_REASONING_EFFORT = "medium" as const;
+export const DEFAULT_CODEX_REASONING_EFFORT = "low" as const;
 export const DEFAULT_OPENPOND_COMMAND_ACCESS_MODE = "ask" as const;
 export const DEFAULT_OPENPOND_CHAT_MODEL = "openpond-chat" as const;
 

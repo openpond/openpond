@@ -1,6 +1,7 @@
 @import "./styles/base.css";
 @import "./styles/common/image-lightbox.css";
 @import "./styles/common/project-kind-icon.css";
+@import "./styles/common/tabs.css";
 @import "./styles/splash/app-splash.css";
 @import "./styles/shell.css";
 @import "./styles/app-shell/main-pane.css";
@@ -27,6 +28,7 @@
 @import "./styles/chat/composer-footer.css";
 @import "./styles/chat/voice-input.css";
 @import "./styles/chat/command-results.css";
+@import "./styles/team-chat/team-chat.css";
 @import "./styles/dropdown-select.css";
 @import "./styles/chat/context-status.css";
 @import "./styles/chat/composer-actions.css";

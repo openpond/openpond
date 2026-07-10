@@ -357,6 +357,8 @@ function SubagentDetails({
             ["Latest update", subagentLatestUpdateLabel(runtime)],
             ["Active", String(runtime.activeCount)],
             ["Blocked", String(runtime.blockedCount)],
+            ["Failed", String(subagentStatusCount(runtime, ["failed", "failed_with_artifacts"]))],
+            ["Cancelled", String(subagentStatusCount(runtime, ["cancelled"]))],
             ["Unresolved", String(runtime.unresolvedCount)],
             ["Terminal", String(runtime.terminalCount)],
             ["Archived", String(runtime.archivedCount)],
@@ -370,6 +372,8 @@ function SubagentDetails({
             ["Required revision", String(runtime.requiredNeedsRevisionCount)],
             ["Required user input", String(runtime.requiredNeedsUserInputCount)],
             ["Required blocking", String(runtime.requiredBlockingCount)],
+            ["Required failed", String(subagentStatusCount(runtime, ["failed", "failed_with_artifacts"], true))],
+            ["Required cancelled", String(subagentStatusCount(runtime, ["cancelled"], true))],
             ["Required accepted", String(runtime.requiredAcceptedCount)],
             ["Required terminal", String(runtime.requiredTerminalCount)],
             ["Required archived", String(runtime.requiredArchivedCount)],
@@ -564,6 +568,15 @@ function subagentLatestUpdateLabel(runtime: SubagentRuntimeStatus): string {
   const update = runtime.latestMeaningfulUpdate;
   if (!update) return "No structured update";
   return `${subagentRoleLabel(update.roleId)} ${update.status}: ${update.message}`;
+}
+
+function subagentStatusCount(
+  runtime: SubagentRuntimeStatus,
+  statuses: readonly SubagentRun["status"][],
+  requiredOnly = false,
+): number {
+  const statusSet = new Set(statuses);
+  return runtime.runs.filter((run) => (!requiredOnly || run.required) && statusSet.has(run.status)).length;
 }
 
 function SubagentTaskGraphDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {

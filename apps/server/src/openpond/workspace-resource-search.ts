@@ -83,7 +83,8 @@ export async function searchLocalWorkspaceResources(input: {
   const limit = normalizeLimit(input.request.limit, DEFAULT_RESOURCE_SEARCH_LIMIT, MAX_RESOURCE_SEARCH_LIMIT);
   const mode = workspaceSearchMode(input.request.filters);
   const files = await visibleWorkspaceFiles(input.repoPath);
-  const result = await searchWorkspaceResourcesByMode(input.repoPath, files, query, mode, limit);
+  const pathQuery = workspaceRelativePathQuery(input.repoPath, query);
+  const result = await searchWorkspaceResourcesByMode(input.repoPath, files, query, pathQuery, mode, limit);
 
   return {
     query,
@@ -97,25 +98,28 @@ async function searchWorkspaceResourcesByMode(
   repoPath: string,
   files: string[],
   query: string,
+  pathQuery: string,
   mode: WorkspaceSearchMode,
   limit: number,
 ): Promise<WorkspaceSearchItemsResult> {
-  if (mode === "path") return pathSearchItems(files, query, limit);
-  if (mode === "ranked") return rankedSearchItems(repoPath, files, query, limit);
-  return exactSearchItems(repoPath, files, query, limit);
+  if (mode === "path") return pathSearchItems(files, pathQuery, limit);
+  if (mode === "ranked") return rankedSearchItems(repoPath, files, pathQuery, limit);
+  return exactSearchItems(repoPath, files, query, pathQuery, limit);
 }
 
 async function exactSearchItems(
   repoPath: string,
   files: string[],
   query: string,
+  pathQuery: string,
   limit: number,
 ): Promise<WorkspaceSearchItemsResult> {
   const items = new Map<string, SearchItem>();
   const lowerQuery = query.toLowerCase();
+  const lowerPathQuery = pathQuery.toLowerCase();
 
   for (const filePath of files) {
-    if (filePath.toLowerCase().includes(lowerQuery)) {
+    if (filePath.toLowerCase().includes(lowerPathQuery)) {
       addSearchItem(items, {
         ref: workspaceFileRef(filePath),
         title: filePath,
@@ -443,6 +447,15 @@ function orderedCharacterScore(value: string, query: string): number {
   const compactness = needle.length / span;
   const boundaryBonus = boundaryMatches / needle.length;
   return Math.min(1, compactness * 0.7 + boundaryBonus * 0.3);
+}
+
+function workspaceRelativePathQuery(repoPath: string, query: string): string {
+  if (!path.isAbsolute(query)) return query;
+  const relative = path.relative(path.resolve(repoPath), path.resolve(query));
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return query;
+  }
+  return relative.split(path.sep).join("/");
 }
 
 function workspaceSearchMode(filters: Record<string, unknown> | undefined): WorkspaceSearchMode {

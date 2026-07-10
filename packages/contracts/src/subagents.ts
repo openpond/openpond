@@ -36,6 +36,10 @@ export const SubagentPeerMessagesSchema = z.enum(["disabled", "goal_scoped"]);
 
 export type SubagentPeerMessages = z.infer<typeof SubagentPeerMessagesSchema>;
 
+export const SubagentDelegationModeSchema = z.enum(["manual", "balanced", "proactive"]);
+
+export type SubagentDelegationMode = z.infer<typeof SubagentDelegationModeSchema>;
+
 export const SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS = [
   "(^|/)(package\\.json|bun\\.lockb?|pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock|deno\\.lock)$",
   "(^|/)(migrations?|schema|auth|security|permissions?|billing|payments?)(/|$)",
@@ -189,6 +193,7 @@ export type SubagentRoleSettings = z.infer<typeof SubagentRoleSettingsSchema>;
 
 export const SubagentPreferencesSchema = z.object({
   enabled: z.boolean().default(true),
+  delegationMode: SubagentDelegationModeSchema.default("balanced"),
   defaultModelRef: ChatModelRefSchema.nullable().default(null),
   roles: z
     .array(SubagentRoleSettingsSchema)

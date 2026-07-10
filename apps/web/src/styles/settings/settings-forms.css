@@ -510,56 +510,10 @@
   gap: 12px;
 }
 
-.provider-credential-tabs {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: #101010;
-}
-
 .provider-mode-tabs {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
   justify-self: stretch;
   width: auto;
   margin: 12px 20px 0;
-}
-
-.provider-credential-tabs button {
-  min-height: 30px;
-  min-width: 92px;
-  border: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  background: transparent;
-  color: #9b9b9b;
-  padding: 0 12px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.provider-mode-tabs button {
-  min-height: 40px;
-  min-width: 0;
-}
-
-.provider-credential-tabs button:last-child {
-  border-right: 0;
-}
-
-.provider-credential-tabs button:hover,
-.provider-credential-tabs button.active {
-  background: rgba(255, 255, 255, 0.07);
-  color: #f5f5f5;
-}
-
-.provider-credential-tabs button:focus-visible {
-  outline: 2px solid rgba(6, 182, 212, 0.38);
-  outline-offset: -2px;
 }
 
 .provider-credential-panel,

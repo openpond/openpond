@@ -5,6 +5,7 @@ import type {
   InsightsEvidenceSourceSettings,
   ProviderSettings,
   SubagentIsolationMode,
+  SubagentDelegationMode,
   SubagentPeerMessages,
   SubagentRoleSettings,
   SubagentToolPolicy,
@@ -51,6 +52,7 @@ type InsightsSettingsSectionProps = SharedHarnessSettingsProps & {
 
 type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   subagentsEnabled: boolean;
+  subagentDelegationMode: SubagentDelegationMode;
   subagentsUseDefaultModel: boolean;
   subagentsProvider: ChatProvider;
   subagentsModel: string;
@@ -63,6 +65,7 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   providers: ProviderSettings | null;
   changeSubagentsProvider: (provider: ChatProvider) => void;
   setSubagentsEnabled: (value: boolean) => void;
+  setSubagentDelegationMode: (value: SubagentDelegationMode) => void;
   setSubagentsUseDefaultModel: (value: boolean) => void;
   setSubagentsModel: (value: string) => void;
   setSubagentsMaxConcurrentRuns: (value: number) => void;
@@ -310,6 +313,7 @@ export function InsightsSettingsSection({
 
 export function SubagentsSettingsSection({
   subagentsEnabled,
+  subagentDelegationMode,
   subagentsUseDefaultModel,
   subagentsProvider,
   subagentsModel,
@@ -325,6 +329,7 @@ export function SubagentsSettingsSection({
   saveDefaults,
   changeSubagentsProvider,
   setSubagentsEnabled,
+  setSubagentDelegationMode,
   setSubagentsUseDefaultModel,
   setSubagentsModel,
   setSubagentsMaxConcurrentRuns,
@@ -355,6 +360,7 @@ export function SubagentsSettingsSection({
   const unchanged = subagentSettingsEqual(
     {
       enabled: subagentsEnabled,
+      delegationMode: subagentDelegationMode,
       defaultModelRef: subagentDefaultModelRef,
       roles: subagentRoles,
       maxConcurrentRuns: subagentsMaxConcurrentRuns,
@@ -386,6 +392,28 @@ export function SubagentsSettingsSection({
             </label>
           </div>
         </div>
+        <section className="subagent-settings-section">
+          <div className="subagent-settings-card-header">
+            <div>
+              <span>Default delegation</span>
+              <small>Used unless a task overrides it from the composer.</small>
+            </div>
+          </div>
+          <div className="subagent-field-grid two">
+            <label className="settings-select-field">
+              <span>Subagent use</span>
+              <select
+                value={subagentDelegationMode}
+                disabled={saving || !subagentsEnabled}
+                onChange={(event) => setSubagentDelegationMode(event.target.value as SubagentDelegationMode)}
+              >
+                <option value="manual">Manual</option>
+                <option value="balanced">Balanced</option>
+                <option value="proactive">Proactive</option>
+              </select>
+            </label>
+          </div>
+        </section>
         <section className="subagent-settings-section">
           <div className="subagent-settings-card-header">
             <div>
@@ -754,6 +782,7 @@ function numberOrDefault(value: string, fallback: number): number {
 function subagentSettingsEqual(
   current: {
     enabled: boolean;
+    delegationMode: SubagentDelegationMode;
     defaultModelRef: BootstrapPayload["preferences"]["subagents"]["defaultModelRef"];
     roles: SubagentRoleSettings[];
     maxConcurrentRuns: number;
@@ -767,6 +796,7 @@ function subagentSettingsEqual(
   const saved = preferences.subagents;
   return (
     current.enabled === saved.enabled &&
+    current.delegationMode === saved.delegationMode &&
     modelRefsEqual(current.defaultModelRef, saved.defaultModelRef) &&
     current.maxConcurrentRuns === saved.maxConcurrentRuns &&
     current.maxConcurrentRunsPerProvider === saved.maxConcurrentRunsPerProvider &&

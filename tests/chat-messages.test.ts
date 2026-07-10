@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeEvent } from "@openpond/contracts";
+import { SessionSchema, type RuntimeEvent } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
 import { activityGroupSummary, buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
+import { subagentChildSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
+import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
 
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
   return {
@@ -92,6 +94,152 @@ describe("chat message projection", () => {
     );
     expect(html).toContain("activity-subagent-avatar-group");
     expect(html).toContain("Open Coding subagent (completed) conversation");
+  });
+
+  test("renders child handoffs as separate visible right-aligned cards", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "Diagnose the bug" },
+      }),
+      commandStarted("search_1", "turn_1", "rg goal apps/server/src"),
+      runtimeEvent({
+        id: "child_message",
+        name: "subagent.message",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+        data: {
+          childSessionId: "session_child_review",
+          roleId: "review",
+          modelRef: { providerId: "openai", modelId: "gpt-5.6-sol" },
+          status: "running",
+          message: {
+            id: "message_1",
+            fromRunId: "run_review",
+            parentGoalId: "goal_1",
+            kind: "status",
+            priority: "interrupt",
+            body: "The hidden-directory hypothesis was disproven.",
+            refs: [],
+            createdAt: "2026-05-16T00:00:00.000Z",
+          },
+          delivery: {
+            status: "delivered",
+            deliveredParentSessionId: "session_1",
+            wakeParentReason: "parent_turn_active",
+          },
+        },
+      }),
+      commandStarted("search_2", "turn_1", "rg scanner apps/server/src"),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+      "activity_group",
+      "activity_group",
+    ]);
+    expect(messages[1]?.activities?.[0]?.subagentMessage).toBeUndefined();
+    expect(messages[2]?.activities?.[0]?.subagentMessage).toMatchObject({
+      direction: "received",
+      roleId: "review",
+      childSessionId: "session_child_review",
+    });
+    expect(messages[3]?.activities?.[0]?.subagentMessage).toBeUndefined();
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[2]!,
+        onOpenSession: () => undefined,
+      }),
+    );
+    expect(html).toContain("activity-child-message-group received");
+    expect(html).toContain("Review subagent update · gpt-5.6-sol");
+    expect(html).toContain("The hidden-directory hypothesis was disproven.");
+    expect(html).not.toContain("Open child conversation");
+    expect(html).not.toContain("activity-summary");
+  });
+
+  test("collapses long subagent updates behind a five-line show-more control", () => {
+    const body = Array.from({ length: 7 }, (_, index) => `Evidence line ${index + 1}`).join("\n");
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "child_message_long",
+        name: "subagent.message",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+        data: {
+          childSessionId: "session_child_research",
+          roleId: "research",
+          modelRef: { providerId: "openai", modelId: "gpt-5.6-sol" },
+          message: {
+            id: "message_long",
+            fromRunId: "run_research",
+            kind: "handoff",
+            body,
+            refs: [],
+          },
+          delivery: {
+            status: "delivered",
+            deliveredParentSessionId: "session_1",
+          },
+        },
+      }),
+    ]);
+
+    expect(subagentMessageNeedsCollapse(body)).toBe(true);
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[0]!,
+        onOpenSession: () => undefined,
+      }),
+    );
+    expect(html).toContain('class="collapsed"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("Show more");
+  });
+
+  test("extracts a new child session shell from live subagent start receipts", () => {
+    const childSession = SessionSchema.parse({
+      id: "session_child_live",
+      provider: "openai",
+      modelRef: { providerId: "openai", modelId: "gpt-5.6-sol" },
+      openPondCommandAccessMode: "ask",
+      hiddenFromDefaultSidebar: true,
+      parentSessionId: "session_parent",
+      parentTurnId: "turn_parent",
+      parentGoalId: null,
+      subagentRunId: "run_live",
+      subagentRoleId: "research",
+      title: "Research: live child",
+      appId: null,
+      appName: null,
+      cwd: "/tmp/openpond",
+      codexThreadId: null,
+      createdAt: "2026-07-09T20:28:56.212Z",
+      updatedAt: "2026-07-09T20:28:56.212Z",
+      status: "idle",
+      pinned: false,
+      archived: false,
+      order: 3,
+    });
+    const sessions = subagentChildSessionsFromRuntimeEvents([
+      runtimeEvent({
+        id: "subagent_started_live",
+        name: "subagent.started",
+        sessionId: "session_parent",
+        turnId: "turn_parent",
+        status: "pending",
+        data: { childSession },
+      }),
+    ]);
+
+    expect(sessions).toEqual([childSession]);
   });
 
   test("keeps subagent state visible in mixed parent activity summaries", () => {

@@ -4,7 +4,7 @@ import type {
   ModelToolExecutionContext,
   ModelToolDefinition,
 } from "../apps/server/src/openpond/model-tool-registry";
-import type { Session } from "../packages/contracts/src";
+import { defaultSubagentPreferences, type Session } from "../packages/contracts/src";
 
 describe("OpenPond capability tool registry", () => {
   test("adds subagent tools only when subagent handlers are supplied", () => {
@@ -184,6 +184,28 @@ describe("OpenPond capability tool registry", () => {
         },
       },
     });
+  });
+
+  test("publishes the exact enabled subagent role catalog in the start tool schema", () => {
+    const roles = defaultSubagentPreferences().roles.map((role) => ({
+      ...role,
+      enabled: role.id === "coding" || role.id === "review",
+      modelRef: role.id === "coding" ? { providerId: "zai", modelId: "glm-5.2" } : null,
+    }));
+    const definitions = createOpenPondCapabilityModelToolDefinitions({
+      ...requiredHandlers(),
+      startSubagent: async () => subagentToolResult("queued"),
+      subagentRoles: roles,
+    });
+    const start = requireTool(definitions, "openpond_subagent_start");
+    const roleId = (start.parameters as any).properties.roleId;
+
+    expect(roleId.enum).toEqual(["coding", "review"]);
+    expect(roleId.description).toContain("coding: Make scoped code changes");
+    expect(roleId.description).toContain("workspace_write, copy_on_write");
+    expect(roleId.description).toContain("model zai/glm-5.2");
+    expect(roleId.description).toContain("review: Inspect diffs or implementation plans");
+    expect(roleId.description).not.toContain("research:");
   });
 
   test("rejects invalid subagent mailbox kinds before handler execution", async () => {

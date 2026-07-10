@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { Approval, RuntimeEvent } from "@openpond/contracts";
+import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { openEventStream, type ClientConnection } from "../api";
 import type { SidebarSectionMenuId } from "../app/app-state";
 import { mergeRuntimeEventLists } from "../lib/runtime-event-lists";
+import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
 type ShortcutInput = {
   searchOpen: boolean;
@@ -50,11 +51,19 @@ type RuntimeEventsInput = {
   connection: ClientConnection | null;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setApprovals: Dispatch<SetStateAction<Approval[]>>;
+  setSessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
   onDisconnected?: () => void;
 };
 
-export function useRuntimeEvents({ connection, setEvents, setApprovals, setError, onDisconnected }: RuntimeEventsInput) {
+export function useRuntimeEvents({
+  connection,
+  setEvents,
+  setApprovals,
+  setSessions,
+  setError,
+  onDisconnected,
+}: RuntimeEventsInput) {
   useEffect(() => {
     if (!connection?.token) return;
     let disconnectTimer: number | null = null;
@@ -78,6 +87,12 @@ export function useRuntimeEvents({ connection, setEvents, setApprovals, setError
       if (nextEvents.length === 0) return;
 
       setEvents((current) => mergeRuntimeEventLists(current, nextEvents));
+      const childSessions = subagentChildSessionsFromRuntimeEvents(nextEvents);
+      if (childSessions.length > 0) {
+        setSessions((current) =>
+          childSessions.reduce(upsertSessionPreservingLocalSidebarState, current),
+        );
+      }
       setApprovals((current) => {
         let next = current;
         for (const runtimeEvent of nextEvents) {
@@ -125,5 +140,17 @@ export function useRuntimeEvents({ connection, setEvents, setApprovals, setError
       if (flushFrame !== null) window.cancelAnimationFrame(flushFrame);
       source.close();
     };
-  }, [connection, onDisconnected, setApprovals, setError, setEvents]);
+  }, [connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
+}
+
+export function subagentChildSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {
+  const sessions = new Map<string, Session>();
+  for (const runtimeEvent of events) {
+    if (runtimeEvent.name !== "subagent.started" && runtimeEvent.name !== "subagent.blocked") continue;
+    const data = runtimeEvent.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+    const parsed = SessionSchema.safeParse((data as Record<string, unknown>).childSession);
+    if (parsed.success) sessions.set(parsed.data.id, parsed.data);
+  }
+  return [...sessions.values()];
 }

@@ -77,6 +77,37 @@ const VISION_REASONING_MODEL_CAPABILITIES: Partial<ProviderModelCapabilities> = 
   vision: true,
 };
 
+const LEGACY_OPENAI_DEFAULT_MODEL = "gpt-5.5";
+const CURRENT_OPENAI_DEFAULT_MODEL = "gpt-5.6-sol";
+const CURRENT_OPENAI_MODEL_IDS = new Set([
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.3-codex",
+  "gpt-5.3-codex-spark",
+  "gpt-5.2",
+]);
+const OPENAI_FAMILY_PROVIDER_IDS = new Set<ProviderId>(["codex", "openai"]);
+
+function openAiFamilyModels(
+  capabilities: Partial<ProviderModelCapabilities>,
+): readonly ProviderPresetModel[] {
+  return [
+    { id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol", capabilities },
+    { id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra", capabilities },
+    { id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna", capabilities },
+    { id: "gpt-5.5", displayName: "GPT-5.5", capabilities },
+    { id: "gpt-5.4", displayName: "GPT-5.4", capabilities },
+    { id: "gpt-5.4-mini", displayName: "GPT-5.4 Mini", capabilities },
+    { id: "gpt-5.3-codex", displayName: "GPT-5.3 Codex", capabilities },
+    { id: "gpt-5.3-codex-spark", displayName: "GPT-5.3 Codex Spark", capabilities },
+    { id: "gpt-5.2", displayName: "GPT-5.2", capabilities },
+  ];
+}
+
 const ZAI_CODING_PLAN_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
 const ZAI_PREVIOUS_DEFAULT_BASE_URLS = new Set([
   "https://api.z.ai/api/paas/v4",
@@ -120,27 +151,10 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       reasoning: true,
     },
     defaultEnabled: true,
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
     modelCacheSource: "curated",
     models: [
-      { id: "gpt-5.5", displayName: "GPT-5.5", capabilities: REASONING_MODEL_CAPABILITIES },
-      { id: "gpt-5.4", displayName: "GPT-5.4", capabilities: REASONING_MODEL_CAPABILITIES },
-      {
-        id: "gpt-5.4-mini",
-        displayName: "GPT-5.4 mini",
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-      {
-        id: "gpt-5.3-codex",
-        displayName: "GPT-5.3 Codex",
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-      {
-        id: "gpt-5.3-codex-spark",
-        displayName: "GPT-5.3 Codex Spark",
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-      { id: "gpt-5.2", displayName: "GPT-5.2", capabilities: REASONING_MODEL_CAPABILITIES },
+      ...openAiFamilyModels(REASONING_MODEL_CAPABILITIES),
     ],
   },
   {
@@ -192,11 +206,10 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       structuredOutput: true,
     },
     defaultBaseUrl: "https://api.openai.com/v1",
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
     modelCacheSource: "curated",
     models: [
-      { id: "gpt-5.5", displayName: "GPT-5.5", capabilities: VISION_REASONING_MODEL_CAPABILITIES },
-      { id: "gpt-5.4", displayName: "GPT-5.4", capabilities: VISION_REASONING_MODEL_CAPABILITIES },
+      ...openAiFamilyModels(VISION_REASONING_MODEL_CAPABILITIES),
       {
         id: "gpt-4.1",
         displayName: "GPT-4.1",
@@ -538,10 +551,36 @@ function serverPresetFromCatalogProvider(
   };
 }
 
+function normalizeOpenAiFamilyPreset(preset: ServerProviderPreset): ServerProviderPreset {
+  if (!OPENAI_FAMILY_PROVIDER_IDS.has(preset.id)) return preset;
+
+  const fallback = FALLBACK_PRESETS_BY_ID.get(preset.id);
+  const currentModels = fallback?.models.filter((model) => CURRENT_OPENAI_MODEL_IDS.has(model.id)) ?? [];
+  const retainedModels =
+    preset.id === "openai"
+      ? preset.models.filter((model) => model.id !== LEGACY_OPENAI_DEFAULT_MODEL)
+      : preset.models;
+  const hasCurrentDefault = preset.models.some((model) => model.id === CURRENT_OPENAI_DEFAULT_MODEL);
+  const defaultModel =
+    !preset.defaultModel || preset.defaultModel === LEGACY_OPENAI_DEFAULT_MODEL || !hasCurrentDefault
+      ? CURRENT_OPENAI_DEFAULT_MODEL
+      : preset.defaultModel;
+
+  return {
+    ...preset,
+    defaultModel,
+    models: [...currentModels, ...retainedModels],
+  };
+}
+
 function providerPresetMap(catalog?: ProviderCatalog | null): Map<ProviderId, ServerProviderPreset> {
   const presets = new Map(FALLBACK_PRESETS_BY_ID);
   for (const provider of catalog?.providers ?? []) {
     presets.set(provider.id, serverPresetFromCatalogProvider(provider));
+  }
+  for (const providerId of OPENAI_FAMILY_PROVIDER_IDS) {
+    const preset = presets.get(providerId);
+    if (preset) presets.set(providerId, normalizeOpenAiFamilyPreset(preset));
   }
   return presets;
 }
@@ -594,10 +633,14 @@ function providerConfigForPreset(
 ): ProviderConfig {
   const storedBaseUrl = normalizeDefaultBaseUrlForProvider(preset.id, stored?.baseUrl ?? null);
   const presetBaseUrl = normalizeDefaultBaseUrlForProvider(preset.id, preset.defaultBaseUrl ?? null);
+  const storedDefaultModel =
+    OPENAI_FAMILY_PROVIDER_IDS.has(preset.id) && stored?.defaultModel === LEGACY_OPENAI_DEFAULT_MODEL
+      ? CURRENT_OPENAI_DEFAULT_MODEL
+      : stored?.defaultModel;
   return ProviderConfigSchema.parse({
     enabled: stored?.enabled ?? preset.defaultEnabled ?? false,
     baseUrl: storedBaseUrl ?? presetBaseUrl,
-    defaultModel: stored?.defaultModel ?? preset.defaultModel ?? null,
+    defaultModel: storedDefaultModel ?? preset.defaultModel ?? null,
     modelOverrides: stored?.modelOverrides ?? [],
     updatedAt: stored?.updatedAt ?? null,
   });
@@ -701,9 +744,15 @@ function modelCacheForSettings(
 ): ProviderModelCache {
   const source = existing?.source && existing.source !== "none" ? existing.source : preset.modelCacheSource;
   const cacheSource = source === "hosted" ? "hosted" : source === "manual" ? "manual" : "curated";
-  const cachedModels = existing?.models ?? [];
+  const cachedModels =
+    preset.id === "openai"
+      ? (existing?.models ?? []).filter((model) => model.id !== LEGACY_OPENAI_DEFAULT_MODEL)
+      : existing?.models ?? [];
   const starterModels = starterModelsForPreset(preset, config, cacheSource);
-  const models = uniqueModels([...cachedModels, ...starterModels]);
+  const modelCandidates = OPENAI_FAMILY_PROVIDER_IDS.has(preset.id)
+    ? [...starterModels, ...cachedModels]
+    : [...cachedModels, ...starterModels];
+  const models = uniqueModels(modelCandidates);
   return ProviderModelCacheSchema.parse({
     providerId: preset.id,
     models,

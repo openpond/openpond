@@ -725,12 +725,13 @@
   min-width: 0;
   border-radius: 5px;
   background: #2b2b2b;
-  color: #e8e8e8;
+  color: var(--blue);
   padding: 2px 6px;
-  font-size: inherit;
-  font-weight: 650;
-  line-height: 1.2;
-  vertical-align: -1px;
+  font-family: inherit;
+  font-size: 1em;
+  font-weight: 400;
+  line-height: inherit;
+  vertical-align: baseline;
   white-space: nowrap;
   cursor: text;
   margin: 0 2px;
@@ -739,8 +740,8 @@
 .composer-connected-app-mention-icon {
   display: block;
   flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
   object-fit: contain;
   pointer-events: none;
 }
@@ -749,8 +750,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1;
-  transform: translateY(-0.5px);
+  line-height: inherit;
 }
 
 .composer-repo-link-icon {

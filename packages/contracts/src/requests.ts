@@ -18,7 +18,11 @@ import {
   WorkspaceEditorPreferencesSchema,
   WorkspaceKindSchema,
 } from "./settings.js";
-import { SubagentPreferencesSchema, SubagentRoleIdSchema } from "./subagents.js";
+import {
+  SubagentDelegationModeSchema,
+  SubagentPreferencesSchema,
+  SubagentRoleIdSchema,
+} from "./subagents.js";
 import {
   ChatModelRefSchema,
   ProviderCredentialDeleteRequestSchema,
@@ -117,6 +121,7 @@ export const CreateSessionRequestSchema = z.object({
   parentGoalId: z.string().trim().min(1).max(200).nullable().optional(),
   subagentRunId: z.string().trim().min(1).max(200).nullable().optional(),
   subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
+  subagentDelegationMode: SubagentDelegationModeSchema.nullable().optional(),
   appId: z.string().nullable().optional(),
   appName: z.string().nullable().optional(),
   workspaceKind: WorkspaceKindSchema.optional(),
@@ -356,6 +361,7 @@ export const PatchSessionRequestSchema = z.object({
   parentGoalId: z.string().trim().min(1).max(200).nullable().optional(),
   subagentRunId: z.string().trim().min(1).max(200).nullable().optional(),
   subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
+  subagentDelegationMode: SubagentDelegationModeSchema.nullable().optional(),
   appId: z.string().nullable().optional(),
   appName: z.string().nullable().optional(),
   workspaceKind: WorkspaceKindSchema.optional(),

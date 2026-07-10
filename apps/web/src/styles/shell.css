@@ -152,6 +152,8 @@
 .window-control,
 .window-control *,
 .window-controls,
+.titlebar-title,
+.titlebar-title *,
 .titlebar-breadcrumbs,
 .titlebar-breadcrumbs button,
 .titlebar-icon,
@@ -241,6 +243,44 @@
   color: #f1f1f1;
   font-size: 13px;
   font-weight: 500;
+}
+
+.titlebar-copy-target {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.titlebar-copy-menu {
+  position: fixed;
+  z-index: 120;
+  display: grid;
+  width: 190px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: #252525;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.titlebar-copy-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 9px;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+}
+
+.titlebar-copy-menu button:hover,
+.titlebar-copy-menu button:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
+  outline: none;
 }
 
 .titlebar-title span {

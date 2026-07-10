@@ -1,27 +1,42 @@
 import { readJson, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 
-export async function handleOrganizationRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
-  const {
-    organizationPayload,
-  } = deps;
+export async function handleOrganizationRoutes({
+  deps,
+  request,
+  requestUrl,
+  response,
+}: HttpRouteContext): Promise<boolean> {
+  const { organizationPayload } = deps;
+  if (requestUrl.pathname === "/v1/team-invitations") {
+    if (request.method === "GET") {
+      sendJson(response, 200, await organizationPayload({ type: "invitations_list" }));
+      return true;
+    }
+  }
+  const invitationDecision = /^\/v1\/team-invitations\/(accept|decline)$/.exec(requestUrl.pathname);
+  if (invitationDecision && request.method === "POST") {
+    sendJson(
+      response,
+      200,
+      await organizationPayload({
+        type: invitationDecision[1] === "accept" ? "invitation_accept" : "invitation_decline",
+        payload: await readJson(request),
+      })
+    );
+    return true;
+  }
   if (requestUrl.pathname === "/v1/organizations") {
     if (request.method === "GET") {
       sendJson(response, 200, await organizationPayload({ type: "list" }));
       return true;
     }
     if (request.method === "POST") {
-      sendJson(
-        response,
-        201,
-        await organizationPayload({ type: "create", payload: await readJson(request) }),
-      );
+      sendJson(response, 201, await organizationPayload({ type: "create", payload: await readJson(request) }));
       return true;
     }
   }
-  const organizationMatch = /^\/v1\/organizations\/([^/]+)(?:\/(.*))?$/.exec(
-    requestUrl.pathname,
-  );
+  const organizationMatch = /^\/v1\/organizations\/([^/]+)(?:\/(.*))?$/.exec(requestUrl.pathname);
   if (organizationMatch) {
     const slug = decodeURIComponent(organizationMatch[1]!);
     const rest = organizationMatch[2] ?? "";
@@ -38,7 +53,7 @@ export async function handleOrganizationRoutes({ deps, request, requestUrl, resp
             type: "update",
             slug,
             payload: await readJson(request),
-          }),
+          })
         );
         return true;
       }
@@ -56,7 +71,7 @@ export async function handleOrganizationRoutes({ deps, request, requestUrl, resp
             type: "mcp_generate",
             slug,
             payload: await readJson(request),
-          }),
+          })
         );
         return true;
       }
@@ -74,7 +89,7 @@ export async function handleOrganizationRoutes({ deps, request, requestUrl, resp
             type: "member_upsert",
             slug,
             payload: await readJson(request),
-          }),
+          })
         );
         return true;
       }

@@ -223,7 +223,7 @@ export function WorkspaceDiffTabs({
               {onOpenSideChat ? (
                 <button type="button" role="menuitem" onClick={onOpenSideChat}>
                   <MessageSquare size={14} />
-                  <span>New chat</span>
+                  <span>New task</span>
                   <kbd />
                 </button>
               ) : null}

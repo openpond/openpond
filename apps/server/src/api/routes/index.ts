@@ -10,6 +10,7 @@ import { handleSandboxRoutes } from "./sandbox-routes.js";
 import { handleSessionRoutes } from "./session-routes.js";
 import { handleSettingsRoutes } from "./settings-routes.js";
 import { handleUsageRoutes } from "./usage-routes.js";
+import { handleTeamChatRoutes } from "./team-chat-routes.js";
 import { handleWorkspaceRoutes } from "./workspace-routes.js";
 
 export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
@@ -22,6 +23,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "organizations", handle: handleOrganizationRoutes },
   { id: "sandbox", handle: handleSandboxRoutes },
   { id: "projects-cloud", handle: handleProjectCloudRoutes },
+  { id: "team-chat", handle: handleTeamChatRoutes },
   { id: "settings-providers", handle: handleSettingsRoutes },
   { id: "workspace", handle: handleWorkspaceRoutes },
   { id: "sessions", handle: handleSessionRoutes },

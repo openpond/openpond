@@ -10,7 +10,7 @@ import {
   WorkspaceKindSchema,
 } from "./settings.js";
 import { ChatModelRefSchema } from "./providers.js";
-import { SubagentRoleIdSchema } from "./subagents.js";
+import { SubagentDelegationModeSchema, SubagentRoleIdSchema } from "./subagents.js";
 
 export const SessionSchema = z.object({
   id: z.string(),
@@ -24,6 +24,7 @@ export const SessionSchema = z.object({
   parentGoalId: z.string().nullable().optional(),
   subagentRunId: z.string().nullable().optional(),
   subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
+  subagentDelegationMode: SubagentDelegationModeSchema.nullable().optional(),
   title: z.string(),
   appId: z.string().nullable(),
   appName: z.string().nullable(),

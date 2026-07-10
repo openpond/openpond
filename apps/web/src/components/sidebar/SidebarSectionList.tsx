@@ -1,5 +1,5 @@
-import type { Session } from "@openpond/contracts";
-import { useState } from "react";
+import type { Session, TeamChatMember, TeamChatThread } from "@openpond/contracts";
+import { useEffect, useState } from "react";
 import {
   Cloud,
   Eye,
@@ -37,26 +37,18 @@ export function sidebarProjectClickAction(input: {
   selectedSessionId: string | null;
   view: AppView;
 }): SidebarProjectClickAction {
-  return input.view === "chat" && !input.selectedSessionId
-    ? "select_draft_project"
-    : "toggle_project";
+  return input.view === "chat" && !input.selectedSessionId ? "select_draft_project" : "toggle_project";
 }
 
 export function nextSidebarChatVisibleCount(currentCount: number, totalCount: number): number {
-  return Math.min(
-    Math.max(currentCount, SIDEBAR_SECTION_LIMIT) + SIDEBAR_CHAT_PAGE_SIZE,
-    totalCount,
-  );
+  return Math.min(Math.max(currentCount, SIDEBAR_SECTION_LIMIT) + SIDEBAR_CHAT_PAGE_SIZE, totalCount);
 }
 
 export function previousSidebarChatVisibleCount(currentCount: number, totalCount: number): number {
   const boundedCount = Math.max(SIDEBAR_SECTION_LIMIT, Math.min(currentCount, totalCount));
   if (boundedCount <= SIDEBAR_SECTION_LIMIT) return SIDEBAR_SECTION_LIMIT;
   const pageCount = Math.ceil((boundedCount - SIDEBAR_SECTION_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE);
-  return Math.max(
-    SIDEBAR_SECTION_LIMIT,
-    SIDEBAR_SECTION_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE,
-  );
+  return Math.max(SIDEBAR_SECTION_LIMIT, SIDEBAR_SECTION_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE);
 }
 
 export function SidebarSectionList({
@@ -101,7 +93,14 @@ export function SidebarSectionList({
   subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
   sectionMenuOpen,
   selectCloudWorkItem,
+  selectTeamThread,
+  openTeamDm,
   selectedCloudWorkItemId,
+  selectedTeamThreadId,
+  teamChatEnabled,
+  currentUserId,
+  teamMembers = [],
+  teamThreads = [],
   selectedProjectId,
   selectedSessionId,
   sidebarProjectIdBySessionId,
@@ -132,8 +131,31 @@ export function SidebarSectionList({
   const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<Record<string, number>>({});
   const [expandedCloudProjectWorkItemIds, setExpandedCloudProjectWorkItemIds] = useState<Set<string>>(() => new Set());
   const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] = useState<Set<string>>(() => new Set());
-  const projectsSectionRows =
-    projectRows ?? [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
+  const activeChildSessionExpansionKey = JSON.stringify(
+    Object.entries(childSessionRowsByParentId)
+      .filter(
+        ([parentSessionId, childSessions]) =>
+          childSessions.length > 0 && (subagentRuntimeBySessionId.get(parentSessionId)?.activeCount ?? 0) > 0
+      )
+      .flatMap(([parentSessionId, childSessions]) =>
+        childSessions.map((childSession) => [parentSessionId, childSession.id] as const)
+      )
+      .sort(
+        ([leftParent, leftChild], [rightParent, rightChild]) =>
+          leftParent.localeCompare(rightParent) || leftChild.localeCompare(rightChild)
+      )
+  );
+
+  useEffect(() => {
+    const activeChildren = JSON.parse(activeChildSessionExpansionKey) as Array<[string, string]>;
+    if (activeChildren.length === 0) return;
+    const parentSessionIds = new Set(activeChildren.map(([parentSessionId]) => parentSessionId));
+    setExpandedChildSessionParentIds((current) => {
+      if ([...parentSessionIds].every((parentSessionId) => current.has(parentSessionId))) return current;
+      return new Set([...current, ...parentSessionIds]);
+    });
+  }, [activeChildSessionExpansionKey]);
+  const projectsSectionRows = projectRows ?? [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
 
   function showMoreProjectChats(projectId: string, totalCount: number) {
     setProjectChatVisibleCounts((current) => {
@@ -205,6 +227,14 @@ export function SidebarSectionList({
     setSelectedAppId(projectId ? null : session.appId);
     setSelectedProjectId(projectId);
     setView("chat");
+  }
+
+  const generalThread = teamThreads.find((thread) => thread.kind === "general") ?? null;
+  const dmThreadByUserId = new Map<string, TeamChatThread>();
+  for (const thread of teamThreads) {
+    if (thread.kind !== "dm") continue;
+    const other = thread.participants.find((participant) => participant.userId !== currentUserId);
+    if (other) dmThreadByUserId.set(other.userId, thread);
   }
 
   function childSessionsFor(session: Session): Session[] {
@@ -358,9 +388,7 @@ export function SidebarSectionList({
   function renderChildSessionRows(parentSession: Session, options: { nested?: boolean } = {}) {
     const childSessions = childSessionsFor(parentSession);
     if (childSessions.length === 0 || !childSessionsExpanded(parentSession, childSessions)) return null;
-    const groupClassName = ["sidebar-child-session-group", options.nested ? "nested" : ""]
-      .filter(Boolean)
-      .join(" ");
+    const groupClassName = ["sidebar-child-session-group", options.nested ? "nested" : ""].filter(Boolean).join(" ");
 
     return (
       <div className={groupClassName}>
@@ -388,6 +416,35 @@ export function SidebarSectionList({
 
   return (
     <div className="sidebar-scroll">
+      {teamChatEnabled ? (
+        <SidebarSection label="Team">
+          {generalThread ? (
+            <TeamSidebarRow
+              label="# general"
+              selected={view === "team" && selectedTeamThreadId === generalThread.id}
+              unreadCount={generalThread.unreadCount}
+              onSelect={() => selectTeamThread(generalThread.id)}
+            />
+          ) : null}
+          {teamMembers
+            .filter((member) => member.userId !== currentUserId)
+            .map((member) => {
+              const thread = dmThreadByUserId.get(member.userId) ?? null;
+              return (
+                <TeamSidebarRow
+                  key={member.userId}
+                  member={member}
+                  label={member.name}
+                  selected={view === "team" && selectedTeamThreadId === thread?.id}
+                  unreadCount={thread?.unreadCount ?? 0}
+                  onSelect={() => openTeamDm(member.userId)}
+                />
+              );
+            })}
+          {!generalThread && teamMembers.length === 0 ? <div className="empty-row">No team selected</div> : null}
+        </SidebarSection>
+      ) : null}
+
       <SidebarSection label="Pinned" collapsed={pinnedCollapsed} onToggleCollapsed={onTogglePinnedCollapsed}>
         {pinnedRows.map((row) => {
           const isDraggedRow = dragItem?.type === row.type && dragItem.id === row.id;
@@ -411,7 +468,11 @@ export function SidebarSectionList({
                   onMoveToCloud={row.item.kind === "local" ? () => moveProjectToCloud(row.item) : undefined}
                   onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(row.item.id, target)}
                   onTogglePin={() => toggleProjectPinned(row.item)}
-                  onToggleSystemVisibility={row.item.kind === "local" && row.item.project.systemKind ? () => toggleSystemProjectVisibility(row.item) : undefined}
+                  onToggleSystemVisibility={
+                    row.item.kind === "local" && row.item.project.systemKind
+                      ? () => toggleSystemProjectVisibility(row.item)
+                      : undefined
+                  }
                   onRemove={() => removeProject(row.item)}
                   onDragStart={(event) => startPinnedDrag(event, { type: "project", id: row.id })}
                   onDragEnd={clearSidebarDrag}
@@ -585,7 +646,9 @@ export function SidebarSectionList({
                     }}
                   >
                     {insightsSystemProjectHidden === false ? <EyeOff size={13} /> : <Eye size={13} />}
-                    <span>{insightsSystemProjectHidden === false ? "Hide Insights folder" : "Show Insights folder"}</span>
+                    <span>
+                      {insightsSystemProjectHidden === false ? "Hide Insights folder" : "Show Insights folder"}
+                    </span>
                   </button>
                 </div>
               )}
@@ -611,7 +674,9 @@ export function SidebarSectionList({
               onMoveToCloud={item.kind === "local" ? () => moveProjectToCloud(item) : undefined}
               onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(item.id, target)}
               onTogglePin={() => toggleProjectPinned(item)}
-              onToggleSystemVisibility={item.kind === "local" && item.project.systemKind ? () => toggleSystemProjectVisibility(item) : undefined}
+              onToggleSystemVisibility={
+                item.kind === "local" && item.project.systemKind ? () => toggleSystemProjectVisibility(item) : undefined
+              }
               onRemove={() => removeProject(item)}
             />
             {renderProjectChildren(item)}
@@ -656,7 +721,12 @@ export function SidebarSectionList({
             >
               <ListFilter size={14} />
             </button>
-            <button className="section-icon" data-tooltip="New chat" aria-label="New chat" onClick={() => beginNewChat(null)}>
+            <button
+              className="section-icon"
+              data-tooltip="New task"
+              aria-label="New task"
+              onClick={() => beginNewChat(null)}
+            >
               <SquarePen size={14} />
             </button>
           </>
@@ -717,15 +787,47 @@ export function SidebarSectionList({
             className="sidebar-pagination-controls"
             aria-label={`Showing ${visibleChatRows.length} of ${chatRows.length} chats`}
           >
-            {canShowMoreChats ? (
-              <SidebarShowMoreButton onClick={showMoreChats}>Show more</SidebarShowMoreButton>
-            ) : null}
-            {canShowLessChats ? (
-              <SidebarShowMoreButton onClick={showLessChats}>Show less</SidebarShowMoreButton>
-            ) : null}
+            {canShowMoreChats ? <SidebarShowMoreButton onClick={showMoreChats}>Show more</SidebarShowMoreButton> : null}
+            {canShowLessChats ? <SidebarShowMoreButton onClick={showLessChats}>Show less</SidebarShowMoreButton> : null}
           </div>
         )}
       </SidebarSection>
     </div>
   );
+}
+
+function TeamSidebarRow({
+  label,
+  member,
+  selected,
+  unreadCount,
+  onSelect,
+}: {
+  label: string;
+  member?: TeamChatMember;
+  selected: boolean;
+  unreadCount: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button type="button" className={`team-sidebar-row${selected ? " selected" : ""}`} onClick={onSelect}>
+      {member ? <TeamSidebarAvatar member={member} /> : <span className="team-sidebar-channel">#</span>}
+      <span className="team-sidebar-label">{label}</span>
+      {unreadCount > 0 ? (
+        <span className="team-sidebar-unread" aria-label={`${unreadCount} unread`}>
+          {unreadCount > 99 ? "99+" : unreadCount}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function TeamSidebarAvatar({ member }: { member: TeamChatMember }) {
+  if (member.image) return <img className="team-sidebar-avatar" src={member.image} alt="" />;
+  const initials = member.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return <span className="team-sidebar-avatar fallback">{initials || "?"}</span>;
 }

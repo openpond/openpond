@@ -8,17 +8,18 @@ export type OpenPondOrganization = {
   name: string;
   displayName: string;
   role: OpenPondOrganizationRole;
+  workspaceKind?: "personal" | "shared";
   status: OpenPondOrganizationStatus;
+  kind?: "personal_default" | "managed_client" | "team";
+  isPersonalDefault?: boolean;
+  isManagedClient?: boolean;
   primaryContactEmail: string | null;
   customDomain: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export type OpenPondOrganizationMcpServerStatus =
-  | "active"
-  | "disabled"
-  | "rotating";
+export type OpenPondOrganizationMcpServerStatus = "active" | "disabled" | "rotating";
 
 export type OpenPondOrganizationMcpServer = {
   id: string;
@@ -42,6 +43,25 @@ export type OpenPondOrganizationMember = {
   name: string | null;
   role: OpenPondOrganizationRole;
   createdAt: string;
+};
+
+export type OpenPondTeamInvitation = {
+  id: string;
+  teamId: string;
+  email: string;
+  role: "admin" | "member";
+  status: "pending" | "accepted" | "declined" | "revoked" | "expired";
+  invitedByUserId: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type OpenPondTeamInvitationsResponse = {
+  invitations: OpenPondTeamInvitation[];
+};
+
+export type OpenPondTeamInvitationResponse = {
+  invitation: OpenPondTeamInvitation;
 };
 
 export type OpenPondOrganizationsResponse = {
@@ -85,24 +105,18 @@ export type UpsertOpenPondOrganizationMemberRequest = {
   role: OpenPondOrganizationRole;
 };
 
-export function openPondOrganizationRoleLabel(
-  role: OpenPondOrganizationRole | null | undefined,
-): string {
+export function openPondOrganizationRoleLabel(role: OpenPondOrganizationRole | null | undefined): string {
   if (role === "owner") return "Owner";
   if (role === "admin") return "Admin";
   if (role === "member") return "Member";
   return "Member";
 }
 
-export function openPondOrganizationContextLabel(
-  organization: OpenPondOrganization | null | undefined,
-): string | null {
+export function openPondOrganizationContextLabel(organization: OpenPondOrganization | null | undefined): string | null {
   if (!organization) return null;
   return `${organization.displayName} · ${openPondOrganizationRoleLabel(organization.role)}`;
 }
 
-export function canManageOpenPondOrganization(
-  organization: OpenPondOrganization | null | undefined,
-): boolean {
+export function canManageOpenPondOrganization(organization: OpenPondOrganization | null | undefined): boolean {
   return organization?.role === "owner" || organization?.role === "admin";
 }

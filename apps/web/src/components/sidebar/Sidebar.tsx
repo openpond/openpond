@@ -51,6 +51,10 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
+      <div className="sidebar-wordmark-row">
+        <img className="sidebar-wordmark" src="/openpond-wordlogo-white.png" alt="OpenPond" />
+      </div>
+
       <SidebarNavigation
         beginNewChat={beginNewChat}
         setSectionMenuOpen={setSectionMenuOpen}

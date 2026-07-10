@@ -96,6 +96,8 @@ import {
   createScriptedOpenPondChatStream,
   scriptedOpenPondModelsEnabled,
 } from "./openpond/scripted-chat-provider.js";
+import { createTeamChatAiExecutionService } from "./openpond/team-chat-executor.js";
+import { teamChatRequestPayload } from "./openpond/team-chat-client.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
@@ -357,6 +359,10 @@ export async function createOpenPondServer(
       }),
     };
   }
+  const teamChatAiExecutions = createTeamChatAiExecutionService({
+    loadProviderRuntime: localByokRuntimeState,
+    version,
+  });
 
   const {
     resolveApproval: resolveCodexApproval,
@@ -1107,6 +1113,9 @@ export async function createOpenPondServer(
       applyCloudWorkItemLocalPatchPayload,
       organizationPayload: organizationRequestPayload,
       sandboxPayload: sandboxRequestPayload,
+      teamChatPayload: teamChatRequestPayload,
+      executeTeamChatAiTurn: teamChatAiExecutions.execute,
+      cancelTeamChatAiTurnExecution: teamChatAiExecutions.cancel,
       gitAvailabilityPayload,
       startGitInstallPayload,
       remoteAccessPayload: remoteAccess.status,

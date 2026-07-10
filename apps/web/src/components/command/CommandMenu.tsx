@@ -80,7 +80,7 @@ export function CommandMenu({
         <div className="command-results">
           <button className="command-result command-create" onClick={onNewChat}>
             <SquarePen size={15} />
-            <span>New local chat</span>
+            <span>New local task</span>
             <small>General</small>
           </button>
           <CommandResultGroup label="Projects">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   ChevronDown,
   CircleAlert,
@@ -27,6 +27,8 @@ import { ImageLightbox } from "../common/ImageLightbox";
 
 const COMMAND_OUTPUT_VISIBLE_LINES = 5;
 const MAX_SUMMARY_SUBAGENT_AVATARS = 4;
+const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
+const SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS = 280;
 
 type SubagentOpenSession = NonNullable<ActivityItem["openSession"]>;
 
@@ -51,13 +53,21 @@ export function ActivityGroup({
   const summaryOpenSessions = subagentOpenSessions(activities);
   const childMessageSummary = activities.length > 0 && activities.every((activity) => activity.subagentMessage);
 
+  if (childMessageSummary) {
+    return (
+      <SubagentMessageActivityGroup
+        activities={activities}
+      />
+    );
+  }
+
   return (
     <article className="activity-group">
       <div className="activity-summary-row">
         <button
           type="button"
           aria-expanded={expanded}
-          className={`activity-summary ${danger ? "danger" : ""} ${childMessageSummary ? "child-message-summary" : ""}`}
+          className={`activity-summary ${danger ? "danger" : ""}`}
           onClick={() => setExpanded((current) => !current)}
         >
           {summaryImage ? (
@@ -118,7 +128,6 @@ function ActivityDetailRow({
     return (
       <SubagentMessageDetailRow
         activity={activity}
-        onOpenSession={onOpenSession}
       />
     );
   }
@@ -171,21 +180,45 @@ function ActivityDetailRow({
 
 function SubagentMessageDetailRow({
   activity,
-  onOpenSession,
 }: {
   activity: ActivityItem;
-  onOpenSession?: (sessionId: string) => void;
 }) {
+  const [bodyExpanded, setBodyExpanded] = useState(false);
   const message = activity.subagentMessage;
   if (!message) return null;
-  const title = message.direction === "received" ? "Child message received" : "Child message sent";
+  const roleLabel = `${subagentRoleLabel(message.roleId ?? activity.openSession?.roleId)} subagent`;
+  const baseTitle = message.direction === "received" ? `${roleLabel} update` : `Message to ${roleLabel.toLowerCase()}`;
+  const title = message.modelRef?.modelId ? `${baseTitle} · ${message.modelRef.modelId}` : baseTitle;
   const facts = subagentMessageFacts(message);
+  const collapsible = subagentMessageNeedsCollapse(message.body);
   return (
-    <div className={`activity-detail-row child-message ${message.direction}`} key={activity.id}>
-      <span>{title}</span>
-      <div className="activity-detail-main">
-        <div className="activity-child-message-card">
-          <p>{message.body}</p>
+    <div className={`activity-child-message ${message.direction}`} key={activity.id}>
+      <div className="activity-child-message-card">
+        <div className="activity-child-message-header">
+          <span className="activity-child-message-title">
+            <Bot aria-hidden size={14} />
+            <strong title={title}>{title}</strong>
+          </span>
+          <small>{message.kind.replace(/_/g, " ")}</small>
+        </div>
+        <p
+          className={collapsible && !bodyExpanded ? "collapsed" : undefined}
+          style={{ "--subagent-message-visible-lines": SUBAGENT_MESSAGE_VISIBLE_LINES } as CSSProperties}
+        >
+          {message.body}
+        </p>
+        {collapsible ? (
+          <button
+            type="button"
+            className="activity-child-message-toggle"
+            aria-expanded={bodyExpanded}
+            onClick={() => setBodyExpanded((current) => !current)}
+          >
+            {bodyExpanded ? "Show less" : "Show more"}
+          </button>
+        ) : null}
+        <details className="activity-child-message-details">
+          <summary>Message details</summary>
           <div className="activity-child-message-facts" aria-label="Child message metadata">
             {facts.map((fact) => (
               <span key={fact.label}>
@@ -194,28 +227,36 @@ function SubagentMessageDetailRow({
               </span>
             ))}
           </div>
-          {message.refs?.length ? (
-            <div className="activity-child-message-refs" aria-label="Child message references">
-              {message.refs.map((ref) => (
-                <span key={`${ref.kind}:${ref.id}`}>
-                  {ref.kind}:{ref.id} ({ref.label})
-                </span>
-              ))}
-            </div>
-          ) : null}
-          {activity.openSession && onOpenSession ? (
-            <div className="activity-child-message-actions">
-              <SubagentAvatarButton
-                className="activity-subagent-detail-avatar"
-                openSession={activity.openSession}
-                onOpenSession={onOpenSession}
-              />
-              <span>Open child conversation</span>
-            </div>
-          ) : null}
-        </div>
+        </details>
+        {message.refs?.length ? (
+          <div className="activity-child-message-refs" aria-label="Child message references">
+            {message.refs.map((ref) => (
+              <span key={`${ref.kind}:${ref.id}`}>
+                {ref.kind}:{ref.id} ({ref.label})
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function SubagentMessageActivityGroup({
+  activities,
+}: {
+  activities: ActivityItem[];
+}) {
+  const direction = activities[0]?.subagentMessage?.direction ?? "received";
+  return (
+    <article className={`activity-child-message-group ${direction}`}>
+      {activities.map((activity) => (
+        <SubagentMessageDetailRow
+          activity={activity}
+          key={activity.id}
+        />
+      ))}
+    </article>
   );
 }
 
@@ -225,6 +266,9 @@ function subagentMessageFacts(message: NonNullable<ActivityItem["subagentMessage
     { label: "Kind", value: message.kind },
     { label: "From", value: message.fromRunId },
     message.roleId ? { label: "Role", value: message.roleId } : null,
+    message.modelRef
+      ? { label: "Model", value: `${message.modelRef.providerId}/${message.modelRef.modelId}` }
+      : null,
     message.childSessionId ? { label: "Child", value: message.childSessionId } : null,
     message.parentGoalId ? { label: "Goal", value: message.parentGoalId } : null,
     message.toRunId ? { label: "To run", value: message.toRunId } : null,
@@ -233,6 +277,10 @@ function subagentMessageFacts(message: NonNullable<ActivityItem["subagentMessage
     message.wakeReason ? { label: "Wake", value: message.wakeReason } : null,
     message.createdAt ? { label: "Created", value: message.createdAt } : null,
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
+}
+
+export function subagentMessageNeedsCollapse(body: string): boolean {
+  return body.length > SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS || body.split(/\r?\n/).length > SUBAGENT_MESSAGE_VISIBLE_LINES;
 }
 
 function ActivitySummaryText({ summary }: { summary: string }) {

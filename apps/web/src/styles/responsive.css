@@ -55,6 +55,10 @@
     display: none;
   }
 
+  .main-pane.team-active.diff-open > .team-ai-thread-panel {
+    display: grid;
+  }
+
   .main-pane.diff-expanded .workspace-diff-panel {
     display: grid;
   }

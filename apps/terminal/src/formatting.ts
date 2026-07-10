@@ -135,7 +135,10 @@ export function modelOptionsForProvider(
   }
   if (provider === "codex") {
     return [
-      { id: DEFAULT_CODEX_CHAT_MODEL, label: "GPT-5.5", description: "default Codex model" },
+      { id: DEFAULT_CODEX_CHAT_MODEL, label: "GPT-5.6 Sol", description: "default Codex model" },
+      { id: "gpt-5.6-terra", label: "GPT-5.6 Terra", description: "Codex model" },
+      { id: "gpt-5.6-luna", label: "GPT-5.6 Luna", description: "Codex model" },
+      { id: "gpt-5.5", label: "GPT-5.5", description: "Codex model" },
       { id: "gpt-5.4", label: "GPT-5.4", description: "Codex model" },
       { id: "gpt-5.4-mini", label: "GPT-5.4 Mini", description: "Codex model" },
       { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", description: "Codex model" },

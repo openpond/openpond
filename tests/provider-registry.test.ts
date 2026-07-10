@@ -185,6 +185,122 @@ describe("local BYOK provider registry", () => {
     expect(settings.statuses.openpond).toBeDefined();
   });
 
+  test("enriches stale hosted OpenAI catalog with the current GPT-5.6 family", () => {
+    const catalog = ProviderCatalogSchema.parse({
+      version: 1,
+      generatedAt: "2026-07-09T10:00:00.000Z",
+      providers: [
+        {
+          id: "openai",
+          displayName: "Hosted OpenAI",
+          lifecycleStatus: "active",
+          credentialModes: ["chatgpt-subscription", "local-byok"],
+          routing: {
+            hostedOpChat: false,
+            localRuntime: true,
+            localByok: true,
+            hostedByok: false,
+          },
+          capabilities: {
+            chatCompletions: true,
+            streaming: true,
+            modelDiscovery: "provider",
+            toolCalling: true,
+            reasoning: true,
+            imageInput: true,
+            structuredOutput: true,
+          },
+          defaultBaseUrl: "https://api.openai.com/v1",
+          defaultModel: "gpt-5.5",
+          modelCacheSource: "curated",
+          models: [
+            {
+              id: "gpt-5.5",
+              displayName: "GPT-5.5",
+              capabilities: { streaming: true, reasoning: true },
+            },
+          ],
+        },
+      ],
+    });
+
+    const settings = buildProviderSettings({ file: emptyProvidersFile(), catalog });
+    const openAiModelIds = settings.modelCaches.openai?.models.map((model) => model.id);
+
+    expect(settings.providers.openai?.defaultModel).toBe("gpt-5.6-sol");
+    expect(openAiModelIds?.slice(0, 3)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
+    expect(openAiModelIds).toContain("gpt-5.5");
+  });
+
+  test("migrates persisted OpenAI and Codex GPT-5.5 defaults to GPT-5.6 Sol", () => {
+    const settings = buildProviderSettings({
+      file: {
+        version: 1,
+        providers: {
+          openai: ProviderConfigSchema.parse({ enabled: true, defaultModel: "gpt-5.5" }),
+          codex: ProviderConfigSchema.parse({ enabled: true, defaultModel: "gpt-5.5" }),
+        },
+        modelCaches: {
+          openai: {
+            providerId: "openai",
+            models: [
+              {
+                id: "gpt-5.5",
+                providerId: "openai",
+                displayName: "GPT-5.5",
+                contextWindow: null,
+                outputLimit: null,
+                lifecycleStatus: "active",
+                source: "curated",
+                capabilities: {},
+              },
+            ],
+            fetchedAt: "2026-07-08T10:00:00.000Z",
+            lastError: null,
+            source: "curated",
+          },
+          codex: {
+            providerId: "codex",
+            models: [
+              {
+                id: "gpt-5.5",
+                providerId: "codex",
+                displayName: "GPT-5.5",
+                contextWindow: null,
+                outputLimit: null,
+                lifecycleStatus: "active",
+                source: "curated",
+                capabilities: {},
+              },
+            ],
+            fetchedAt: "2026-07-08T10:00:00.000Z",
+            lastError: null,
+            source: "curated",
+          },
+        },
+      },
+    });
+
+    expect(settings.providers.openai?.defaultModel).toBe("gpt-5.6-sol");
+    expect(settings.providers.codex?.defaultModel).toBe("gpt-5.6-sol");
+    expect(settings.modelCaches.openai?.models.map((model) => model.id).slice(0, 3)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
+    expect(settings.modelCaches.codex?.models.map((model) => model.id).slice(0, 3)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
+    expect(settings.modelCaches.openai?.models.map((model) => model.id)).toContain("gpt-5.5");
+    expect(settings.modelCaches.codex?.models.map((model) => model.id)).toContain("gpt-5.5");
+  });
+
   test("preserves hosted catalog cache in the local providers file", () => {
     const catalog = ProviderCatalogSchema.parse({
       version: 1,

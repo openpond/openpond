@@ -44,6 +44,8 @@ The recommendation is not to add subagents as a new concept. The next improvemen
 - A reviewer model is optional and boundary-based. It is useful for high-risk diffs, broad edits, ambiguous validation, low confidence, or explicit independent-review requests, not for every child tool turn.
 - Independent-review routing should become structured subagent review metadata, not goal state. Goals can project the count/status, but the source of truth belongs to the child run's review packet.
 - Keep copy-on-write as the default for background coding subagents as long as dependency hydration, patch handoff, and cleanup/archive remain reliable.
+- Treat delegation appetite as parent-thread policy, not goal or child-run state. Use `manual`, `balanced`, and `proactive` modes with a global default and nullable per-session override.
+- Inject the resolved delegation mode only into the parent system context. Child workers receive their bounded worker context, not the parent's delegation policy.
 - Use stronger models where the marginal value is highest: parent supervision/synthesis and boundary review first; specialist worker roles can opt into stronger models through role `modelRef` when the task risk or budget justifies it. Do not force every subagent onto the strongest model by default.
 
 ## Failure modes this spec must prevent
@@ -547,6 +549,20 @@ Use the verifiable desktop harness as the primary end-to-end product test path f
 - [x] Desktop harness scenario: bounded coding worker receives a structured brief, edits only the copy-on-write child worktree, validates with a real command, and submits for review without self-accepting. Done: `tests/desktop-scenarios/subagent-bounded-worker-contract.ts` asserts the coding role, `copy_on_write` isolation, persisted worker brief, repeated-search ledger evidence, passed validation command, durable workspace handoff patch, child proof file presence, parent checkout absence, and submitted-for-review state.
 - [x] Run typecheck, focused unit tests, and relevant desktop harness scenarios. Done: `bun run typecheck`, focused queue/lifecycle/chat/scripted tests, focused new desktop scenarios, and the full 12-scenario `bun run test:desktop:subagents` suite pass for this slice.
 
+### Phase 10: Parent delegation policy
+
+This phase controls how readily the parent orchestrator uses the existing subagent tools. It does not add goals, change worker budgets, or make children self-orchestrating.
+
+- [x] Add a typed `manual | balanced | proactive` delegation mode with `balanced` as the global default.
+- [x] Persist a nullable per-session override and resolve it as session override -> global default.
+- [x] Add an icon menu beside voice input with `Use default`, `Manual`, `Balanced`, and `Proactive` choices; carry pre-send choices into newly created sessions.
+- [x] Keep the selector off child, Codex-history, team-chat, and globally disabled subagent surfaces.
+- [x] Inject a short parent-only system instruction that changes delegation threshold while preserving parent planning, coordination, and synthesis.
+- [x] Keep explicit user delegation requests higher priority than the selected default behavior.
+- [x] Record the resolved mode and source on turn metadata for diagnostics.
+- [x] Add the global default control to Subagents Settings.
+- [x] Verify contract defaults, session persistence, parent-only prompt injection, focused runtime behavior, typecheck, and production web build. Done: focused preferences/session/runner tests pass, child prompt coverage rejects parent policy leakage, and the composer uses a neutral `SUB` trigger with the mode menu beside voice input.
+
 ## Cleanup priorities
 
 ### 1. Stale and orphaned run handling
@@ -713,6 +729,7 @@ Each scenario should record runtime events, bootstrap/session evidence, visible 
 
 ## Validation
 
+- Delegation-policy evidence: 2026-07-09 pass added typed global and per-session delegation modes, new-session carryover plus existing-session PATCH persistence, parent-only system context injection, turn metadata diagnostics, Subagents Settings default selection, and the composer `SUB` menu. Passed `bun test tests/app-preferences.test.ts tests/session-store.test.ts tests/turn-runner-subagents.test.ts` (63 tests, 436 expects), `bun run typecheck`, `bun run build:contracts`, `bun run build:web`, and `git diff --check`.
 - Current evidence: 2026-07-09 implementation pass updated the subagent contracts, native tool registry, runtime launch/finalization/review handling, structured packet-quality facts/evidence, explicit dismissal for blocked/failed/cancelled children, explicit parent/reviewer review decisions with child correction delivery, boundary review wake prompt packets, web runtime projection/activity labels and required lifecycle buckets, compact child final result summaries with retained-workspace expiry display, Subagents Settings copy, runtime-derived progress ledger derivation, repeated-exploration steering with role-configured thresholds, command exit-status preservation, copy-on-write dependency links, durable patch handoff artifacts, patch approval accept/decline/cancel/conflict retention behavior with 7-day retained-workspace metadata, automatic expired-retained-workspace cleanup through the lifecycle watcher and runner `retention_expired` policy, provider-failure handoff metadata, cleanup/archive/supersede/dismiss events, goal lifecycle coupling, child-session archive receipts, exposed `SubagentRun.updatedAt`, active/stale/scope store helpers, watcher diagnostics, dynamic watcher arming/disarming, optional stale attention, optional stale auto-cancel, orphan auto-cancel, scope-first watcher querying, required lifecycle wake policy, deterministic scripted lifecycle desktop models including parent review/revision and bounded-worker copy-on-write proofs, stable argument-derived scripted native tool-call ids, and a dedicated `subagent-lifecycle` queue so watcher ticks are not starved behind child execution.
 - Retained-workspace expiry warning evidence: 2026-07-09 pass added the typed `subagent.workspace_retention_expiring` event, watcher-side 24-hour pre-cleanup warning emission, persisted warning metadata that does not bump `subagent_runs.updated_at`, warning-only diagnostics with `wakePolicy: "not_waking_parent_for_retained_workspace_expiry_warning"`, and retained-workspace warning scheduling that can replace a later cleanup timer with an earlier warning timer.
 - Evidence retention evidence: 2026-07-09 pass added `SubagentEvidenceRetentionPolicySchema` and `SubagentRun.evidenceRetention` defaulting to indefinite parent-retained child messages and non-workspace artifact refs; cleanup/archive lifecycle records and child-session archive metadata now carry that policy separately from temporary workspace retention.

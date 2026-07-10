@@ -1,7 +1,22 @@
 import type { Dispatch, DragEvent, PointerEvent, SetStateAction } from "react";
-import type { AccountState, BootstrapPayload, CloudWorkItem, OpenPondApp, Session, WorkspaceState } from "@openpond/contracts";
+import type {
+  AccountState,
+  BootstrapPayload,
+  CloudWorkItem,
+  OpenPondApp,
+  Session,
+  TeamChatMember,
+  TeamChatThread,
+  WorkspaceState,
+} from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
-import type { AppView, PinnedSidebarItem, SettingsSection, SidebarDragItem, SidebarProjectItem } from "../../lib/app-models";
+import type {
+  AppView,
+  PinnedSidebarItem,
+  SettingsSection,
+  SidebarDragItem,
+  SidebarProjectItem,
+} from "../../lib/app-models";
 import type { TerminalScopeSummary } from "../terminal/terminal-state";
 import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
@@ -13,6 +28,11 @@ export type SidebarProps = {
   selectedProjectId: string | null;
   selectedSessionId: string | null;
   selectedCloudWorkItemId: string | null;
+  selectedTeamThreadId: string | null;
+  teamChatEnabled: boolean;
+  currentUserId: string | null;
+  teamMembers: TeamChatMember[];
+  teamThreads: TeamChatThread[];
   account: AccountState | null;
   profile: BootstrapPayload["profile"] | null | undefined;
   pinnedCollapsed: boolean;
@@ -68,6 +88,8 @@ export type SidebarProps = {
   openCloudHome: () => void;
   createCloudEnvironment: () => void;
   selectCloudWorkItem: (workItem: CloudWorkItem) => void;
+  selectTeamThread: (threadId: string) => void;
+  openTeamDm: (userId: string) => void;
   addProjectFolder: () => void;
   startExistingProjectFromPath: () => void;
   startProjectFromScratch: () => void;

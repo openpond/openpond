@@ -12,7 +12,10 @@ import {
 } from "./AccountEndpointDialog";
 import type { SaveEnvironmentAccountInput } from "./useAccountSettings";
 import type { DropdownOption } from "../../lib/app-models";
-import { normalizeOpenPondOrganization } from "../../lib/cloud-project-utils";
+import {
+  normalizeOpenPondOrganization,
+  resolveDefaultOpenPondOrganization,
+} from "../../lib/cloud-project-utils";
 import {
   openPondOrganizationRoleLabel,
   type OpenPondOrganization,
@@ -128,7 +131,8 @@ export function AccountSettingsSection({
         : null,
     [activeOrganizations, visibleDefaultTeamId],
   );
-  const selectedDefaultOrganization = persistedDefaultOrganization ?? activeOrganizations[0] ?? null;
+  const selectedDefaultOrganization =
+    persistedDefaultOrganization ?? resolveDefaultOpenPondOrganization(activeOrganizations);
   const selectedDefaultTeamId = selectedDefaultOrganization?.teamId ?? "";
   const teamOptions = useMemo<DropdownOption[]>(
     () => {

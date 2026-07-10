@@ -69,6 +69,94 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("atomically enforces one nonterminal current goal per session", async () => {
+    await withStoreDir(async (storeDir) => {
+      const store = new SqliteStore(storeDir);
+      await store.snapshot();
+
+      const starts = await Promise.allSettled([
+        store.appendRuntimeEvent(threadGoalEvent("event-goal-1", "goal_1", "running")),
+        store.appendRuntimeEvent(threadGoalEvent("event-goal-2-rejected", "goal_2", "queued")),
+      ]);
+      expect(starts[0]?.status).toBe("fulfilled");
+      expect(starts[1]).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({ message: expect.stringContaining("goal_1 is already running") }),
+      });
+
+      await expect(
+        store.appendRuntimeEvent(threadGoalEvent("event-goal-1-paused", "goal_1", "paused")),
+      ).resolves.toBeUndefined();
+      await expect(
+        store.claimOpenPondThreadGoal({
+          sessionId: "session-goals",
+          goalId: "goal_2",
+          status: "queued",
+          updatedAt: "2026-07-01T10:00:02.000Z",
+        }),
+      ).rejects.toThrow("goal_1 is already paused");
+
+      await store.appendRuntimeEvent(threadGoalEvent("event-goal-1-completed", "goal_1", "completed"));
+      await expect(
+        store.appendRuntimeEvent(threadGoalEvent("event-goal-2", "goal_2", "running")),
+      ).resolves.toBeUndefined();
+      await store.appendRuntimeEvent(threadGoalEvent("event-goal-2-completed", "goal_2", "completed"));
+
+      await store.claimOpenPondThreadGoal({
+        sessionId: "session-goals",
+        goalId: "goal_3",
+        status: "queued",
+        updatedAt: "2026-07-01T10:00:05.000Z",
+      });
+      await store.releaseOpenPondThreadGoalClaim("session-goals", "goal_3");
+
+      const eventIds = (await store.snapshot()).events.map((event) => event.id);
+      expect(eventIds).toEqual([
+        "event-goal-1",
+        "event-goal-1-paused",
+        "event-goal-1-completed",
+        "event-goal-2",
+        "event-goal-2-completed",
+      ]);
+      await store.close();
+
+      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      try {
+        const rows = await all<OpenPondThreadGoalTestRow>(db, "SELECT * FROM openpond_thread_goals");
+        expect(rows).toEqual([]);
+      } finally {
+        await close(db);
+      }
+    });
+  });
+
+  test("backfills the current goal claim when migrating an existing event store", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initialStore = new SqliteStore(storeDir);
+      await initialStore.appendRuntimeEvent(threadGoalEvent("event-existing-goal", "goal_existing", "running"));
+      await initialStore.close();
+
+      const db = await openDatabase(storePath);
+      await run(db, "DROP TABLE openpond_thread_goals");
+      await run(db, "PRAGMA user_version = 9");
+      await close(db);
+
+      const migratedStore = new SqliteStore(storeDir);
+      await migratedStore.snapshot();
+      await expect(
+        migratedStore.claimOpenPondThreadGoal({
+          sessionId: "session-goals",
+          goalId: "goal_new",
+          status: "queued",
+          updatedAt: "2026-07-01T10:01:00.000Z",
+        }),
+      ).rejects.toThrow("goal_existing is already running");
+      await migratedStore.close();
+      expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+    });
+  });
+
   test("backs up an existing unversioned database before migrating", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");
@@ -475,6 +563,38 @@ function runtimeEvent(id: string, sessionId: string, turnId: string): RuntimeEve
     source: "provider",
     status: "running",
     output: id,
+  };
+}
+
+type OpenPondThreadGoalTestRow = {
+  session_id: string;
+  goal_id: string;
+  status: string;
+  provisional: number;
+  updated_at: string;
+};
+
+function threadGoalEvent(id: string, goalId: string, status: string): RuntimeEvent {
+  return {
+    id,
+    sessionId: "session-goals",
+    turnId: "turn-goals",
+    name: "diagnostic",
+    timestamp: "2026-07-01T10:00:00.000Z",
+    source: "provider",
+    status: "completed",
+    output: goalId,
+    data: {
+      kind: "thread_goal",
+      provider: "openpond",
+      goal: {
+        id: goalId,
+        provider: "openpond",
+        objective: `Objective for ${goalId}`,
+        status,
+        updatedAt: "2026-07-01T10:00:00.000Z",
+      },
+    },
   };
 }
 

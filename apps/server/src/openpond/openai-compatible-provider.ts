@@ -556,13 +556,13 @@ function subscriptionModelsFromSettings(
     ? cached
     : [
         ProviderModelSchema.parse({
-          id: "gpt-5.5",
+          id: "gpt-5.6-sol",
           providerId,
-          displayName: "GPT-5.5",
+          displayName: "GPT-5.6 Sol",
           contextWindow: 400000,
           outputLimit: 128000,
           source: "curated",
-          capabilities: capabilitiesForModelId("gpt-5.5"),
+          capabilities: capabilitiesForModelId("gpt-5.6-sol"),
         }),
       ];
 }

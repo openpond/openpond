@@ -113,6 +113,26 @@ describe("OpenPond resource read/search", () => {
     expect(result.items.some((item) => item.snippet?.includes("inline image"))).toBe(true);
   });
 
+  test("finds a workspace file when the query is its absolute path", async () => {
+    const repoPath = await tempWorkspace();
+    const relativePath =
+      "docs/working-docs/sandbox/2026-07-09-openpond-team-chat-dms-and-ai-invocation.md";
+    await mkdir(path.join(repoPath, path.dirname(relativePath)), { recursive: true });
+    await writeFile(path.join(repoPath, relativePath), "# Existing document\n");
+
+    const result = await searchLocalWorkspaceResources({
+      repoPath,
+      request: { scope: "workspace", query: path.join(repoPath, relativePath), limit: 10 },
+    });
+
+    expect(result.items).toContainEqual(
+      expect.objectContaining({
+        ref: `workspace:file:${relativePath}`,
+        metadata: expect.objectContaining({ matchKind: "path", searchMode: "exact" }),
+      }),
+    );
+  });
+
   test("marks workspace search results truncated only when more matches exist", async () => {
     const repoPath = await tempWorkspace();
     await mkdir(path.join(repoPath, "src"), { recursive: true });

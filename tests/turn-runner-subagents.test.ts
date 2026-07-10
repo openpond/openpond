@@ -6,6 +6,7 @@ import path from "node:path";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 import { createSubagentLifecycleWatcher } from "../apps/server/src/runtime/subagent-lifecycle-watcher";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
+import { latestSubagentRuntimeFromEvents } from "../apps/web/src/lib/subagent-runtime";
 import {
   AppPreferencesSchema,
   ModelUsageRecordSchema,
@@ -24,6 +25,61 @@ import {
 } from "../packages/contracts/src";
 
 describe("turn runner subagent native tools", () => {
+  test("injects the resolved delegation mode into parent turns and records its source", async () => {
+    const configuredPreferences = preferences();
+    configuredPreferences.subagents.delegationMode = "proactive";
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_status",
+      toolArgs: {},
+      preferences: configuredPreferences,
+      sessionOverrides: { subagentDelegationMode: "manual" },
+      disableDefaultToolCall: true,
+      textBySessionId: { session_1: ["Handled without delegation."] },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "Handle this directly",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.metadata.subagentDelegation).toEqual({
+      mode: "manual",
+      source: "session_override",
+    });
+    expect(JSON.stringify(harness.streamInputs[0])).toContain("Subagent delegation mode: manual.");
+    expect(JSON.stringify(harness.streamInputs[0])).toContain(
+      "Start subagents only when the user explicitly requests delegation.",
+    );
+  });
+
+  test("passes the enabled role catalog into the native subagent tool", async () => {
+    const configuredPreferences = preferences();
+    configuredPreferences.subagents.roles = configuredPreferences.subagents.roles.map((role) => ({
+      ...role,
+      enabled: role.id === "coding" || role.id === "review",
+    }));
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_status",
+      toolArgs: {},
+      preferences: configuredPreferences,
+      disableDefaultToolCall: true,
+      textBySessionId: { session_1: ["Role catalog inspected."] },
+    });
+
+    await harness.runner.sendTurn("session_1", {
+      prompt: "Inspect available child roles",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    const startTool = harness.streamInputs[0].tools.find(
+      (tool: any) => tool.function.name === "openpond_subagent_start",
+    );
+    expect(startTool.function.parameters.properties.roleId.enum).toEqual(["coding", "review"]);
+    expect(startTool.function.parameters.properties.roleId.description).toContain(
+      "coding: Make scoped code changes",
+    );
+  });
+
   test("prioritizes connected app instruction tools for prompt-only @x mentions", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
@@ -105,6 +161,16 @@ describe("turn runner subagent native tools", () => {
       subagentRoleId: "coding",
     });
     expect(harness.events.some((event) => event.name === "subagent.blocked" && event.sessionId === "session_1")).toBe(true);
+    const blockedReceipt = harness.events.find(
+      (event) => event.name === "subagent.blocked" && event.sessionId === "session_1",
+    );
+    expect((blockedReceipt?.data as any)?.childSession).toMatchObject({
+      id: childSession?.id,
+      parentSessionId: "session_1",
+      subagentRunId: harness.runs[0]?.id,
+      subagentRoleId: "coding",
+    });
+    expect((blockedReceipt?.data as any)?.childSession?.metadata).toBeUndefined();
     const completed = harness.events.find(
       (event) => event.name === "tool.completed" && event.action === "openpond_subagent_start",
     );
@@ -454,6 +520,7 @@ describe("turn runner subagent native tools", () => {
         "You are an OpenPond coding subagent running in an addressable child conversation.",
       );
       expect(JSON.stringify(childStreamInput)).toContain("Use openpond_subagent_send_message to message the parent");
+      expect(JSON.stringify(childStreamInput)).not.toContain("Subagent delegation mode:");
       expect(worktreePath).not.toBe(repoPath);
       expect(worktreePath).toContain("openpond-subagents");
       await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
@@ -3223,6 +3290,66 @@ describe("turn runner subagent native tools", () => {
     expect(completed?.output).toContain("Subagent role research token budget reached: 40/40 tokens used.");
   });
 
+  test("resolves same-turn goal control against fresh runtime events", async () => {
+    let startedGoalId: string | null = null;
+    const harness = createSubagentHarness({
+      toolName: "openpond_goal_control",
+      toolArgs: {},
+      preferences: preferences(),
+      disableDefaultToolCall: true,
+      toolCallForStream: async (_streamInput, context) => {
+        if (context.streamPass === 1) {
+          return {
+            name: "openpond_goal_control",
+            args: {
+              action: "start",
+              objective: "Fix the same-turn goal snapshot regression.",
+              reason: "Start the requested goal.",
+            },
+          };
+        }
+        if (context.streamPass === 2) {
+          const latestGoal = context.events.filter(
+            (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
+          ).at(-1);
+          startedGoalId = (latestGoal?.data as any)?.goal?.id ?? null;
+          if (!startedGoalId) throw new Error("Expected the first goal-control call to persist a thread goal.");
+          return {
+            name: "openpond_goal_control",
+            args: {
+              action: "complete",
+              targetGoalId: startedGoalId,
+              reason: "The same model turn completed the bounded goal.",
+            },
+          };
+        }
+        return null;
+      },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "Start and complete this bounded goal in one turn",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
+    expect(turn.status).toBe("completed");
+    const goalControls = harness.events.filter(
+      (event) => event.name === "tool.completed" && event.action === "openpond_goal_control",
+    );
+    expect(goalControls).toHaveLength(2);
+    expect(goalControls[0]).toMatchObject({ status: "completed" });
+    expect(goalControls[1]).toMatchObject({
+      status: "completed",
+      data: {
+        result: {
+          goalId: startedGoalId,
+          action: "complete",
+          status: "completed",
+        },
+      },
+    });
+  });
+
   test("marks active child runs as needs_resume when the parent goal resumes", async () => {
     const pausedGoal = activeGoalEvent();
     ((pausedGoal.data as any).goal as any).status = "paused";
@@ -4047,6 +4174,19 @@ describe("turn runner subagent native tools", () => {
         },
       },
     });
+    const threadGoalIds = harness.events
+      .filter((event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal")
+      .map((event) => (event.data as any)?.goal?.id);
+    expect([...new Set(threadGoalIds)]).toEqual(["goal_1"]);
+    expect(latestSubagentRuntimeFromEvents(harness.events, "session_1")).toMatchObject({
+      blockedCount: 0,
+      unresolvedCount: 0,
+      terminalCount: 2,
+      label: "1 subagent cancelled",
+      runs: expect.arrayContaining([
+        expect.objectContaining({ id: "run_optional", status: "cancelled", required: false }),
+      ]),
+    });
     expect(harness.runs.find((candidate) => candidate.id === "run_completed")).toMatchObject({
       metadata: {
         childSessionArchive: {
@@ -4104,10 +4244,11 @@ describe("turn runner subagent native tools", () => {
         optionalCount: 1,
         activeCount: 0,
         acceptedCount: 1,
-        blockingCount: 1,
+        blockingCount: 0,
         terminalCount: 2,
         cleanupNeededCount: 0,
         archivedCount: 2,
+        unresolvedCount: 0,
         requiredAcceptedCount: 1,
         requiredArchivedCount: 1,
         requiredUnresolvedCount: 0,
@@ -4400,13 +4541,13 @@ describe("turn runner subagent native tools", () => {
         requiredCount: 1,
         activeCount: 0,
         acceptedCount: 0,
-        blockingCount: 1,
+        blockingCount: 0,
         terminalCount: 1,
         cleanupNeededCount: 0,
         archivedCount: 1,
-        requiredBlockingCount: 1,
+        requiredBlockingCount: 0,
         requiredArchivedCount: 1,
-        requiredUnresolvedCount: 1,
+        requiredUnresolvedCount: 0,
         runs: [
           expect.objectContaining({
             id: "run_active_goal_child",

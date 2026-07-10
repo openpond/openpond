@@ -33,6 +33,39 @@ describe("OpenPond goal control facade", () => {
     expect(result.goal.id).toMatch(/^goal_/);
   });
 
+  test("rejects a second start while the thread already has a nonterminal goal", () => {
+    const session = baseSession({ workspaceKind: "local_project", cwd: "/repo" });
+    const events = [
+      threadGoalEvent({
+        id: "goal_active",
+        objective: "Fix the original bug.",
+        status: "running",
+        mode: "local",
+      }),
+    ];
+
+    expect(() => runOpenPondGoalControl({
+      session,
+      events,
+      request: {
+        action: "start",
+        objective: "Accidentally duplicate the goal.",
+        reason: "Model retried start from a continuation.",
+      },
+    })).toThrow("OpenPond goal goal_active is already running");
+
+    expect(() => runOpenPondGoalControl({
+      session,
+      events,
+      request: {
+        action: "start",
+        objective: "Accidentally duplicate the goal.",
+        targetGoalId: "goal_active",
+        reason: "Model supplied the continuation goal id to start.",
+      },
+    })).toThrow("targetGoalId cannot be used with start");
+  });
+
   test("pauses, resumes, and stops the targeted OpenPond goal", () => {
     const events = [
       threadGoalEvent({

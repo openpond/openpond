@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 9;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 10;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -31,6 +31,14 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS events_session_id_idx ON events(session_id);
   CREATE INDEX IF NOT EXISTS events_session_sequence_idx ON events(session_id, sequence);
   CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events(timestamp);
+
+  CREATE TABLE IF NOT EXISTS openpond_thread_goals (
+    session_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    provisional INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
 
   CREATE TABLE IF NOT EXISTS approvals (
     id TEXT PRIMARY KEY,

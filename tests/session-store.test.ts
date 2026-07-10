@@ -64,6 +64,7 @@ describe("session store patches", () => {
 
       const created = await createSession({
         provider: "codex",
+        subagentDelegationMode: "proactive",
         workspaceKind: "sandbox",
         workspaceId: null,
         metadata: { workspaceTarget: "hybrid", source: "test" },
@@ -72,13 +73,17 @@ describe("session store patches", () => {
       const stored = await store.getSession(created.id);
 
       expect(created.metadata).toEqual({ workspaceTarget: "hybrid", source: "test" });
+      expect(created.subagentDelegationMode).toBe("proactive");
       expect(stored?.metadata).toEqual({ workspaceTarget: "hybrid", source: "test" });
 
       const patched = await patchSession(created.id, {
         metadata: { workspaceTarget: "hybrid", source: "patched" },
+        subagentDelegationMode: "manual",
       });
 
       expect(patched.metadata).toEqual({ workspaceTarget: "hybrid", source: "patched" });
+      expect(patched.subagentDelegationMode).toBe("manual");
+      expect((await patchSession(created.id, { subagentDelegationMode: null })).subagentDelegationMode).toBeNull();
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });

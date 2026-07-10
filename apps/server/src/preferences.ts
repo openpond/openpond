@@ -1,6 +1,7 @@
 import {
   AppPreferencesSchema,
   DEFAULT_CODEX_CHAT_MODEL,
+  DEFAULT_CODEX_REASONING_EFFORT,
   type AppPreferences,
   type SidebarAppPreference,
 } from "@openpond/contracts";
@@ -21,17 +22,16 @@ export function normalizeAppPreferences(value: unknown): AppPreferences {
   const parsed = AppPreferencesSchema.safeParse(value ?? {});
   const preferences = parsed.success ? parsed.data : AppPreferencesSchema.parse({});
   const defaultTeamId = preferences.defaultTeamId?.trim() || null;
-  if (preferences.defaultChatProvider === "codex" && preferences.defaultChatModel === "codex-default") {
-    return {
-      ...preferences,
-      defaultTeamId,
-      defaultChatModel: DEFAULT_CODEX_CHAT_MODEL,
-      defaultNewProjectDirectory: normalizeProjectDirectory(preferences.defaultNewProjectDirectory),
-    };
-  }
+  const legacyCodexDefaultModel =
+    preferences.defaultChatProvider === "codex" &&
+    (preferences.defaultChatModel === "codex-default" || preferences.defaultChatModel === "gpt-5.5");
   return {
     ...preferences,
     defaultTeamId,
+    ...(legacyCodexDefaultModel ? { defaultChatModel: DEFAULT_CODEX_CHAT_MODEL } : {}),
+    ...(legacyCodexDefaultModel && preferences.codexReasoningEffort === "medium"
+      ? { codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT }
+      : {}),
     defaultNewProjectDirectory: normalizeProjectDirectory(preferences.defaultNewProjectDirectory),
   };
 }

@@ -17,11 +17,14 @@ import type {
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
   OpenPondApp,
+  ProviderSettings,
+  SubagentDelegationMode,
 } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import {
   CODEX_PERMISSION_MODE_OPTIONS,
   OPENPOND_COMMAND_ACCESS_MODE_OPTIONS,
+  providerModelSupportsReasoning,
   type DropdownOption,
 } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
@@ -29,8 +32,28 @@ import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { VoiceInputButton } from "../voice/VoiceInputButton";
 import { CodexModelReasoningMenu } from "./ComposerControls";
+import { ComposerDelegationMenu } from "./ComposerDelegationMenu";
+
+const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
+  "codex",
+  "openai",
+  "xai",
+  "openrouter",
+  "deepseek",
+  "zai",
+  "moonshot",
+  "together",
+  "groq",
+  "fireworks",
+  "custom-openai-compatible",
+  "setup-provider",
+]);
 
 export function ComposerPrimaryControls({
+  surface = "chat",
+  teamUseModel = false,
+  teamUseModelLocked = false,
+  onTeamUseModelChange,
   addFiles,
   addMenuOpen,
   addMenuRef,
@@ -62,6 +85,7 @@ export function ComposerPrimaryControls({
   onToggleAddMenu,
   onTranscript,
   provider,
+  providerSettings,
   providerOptions,
   queueDraftDisabled,
   queueDraftTooltip,
@@ -69,11 +93,18 @@ export function ComposerPrimaryControls({
   sendDisabled,
   sendTooltip,
   selectedMentionAppId,
+  subagentDelegationDefaultMode,
+  subagentDelegationMode,
+  onSubagentDelegationModeChange,
   showToast,
   stopIcon = "stop",
   stopLabel = "Stop response",
   steering,
 }: {
+  surface?: "chat" | "team";
+  teamUseModel?: boolean;
+  teamUseModelLocked?: boolean;
+  onTeamUseModelChange?: (value: boolean) => void;
   addFiles: (files: File[]) => void;
   addMenuOpen: boolean;
   addMenuRef: RefObject<HTMLDivElement | null>;
@@ -105,6 +136,7 @@ export function ComposerPrimaryControls({
   onToggleAddMenu: () => void;
   onTranscript: (text: string) => void;
   provider: ChatProvider;
+  providerSettings?: ProviderSettings | null;
   providerOptions: DropdownOption[];
   queueDraftDisabled: boolean;
   queueDraftTooltip: string;
@@ -112,11 +144,100 @@ export function ComposerPrimaryControls({
   sendDisabled: boolean;
   sendTooltip: string;
   selectedMentionAppId: string | null;
+  subagentDelegationDefaultMode?: SubagentDelegationMode;
+  subagentDelegationMode?: SubagentDelegationMode | null;
+  onSubagentDelegationModeChange?: (mode: SubagentDelegationMode | null) => void;
   showToast: ShowAppToast;
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
   steering: boolean;
 }) {
+  const showModelReasoningMenu = providerModelSupportsReasoning(provider, modelValue, providerSettings);
+  if (surface === "team") {
+    return (
+      <div className="composer-primary-controls team-chat-composer-controls">
+        <label className="team-chat-model-toggle">
+          <input
+            type="checkbox"
+            checked={teamUseModel}
+            disabled={busy || teamUseModelLocked}
+            onChange={(event) => onTeamUseModelChange?.(event.currentTarget.checked)}
+          />
+          <span>Use model</span>
+        </label>
+        <div className="composer-spacer" />
+        {teamUseModel ? (
+          <>
+            <DropdownSelect
+              compact
+              placement={dropdownPlacement}
+              label="Provider"
+              value={provider}
+              options={providerOptions.filter((option) => TEAM_CHAT_LOCAL_PROVIDER_IDS.has(option.value))}
+              disabled={busy}
+              onChange={(value) => {
+                if (value === "setup-provider") {
+                  onProviderSetupOpen?.();
+                  return;
+                }
+                onProviderChange(value as ChatProvider);
+              }}
+            />
+            {showModelReasoningMenu ? (
+              <CodexModelReasoningMenu
+                disabled={busy}
+                model={modelValue}
+                modelOptions={modelOptions}
+                placement={dropdownPlacement}
+                reasoningEffort={codexReasoningEffort}
+                onModelChange={onModelChange}
+                onReasoningEffortChange={onCodexReasoningEffortChange}
+              />
+            ) : modelOptions.length > 0 ? (
+              <DropdownSelect
+                compact
+                placement={dropdownPlacement}
+                label="Model"
+                value={modelValue}
+                options={modelOptions}
+                disabled={busy}
+                onChange={onModelChange}
+              />
+            ) : null}
+          </>
+        ) : null}
+        <VoiceInputButton
+          buttonClassName="composer-icon"
+          connection={connection}
+          disabled={disabled}
+          iconSize={16}
+          wrapperClassName="composer-voice-input"
+          showToast={showToast}
+          onTranscript={onTranscript}
+        />
+        {running ? (
+          <button
+            type="button"
+            className="send-button stop-button"
+            data-tooltip={stopLabel}
+            aria-label={stopLabel}
+            onClick={onStop}
+          >
+            <Square size={13} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            className="send-button"
+            disabled={sendDisabled}
+            data-tooltip={sendTooltip}
+            aria-label={sendTooltip}
+          >
+            <ArrowUp size={18} />
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="composer-primary-controls">
       <div className="composer-add-control open-up" ref={addMenuRef}>
@@ -266,17 +387,18 @@ export function ComposerPrimaryControls({
           onProviderChange(value as ChatProvider);
         }}
       />
-      {provider === "codex" && (
+      {showModelReasoningMenu && (
         <CodexModelReasoningMenu
           disabled={busy}
           model={modelValue}
+          modelOptions={modelOptions}
           placement={dropdownPlacement}
           reasoningEffort={codexReasoningEffort}
           onModelChange={onModelChange}
           onReasoningEffortChange={onCodexReasoningEffortChange}
         />
       )}
-      {provider !== "codex" && modelOptions.length > 0 && (
+      {!showModelReasoningMenu && modelOptions.length > 0 && (
         <DropdownSelect
           compact
           placement={dropdownPlacement}
@@ -296,6 +418,14 @@ export function ComposerPrimaryControls({
         showToast={showToast}
         onTranscript={onTranscript}
       />
+      {subagentDelegationDefaultMode && onSubagentDelegationModeChange ? (
+        <ComposerDelegationMenu
+          defaultMode={subagentDelegationDefaultMode}
+          disabled={disabled}
+          overrideMode={subagentDelegationMode ?? null}
+          onChange={onSubagentDelegationModeChange}
+        />
+      ) : null}
       {steering ? (
         <button
           type="button"

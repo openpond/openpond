@@ -7,6 +7,7 @@ import type {
   InsightsEvidenceSourceSettings,
   ProviderSettings,
   SubagentIsolationMode,
+  SubagentDelegationMode,
   SubagentPeerMessages,
   SubagentRoleSettings,
   SubagentToolPolicy,
@@ -46,6 +47,9 @@ export function useDefaultsSettings({
   );
   const [insightsEvidenceSources, setInsightsEvidenceSources] = useState(preferences.insightsEvidenceSources);
   const [subagentsEnabled, setSubagentsEnabled] = useState(preferences.subagents.enabled);
+  const [subagentDelegationMode, setSubagentDelegationMode] = useState(
+    preferences.subagents.delegationMode,
+  );
   const [subagentsUseDefaultModel, setSubagentsUseDefaultModel] = useState(!preferences.subagents.defaultModelRef);
   const [subagentsProvider, setSubagentsProvider] = useState<ChatProvider>(
     preferences.subagents.defaultModelRef?.providerId ?? preferences.defaultChatProvider,
@@ -73,6 +77,7 @@ export function useDefaultsSettings({
     : { providerId: subagentsProvider, modelId: subagentsModel.trim() };
   const subagentsDirty =
     subagentsEnabled !== preferences.subagents.enabled ||
+    subagentDelegationMode !== preferences.subagents.delegationMode ||
     !chatModelRefsEqual(subagentsDefaultModelRef, preferences.subagents.defaultModelRef) ||
     subagentsMaxConcurrentRuns !== preferences.subagents.maxConcurrentRuns ||
     subagentsMaxConcurrentRunsPerProvider !== preferences.subagents.maxConcurrentRunsPerProvider ||
@@ -93,6 +98,7 @@ export function useDefaultsSettings({
     setInsightsModel(preferences.insightsModelRef?.modelId ?? preferences.defaultChatModel);
     setInsightsEvidenceSources(preferences.insightsEvidenceSources);
     setSubagentsEnabled(preferences.subagents.enabled);
+    setSubagentDelegationMode(preferences.subagents.delegationMode);
     setSubagentsUseDefaultModel(!preferences.subagents.defaultModelRef);
     setSubagentsProvider(preferences.subagents.defaultModelRef?.providerId ?? preferences.defaultChatProvider);
     setSubagentsModel(preferences.subagents.defaultModelRef?.modelId ?? preferences.defaultChatModel);
@@ -247,6 +253,7 @@ export function useDefaultsSettings({
           insightsEvidenceSources,
           subagents: {
             enabled: subagentsEnabled,
+            delegationMode: subagentDelegationMode,
             defaultModelRef: subagentsUseDefaultModel
               ? null
               : modelRefForTurn(subagentsProvider, subagentsModel, providers) ?? null,
@@ -282,6 +289,7 @@ export function useDefaultsSettings({
     insightsModel,
     insightsEvidenceSources,
     subagentsEnabled,
+    subagentDelegationMode,
     subagentsUseDefaultModel,
     subagentsProvider,
     subagentsModel,
@@ -311,6 +319,7 @@ export function useDefaultsSettings({
     setInsightsEvidenceSourceEnabled: (key: keyof InsightsEvidenceSourceSettings, enabled: boolean) =>
       setInsightsEvidenceSources((current) => ({ ...current, [key]: enabled })),
     setSubagentsEnabled,
+    setSubagentDelegationMode: (value: SubagentDelegationMode) => setSubagentDelegationMode(value),
     setSubagentsMaxConcurrentRuns: (value: number) => setSubagentsMaxConcurrentRuns(clampInteger(value, 1, 32)),
     setSubagentsMaxConcurrentRunsPerProvider: (value: number | null) =>
       setSubagentsMaxConcurrentRunsPerProvider(value === null ? null : clampInteger(value, 1, 32)),

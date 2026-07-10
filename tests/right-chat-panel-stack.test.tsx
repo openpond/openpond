@@ -14,20 +14,28 @@ const noopAsync = async () => undefined;
 const noopAsyncBoolean = async () => true;
 
 describe("Right chat panel stack", () => {
-  test("keeps Files in the right-sidebar chrome above side chats", () => {
+  test("keeps Files and every side chat in a selectable right-sidebar tab strip", () => {
     const markup = renderRightChatStack({
-      panels: [rightChatPanel("panel_top", "Top chat"), rightChatPanel("panel_bottom", "Bottom chat")],
+      panels: [
+        rightChatPanel("panel_top", "Top chat"),
+        rightChatPanel("panel_middle", "Middle chat"),
+        rightChatPanel("panel_bottom", "Bottom chat"),
+      ],
     });
 
     expect(markup).toContain("right-chat-topbar");
     expect(markup).toContain("Files");
     expect(markup).toContain("right-chat-tab active");
     expect(markup).toContain("Top chat");
+    expect(markup).toContain("Middle chat");
     expect(markup).toContain("Bottom chat");
     expect(markup).toContain("aria-label=\"Close Top chat\"");
     expect(markup).toContain("aria-label=\"Add to right sidebar\"");
-    expect(markup).toContain("right-chat-stack-body panes-2");
-    expect(markup).toContain("right-chat-splitter");
+    expect(markup).toContain("right-chat-stack-body panes-1");
+    expect(markup).toContain('id="right-chat-panel-panel_bottom"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('aria-selected="false"');
+    expect(markup).not.toContain("right-chat-splitter");
     expect(markup).not.toContain("right-chat-empty");
     expect(markup).not.toContain("right-chat-pane-header");
     expect(markup).not.toContain("right-chat-status-dot");

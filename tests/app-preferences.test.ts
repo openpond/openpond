@@ -41,6 +41,7 @@ describe("app preferences", () => {
     const coding = preferences.subagents.roles.find((role) => role.id === "coding");
     const research = preferences.subagents.roles.find((role) => role.id === "research");
     expect(preferences.subagents.enabled).toBe(true);
+    expect(preferences.subagents.delegationMode).toBe("balanced");
     expect(preferences.subagents.maxConcurrentRuns).toBe(4);
     expect(preferences.subagents.maxConcurrentRunsPerProvider).toBe(2);
     expect(preferences.subagents.maxConcurrentRunsPerWorkspaceTarget).toBe(2);
@@ -72,6 +73,8 @@ describe("app preferences", () => {
     expect(AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 3600 } }).subagents.heartbeatIntervalSeconds).toBe(3600);
     expect(() => AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 9 } })).toThrow();
     expect(() => AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 3601 } })).toThrow();
+    expect(AppPreferencesSchema.parse({ subagents: { delegationMode: "proactive" } }).subagents.delegationMode).toBe("proactive");
+    expect(() => AppPreferencesSchema.parse({ subagents: { delegationMode: "always" } })).toThrow();
     const tunedCoding = AppPreferencesSchema.parse({
       subagents: {
         roles: [{
@@ -235,7 +238,7 @@ describe("app preferences", () => {
     }
   }, 20_000);
 
-  test("persists gpt-5.5 main chat with Z.ai coding subagent settings", async () => {
+  test("migrates legacy Codex gpt-5.5 main chat while preserving Z.ai coding subagent settings", async () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-subagent-preferences-"));
     const server = await createOpenPondServer({
       port: 0,
@@ -279,7 +282,8 @@ describe("app preferences", () => {
       );
 
       expect(saved.preferences.defaultChatProvider).toBe("codex");
-      expect(saved.preferences.defaultChatModel).toBe("gpt-5.5");
+      expect(saved.preferences.defaultChatModel).toBe("gpt-5.6-sol");
+      expect(saved.preferences.codexReasoningEffort).toBe("low");
       expect(saved.preferences.subagents.roles.find((role) => role.id === "coding")?.modelRef).toEqual({
         providerId: "zai",
         modelId: "glm-5.2",

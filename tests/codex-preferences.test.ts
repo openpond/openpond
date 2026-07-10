@@ -23,6 +23,15 @@ class MemoryStorage implements Pick<Storage, "getItem" | "setItem"> {
 }
 
 describe("Codex preference persistence", () => {
+  test("defaults Codex reasoning to low when no explicit choice exists", () => {
+    const storage = new MemoryStorage();
+
+    expect(codexPreferencesWithLocalOverrides(null, storage)).toEqual({
+      codexPermissionMode: "default",
+      codexReasoningEffort: "low",
+    });
+  });
+
   test("uses stored Codex choices over stale bootstrap defaults", () => {
     const storage = new MemoryStorage();
     storage.setItem(CODEX_PERMISSION_MODE_STORAGE_KEY, "full-access");

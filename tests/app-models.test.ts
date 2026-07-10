@@ -38,7 +38,7 @@ describe("app model labels", () => {
     const preferences: AppPreferences = {
       ...DEFAULT_APP_PREFERENCES,
       defaultChatProvider: "codex",
-      defaultChatModel: "gpt-5.5",
+      defaultChatModel: "gpt-5.6-sol",
       subagents: SubagentPreferencesSchema.parse({
         roles: [
           {
@@ -59,7 +59,7 @@ describe("app model labels", () => {
     });
     expect(subagentModelRefForRole(preferences, "review", providerSettings)).toEqual({
       providerId: "codex",
-      modelId: "gpt-5.5",
+      modelId: "gpt-5.6-sol",
     });
     expect(
       subagentModelRefForRole(
@@ -123,7 +123,20 @@ describe("app model labels", () => {
       ),
     ).toEqual({
       provider: "codex",
-      model: "gpt-5.5",
+      model: "gpt-5.6-sol",
+    });
+
+    expect(
+      modelSelectionForSession(
+        {
+          provider: "codex",
+          modelRef: { providerId: "codex", modelId: "gpt-5.5" },
+        },
+        providerSettings,
+      ),
+    ).toEqual({
+      provider: "codex",
+      model: "gpt-5.6-sol",
     });
   });
 });

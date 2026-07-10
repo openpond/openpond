@@ -10,7 +10,7 @@ import type {
   WorkspaceToolRequest,
   WorkspaceToolResult,
 } from "@openpond/contracts";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState, type MouseEvent } from "react";
 import {
   ChevronRight,
   Lightbulb,
@@ -23,6 +23,7 @@ import {
 import { WindowControls, isDesktopShell, isMacPlatform } from "./WindowControls";
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 import type { ClientConnection } from "../../api";
+import { copyToClipboard } from "../../lib/clipboard";
 
 const WorkspaceEnvironmentMenu = lazy(() =>
   import("../chat/WorkspaceEnvironmentMenu").then((module) => ({ default: module.WorkspaceEnvironmentMenu })),
@@ -36,6 +37,7 @@ export type TopBarBreadcrumb = {
 export function AppTopBar({
   sidebarOpen,
   title,
+  conversationId,
   breadcrumbs,
   workspaceName,
   workspaceId,
@@ -51,7 +53,10 @@ export function AppTopBar({
   showDiffControls,
   diffPanelOpen,
   terminalOpen,
+  rightSidebarAvailable = false,
+  rightSidebarOpen = false,
   onToggleDiffPanel,
+  onToggleRightSidebar,
   onOpenSearch,
   onToggleTerminal,
   onOpenInsights,
@@ -72,6 +77,7 @@ export function AppTopBar({
 }: {
   sidebarOpen: boolean;
   title: string;
+  conversationId?: string | null;
   breadcrumbs?: TopBarBreadcrumb[];
   workspaceName: string | null;
   workspaceId: string | null;
@@ -87,7 +93,10 @@ export function AppTopBar({
   showDiffControls: boolean;
   diffPanelOpen: boolean;
   terminalOpen: boolean;
+  rightSidebarAvailable?: boolean;
+  rightSidebarOpen?: boolean;
   onToggleDiffPanel: () => void;
+  onToggleRightSidebar?: () => void;
   onOpenSearch: () => void;
   onToggleTerminal: () => void;
   onOpenInsights: () => void;
@@ -111,9 +120,40 @@ export function AppTopBar({
 }) {
   const filesChanged = workspaceDiff?.filesChanged ?? 0;
   const showWindowControls = isDesktopShell() && !isMacPlatform(platform);
-  const showRightControls = showWorkspaceControls || showWindowControls;
+  const showRightControls = showWorkspaceControls || rightSidebarAvailable || showWindowControls;
   const activeInsightCount = insightsSummary?.activeCount ?? 0;
   const activeInsights = insightsItems.filter((item) => item.status === "active");
+  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!titleMenu) return;
+    const closeMenu = () => setTitleMenu(null);
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("blur", closeMenu);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("blur", closeMenu);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [titleMenu]);
+
+  const openTitleMenu = (event: MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 190;
+    const menuHeight = conversationId ? 76 : 42;
+    setTitleMenu({
+      x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
+      y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+    });
+  };
+
+  const copyTitleValue = (value: string) => {
+    void copyToClipboard(value);
+    setTitleMenu(null);
+  };
+
   return (
     <header className="app-titlebar">
       <div className="titlebar-left">
@@ -142,7 +182,13 @@ export function AppTopBar({
           </nav>
         ) : (
           <div className="titlebar-title">
-            <strong>{title}</strong>
+            <strong
+              className="titlebar-copy-target"
+              title="Double-click to select; right-click for copy options"
+              onContextMenu={openTitleMenu}
+            >
+              {title}
+            </strong>
             {workspaceName && <span>{workspaceName}</span>}
             {showWorkspaceControls && (
               <button className="titlebar-icon" title="More">
@@ -247,7 +293,39 @@ export function AppTopBar({
               )}
             </div>
           )}
+          {rightSidebarAvailable && onToggleRightSidebar ? (
+            <div className="titlebar-actions">
+              <button
+                type="button"
+                className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
+                title={`${rightSidebarOpen ? "Hide" : "Show"} AI thread sidebar`}
+                aria-label={`${rightSidebarOpen ? "Hide" : "Show"} AI thread sidebar`}
+                aria-pressed={rightSidebarOpen}
+                onClick={onToggleRightSidebar}
+              >
+                <PanelRight size={16} />
+              </button>
+            </div>
+          ) : null}
           <WindowControls platform={platform} />
+        </div>
+      )}
+      {titleMenu && (
+        <div
+          className="titlebar-copy-menu"
+          role="menu"
+          aria-label="Conversation title actions"
+          style={{ left: titleMenu.x, top: titleMenu.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button type="button" role="menuitem" onClick={() => copyTitleValue(title)}>
+            Copy title
+          </button>
+          {conversationId && (
+            <button type="button" role="menuitem" onClick={() => copyTitleValue(conversationId)}>
+              Copy conversation ID
+            </button>
+          )}
         </div>
       )}
     </header>

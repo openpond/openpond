@@ -21,7 +21,10 @@ import {
   openPondCommandAccessPreferencesWithLocalOverride,
   storedOpenPondCommandAccessPreferenceSyncPatch,
 } from "../lib/openpond-command-access-preferences";
-import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
+import {
+  normalizeOpenPondOrganization,
+  resolveDefaultOpenPondOrganization,
+} from "../lib/cloud-project-utils";
 import { isSameConnection } from "../lib/layout";
 import type { OpenPondOrganization } from "../lib/organization-types";
 import {
@@ -393,8 +396,8 @@ export function useAppBootstrap(params: {
           return;
         }
 
-        const firstTeamId = activeOrganizations[0]?.teamId;
-        if (!firstTeamId) {
+        const fallbackTeamId = resolveDefaultOpenPondOrganization(activeOrganizations)?.teamId;
+        if (!fallbackTeamId) {
           completeStartup();
           return;
         }
@@ -403,17 +406,17 @@ export function useAppBootstrap(params: {
           completeStartup();
           return;
         }
-        const preloadAgentsPromise = preloadTeamAgents(firstTeamId);
+        const preloadAgentsPromise = preloadTeamAgents(fallbackTeamId);
         defaultTeamSyncKeyRef.current = defaultTeamPreferenceSyncKey(
           accountKey,
-          firstTeamId,
+          fallbackTeamId,
           bootstrap.accountMeta.asOf ?? "initial",
         );
-        const updatedPayload = await api.savePreferences(connection, { defaultTeamId: firstTeamId });
+        const updatedPayload = await api.savePreferences(connection, { defaultTeamId: fallbackTeamId });
         await preloadAgentsPromise;
         const latestDefaultTeamIdAfterSave = latestDefaultTeamIdRef.current;
         if (cancelled) {
-          if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== firstTeamId) {
+          if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
             void api
               .savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave })
               .then(applyPreferencesPayload)
@@ -423,7 +426,7 @@ export function useAppBootstrap(params: {
           }
           return;
         }
-        if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== firstTeamId) {
+        if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
           applyPreferencesPayload(
             await api.savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave }),
           );
@@ -495,6 +498,7 @@ export function useAppBootstrap(params: {
     connection,
     setEvents,
     setApprovals,
+    setSessions,
     setError,
     onDisconnected: recoverConnection,
   });

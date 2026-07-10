@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CodexReasoningEffort } from "@openpond/contracts";
 import { Check, ChevronDown, Cloud, Folder, Plus, UploadCloud } from "../icons";
 import { CODEX_MODEL_OPTIONS, CODEX_REASONING_EFFORT_OPTIONS } from "../../lib/app-models";
+import type { DropdownOption } from "../../lib/app-models";
 import type {
   WorkspaceTargetOptionState,
   WorkspaceTargetState,
@@ -309,6 +310,7 @@ function WorkspaceTargetIcon({
 export function CodexModelReasoningMenu({
   disabled,
   model,
+  modelOptions = CODEX_MODEL_OPTIONS,
   placement,
   reasoningEffort,
   onModelChange,
@@ -316,6 +318,7 @@ export function CodexModelReasoningMenu({
 }: {
   disabled: boolean;
   model: string;
+  modelOptions?: DropdownOption[];
   placement: "bottom" | "top";
   reasoningEffort: CodexReasoningEffort;
   onModelChange: (value: string) => void;
@@ -323,11 +326,15 @@ export function CodexModelReasoningMenu({
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedModel = CODEX_MODEL_OPTIONS.find((option) => option.value === model) ?? CODEX_MODEL_OPTIONS[0]!;
+  const selectedModel =
+    modelOptions.find((option) => option.value === model) ??
+    CODEX_MODEL_OPTIONS.find((option) => option.value === model) ??
+    modelOptions[0] ??
+    CODEX_MODEL_OPTIONS[0]!;
   const selectedReasoning =
     CODEX_REASONING_EFFORT_OPTIONS.find((option) => option.value === reasoningEffort) ??
     CODEX_REASONING_EFFORT_OPTIONS[1]!;
-  const triggerLabel = `${compactCodexModelLabel(selectedModel.label)} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`;
+  const triggerLabel = `${compactModelLabel(selectedModel.label)} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`;
 
   useEffect(() => {
     if (!open) return;
@@ -380,7 +387,7 @@ export function CodexModelReasoningMenu({
             </button>
           ))}
           <div className="codex-model-menu-title">Model</div>
-          {CODEX_MODEL_OPTIONS.map((option) => (
+          {modelOptions.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -399,6 +406,6 @@ export function CodexModelReasoningMenu({
   );
 }
 
-function compactCodexModelLabel(label: string): string {
+function compactModelLabel(label: string): string {
   return label.replace(/^GPT-/, "").replace(/\s+Codex Spark$/, " Spark").replace(/\s+Codex$/, " Codex");
 }

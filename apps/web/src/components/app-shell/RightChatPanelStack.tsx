@@ -5,7 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
@@ -139,10 +139,25 @@ export function RightChatPanelStack({
   onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [splitPercent, setSplitPercent] = useState(50);
+  const [activePanelId, setActivePanelId] = useState(() => panels.at(-1)?.id ?? null);
   const addAnchorRef = useRef<HTMLDivElement | null>(null);
-  const stackBodyRef = useRef<HTMLDivElement | null>(null);
-  const visiblePanels = panels.slice(0, 2);
+  const tabButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const previousPanelIdsRef = useRef<Set<string>>(new Set(panels.map((panel) => panel.id)));
+  const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels.at(-1) ?? null;
+
+  useEffect(() => {
+    const previousPanelIds = previousPanelIdsRef.current;
+    let addedPanel: RightChatPanelView | null = null;
+    for (const panel of panels) {
+      if (!previousPanelIds.has(panel.id)) addedPanel = panel;
+    }
+    previousPanelIdsRef.current = new Set(panels.map((panel) => panel.id));
+    setActivePanelId((current) => {
+      if (addedPanel) return addedPanel.id;
+      if (current && panels.some((panel) => panel.id === current)) return current;
+      return panels.at(-1)?.id ?? null;
+    });
+  }, [panels]);
 
   useEffect(() => {
     if (!addMenuOpen) return undefined;
@@ -161,25 +176,24 @@ export function RightChatPanelStack({
     };
   }, [addMenuOpen]);
 
-  const startSplitResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (visiblePanels.length !== 2) return;
+  const selectPanel = useCallback((panelId: string, focus = false) => {
+    setActivePanelId(panelId);
+    if (focus) window.requestAnimationFrame(() => tabButtonRefs.current.get(panelId)?.focus());
+  }, []);
+
+  const handleTabKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>, panelId: string) => {
+    const currentIndex = panels.findIndex((panel) => panel.id === panelId);
+    if (currentIndex < 0) return;
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % panels.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + panels.length) % panels.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = panels.length - 1;
+    if (nextIndex === null) return;
     event.preventDefault();
-    const body = stackBodyRef.current;
-    if (!body) return;
-    const bounds = body.getBoundingClientRect();
-    const update = (clientY: number) => {
-      const next = ((clientY - bounds.top) / Math.max(bounds.height, 1)) * 100;
-      setSplitPercent(Math.max(28, Math.min(72, next)));
-    };
-    update(event.clientY);
-    const handlePointerMove = (moveEvent: PointerEvent) => update(moveEvent.clientY);
-    const handlePointerUp = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }, [visiblePanels.length]);
+    const nextPanel = panels[nextIndex];
+    if (nextPanel) selectPanel(nextPanel.id, true);
+  }, [panels, selectPanel]);
 
   return (
     <aside className="workspace-diff-panel right-chat-panel-stack" aria-label="Side chats">
@@ -202,31 +216,43 @@ export function RightChatPanelStack({
             <FolderOpen size={14} />
             <span>Files</span>
           </button>
-          {visiblePanels.map((panel) => (
-            <div className="workspace-diff-tab right-chat-tab active" key={panel.id}>
-              <button
-                type="button"
-                className="workspace-diff-tab-main"
-                role="tab"
-                aria-selected
-                title={panel.title}
-              >
-                <span>{panel.title}</span>
-              </button>
-              <button
-                type="button"
-                className="workspace-diff-tab-close"
-                title={`Close ${panel.title}`}
-                aria-label={`Close ${panel.title}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onClosePanel(panel.id);
-                }}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
+          {panels.map((panel) => {
+            const active = panel.id === activePanel?.id;
+            return (
+              <div className={`workspace-diff-tab right-chat-tab ${active ? "active" : ""}`} key={panel.id}>
+                <button
+                  type="button"
+                  className="workspace-diff-tab-main"
+                  role="tab"
+                  id={`right-chat-tab-${panel.id}`}
+                  aria-controls={`right-chat-panel-${panel.id}`}
+                  aria-selected={active}
+                  tabIndex={active ? 0 : -1}
+                  title={panel.title}
+                  ref={(element) => {
+                    if (element) tabButtonRefs.current.set(panel.id, element);
+                    else tabButtonRefs.current.delete(panel.id);
+                  }}
+                  onClick={() => selectPanel(panel.id)}
+                  onKeyDown={(event) => handleTabKeyDown(event, panel.id)}
+                >
+                  <span>{panel.title}</span>
+                </button>
+                <button
+                  type="button"
+                  className="workspace-diff-tab-close"
+                  title={`Close ${panel.title}`}
+                  aria-label={`Close ${panel.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onClosePanel(panel.id);
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
           <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
             <button
               type="button"
@@ -250,7 +276,7 @@ export function RightChatPanelStack({
                   }}
                 >
                   <MessageSquare size={13} />
-                  <span>New chat</span>
+                  <span>New task</span>
                 </button>
                 <button
                   type="button"
@@ -268,12 +294,8 @@ export function RightChatPanelStack({
           </div>
         </div>
       </div>
-      <div
-        className={`right-chat-stack-body panes-${visiblePanels.length}`}
-        ref={stackBodyRef}
-        style={{ "--right-chat-split": `${splitPercent}%` } as CSSProperties}
-      >
-        {visiblePanels.map((panel, index) => (
+      <div className="right-chat-stack-body panes-1">
+        {activePanel ? (
           <RightChatPane
             busy={busy}
             codexPermissionMode={codexPermissionMode}
@@ -281,10 +303,10 @@ export function RightChatPanelStack({
             openPondCommandAccessMode={openPondCommandAccessMode}
             connection={connection}
             connectedAppMentions={connectedAppMentions}
-            key={panel.id}
+            key={activePanel.id}
             mentionApps={mentionApps}
             profileSkills={profileSkills}
-            panel={panel}
+            panel={activePanel}
             projectTarget={projectTarget}
             providerSettings={providerSettings}
             accountBaseUrl={accountBaseUrl}
@@ -294,29 +316,20 @@ export function RightChatPanelStack({
             workspaceTarget={workspaceTarget}
             onCodexPermissionModeChange={onCodexPermissionModeChange}
             onCodexReasoningEffortChange={onCodexReasoningEffortChange}
-            onOpenPondCommandAccessModeChange={(mode) => onOpenPondCommandAccessModeChange(mode, panel.session)}
-            onModelChange={(model) => onModelChange(panel.id, model)}
-          onOpenFileInSidebar={onOpenFileInSidebar}
-          onOpenProfileSettings={onOpenProfileSettings}
-          onOpenSession={onOpenSession}
-          onProviderChange={(provider) => onProviderChange(panel.id, provider)}
+            onOpenPondCommandAccessModeChange={(mode) => onOpenPondCommandAccessModeChange(mode, activePanel.session)}
+            onModelChange={(model) => onModelChange(activePanel.id, model)}
+            onOpenFileInSidebar={onOpenFileInSidebar}
+            onOpenProfileSettings={onOpenProfileSettings}
+            onOpenSession={onOpenSession}
+            onProviderChange={(provider) => onProviderChange(activePanel.id, provider)}
             onProviderSetupOpen={onProviderSetupOpen}
-            onPromptChange={(prompt) => onPromptChange(panel.id, prompt)}
+            onPromptChange={(prompt) => onPromptChange(activePanel.id, prompt)}
             onProjectTargetChange={onProjectTargetChange}
             onResolveApproval={onResolveApproval}
             onShowBrowserPanel={onShowBrowserPanel}
-            onStop={() => onStop(panel.sessionId)}
-            onSubmit={(attachments, action, command, options) => onSubmit(panel.id, attachments, action, command, options)}
+            onStop={() => onStop(activePanel.sessionId)}
+            onSubmit={(attachments, action, command, options) => onSubmit(activePanel.id, attachments, action, command, options)}
             onWorkspaceTargetChange={onWorkspaceTargetChange}
-          />
-        ))}
-        {visiblePanels.length === 2 ? (
-          <div
-            className="right-chat-splitter"
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label="Resize side chats"
-            onPointerDown={startSplitResize}
           />
         ) : null}
       </div>
@@ -439,7 +452,12 @@ function RightChatPane({
   );
 
   return (
-    <section className={`right-chat-pane ${panel.pendingApproval ? "has-approval" : ""}`}>
+    <section
+      className={`right-chat-pane ${panel.pendingApproval ? "has-approval" : ""}`}
+      id={`right-chat-panel-${panel.id}`}
+      role="tabpanel"
+      aria-labelledby={`right-chat-tab-${panel.id}`}
+    >
       <div
         className="chat-thread right-chat-thread"
         ref={threadRef}

@@ -59,6 +59,18 @@ type EventPagePayloadRow = PayloadRow & {
   sequence: number;
 };
 
+type OpenPondThreadGoalRow = {
+  session_id: string;
+  goal_id: string;
+  status: string;
+  provisional: number;
+  updated_at: string;
+};
+
+type OpenPondThreadGoalMutation =
+  | { kind: "clear"; sessionId: string }
+  | { kind: "upsert"; sessionId: string; goalId: string; status: string; updatedAt: string };
+
 type InsightItemRow = {
   id: string;
   scope_type: string;
@@ -1562,6 +1574,7 @@ export class SqliteStore {
     const write = this.writeQueue.then(async () => {
       fn(this.data);
       await this.persist();
+      await this.createOpenPondThreadGoalTable();
       await this.rebuildReadModels();
       snapshot = structuredClone(this.data);
     });
@@ -1570,32 +1583,126 @@ export class SqliteStore {
     return snapshot;
   }
 
+  async claimOpenPondThreadGoal(input: {
+    sessionId: string;
+    goalId: string;
+    status: string;
+    updatedAt: string;
+  }): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        await this.upsertOpenPondThreadGoal({
+          kind: "upsert",
+          sessionId: input.sessionId,
+          goalId: input.goalId,
+          status: input.status,
+          updatedAt: input.updatedAt,
+        }, true);
+        await this.exec("COMMIT");
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+  }
+
+  async releaseOpenPondThreadGoalClaim(sessionId: string, goalId: string): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.run(
+        "DELETE FROM openpond_thread_goals WHERE session_id = ? AND goal_id = ? AND provisional = 1",
+        [sessionId, goalId],
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+  }
+
   async appendRuntimeEvent(runtimeEvent: StoreData["events"][number]): Promise<void> {
     await this.ready;
     const write = this.writeQueue.then(async () => {
       const safeRuntimeEvent = sanitizeRuntimeEvent(runtimeEvent);
-      const index = this.data.events.length;
-      const sequence = await this.nextEventSequence();
-      await this.run(
-        "INSERT INTO events (id, session_id, turn_id, name, timestamp, sequence, sort_index, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-          safeRuntimeEvent.id,
-          safeRuntimeEvent.sessionId ?? null,
-          safeRuntimeEvent.turnId ?? null,
-          safeRuntimeEvent.name,
-          safeRuntimeEvent.timestamp,
-          sequence,
-          index,
-          JSON.stringify(safeRuntimeEvent),
-        ]
-      );
-      if (safeRuntimeEvent.sessionId) {
-        await this.updateThreadDetailProjectionForEvent(safeRuntimeEvent, sequence);
+      const goalMutation = openPondThreadGoalMutationFromEvent(safeRuntimeEvent);
+      if (goalMutation) await this.exec("BEGIN IMMEDIATE");
+      try {
+        if (goalMutation) await this.upsertOpenPondThreadGoal(goalMutation, false);
+        await this.insertRuntimeEventRecord(safeRuntimeEvent);
+        if (goalMutation) await this.exec("COMMIT");
+      } catch (error) {
+        if (goalMutation) await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
       }
       this.data.events.push(safeRuntimeEvent);
     });
     this.writeQueue = write.catch(() => undefined);
     await write;
+  }
+
+  private async insertRuntimeEventRecord(runtimeEvent: RuntimeEvent): Promise<void> {
+    const index = this.data.events.length;
+    const sequence = await this.nextEventSequence();
+    await this.run(
+      "INSERT INTO events (id, session_id, turn_id, name, timestamp, sequence, sort_index, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        runtimeEvent.id,
+        runtimeEvent.sessionId ?? null,
+        runtimeEvent.turnId ?? null,
+        runtimeEvent.name,
+        runtimeEvent.timestamp,
+        sequence,
+        index,
+        JSON.stringify(runtimeEvent),
+      ],
+    );
+    if (runtimeEvent.sessionId) {
+      await this.updateThreadDetailProjectionForEvent(runtimeEvent, sequence);
+    }
+  }
+
+  private async upsertOpenPondThreadGoal(
+    mutation: OpenPondThreadGoalMutation,
+    provisional: boolean,
+  ): Promise<void> {
+    if (mutation.kind === "clear") {
+      await this.run("DELETE FROM openpond_thread_goals WHERE session_id = ?", [mutation.sessionId]);
+      return;
+    }
+    const existing = await this.get<OpenPondThreadGoalRow>(
+      "SELECT * FROM openpond_thread_goals WHERE session_id = ?",
+      [mutation.sessionId],
+    );
+    if (isTerminalOpenPondGoalStatus(mutation.status)) {
+      if (existing?.goal_id === mutation.goalId) {
+        await this.run("DELETE FROM openpond_thread_goals WHERE session_id = ? AND goal_id = ?", [
+          mutation.sessionId,
+          mutation.goalId,
+        ]);
+      }
+      return;
+    }
+    if (existing && existing.goal_id !== mutation.goalId) {
+      throw new Error(
+        `OpenPond goal ${existing.goal_id} is already ${existing.status} for session ${mutation.sessionId}. Complete, stop, or restart it before starting another current goal.`,
+      );
+    }
+    await this.run(
+      `INSERT INTO openpond_thread_goals (session_id, goal_id, status, provisional, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(session_id)
+       DO UPDATE SET
+         goal_id = excluded.goal_id,
+         status = excluded.status,
+         provisional = CASE
+           WHEN openpond_thread_goals.provisional = 0 THEN 0
+           ELSE excluded.provisional
+         END,
+         updated_at = excluded.updated_at`,
+      [mutation.sessionId, mutation.goalId, mutation.status, provisional ? 1 : 0, mutation.updatedAt],
+    );
   }
 
   async runtimeEventContext(
@@ -1624,6 +1731,7 @@ export class SqliteStore {
     this.data = await readStoreData({
       allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
     });
+    await this.run("DELETE FROM openpond_thread_goals WHERE provisional = 1", []);
   }
 
   private async configureDatabase(): Promise<void> {
@@ -1975,6 +2083,44 @@ export class SqliteStore {
     `);
   }
 
+  async createOpenPondThreadGoalTable(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS openpond_thread_goals (
+        session_id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        provisional INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const rows = await this.all<EventPagePayloadRow>(
+      "SELECT sequence, payload FROM events ORDER BY sequence ASC",
+      [],
+    );
+    const currentBySession = new Map<string, Extract<OpenPondThreadGoalMutation, { kind: "upsert" }>>();
+    for (const row of rows) {
+      const mutation = openPondThreadGoalMutationFromEvent(JSON.parse(row.payload) as RuntimeEvent);
+      if (!mutation) continue;
+      if (mutation.kind === "clear") {
+        currentBySession.delete(mutation.sessionId);
+      } else if (isTerminalOpenPondGoalStatus(mutation.status)) {
+        if (currentBySession.get(mutation.sessionId)?.goalId === mutation.goalId) {
+          currentBySession.delete(mutation.sessionId);
+        }
+      } else {
+        currentBySession.set(mutation.sessionId, mutation);
+      }
+    }
+    await this.run("DELETE FROM openpond_thread_goals", []);
+    for (const goal of currentBySession.values()) {
+      await this.run(
+        `INSERT INTO openpond_thread_goals (session_id, goal_id, status, provisional, updated_at)
+         VALUES (?, ?, ?, 0, ?)`,
+        [goal.sessionId, goal.goalId, goal.status, goal.updatedAt],
+      );
+    }
+  }
+
   private async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
     const rows = await this.all<TableInfoRow>(`PRAGMA table_info(${table})`);
     if (rows.some((row) => row.name === column)) return;
@@ -2313,7 +2459,49 @@ const SQLITE_MIGRATIONS: Migration[] = [
     version: 9,
     run: (store) => store.createSubagentTables(),
   },
+  {
+    version: 10,
+    run: (store) => store.createOpenPondThreadGoalTable(),
+  },
 ];
+
+function openPondThreadGoalMutationFromEvent(event: RuntimeEvent): OpenPondThreadGoalMutation | null {
+  if (event.name !== "diagnostic" || !event.sessionId) return null;
+  const data = recordValue(event.data);
+  const provider = stringValue(data?.provider);
+  if (data?.kind === "thread_goal_cleared") {
+    return provider && provider !== "openpond" ? null : { kind: "clear", sessionId: event.sessionId };
+  }
+  if (data?.kind !== "thread_goal") return null;
+  const goal = recordValue(data.goal);
+  const goalProvider = provider ?? stringValue(goal?.provider) ?? "openpond";
+  const goalId = stringValue(goal?.id);
+  const status = stringValue(goal?.status);
+  if (goalProvider !== "openpond" || !goalId || !status) return null;
+  return {
+    kind: "upsert",
+    sessionId: event.sessionId,
+    goalId,
+    status,
+    updatedAt: stringValue(goal?.updatedAt) ?? event.timestamp,
+  };
+}
+
+function isTerminalOpenPondGoalStatus(status: string): boolean {
+  return status === "completed" ||
+    status === "complete" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "stopped";
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 
 function localAgentScheduleFromRow(row: LocalAgentScheduleRow): LocalAgentSchedule {
   return JSON.parse(row.payload) as LocalAgentSchedule;

@@ -43,6 +43,7 @@ import {
   type SubagentMessage,
   type SubagentMessageDelivery,
   type SubagentMessagePriority,
+  type SubagentDelegationMode,
   type SubagentProgress,
   type SubagentProgressPhase,
   type SubagentRef,
@@ -132,6 +133,7 @@ import {
   runOpenPondGoalControl,
   type OpenPondGoalControlAction,
   type OpenPondGoalControlGoal,
+  type OpenPondGoalControlResult,
   type OpenPondGoalSubagentRunSummary,
   type OpenPondGoalSubagentState,
 } from "../openpond/goal-control.js";
@@ -626,6 +628,13 @@ export function createTurnRunner(deps: {
       toRole?: string | null;
       limit?: number;
     }): Promise<SubagentMessage[]>;
+    claimOpenPondThreadGoal?(input: {
+      sessionId: string;
+      goalId: string;
+      status: string;
+      updatedAt: string;
+    }): Promise<void>;
+    releaseOpenPondThreadGoalClaim?(sessionId: string, goalId: string): Promise<void>;
   };
   upsertApproval: (approval: Approval) => Promise<void>;
   createSession?: (payload: unknown) => Promise<Session>;
@@ -848,10 +857,11 @@ export function createTurnRunner(deps: {
 
   async function subagentExplorationSteeringPolicyForSession(
     session: Session,
+    preferences?: AppPreferences,
   ): Promise<SubagentExplorationSteeringPolicy> {
     if (!session.subagentRoleId) return SubagentExplorationSteeringPolicySchema.parse({});
-    const preferences = await loadAppPreferences();
-    const role = preferences.subagents.roles.find((candidate) => candidate.id === session.subagentRoleId);
+    const resolvedPreferences = preferences ?? await loadAppPreferences();
+    const role = resolvedPreferences.subagents.roles.find((candidate) => candidate.id === session.subagentRoleId);
     return role?.explorationSteering ?? SubagentExplorationSteeringPolicySchema.parse({});
   }
 
@@ -975,7 +985,11 @@ export function createTurnRunner(deps: {
     runtimeEvents: RuntimeEvent[],
     profileSkillRuntime: ProfileSkillRuntime,
     connectedApps: ResolvedConnectedAppContext[],
-    options: { disableWorkflowDelegationTools?: boolean } = {},
+    options: {
+      disableWorkflowDelegationTools?: boolean;
+      subagentRoles?: readonly SubagentRoleSettings[];
+      subagentToolsEnabled?: boolean;
+    } = {},
   ): ModelToolDefinition[] {
     const definitions: ModelToolDefinition[] = [];
     if (!options.disableWorkflowDelegationTools) {
@@ -983,11 +997,11 @@ export function createTurnRunner(deps: {
         ...createOpenPondCapabilityModelToolDefinitions({
           startCreatePipeline: startCreatePipelineFromModelTool,
           startGoalControl: (context, input) =>
-            startGoalControlFromModelTool(context, input, runtimeEvents),
+            startGoalControlFromModelTool(context, input),
           ...(executeProfileSkillGoal
             ? { startProfileSkillGoal: startProfileSkillGoalFromModelTool }
             : {}),
-          ...(subagentToolsAvailable()
+          ...(subagentToolsAvailable() && options.subagentToolsEnabled !== false
             ? {
                 startSubagent: startSubagentFromModelTool,
                 statusSubagents: statusSubagentsFromModelTool,
@@ -995,6 +1009,7 @@ export function createTurnRunner(deps: {
                 cancelSubagent: cancelSubagentFromModelTool,
                 reviewSubagent: reviewSubagentFromModelTool,
                 sendSubagentMessage: sendSubagentMessageFromModelTool,
+                subagentRoles: options.subagentRoles,
               }
             : {}),
         }),
@@ -1272,6 +1287,7 @@ export function createTurnRunner(deps: {
       parentSession: context.session,
       parentTurnId: context.turnId,
       run,
+      childSession,
       eventName: isolationBlocker ? "subagent.blocked" : "subagent.started",
       status: isolationBlocker ? "failed" : "pending",
       output: isolationBlocker
@@ -1724,7 +1740,7 @@ export function createTurnRunner(deps: {
         output: priority === "interrupt"
           ? `Interrupt subagent message sent: ${message.kind}.`
           : `Subagent message sent: ${message.kind}.`,
-        data: { message, delivery, deliveredRunIds },
+        data: { message, delivery, deliveredRunIds, modelRef: context.session.modelRef },
       }),
     );
     if (context.session.parentSessionId && context.session.parentSessionId !== context.session.id) {
@@ -1743,6 +1759,7 @@ export function createTurnRunner(deps: {
             deliveredRunIds,
             childSessionId: context.session.id,
             roleId: context.session.subagentRoleId ?? null,
+            modelRef: context.session.modelRef,
           },
         }),
       );
@@ -1976,6 +1993,7 @@ export function createTurnRunner(deps: {
             deliveredToRunId: run.id,
             acknowledgedRunId: run.id,
             priority: message.priority ?? "normal",
+            modelRef: run.modelRef,
           },
         }),
       );
@@ -2519,6 +2537,7 @@ export function createTurnRunner(deps: {
     parentSession: Session;
     parentTurnId?: string | null;
     run: SubagentRun;
+    childSession?: Session | null;
     eventName: Extract<RuntimeEvent["name"], `subagent.${string}`>;
     status: RuntimeEvent["status"];
     output: string;
@@ -2536,9 +2555,17 @@ export function createTurnRunner(deps: {
           run: input.run,
           childSessionId: input.run.childSessionId,
           parentGoalId: input.run.parentGoalId,
+          ...(input.childSession
+            ? { childSession: sessionShellForRuntimeEvent(input.childSession) }
+            : {}),
         },
       }),
     );
+  }
+
+  function sessionShellForRuntimeEvent(session: Session): Session {
+    const { metadata: _metadata, ...shell } = session;
+    return shell;
   }
 
   async function appendSubagentReviewCorrectionMessage(input: {
@@ -2610,7 +2637,12 @@ export function createTurnRunner(deps: {
         output: input.priority === "interrupt"
           ? "Interrupt subagent review correction sent."
           : "Subagent review correction sent.",
-        data: { message, delivery, deliveredRunIds: delivery.deliveredRunIds },
+        data: {
+          message,
+          delivery,
+          deliveredRunIds: delivery.deliveredRunIds,
+          modelRef: input.run.modelRef,
+        },
       }),
     );
     return message;
@@ -4863,8 +4895,41 @@ export function createTurnRunner(deps: {
     return [`${label}:`, ...values.map((value) => `- ${value}`)].join("\n");
   }
 
-  function subagentSystemContextForSession(session: Session): string | null {
-    if (!session.subagentRunId) return null;
+  type SubagentDelegationResolution = {
+    mode: SubagentDelegationMode;
+    source: "session_override" | "global_default";
+  };
+
+  function resolveSubagentDelegation(
+    session: Session,
+    preferences: AppPreferences | null,
+  ): SubagentDelegationResolution | null {
+    if (session.subagentRunId || !preferences?.subagents.enabled) return null;
+    return session.subagentDelegationMode
+      ? { mode: session.subagentDelegationMode, source: "session_override" }
+      : { mode: preferences.subagents.delegationMode, source: "global_default" };
+  }
+
+  function subagentDelegationInstruction(resolution: SubagentDelegationResolution): string {
+    const behavior = resolution.mode === "manual"
+      ? "Start subagents only when the user explicitly requests delegation."
+      : resolution.mode === "proactive"
+        ? "Prefer delegating meaningful independent research, coding, testing, and review work; use parallel children when workstreams are independent."
+        : "Delegate clearly bounded work when parallelism or independent review is valuable; keep small linear work in the parent.";
+    return [
+      `Subagent delegation mode: ${resolution.mode}. ${behavior}`,
+      "Keep planning, coordination, and final synthesis in the parent.",
+      "Explicit user delegation instructions take priority over this default.",
+    ].join("\n");
+  }
+
+  function subagentSystemContextForSession(
+    session: Session,
+    delegation: SubagentDelegationResolution | null,
+  ): string | null {
+    if (!session.subagentRunId) {
+      return delegation ? subagentDelegationInstruction(delegation) : null;
+    }
     const subagent = recordFromUnknown(recordFromUnknown(session.metadata)?.subagent);
     const systemContext = typeof subagent?.systemContext === "string" ? subagent.systemContext.trim() : "";
     return systemContext || null;
@@ -5455,13 +5520,37 @@ export function createTurnRunner(deps: {
   async function startGoalControlFromModelTool(
     context: ModelToolExecutionContext,
     input: OpenPondGoalControlToolInput,
-    runtimeEvents: RuntimeEvent[],
   ): Promise<OpenPondGoalControlToolResult> {
+    const runtimeEvents = (await store.snapshot()).events;
     const result = runOpenPondGoalControl({
       session: context.session,
       events: runtimeEvents,
       request: input,
     });
+    const claimed = result.action === "start" && Boolean(store.claimOpenPondThreadGoal);
+    if (claimed) {
+      await store.claimOpenPondThreadGoal!({
+        sessionId: context.session.id,
+        goalId: result.goal.id,
+        status: result.goal.status,
+        updatedAt: result.goal.updatedAt,
+      });
+    }
+    try {
+      return await persistGoalControlFromModelTool(context, input, result);
+    } catch (error) {
+      if (claimed) {
+        await store.releaseOpenPondThreadGoalClaim?.(context.session.id, result.goal.id).catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+
+  async function persistGoalControlFromModelTool(
+    context: ModelToolExecutionContext,
+    input: OpenPondGoalControlToolInput,
+    result: OpenPondGoalControlResult,
+  ): Promise<OpenPondGoalControlToolResult> {
     await assertGoalSubagentsResolvedForCompletion({
       context,
       goalId: result.goal.id,
@@ -5650,12 +5739,8 @@ export function createTurnRunner(deps: {
   }
 
   function goalSubagentRunBlocking(run: SubagentRun): boolean {
-    if (subagentRunDismissed(run)) return false;
-    return run.status === "blocked" ||
-      run.status === "needs_user_input" ||
-      run.status === "failed_with_artifacts" ||
-      run.status === "failed" ||
-      run.status === "cancelled";
+    if (subagentRunResolvedForGoal(run)) return false;
+    return run.status === "blocked";
   }
 
   function goalSubagentRunTerminal(run: SubagentRun): boolean {
@@ -5668,7 +5753,17 @@ export function createTurnRunner(deps: {
   }
 
   function subagentRunResolvedForGoal(run: SubagentRun): boolean {
-    return subagentRunAccepted(run) || subagentRunDismissed(run) || run.status === "superseded";
+    return subagentRunAccepted(run) ||
+      subagentRunDismissed(run) ||
+      run.status === "superseded" ||
+      subagentRunCancelledByParentGoal(run) ||
+      (!run.required && goalSubagentRunTerminal(run));
+  }
+
+  function subagentRunCancelledByParentGoal(run: SubagentRun): boolean {
+    if (run.status !== "cancelled") return false;
+    const lifecycle = recordFromUnknown(run.metadata?.goalLifecycle);
+    return stringFromRecord(lifecycle ?? {}, "action") === "cancelled_by_parent_goal";
   }
 
   function goalSubagentRunCleanupNeeded(run: SubagentRun): boolean {
@@ -5849,6 +5944,7 @@ export function createTurnRunner(deps: {
       `Goal ID: ${goal.id}`,
       `Objective: ${goal.objective}`,
       "",
+      "This is a continuation of the goal above. Do not call openpond_goal_control with action start.",
       "Make concrete progress in this turn using the available tools and workspace context.",
       "If the goal is complete, call openpond_goal_control with action complete and include the evidence in the reason.",
       "If you cannot continue productively without user input or an external change, explain the blocker clearly and do not start an empty loop.",
@@ -6343,6 +6439,7 @@ export function createTurnRunner(deps: {
       messages: HostedMessages,
       options?: HostedToolLoopStreamOptions,
     ) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
+    appPreferences: AppPreferences | null;
   }): Promise<Session> {
     let session = params.session;
     const messages = [...params.messages];
@@ -6351,13 +6448,18 @@ export function createTurnRunner(deps: {
     const invalidRequestCounts = new Map<string, number>();
     let workspaceToolResultCount = 0;
     let toolRequiredCorrectionSent = false;
+    const appPreferences = params.appPreferences;
     const nativeToolDefinitions = nativeToolsEnabledForProvider(params.provider)
       ? enabledModelToolDefinitions(createNativeModelToolDefinitions(
           params.openPondActionCatalog,
           params.resourceEvents,
         params.profileSkillRuntime,
         params.connectedApps,
-        { disableWorkflowDelegationTools: isTerminalOneShotTurn(params.turn) },
+        {
+          disableWorkflowDelegationTools: isTerminalOneShotTurn(params.turn),
+          subagentRoles: appPreferences?.subagents.roles.filter((role) => role.enabled),
+          subagentToolsEnabled: appPreferences?.subagents.enabled ?? false,
+        },
       ), {
           session,
           provider: params.provider,
@@ -6372,7 +6474,7 @@ export function createTurnRunner(deps: {
     const initialEventIds = new Set(params.resourceEvents.map((item) => item.id));
     const deliveredSubagentAsideKeys = new Set<string>();
     const subagentSteeringTracker = createSubagentToolLoopSteeringTracker(
-      await subagentExplorationSteeringPolicyForSession(session),
+      await subagentExplorationSteeringPolicyForSession(session, appPreferences ?? undefined),
     );
     async function appendContextUsage(input: {
       messages: HostedMessages;
@@ -7839,6 +7941,10 @@ export function createTurnRunner(deps: {
     if (subagentContinuation) turnPermissions = subagentContinuation.turnPermissions;
     const activeProvider = input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider;
     const activeModelId = input.modelRef?.modelId ?? input.model ?? session.modelRef?.modelId ?? null;
+    const appPreferences = nativeToolsEnabledForProvider(activeProvider) && subagentToolsAvailable()
+      ? await loadAppPreferences()
+      : null;
+    const subagentDelegation = resolveSubagentDelegation(session, appPreferences);
     const turnModelRef: ChatModelRef | null = activeModelId
       ? { providerId: activeProvider, modelId: activeModelId }
       : input.modelRef ?? session.modelRef ?? null;
@@ -7851,6 +7957,7 @@ export function createTurnRunner(deps: {
     const effectiveUsageAttribution = input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
     const createPipelineMetadata = {
       ...(input.metadata ? input.metadata : {}),
+      ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution ? { usageAttribution: effectiveUsageAttribution } : {}),
       ...(input.createPipelineRequest ? { createPipelineRequest: input.createPipelineRequest } : {}),
       ...(input.createPipeline ? { createPipeline: input.createPipeline } : {}),
@@ -8259,7 +8366,7 @@ export function createTurnRunner(deps: {
             signal: controller.signal,
           })
         : [];
-      const extraSystemContext = subagentSystemContextForSession(session);
+      const extraSystemContext = subagentSystemContextForSession(session, subagentDelegation);
       if (session.provider === "openpond") {
         const providerTurnId = `openpond-${turn.id}`;
         const model = turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
@@ -8293,6 +8400,7 @@ export function createTurnRunner(deps: {
           messages,
         });
         session = await runHostedToolLoop({
+          appPreferences,
           session,
           turn,
           turnPermissions,
@@ -8399,6 +8507,7 @@ export function createTurnRunner(deps: {
           maxContextTokens: contextLimitTokens,
         });
         session = await runHostedToolLoop({
+          appPreferences,
           session,
           turn,
           turnPermissions,

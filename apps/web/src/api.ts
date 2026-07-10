@@ -6,6 +6,7 @@ import type {
   CloudWorkItemBackgroundRequest,
   CloudWorkItemDetail,
   CompactSessionRequest,
+  ChatAttachment,
   ChatAttachmentSummary,
   CreateCloudWorkItemRequest,
   CreateLocalProjectRequest,
@@ -76,6 +77,15 @@ import type {
   WorkspaceTemplateConfigView,
   WorkspaceToolRequest,
   WorkspaceToolResult,
+  TeamChatHostedAiThread,
+  TeamChatAttachment,
+  TeamChatAttachmentDownload,
+  TeamChatEventPage,
+  TeamChatMember,
+  TeamChatMessage,
+  TeamChatRealtimeSession,
+  TeamChatThread,
+  TeamChatThreadDetail,
 } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
@@ -158,6 +168,183 @@ export type {
 export const api = {
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  teamChatMembers: (connection: ClientConnection, teamId: string) =>
+    apiFetch<{ members: TeamChatMember[] }>(
+      connection,
+      `/v1/team-chat/members?teamId=${encodeURIComponent(teamId)}`,
+    ),
+  teamChatThreads: (connection: ClientConnection, teamId: string) =>
+    apiFetch<{ threads: TeamChatThread[] }>(
+      connection,
+      `/v1/team-chat/threads?teamId=${encodeURIComponent(teamId)}`,
+    ),
+  teamChatRealtimeSession: (connection: ClientConnection, teamId: string) =>
+    apiFetch<TeamChatRealtimeSession>(
+      connection,
+      `/v1/team-chat/realtime-session?teamId=${encodeURIComponent(teamId)}`,
+    ),
+  teamChatEvents: (
+    connection: ClientConnection,
+    teamId: string,
+    input: { after?: number; limit?: number } = {},
+  ) => {
+    const query = new URLSearchParams({ teamId });
+    if (input.after != null) query.set("after", String(input.after));
+    if (input.limit != null) query.set("limit", String(input.limit));
+    return apiFetch<TeamChatEventPage>(
+      connection,
+      `/v1/team-chat/events?${query.toString()}`,
+    );
+  },
+  teamChatGeneral: (connection: ClientConnection, teamId: string) =>
+    apiFetch<TeamChatThreadDetail>(connection, "/v1/team-chat/threads/general", {
+      method: "POST",
+      body: JSON.stringify({ teamId }),
+    }),
+  teamChatDm: (connection: ClientConnection, teamId: string, otherUserId: string) =>
+    apiFetch<TeamChatThreadDetail>(connection, "/v1/team-chat/threads/dm", {
+      method: "POST",
+      body: JSON.stringify({ teamId, otherUserId }),
+    }),
+  teamChatThread: (
+    connection: ClientConnection,
+    teamId: string,
+    threadId: string,
+    input: { beforeSequence?: number; limit?: number } = {},
+  ) => {
+    const query = new URLSearchParams({ teamId });
+    if (input.beforeSequence != null) query.set("beforeSequence", String(input.beforeSequence));
+    if (input.limit != null) query.set("limit", String(input.limit));
+    return apiFetch<TeamChatThreadDetail>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}?${query.toString()}`,
+    );
+  },
+  uploadTeamChatAttachment: (
+    connection: ClientConnection,
+    threadId: string,
+    input: { teamId: string; attachment: ChatAttachment },
+  ) =>
+    apiFetch<TeamChatAttachment>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/attachments/upload`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  teamChatAttachmentDownload: (
+    connection: ClientConnection,
+    teamId: string,
+    attachmentId: string,
+  ) =>
+    apiFetch<TeamChatAttachmentDownload>(
+      connection,
+      `/v1/team-chat/attachments/${encodeURIComponent(attachmentId)}/download?teamId=${encodeURIComponent(teamId)}`,
+    ),
+  sendTeamChatMessage: (
+    connection: ClientConnection,
+    threadId: string,
+    input: {
+      teamId: string;
+      body: string;
+      clientRequestId: string;
+      mentionUserIds?: string[];
+      attachmentIds?: string[];
+    },
+  ) =>
+    apiFetch<TeamChatMessage>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  editTeamChatMessage: (
+    connection: ClientConnection,
+    threadId: string,
+    messageId: string,
+    input: { teamId: string; body: string },
+  ) =>
+    apiFetch<TeamChatMessage>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  deleteTeamChatMessage: (
+    connection: ClientConnection,
+    threadId: string,
+    messageId: string,
+    teamId: string,
+  ) =>
+    apiFetch<TeamChatMessage>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`,
+      { method: "DELETE", body: JSON.stringify({ teamId }) },
+    ),
+  markTeamChatRead: (
+    connection: ClientConnection,
+    threadId: string,
+    teamId: string,
+    sequence: number,
+  ) =>
+    apiFetch<{ sequence: number }>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/read`,
+      { method: "POST", body: JSON.stringify({ teamId, sequence }) },
+    ),
+  createTeamChatAiThread: (
+    connection: ClientConnection,
+    threadId: string,
+    input: {
+      teamId: string;
+      body: string;
+      clientRequestId: string;
+      providerId: string;
+      modelId: string;
+    },
+  ) =>
+    apiFetch<TeamChatHostedAiThread>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/ai-threads`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  teamChatAiThread: (connection: ClientConnection, teamId: string, conversationId: string) =>
+    apiFetch<TeamChatHostedAiThread>(
+      connection,
+      `/v1/team-chat/ai-threads/${encodeURIComponent(conversationId)}?teamId=${encodeURIComponent(teamId)}`,
+    ),
+  sendTeamChatAiTurn: (
+    connection: ClientConnection,
+    conversationId: string,
+    input: {
+      teamId: string;
+      body: string;
+      clientRequestId: string;
+      providerId: string;
+      modelId: string;
+    },
+  ) =>
+    apiFetch<TeamChatHostedAiThread>(
+      connection,
+      `/v1/team-chat/ai-threads/${encodeURIComponent(conversationId)}/turns`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  executeTeamChatAiTurn: (
+    connection: ClientConnection,
+    turnId: string,
+    teamId: string,
+  ) =>
+    apiFetch<{ accepted: true }>(
+      connection,
+      `/v1/team-chat/ai-turns/${encodeURIComponent(turnId)}/execute`,
+      { method: "POST", body: JSON.stringify({ teamId }) },
+    ),
+  cancelTeamChatAiTurnExecution: (
+    connection: ClientConnection,
+    turnId: string,
+    teamId: string,
+  ) =>
+    apiFetch<{ cancelled: boolean }>(
+      connection,
+      `/v1/team-chat/ai-turns/${encodeURIComponent(turnId)}/execute/cancel`,
+      { method: "POST", body: JSON.stringify({ teamId }) },
+    ),
   usage: (
     connection: ClientConnection,
     input: {

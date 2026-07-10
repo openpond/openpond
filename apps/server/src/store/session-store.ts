@@ -40,6 +40,7 @@ export function createSessionStore(deps: {
       parentGoalId: input.parentGoalId ?? null,
       subagentRunId: input.subagentRunId ?? null,
       subagentRoleId: input.subagentRoleId ?? null,
+      subagentDelegationMode: input.subagentDelegationMode ?? null,
       title: input.title || input.appName || "New chat",
       appId: input.appId ?? null,
       appName: input.appName ?? null,

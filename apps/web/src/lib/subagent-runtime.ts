@@ -172,13 +172,7 @@ const NEEDS_REVISION_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>(["needs_
 const NEEDS_USER_INPUT_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>(["needs_user_input"]);
 const ACCEPTED_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>(["accepted", "completed"]);
 const FAILED_WITH_ARTIFACTS_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>(["failed_with_artifacts"]);
-const BLOCKED_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>([
-  "blocked",
-  "needs_user_input",
-  "failed_with_artifacts",
-  "failed",
-  "cancelled",
-]);
+const BLOCKED_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>(["blocked"]);
 const TERMINAL_SUBAGENT_STATUSES = new Set<SubagentRun["status"]>([
   "accepted",
   "completed",
@@ -211,7 +205,7 @@ export function latestSubagentRuntimeFromEvents(
   const needsUserInputRuns = runs.filter((run) => NEEDS_USER_INPUT_SUBAGENT_STATUSES.has(run.status));
   const acceptedRuns = runs.filter(subagentRunAccepted);
   const failedWithArtifactsRuns = runs.filter((run) => FAILED_WITH_ARTIFACTS_SUBAGENT_STATUSES.has(run.status));
-  const blockedRuns = runs.filter((run) => BLOCKED_SUBAGENT_STATUSES.has(run.status) && !subagentRunDismissed(run));
+  const blockedRuns = runs.filter((run) => BLOCKED_SUBAGENT_STATUSES.has(run.status) && !subagentRunResolved(run));
   const completedRuns = runs.filter((run) => ACCEPTED_SUBAGENT_STATUSES.has(run.status) || run.review?.status === "accepted");
   const terminalRuns = runs.filter(subagentRunTerminal);
   const unresolvedRuns = runs.filter((run) => !subagentRunResolved(run));
@@ -325,6 +319,10 @@ function subagentRuntimeLabel(
   if (needsRevisionRuns.length > 0) return `${needsRevisionRuns.length} ${plural(needsRevisionRuns.length, "subagent")} needs revision`;
   if (submittedRuns.length > 0) return `${submittedRuns.length} ${plural(submittedRuns.length, "subagent")} submitted`;
   if (blockedRuns.length > 0) return `${blockedRuns.length} ${plural(blockedRuns.length, "subagent")} blocked`;
+  const failedRuns = terminalRuns.filter((run) => run.status === "failed" || run.status === "failed_with_artifacts");
+  if (failedRuns.length > 0) return `${failedRuns.length} ${plural(failedRuns.length, "subagent")} failed`;
+  const cancelledRuns = terminalRuns.filter((run) => run.status === "cancelled");
+  if (cancelledRuns.length > 0) return `${cancelledRuns.length} ${plural(cancelledRuns.length, "subagent")} cancelled`;
   if (completedRuns.length === 0 && terminalRuns.length > 0) return `${terminalRuns.length} ${plural(terminalRuns.length, "subagent")} terminal`;
   return `${completedRuns.length} ${plural(completedRuns.length, "subagent")} accepted`;
 }
@@ -359,7 +357,17 @@ function subagentRunAccepted(run: SubagentRun): boolean {
 }
 
 function subagentRunResolved(run: SubagentRun): boolean {
-  return subagentRunAccepted(run) || subagentRunDismissed(run) || run.status === "superseded";
+  return subagentRunAccepted(run) ||
+    subagentRunDismissed(run) ||
+    run.status === "superseded" ||
+    subagentRunCancelledByParentGoal(run) ||
+    (!run.required && subagentRunTerminal(run));
+}
+
+function subagentRunCancelledByParentGoal(run: SubagentRun): boolean {
+  if (run.status !== "cancelled") return false;
+  const lifecycle = asRecord(run.metadata.goalLifecycle);
+  return stringValue(lifecycle?.action) === "cancelled_by_parent_goal";
 }
 
 function subagentRunTerminal(run: SubagentRun): boolean {

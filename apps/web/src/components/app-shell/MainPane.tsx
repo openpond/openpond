@@ -33,6 +33,7 @@ import type {
   ResolveApprovalRequest,
   RuntimeEvent,
   Session,
+  SubagentDelegationMode,
   UsageRequestAttribution,
   WorkspaceDiffSummary,
   WorkspaceKind,
@@ -82,6 +83,7 @@ import type {
   WorkspaceDiffTabRequest,
   WorkspaceFileSourceSwitcher,
 } from "../workspace-diff/workspace-diff-panel-model";
+import { TeamAiThreadPanel, TeamChatView, type TeamChatViewProps } from "../team-chat/TeamChatView";
 
 const WorkspaceDiffPanel = lazy(() =>
   import("../workspace-diff/WorkspaceDiffPanel").then((module) => ({ default: module.WorkspaceDiffPanel })),
@@ -107,6 +109,7 @@ const InsightsView = lazy(() =>
 
 type MainPaneProps = {
   view: AppView;
+  teamChat: TeamChatViewProps;
   bootstrap: BootstrapPayload | null;
   runtimeEvents: RuntimeEvent[];
   chatMessages: ChatMessage[];
@@ -129,6 +132,9 @@ type MainPaneProps = {
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
+  subagentDelegationDefaultMode: SubagentDelegationMode;
+  subagentDelegationMode: SubagentDelegationMode | null;
+  subagentDelegationAvailable: boolean;
   pendingApproval: Approval | null;
   activeWorkspaceAppId: string | null;
   activeWorkspaceId: string | null;
@@ -194,6 +200,7 @@ type MainPaneProps = {
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
   changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
+  changeSubagentDelegationMode: (mode: SubagentDelegationMode | null) => void;
   resolveApproval: (
     approvalId: string,
     decision: ResolveApprovalRequest["decision"],
@@ -459,6 +466,7 @@ export function sandboxIdFromWorkspaceName(workspaceName: string | null): string
 
 export function MainPane({
   view,
+  teamChat,
   bootstrap,
   runtimeEvents,
   chatMessages,
@@ -481,6 +489,9 @@ export function MainPane({
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,
+  subagentDelegationDefaultMode,
+  subagentDelegationMode,
+  subagentDelegationAvailable,
   pendingApproval,
   activeWorkspaceAppId,
   activeWorkspaceId,
@@ -546,6 +557,7 @@ export function MainPane({
   changeCodexPermissionMode,
   changeCodexReasoningEffort,
   changeOpenPondCommandAccessMode,
+  changeSubagentDelegationMode,
   resolveApproval,
   answerCreatePipelineQuestionTurn,
   approveCreatePipelineTurn,
@@ -668,9 +680,16 @@ export function MainPane({
   const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
+  const showTeamAiThreadPanel =
+    view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
   const showRightHomePanel =
     (view === "chat" || view === "cloud" || view === "profile") && diffPanelOpen && rightPanelMode === "home";
-  const showRightPanel = showDiffPanel || showBrowserPanel || showRightChatPanel || showRightHomePanel;
+  const showRightPanel =
+    showDiffPanel ||
+    showBrowserPanel ||
+    showRightChatPanel ||
+    showTeamAiThreadPanel ||
+    showRightHomePanel;
   const rightPanelExpanded = showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
   const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
   const billingTarget = billingTargetForContext({
@@ -702,7 +721,9 @@ export function MainPane({
     reviseCreatePipelineTurn,
   ]);
   const viewClass =
-    view === "apps" || view === "get-started" || view === "insights" || view === "profile"
+    view === "team"
+      ? "team-active"
+      : view === "apps" || view === "get-started" || view === "insights" || view === "profile"
       ? "page-active"
       : view === "cloud"
         ? "cloud-active"
@@ -796,7 +817,6 @@ export function MainPane({
             });
           }
           if (!slashCommandCloudProjectId) {
-            setView("cloud");
             showToast(`Select a Cloud Project before using /${command.command}.`, "error");
             return false;
           }
@@ -1300,6 +1320,13 @@ export function MainPane({
       onResizeStart={onDiffPanelResizeStart}
     />
   ) : null;
+  const teamAiThreadPanel = showTeamAiThreadPanel ? (
+    <TeamAiThreadPanel
+      {...teamChat}
+      key={teamChat.aiThread?.conversationId}
+      onResizeStart={onDiffPanelResizeStart}
+    />
+  ) : null;
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
@@ -1355,7 +1382,7 @@ export function MainPane({
       onToggleTerminal={onToggleTerminal}
     />
   ) : null;
-  const rightPanel = rightChatPanel ?? diffPanel ?? browserPanel ?? homePanel;
+  const rightPanel = teamAiThreadPanel ?? rightChatPanel ?? diffPanel ?? browserPanel ?? homePanel;
   const terminalPanel = (
     <AppTerminalPanel
       open={terminalOpen}
@@ -1411,6 +1438,11 @@ export function MainPane({
             onToast={showToast}
           />
         </Suspense>
+      ) : view === "team" ? (
+        <>
+          <TeamChatView {...teamChat} />
+          {showRightPanel ? rightPanel : null}
+        </>
       ) : view === "get-started" ? (
         <Suspense fallback={null}>
           <GetStartedView
@@ -1571,6 +1603,8 @@ export function MainPane({
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
                 openPondCommandAccessMode={openPondCommandAccessMode}
+                subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
+                subagentDelegationMode={subagentDelegationMode}
                 onProviderChange={changeDraftProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1579,6 +1613,7 @@ export function MainPane({
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
+                onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
                 onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
@@ -1635,6 +1670,8 @@ export function MainPane({
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
                 openPondCommandAccessMode={openPondCommandAccessMode}
+                subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
+                subagentDelegationMode={subagentDelegationMode}
                 onProviderChange={changeDraftProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1643,6 +1680,7 @@ export function MainPane({
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
+                onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
                 onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}

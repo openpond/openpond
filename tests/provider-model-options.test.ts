@@ -8,6 +8,10 @@ import {
   providerSupportsSubscription,
   visibleProviderModelOptions,
 } from "../apps/web/src/components/settings/ProviderSettingsSection";
+import {
+  modelOptionsForProvider,
+  providerModelSupportsReasoning,
+} from "../apps/web/src/lib/app-models";
 import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
 import type { ProviderSecrets } from "../apps/server/src/openpond/provider-secrets";
 
@@ -72,5 +76,45 @@ describe("provider model option capping", () => {
     });
 
     expect(providerCredentialLabel(settings.statuses.zai!, settings)).toBe("Coding Plan key");
+  });
+
+  test("keeps current OpenAI subscription models visible with reasoning effort support", () => {
+    const settings = buildProviderSettings({
+      file: {
+        version: 1,
+        providers: {},
+        modelCaches: {
+          openai: {
+            providerId: "openai",
+            models: [
+              {
+                id: "gpt-5.5",
+                providerId: "openai",
+                displayName: "GPT-5.5",
+                contextWindow: null,
+                outputLimit: null,
+                lifecycleStatus: "active",
+                source: "curated",
+                capabilities: { reasoning: true },
+              },
+            ],
+            fetchedAt: "2026-07-08T10:00:00.000Z",
+            lastError: null,
+            source: "curated",
+          },
+        },
+      },
+    });
+    const options = modelOptionsForProvider("openai", settings).map((option) => option.value);
+
+    expect(options.slice(0, 3)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
+    expect(options).toContain("gpt-5.5");
+    expect(options).toContain("gpt-5.3-codex-spark");
+    expect(providerModelSupportsReasoning("openai", "gpt-5.6-sol", settings)).toBe(true);
+    expect(providerModelSupportsReasoning("openai", "gpt-5.3-codex-spark", settings)).toBe(true);
   });
 });

@@ -8,6 +8,8 @@ import type {
   OpenPondApp,
   OpenPondProfileSkill,
   ProviderSettings,
+  SubagentDelegationMode,
+  TeamChatMember,
 } from "@openpond/contracts";
 import {
   chatProviderLabel,
@@ -100,6 +102,11 @@ export type {
 
 type ComposerProps = {
   mode: "dock" | "start";
+  surface?: "chat" | "team";
+  teamUseModel?: boolean;
+  teamUseModelLocked?: boolean;
+  teamMentionMembers?: TeamChatMember[];
+  onTeamUseModelChange?: (value: boolean) => void;
   prompt: string;
   composeNotice?: ComposerNotice | null;
   mentionApps?: OpenPondApp[];
@@ -129,6 +136,8 @@ type ComposerProps = {
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
+  subagentDelegationDefaultMode?: SubagentDelegationMode;
+  subagentDelegationMode?: SubagentDelegationMode | null;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
@@ -137,6 +146,7 @@ type ComposerProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
+  onSubagentDelegationModeChange?: (mode: SubagentDelegationMode | null) => void;
   onPromptChange: (value: string) => void;
   onMentionAppSelect?: (appId: string | null) => void;
   showToast: ShowAppToast;
@@ -300,6 +310,11 @@ export function hasComposerSubmittableInput({
 
 export function Composer({
   mode,
+  surface = "chat",
+  teamUseModel = false,
+  teamUseModelLocked = false,
+  teamMentionMembers = [],
+  onTeamUseModelChange,
   prompt,
   composeNotice = null,
   mentionApps = [],
@@ -329,6 +344,8 @@ export function Composer({
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,
+  subagentDelegationDefaultMode,
+  subagentDelegationMode,
   onProviderChange,
   onProviderSetupOpen,
   onProjectTargetChange,
@@ -337,6 +354,7 @@ export function Composer({
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
+  onSubagentDelegationModeChange,
   onPromptChange,
   onMentionAppSelect,
   showToast,
@@ -387,7 +405,12 @@ export function Composer({
     setAttachmentError,
     stageAttachmentsForSubmit,
   } = useComposerAttachments();
-  const placeholder = mode === "start" ? "Ask Openpond Anything" : "Ask for follow-up changes";
+  const placeholder =
+    surface === "team"
+      ? "Message team"
+      : mode === "start"
+        ? "Ask Openpond Anything"
+        : "Ask for follow-up changes";
   const modelValue = normalizeChatModel(provider, model, providerSettings);
   const dropdownPlacement = mode === "dock" || showProjectFooter ? "top" : "bottom";
   const contextStatusTooltipId = useId();
@@ -528,6 +551,17 @@ export function Composer({
   const mentionMatches = useMemo<ComposerMentionMenuItem[]>(() => {
     if (!mentionContext) return [];
     const needle = mentionContext.query;
+    if (surface === "team") {
+      return teamMentionMembers
+        .filter((member) => {
+          if (!needle) return true;
+          return [member.name, member.handle ?? ""]
+            .map(normalizeMentionToken)
+            .some((token) => token.includes(needle));
+        })
+        .map((member) => ({ kind: "team-member" as const, member }))
+        .slice(0, 8);
+    }
     const appMatches = mentionApps
       .filter((app) => {
         if (!needle) return true;
@@ -545,7 +579,7 @@ export function Composer({
     const connectedAppMatches = connectedAppMentionMatchesForQuery(connectedAppMentions, needle)
       .map((app) => ({ kind: "connected-app" as const, app }));
     return [...appMatches, ...connectedAppMatches, ...actionMatches].slice(0, 8);
-  }, [actionCatalog, connectedAppMentions, mentionApps, mentionContext]);
+  }, [actionCatalog, connectedAppMentions, mentionApps, mentionContext, surface, teamMentionMembers]);
   const showMentionMenu = Boolean(!inputDisabled && mentionContext && mentionMatches.length > 0);
   const activeSkillContext = useMemo(
     () => activeProfileSkillInvocationContext(prompt, Math.min(cursorIndex, prompt.length)),
@@ -566,8 +600,11 @@ export function Composer({
     skillMenuDismissedPrompt !== activeSkillKey,
   );
   const activeSlashContext = useMemo(
-    () => activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
-    [cursorIndex, prompt],
+    () =>
+      surface === "team"
+        ? null
+        : activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
+    [cursorIndex, prompt, surface],
   );
   const activeSlashKey = activeSlashContext
     ? `${prompt}:${activeSlashContext.start}:${activeSlashContext.end}`
@@ -877,6 +914,20 @@ export function Composer({
   }
 
   function selectMentionItem(item: ComposerMentionMenuItem) {
+    if (item.kind === "team-member") {
+      if (!mentionContext) return;
+      const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+      const token = item.member.handle || normalizeMentionToken(item.member.name);
+      const before = prompt.slice(0, mentionContext.start);
+      const after = prompt.slice(cursor);
+      const inserted = `@${token} `;
+      const nextPrompt = `${before}${inserted}${after}`;
+      const nextCursor = before.length + inserted.length;
+      onPromptChange(nextPrompt);
+      setCursorIndex(nextCursor);
+      window.requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(nextCursor));
+      return;
+    }
     if (item.kind === "app") {
       selectMentionApp(item.app);
       return;
@@ -1416,7 +1467,10 @@ export function Composer({
               }
             }}
             onPromptChange={(nextValue, nextPromptCursor) => {
-              const completedCommand = completedTypedSlashCommand(nextValue, nextPromptCursor);
+              const completedCommand =
+                surface === "team"
+                  ? null
+                  : completedTypedSlashCommand(nextValue, nextPromptCursor);
               if (completedCommand) {
                 const nextPrompt = `${nextValue.slice(0, completedCommand.start)}${nextValue.slice(completedCommand.end)}`;
                 const nextCursor = completedCommand.start;
@@ -1454,6 +1508,10 @@ export function Composer({
           />
         </div>
         <ComposerPrimaryControls
+          surface={surface}
+          teamUseModel={teamUseModel}
+          teamUseModelLocked={teamUseModelLocked}
+          onTeamUseModelChange={onTeamUseModelChange}
           addFiles={addFiles}
           addMenuOpen={addMenuOpen}
           addMenuRef={addMenuRef}
@@ -1485,6 +1543,7 @@ export function Composer({
           onToggleAddMenu={() => setAddMenuOpen((open) => !open)}
           onTranscript={insertDictationTranscript}
           provider={provider}
+          providerSettings={providerSettings}
           providerOptions={providerOptions}
           queueDraftDisabled={queueDraftDisabled}
           queueDraftTooltip={queueDraftTooltip}
@@ -1492,6 +1551,9 @@ export function Composer({
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           selectedMentionAppId={selectedMentionAppId}
+          subagentDelegationDefaultMode={subagentDelegationDefaultMode}
+          subagentDelegationMode={subagentDelegationMode}
+          onSubagentDelegationModeChange={onSubagentDelegationModeChange}
           showToast={showToast}
           stopIcon={stopControlIcon}
           stopLabel={stopControlLabel}

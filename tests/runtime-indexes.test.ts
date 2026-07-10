@@ -632,6 +632,41 @@ describe("runtime indexes", () => {
     ]);
   });
 
+  test("treats cancelled optional subagents as terminal instead of blocked or unresolved", () => {
+    const indexes = buildRuntimeIndexes(
+      [
+        runtimeEvent({
+          id: "subagent_optional_cancelled",
+          sessionId: "s1",
+          turnId: "turn_1",
+          name: "subagent.cancelled",
+          status: "completed",
+          data: {
+            run: subagentRun({
+              id: "run_optional_cancelled",
+              status: "cancelled",
+              required: false,
+              error: "Parent completed the goal before optional review finished.",
+              report: {
+                summary: "Optional review was cancelled.",
+                blockers: ["Parent completed the goal before optional review finished."],
+              },
+              completedAt: "2026-07-01T10:01:00.000Z",
+            }),
+          },
+        }),
+      ],
+      [],
+    );
+
+    expect(latestSubagentRuntimeForSession(indexes, "s1")).toMatchObject({
+      blockedCount: 0,
+      unresolvedCount: 0,
+      terminalCount: 1,
+      label: "1 subagent cancelled",
+    });
+  });
+
   test("preserves unchanged session event arrays when appending events", () => {
     const firstEvents = [
       runtimeEvent({ id: "s1_delta", sessionId: "s1", name: "assistant.delta", output: "one" }),
@@ -689,6 +724,7 @@ function subagentRun(input: {
   review?: Partial<SubagentRun["review"]>;
   progress?: Partial<SubagentRun["progress"]>;
   metadata?: Record<string, unknown>;
+  required?: boolean;
 }) {
   return {
     id: input.id,
@@ -704,7 +740,7 @@ function subagentRun(input: {
     background: true,
     peerMessages: "goal_scoped",
     status: input.status,
-    required: true,
+    required: input.required ?? true,
     createdAt: "2026-07-01T10:00:00.000Z",
     startedAt: input.startedAt ?? null,
     completedAt: input.completedAt ?? null,

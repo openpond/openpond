@@ -31,6 +31,10 @@ describe("GoalDetailsView subagents", () => {
     expect(html).toContain("Task Graph");
     expect(html).toContain("Background check");
     expect(html).toContain("Latest update");
+    expect(html).toContain("Failed");
+    expect(html).toContain("Cancelled");
+    expect(html).toContain("Required failed");
+    expect(html).toContain("Required cancelled");
     expect(html).toContain("Coding running: Inspecting files");
     expect(html).toContain("zai/glm-5.2");
     expect(html).toContain("Implement the patch");

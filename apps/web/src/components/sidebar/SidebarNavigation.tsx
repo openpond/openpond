@@ -34,7 +34,7 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       <button className="nav-command" onClick={() => beginNewChat(null)}>
         <SquarePen size={16} />
-        <span>New chat</span>
+        <span>New task</span>
       </button>
       <button
         className={`nav-command ${view === "get-started" ? "active" : ""}`}

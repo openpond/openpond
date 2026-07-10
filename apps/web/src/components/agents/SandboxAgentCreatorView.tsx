@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { api } from "../../api";
-import { normalizeOpenPondOrganization } from "../../lib/cloud-project-utils";
+import {
+  normalizeOpenPondOrganization,
+  resolveDefaultOpenPondOrganization,
+} from "../../lib/cloud-project-utils";
 import type { OpenPondOrganization } from "../../lib/organization-types";
 import {
   openPondOrganizationCacheKey,
@@ -39,8 +42,8 @@ export function SandboxAgentCreatorView({
 
   const organizationCacheKey = openPondOrganizationCacheKey(account);
   const normalizedDefaultTeamId = defaultTeamId?.trim() ?? "";
-  const firstOrganization = organizations[0] ?? null;
-  const selectedTeamId = normalizedDefaultTeamId || firstOrganization?.teamId || "";
+  const fallbackOrganization = resolveDefaultOpenPondOrganization(organizations);
+  const selectedTeamId = normalizedDefaultTeamId || fallbackOrganization?.teamId || "";
   const cachedAgentsLoaded = Boolean(
     selectedTeamId && readSandboxAgentsFromMemory(selectedTeamId, organizationCacheKey) !== null,
   );

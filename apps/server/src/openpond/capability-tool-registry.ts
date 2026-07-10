@@ -7,10 +7,11 @@ import type {
   SubagentReport,
   SubagentReviewState,
   SubagentRunStatus,
+  SubagentRoleSettings,
   SubagentToolPolicy,
   SubagentWorkerBrief,
 } from "@openpond/contracts";
-import { SubagentWorkerBriefSchema } from "@openpond/contracts";
+import { SUBAGENT_ROLE_PRESETS, SubagentWorkerBriefSchema } from "@openpond/contracts";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,
@@ -189,7 +190,9 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     context: ModelToolExecutionContext,
     input: OpenPondSubagentMessageToolInput,
   ) => Promise<OpenPondSubagentMessageToolResult>;
+  subagentRoles?: readonly SubagentRoleSettings[];
 }): ModelToolDefinition[] {
+  const enabledSubagentRoles = (deps.subagentRoles ?? []).filter((role) => role.enabled);
   const definitions: ModelToolDefinition[] = [
     {
       name: "openpond_create_pipeline",
@@ -231,7 +234,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     {
       name: "openpond_goal_control",
       description:
-        "Start, restart, pause, resume, complete, or stop the current OpenPond goal after resolving the target goal and execution mode from chat context.",
+        "Start a goal only when the thread has no nonterminal goal, or restart, pause, resume, complete, or stop the current goal. Never use start from a goal continuation; control the supplied goal id instead.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -249,7 +252,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           targetGoalId: {
             type: "string",
             minLength: 1,
-            description: "Goal id to control when the current chat context is not enough.",
+            description: "Goal id to control when the current chat context is not enough. Invalid with action start.",
           },
           mode: {
             type: "string",
@@ -283,7 +286,8 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           roleId: {
             type: "string",
             minLength: 1,
-            description: "Configured subagent role id such as coding, research, review, test, docs, planner, or summarizer.",
+            ...(enabledSubagentRoles.length > 0 ? { enum: enabledSubagentRoles.map((role) => role.id) } : {}),
+            description: subagentRoleCatalogDescription(enabledSubagentRoles),
           },
           objective: {
             type: "string",
@@ -638,6 +642,22 @@ function subagentStartToolInput(args: Record<string, unknown>): OpenPondSubagent
     ...(workerBrief ? { workerBrief } : {}),
     ...(required === null ? {} : { required }),
   };
+}
+
+function subagentRoleCatalogDescription(roles: readonly SubagentRoleSettings[]): string {
+  if (roles.length === 0) {
+    return "Configured subagent role id. The runtime validates that the selected role is enabled.";
+  }
+  const presetById = new Map(SUBAGENT_ROLE_PRESETS.map((preset) => [preset.id, preset]));
+  const catalog = roles.map((role) => {
+    const preset = presetById.get(role.id as (typeof SUBAGENT_ROLE_PRESETS)[number]["id"]);
+    const model = role.modelRef
+      ? `${role.modelRef.providerId}/${role.modelRef.modelId}`
+      : "configured default or parent model";
+    const purpose = preset?.description ?? "Run the configured bounded specialist assignment.";
+    return `${role.id}: ${purpose} Capabilities: ${role.toolPolicy}, ${role.isolationMode}, ${role.background ? "background" : "foreground"}, ${role.peerMessages} peer messages, model ${model}.`;
+  });
+  return `Enabled subagent roles: ${catalog.join(" ")}`;
 }
 
 function subagentWorkerBriefArg(args: Record<string, unknown>): SubagentWorkerBrief | null {

@@ -35,6 +35,7 @@ import {
 
 export type AppView =
   | "chat"
+  | "team"
   | "apps"
   | "cloud"
   | "get-started"
@@ -89,6 +90,10 @@ export type ActivityItem = {
     parentGoalId?: string | null;
     childSessionId?: string | null;
     roleId?: string | null;
+    modelRef?: {
+      providerId: string;
+      modelId: string;
+    } | null;
     deliveryStatus?: string | null;
     wakeReason?: string | null;
     createdAt?: string | null;
@@ -294,7 +299,10 @@ export const RUNNABLE_CHAT_PROVIDER_IDS = [
 ] as const satisfies readonly ChatProvider[];
 const RUNNABLE_CHAT_PROVIDER_ID_SET = new Set<ChatProvider>(RUNNABLE_CHAT_PROVIDER_IDS);
 export const CODEX_MODEL_OPTIONS: DropdownOption[] = [
-  { value: DEFAULT_CODEX_CHAT_MODEL, label: "GPT-5.5" },
+  { value: DEFAULT_CODEX_CHAT_MODEL, label: "GPT-5.6 Sol" },
+  { value: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
+  { value: "gpt-5.6-luna", label: "GPT-5.6 Luna" },
+  { value: "gpt-5.5", label: "GPT-5.5" },
   { value: "gpt-5.4", label: "GPT-5.4" },
   { value: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
   { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
@@ -491,7 +499,7 @@ function modelOptionFromProviderModel(model: ProviderModel): DropdownOption {
 
 function fallbackModelOptions(provider: ChatProvider): DropdownOption[] {
   if (provider === "openpond") return OPENPOND_MODEL_OPTIONS;
-  if (provider === "codex") return CODEX_MODEL_OPTIONS;
+  if (provider === "codex" || provider === "openai") return CODEX_MODEL_OPTIONS;
   return [];
 }
 
@@ -561,6 +569,25 @@ export function modelOptionsForProvider(
   return uniqueDropdownOptions([...fromCache, ...manual, ...fallbackModelOptions(provider)]);
 }
 
+export function providerModelSupportsReasoning(
+  provider: ChatProvider,
+  model: string,
+  settings?: ProviderSettings | null,
+): boolean {
+  if (provider === "codex" || provider === "openai") return true;
+  const trimmed = model.trim();
+  if (!trimmed) return false;
+  const cachedModel = providerModelCache(settings, provider)?.models.find(
+    (candidate) => candidate.id === trimmed,
+  );
+  if (cachedModel) return Boolean(cachedModel.capabilities.reasoning);
+  return modelOptionsForProvider(provider, settings).some(
+    (option) =>
+      option.value === trimmed &&
+      /\breasoning\b/i.test(option.description ?? ""),
+  );
+}
+
 export function defaultModelForProvider(
   provider: ChatProvider,
   settings?: ProviderSettings | null,
@@ -582,6 +609,9 @@ export function normalizeChatModel(
   settings?: ProviderSettings | null,
 ): string {
   const trimmed = model?.trim();
+  if (provider === "codex" && (trimmed === "codex-default" || trimmed === "gpt-5.5")) {
+    return DEFAULT_CODEX_CHAT_MODEL;
+  }
   const options = modelOptionsForProvider(provider, settings);
   if (trimmed && options.some((option) => option.value === trimmed)) return trimmed;
   if (trimmed && provider !== "codex" && options.length === 0 && !settings) return trimmed;

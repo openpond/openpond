@@ -8,6 +8,7 @@ type OpenPondOrganizationCacheEntry = {
 };
 
 const organizationsByAccountKey = new Map<string, OpenPondOrganizationCacheEntry>();
+const listenersByAccountKey = new Map<string, Set<() => void>>();
 
 export function openPondOrganizationCacheKey(
   account: BootstrapPayload["account"] | null | undefined,
@@ -43,6 +44,24 @@ export function writeOpenPondOrganizationsToMemory(
     promise: null,
     updatedAt: Date.now(),
   });
+  for (const listener of listenersByAccountKey.get(normalizedAccountKey) ?? []) {
+    listener();
+  }
+}
+
+export function subscribeOpenPondOrganizations(
+  accountKey: string | null | undefined,
+  listener: () => void,
+): () => void {
+  const normalizedAccountKey = accountKey?.trim();
+  if (!normalizedAccountKey) return () => undefined;
+  const listeners = listenersByAccountKey.get(normalizedAccountKey) ?? new Set();
+  listeners.add(listener);
+  listenersByAccountKey.set(normalizedAccountKey, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) listenersByAccountKey.delete(normalizedAccountKey);
+  };
 }
 
 export function preloadOpenPondOrganizations(input: {

@@ -12,7 +12,12 @@ export { activityGroupSummary, summarizeActivityGroup } from "./chat-activity-su
 export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEvent): void {
   const activity = activityFromEvent(item);
   const previous = messages[messages.length - 1];
-  if (previous?.role === "activity_group" && previous.turnId === item.turnId) {
+  if (
+    previous?.role === "activity_group" &&
+    previous.turnId === item.turnId &&
+    !activity.subagentMessage &&
+    !previous.activities?.some((candidate) => candidate.subagentMessage)
+  ) {
     previous.activities = appendActivityToList(previous.activities ?? [], item, activity);
     previous.timestamp = item.timestamp;
     return;
@@ -575,6 +580,9 @@ function activitySubagentMessage(item: RuntimeEvent): ActivityItem["subagentMess
   if (!messageId || !kind || !fromRunId || !body) return undefined;
 
   const delivery = asRecord(data?.delivery ?? message.delivery);
+  const modelRef = asRecord(data?.modelRef);
+  const modelProviderId = stringValue(modelRef, ["providerId"]);
+  const modelId = stringValue(modelRef, ["modelId"]);
   const deliveredParentSessionId = stringValue(delivery, ["deliveredParentSessionId"]);
   const direction = deliveredParentSessionId === item.sessionId && !fromRunId.startsWith("parent:")
     ? "received"
@@ -601,6 +609,7 @@ function activitySubagentMessage(item: RuntimeEvent): ActivityItem["subagentMess
     parentGoalId: stringValue(message, ["parentGoalId"]),
     childSessionId: stringValue(data, ["childSessionId"]),
     roleId: stringValue(data, ["roleId"]),
+    modelRef: modelProviderId && modelId ? { providerId: modelProviderId, modelId } : null,
     deliveryStatus: stringValue(delivery, ["status"]),
     wakeReason: stringValue(delivery, ["wakeParentReason"]),
     createdAt: stringValue(message, ["createdAt"]),

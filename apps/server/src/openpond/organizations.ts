@@ -3,6 +3,9 @@ import type { RuntimeAccountContext } from "@openpond/runtime";
 
 export type OrganizationRequestAction =
   | { type: "list" }
+  | { type: "invitations_list" }
+  | { type: "invitation_accept"; payload: unknown }
+  | { type: "invitation_decline"; payload: unknown }
   | { type: "create"; payload: unknown }
   | { type: "get"; slug: string }
   | { type: "update"; slug: string; payload: unknown }
@@ -16,9 +19,7 @@ export type OrganizationRequestAction =
 
 const DEFAULT_OPENPOND_API_BASE_URL = "https://api.openpond.ai";
 
-export async function organizationRequestPayload(
-  action: OrganizationRequestAction,
-): Promise<unknown> {
+export async function organizationRequestPayload(action: OrganizationRequestAction): Promise<unknown> {
   const context = await loadOpenPondAccountContext();
   const token = context.token?.trim();
   if (!token) {
@@ -29,6 +30,16 @@ export async function organizationRequestPayload(
   if (action.type === "list") {
     return openPondApiRequest(apiBaseUrl, token, "/v1/organizations");
   }
+  if (action.type === "invitations_list") {
+    return openPondApiRequest(apiBaseUrl, token, "/v1/teams/invitations");
+  }
+  if (action.type === "invitation_accept" || action.type === "invitation_decline") {
+    const decision = action.type === "invitation_accept" ? "accept" : "decline";
+    return openPondApiRequest(apiBaseUrl, token, `/v1/teams/invitations/${decision}`, {
+      method: "POST",
+      body: JSON.stringify(action.payload ?? {}),
+    });
+  }
   if (action.type === "create") {
     return openPondApiRequest(apiBaseUrl, token, "/v1/organizations", {
       method: "POST",
@@ -36,65 +47,38 @@ export async function organizationRequestPayload(
     });
   }
   if (action.type === "get") {
-    return openPondApiRequest(
-      apiBaseUrl,
-      token,
-      `/v1/organizations/${encodeURIComponent(action.slug)}`,
-    );
+    return openPondApiRequest(apiBaseUrl, token, `/v1/organizations/${encodeURIComponent(action.slug)}`);
   }
   if (action.type === "update") {
-    return openPondApiRequest(
-      apiBaseUrl,
-      token,
-      `/v1/organizations/${encodeURIComponent(action.slug)}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(action.payload ?? {}),
-      },
-    );
+    return openPondApiRequest(apiBaseUrl, token, `/v1/organizations/${encodeURIComponent(action.slug)}`, {
+      method: "PATCH",
+      body: JSON.stringify(action.payload ?? {}),
+    });
   }
   if (action.type === "members") {
-    return openPondApiRequest(
-      apiBaseUrl,
-      token,
-      `/v1/organizations/${encodeURIComponent(action.slug)}/members`,
-    );
+    return openPondApiRequest(apiBaseUrl, token, `/v1/organizations/${encodeURIComponent(action.slug)}/members`);
   }
   if (action.type === "member_upsert") {
-    return openPondApiRequest(
-      apiBaseUrl,
-      token,
-      `/v1/organizations/${encodeURIComponent(action.slug)}/members`,
-      {
-        method: "POST",
-        body: JSON.stringify(action.payload ?? {}),
-      },
-    );
+    return openPondApiRequest(apiBaseUrl, token, `/v1/organizations/${encodeURIComponent(action.slug)}/members`, {
+      method: "POST",
+      body: JSON.stringify(action.payload ?? {}),
+    });
   }
   if (action.type === "mcp_get") {
-    return openPondApiRequest(
-      apiBaseUrl,
-      token,
-      `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server`,
-    );
+    return openPondApiRequest(apiBaseUrl, token, `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server`);
   }
   if (action.type === "mcp_generate") {
-    return openPondApiRequest(
-      apiBaseUrl,
-      token,
-      `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server`,
-      {
-        method: "POST",
-        body: JSON.stringify(action.payload ?? {}),
-      },
-    );
+    return openPondApiRequest(apiBaseUrl, token, `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server`, {
+      method: "POST",
+      body: JSON.stringify(action.payload ?? {}),
+    });
   }
   if (action.type === "mcp_rotate") {
     return openPondApiRequest(
       apiBaseUrl,
       token,
       `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server/rotate`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
   if (action.type === "mcp_disable") {
@@ -102,7 +86,7 @@ export async function organizationRequestPayload(
       apiBaseUrl,
       token,
       `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server/disable`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
   if (action.type === "mcp_enable") {
@@ -110,7 +94,7 @@ export async function organizationRequestPayload(
       apiBaseUrl,
       token,
       `/v1/organizations/${encodeURIComponent(action.slug)}/mcp-server/enable`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
   throw new Error(`Unsupported organization action: ${(action as { type: string }).type}`);
@@ -120,7 +104,7 @@ async function openPondApiRequest(
   apiBaseUrl: string,
   token: string,
   path: string,
-  init: RequestInit = {},
+  init: RequestInit = {}
 ): Promise<unknown> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -143,8 +127,8 @@ async function openPondApiRequest(
       typeof payload.message === "string"
         ? payload.message
         : typeof payload.error === "string"
-          ? payload.error
-          : response.statusText;
+        ? payload.error
+        : response.statusText;
     throw new Error(message);
   }
   return payload;

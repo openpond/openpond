@@ -26,7 +26,7 @@ export function GetStartedView(_: GetStartedViewProps) {
   return (
     <section className="get-started-view" aria-label="Get started">
       <div className="get-started-shell">
-        <div className="get-started-tabs" role="tablist" aria-label="Get started topics">
+        <div className="surface-tabs get-started-tabs" role="tablist" aria-label="Get started topics">
           {GET_STARTED_DECKS.map((deck) => (
             <button
               aria-selected={activeDeck.id === deck.id}

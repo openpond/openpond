@@ -15,6 +15,7 @@ import type {
   ProviderSettings,
   RuntimeEvent,
   Session,
+  SubagentDelegationMode,
   UsageRequestAttribution,
   WorkspaceState,
 } from "@openpond/contracts";
@@ -25,6 +26,7 @@ import {
   modelForTurn,
   modelRefForTurn,
   normalizeChatModel,
+  providerModelSupportsReasoning,
   projectSelectionKey,
   type ChatMessage,
   type AppView,
@@ -117,6 +119,7 @@ type UseChatActionsInput = {
   selectedSession: Session | null;
   sessions: Session[];
   workspaceTarget: WorkspaceTargetValue;
+  subagentDelegationMode: SubagentDelegationMode | null;
   setDraftModel: Dispatch<SetStateAction<string>>;
   setDraftProvider: Dispatch<SetStateAction<ChatProvider>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -294,6 +297,7 @@ export function useChatActions({
   selectedSession,
   sessions,
   workspaceTarget,
+  subagentDelegationMode,
   setDraftModel,
   setDraftProvider,
   setError,
@@ -848,17 +852,19 @@ export function useChatActions({
           connection,
           useHybridWorkspace
             ? {
-                ...buildHybridWorkspaceSessionRequest({
+              ...buildHybridWorkspaceSessionRequest({
                   modelRef: sessionModelRef,
                   provider: sessionProvider,
                   target: hybridWorkspaceTarget,
                   title: value.slice(0, 64),
                 }),
+                subagentDelegationMode,
                 ...(sessionCommandAccessMode ? { openPondCommandAccessMode: sessionCommandAccessMode } : {}),
               }
             : {
                 provider: sessionProvider,
                 modelRef: sessionModelRef,
+                subagentDelegationMode,
                 ...(sessionCommandAccessMode ? { openPondCommandAccessMode: sessionCommandAccessMode } : {}),
                 appId: sessionAppId,
                 appName: sessionAppName,
@@ -944,6 +950,11 @@ export function useChatActions({
         model: modelForTurnValue,
         providerSettings,
       });
+      const turnSupportsReasoningEffort = providerModelSupportsReasoning(
+        turnProvider,
+        turnModelPayload.model ?? modelForTurnValue,
+        providerSettings,
+      );
       const codexTurnPermissions =
         turnProvider === "codex"
           ? codexPermissionTurnInput(codexPermissionMode)
@@ -963,7 +974,7 @@ export function useChatActions({
         ...turnModelPayload,
         ...codexTurnPermissions,
         codexPermissionMode: turnProvider === "codex" ? codexPermissionMode : "default",
-        codexReasoningEffort: turnProvider === "codex" ? codexReasoningEffort : undefined,
+        codexReasoningEffort: turnSupportsReasoningEffort ? codexReasoningEffort : undefined,
       });
       const payload = await api.bootstrap(connection);
       applyBootstrapPayload(payload);
