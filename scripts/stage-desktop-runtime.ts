@@ -2,18 +2,16 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  runtimeInventoryVerification,
+  type RuntimeInventoryEntry,
+} from "./desktop-runtime-inventory";
 
 type DesktopRuntimeStageOptions = {
   root: string;
   stageRoot?: string;
   platform?: NodeJS.Platform;
   arch?: string;
-};
-
-type RuntimeInventoryEntry = {
-  path: string;
-  bytes: number;
-  sha256: string;
 };
 
 const FORBIDDEN_RUNTIME_SUFFIXES = [".a", ".cc", ".gyp", ".h", ".map", ".pdb", ".ts"];
@@ -40,7 +38,7 @@ export async function stageDesktopRuntime(
   await stageSmallDependency(options.root, runtimeRoot, "bindings", ["bindings.js"]);
   await stageSmallDependency(options.root, runtimeRoot, "file-uri-to-path", ["index.js"]);
 
-  const files = await inventoryFiles(runtimeRoot);
+  const files = await inventoryFiles(runtimeRoot, runtimeRoot, platform);
   const forbidden = files.filter((entry) =>
     FORBIDDEN_RUNTIME_SUFFIXES.some((suffix) => entry.path.toLowerCase().endsWith(suffix)),
   );
@@ -81,9 +79,26 @@ async function stageDesktopApp(root: string, appRoot: string): Promise<void> {
   await fs.mkdir(appRoot, { recursive: true, mode: 0o755 });
   await fs.writeFile(path.join(appRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
   for (const entry of ["main.js", "preload.js"]) {
+    const source = path.join(root, "apps", "desktop", "dist", entry);
+    await assertStandaloneDesktopBundle(source);
     await copyRequired(
-      path.join(root, "apps", "desktop", "dist", entry),
+      source,
       path.join(appRoot, "dist", entry),
+    );
+  }
+}
+
+export async function assertStandaloneDesktopBundle(filePath: string): Promise<void> {
+  const source = await fs.readFile(filePath, "utf8").catch(() => null);
+  if (source === null) {
+    throw new Error(`Required desktop bundle is missing: ${filePath}. Run bun run build:desktop.`);
+  }
+  const localImport = source.match(/\bfrom\s*["'](\.{1,2}\/[^"']+)/)
+    ?? source.match(/\bimport\s*["'](\.{1,2}\/[^"']+)/)
+    ?? source.match(/\b(?:import|require)\s*\(\s*["'](\.{1,2}\/[^"']+)/);
+  if (localImport) {
+    throw new Error(
+      `Desktop entrypoint is not a standalone bundle (${localImport[1]}): ${filePath}. Run bun run build:desktop.`,
     );
   }
 }
@@ -199,17 +214,23 @@ async function copyRequired(source: string, target: string): Promise<void> {
   await fs.chmod(target, stat.mode & 0o777);
 }
 
-async function inventoryFiles(root: string, baseRoot = root): Promise<RuntimeInventoryEntry[]> {
+async function inventoryFiles(
+  root: string,
+  baseRoot: string,
+  platform: NodeJS.Platform,
+): Promise<RuntimeInventoryEntry[]> {
   const entries = await fs.readdir(root, { withFileTypes: true });
   const nested = await Promise.all(entries.map(async (entry): Promise<RuntimeInventoryEntry[]> => {
     const fullPath = path.join(root, entry.name);
-    if (entry.isDirectory()) return inventoryFiles(fullPath, baseRoot);
+    if (entry.isDirectory()) return inventoryFiles(fullPath, baseRoot, platform);
     if (!entry.isFile()) return [];
     const content = await fs.readFile(fullPath);
+    const relativePath = path.relative(baseRoot, fullPath).replaceAll(path.sep, "/");
     return [{
-      path: path.relative(baseRoot, fullPath).replaceAll(path.sep, "/"),
+      path: relativePath,
       bytes: content.byteLength,
       sha256: createHash("sha256").update(content).digest("hex"),
+      verification: runtimeInventoryVerification(platform, relativePath),
     }];
   }));
   return nested.flat().sort((left, right) => left.path.localeCompare(right.path));

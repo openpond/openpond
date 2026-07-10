@@ -18,18 +18,16 @@ on:
   schedule:
     - cron: "0 7 * * *"
   push:
-    branches:
-      - master
     tags:
       - "v*.*.*"
+      - "!v*-nightly.*"
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 concurrency:
-  group: release-builds-${{ github.ref || github.run_id }}
-  cancel-in-progress: false
+  group: release-builds-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}', github.ref, inputs.channel) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'schedule' }}
 
 jobs:
   meta:
@@ -46,7 +44,7 @@ jobs:
       short_sha: ${{ steps.release.outputs.short_sha }}
       should_release: ${{ steps.release.outputs.should_release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -68,18 +66,8 @@ jobs:
             channel="nightly"
           elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             channel="${INPUT_CHANNEL:-nightly}"
-          elif [[ "${GITHUB_REF_TYPE}" == "branch" && "${GITHUB_REF_NAME}" == "master" ]]; then
-            channel="nightly"
-            if git log -1 --pretty=%s | grep -Eq '^chore: release v[0-9]+\.[0-9]+\.[0-9]+$'; then
-              should_release="false"
-            fi
           elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            if [[ "${GITHUB_REF_NAME}" == *"-nightly."* ]]; then
-              channel="nightly"
-              should_release="false"
-            else
-              channel="stable"
-            fi
+            channel="stable"
           else
             echo "Unsupported release event: ${GITHUB_EVENT_NAME}" >&2
             exit 1
@@ -105,9 +93,7 @@ jobs:
             make_latest="true"
             release_name="OpenPond App v${version}"
           else
-            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-              version="${GITHUB_REF_NAME#v}"
-            elif [[ -n "${INPUT_VERSION}" ]]; then
+            if [[ -n "${INPUT_VERSION}" ]]; then
               version="${INPUT_VERSION#v}"
             else
               base_version="$(node -p "require('./apps/desktop/package.json').version.split('-')[0]")"
@@ -146,9 +132,30 @@ jobs:
             echo "should_release=${should_release}"
           } >> "$GITHUB_OUTPUT"
 
+  validate:
+    name: Validate release source
+    needs: meta
+    if: needs.meta.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+
+      - name: Run tests once before packaging
+        run: bun run test
+
   build:
     name: ${{ matrix.name }}
-    needs: meta
+    needs: [meta, validate]
     if: needs.meta.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -173,7 +180,7 @@ jobs:
           #   package_script: package:win:release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.meta.outputs.ref }}
 
@@ -181,7 +188,7 @@ jobs:
         with:
           bun-version: "1.3.13"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
@@ -189,9 +196,6 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - run: bun run build
-
-      - name: Run tests
-        run: bun run test
 
       - name: Prepare release build config
         run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
@@ -237,11 +241,13 @@ jobs:
             bun run smoke:desktop:packaged -- --json "${report_path}"
           fi
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload packaged smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: packaged-smoke-${{ matrix.name }}
-          path: release-smoke/*.json
-          if-no-files-found: error
+          path: release-smoke/**
+          if-no-files-found: warn
 
       - name: Collect release assets
         shell: bash
@@ -261,7 +267,7 @@ jobs:
           fi
           cp "${files[@]}" release-publish/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.name }}
           path: release-publish/*
@@ -272,8 +278,11 @@ jobs:
     needs: [meta, build]
     if: needs.meta.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.meta.outputs.ref }}
           fetch-depth: 0
@@ -281,13 +290,13 @@ jobs:
       - name: Fetch release tags
         run: git fetch --force --tags origin
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: desktop-*
           merge-multiple: true
           path: release-assets
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: packaged-smoke-*
           merge-multiple: true
@@ -297,7 +306,7 @@ jobs:
         with:
           bun-version: "1.3.13"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
@@ -359,7 +368,7 @@ jobs:
 
       - name: Publish release
         if: steps.release_notes.outputs.previous_tag != ''
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.meta.outputs.tag }}
           target_commitish: ${{ needs.meta.outputs.ref }}
@@ -373,7 +382,7 @@ jobs:
 
       - name: Publish first release
         if: steps.release_notes.outputs.previous_tag == ''
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.meta.outputs.tag }}
           target_commitish: ${{ needs.meta.outputs.ref }}

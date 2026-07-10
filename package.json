@@ -36,7 +36,7 @@
     "build:web": "bun run --cwd apps/web build",
     "build:desktop": "tsc -b apps/desktop && bun build apps/desktop/src/main.ts --target=node --format=esm --external electron --outfile apps/desktop/dist/main.js && bun build apps/desktop/src/preload.ts --target=node --format=cjs --external electron --outfile apps/desktop/dist/preload.js",
     "stage:desktop": "bun scripts/stage-desktop-runtime.ts",
-    "build": "bun run typecheck && bun run bundle:server && bun run build:web",
+    "build": "bun run typecheck && bun run bundle:server && bun run build:web && bun run build:desktop",
     "budgets:warn": "bun scripts/check-performance-budgets.ts",
     "budgets:check": "OPENPOND_BUDGETS_STRICT=1 bun scripts/check-performance-budgets.ts",
     "budgets:desktop-package": "bun scripts/check-desktop-package-budgets.ts",

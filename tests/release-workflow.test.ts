@@ -11,7 +11,9 @@ import {
 import { validatePackagedSmokeReports } from "../scripts/validate-packaged-smoke-reports";
 
 const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
+const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const CLI_INSTALLER_PATH = "apps/cli/install.sh";
+const ROOT_PACKAGE_PATH = "package.json";
 
 describe("release workflow", () => {
   test("CLI installer verifies the published archive checksum before extraction", () => {
@@ -45,8 +47,8 @@ describe("release workflow", () => {
     expect(workflow).not.toMatch(/^\s*os:\s*windows-latest$/m);
     expect(workflow).not.toMatch(/^\s*package_script:\s*package:win:release$/m);
 
-    expect(workflow).toContain("name: Run tests");
-    expect(workflow).toContain("bun run test");
+    expect(workflow).toContain("name: Run tests once before packaging");
+    expect(workflow.match(/bun run test/g)).toHaveLength(1);
     expect(workflow).not.toContain("name: Run tests on Windows");
     expect(workflow).not.toContain("bun test tests/*.test.ts");
 
@@ -58,7 +60,8 @@ describe("release workflow", () => {
     expect(workflow).toContain('xvfb-run -a bun run smoke:desktop:packaged -- --json "${report_path}"');
     expect(workflow).toContain('bun run smoke:desktop:packaged -- --json "${report_path}"');
     expect(workflow).toContain("name: packaged-smoke-${{ matrix.name }}");
-    expect(workflow).toContain("path: release-smoke/*.json");
+    expect(workflow).toContain("if: always()");
+    expect(workflow).toContain("path: release-smoke/**");
     expect(workflow).toContain("pattern: packaged-smoke-*");
     expect(workflow).toContain("path: release-smoke-artifacts");
     expect(workflow).toContain("name: Validate packaged smoke reports");
@@ -73,6 +76,39 @@ describe("release workflow", () => {
     expect(workflow).toContain('basename "${files[$index]}"');
     expect(workflow).toContain("builder-debug.yml");
     expect(workflow).not.toContain("runs-on: ubuntu-latest\n    runs-on: ubuntu-latest");
+  });
+
+  test("keeps validation and publishing triggers separated", () => {
+    const releaseWorkflow = readFileSync(WORKFLOW_PATH, "utf8");
+    const ciWorkflow = readFileSync(CI_WORKFLOW_PATH, "utf8");
+
+    expect(ciWorkflow).toMatch(/push:\n\s+branches:\n\s+- master/);
+    expect(ciWorkflow).not.toContain("branches-ignore");
+    expect(releaseWorkflow).not.toMatch(/push:\n\s+branches:/);
+    expect(releaseWorkflow).toContain('- "!v*-nightly.*"');
+    expect(releaseWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'schedule' }}");
+  });
+
+  test("scopes release credentials to the publishing job and uses current action runtimes", () => {
+    const workflow = readFileSync(WORKFLOW_PATH, "utf8");
+
+    expect(workflow).toMatch(/permissions:\n\s+contents: read/);
+    expect(workflow).toMatch(/release:\n[\s\S]*?permissions:\n\s+contents: write\n\s+id-token: write/);
+    expect(workflow.match(/contents: write/g)).toHaveLength(1);
+    expect(workflow.match(/id-token: write/g)).toHaveLength(1);
+    expect(workflow).toContain("actions/checkout@v7");
+    expect(workflow).toContain("actions/setup-node@v6");
+    expect(workflow).toContain("actions/upload-artifact@v7");
+    expect(workflow).toContain("actions/download-artifact@v8");
+    expect(workflow).toContain("softprops/action-gh-release@v3");
+    expect(workflow).not.toMatch(/actions\/(?:checkout|setup-node|upload-artifact|download-artifact)@v4/);
+  });
+
+  test("builds standalone desktop bundles before staging release packages", () => {
+    const packageJson = JSON.parse(readFileSync(ROOT_PACKAGE_PATH, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.build).toContain("bun run build:desktop");
   });
 
   test("packaged smoke resolver supports stable and nightly unpacked app names", () => {

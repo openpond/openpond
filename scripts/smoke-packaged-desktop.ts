@@ -5,6 +5,12 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  capturePackagedProcess,
+  errorDetails,
+  preservePackagedAppLogs,
+  type PackagedProcessCapture,
+} from "./packaged-smoke-diagnostics";
 
 type DevtoolsTarget = {
   type?: string;
@@ -74,9 +80,10 @@ async function main(): Promise<void> {
     userData,
     devtoolsPort,
   });
+  const processCapture = capturePackagedProcess(child);
   let cdp: CdpClient | null = null;
   try {
-    const target = await waitForDevtoolsTarget(devtoolsPort, timeoutMs);
+    const target = await waitForDevtoolsTarget(devtoolsPort, timeoutMs, child, processCapture);
     const devtoolsTargetMs = Date.now() - launchedAt;
     cdp = await CdpClient.connect(target.webSocketDebuggerUrl!);
     await waitForRendererBridge(cdp, timeoutMs);
@@ -209,6 +216,23 @@ async function main(): Promise<void> {
     };
     await writeSmokeReport(report, options.jsonPath);
     console.log(JSON.stringify(report, null, 2));
+  } catch (error) {
+    const logs = await preservePackagedAppLogs({ appHome, reportPath: options.jsonPath });
+    const report = {
+      ok: false,
+      appPath: launchTarget.appPath,
+      platform: process.platform,
+      error: errorDetails(error),
+      process: processCapture.snapshot(),
+      diagnostics: { logs },
+      timings: {
+        totalSmokeMs: Date.now() - startedAt,
+        launchWaitMs: Date.now() - launchedAt,
+      },
+    };
+    await writeSmokeReport(report, options.jsonPath);
+    console.error(JSON.stringify(report, null, 2));
+    throw error;
   } finally {
     cdp?.close();
     if (child.exitCode === null) {
@@ -386,15 +410,6 @@ function launchPackagedApp(
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const stderr: string[] = [];
-  child.stderr.on("data", (chunk) => {
-    stderr.push(String(chunk));
-    if (stderr.join("").length > 32_000) stderr.splice(0, stderr.length - 20);
-  });
-  child.on("exit", (code, signal) => {
-    if (code === 0 || signal) return;
-    console.error(`Packaged desktop exited early with code ${code}. stderr:\n${stderr.join("")}`);
-  });
   return child;
 }
 
@@ -486,9 +501,21 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-async function waitForDevtoolsTarget(port: number, timeoutMs: number): Promise<Required<DevtoolsTarget>> {
+async function waitForDevtoolsTarget(
+  port: number,
+  timeoutMs: number,
+  child: ChildProcessWithoutNullStreams,
+  processCapture: PackagedProcessCapture,
+): Promise<Required<DevtoolsTarget>> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      const snapshot = processCapture.snapshot();
+      throw new Error(
+        `Packaged desktop exited before exposing a DevTools target ` +
+        `(exit=${String(snapshot.exitCode)}, signal=${String(snapshot.signalCode)}).`,
+      );
+    }
     const target = await fetch(`http://127.0.0.1:${port}/json/list`)
       .then((response) => (response.ok ? response.json() : null))
       .then((targets) => Array.isArray(targets) ? targets.find(isUsableTarget) : null)
@@ -533,7 +560,7 @@ function isUsableTarget(target: DevtoolsTarget): target is Required<DevtoolsTarg
 async function waitForRendererBridge(cdp: CdpClient, timeoutMs: number): Promise<void> {
   await waitFor(async () => evaluateValue<boolean>(
     cdp,
-    `document.readyState !== "loading" &&
+    `document.readyState === "complete" &&
       typeof window.openpond === "object" &&
       typeof window.openpond.getConnection === "function" &&
       typeof window.openpond.browser?.open === "function"`,
