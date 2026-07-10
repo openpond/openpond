@@ -31,8 +31,14 @@ import {
   collectProjectSourceUploadEntries,
   mergeProjectSourceUploadEntries,
 } from "./project-source-upload";
-import { parseAgentSourceCheckDispatch } from "./project-agent-inputs";
-import type { OpenPondHostedProfileSummary } from "../sandbox/types/index";
+import {
+  parseAgentSourceCheckDispatch,
+  parseAgentSourceCheckKind,
+} from "./project-agent-inputs";
+import type {
+  OpenPondHostedProfileManifest,
+  OpenPondHostedProfileSummary,
+} from "../sandbox/types/index";
 
 type CliOptions = Record<string, string | boolean>;
 type LoadedOpenPondProfileState = Awaited<ReturnType<typeof loadOpenPondProfileState>>;
@@ -200,6 +206,7 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
     explicitHostedSourceAgentId ||
     (requestHostedSourceChecks || publishHostedSource ? hostedRunAgentId : null);
   const manifest = JSON.parse(await readFile(state.manifestPath, "utf8")) as ProfileRepoManifest;
+  const hostedManifest = normalizeHostedProfileManifest(manifest);
   const sourcePath = manifest.profiles[state.activeProfile ?? manifest.defaultProfile]?.path ?? "profiles/default";
   const upload = await collectProfileSourceUploadForPush({
     state,
@@ -215,7 +222,7 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
       `Push OpenPond profile ${state.activeProfile ?? "default"} at ${state.git.shortHead ?? state.git.head}`,
     expectedSourceCommitSha: currentHostedHead,
     localHeadSha: state.git.head,
-    manifest,
+    manifest: hostedManifest,
     sourcePath,
     agents: state.agents.map((agent) => ({
       id: agent.id,
@@ -230,7 +237,7 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
   let pushStatus: LocalOpenPondProfilePushStatus = {
     status: "pushed",
     promotionStatus: preserveHostedPromotionEvidence
-      ? state.hosted?.promotionStatus ?? "uploaded"
+      ? (state.hosted?.promotionStatus as LocalOpenPondProfilePushStatus["promotionStatus"]) ?? "uploaded"
       : "uploaded",
     hostedRunStatus: preserveHostedPromotionEvidence
       ? (state.hosted?.hostedRunStatus as LocalOpenPondProfilePushStatus["hostedRunStatus"]) ?? "not_started"
@@ -316,6 +323,9 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
     if (!hostedSourceAgentId) {
       throw new Error("--hosted-source-agent-id or --hosted-run-agent-id is required for hosted source checks or publish.");
     }
+    if (!hostedRuntimeAgentId) {
+      throw new Error("Unable to resolve the hosted runtime agent for source checks.");
+    }
     try {
       hostedSourceDeployPlan = await client.agents.sourceDeployPlan(hostedRuntimeAgentId, { teamId });
       if (requestHostedSourceChecks) {
@@ -325,7 +335,10 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
           teamId,
           ...(sourceRef ? { sourceRef } : {}),
           ...(baseSha ? { baseSha } : {}),
-          checkKind: optionString(options, "hostedCheckKind") || optionString(options, "checkKind") || "all",
+          checkKind:
+            parseAgentSourceCheckKind(
+              optionString(options, "hostedCheckKind") || optionString(options, "checkKind"),
+            ) ?? "all",
           dispatch: hostedSourceDispatch,
           metadata: {
             source: "openpond_profile_push_checks",
@@ -396,6 +409,9 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
   if (publishHostedSource) {
     if (!hostedSourceAgentId) {
       throw new Error("--hosted-source-agent-id or --hosted-run-agent-id is required for hosted source publish.");
+    }
+    if (!hostedRuntimeAgentId) {
+      throw new Error("Unable to resolve the hosted runtime agent for source publish.");
     }
     try {
       const expectedManifestHash =
@@ -602,11 +618,33 @@ function summarizeProfileSourceUpload(upload: Awaited<ReturnType<typeof collectP
   };
 }
 
+function normalizeHostedProfileManifest(
+  manifest: ProfileRepoManifest,
+): OpenPondHostedProfileManifest {
+  return {
+    ...manifest,
+    profiles: Object.fromEntries(
+      Object.entries(manifest.profiles).map(([name, profile]) => [
+        name,
+        {
+          path: profile.path,
+          defaultAgent: profile.defaultAgent ?? "default",
+          enabledAgents: profile.enabledAgents ?? [],
+        },
+      ]),
+    ),
+  };
+}
+
 export async function collectProfileSourceUploadForPush(input: {
   state: LoadedOpenPondProfileState;
   hostedSourceAgentId: string | null;
 }): Promise<Awaited<ReturnType<typeof collectProfileSourceUploadEntries>>> {
-  const collected = await collectProfileSourceUploadEntries(input.state.repoPath);
+  const repoPath = input.state.repoPath;
+  if (!repoPath) {
+    throw new Error("Active OpenPond profile is missing a repository path.");
+  }
+  const collected = await collectProfileSourceUploadEntries(repoPath);
   if (!input.hostedSourceAgentId) return collected;
   if (!input.state.sourcePath) {
     throw new Error("Active OpenPond profile is missing a source path.");
@@ -624,7 +662,7 @@ export async function collectProfileSourceUploadForPush(input: {
     agent.path,
   );
   const relativeSourceRoot = path
-    .relative(input.state.repoPath, sourceRoot)
+    .relative(repoPath, sourceRoot)
     .replace(/\\/g, "/");
   if (relativeSourceRoot.startsWith("..") || path.isAbsolute(relativeSourceRoot)) {
     throw new Error(`Profile agent path escapes profile repo: ${agent.path}`);

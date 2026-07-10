@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release-builds-${{ github.ref || github.run_id }}
@@ -154,11 +155,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: linux-appimage
-            os: ubuntu-latest
+          - name: linux-x64-appimage
+            os: ubuntu-24.04
             package_script: package:linux:release
-          - name: mac-zip
-            os: macos-latest
+          - name: linux-arm64-appimage
+            os: ubuntu-24.04-arm
+            package_script: package:linux:release
+          - name: mac-arm64-zip
+            os: macos-15
+            package_script: package:mac:release
+          - name: mac-x64-zip
+            os: macos-15-intel
             package_script: package:mac:release
           # Temporarily disabled while Windows release builds are unstable.
           # - name: windows-nsis
@@ -174,6 +181,11 @@ jobs:
         with:
           bun-version: "1.3.13"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
       - run: bun install --frozen-lockfile
 
       - run: bun run build
@@ -186,34 +198,32 @@ jobs:
 
       - run: bun run ${{ matrix.package_script }}
 
-      - name: Build CLI installer tarball
+      - name: Enforce desktop package budgets
+        run: bun run budgets:desktop-package
+
+      - name: Build and verify CLI distributions
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          case "${RUNNER_OS}" in
-            Linux) cli_os="linux" ;;
-            macOS) cli_os="darwin" ;;
-            *) echo "unsupported CLI release OS: ${RUNNER_OS}" >&2; exit 1 ;;
-          esac
-          case "$(uname -m)" in
-            x86_64|amd64) cli_arch="x64" ;;
-            arm64|aarch64) cli_arch="arm64" ;;
-            *) echo "unsupported CLI release arch: $(uname -m)" >&2; exit 1 ;;
-          esac
-          rm -rf release-cli
-          mkdir -p release-cli release
-          bun build apps/cli/src/cli/main.ts --compile --outfile release-cli/openpond
-          cp release-cli/openpond release-cli/op
-          cp apps/cli/package.json release-cli/package.json
-          chmod +x release-cli/openpond release-cli/op
-          tar -czf "release/openpond-cli-${cli_os}-${cli_arch}.tar.gz" -C release-cli openpond op package.json
+          bun run cli:build
+          bun run cli:release:build
+          cli_archive="$(find release -maxdepth 1 -type f -name 'openpond-cli-*.tar.gz' -print -quit)"
+          test -n "${cli_archive}"
+          bun scripts/check-cli-distribution.ts --archive "${cli_archive}"
 
       - name: Install Linux packaged-smoke display dependency
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
+
+      - name: Prove renderer commit boundaries in the dev browser harness
+        if: matrix.name == 'linux-x64-appimage'
+        shell: bash
+        run: |
+          mkdir -p release-smoke
+          xvfb-run -a bun run smoke:desktop:dev -- --skip-chat --json release-smoke/dev-render-commits.json
 
       - name: Smoke packaged desktop
         shell: bash
@@ -287,10 +297,27 @@ jobs:
         with:
           bun-version: "1.3.13"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
       - run: bun install --frozen-lockfile
 
       - name: Validate packaged smoke reports
         run: bun run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts
+
+      - name: Publish stable CLI package to npm
+        if: needs.meta.outputs.channel == 'stable'
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
+          npm install --global npm@11.5.1
+          bun run build:web
+          bun run cli:build
+          npm publish ./apps/cli --access public --provenance
 
       - name: Generate SBOM
         run: bun run release:sbom

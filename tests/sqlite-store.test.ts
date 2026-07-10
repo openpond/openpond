@@ -86,7 +86,10 @@ describe("SqliteStore hardening", () => {
 
       await expect(
         store.appendRuntimeEvent(threadGoalEvent("event-goal-1-paused", "goal_1", "paused")),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({
+        id: "event-goal-1-paused",
+        sequence: 2,
+      });
       await expect(
         store.claimOpenPondThreadGoal({
           sessionId: "session-goals",
@@ -99,7 +102,10 @@ describe("SqliteStore hardening", () => {
       await store.appendRuntimeEvent(threadGoalEvent("event-goal-1-completed", "goal_1", "completed"));
       await expect(
         store.appendRuntimeEvent(threadGoalEvent("event-goal-2", "goal_2", "running")),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({
+        id: "event-goal-2",
+        sequence: 4,
+      });
       await store.appendRuntimeEvent(threadGoalEvent("event-goal-2-completed", "goal_2", "completed"));
 
       await store.claimOpenPondThreadGoal({

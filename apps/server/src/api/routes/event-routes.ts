@@ -9,7 +9,7 @@ import {
 export async function handleEventRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const {
     eventPagePayload,
-    subscribers,
+    openEventSubscriber,
     token,
   } = deps;
   if (request.method === "GET" && requestUrl.pathname === "/v1/events/page") {
@@ -23,15 +23,18 @@ export async function handleEventRoutes({ deps, request, requestUrl, response }:
       Connection: "keep-alive",
     });
     response.write("retry: 1500\n");
-    response.write(`event: ready\ndata: ${JSON.stringify({ ok: true })}\n\n`);
+    const afterSequence = eventStreamCursor(request, requestUrl);
+    const sessionId = normalizedSearchString(requestUrl.searchParams.get("sessionId"));
+    const closeSubscriber = await openEventSubscriber({ response, afterSequence, sessionId });
+    if (response.destroyed) return true;
+    response.write(`event: ready\ndata: ${JSON.stringify({ ok: true, sequence: afterSequence })}\n\n`);
     const heartbeat = setInterval(() => {
       if (response.destroyed) return;
       response.write(`: heartbeat ${now()}\n\n`);
     }, 25000);
-    subscribers.add(response);
     request.on("close", () => {
       clearInterval(heartbeat);
-      subscribers.delete(response);
+      closeSubscriber();
     });
     return true;
   }
@@ -52,4 +55,16 @@ export async function handleEventRoutes({ deps, request, requestUrl, response }:
     return true;
   }
   return false;
+}
+
+function eventStreamCursor(request: HttpRouteContext["request"], requestUrl: URL): number {
+  const raw = requestUrl.searchParams.get("afterSequence") ?? request.headers["last-event-id"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const parsed = Number(value ?? 0);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function normalizedSearchString(value: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }

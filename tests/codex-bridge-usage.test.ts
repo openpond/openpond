@@ -22,14 +22,10 @@ describe("codex bridge usage ledger", () => {
     const turn = codexTurn();
     const bridge = createCodexBridge({
       store: {
-        async snapshot() {
-          return {
-            sessions: [session],
-            turns: [turn],
-            events,
-            approvals: [],
-          };
-        },
+        async turnByProviderTurnId() { return turn; },
+        async latestTurnForSession() { return turn; },
+        async getSession() { return session; },
+        async runtimeEventsForSession() { return events; },
         async upsertModelUsageRecord(record: ModelUsageRecord) {
           usageRecords.push(record);
           return record;
@@ -131,13 +127,8 @@ describe("codex bridge usage ledger", () => {
     });
     const bridge = createCodexBridge({
       store: {
-        async snapshot() {
-          return {
-            sessions: [parentSession, childSession],
-            turns: [codexTurn({ id: "turn_child", sessionId: "session_child" })],
-            events,
-            approvals,
-          };
+        async getSession(sessionId: string) {
+          return [parentSession, childSession].find((session) => session.id === sessionId) ?? null;
         },
         async getSubagentRun(runId: string) {
           return runs.find((run) => run.id === runId) ?? null;

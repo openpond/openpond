@@ -133,6 +133,9 @@ async function main(): Promise<void> {
       throw new Error(`Dev Electron browser-control worker was not connected: ${JSON.stringify(browserStatus)}`);
     }
 
+    const sharedSurfaceStyles = await verifySharedSurfaceStyles(cdp);
+    const renderCommits = await runComposerCommitProof(cdp);
+
     const chat = options.skipChat
       ? null
       : await runDesktopChatSmoke({
@@ -191,6 +194,8 @@ async function main(): Promise<void> {
           : [],
       },
       chat,
+      sharedSurfaceStyles,
+      renderCommits,
       timings: {
         totalSmokeMs: Date.now() - startedAt,
         devtoolsTargetMs,
@@ -214,6 +219,111 @@ async function main(): Promise<void> {
       rm(userData, { recursive: true, force: true }),
     ]);
   }
+}
+
+async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
+  insightsButtonWidth: number;
+  insightsButtonHeight: number;
+  insightsDropdownHidden: boolean;
+}> {
+  const styles = await evaluateValue<{
+    buttonWidth: number;
+    buttonHeight: number;
+    buttonDisplay: string;
+    dropdownVisibility: string | null;
+    dropdownPointerEvents: string | null;
+  }>(
+    cdp,
+    `(() => {
+      const button = document.querySelector(".topbar-insights-button");
+      const dropdown = document.querySelector(".topbar-insights-dropdown");
+      if (!(button instanceof HTMLElement)) throw new Error("Insights top-bar button is missing.");
+      const buttonStyle = getComputedStyle(button);
+      const dropdownStyle = dropdown instanceof HTMLElement ? getComputedStyle(dropdown) : null;
+      return {
+        buttonWidth: button.getBoundingClientRect().width,
+        buttonHeight: button.getBoundingClientRect().height,
+        buttonDisplay: buttonStyle.display,
+        dropdownVisibility: dropdownStyle?.visibility ?? null,
+        dropdownPointerEvents: dropdownStyle?.pointerEvents ?? null
+      };
+    })()`,
+  );
+  if (
+    !["grid", "inline-grid"].includes(styles.buttonDisplay) ||
+    Math.abs(styles.buttonWidth - 28) > 0.1 ||
+    Math.abs(styles.buttonHeight - 28) > 0.1
+  ) {
+    throw new Error(`Insights top-bar styles were not loaded: ${JSON.stringify(styles)}`);
+  }
+  const insightsDropdownHidden =
+    styles.dropdownVisibility === null ||
+    (styles.dropdownVisibility === "hidden" && styles.dropdownPointerEvents === "none");
+  if (!insightsDropdownHidden) {
+    throw new Error(`Insights dropdown was exposed at rest: ${JSON.stringify(styles)}`);
+  }
+  return {
+    insightsButtonWidth: styles.buttonWidth,
+    insightsButtonHeight: styles.buttonHeight,
+    insightsDropdownHidden,
+  };
+}
+
+async function runComposerCommitProof(cdp: CdpClient): Promise<{
+  composerCommits: number;
+  sidebarCommits: number;
+  typedCharacters: number;
+}> {
+  const proofText = "renderer commit boundary proof";
+  await waitFor(async () => {
+    await evaluateValue<boolean>(cdp, "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)");
+    await Bun.sleep(300);
+    const idle = await evaluateValue<Record<string, { commits?: number }>>(
+      cdp,
+      "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}",
+    );
+    return Object.values(idle).every((metric) => (metric.commits ?? 0) === 0);
+  }, 5_000, "Renderer did not reach a quiet commit window before the typing proof.");
+  await evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      window.__OPENPOND_RENDER_COMMITS__?.reset();
+      const input = document.querySelector(".composer-inline-input[role='textbox'], [role='textbox'][contenteditable], textarea");
+      if (!(input instanceof HTMLElement)) return false;
+      input.focus();
+      return true;
+    })()`,
+  );
+  for (const character of proofText) {
+    await cdp.send("Input.insertText", { text: character });
+  }
+  await waitFor(async () => evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      const input = document.querySelector(".composer-inline-input[role='textbox'], [role='textbox'][contenteditable], textarea");
+      const value = input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement
+        ? input.value
+        : input?.textContent ?? "";
+      return value.includes(${JSON.stringify(proofText)});
+    })()`,
+  ), 5_000, "Composer did not accept commit-budget proof input.");
+  const metrics = await evaluateValue<Record<string, { commits?: number }>>(
+    cdp,
+    "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}",
+  );
+  const composerCommits = metrics.composer?.commits ?? 0;
+  const sidebarCommits = metrics.sidebar?.commits ?? 0;
+  if (composerCommits < 1 || composerCommits > proofText.length + 2) {
+    throw new Error(`Composer commit budget failed: ${composerCommits} commits for ${proofText.length} characters.`);
+  }
+  if (sidebarCommits !== 0) {
+    throw new Error(`Composer typing crossed the sidebar render boundary: ${sidebarCommits} commits.`);
+  }
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
+  return { composerCommits, sidebarCommits, typedCharacters: proofText.length };
 }
 
 function parseArgs(args: string[]): SmokeOptions {

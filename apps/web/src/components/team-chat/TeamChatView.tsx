@@ -5,6 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import "../../styles/team-chat/team-chat.css";
 import type {
   ChatAttachment,
   ChatProvider,
@@ -22,6 +23,7 @@ import { api, type ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { WorkspaceTargetState } from "../../lib/workspace-location";
+import { teamChatThreadTitle } from "../../lib/team-chat-thread";
 import { Composer } from "../chat/Composer";
 import type { ComposerProjectTargetState } from "../chat/ComposerControls";
 import { MarkdownText } from "../chat/MarkdownText";
@@ -689,13 +691,6 @@ function TeamAvatar({ member }: { member: TeamChatMember | null }) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
   return <span className="team-chat-avatar fallback">{initials}</span>;
-}
-
-export function teamChatThreadTitle(thread: TeamChatThread, currentUserId: string | null): string {
-  if (thread.kind === "general") return "# general";
-  if (thread.title) return thread.title;
-  const other = thread.participants.find((participant) => participant.userId !== currentUserId);
-  return other?.name ?? "Direct message";
 }
 
 function dmMemberStatus(thread: TeamChatThread, currentUserId: string | null): string {

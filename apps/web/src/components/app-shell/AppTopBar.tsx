@@ -11,6 +11,7 @@ import type {
   WorkspaceToolResult,
 } from "@openpond/contracts";
 import { lazy, Suspense, useEffect, useState, type MouseEvent } from "react";
+import "../../styles/app-shell/topbar-insights.css";
 import {
   ChevronRight,
   Lightbulb,
@@ -238,7 +239,9 @@ export function AppTopBar({
                   onClick={onOpenInsights}
                 >
                   <Lightbulb size={16} />
-                  <span className="topbar-insights-count">{activeInsightCount}</span>
+                  <span className="topbar-insights-count">
+                    {activeInsightCount > 99 ? "99+" : activeInsightCount}
+                  </span>
                 </button>
                 {activeInsights.length ? (
                   <div className="topbar-insights-dropdown" role="menu" aria-label="Active Insights">

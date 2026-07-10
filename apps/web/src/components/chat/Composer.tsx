@@ -100,7 +100,7 @@ export type {
   ComposerProjectTargetState,
 } from "./ComposerControls";
 
-type ComposerProps = {
+export type ComposerProps = {
   mode: "dock" | "start";
   surface?: "chat" | "team";
   teamUseModel?: boolean;

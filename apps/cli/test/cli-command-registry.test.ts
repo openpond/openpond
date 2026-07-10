@@ -51,7 +51,7 @@ describe("CLI command registry", () => {
 
   test("documents the headless chat contract in registry and top-level help", () => {
     const definition = getCliCommandDefinition("chat");
-    expect(definition?.usage).toContain("--message <text>|--message-file <path>|--stdin");
+    expect(definition?.usage).toContain("--message-file <path>|--message <text>|--stdin");
     expect(definition?.usage).toContain("--non-interactive");
     expect(definition?.usage).toContain("--approval-policy <policy>");
     expect(definition?.usage).toContain("--timeout-sec <n>");

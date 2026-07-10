@@ -23,7 +23,7 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     workspaceTemplateConfigPayload,
   } = deps;
   if (request.method === "GET" && requestUrl.pathname === "/v1/bootstrap") {
-    if (requestUrl.searchParams.get("refreshCodex") === "1") await refreshCodexStatus();
+    if (requestUrl.searchParams.get("refreshCodex") === "1") await refreshCodexStatus(true);
     sendJson(
       response,
       200,
@@ -35,7 +35,7 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/status") {
-    await refreshCodexStatus();
+    await refreshCodexStatus(true);
     const payload = await bootstrapPayload();
     sendJson(response, 200, {
       server: payload.server,

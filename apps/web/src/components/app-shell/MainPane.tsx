@@ -1,5 +1,4 @@
 import {
-  lazy,
   Suspense,
   useEffect,
   useCallback,
@@ -48,7 +47,8 @@ import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
-import { Composer, type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
+import { type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
+import { DraftBoundComposer } from "../chat/DraftBoundComposer";
 import type { ComposerCreatePipelineRuntime } from "../chat/ComposerCreatePipelineStrip";
 import type { CreatePipelineReviewActionInput } from "../chat/create-pipeline-types";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
@@ -65,6 +65,7 @@ import {
   type ParsedComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
+import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import {
   resolveRightSidebarFileSource,
   type RightSidebarFileSource,
@@ -83,29 +84,18 @@ import type {
   WorkspaceDiffTabRequest,
   WorkspaceFileSourceSwitcher,
 } from "../workspace-diff/workspace-diff-panel-model";
-import { TeamAiThreadPanel, TeamChatView, type TeamChatViewProps } from "../team-chat/TeamChatView";
-
-const WorkspaceDiffPanel = lazy(() =>
-  import("../workspace-diff/WorkspaceDiffPanel").then((module) => ({ default: module.WorkspaceDiffPanel })),
-);
-const AppsView = lazy(() =>
-  import("../apps/AppsView").then((module) => ({ default: module.AppsView })),
-);
-const GetStartedView = lazy(() =>
-  import("../get-started/GetStartedView").then((module) => ({ default: module.GetStartedView })),
-);
-const ProfileView = lazy(() =>
-  import("../profile/ProfileView").then((module) => ({ default: module.ProfileView })),
-);
-const BrowserSidebar = lazy(() =>
-  import("../browser/BrowserSidebar").then((module) => ({ default: module.BrowserSidebar })),
-);
-const CloudWorkView = lazy(() =>
-  import("../cloud/CloudWorkView").then((module) => ({ default: module.CloudWorkView })),
-);
-const InsightsView = lazy(() =>
-  import("../insights/InsightsView").then((module) => ({ default: module.InsightsView })),
-);
+import type { TeamChatViewProps } from "../team-chat/TeamChatView";
+import {
+  AppsView,
+  BrowserSidebar,
+  CloudWorkView,
+  GetStartedView,
+  InsightsView,
+  ProfileView,
+  TeamAiThreadPanel,
+  TeamChatView,
+  WorkspaceDiffPanel,
+} from "./MainPaneLazyViews";
 
 type MainPaneProps = {
   view: AppView;
@@ -117,7 +107,7 @@ type MainPaneProps = {
   goalRuntime: GoalRuntimeStatus | null;
   subagentRuntime: SubagentRuntimeStatus | null;
   selectedSessionId: string | null;
-  prompt: string;
+  composerDraftStore: ComposerDraftStore;
   mainComposerFocusRequestId: number;
   steerAutoDispatchBlocked: boolean;
   steerAutoDispatchReady: boolean;
@@ -216,7 +206,6 @@ type MainPaneProps = {
     input: CreatePipelineReviewActionInput,
     revision: string,
   ) => Promise<void>;
-  setPrompt: (prompt: string) => void;
   setMentionedAppId: (appId: string | null) => void;
   showToast: ShowAppToast;
   sendPrompt: (
@@ -474,7 +463,7 @@ export function MainPane({
   goalRuntime,
   subagentRuntime,
   selectedSessionId,
-  prompt,
+  composerDraftStore,
   mainComposerFocusRequestId,
   steerAutoDispatchBlocked,
   steerAutoDispatchReady,
@@ -563,7 +552,6 @@ export function MainPane({
   approveCreatePipelineTurn,
   cancelCreatePipelineTurn,
   reviseCreatePipelineTurn,
-  setPrompt,
   setMentionedAppId,
   showToast,
   sendPrompt,
@@ -741,10 +729,10 @@ export function MainPane({
       selectedCommand: ComposerSlashCommand | null = null,
       options: ComposerSubmitOptions = {},
     ) => {
-      const promptForSubmit = options.promptOverride ?? prompt;
+      const promptForSubmit = options.promptOverride ?? composerDraftStore.getSnapshot();
       const clearMainPrompt = () => {
         if (options.preservePrompt) return;
-        setPrompt("");
+        composerDraftStore.set("");
         setMentionedAppId(null);
       };
       if (!action) {
@@ -843,10 +831,9 @@ export function MainPane({
       onOpenInsightsSession,
       onCreateCloudWork,
       onRunInsightsScan,
-      prompt,
+      composerDraftStore,
       sendPrompt,
       setMentionedAppId,
-      setPrompt,
       setView,
       showToast,
       slashCommandCloudProjectId,
@@ -1439,15 +1426,15 @@ export function MainPane({
           />
         </Suspense>
       ) : view === "team" ? (
-        <>
+        <Suspense fallback={null}>
           <TeamChatView {...teamChat} />
           {showRightPanel ? rightPanel : null}
-        </>
+        </Suspense>
       ) : view === "get-started" ? (
         <Suspense fallback={null}>
           <GetStartedView
             onCreateAgent={() => {
-              setPrompt("/create ");
+              composerDraftStore.set("/create ");
               setMentionedAppId(null);
               setView("chat");
             }}
@@ -1470,7 +1457,7 @@ export function MainPane({
                 onError={onError}
                 onToast={showToast}
                 onSkillCommand={(command) => {
-                  setPrompt(command);
+                  composerDraftStore.set(command);
                   setMentionedAppId(null);
                   setView("chat");
                 }}
@@ -1575,10 +1562,10 @@ export function MainPane({
                   </button>
                 </div>
               ) : null}
-              <Composer
+              <DraftBoundComposer
+                draftStore={composerDraftStore}
                 mode="dock"
                 focusRequestId={mainComposerFocusRequestId}
-                prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
                 profileSkills={profileSkills}
@@ -1614,7 +1601,6 @@ export function MainPane({
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
                 onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
-                onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
@@ -1642,11 +1628,11 @@ export function MainPane({
             )}
             <div className="composer-stack start">
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
-              <Composer
+              <DraftBoundComposer
+                draftStore={composerDraftStore}
                 mode="start"
                 autoFocus
                 focusRequestId={mainComposerFocusRequestId}
-                prompt={prompt}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
                 profileSkills={profileSkills}
@@ -1681,7 +1667,6 @@ export function MainPane({
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
                 onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
-                onPromptChange={setPrompt}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}

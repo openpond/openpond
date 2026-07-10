@@ -416,6 +416,10 @@ export function buildCodingWorkItemBackgroundInput(
   options: Record<string, string | boolean>
 ): SandboxCodingWorkItemBackgroundInput {
   const payload = optionalJsonObject(options, "payload", "payload");
+  const agentEdit = optionalJsonObject(options, "agentEdit", "agent-edit");
+  const setup = optionalCommandList(options, "setup", "setup");
+  const validation = optionalCommandList(options, "validation", "validation");
+  const branchPolicy = optionalJsonObject(options, "branchPolicy", "branch-policy");
   return {
     teamId,
     ...(optionString(options, "prompt")
@@ -436,26 +440,25 @@ export function buildCodingWorkItemBackgroundInput(
     ...(optionString(options, "agentId")
       ? { agentId: optionString(options, "agentId") }
       : {}),
-    ...(optionalJsonObject(options, "agentEdit", "agent-edit")
-      ? { agentEdit: optionalJsonObject(options, "agentEdit", "agent-edit") }
-      : {}),
-    ...(optionalJsonObject(options, "setup", "setup")
-      ? { setup: optionalJsonObject(options, "setup", "setup") }
-      : {}),
-    ...(optionalJsonObject(options, "validation", "validation")
-      ? { validation: optionalJsonObject(options, "validation", "validation") }
-      : {}),
-    ...(optionalJsonObject(options, "branchPolicy", "branch-policy")
-      ? {
-          branchPolicy: optionalJsonObject(
-            options,
-            "branchPolicy",
-            "branch-policy"
-          ),
-        }
-      : {}),
+    ...(agentEdit ? { agentEdit } : {}),
+    ...(setup ? { setup } : {}),
+    ...(validation ? { validation } : {}),
+    ...(branchPolicy ? { branchPolicy } : {}),
     ...(payload ? { payload } : {}),
   };
+}
+
+function optionalCommandList(
+  options: Record<string, string | boolean>,
+  key: string,
+  displayName: string,
+): { commands: string[] } | null {
+  const value = optionalJsonObject(options, key, displayName);
+  if (!value) return null;
+  if (!Array.isArray(value.commands) || value.commands.some((command) => typeof command !== "string")) {
+    throw new Error(`${displayName} must be a JSON object with a string commands array`);
+  }
+  return { commands: value.commands };
 }
 
 export function buildCodingWorkItemPromotionInput(

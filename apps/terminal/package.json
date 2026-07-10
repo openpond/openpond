@@ -5,6 +5,12 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "bin": {
     "openpond-app": "./dist/index.js"
   },
@@ -13,6 +19,7 @@
     "dev": "bun src/index.ts chat"
   },
   "dependencies": {
-    "@openpond/contracts": "workspace:*"
+    "@openpond/contracts": "workspace:*",
+    "@openpond/runtime": "workspace:*"
   }
 }

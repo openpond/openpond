@@ -28,9 +28,22 @@ jobs:
 
       - run: bun run typecheck
 
+      - run: bun run cli:typecheck
+
+      - run: bun run agent-sdk:typecheck
+
       - run: bun run build
 
+      - run: bun run cli:build
+
+      - run: bun run budgets:cli
+
       - run: bun run budgets:warn
+
+      - run: bun run budgets:check
+
+      - run: bun run structure:check
+      - run: bun run dependencies:check
 
       - run: bun run test
         env:

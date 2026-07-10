@@ -466,12 +466,12 @@ describe("Cloud native UI", () => {
     expect(projectsSection.indexOf('aria-label="More project actions"')).toBeGreaterThan(
       projectsSection.indexOf('aria-label="Pin project"'),
     );
-    expect(projectsSection.indexOf('data-tooltip="New chat"')).toBeGreaterThan(
+    expect(projectsSection.indexOf('data-tooltip="New task"')).toBeGreaterThan(
       projectsSection.indexOf('aria-label="More project actions"'),
     );
     expect(markup).toContain("Implement Cloud follow-up");
     expect(markup).not.toContain("Open project chat");
-    expect(markup).toContain('data-tooltip="New chat"');
+    expect(markup).toContain('data-tooltip="New task"');
     expect(markup).toContain('aria-label="More project actions"');
     expect(markup).not.toContain('data-tooltip="Move to Cloud"');
     expect(markup).not.toContain("lucide-cloud-upload");

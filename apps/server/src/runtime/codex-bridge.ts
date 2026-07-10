@@ -161,15 +161,17 @@ export function createCodexBridge(deps: {
       return;
     }
 
-    const snapshot = await store.snapshot();
-    const turn = providerTurnId
-      ? snapshot.turns.find((candidate) => candidate.providerTurnId === providerTurnId)
-      : snapshot.turns.find((candidate) => candidate.sessionId === sessionId && candidate.status === "in_progress");
-    const session = snapshot.sessions.find((candidate) => candidate.id === sessionId);
+    const [turn, session, sessionEvents] = await Promise.all([
+      providerTurnId
+        ? store.turnByProviderTurnId(providerTurnId)
+        : store.latestTurnForSession(sessionId, "in_progress"),
+      store.getSession(sessionId),
+      store.runtimeEventsForSession(sessionId),
+    ]);
     const localTurnId = turn?.id;
 
     async function appendGoalClearedForTerminalTurn(): Promise<void> {
-      if (!latestCodexGoalIsActive(snapshot.events, sessionId)) return;
+      if (!latestCodexGoalIsActive(sessionEvents, sessionId)) return;
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -201,8 +203,8 @@ export function createCodexBridge(deps: {
       usageEvent.data = usageSnapshot;
       await appendRuntimeEvent(usageEvent);
       await appendCodexContextUsageRecord({
-        session,
-        turn,
+        session: session ?? undefined,
+        turn: turn ?? undefined,
         usageEvent,
         usageSnapshot,
       });
@@ -252,8 +254,8 @@ export function createCodexBridge(deps: {
 
     if (notification.method === "thread/compacted" || notification.method === "context_compacted") {
       const codexThreadId = stringValue(params, ["threadId", "thread_id"]);
-      if (hasRecentCodexCompactionCompleted(snapshot.events, sessionId, codexThreadId)) return;
-      const reason = codexCompactionReason(snapshot.events, sessionId, codexThreadId);
+      if (hasRecentCodexCompactionCompleted(sessionEvents, sessionId, codexThreadId)) return;
+      const reason = codexCompactionReason(sessionEvents, sessionId, codexThreadId);
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -282,8 +284,8 @@ export function createCodexBridge(deps: {
       const type = typeof item?.type === "string" ? item.type : "";
       if (type === "contextCompaction") {
         const codexThreadId = stringValue(params, ["threadId", "thread_id"]);
-        if (hasRecentCodexCompactionStarted(snapshot.events, sessionId, codexThreadId)) return;
-        const reason = codexCompactionReason(snapshot.events, sessionId, codexThreadId);
+        if (hasRecentCodexCompactionStarted(sessionEvents, sessionId, codexThreadId)) return;
+        const reason = codexCompactionReason(sessionEvents, sessionId, codexThreadId);
         await appendRuntimeEvent(
           event({
             sessionId,
@@ -360,8 +362,8 @@ export function createCodexBridge(deps: {
       const type = typeof item?.type === "string" ? item.type : "";
       if (type === "contextCompaction") {
         const codexThreadId = stringValue(params, ["threadId", "thread_id"]);
-        if (hasRecentCodexCompactionCompleted(snapshot.events, sessionId, codexThreadId)) return;
-        const reason = codexCompactionReason(snapshot.events, sessionId, codexThreadId);
+        if (hasRecentCodexCompactionCompleted(sessionEvents, sessionId, codexThreadId)) return;
+        const reason = codexCompactionReason(sessionEvents, sessionId, codexThreadId);
         await appendRuntimeEvent(
           event({
             sessionId,
@@ -667,9 +669,7 @@ export function createCodexBridge(deps: {
     if (typeof store.getSubagentRun !== "function" || typeof store.upsertSubagentRun !== "function") {
       return null;
     }
-    const snapshot = await store.snapshot();
-    const sessions = Array.isArray(snapshot.sessions) ? snapshot.sessions : [];
-    const childSession = sessions.find((session) => session.id === approval.sessionId);
+    const childSession = await store.getSession(approval.sessionId);
     if (!childSession?.parentSessionId || !childSession.subagentRunId) return null;
     const run = await store.getSubagentRun(childSession.subagentRunId);
     if (!run) return null;

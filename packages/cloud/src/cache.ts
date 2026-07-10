@@ -1,8 +1,9 @@
 import { promises as fs } from "node:fs";
-import os from "node:os";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import type { AppListItem } from "./api.js";
+import { openPondConfigDirectory, updatePrivateJsonFile } from "./private-json-file.js";
 
 type CacheEntry<T> = {
   items: T;
@@ -19,27 +20,21 @@ type CacheStore = {
   byKey: Record<string, CacheBucket>;
 };
 
-const CACHE_DIR = ".openpond";
 const CACHE_FILENAME = "cache.json";
-const DEFAULT_STORE: CacheStore = { version: 1, byKey: {} };
 
 export const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000;
 
 function getCachePath(): string {
-  return path.join(os.homedir(), CACHE_DIR, CACHE_FILENAME);
+  return path.join(openPondConfigDirectory(), CACHE_FILENAME);
 }
 
 function buildCacheKey(apiBase: string, apiKey: string): string {
-  const trimmed = apiKey.trim();
-  const hint =
-    trimmed.length > 12
-      ? `${trimmed.slice(0, 8)}_${trimmed.slice(-4)}`
-      : trimmed;
+  const credentialHash = createHash("sha256").update(apiKey.trim()).digest("hex");
   try {
     const host = new URL(apiBase).host;
-    return `${host}:${hint}`;
+    return `${host}:${credentialHash}`;
   } catch {
-    return `${apiBase}:${hint}`;
+    return `${apiBase}:${credentialHash}`;
   }
 }
 
@@ -56,18 +51,16 @@ async function loadCache(): Promise<CacheStore> {
     const raw = await fs.readFile(getCachePath(), "utf-8");
     const parsed = JSON.parse(raw) as CacheStore;
     if (!parsed || typeof parsed !== "object" || !parsed.byKey) {
-      return DEFAULT_STORE;
+      return emptyCacheStore();
     }
     return parsed;
   } catch {
-    return DEFAULT_STORE;
+    return emptyCacheStore();
   }
 }
 
-async function saveCache(store: CacheStore): Promise<void> {
-  const filePath = getCachePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(store, null, 2), "utf-8");
+function emptyCacheStore(): CacheStore {
+  return { version: 1, byKey: {} };
 }
 
 export async function getCachedApps(params: {
@@ -90,15 +83,15 @@ export async function setCachedApps(params: {
   apiKey: string;
   apps: AppListItem[];
 }): Promise<void> {
-  const store = await loadCache();
-  const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
-  const bucket = store.byKey[cacheKey] || {};
-  bucket.apps = {
-    items: params.apps,
-    updatedAt: new Date().toISOString(),
-  };
-  store.byKey[cacheKey] = bucket;
-  await saveCache(store);
+  await mutateCache((store) => {
+    const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
+    const bucket = store.byKey[cacheKey] || {};
+    bucket.apps = {
+      items: params.apps,
+      updatedAt: new Date().toISOString(),
+    };
+    store.byKey[cacheKey] = bucket;
+  });
 }
 
 export async function getCachedTools(params: {
@@ -121,13 +114,21 @@ export async function setCachedTools(params: {
   apiKey: string;
   tools: unknown[];
 }): Promise<void> {
-  const store = await loadCache();
-  const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
-  const bucket = store.byKey[cacheKey] || {};
-  bucket.tools = {
-    items: params.tools,
-    updatedAt: new Date().toISOString(),
-  };
-  store.byKey[cacheKey] = bucket;
-  await saveCache(store);
+  await mutateCache((store) => {
+    const cacheKey = buildCacheKey(params.apiBase, params.apiKey);
+    const bucket = store.byKey[cacheKey] || {};
+    bucket.tools = {
+      items: params.tools,
+      updatedAt: new Date().toISOString(),
+    };
+    store.byKey[cacheKey] = bucket;
+  });
+}
+
+async function mutateCache(mutate: (store: CacheStore) => void): Promise<void> {
+  await updatePrivateJsonFile<CacheStore>(getCachePath(), emptyCacheStore, (raw) => {
+    const store = raw && typeof raw === "object" && raw.byKey ? raw : emptyCacheStore();
+    mutate(store);
+    return store;
+  });
 }

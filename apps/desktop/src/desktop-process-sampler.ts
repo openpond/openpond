@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_SAMPLE_TIMEOUT_MS = 5_000;
+const DEFAULT_MAX_PROCESS_ROWS = 128;
 
 export type ProcessTreeRow = {
   pid: number;
@@ -23,6 +25,7 @@ export type ProcessTreeSamplerSnapshot = {
   activePid: number | null;
   sampleIntervalMs: number;
   maxSamples: number;
+  maxProcessRows: number;
   samples: ProcessTreeSample[];
   lastError: string | null;
 };
@@ -32,21 +35,25 @@ export class DesktopProcessTreeSampler {
   private readonly maxSamples: number;
   private readonly dateNow: () => string;
   private readonly sampler: typeof sampleProcessTree;
+  private readonly maxProcessRows: number;
   private activePid: number | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private samples: ProcessTreeSample[] = [];
   private lastError: string | null = null;
+  private inFlight: Promise<ProcessTreeSample | null> | null = null;
 
   constructor(options: {
     sampleIntervalMs?: number;
     maxSamples?: number;
     dateNow?: () => string;
     sampler?: typeof sampleProcessTree;
+    maxProcessRows?: number;
   } = {}) {
-    this.sampleIntervalMs = Math.max(1_000, Math.trunc(options.sampleIntervalMs ?? 5_000));
+    this.sampleIntervalMs = Math.max(1_000, Math.trunc(options.sampleIntervalMs ?? 15_000));
     this.maxSamples = Math.max(1, Math.trunc(options.maxSamples ?? 120));
     this.dateNow = options.dateNow ?? (() => new Date().toISOString());
     this.sampler = options.sampler ?? sampleProcessTree;
+    this.maxProcessRows = Math.max(1, Math.trunc(options.maxProcessRows ?? DEFAULT_MAX_PROCESS_ROWS));
   }
 
   start(pid: number | undefined): void {
@@ -71,22 +78,34 @@ export class DesktopProcessTreeSampler {
       activePid: this.activePid,
       sampleIntervalMs: this.sampleIntervalMs,
       maxSamples: this.maxSamples,
+      maxProcessRows: this.maxProcessRows,
       samples: [...this.samples],
       lastError: this.lastError,
     };
   }
 
-  async sampleNow(): Promise<ProcessTreeSample | null> {
-    if (!this.activePid) return null;
-    try {
-      const sample = await this.sampler(this.activePid, this.dateNow);
-      this.lastError = null;
-      if (sample) this.pushSample(sample);
-      return sample;
-    } catch (error) {
-      this.lastError = error instanceof Error ? error.message : String(error);
-      return null;
-    }
+  sampleNow(): Promise<ProcessTreeSample | null> {
+    if (!this.activePid) return Promise.resolve(null);
+    if (this.inFlight) return this.inFlight;
+    const sampledPid = this.activePid;
+    const operation = (async () => {
+      try {
+        const sample = await this.sampler(sampledPid, this.dateNow, {
+          maxProcessRows: this.maxProcessRows,
+        });
+        this.lastError = null;
+        if (sample && this.activePid === sampledPid) this.pushSample(sample);
+        return sample;
+      } catch (error) {
+        this.lastError = error instanceof Error ? error.message : String(error);
+        return null;
+      }
+    })();
+    this.inFlight = operation;
+    void operation.finally(() => {
+      if (this.inFlight === operation) this.inFlight = null;
+    });
+    return operation;
   }
 
   private pushSample(sample: ProcessTreeSample): void {
@@ -100,6 +119,7 @@ export class DesktopProcessTreeSampler {
 export async function sampleProcessTree(
   rootPid: number,
   dateNow: () => string = () => new Date().toISOString(),
+  options: { maxProcessRows?: number; timeoutMs?: number } = {},
 ): Promise<ProcessTreeSample | null> {
   if (process.platform === "win32") {
     const { stdout } = await execFileAsync(
@@ -122,15 +142,19 @@ export async function sampleProcessTree(
       {
         encoding: "utf8",
         maxBuffer: 2 * 1024 * 1024,
+        timeout: options.timeoutMs ?? DEFAULT_SAMPLE_TIMEOUT_MS,
+        windowsHide: true,
       },
     );
-    return summarizeProcessTree(rootPid, parseWindowsProcessRows(stdout), dateNow());
+    return summarizeProcessTree(rootPid, parseWindowsProcessRows(stdout), dateNow(), options.maxProcessRows);
   }
   const { stdout } = await execFileAsync("ps", ["-axo", "pid=,ppid=,pcpu=,rss="], {
     encoding: "utf8",
     maxBuffer: 2 * 1024 * 1024,
+    timeout: options.timeoutMs ?? DEFAULT_SAMPLE_TIMEOUT_MS,
+    windowsHide: true,
   });
-  return summarizeProcessTree(rootPid, parseUnixProcessRows(stdout), dateNow());
+  return summarizeProcessTree(rootPid, parseUnixProcessRows(stdout), dateNow(), options.maxProcessRows);
 }
 
 export function parseWindowsProcessRows(output: string): ProcessTreeRow[] {
@@ -193,6 +217,7 @@ export function summarizeProcessTree(
   rootPid: number,
   rows: ProcessTreeRow[],
   sampledAt: string,
+  maxProcessRows = DEFAULT_MAX_PROCESS_ROWS,
 ): ProcessTreeSample | null {
   const byParent = new Map<number, ProcessTreeRow[]>();
   for (const row of rows) {
@@ -217,7 +242,10 @@ export function summarizeProcessTree(
     processCount: processRows.length,
     cpuPercent: roundMetric(processRows.reduce((sum, row) => sum + row.cpuPercent, 0)),
     rssBytes: processRows.reduce((sum, row) => sum + row.rssBytes, 0),
-    processes: processRows.sort((left, right) => left.pid - right.pid),
+    processes: [...processRows]
+      .sort((left, right) => right.rssBytes - left.rssBytes || left.pid - right.pid)
+      .slice(0, Math.max(1, maxProcessRows))
+      .sort((left, right) => left.pid - right.pid),
   };
 }
 

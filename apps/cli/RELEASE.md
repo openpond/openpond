@@ -1,24 +1,18 @@
 # Release Workflow
 
-This package uses [Changesets](https://github.com/changesets/changesets) for version management and publishing to npm.
+The root stable-release workflow publishes this package to npm after every supported Desktop package and smoke report passes.
 
 ## Setup required
 
-### 1) npm trusted publisher
+### npm trusted publisher
 Configure npm trusted publishing for this GitHub repository/workflow.
 
-### 2) GitHub token
-`GITHUB_TOKEN` is provided by GitHub Actions.
+## Release workflow
 
-## Development workflow
+1. Run `bun run release:patch`, `release:minor`, or `release:major` from a clean `master` checkout.
+2. The release command updates every versioned workspace, runs the full checks, commits, tags, and pushes the release.
+3. `.github/workflows/release-builds.yml` builds and smokes Linux/macOS Desktop and CLI artifacts on x64 and arm64.
+4. After the smoke reports pass, a stable release publishes `apps/cli` with npm provenance and publishes the GitHub release with `SHA256SUMS.txt`.
 
-1) Make your changes
-2) Create a changeset:
-   ```bash
-   npm run changeset
-   ```
-3) Commit code + changeset
-4) Open a PR to `master`
-
-When changesets are merged into `master`, the release workflow will open a Version Packages PR.
+Nightly releases publish GitHub artifacts but do not publish an npm version.
 Merging that PR publishes to npm and updates `CHANGELOG.md`.

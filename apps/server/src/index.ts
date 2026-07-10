@@ -72,9 +72,11 @@ import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-ex
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
 import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
 import { isCodexHistorySessionId } from "./codex-history.js";
+import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
+import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { createSubagentLifecycleWatcher } from "./runtime/subagent-lifecycle-watcher.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
@@ -137,7 +139,7 @@ export async function createOpenPondServer(
   const store = new SqliteStore(storeDir, { logger });
   const startedAt = now();
   const serverId = randomUUID();
-  const { appendRuntimeEvent, closeEventSubscribers, subscribers, truncateLogValue } =
+  const { appendRuntimeEvent, closeEventSubscribers, openEventSubscriber, truncateLogValue } =
     createRuntimeEventBus({
       logger,
       store,
@@ -148,32 +150,13 @@ export async function createOpenPondServer(
   const workspaceLocks = new Map<string, Promise<unknown>>();
   let actualPort = port;
   let closing = false;
-  let codexStatus: CodexStatus = {
-    available: false,
-    binaryPath: null,
-    version: null,
-    authHealth: "unknown",
-    account: null,
-    appServer: { status: "idle", lastError: null },
-  };
+  const codexStatusService = createCodexStatusService({
+    detect: () => detectCodexStatus(process.env.CODEX_BINARY || "codex"),
+  });
 
   logger.info("server starting", { host, port, storeDir, serverId });
 
-  async function refreshCodexStatus(): Promise<CodexStatus> {
-    const probe = await detectCodexStatus(process.env.CODEX_BINARY || "codex");
-    codexStatus = {
-      available: probe.available,
-      binaryPath: probe.binaryPath,
-      version: probe.version,
-      authHealth: probe.authHealth,
-      account: probe.account,
-      appServer: {
-        status: codexStatus.appServer.status,
-        lastError: probe.error,
-      },
-    };
-    return codexStatus;
-  }
+  const refreshCodexStatus = (force = false) => codexStatusService.refresh(force);
 
   void refreshCodexStatus();
 
@@ -235,6 +218,7 @@ export async function createOpenPondServer(
     workspaceLspSettingsStatusPayload,
     workspaceLspRuntimeStatusPayload,
     restartWorkspaceLspPayload,
+    closeWorkspaceLsp,
     createLocalProjectPayload,
     deleteLocalProjectPayload,
     updateLocalProjectAgentSetupPayload,
@@ -276,7 +260,7 @@ export async function createOpenPondServer(
     startedAt,
     version,
     runtimeVersion,
-    getCodexStatus: () => codexStatus,
+    getCodexStatus: codexStatusService.get,
     refreshCodexStatus,
     appendRuntimeEvent,
     isClosing: () => closing,
@@ -311,8 +295,7 @@ export async function createOpenPondServer(
     storeDir,
     workspaceDiffPayload,
   });
-
-  const { executeWorkspaceTool } = createWorkspaceToolExecutor({
+  const { closeCloudWorkspaceReadiness, executeWorkspaceTool, ensureCloudWorkspaceReady } = createWorkspaceToolExecutor({
     logger,
     truncateLogValue,
     appendRuntimeEvent,
@@ -329,12 +312,12 @@ export async function createOpenPondServer(
     openPondCacheScope,
     upsertScaffoldApp,
     gitBaseUrlFromContext,
+    sandboxRequest: sandboxRequestPayload,
   });
   const openPondCommandAccess = createOpenPondCommandAccessService({
     upsertApproval,
     appendRuntimeEvent,
   });
-
   const {
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
@@ -354,7 +337,7 @@ export async function createOpenPondServer(
       settings: buildProviderSettings({
         file,
         secrets,
-        codex: codexStatus,
+        codex: codexStatusService.get(),
         catalog: cachedProviderCatalog(file),
       }),
     };
@@ -378,12 +361,12 @@ export async function createOpenPondServer(
   const { ensureCodexRuntime } = createCodexRuntimeManager({
     appendRuntimeEvent,
     codexSessions,
-    getCodexStatus: () => codexStatus,
+    getCodexStatus: codexStatusService.get,
     handleCodexServerRequest,
     mapCodexNotification,
     optionsVersion: options.version,
     setCodexStatus: (status) => {
-      codexStatus = status;
+      codexStatusService.set(status);
     },
     store,
     storeDir,
@@ -392,16 +375,7 @@ export async function createOpenPondServer(
 
   let notifySubagentLifecycleStateChanged: ((run: SubagentRun) => void) | null = null;
 
-  const {
-    sendTurn,
-    isSessionTurnActive,
-    interruptSessionTurn,
-    updateTurnCreatePipeline,
-    resolveCreatePipelineApproval,
-    resolveSubagentPatchApplyApproval,
-    runSubagentLifecycleAction,
-    cleanupExpiredRetainedSubagentWorkspace,
-  } = createTurnRunner({
+  const turnRunner = createTurnRunner({
     attachmentRootDir,
     store,
     createSession,
@@ -475,12 +449,20 @@ export async function createOpenPondServer(
     streamOpenPondHostedChatTurn,
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
-    notifySubagentRunStateChanged: (run) => {
-      notifySubagentLifecycleStateChanged?.(run);
-    },
+    notifySubagentRunStateChanged: (run) => notifySubagentLifecycleStateChanged?.(run),
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
+  const {
+    sendTurn,
+    isSessionTurnActive,
+    interruptSessionTurn,
+    updateTurnCreatePipeline,
+    resolveCreatePipelineApproval,
+    resolveSubagentPatchApplyApproval,
+    runSubagentLifecycleAction,
+    cleanupExpiredRetainedSubagentWorkspace,
+  } = turnRunner;
   const insightsService = createInsightsService({
     store,
     storeDir,
@@ -543,7 +525,10 @@ export async function createOpenPondServer(
     model: string | null,
   ): Promise<RuntimeEvent> {
     const existing = findRecentCodexCompactionCompleted(
-      (await store.snapshot()).events,
+      await store.runtimeEventsForSession(session.id, {
+        names: ["session.compaction.completed"],
+        limit: 100,
+      }),
       session.id,
       codexThreadId,
     );
@@ -732,9 +717,7 @@ export async function createOpenPondServer(
     if (session.status === "closed") throw new Error("Cannot compact a closed session.");
     const requestedModel = input.model ?? session.modelRef?.modelId ?? null;
 
-    const priorEvents = (await store.snapshot()).events.filter(
-      (item) => item.sessionId === sessionId,
-    );
+    const priorEvents = await store.runtimeEventsForSession(sessionId);
     const startedEvent = event({
       sessionId,
       name: "session.compaction.started",
@@ -992,7 +975,7 @@ export async function createOpenPondServer(
       executeLocalCommand: openPondCommandAccess.executeCommand,
       executeWorkspaceTool,
       getSession,
-      runtimeEventsSnapshot: async () => (await store.snapshot()).events,
+      runtimeEventsForSession: (targetSessionId) => store.runtimeEventsForSession(targetSessionId),
     }, {
       session,
       command: input.command,
@@ -1024,7 +1007,7 @@ export async function createOpenPondServer(
       version,
       runtimeVersion,
       logger,
-      subscribers,
+      openEventSubscriber,
       refreshCodexStatus,
       bootstrapPayload,
       eventPagePayload,
@@ -1131,6 +1114,7 @@ export async function createOpenPondServer(
       patchSession: patchSessionPayload,
       sendTurn,
       runSessionCommand: runSessionCommandPayload,
+      ensureCloudWorkspaceReady,
       recordPreflightTurnFailure,
       updateTurnCreatePipeline,
       interruptSessionTurn,
@@ -1162,6 +1146,21 @@ export async function createOpenPondServer(
     version,
     runtimeVersion,
   };
+  const closeServer = createServerShutdown({
+    serverId,
+    logger,
+    httpServer,
+    store,
+    workQueues,
+    codexSessions: codexSessions.values(),
+    markClosing: () => { closing = true; },
+    backgroundLoops: [insightsBackgroundLoop, localAgentScheduleLoop, subagentLifecycleWatcher],
+    browserControlQueue,
+    closeEventSubscribers,
+    terminalWebSockets,
+    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close,
+      closeCloudWorkspaceReadiness, closeWorkspaceLsp, voiceTranscription.close],
+  });
 
   return {
     url: `http://${host}:${actualPort}`,
@@ -1169,25 +1168,7 @@ export async function createOpenPondServer(
     tokenFile,
     storePath: store.storePath,
     status,
-    close: async () => {
-      logger.info("server closing", { serverId });
-      closing = true;
-      insightsBackgroundLoop.stop();
-      localAgentScheduleLoop.stop();
-      subagentLifecycleWatcher.stop();
-      browserControlQueue.close();
-      await closeEventSubscribers();
-      terminalWebSockets.close();
-      await waitForOpenPondRefresh();
-      for (const runtime of codexSessions.values()) await runtime.client.stop();
-      await workQueues.drain();
-      await new Promise<void>((resolve, reject) => {
-        httpServer.close((error) => (error ? reject(error) : resolve()));
-      });
-      await store.close();
-      logger.info("server closed", { serverId });
-      await logger.flush();
-    },
+    close: closeServer,
     testHooks: {
       drainWorkQueues: workQueues.drain,
       workQueueReceipts: workQueues.receipts,

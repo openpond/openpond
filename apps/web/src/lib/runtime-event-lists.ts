@@ -1,5 +1,7 @@
 import type { RuntimeEvent } from "@openpond/contracts";
 
+export const MAX_LIVE_RUNTIME_EVENTS = 5_000;
+
 export function mergeRuntimeEventLists(first: RuntimeEvent[], second: RuntimeEvent[]): RuntimeEvent[] {
   if (first.length === 0) return second;
   if (second.length === 0) return first;
@@ -11,6 +13,22 @@ export function mergeRuntimeEventLists(first: RuntimeEvent[], second: RuntimeEve
     merged.push(event);
   }
   return merged;
+}
+
+export function mergeLiveRuntimeEventLists(
+  first: RuntimeEvent[],
+  second: RuntimeEvent[],
+  limit = MAX_LIVE_RUNTIME_EVENTS,
+): RuntimeEvent[] {
+  return limitRuntimeEventList(mergeRuntimeEventLists(first, second), limit);
+}
+
+export function limitRuntimeEventList(
+  events: RuntimeEvent[],
+  limit = MAX_LIVE_RUNTIME_EVENTS,
+): RuntimeEvent[] {
+  if (events.length <= limit) return events;
+  return events.slice(events.length - limit);
 }
 
 export function mergeRuntimeEventsIntoSessionPageCache(
@@ -29,8 +47,8 @@ export function mergeBootstrapRuntimeEvents(
   bootstrapEvents: RuntimeEvent[],
   currentEvents: RuntimeEvent[],
 ): RuntimeEvent[] {
-  if (currentEvents.length === 0) return bootstrapEvents;
-  if (bootstrapEvents.length === 0) return currentEvents;
+  if (currentEvents.length === 0) return limitRuntimeEventList(bootstrapEvents);
+  if (bootstrapEvents.length === 0) return limitRuntimeEventList(currentEvents);
 
   const bootstrapEventIds = new Set(bootstrapEvents.map((event) => event.id));
   const latestBootstrapSequence = latestRuntimeEventSequence(bootstrapEvents);
@@ -47,7 +65,7 @@ export function mergeBootstrapRuntimeEvents(
     return true;
   });
 
-  return mergeRuntimeEventLists(bootstrapEvents, currentEventsAfterBootstrap);
+  return mergeLiveRuntimeEventLists(bootstrapEvents, currentEventsAfterBootstrap);
 }
 
 export function latestRuntimeEventSequence(events: RuntimeEvent[]): number | null {

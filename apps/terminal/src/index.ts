@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ReadStream, WriteStream } from "node:tty";
+import { pathToFileURL } from "node:url";
 import {
   type Approval,
   type BootstrapPayload,
@@ -11,9 +12,7 @@ import {
 import { createComposer, handleComposerKey, replaceComposerText, type ComposerState } from "./ui/composer.js";
 import {
   createLineModeTurnGuard,
-  createTerminalTurnSubmissionGuard,
   LINE_MODE_TURN_RUNNING_MESSAGE,
-  TERMINAL_TURN_RUNNING_MESSAGE,
 } from "./line-mode-turn-guard.js";
 import {
   parseDirectCommandPrompt,
@@ -40,9 +39,11 @@ import {
   runTerminalDirectCommand,
   terminalDirectCommandBlockedReason,
 } from "./direct-command.js";
-import { openTerminalEvents } from "./events.js";
+import { openTerminalEvents, type TerminalEventStreamController } from "./events.js";
+import { createTerminalInteractiveState } from "./interactive-state.js";
 import {
   ensureTerminalChatSession,
+  ensureTerminalSessionWorkspaceReady,
   findTerminalSession,
   profileLabel,
 } from "./session-state.js";
@@ -110,19 +111,18 @@ async function chat(options: Options): Promise<void> {
   let activeSessionId = options.resume;
   let activeAgentId: string | null = null;
   let payload: BootstrapPayload | null = null;
-  let eventStream: AbortController | null = null;
+  let eventStream: TerminalEventStreamController | null = null;
   let exitResolve: (() => void) | null = null;
   let connection: { server: string; token: string } | null = null;
   let pendingCommandApproval: Approval | null = null;
   let permissionQuestion: { approval: Approval } | null = null;
   let permissionQuestionSelectedIndex = 0;
-  let running = false;
   let exitRequested = false;
   let notice: string | null = null;
   let eventStreamNotice: string | null = null;
   const commandScheduler = createSerialTaskScheduler();
   const resizeRenderScheduler = createLatestWinsTaskScheduler();
-  const turnSubmissionGuard = createTerminalTurnSubmissionGuard();
+  const interaction = createTerminalInteractiveState(activeSessionId);
 
   const renderer = new TerminalRenderer(output as WriteStream, () => {
     resizeRenderScheduler.request(() => {
@@ -138,7 +138,7 @@ async function chat(options: Options): Promise<void> {
       cwd: options.cwd,
       profile: payload ? profileLabel(payload) : "loading",
       agent: activeAgentId,
-      running,
+      running: interaction.snapshot().phase === "running",
       sessionId: activeSessionId,
       notice: notice ?? eventStreamNotice,
     };
@@ -272,20 +272,27 @@ async function chat(options: Options): Promise<void> {
   }
 
   async function submitPrompt(text: string): Promise<void> {
-    if (!connection || !activeSessionId) return;
-    if (!turnSubmissionGuard.tryStartSubmission()) {
-      addItem(systemItem(TERMINAL_TURN_RUNNING_MESSAGE, "warning"));
+    if (!activeSessionId) {
+      addItem(systemItem("Wait for terminal startup before sending a turn.", "warning"));
+      return;
+    }
+    const started = interaction.beginTurn(activeSessionId);
+    if (!started.ok) {
+      addItem(systemItem(started.message, "warning"));
+      return;
+    }
+    if (!connection) {
+      interaction.failTurnSubmission(activeSessionId);
+      addItem(systemItem("Wait for the server connection before sending a turn.", "warning"));
       return;
     }
     transcript = appendTranscriptItem(transcript, userItem(text));
-    running = true;
     setNotice("running");
     render();
     const prompt = activeAgentId ? `@${activeAgentId} ${text}` : text;
     const modelId = activeModelId(options, payload?.providers);
     if (!modelId) {
-      running = false;
-      turnSubmissionGuard.failSubmission();
+      interaction.failTurnSubmission(activeSessionId);
       setNotice(null);
       addItem(systemItem(`No model selected for ${providerLabel(payload?.providers, options.provider)}. Use /model <id> or configure a default model in Desktop settings.`, "warning"));
       return;
@@ -295,7 +302,7 @@ async function chat(options: Options): Promise<void> {
         method: "POST",
         body: JSON.stringify({
           prompt,
-          cwd: options.cwd,
+          ...(options.cwdExplicit || (!options.project && !options.resume) ? { cwd: options.cwd } : {}),
           model: modelId,
           modelRef: activeModelRef(options, payload?.providers),
           approvalPolicy: "on-request",
@@ -303,8 +310,7 @@ async function chat(options: Options): Promise<void> {
         }),
       });
     } catch (error) {
-      running = false;
-      turnSubmissionGuard.failSubmission();
+      interaction.failTurnSubmission(activeSessionId);
       setNotice(null);
       addItem(systemItem(error instanceof Error ? error.message : String(error), "error"));
     }
@@ -336,6 +342,16 @@ async function chat(options: Options): Promise<void> {
 
   async function handleSubmit(text: string): Promise<void> {
     try {
+      const phase = interaction.snapshot().phase;
+      if (phase === "starting" || phase === "switching" || phase === "stopping") {
+        const command = parseSlashCommand(text);
+        if (command?.type === "exit") requestExit();
+        else {
+          const blocked = interaction.blocked("accepting input");
+          if (!blocked.ok) addItem(systemItem(blocked.message, "warning"));
+        }
+        return;
+      }
       if (permissionQuestion) {
         const choice = parseTerminalPermissionChoice(text);
         if (!choice) {
@@ -349,7 +365,12 @@ async function chat(options: Options): Promise<void> {
       }
       const directCommand = parseDirectCommandPrompt(text);
       if (directCommand) {
-        await submitDirectCommand(directCommand.command);
+        const allowed = interaction.blocked("running a direct command");
+        if (!allowed.ok) {
+          addItem(systemItem(allowed.message, "warning"));
+          return;
+        }
+        await commandScheduler.run(() => submitDirectCommand(directCommand.command));
         return;
       }
       const command = parseSlashCommand(text);
@@ -367,6 +388,24 @@ async function chat(options: Options): Promise<void> {
             getActiveSessionId: () => activeSessionId,
             setActiveSessionId: (sessionId) => {
               activeSessionId = sessionId;
+            },
+            switchSession: async (create) => {
+              const started = interaction.beginSessionSwitch();
+              if (!started.ok) throw new Error(started.message);
+              try {
+                const created = await create();
+                const session = await ensureTerminalSessionWorkspaceReady(connection!, created) ?? created;
+                activeSessionId = session.id;
+                await eventStream?.switchSession(session.id);
+                interaction.completeSessionSwitch(session.id);
+                transcript = [];
+                pendingCommandApproval = null;
+                permissionQuestion = null;
+                return session;
+              } catch (error) {
+                interaction.failSessionSwitch();
+                throw error;
+              }
             },
             getActiveAgentId: () => activeAgentId,
             setActiveAgentId: (agentId) => {
@@ -465,7 +504,7 @@ async function chat(options: Options): Promise<void> {
     if (result.action.type === "cancel-or-exit") {
       if (permissionQuestion) {
         void resolvePermissionQuestion("skip");
-      } else if (running && connection && activeSessionId) {
+      } else if (interaction.snapshot().phase === "running" && connection && activeSessionId) {
         setNotice("interrupting");
         void interruptTurn(connection.server, connection.token, activeSessionId).catch((error) => {
           addItem(systemItem(error instanceof Error ? error.message : String(error), "error"));
@@ -489,6 +528,7 @@ async function chat(options: Options): Promise<void> {
   function requestExit(): void {
     if (exitRequested) return;
     exitRequested = true;
+    interaction.beginStopping();
     exitResolve?.();
   }
 
@@ -504,7 +544,9 @@ async function chat(options: Options): Promise<void> {
     payload = await apiFetch<BootstrapPayload>(connection.server, connection.token, "/v1/bootstrap?refreshCodex=1");
     activeAgentId = payload.profile.agents[0]?.id ?? null;
     const sessionState = await ensureTerminalChatSession(connection, payload, options, activeSessionId);
+    const readySession = await ensureTerminalSessionWorkspaceReady(connection, sessionState.session);
     activeSessionId = sessionState.sessionId;
+    if (readySession?.cwd) options.cwd = readySession.cwd;
     options.provider = sessionState.provider;
     options.model = sessionState.model;
     notice = null;
@@ -515,7 +557,7 @@ async function chat(options: Options): Promise<void> {
       token: connection.token,
       activeSessionId: () => activeSessionId,
       onEvent: (event) => {
-        turnSubmissionGuard.applyRuntimeEvent(event);
+        interaction.applyRuntimeEvent(event);
         const requestedApproval = commandApprovalFromRuntimeEvent(event);
         if (requestedApproval) pendingCommandApproval = requestedApproval;
         const resolvedApprovalId = commandApprovalIdFromResolvedEvent(event);
@@ -526,10 +568,8 @@ async function chat(options: Options): Promise<void> {
           permissionQuestion = null;
           notice = null;
         }
-        if (event.name === "turn.started") running = true;
         transcript = appendRuntimeEvent(transcript, event);
         if (event.name === "turn.completed" || event.name === "turn.failed" || event.name === "turn.interrupted") {
-          running = false;
           notice = null;
         }
         eventRenderScheduler.request();
@@ -544,6 +584,8 @@ async function chat(options: Options): Promise<void> {
         }
       },
     });
+    await eventStream.ready;
+    interaction.completeStartup(activeSessionId);
     render();
     await new Promise<void>((resolve) => {
       exitResolve = resolve;
@@ -554,7 +596,7 @@ async function chat(options: Options): Promise<void> {
     resizeRenderScheduler.cancel();
     rawInput.stop();
     renderer.stop();
-    stopManagedServer();
+    await stopManagedServer();
   }
 }
 
@@ -570,7 +612,9 @@ async function lineModeChat(options: Options): Promise<void> {
   const connection = await ensureServer(options, (line) => output.write(`${line}\n`));
   const payload = await apiFetch<BootstrapPayload>(connection.server, connection.token, "/v1/bootstrap?refreshCodex=1");
   const sessionState = await ensureTerminalChatSession(connection, payload, options, options.resume);
+  const readySession = await ensureTerminalSessionWorkspaceReady(connection, sessionState.session);
   const activeSessionId = sessionState.sessionId;
+  if (readySession?.cwd) options.cwd = readySession.cwd;
   options.provider = sessionState.provider;
   options.model = sessionState.model;
   const turnGuard = createLineModeTurnGuard();
@@ -588,6 +632,7 @@ async function lineModeChat(options: Options): Promise<void> {
       }
     },
   });
+  await eventStream.ready;
   const rl = createInterface({ input, output });
   output.write(`OpenPond ${providerLabel(payload.providers, options.provider)} / ${modelLabel(payload.providers, options)} ${options.cwd}\n`);
   try {
@@ -609,7 +654,7 @@ async function lineModeChat(options: Options): Promise<void> {
           method: "POST",
           body: JSON.stringify({
             prompt: line,
-            cwd: options.cwd,
+            ...(options.cwdExplicit || (!options.project && !options.resume) ? { cwd: options.cwd } : {}),
             model: modelId,
             modelRef: activeModelRef(options, payload.providers),
             approvalPolicy: "on-request",
@@ -624,12 +669,12 @@ async function lineModeChat(options: Options): Promise<void> {
   } finally {
     rl.close();
     eventStream.abort();
-    stopManagedServer();
+    await stopManagedServer();
   }
 }
 
-async function main(): Promise<void> {
-  const { command, options } = parseTerminalArgs(process.argv.slice(2));
+export async function runOpenPondTerminalCli(argv = process.argv.slice(2)): Promise<void> {
+  const { command, options } = parseTerminalArgs(argv);
   if (command !== "chat") {
     output.write(
       "Usage: openpond-app chat [--server URL] [--provider PROVIDER] [--model MODEL] [--cwd DIR] [--project APP_ID] [--resume SESSION_ID] (--message TEXT|--message-file PATH|--stdin) --non-interactive [--yes] [--approval-policy POLICY] [--json] [--timeout-sec SEC] [--max-output-bytes BYTES] [--sandbox MODE]\n"
@@ -639,10 +684,12 @@ async function main(): Promise<void> {
   await chat(options);
 }
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  const exitCode = typeof (error as { exitCode?: unknown }).exitCode === "number"
-    ? (error as { exitCode: number }).exitCode
-    : 1;
-  process.exit(exitCode);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void runOpenPondTerminalCli().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    const exitCode = typeof (error as { exitCode?: unknown }).exitCode === "number"
+      ? (error as { exitCode: number }).exitCode
+      : 1;
+    process.exit(exitCode);
+  });
+}

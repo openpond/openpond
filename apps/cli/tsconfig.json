@@ -10,6 +10,9 @@
       "@openpond/cloud/*": ["../../packages/cloud/src/*"],
       "@openpond/contracts": ["../../packages/contracts/src/index.ts"],
       "@openpond/contracts/*": ["../../packages/contracts/src/*"],
+      "@openpond/local-server": ["../server/src/index.ts"],
+      "@openpond/local-server/*": ["../server/src/*"],
+      "@openpond/terminal": ["../terminal/src/index.ts"],
       "openpond-agent-sdk": ["../../packages/agent-sdk/src/index.ts"],
       "openpond-agent-sdk/*": ["../../packages/agent-sdk/src/*"]
     },

@@ -1,11 +1,11 @@
 # OpenPond App Packaging
 
-V1 uses electron-builder with these release paths:
+The active release workflow produces and smokes these targets:
 
-- Linux: AppImage via `bun run package:linux`
-- macOS: DMG and zip via `bun run package:mac`
-- Windows: NSIS installer via `bun run package:win`
-- Homebrew cask draft: `packaging/homebrew/Casks/openpond-app.rb`
-- winget draft manifests: `packaging/winget/OpenPond.OpenPondApp*.yaml`
+- Linux x64 and arm64: AppImage via `bun run package:linux:release`
+- macOS x64 and arm64: zip via `bun run package:mac:release`
+- CLI x64 and arm64: compiled tarballs for Linux and macOS, plus npm
 
-Signing, notarization, and update publishing are intentionally configured by CI secrets rather than checked into the repo.
+Windows packaging is paused and is not advertised as supported until the NSIS lane has a real packaged smoke. The stale Homebrew and winget drafts were retired because their repository names, artifact names, versions, and checksums were not generated from the release inventory.
+
+Signing, notarization, npm trusted publishing, and update publishing are configured in CI rather than checked into the repository. Every GitHub release includes `SHA256SUMS.txt`; the CLI installer verifies it before extraction.

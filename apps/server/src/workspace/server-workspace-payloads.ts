@@ -66,7 +66,7 @@ import { subagentIsolatedWorkspaceRepoPath } from "./subagent-workspace.js";
 import { writeWorkspaceFile } from "../workspace-tools/workspace-tool-file-system.js";
 import type { SqliteStore } from "../store/store.js";
 import { now, textFromUnknown } from "../utils.js";
-import { workspaceLspManager } from "./workspace-lsp.js";
+import { WorkspaceLspManager } from "./workspace-lsp.js";
 
 export type ServerWorkspacePayloads = ReturnType<typeof createServerWorkspacePayloads>;
 
@@ -79,6 +79,7 @@ export function createServerWorkspacePayloads(deps: {
   bootstrapPayload: (bootstrapOptions?: { forceOpenPond?: boolean; ensureProfile?: boolean }) => Promise<BootstrapPayload>;
 }) {
   const { store, storeDir, findOpenPondApp, loadAppPreferences, bootstrapPayload } = deps;
+  const workspaceLspManager = new WorkspaceLspManager();
 
   async function findLocalWorkspace(projectId: string): Promise<LocalProject | null> {
     return findLocalProject(store, projectId);
@@ -504,6 +505,7 @@ export function createServerWorkspacePayloads(deps: {
     workspaceLspSettingsStatusPayload,
     workspaceLspRuntimeStatusPayload,
     restartWorkspaceLspPayload,
+    closeWorkspaceLsp: () => workspaceLspManager.shutdown(),
     createLocalProjectPayload,
     deleteLocalProjectPayload,
     updateLocalProjectAgentSetupPayload,

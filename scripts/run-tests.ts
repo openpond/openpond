@@ -25,6 +25,7 @@ const nonDeterministicEnvKeys = [
   "OPENPOND_GOAL_RUN_CONFIG_PATH",
   "OPENPOND_GOAL_STORAGE",
   "OPENPOND_GOAL_STORAGE_LOCATION",
+  "OPENPOND_CONFIG_DIR",
   "OPENPOND_OPCHAT_API_KEY",
   "OPENPOND_OPCHAT_API_URL",
   "OPENPOND_OPCHAT_MODEL",
@@ -124,6 +125,15 @@ async function discoverRootTests(): Promise<{ node: string[]; bun: string[] }> {
     .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
     .sort()
     .map((entry) => path.join("tests", entry));
+  for (const testRoot of ["apps/server/src", "packages/cloud/src"]) {
+    const colocated = await readdir(path.join(root, testRoot), { recursive: true });
+    bun.push(
+      ...colocated
+        .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
+        .map((entry) => path.join(testRoot, entry)),
+    );
+  }
+  bun.sort();
   return { node, bun };
 }
 

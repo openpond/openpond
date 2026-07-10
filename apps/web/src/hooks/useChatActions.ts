@@ -68,7 +68,7 @@ import { openPondActionProjectTarget } from "../lib/openpond-action-project";
 import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
 import { canManageOpenPondOrganization, type OpenPondOrganization } from "../lib/organization-types";
 import { implicitOrganization } from "../lib/project-agent-setup";
-import { mergeRuntimeEventLists } from "../lib/runtime-event-lists";
+import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import type {
   SandboxActionCatalogEntry,
   SandboxAgent,
@@ -100,7 +100,7 @@ type UseChatActionsInput = {
   draftProvider: ChatProvider;
   expandProject: (projectId: string) => void;
   ensureCloudSessionReady?: (session: Session) => Promise<Session>;
-  prompt: string;
+  getPrompt: () => string;
   bootstrap: BootstrapPayload | null;
   chatMessages: ChatMessage[];
   apps: OpenPondApp[];
@@ -278,7 +278,7 @@ export function useChatActions({
   draftProvider,
   expandProject,
   ensureCloudSessionReady,
-  prompt,
+  getPrompt,
   bootstrap,
   chatMessages,
   apps,
@@ -541,7 +541,7 @@ export function useChatActions({
       cwd: session.cwd,
     });
     setSessions((current) => upsertSessionPreservingLocalSidebarState(current, payload.session));
-    setEvents((current) => mergeRuntimeEventLists(current, payload.events));
+    setEvents((current) => mergeLiveRuntimeEventLists(current, payload.events));
     return true;
   }
 
@@ -551,7 +551,7 @@ export function useChatActions({
     promptOverride?: string,
     options: SendPromptOptions = {},
   ): Promise<boolean> {
-    const promptForTurn = promptOverride ?? prompt;
+    const promptForTurn = promptOverride ?? getPrompt();
     let value = promptForTurn.trim() || (attachments.length > 0 ? "Please review the attached files." : "");
     if (!connection || !value) return false;
     const displayPromptForTurn = options.displayPrompt?.trim() || value;
@@ -661,7 +661,7 @@ export function useChatActions({
           applyBootstrapPayload(payload);
           clearPromptForTurn();
           setEvents((current) =>
-            mergeRuntimeEventLists(
+            mergeLiveRuntimeEventLists(
               current,
               directActionRunEvents({
                 action: selectedActionForTurn,
@@ -764,7 +764,7 @@ export function useChatActions({
         const payload = await api.bootstrap(connection);
         applyBootstrapPayload(payload);
         setEvents((current) =>
-          mergeRuntimeEventLists(
+          mergeLiveRuntimeEventLists(
             current,
             directActionRunEvents({
               action: selectedActionForTurn,

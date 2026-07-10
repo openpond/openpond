@@ -1,6 +1,7 @@
 import type { WriteStream } from "node:tty";
 import { clearLine, hideCursor, resetCursorColor, setCursorColor, showCursor } from "./ansi.js";
 import { buildFrame, type LayoutInput } from "./layout.js";
+import { TranscriptLayoutCache } from "./transcript-layout-cache.js";
 
 const CSI = "\x1b[";
 const MAX_FRAME_ROWS = 10;
@@ -11,6 +12,7 @@ export class TerminalRenderer {
   private cursorRow = 1;
   private active = false;
   private resizeHandler: (() => void) | null = null;
+  private readonly transcriptLayoutCache = new TranscriptLayoutCache();
 
   constructor(output: WriteStream, onResize: () => void) {
     this.output = output;
@@ -39,7 +41,7 @@ export class TerminalRenderer {
     if (!this.active) return;
     const cols = this.output.columns || 80;
     const rows = Math.min(this.output.rows || 24, MAX_FRAME_ROWS);
-    const frame = buildFrame({ ...input, cols, rows });
+    const frame = buildFrame({ ...input, cols, rows, transcriptLayoutCache: this.transcriptLayoutCache });
     let buffer = `${hideCursor()}${this.clearPrompt()}`;
 
     const physicalRows = frame.lines.length;

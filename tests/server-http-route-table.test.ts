@@ -101,6 +101,15 @@ describe("server HTTP route table", () => {
         ],
       });
       await expect(
+        expectJsonRequest(origin, "POST", "/v1/sessions/session-1/workspace/ensure-ready", 200, {
+          branch: "feature/ready",
+          surface: "terminal",
+        }),
+      ).resolves.toMatchObject({
+        name: "ensureCloudWorkspaceReady",
+        args: ["session-1", { branch: "feature/ready", surface: "terminal" }],
+      });
+      await expect(
         expectJsonRequest(origin, "POST", "/v1/codex-history/codex_history_thread-1/turns/interrupt", 202),
       ).resolves.toMatchObject({
         name: "interruptCodexHistoryTurnPayload",
@@ -123,6 +132,7 @@ describe("server HTTP route table", () => {
         "sendTurn",
         "runSubagentLifecycleAction",
         "recordPreflightTurnFailure",
+        "ensureCloudWorkspaceReady",
         "interruptCodexHistoryTurnPayload",
       ]);
     } finally {

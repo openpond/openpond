@@ -53,7 +53,6 @@ const AGENT_SDK_GENERATED_ARTIFACTS = [
 ];
 
 type ProjectSourceUploadEntry = { path: string; type: "file"; contentsBase64: string };
-
 type ProjectSourceUpload = {
   entries: ProjectSourceUploadEntry[];
   fileCount: number;
@@ -61,12 +60,12 @@ type ProjectSourceUpload = {
   limits: typeof PROJECT_SOURCE_UPLOAD_LIMITS;
   transport: typeof PROJECT_SOURCE_UPLOAD_TRANSPORT;
 };
-
 type ProjectSourceUploadFile = {
   path: string;
   absolutePath: string;
   size: number;
   mtimeMs: number;
+  ctimeMs: number;
 };
 
 function isSafeProjectSourcePath(filePath: string): boolean {
@@ -136,6 +135,7 @@ export async function collectProjectSourceUploadEntries(projectPath: string): Pr
         absolutePath,
         size: stat.size,
         mtimeMs: Math.trunc(stat.mtimeMs),
+        ctimeMs: Math.trunc(stat.ctimeMs),
       } satisfies ProjectSourceUploadFile;
     })
   ).filter((file): file is ProjectSourceUploadFile => file !== null);
@@ -644,7 +644,7 @@ async function buildAgentSdkMaterializedDependency(
     );
     const packageManager = detectAgentSdkPackageManager(projectPath, packageJson);
     const installCommand = agentSdkDependencyInstallCommand(packageManager);
-    const sdkPackage = {
+    const sdkPackage: Omit<AgentSdkMaterializedTarball, "contents"> = {
       packageName: "openpond-agent-sdk",
       source: "uploaded_tarball",
       path: AGENT_SDK_VENDOR_TARBALL_PATH,

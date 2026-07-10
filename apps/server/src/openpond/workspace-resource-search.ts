@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { listPlainWorkspaceFiles, runWorkspaceCommand } from "../workspace/workspaces.js";
 import { listWorkspaceFiles, resolveForRead } from "../workspace-tools/workspace-tool-file-system.js";
-import type { ResourceSearchRequest, ResourceSearchResult } from "./resources.js";
+import type { ResourceSearchRequest, ResourceSearchResult } from "./resource-types.js";
 
 type WorkspaceSearchMode = "exact" | "path" | "ranked";
 

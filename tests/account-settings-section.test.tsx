@@ -3,7 +3,10 @@ import { createElement, type FormEvent, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 
-import { AccountEndpointDialog } from "../apps/web/src/components/settings/AccountEndpointDialog";
+import {
+  AccountEndpointDialog,
+  accountEndpointSelectorForMode,
+} from "../apps/web/src/components/settings/AccountEndpointDialog";
 import { AccountSettingsSection } from "../apps/web/src/components/settings/AccountSettingsSection";
 
 const NOW = "2026-07-02T12:00:00.000Z";
@@ -87,6 +90,22 @@ function renderAccountSettings(account: AccountState): string {
 }
 
 describe("AccountSettingsSection", () => {
+  test("derives a new account identity when connecting another key to the same environment", () => {
+    const activeAccount = {
+      handle: "qa-user-3",
+      baseUrl: "https://staging.openpond.ai",
+    };
+
+    expect(accountEndpointSelectorForMode("connect", activeAccount)).toEqual({
+      handle: undefined,
+      currentBaseUrl: null,
+    });
+    expect(accountEndpointSelectorForMode("update", activeAccount)).toEqual({
+      handle: "qa-user-3",
+      currentBaseUrl: "https://staging.openpond.ai",
+    });
+  });
+
   test("renders a first-run sign-in state for signed-out users", () => {
     const html = renderAccountSettings(accountState());
 

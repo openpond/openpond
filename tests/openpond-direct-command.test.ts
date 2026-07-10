@@ -134,7 +134,8 @@ describe("OpenPond direct command routing", () => {
           return workspaceResult({ output: "Command succeeded\n\nok" });
         },
         getSession: async () => currentSession,
-        runtimeEventsSnapshot: async () => events.slice(),
+        runtimeEventsForSession: async (sessionId) =>
+          events.filter((event) => event.sessionId === sessionId),
       },
       {
         session: currentSession,

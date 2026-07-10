@@ -41,7 +41,7 @@ export type OpenPondDirectCommandDeps = {
     options?: { turnId?: string },
   ) => Promise<WorkspaceToolResult>;
   getSession: (sessionId: string) => Promise<Session>;
-  runtimeEventsSnapshot?: () => Promise<RuntimeEvent[]>;
+  runtimeEventsForSession?: (sessionId: string) => Promise<RuntimeEvent[]>;
 };
 
 export async function runOpenPondDirectCommand(
@@ -192,7 +192,9 @@ async function runSandboxDirectCommand(
   input: OpenPondDirectCommandInput,
   commandRunId: string,
 ): Promise<OpenPondDirectCommandResponse> {
-  const beforeEvents = deps.runtimeEventsSnapshot ? await deps.runtimeEventsSnapshot() : [];
+  const beforeEvents = deps.runtimeEventsForSession
+    ? await deps.runtimeEventsForSession(input.session.id)
+    : [];
   const beforeEventIds = new Set(beforeEvents.map((item) => item.id));
   const result = await deps.executeWorkspaceTool(
     input.session.id,
@@ -206,7 +208,9 @@ async function runSandboxDirectCommand(
     },
     { turnId: commandRunId },
   );
-  const afterEvents = deps.runtimeEventsSnapshot ? await deps.runtimeEventsSnapshot() : [];
+  const afterEvents = deps.runtimeEventsForSession
+    ? await deps.runtimeEventsForSession(input.session.id)
+    : [];
   const events = afterEvents.filter(
     (item) =>
       item.sessionId === input.session.id &&

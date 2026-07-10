@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./ready-line-parser": {
+      "import": "./dist/ready-line-parser.js",
+      "types": "./dist/ready-line-parser.d.ts"
     }
   },
   "scripts": {

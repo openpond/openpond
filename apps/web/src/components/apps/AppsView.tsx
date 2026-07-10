@@ -9,6 +9,7 @@ import {
   buildConnectedAppStatusRows,
 } from "@openpond/contracts";
 import { useEffect, useMemo, useState } from "react";
+import "../../styles/apps/apps.css";
 import { api, type ClientConnection } from "../../api";
 import {
   CheckCircle2,

@@ -105,7 +105,18 @@ export class BrowserSidebarManager {
   ) {
     this.evictionTimer = setInterval(() => this.enforceMemoryPolicy(), 60_000);
     this.evictionTimer.unref?.();
-    window.once("closed", () => this.destroy());
+    window.once("closed", () => void this.shutdown());
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.destroyed) return;
+    this.destroyed = true; clearInterval(this.evictionTimer);
+    for (const pending of this.pendingStateEmits.values()) clearTimeout(pending.timer);
+    this.pendingStateEmits.clear();
+    const persistKeys = [...this.pendingTabPersists.keys()];
+    for (const pending of this.pendingTabPersists.values()) clearTimeout(pending.timer);
+    await Promise.all(persistKeys.map((key) => this.flushTabPersist(key, false)));
+    for (const runtime of this.runtimes.values()) this.destroyRuntime(runtime.conversationId, runtime.tabId);
   }
 
   async open(input: BrowserUrlInput): Promise<void> {
@@ -965,17 +976,6 @@ export class BrowserSidebarManager {
     this.recentEvictions.splice(0, Math.max(0, this.recentEvictions.length - 20));
   }
 
-  private destroy(): void {
-    this.destroyed = true;
-    clearInterval(this.evictionTimer);
-    for (const pending of this.pendingStateEmits.values()) clearTimeout(pending.timer);
-    this.pendingStateEmits.clear();
-    for (const [key, pending] of this.pendingTabPersists) {
-      clearTimeout(pending.timer);
-      void this.flushTabPersist(key, false);
-    }
-    for (const runtime of Array.from(this.runtimes.values())) this.destroyRuntime(runtime.conversationId, runtime.tabId);
-  }
 }
 
 function pageUrl(runtime: RuntimeTab): string {

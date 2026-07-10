@@ -607,14 +607,14 @@ describe("OpenPond App action channel", () => {
       }),
     );
 
-    expect(html).toContain(">New chat</span>");
+    expect(html).toContain(">New task</span>");
     expect(html).toContain(">Files</span>");
     expect(html).toContain(">Open file</span>");
     expect(html).toContain(">Browser</span>");
     expect(html).not.toContain(">Changes</span>");
     expect(html).not.toContain(">Review</span>");
     const menuFilesIndex = html.lastIndexOf(">Files</span>");
-    expect(html.indexOf(">New chat</span>")).toBeLessThan(menuFilesIndex);
+    expect(html.indexOf(">New task</span>")).toBeLessThan(menuFilesIndex);
     expect(menuFilesIndex).toBeLessThan(html.indexOf(">Open file</span>"));
     expect(html.indexOf(">Open file</span>")).toBeLessThan(html.indexOf(">Browser</span>"));
   });

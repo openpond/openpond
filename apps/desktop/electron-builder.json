@@ -3,46 +3,25 @@
   "productName": "openpond",
   "asar": true,
   "directories": {
+    "app": "apps/desktop/stage/app",
     "output": "release",
     "buildResources": "apps/desktop/build"
   },
   "icon": "apps/desktop/build/icon.png",
   "afterPack": "scripts/after-pack.cjs",
   "files": [
-    "apps/desktop/dist/**/*",
-    "package.json"
+    "dist/**/*",
+    "package.json",
+    "!node_modules/**/*"
   ],
+  "npmRebuild": false,
   "extraMetadata": {
-    "main": "apps/desktop/dist/main.js"
+    "main": "dist/main.js"
   },
   "extraResources": [
     {
-      "from": "apps/server/dist",
-      "to": "server"
-    },
-    {
-      "from": "node_modules/sqlite3",
-      "to": "server/node_modules/sqlite3"
-    },
-    {
-      "from": "node_modules/bindings",
-      "to": "server/node_modules/bindings"
-    },
-    {
-      "from": "node_modules/file-uri-to-path",
-      "to": "server/node_modules/file-uri-to-path"
-    },
-    {
-      "from": "node_modules/node-pty",
-      "to": "server/node_modules/node-pty"
-    },
-    {
-      "from": "node_modules/node-addon-api",
-      "to": "server/node_modules/node-addon-api"
-    },
-    {
-      "from": "apps/web/dist",
-      "to": "web"
+      "from": "apps/desktop/stage/runtime",
+      "to": "."
     },
     {
       "from": "apps/desktop/build/icons",

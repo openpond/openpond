@@ -8,6 +8,7 @@ import type {
   InsightStatus,
 } from "@openpond/contracts";
 import { useEffect, useMemo, useState } from "react";
+import "../../styles/insights/insights.css";
 import { CheckCircle2, RefreshCw, X } from "../icons";
 
 type InsightsViewProps = {

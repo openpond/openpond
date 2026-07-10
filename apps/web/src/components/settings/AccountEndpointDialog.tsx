@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
+import "../../styles/workspace/git-dialogs.css";
 import type { AccountState } from "@openpond/contracts";
 import { KeyRound, Save, SlidersHorizontal, X } from "../icons";
 
@@ -14,6 +15,22 @@ export type AccountEndpointUpdate = {
   apiKey?: string;
   environment?: string | null;
 };
+
+export function accountEndpointSelectorForMode(
+  mode: AccountEndpointDialogMode,
+  account: Pick<AccountRow, "handle" | "baseUrl"> | null | undefined,
+): Pick<AccountEndpointUpdate, "handle" | "currentBaseUrl"> {
+  if (mode === "connect") {
+    return {
+      handle: undefined,
+      currentBaseUrl: null,
+    };
+  }
+  return {
+    handle: account?.handle,
+    currentBaseUrl: account?.baseUrl ?? null,
+  };
+}
 
 type AccountEndpointDialogProps = {
   account?: AccountRow | null;
@@ -79,9 +96,9 @@ export function AccountEndpointDialog({
     }
 
     try {
+      const accountSelector = accountEndpointSelectorForMode(mode, account);
       await onSave({
-        handle: account?.handle,
-        currentBaseUrl: account?.baseUrl ?? null,
+        ...accountSelector,
         baseUrl: normalizedBaseUrl,
         apiBaseUrl: normalizedApiBaseUrl,
         apiKey: connectMode ? trimmedApiKey : undefined,

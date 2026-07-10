@@ -30,6 +30,7 @@ type ActiveExecution = {
   codexClient: CodexAppServerClient | null;
   teamId: string;
   cancelled: boolean;
+  settled: Promise<void>;
 };
 
 const PARTIAL_PUBLISH_INTERVAL_MS = 750;
@@ -40,20 +41,36 @@ export function createTeamChatAiExecutionService(input: {
   version: string;
 }) {
   const active = new Map<string, ActiveExecution>();
+  let closing = false;
+  let closePromise: Promise<void> | null = null;
 
   function execute(turnId: string, teamId: string): { accepted: true } {
+    if (closing) throw new Error("Team Chat AI executor is closed.");
     if (active.has(turnId)) return { accepted: true };
     const execution: ActiveExecution = {
       controller: new AbortController(),
       codexClient: null,
       teamId,
       cancelled: false,
+      settled: Promise.resolve(),
     };
     active.set(turnId, execution);
-    void run(turnId, execution).finally(() => {
+    execution.settled = run(turnId, execution).finally(() => {
       if (active.get(turnId) === execution) active.delete(turnId);
     });
     return { accepted: true };
+  }
+
+  function close(): Promise<void> {
+    if (closePromise) return closePromise;
+    closing = true;
+    closePromise = (async () => {
+      const executions = [...active.entries()];
+      await Promise.all(executions.map(([turnId, execution]) => cancel(turnId, execution.teamId)));
+      await Promise.all(executions.map(([, execution]) => execution.settled));
+      if (active.size > 0) throw new Error(`Team Chat AI executor leaked ${active.size} execution(s).`);
+    })();
+    return closePromise;
   }
 
   async function cancel(turnId: string, teamId?: string): Promise<{ cancelled: boolean }> {
@@ -136,7 +153,7 @@ export function createTeamChatAiExecutionService(input: {
     }
   }
 
-  return { execute, cancel, activeTurnIds: () => Array.from(active.keys()) };
+  return { execute, cancel, close, activeTurnIds: () => Array.from(active.keys()) };
 }
 
 async function runByokTurn(input: {

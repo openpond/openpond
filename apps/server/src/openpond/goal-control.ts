@@ -95,16 +95,19 @@ export type OpenPondGoalControlResult = {
 
 export function runOpenPondGoalControl(input: {
   session: Session;
-  events: readonly RuntimeEvent[];
+  events?: readonly RuntimeEvent[];
+  targetGoal?: Record<string, unknown> | null;
   request: OpenPondGoalControlInput;
   now?: string;
 }): OpenPondGoalControlResult {
   const action = input.request.action;
   const reason = cleanRequired(input.request.reason, "reason");
   const targetGoalId = cleanOptional(input.request.targetGoalId);
-  const targetGoal = targetGoalId
-    ? findOpenPondGoalById(input.events, input.session.id, targetGoalId)
-    : latestOpenPondGoal(input.events, input.session.id);
+  const targetGoal = input.targetGoal !== undefined
+    ? input.targetGoal
+    : targetGoalId
+      ? findOpenPondGoalById(input.events ?? [], input.session.id, targetGoalId)
+      : latestOpenPondGoal(input.events ?? [], input.session.id);
   const now = input.now ?? new Date().toISOString();
   const mode = resolveGoalControlMode({
     session: input.session,

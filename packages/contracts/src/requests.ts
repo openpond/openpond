@@ -18,6 +18,7 @@ import {
   WorkspaceEditorPreferencesSchema,
   WorkspaceKindSchema,
 } from "./settings.js";
+import type { Session } from "./sessions.js";
 import {
   SubagentDelegationModeSchema,
   SubagentPreferencesSchema,
@@ -468,6 +469,27 @@ export const ResolveApprovalRequestSchema = z.object({
 });
 
 export type ResolveApprovalRequest = z.infer<typeof ResolveApprovalRequestSchema>;
+
+export const EnsureCloudWorkspaceReadyRequestSchema = z.object({
+  branch: z.string().trim().min(1).max(240).nullable().optional(),
+  surface: z.enum(["desktop", "terminal"]),
+});
+
+export type EnsureCloudWorkspaceReadyRequest = z.infer<typeof EnsureCloudWorkspaceReadyRequestSchema>;
+
+export type CloudWorkspaceReadyStatus =
+  | "already_running"
+  | "waited_for_creating"
+  | "started"
+  | "resumed"
+  | "restored"
+  | "recreated";
+
+export type EnsureCloudWorkspaceReadyResponse = {
+  output?: string;
+  session: Session;
+  status: CloudWorkspaceReadyStatus;
+};
 
 export const SwitchOpenPondAccountRequestSchema = z.object({
   handle: z.string().min(1),

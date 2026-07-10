@@ -1,6 +1,8 @@
 import type { RuntimeEvent } from "@openpond/contracts";
 
 export const MAX_ACTIVE_TRANSCRIPT_ITEMS = 200;
+export const MAX_ACTIVE_STREAMING_TEXT_BYTES = 128 * 1024;
+const STREAM_TRUNCATION_MARKER = "\n\n[terminal live output truncated; full output remains available from session history]";
 
 export type TranscriptItem =
   | {
@@ -14,6 +16,8 @@ export type TranscriptItem =
       kind: "assistant";
       text: string;
       streaming: boolean;
+      textBytes?: number;
+      truncated?: boolean;
       createdAt: string;
     }
   | {
@@ -143,14 +147,27 @@ export function appendRuntimeEvent(items: TranscriptItem[], event: RuntimeEvent)
     if (!delta) return items;
     const last = items[items.length - 1];
     if (last?.kind === "assistant" && last.streaming) {
-      return limitActiveTranscriptItems([...items.slice(0, -1), { ...last, text: `${last.text}${delta}` }]);
+      if (last.truncated) return items;
+      const appended = appendStreamingText(last.text, last.textBytes, delta);
+      return limitActiveTranscriptItems([
+        ...items.slice(0, -1),
+        {
+          ...last,
+          text: appended.text,
+          textBytes: appended.textBytes,
+          truncated: appended.truncated,
+        },
+      ]);
     }
+    const initial = appendStreamingText("", 0, delta);
     return appendTranscriptItem(
       items,
       {
         id: event.turnId ? `assistant-${event.turnId}` : itemId("assistant"),
         kind: "assistant",
-        text: delta,
+        text: initial.text,
+        textBytes: initial.textBytes,
+        truncated: initial.truncated,
         streaming: true,
         createdAt: event.timestamp,
       },
@@ -244,4 +261,38 @@ export function appendRuntimeEvent(items: TranscriptItem[], event: RuntimeEvent)
   if (event.name === "session.compaction.failed") return appendTranscriptItem(items, systemItem(event.error || "Compaction failed", "error"));
 
   return items;
+}
+
+function appendStreamingText(
+  current: string,
+  knownCurrentBytes: number | undefined,
+  delta: string,
+): { text: string; textBytes: number; truncated: boolean } {
+  const currentBytes = knownCurrentBytes ?? utf8Bytes(current);
+  const deltaBytes = utf8Bytes(delta);
+  if (currentBytes + deltaBytes <= MAX_ACTIVE_STREAMING_TEXT_BYTES) {
+    return { text: `${current}${delta}`, textBytes: currentBytes + deltaBytes, truncated: false };
+  }
+  const markerBytes = utf8Bytes(STREAM_TRUNCATION_MARKER);
+  const remainingBytes = Math.max(0, MAX_ACTIVE_STREAMING_TEXT_BYTES - currentBytes - markerBytes);
+  const prefix = utf8Prefix(delta, remainingBytes);
+  const text = `${current}${prefix}${STREAM_TRUNCATION_MARKER}`;
+  return { text, textBytes: utf8Bytes(text), truncated: true };
+}
+
+function utf8Prefix(value: string, maxBytes: number): string {
+  if (maxBytes <= 0) return "";
+  let output = "";
+  let bytes = 0;
+  for (const char of value) {
+    const size = utf8Bytes(char);
+    if (bytes + size > maxBytes) break;
+    output += char;
+    bytes += size;
+  }
+  return output;
+}
+
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }

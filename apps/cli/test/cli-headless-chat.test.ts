@@ -450,7 +450,7 @@ describe("CLI headless chat", () => {
       expect(result.timedOut).toBe(false);
       expect(result.code).toBe(124);
       expect(result.stdout).toContain('"status": "timeout"');
-      expect(result.stdout).toContain('"error": "Timed out after 1s."');
+      expect(result.stdout).toContain('"error": "Timed out after 1s during turn completion."');
       expect(result.stderr).toContain("exited with code 124");
       expect(fake.turnRequests).toHaveLength(1);
       expect(fake.interruptRequests).toBe(1);

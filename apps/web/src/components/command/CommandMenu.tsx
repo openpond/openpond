@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import "../../styles/command/command-menu.css";
 import type { ReactNode } from "react";
 import type { Session } from "@openpond/contracts";
 import { Cloud, Folder, MessageSquare, Pin, Search, SquarePen } from "../icons";

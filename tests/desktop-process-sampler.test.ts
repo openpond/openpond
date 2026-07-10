@@ -102,11 +102,42 @@ describe("desktop process tree sampler", () => {
       const snapshot = sampler.snapshot();
       expect(snapshot.activePid).toBe(123);
       expect(snapshot.maxSamples).toBe(2);
-      expect(snapshot.samples.map((sample) => sample.rssBytes)).toEqual([2_048, 3_072]);
+      expect(snapshot.maxProcessRows).toBe(128);
+      expect(snapshot.samples.map((sample) => sample.rssBytes)).toEqual([1_024, 2_048]);
       expect(snapshot.lastError).toBeNull();
     } finally {
       sampler.stop();
     }
+  });
+
+  test("allows only one in-flight sample and bounds reported process rows", async () => {
+    let calls = 0;
+    let release!: (sample: ProcessTreeSample) => void;
+    const pending = new Promise<ProcessTreeSample>((resolve) => { release = resolve; });
+    const sampler = new DesktopProcessTreeSampler({
+      maxProcessRows: 2,
+      sampleIntervalMs: 60_000,
+      sampler: async () => { calls += 1; return pending; },
+    });
+    sampler.start(10);
+    const first = sampler.sampleNow();
+    const second = sampler.sampleNow();
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    release({
+      sampledAt: "now",
+      rootPid: 10,
+      processCount: 3,
+      cpuPercent: 1,
+      rssBytes: 3,
+      processes: [
+        { pid: 10, ppid: 1, cpuPercent: 1, rssBytes: 1 },
+        { pid: 11, ppid: 10, cpuPercent: 0, rssBytes: 1 },
+      ],
+    });
+    await first;
+    expect(sampler.snapshot().samples).toHaveLength(1);
+    sampler.stop();
   });
 
   test("samples the current Unix process tree with real process metrics", async () => {

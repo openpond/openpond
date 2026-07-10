@@ -3,8 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CliUsageError } from "./common";
 import { runProcessCommand } from "../process-runner";
+import { IS_COMPILED_CLI } from "./build-mode";
 
 type CliOptions = Record<string, string | boolean>;
+type AppEntrypoint = { runner: string; args: string[]; cwd: string };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,21 +22,27 @@ export async function runOpenPondServerCommand(
   options: CliOptions,
   rest: string[],
 ): Promise<void> {
-  const root = findWorkspaceRoot();
-  const server = resolveAppEntrypoint(root, "server");
-  const args = [server.entry, mode, ...forwardedOptions(options), ...rest];
-  await runChild(server.runner, args, root);
+  const server = resolveAppEntrypoint("server");
+  const args = [...server.args, mode, ...forwardedOptions(options), ...rest];
+  const webRoot = mode === "web" && typeof options.webRoot !== "string" ? packagedWebRoot() : null;
+  if (webRoot) args.push("--web-root", webRoot);
+  await runChild(server.runner, args, server.cwd);
 }
 
 export async function runOpenPondTerminalCommand(options: CliOptions, rest: string[]): Promise<void> {
   validateTerminalForwardingOptions(options);
-  const root = findWorkspaceRoot();
-  const terminal = resolveAppEntrypoint(root, "terminal");
-  const args = [terminal.entry, "chat", ...forwardedOptions(withDefaultTerminalCwd(options)), ...rest];
-  await runChild(terminal.runner, args, root);
+  const terminal = resolveAppEntrypoint("terminal");
+  const server = resolveAppEntrypoint("server");
+  const args = [...terminal.args, "chat", ...forwardedOptions(normalizeTerminalPaths(options)), ...rest];
+  await runChild(terminal.runner, args, process.cwd(), {
+    OPENPOND_SERVER_RUNNER: server.runner,
+    OPENPOND_SERVER_ARGS: JSON.stringify(server.args),
+    OPENPOND_SERVER_CWD: server.cwd,
+  });
 }
 
-function findWorkspaceRoot(): string {
+function findWorkspaceRoot(): string | null {
+  if (process.env.OPENPOND_FORCE_EMBEDDED_COMPANIONS === "1") return null;
   const candidates = [
     path.resolve(__dirname, "../../../.."),
     path.resolve(__dirname, "../../.."),
@@ -45,19 +53,52 @@ function findWorkspaceRoot(): string {
       return candidate;
     }
   }
-  throw new Error("Could not find the OpenPond workspace root for the local app server.");
+  return null;
 }
 
-function resolveAppEntrypoint(root: string, app: "server" | "terminal"): { runner: string; entry: string } {
-  const source = path.join(root, "apps", app, "src", "index.ts");
-  if (existsSync(source)) {
-    return { runner: process.env.BUN_BINARY || "bun", entry: source };
+function resolveAppEntrypoint(app: "server" | "terminal"): AppEntrypoint {
+  const workspaceRoot = findWorkspaceRoot();
+  if (workspaceRoot) {
+    const source = path.join(workspaceRoot, "apps", app, "src", "index.ts");
+    if (existsSync(source)) return { runner: process.env.BUN_BINARY || "bun", args: [source], cwd: workspaceRoot };
+    const built = path.join(workspaceRoot, "apps", app, "dist", "index.js");
+    if (existsSync(built)) return { runner: process.execPath, args: [built], cwd: workspaceRoot };
   }
-  const built = path.join(root, "apps", app, "dist", "index.js");
-  if (existsSync(built)) {
-    return { runner: process.execPath, entry: built };
+
+  const installedCli = installedCliEntrypoint();
+  const embeddedMode = app === "server" ? "__server" : "__terminal";
+  if (installedCli) {
+    return { runner: process.execPath, args: [installedCli, embeddedMode], cwd: path.dirname(path.dirname(installedCli)) };
   }
-  throw new Error(`Could not find the OpenPond ${app} entrypoint.`);
+  if (isCompiledExecutable()) return { runner: process.execPath, args: [embeddedMode], cwd: process.cwd() };
+  throw new Error(`Could not find the installed OpenPond ${app} companion.`);
+}
+
+function installedCliEntrypoint(): string | null {
+  for (const candidate of [
+    path.resolve(__dirname, "../cli.js"),
+    path.resolve(__dirname, "../../dist/cli.js"),
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function packagedWebRoot(): string | null {
+  if (IS_COMPILED_CLI) {
+    const candidate = path.join(path.dirname(process.execPath), "web");
+    return existsSync(path.join(candidate, "index.html")) ? candidate : null;
+  }
+  const installedCli = installedCliEntrypoint();
+  if (!installedCli) return null;
+  const candidate = path.join(path.dirname(installedCli), "web");
+  return existsSync(path.join(candidate, "index.html")) ? candidate : null;
+}
+
+function isCompiledExecutable(): boolean {
+  if (IS_COMPILED_CLI) return true;
+  const argvEntry = process.argv[1];
+  return Boolean(argvEntry && path.resolve(argvEntry) === path.resolve(process.execPath));
 }
 
 function forwardedOptions(options: CliOptions): string[] {
@@ -77,12 +118,12 @@ function forwardedOptions(options: CliOptions): string[] {
   return args;
 }
 
-function withDefaultTerminalCwd(options: CliOptions): CliOptions {
+function normalizeTerminalPaths(options: CliOptions): CliOptions {
   const callerCwd = process.cwd();
-  const cwd = typeof options.cwd === "string" && options.cwd.trim().length > 0
-    ? path.resolve(callerCwd, options.cwd)
-    : callerCwd;
-  const next: CliOptions = { ...options, cwd };
+  const next: CliOptions = { ...options };
+  if (typeof options.cwd === "string" && options.cwd.trim().length > 0) {
+    next.cwd = path.resolve(callerCwd, options.cwd);
+  }
   if (typeof options.messageFile === "string" && options.messageFile.trim().length > 0) {
     next.messageFile = path.resolve(callerCwd, options.messageFile);
   }
@@ -104,13 +145,23 @@ function validateTerminalForwardingOptions(options: CliOptions): void {
   }
 }
 
-async function runChild(command: string, args: string[], cwd: string): Promise<void> {
+async function runChild(
+  command: string,
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<void> {
   const result = await runProcessCommand(command, args, {
     cwd,
+    // Keep embedded companions in the CLI's process group so an outer package
+    // runner can stop the complete installed CLI tree with one signal.
+    detached: false,
+    env,
     inherit: true,
     timeoutMs: 0,
   });
-  if (result.code && result.code !== 0) {
-    throw new OpenPondChildProcessExitError(`${path.basename(command)} exited with code ${result.code}`, result.code);
+  if (result.code !== 0 || result.signal) {
+    const detail = result.signal ? `signal ${result.signal}` : `code ${result.code ?? "unknown"}`;
+    throw new OpenPondChildProcessExitError(`${path.basename(command)} exited with ${detail}`, result.code ?? 1);
   }
 }

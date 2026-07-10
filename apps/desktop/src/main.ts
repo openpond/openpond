@@ -3,6 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   appDisplayName,
   appHomePath,
@@ -17,10 +18,13 @@ import {
   serverWorkingDirectory,
   tokenFilePath,
 } from "./desktop-environment.js";
-import { registerBrowserSidebarIpc } from "./desktop-browser-ipc.js";
+import { closeBrowserSidebarManagers, registerBrowserSidebarIpc } from "./desktop-browser-ipc.js";
 import { createReadyLineParser } from "./child-process-ready.js";
+import { DesktopBackendManager } from "./desktop-backend-manager.js";
+import { isTrustedDesktopIpcFrameUrl } from "./desktop-ipc-trust.js";
 import { DesktopProcessTreeSampler } from "./desktop-process-sampler.js";
 import { DesktopRequestTracker } from "./desktop-request-tracker.js";
+import { readDesktopServerToken } from "./desktop-server-token.js";
 import {
   copyRecentLogs,
   exportDiagnostics,
@@ -59,10 +63,12 @@ let webProcess: ChildProcessWithoutNullStreams | null = null;
 let connection: ServerConnection | null = null;
 let ipcHandlersRegistered = false;
 let browserControlWorker: DesktopBrowserControlWorker | null = null;
+let trustedRendererUrl: string | null = null;
 const browserControlExecutorToken = randomUUID();
 const browserControlInstanceId = `desktop_${randomUUID()}`;
 const localRequestTracker = new DesktopRequestTracker();
 const serverProcessSampler = new DesktopProcessTreeSampler();
+const backendManager = new DesktopBackendManager();
 
 async function requestMicrophoneAccess(): Promise<boolean> {
   if (process.platform !== "darwin") return true;
@@ -79,12 +85,10 @@ function defaultRendererDevUrl(): string {
 }
 
 async function readToken(): Promise<string | null> {
-  try {
-    const token = (await fs.readFile(tokenFilePath(), "utf8")).trim();
-    return token || null;
-  } catch {
-    return null;
-  }
+  return readDesktopServerToken({
+    environmentToken: process.env.OPENPOND_APP_TOKEN,
+    tokenFile: tokenFilePath(),
+  });
 }
 
 async function health(url: string): Promise<ServerHealth | null> {
@@ -208,6 +212,7 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
 async function ensureServer(): Promise<ServerConnection> {
   if (connection) {
     if (await health(connection.serverUrl)) return connection;
+    await backendManager.stopServer();
     connection = null;
     serverProcess = null;
     stopBrowserControlWorker();
@@ -225,6 +230,7 @@ async function ensureServer(): Promise<ServerConnection> {
   if (shouldReuseExistingServer) {
     desktopLogger().info("reusing existing server", { serverUrl: existingUrl });
     serverProcessSampler.stop();
+    backendManager.useReusedServer();
     connection = { serverUrl: existingUrl, token: existingToken, platform: process.platform, arch: process.arch };
     return connection;
   }
@@ -253,15 +259,19 @@ async function ensureServer(): Promise<ServerConnection> {
           }),
       ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
     },
+    detached: process.platform !== "win32",
   });
+  const ownedServerProcess = serverProcess;
+  backendManager.useOwnedServer(ownedServerProcess);
   serverProcessSampler.start(serverProcess.pid);
   serverProcess.on("error", (error) => {
     serverProcessSampler.stop();
     desktopLogger().error("server process error", { error });
   });
-  serverProcess.on("exit", (code, signal) => {
+  ownedServerProcess.on("exit", (code, signal) => {
     desktopLogger().warn("server process exited", { code, signal });
     serverProcess = null;
+    backendManager.releaseServer(ownedServerProcess);
     connection = null;
     stopBrowserControlWorker();
     serverProcessSampler.stop();
@@ -274,6 +284,7 @@ async function ensureServer(): Promise<ServerConnection> {
     if (!token) throw new Error("OpenPond App server did not write a capability token");
   } catch (error) {
     serverProcessSampler.stop();
+    await backendManager.stopServer();
     throw error;
   }
   connection = { serverUrl, token, platform: process.platform, arch: process.arch };
@@ -323,20 +334,24 @@ async function ensureRenderer(server: ServerConnection): Promise<string> {
       env: {
         ...process.env,
       },
+      detached: process.platform !== "win32",
     });
-    webProcess.stdout.on("data", (chunk: Buffer) => {
+    const ownedWebProcess = webProcess;
+    backendManager.useOwnedRenderer(ownedWebProcess);
+    ownedWebProcess.stdout.on("data", (chunk: Buffer) => {
       const output = chunk.toString("utf8");
       desktopLogger().debug("renderer stdout", { output });
       console.log(output);
     });
-    webProcess.stderr.on("data", (chunk: Buffer) => {
+    ownedWebProcess.stderr.on("data", (chunk: Buffer) => {
       const output = chunk.toString("utf8");
       desktopLogger().warn("renderer stderr", { output });
       console.error(output);
     });
-    webProcess.on("exit", (code, signal) => {
+    ownedWebProcess.on("exit", (code, signal) => {
       desktopLogger().warn("renderer dev server exited", { code, signal });
       webProcess = null;
+      backendManager.releaseRenderer(ownedWebProcess);
     });
   }
 
@@ -348,9 +363,12 @@ async function loadMainWindow(window: BrowserWindow): Promise<void> {
   try {
     const server = await ensureServer();
     if (!app.isPackaged) {
-      await window.loadURL(await ensureRenderer(server));
+      trustedRendererUrl = await ensureRenderer(server);
+      await window.loadURL(trustedRendererUrl);
     } else {
-      await window.loadFile(path.join(process.resourcesPath, "web", "index.html"));
+      const rendererPath = path.join(process.resourcesPath, "web", "index.html");
+      trustedRendererUrl = pathToFileURL(rendererPath).toString();
+      await window.loadFile(rendererPath);
     }
     desktopLogger().info("main window loaded", { packaged: app.isPackaged });
     ensureBrowserControlWorker(server);
@@ -448,7 +466,29 @@ function registerIpcHandlers(): void {
 }
 
 function handleTrackedIpc(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
-  ipcMain.handle(channel, localRequestTracker.wrap(channel, listener));
+  ipcMain.handle(channel, localRequestTracker.wrap(channel, (event, ...args) => {
+    assertTrustedDesktopIpcEvent(event);
+    return listener(event, ...args);
+  }));
+}
+
+function assertTrustedDesktopIpcEvent(event: Electron.IpcMainInvokeEvent): void {
+  const window = mainWindow;
+  if (!window || window.isDestroyed() || event.sender.id !== window.webContents.id) {
+    throw new Error("Untrusted IPC sender.");
+  }
+  if (event.senderFrame && event.senderFrame !== event.sender.mainFrame) {
+    throw new Error("Untrusted IPC frame.");
+  }
+  const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
+  if (!isTrustedDesktopIpcFrameUrl({
+    frameUrl,
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    trustedRendererUrl,
+  })) {
+    throw new Error("Untrusted IPC origin.");
+  }
 }
 
 function installMediaPermissionHandlers(window: BrowserWindow): void {
@@ -526,7 +566,7 @@ async function createWindow(): Promise<void> {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
   mainWindow.on("closed", () => {
@@ -604,7 +644,12 @@ function configureApplicationMenu(): void {
   );
 }
 
+const ownsSingleInstanceLock = app.requestSingleInstanceLock();
+if (!ownsSingleInstanceLock) app.quit();
+app.on("second-instance", () => showMainWindow());
+
 app.whenReady().then(() => {
+  if (!ownsSingleInstanceLock) return;
   configureApplicationMenu();
   app.dock?.setIcon(appIconPath());
   desktopLogger().info("desktop app ready", { packaged: app.isPackaged });
@@ -620,12 +665,23 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => {
+let desktopShutdownStarted = false;
+let desktopShutdownComplete = false;
+app.on("before-quit", (event) => {
+  if (desktopShutdownComplete) return;
+  event.preventDefault();
+  if (desktopShutdownStarted) return;
+  desktopShutdownStarted = true;
   desktopLogger().info("desktop app quitting");
   stopBrowserControlWorker();
   serverProcessSampler.stop();
-  serverProcess?.kill("SIGTERM");
-  webProcess?.kill("SIGTERM");
+  void Promise.all([closeBrowserSidebarManagers(), backendManager.close()])
+    .catch((error) => desktopLogger().error("desktop backend shutdown failed", { error }))
+    .finally(async () => {
+      await desktopLogger().flush();
+      desktopShutdownComplete = true;
+      app.quit();
+    });
 });
 
 process.on("uncaughtException", (error) => {

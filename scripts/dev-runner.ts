@@ -48,6 +48,12 @@ type RunningProcess = {
   child: ChildProcessWithoutNullStreams;
 };
 
+type ProcessExit = {
+  id: string;
+  code: number | null;
+  signal: NodeJS.Signals | null;
+};
+
 const READY_PREFIX = "OPENPOND_APP_SERVER_READY ";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -146,37 +152,19 @@ export function buildDevRunnerPlan(
   const processes: DevRunnerCommand[] = [];
 
   if (options.mode === "desktop") {
-    setupCommands.push(command("bundle-server", bunBinary(env), ["run", "bundle:server"], root));
     setupCommands.push(command("build-desktop", bunBinary(env), ["run", "build:desktop"], root));
+    processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
     processes.push(command("renderer", bunBinary(env), ["run", "--cwd", "apps/web", "dev"], root, rendererEnv));
     processes.push(command("desktop", electronBinary(root), ["."], path.join(root, "apps", "desktop"), desktopEnv));
   }
 
   if (options.mode === "web") {
-    setupCommands.push(command("bundle-server", bunBinary(env), ["run", "bundle:server"], root));
-    processes.push(
-      command(
-        "server",
-        nodeBinary(env),
-        ["apps/server/dist/index.js", "--port", String(serverPort)],
-        root,
-        serverEnv,
-      ),
-    );
+    processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
     processes.push(command("renderer", bunBinary(env), ["run", "--cwd", "apps/web", "dev"], root, rendererEnv));
   }
 
   if (options.mode === "server") {
-    setupCommands.push(command("bundle-server", bunBinary(env), ["run", "bundle:server"], root));
-    processes.push(
-      command(
-        "server",
-        nodeBinary(env),
-        ["apps/server/dist/index.js", "--port", String(serverPort)],
-        root,
-        serverEnv,
-      ),
-    );
+    processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
   }
 
   if (options.mode === "renderer") {
@@ -208,35 +196,49 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
   const rendererProcess = plan.processes.find((processPlan) => processPlan.id === "renderer");
   const desktopProcess = plan.processes.find((processPlan) => processPlan.id === "desktop");
 
-  let serverReady: ReadyPayload | null = null;
-  if (serverProcess) {
-    const server = startProcess(serverProcess, { captureReady: true });
-    running.push({ id: serverProcess.id, child: server.child });
-    serverReady = await server.ready;
-    const token = await readToken(serverReady.tokenFile);
-    if (!token) throw new Error(`OpenPond App server did not write a capability token at ${serverReady.tokenFile ?? tokenFilePath()}`);
-    if (rendererProcess) {
-      rendererProcess.env.VITE_OPENPOND_SERVER_URL = serverReady.url ?? plan.urls.server;
-      rendererProcess.env.VITE_OPENPOND_TOKEN = token;
+  try {
+    if (serverProcess) {
+      const server = startProcess(serverProcess, { captureReady: true });
+      running.push({ id: serverProcess.id, child: server.child });
+      const serverReady = await server.ready;
+      const token = await readToken(serverReady.tokenFile);
+      if (!token) throw new Error(`OpenPond App server did not write a capability token at ${serverReady.tokenFile ?? tokenFilePath()}`);
+      const serverUrl = serverReady.url ?? plan.urls.server;
+      if (rendererProcess) {
+        rendererProcess.env.VITE_OPENPOND_SERVER_URL = serverUrl;
+        rendererProcess.env.VITE_OPENPOND_TOKEN = token;
+      }
+      if (desktopProcess) {
+        desktopProcess.env.OPENPOND_SERVER_URL = serverUrl;
+        desktopProcess.env.OPENPOND_APP_TOKEN = token;
+        desktopProcess.env.OPENPOND_REUSE_SERVER = "1";
+      }
+      console.log(`OpenPond server ready at ${serverUrl}`);
     }
-    console.log(`OpenPond server ready at ${serverReady.url ?? plan.urls.server}`);
-  }
 
-  if (rendererProcess) {
-    const renderer = startProcess(rendererProcess);
-    running.push({ id: rendererProcess.id, child: renderer.child });
-    await waitForUrl(plan.urls.web);
-    console.log(`OpenPond renderer ready at ${plan.urls.web}`);
-  }
+    if (rendererProcess) {
+      const renderer = startProcess(rendererProcess);
+      running.push({ id: rendererProcess.id, child: renderer.child });
+      await waitForUrl(plan.urls.web);
+      console.log(`OpenPond renderer ready at ${plan.urls.web}`);
+    }
 
-  if (desktopProcess) {
-    const desktop = startProcess(desktopProcess);
-    running.push({ id: desktopProcess.id, child: desktop.child });
-  }
+    if (desktopProcess) {
+      const desktop = startProcess(desktopProcess);
+      running.push({ id: desktopProcess.id, child: desktop.child });
+    }
 
-  if (running.length === 0) throw new Error(`No dev processes were configured for mode ${plan.mode}`);
-  installShutdown(running);
-  await waitForExit(running);
+    if (running.length === 0) throw new Error(`No dev processes were configured for mode ${plan.mode}`);
+    const exit = await waitForExitOrSignal(running);
+    if (exit.id === "supervisor") {
+      process.exitCode = exit.code ?? 0;
+      return;
+    }
+    if (exit.code && exit.code !== 0) throw new Error(`${exit.id} exited with code ${exit.code}`);
+    if (exit.signal) throw new Error(`${exit.id} exited with signal ${exit.signal}`);
+  } finally {
+    await stopRunningProcesses(running);
+  }
 }
 
 function runSetupCommand(setup: DevRunnerCommand): void {
@@ -259,6 +261,7 @@ function startProcess(
   const child = spawn(processPlan.command, processPlan.args, {
     cwd: processPlan.cwd,
     env: childEnv(processPlan.env),
+    detached: process.platform !== "win32",
   });
   const ready = options.captureReady ? waitForReady(child, processPlan.id) : Promise.resolve({});
 
@@ -335,34 +338,70 @@ async function waitForUrl(url: string, timeoutMs = 20000): Promise<void> {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-function installShutdown(processes: RunningProcess[]): void {
-  const shutdown = () => {
+function waitForExitOrSignal(processes: RunningProcess[]): Promise<ProcessExit> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exit: ProcessExit) => {
+      if (settled) return;
+      settled = true;
+      process.off("SIGINT", onInterrupt);
+      process.off("SIGTERM", onTerminate);
+      resolve(exit);
+    };
+    const onInterrupt = () => finish({ id: "supervisor", code: 130, signal: "SIGINT" });
+    const onTerminate = () => finish({ id: "supervisor", code: 143, signal: "SIGTERM" });
+    process.once("SIGINT", onInterrupt);
+    process.once("SIGTERM", onTerminate);
     for (const item of processes) {
-      if (!item.child.killed) item.child.kill("SIGTERM");
+      item.child.once("exit", (code, signal) => {
+        finish({ id: item.id, code, signal });
+      });
     }
-  };
-  process.once("SIGINT", () => {
-    shutdown();
-    process.exit(130);
-  });
-  process.once("SIGTERM", () => {
-    shutdown();
-    process.exit(143);
   });
 }
 
-function waitForExit(processes: RunningProcess[]): Promise<void> {
+async function stopRunningProcesses(processes: RunningProcess[]): Promise<void> {
+  await Promise.all([...processes].reverse().map(({ child }) => stopProcessTree(child)));
+}
+
+async function stopProcessTree(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  signalProcessTree(child, "SIGTERM");
+  if (await waitForChildExit(child, 5_000)) return;
+  signalProcessTree(child, "SIGKILL");
+  if (!(await waitForChildExit(child, 2_000))) {
+    throw new Error(`Dev child process tree ${child.pid ?? "unknown"} did not exit`);
+  }
+}
+
+function signalProcessTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/pid", String(child.pid), "/t", ...(signal === "SIGKILL" ? ["/f"] : [])], {
+      stdio: "ignore",
+      windowsHide: true,
+    }).unref();
+    return;
+  }
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+function waitForChildExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
   return new Promise((resolve) => {
-    for (const item of processes) {
-      item.child.once("exit", (code, signal) => {
-        for (const other of processes) {
-          if (other.child !== item.child && !other.child.killed) other.child.kill("SIGTERM");
-        }
-        if (code && code !== 0) process.exitCode = code;
-        if (signal) console.error(`${item.id} exited with signal ${signal}`);
-        resolve();
-      });
-    }
+    const timer = setTimeout(() => {
+      child.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    child.once("exit", onExit);
   });
 }
 
@@ -423,8 +462,19 @@ function bunBinary(env: NodeJS.ProcessEnv): string {
   return process.versions.bun ? process.execPath : "bun";
 }
 
-function nodeBinary(env: NodeJS.ProcessEnv): string {
-  return env.OPENPOND_NODE_BINARY || env.NODE_BINARY || "node";
+function watchedServerCommand(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  serverPort: number,
+  serverEnv: Record<string, string>,
+): DevRunnerCommand {
+  return command(
+    "server",
+    bunBinary(env),
+    ["--watch", "apps/server/src/index.ts", "--port", String(serverPort)],
+    root,
+    serverEnv,
+  );
 }
 
 function electronBinary(root: string): string {

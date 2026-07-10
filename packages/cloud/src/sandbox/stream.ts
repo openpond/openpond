@@ -9,7 +9,8 @@ export async function streamSandboxEventOutput(params: {
   const response = await apiFetch(
     params.sandboxApiUrl,
     params.apiKey,
-    params.path
+    params.path,
+    { timeoutMs: 0, maxResponseBytes: 0 },
   );
   if (!response.body) {
     return;

@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
 import { join } from "node:path";
 
 import { beforeAll, describe, expect, test } from "bun:test";
@@ -55,6 +56,32 @@ describe("CLI installed-package smoke", () => {
     expect(result.code).toBe(0);
     expect(result.stdout.trim()).toBe(packageJson.version);
     expect(result.stderr.trim()).toBe("");
+  });
+
+  test("starts the embedded local server companion from an unrelated cwd", async () => {
+    const cwd = await mkdtemp(join(os.tmpdir(), "openpond-installed-cli-cwd-"));
+    const appHome = await mkdtemp(join(os.tmpdir(), "openpond-installed-cli-home-"));
+    try {
+      const result = await runProcessCommand(
+        "node",
+        [join(cliRoot, packageJson.bin!.openpond!), "serve", "--port", "0"],
+        {
+          cwd,
+          env: {
+            OPENPOND_APP_HOME: appHome,
+            OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
+          },
+          timeoutMs: 1_500,
+        },
+      );
+      expect(result.stdout).toContain("OPENPOND_APP_SERVER_READY");
+      expect(result.terminationReason).toBe("timeout");
+    } finally {
+      await Promise.all([
+        rm(cwd, { recursive: true, force: true }),
+        rm(appHome, { recursive: true, force: true }),
+      ]);
+    }
   });
 
   test(

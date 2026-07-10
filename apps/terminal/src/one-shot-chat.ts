@@ -12,7 +12,7 @@ import type { TerminalOptions } from "./args.js";
 import { apiFetch, ensureServer, stopManagedServer } from "./connection.js";
 import { openTerminalEvents, type TerminalEventStreamController } from "./events.js";
 import { activeModelId, activeModelRef, modelLabel, providerLabel } from "./formatting.js";
-import { ensureTerminalChatSession } from "./session-state.js";
+import { ensureTerminalChatSession, ensureTerminalSessionWorkspaceReady } from "./session-state.js";
 
 export type OneShotChatStatus = "completed" | "failed" | "interrupted" | "timeout";
 type OneShotTerminalState = "turn.completed" | "turn.failed" | "turn.interrupted" | "timeout" | "error";
@@ -62,34 +62,56 @@ export class TerminalOneShotExitError extends Error {
   }
 }
 
+class OneShotDeadlineError extends Error {
+  constructor(readonly phase: string, readonly timeoutSec: number) {
+    super(`Timed out after ${timeoutSec}s during ${phase}.`);
+    this.name = "OneShotDeadlineError";
+  }
+}
+
 export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo = {}): Promise<OneShotChatResult> {
   const output = io.output ?? defaultOutput;
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
-  const prompt = await resolveOneShotPrompt(options, io.input ?? defaultInput);
-  if (!prompt.trim()) {
-    throw new TerminalOneShotExitError("openpond chat --non-interactive requires --message, --message-file, or --stdin input.", 2);
-  }
+  const deadline = createOneShotDeadline(options.timeoutSec);
 
   const startupWarnings: string[] = [];
   let connection: { server: string; token: string } | null = null;
   let eventStream: TerminalEventStreamController | null = null;
-  let timeout: ReturnType<typeof setTimeout> | null = null;
   let timedOut = false;
   let activeSessionId: string | null = null;
   let selectedModel: string | null = options.model;
   let accumulator: OneShotAccumulator | null = null;
+  let turnSubmitted = false;
 
   try {
-    connection = io.connection ?? await ensureServer(options, (line) => startupWarnings.push(line));
-    const payload = await apiFetch<BootstrapPayload>(connection.server, connection.token, "/v1/bootstrap?refreshCodex=1");
-    const sessionState = await ensureTerminalChatSession(
-      connection,
+    const prompt = await deadline.run("input loading", resolveOneShotPrompt(options, io.input ?? defaultInput));
+    if (!prompt.trim()) {
+      throw new TerminalOneShotExitError("openpond chat --non-interactive requires --message, --message-file, or --stdin input.", 2);
+    }
+
+    connection = io.connection ?? await deadline.run(
+      "server startup",
+      ensureServer(options, (line) => startupWarnings.push(line)),
+    );
+    const payload = await deadline.run(
+      "bootstrap",
+      apiFetch<BootstrapPayload>(connection.server, connection.token, "/v1/bootstrap?refreshCodex=1", {
+        signal: deadline.signal,
+      }),
+    );
+    const sessionState = await deadline.run("session setup", ensureTerminalChatSession(
+      { ...connection, signal: deadline.signal },
       payload,
       { ...options, headless: true },
       options.resume,
+    ));
+    const readySession = await deadline.run(
+      "workspace readiness",
+      ensureTerminalSessionWorkspaceReady({ ...connection, signal: deadline.signal }, sessionState.session),
     );
     activeSessionId = sessionState.sessionId;
+    if (readySession?.cwd) options.cwd = readySession.cwd;
     options.provider = sessionState.provider;
     options.model = sessionState.model;
     selectedModel = sessionState.model;
@@ -125,39 +147,13 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
       },
     });
 
-    const timeoutPromise = new Promise<"timeout">((resolve) => {
-      if (!options.timeoutSec) return;
-      timeout = setTimeout(() => {
-        timedOut = true;
-        resolve("timeout");
-      }, options.timeoutSec * 1000);
-    });
+    await deadline.run("event stream readiness", eventStream.ready);
 
-    const streamReady = await Promise.race([
-      eventStream.ready.then(() => "ready" as const),
-      timeoutPromise,
-    ]);
-    if (streamReady === "timeout") {
-      const result = activeAccumulator.result({
-        terminal: "timeout",
-        sessionId: activeSessionId,
-        provider: options.provider,
-        model: modelId,
-        cwd: options.cwd,
-        startedAt,
-        startedAtMs,
-        error: `Timed out after ${options.timeoutSec}s.`,
-      });
-      writeOneShotResult(output, options, result);
-      process.exitCode = 124;
-      return result;
-    }
-
-    await apiFetch(connection.server, connection.token, `/v1/sessions/${activeSessionId}/turns`, {
+    await deadline.run("turn submission", apiFetch(connection.server, connection.token, `/v1/sessions/${activeSessionId}/turns`, {
       method: "POST",
       body: JSON.stringify({
         prompt,
-        cwd: options.cwd,
+        ...(options.cwdExplicit || (!options.project && !options.resume) ? { cwd: options.cwd } : {}),
         model: modelId,
         modelRef: activeModelRef(options, payload.providers),
         approvalPolicy: options.yes ? "never" : options.approvalPolicy,
@@ -171,25 +167,11 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
           },
         },
       }),
-    });
+      signal: deadline.signal,
+    }));
+    turnSubmitted = true;
 
-    const terminal = await Promise.race([terminalEventPromise, timeoutPromise]);
-    if (terminal === "timeout") {
-      await interruptOneShotTurn(connection.server, connection.token, activeSessionId);
-      const result = activeAccumulator.result({
-        terminal: "timeout",
-        sessionId: activeSessionId,
-        provider: options.provider,
-        model: modelId,
-        cwd: options.cwd,
-        startedAt,
-        startedAtMs,
-        error: `Timed out after ${options.timeoutSec}s.`,
-      });
-      writeOneShotResult(output, options, result);
-      process.exitCode = 124;
-      return result;
-    }
+    const terminal = await deadline.run("turn completion", terminalEventPromise);
 
     const result = activeAccumulator.result({
       terminal: terminal.name,
@@ -206,6 +188,25 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
     return result;
   } catch (error) {
     if (error instanceof TerminalOneShotExitError) throw error;
+    if (error instanceof OneShotDeadlineError) {
+      timedOut = true;
+      if (connection && activeSessionId && turnSubmitted) {
+        await interruptOneShotTurn(connection.server, connection.token, activeSessionId);
+      }
+      const result = (accumulator ?? createOneShotAccumulator({ maxOutputBytes: options.maxOutputBytes })).result({
+        terminal: "timeout",
+        sessionId: activeSessionId,
+        provider: options.provider,
+        model: selectedModel,
+        cwd: options.cwd,
+        startedAt,
+        startedAtMs,
+        error: error.message,
+      });
+      writeOneShotResult(output, options, result);
+      process.exitCode = 124;
+      return result;
+    }
     const result = (accumulator ?? createOneShotAccumulator({ maxOutputBytes: options.maxOutputBytes })).result({
       terminal: "error",
       sessionId: activeSessionId,
@@ -220,12 +221,43 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
     process.exitCode = 1;
     return result;
   } finally {
-    if (timeout) clearTimeout(timeout);
+    deadline.dispose();
     const activeEventStream = eventStream as TerminalEventStreamController | null;
     activeEventStream?.abort();
-    if (!io.connection) stopManagedServer();
+    if (!io.connection) await stopManagedServer();
     if (timedOut && !options.json) output.write("\n[turn timeout]\n");
   }
+}
+
+function createOneShotDeadline(timeoutSec: number | null): {
+  signal: AbortSignal;
+  run<T>(phase: string, operation: Promise<T>): Promise<T>;
+  dispose(): void;
+} {
+  const controller = new AbortController();
+  let phase = "startup";
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let rejectTimeout = (_error: OneShotDeadlineError): void => undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    rejectTimeout = reject;
+  });
+  timeout.catch(() => undefined);
+  if (timeoutSec) {
+    timer = setTimeout(() => {
+      controller.abort();
+      rejectTimeout(new OneShotDeadlineError(phase, timeoutSec));
+    }, timeoutSec * 1000);
+  }
+  return {
+    signal: controller.signal,
+    async run<T>(nextPhase: string, operation: Promise<T>): Promise<T> {
+      phase = nextPhase;
+      return timeoutSec ? Promise.race([operation, timeout]) : operation;
+    },
+    dispose() {
+      if (timer) clearTimeout(timer);
+    },
+  };
 }
 
 export function createOneShotAccumulator(options: { maxOutputBytes?: number | null } = {}): {
@@ -396,6 +428,7 @@ function openOneShotTerminalEvents(input: {
   });
   const fallback = new AbortController() as TerminalEventStreamController;
   fallback.ready = pending.then((controller) => controller.ready);
+  fallback.switchSession = (sessionId) => pending.then((controller) => controller.switchSession(sessionId));
   pending.then((controller) => {
     if (fallback.signal.aborted) controller.abort();
     else {

@@ -29,7 +29,7 @@ describe("Sidebar navigation", () => {
   test("does not render a Projects primary navigation entry", () => {
     const markup = renderSidebarNavigation("chat");
 
-    expect(markup).toContain("New chat");
+    expect(markup).toContain("New task");
     expect(markup).toContain("Get started");
     expect(markup).toContain("Agents");
     expect(markup).toContain("Apps");

@@ -56,6 +56,7 @@ type ProfileSourceUploadFile = {
   absolutePath: string;
   size: number;
   mtimeMs: number;
+  ctimeMs: number;
 };
 
 export async function collectProfileSourceUploadEntries(repoPath: string): Promise<OpenPondProfileSourceUpload> {
@@ -98,6 +99,7 @@ export async function collectProfileSourceUploadEntries(repoPath: string): Promi
         absolutePath,
         size: fileStat.size,
         mtimeMs: Math.trunc(fileStat.mtimeMs),
+        ctimeMs: Math.trunc(fileStat.ctimeMs),
       } satisfies ProfileSourceUploadFile;
     })
   ).filter((file): file is ProfileSourceUploadFile => file !== null);

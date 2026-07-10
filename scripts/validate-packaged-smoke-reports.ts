@@ -41,8 +41,10 @@ type SmokeReport = {
 };
 
 const DEFAULT_EXPECTED_REPORTS: ExpectedReport[] = [
-  { name: "linux-appimage", platform: "linux", requireWindowExit: true },
-  { name: "mac-zip", platform: "darwin", requireWindowExit: false },
+  { name: "linux-x64-appimage", platform: "linux", requireWindowExit: true },
+  { name: "linux-arm64-appimage", platform: "linux", requireWindowExit: true },
+  { name: "mac-arm64-zip", platform: "darwin", requireWindowExit: false },
+  { name: "mac-x64-zip", platform: "darwin", requireWindowExit: false },
   // Temporarily disabled while Windows release builds are unstable.
   // { name: "windows-nsis", platform: "win32", requireWindowExit: true },
 ];

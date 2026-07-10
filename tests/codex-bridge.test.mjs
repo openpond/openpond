@@ -13,15 +13,14 @@ function immediateQueue() {
 describe("codex bridge", () => {
   test("maps token usage and compact notifications into runtime events", async () => {
     const events = [];
+    const turn = { id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" };
     const store = {
-      async snapshot() {
-        return {
-          sessions: [{ id: "session_1", appId: "app_1" }],
-          turns: [{ id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" }],
-          events,
-          approvals: [],
-        };
+      async turnByProviderTurnId(providerTurnId) {
+        return providerTurnId === turn.providerTurnId ? turn : null;
       },
+      async latestTurnForSession() { return turn; },
+      async getSession() { return { id: "session_1", appId: "app_1" }; },
+      async runtimeEventsForSession() { return events; },
     };
     const bridge = createCodexBridge({
       store,
@@ -149,15 +148,14 @@ describe("codex bridge", () => {
 
   test("clears stale active Codex goals when a live turn completes", async () => {
     const events = [];
+    const turn = { id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" };
     const store = {
-      async snapshot() {
-        return {
-          sessions: [{ id: "session_1", appId: "app_1" }],
-          turns: [{ id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" }],
-          events,
-          approvals: [],
-        };
+      async turnByProviderTurnId(providerTurnId) {
+        return providerTurnId === turn.providerTurnId ? turn : null;
       },
+      async latestTurnForSession() { return turn; },
+      async getSession() { return { id: "session_1", appId: "app_1" }; },
+      async runtimeEventsForSession() { return events; },
     };
     const bridge = createCodexBridge({
       store,

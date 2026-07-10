@@ -7,5 +7,6 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "electron"]
   },
+  "references": [{ "path": "../../packages/runtime" }],
   "include": ["src/**/*.ts"]
 }

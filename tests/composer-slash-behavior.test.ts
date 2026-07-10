@@ -827,7 +827,7 @@ describe("composer slash behavior", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="OpenPond mentions"');
+    expect(markup).toContain('aria-label="Mentions"');
     expect(markup).toContain("composer-project-menu composer-slash-menu composer-mention-menu");
     expect(markup).toContain("composer-project-option selected");
     expect(markup).toContain("Weekly Ops Notes");

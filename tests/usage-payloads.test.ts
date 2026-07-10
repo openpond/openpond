@@ -163,13 +163,8 @@ function usageStore(records: ModelUsageRecord[]) {
         .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
       return query.limit ? filtered.slice(0, query.limit) : filtered;
     },
-    async snapshot() {
-      return {
-        sessions: [usageSession()],
-        turns: [],
-        events: [],
-        approvals: [],
-      };
+    async sessionShells() {
+      return [usageSession()];
     },
   };
 }

@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -39,6 +39,8 @@ const DEFAULT_MODEL_NAME = "base.en";
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 const TRANSCRIPTION_TIMEOUT_MS = 120_000;
 const MODEL_MIN_BYTES = 10 * 1024 * 1024;
+const MODEL_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+const PROCESS_OUTPUT_MAX_CHARS = 64 * 1024;
 
 export function createVoiceTranscriptionService(input: {
   storeDir: string;
@@ -46,12 +48,18 @@ export function createVoiceTranscriptionService(input: {
 }): {
   status: () => Promise<VoiceTranscriptionStatus>;
   transcribe: (payload: unknown) => Promise<VoiceTranscriptionResponse>;
+  close: () => Promise<void>;
 } {
   const modelName = normalizedModelName(process.env.OPENPOND_WHISPER_MODEL_NAME);
   const modelPath =
     process.env.OPENPOND_WHISPER_MODEL?.trim() ||
     path.join(input.storeDir, "voice-models", `ggml-${modelName}.bin`);
   let modelDownload: Promise<string> | null = null;
+  const closeController = new AbortController();
+  const activeProcesses = new Set<ChildProcess>();
+  const activeTranscriptions = new Set<Promise<VoiceTranscriptionResponse>>();
+  let closing = false;
+  let closePromise: Promise<void> | null = null;
 
   async function status(): Promise<VoiceTranscriptionStatus> {
     const binaryPath = await resolveWhisperBinary();
@@ -76,14 +84,27 @@ export function createVoiceTranscriptionService(input: {
       throw new Error("Automatic Whisper model download is disabled for this model.");
     }
     if (!modelDownload) {
-      modelDownload = downloadDefaultModel(modelPath, modelName, input.logger).finally(() => {
+      modelDownload = downloadDefaultModel(
+        modelPath,
+        modelName,
+        input.logger,
+        closeController.signal,
+      ).finally(() => {
         modelDownload = null;
       });
     }
     return modelDownload;
   }
 
-  async function transcribe(payload: unknown): Promise<VoiceTranscriptionResponse> {
+  function transcribe(payload: unknown): Promise<VoiceTranscriptionResponse> {
+    if (closing) return Promise.reject(new Error("Voice transcription service is closed."));
+    const operation = runTranscription(payload);
+    activeTranscriptions.add(operation);
+    void operation.finally(() => activeTranscriptions.delete(operation)).catch(() => undefined);
+    return operation;
+  }
+
+  async function runTranscription(payload: unknown): Promise<VoiceTranscriptionResponse> {
     const request = parseVoiceTranscriptionRequest(payload);
     const binaryPath = await resolveWhisperBinary();
     if (!binaryPath) throw new Error(whisperInstallHint());
@@ -110,6 +131,8 @@ export function createVoiceTranscriptionService(input: {
         language: request.language ?? "en",
         modelPath: selectedModelPath,
         outputPrefix,
+        signal: closeController.signal,
+        activeProcesses,
       });
       const outputFileText = await fs.readFile(outputTextPath, "utf8").catch(() => "");
       const text = cleanWhisperText(outputFileText);
@@ -129,7 +152,21 @@ export function createVoiceTranscriptionService(input: {
     }
   }
 
-  return { status, transcribe };
+  function close(): Promise<void> {
+    if (closePromise) return closePromise;
+    closing = true;
+    closeController.abort();
+    for (const child of activeProcesses) stopVoiceProcess(child);
+    closePromise = Promise.allSettled([...activeTranscriptions, ...(modelDownload ? [modelDownload] : [])])
+      .then(() => {
+        if (activeProcesses.size > 0) {
+          throw new Error(`Voice transcription leaked ${activeProcesses.size} process(es).`);
+        }
+      });
+    return closePromise;
+  }
+
+  return { close, status, transcribe };
 }
 
 function parseVoiceTranscriptionRequest(payload: unknown): VoiceTranscriptionRequest {
@@ -158,6 +195,8 @@ async function runWhisper(input: {
   audioPath: string;
   outputPrefix: string;
   language: string;
+  signal: AbortSignal;
+  activeProcesses: Set<ChildProcess>;
 }): Promise<void> {
   const threadCount = Math.max(1, Math.min(8, os.cpus().length - 1 || 1));
   const args = [
@@ -175,27 +214,41 @@ async function runWhisper(input: {
     input.outputPrefix,
   ];
   await new Promise<void>((resolve, reject) => {
+    if (input.signal.aborted) {
+      reject(new Error("Voice transcription service is closed."));
+      return;
+    }
     const child = spawn(input.binaryPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+    input.activeProcesses.add(child);
     let stderr = "";
     let stdout = "";
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 1500).unref();
+      stopVoiceProcess(child);
     }, TRANSCRIPTION_TIMEOUT_MS);
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+      stdout = boundedProcessOutput(stdout, chunk.toString("utf8"));
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
+      stderr = boundedProcessOutput(stderr, chunk.toString("utf8"));
     });
+    const onAbort = () => stopVoiceProcess(child);
+    input.signal.addEventListener("abort", onAbort, { once: true });
     child.on("error", (error) => {
       clearTimeout(timeout);
+      input.signal.removeEventListener("abort", onAbort);
+      input.activeProcesses.delete(child);
       reject(error);
     });
     child.on("close", (code) => {
       clearTimeout(timeout);
+      input.signal.removeEventListener("abort", onAbort);
+      input.activeProcesses.delete(child);
+      if (input.signal.aborted) {
+        reject(new Error("Voice transcription service is closed."));
+        return;
+      }
       if (timedOut) {
         reject(new Error("Voice transcription timed out."));
         return;
@@ -208,6 +261,22 @@ async function runWhisper(input: {
       reject(new Error(`whisper.cpp transcription failed${detail ? `: ${detail}` : ""}`));
     });
   });
+}
+
+function stopVoiceProcess(child: ChildProcess): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  const timer = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }, 1_500);
+  timer.unref();
+}
+
+function boundedProcessOutput(current: string, delta: string): string {
+  const next = `${current}${delta}`;
+  return next.length <= PROCESS_OUTPUT_MAX_CHARS
+    ? next
+    : next.slice(next.length - PROCESS_OUTPUT_MAX_CHARS);
 }
 
 function cleanWhisperText(value: string): string {
@@ -243,25 +312,72 @@ async function downloadDefaultModel(
   targetPath: string,
   modelName: string,
   logger: VoiceLogger,
+  signal: AbortSignal,
 ): Promise<string> {
   const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${modelName}.bin`;
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
   logger.info("downloading whisper model", { modelName, targetPath });
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok || !response.body) {
     throw new Error(`Unable to download Whisper model: ${response.status} ${response.statusText}`.trim());
   }
-  await fs.writeFile(tempPath, Buffer.from(await response.arrayBuffer()), { mode: 0o600 });
-  const stat = await fs.stat(tempPath);
-  if (stat.size < MODEL_MIN_BYTES) {
-    await fs.rm(tempPath, { force: true });
-    throw new Error("Downloaded Whisper model is incomplete.");
-  }
+  const sizeBytes = await streamVoiceModelResponseToFile({
+    response,
+    targetPath: tempPath,
+    signal,
+    minBytes: MODEL_MIN_BYTES,
+    maxBytes: MODEL_MAX_BYTES,
+  });
   await fs.rename(tempPath, targetPath);
   await fs.chmod(targetPath, 0o600).catch(() => undefined);
-  logger.info("whisper model downloaded", { modelName, targetPath, sizeBytes: stat.size });
+  logger.info("whisper model downloaded", { modelName, targetPath, sizeBytes });
   return targetPath;
+}
+
+export async function streamVoiceModelResponseToFile(input: {
+  response: Response;
+  targetPath: string;
+  signal: AbortSignal;
+  minBytes: number;
+  maxBytes: number;
+}): Promise<number> {
+  const declaredBytes = Number(input.response.headers.get("content-length"));
+  if (Number.isFinite(declaredBytes) && declaredBytes > input.maxBytes) {
+    throw new Error("Whisper model download exceeds the configured byte limit.");
+  }
+  const reader = input.response.body?.getReader();
+  if (!reader) throw new Error("Whisper model download did not return a response body.");
+  const file = await fs.open(input.targetPath, "wx", 0o600);
+  let sizeBytes = 0;
+  try {
+    try {
+      while (true) {
+        if (input.signal.aborted) throw new Error("Whisper model download was cancelled.");
+        const { done, value } = await reader.read();
+        if (done) break;
+        sizeBytes += value.byteLength;
+        if (sizeBytes > input.maxBytes) {
+          throw new Error("Whisper model download exceeds the configured byte limit.");
+        }
+        await file.write(value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    await fs.rm(input.targetPath, { force: true });
+    throw error;
+  }
+  if (sizeBytes < input.minBytes) {
+    await fs.rm(input.targetPath, { force: true });
+    throw new Error("Downloaded Whisper model is incomplete.");
+  }
+  await fs.chmod(input.targetPath, 0o600).catch(() => undefined);
+  return sizeBytes;
 }
 
 async function resolveWhisperBinary(): Promise<string | null> {

@@ -1,5 +1,12 @@
 import type { Command } from "./types";
 import { parseJsonOption } from "./options";
+import {
+  CLI_SHORT_OPTION_ALIASES,
+  getAnyCliOptionKind,
+  getCliCommandDefinition,
+  getCliOptionKind,
+  type CliCommandOptionKind,
+} from "../command-registry";
 
 const CLI_OPTION_VALUES = Symbol("openpondCliOptionValues");
 
@@ -15,108 +22,6 @@ export class CliUsageError extends Error {
     this.name = "CliUsageError";
   }
 }
-
-type CliOptionValueKind = "boolean" | "string" | "number" | "integer" | "json";
-
-const CLI_SHORT_OPTION_ALIASES: Record<string, string> = {
-  C: "cwd",
-  f: "force",
-  h: "help",
-  j: "json",
-  v: "version",
-  y: "yes",
-};
-
-const CLI_TYPED_OPTIONS: Record<string, CliOptionValueKind> = {
-  account: "string",
-  agentId: "string",
-  apiBaseUrl: "string",
-  app: "string",
-  approvalPolicy: "string",
-  artifactsDir: "string",
-  attach: "boolean",
-  async: "boolean",
-  baseUrl: "string",
-  baseurl: "string",
-  branch: "string",
-  callbackPort: "integer",
-  chatApiBaseUrl: "string",
-  chatApiBaseurl: "string",
-  chatApiUrl: "string",
-  checkKind: "string",
-  checkUpdate: "boolean",
-  cols: "integer",
-  conversationId: "string",
-  cpu: "number",
-  cwd: "string",
-  diskGb: "number",
-  env: "string",
-  expectedManifestHash: "string",
-  force: "boolean",
-  devtoolsPort: "integer",
-  grep: "string",
-  goalStorage: "string",
-  help: "boolean",
-  hostedCheckKind: "string",
-  hostedRunAgentId: "string",
-  hostedRunConversationId: "string",
-  hostedRunIdempotencyKey: "string",
-  hostedRunInput: "json",
-  hostedRunRetry: "boolean",
-  hostedRunTargetProjectId: "string",
-  hostedSourceDispatch: "string",
-  hostedSourceAgentId: "string",
-  hostedSourceChecks: "boolean",
-  hostedSourceProjectId: "string",
-  idleTimeoutSeconds: "integer",
-  isolated: "boolean",
-  json: "boolean",
-  jsonPath: "string",
-  keepHome: "boolean",
-  limit: "integer",
-  maxOutputBytes: "integer",
-  maxDurationSeconds: "integer",
-  maxEntries: "integer",
-  maxResults: "integer",
-  memoryGb: "number",
-  message: "string",
-  messageFile: "string",
-  nonInteractive: "boolean",
-  none: "boolean",
-  path: "string",
-  port: "integer",
-  packaged: "boolean",
-  profile: "string",
-  projectId: "string",
-  publishHostedSource: "boolean",
-  rows: "integer",
-  sandboxApiUrl: "string",
-  sandboxApiurl: "string",
-  respondAsync: "boolean",
-  server: "string",
-  setupTimeoutSeconds: "integer",
-  since: "integer",
-  sourceCheckDispatch: "string",
-  stdin: "boolean",
-  targetProjectId: "string",
-  teamId: "string",
-  timeout: "integer",
-  timeoutMs: "integer",
-  timeoutSec: "integer",
-  timeoutSeconds: "integer",
-  token: "string",
-  tokenFile: "string",
-  tui: "boolean",
-  version: "boolean",
-  workItemId: "string",
-  yes: "boolean",
-};
-
-const CLI_COMMAND_TYPED_OPTIONS: Partial<Record<Command, Record<string, CliOptionValueKind>>> = {
-  harness: {
-    json: "string",
-  },
-};
 
 const CLI_POSITIVE_INTEGER_OPTIONS = new Set(["maxOutputBytes", "timeoutSec"]);
 
@@ -165,6 +70,7 @@ export function parseArgs(argv: string[]): {
     configurable: false,
     writable: false,
   });
+  validateCommandOptions(command, options);
   return { command, options, rest };
 }
 
@@ -193,7 +99,7 @@ function parseShortOptionToken(
       if (!key) {
         throw new CliUsageError(`unknown short option -${alias}`);
       }
-      const kind = CLI_TYPED_OPTIONS[key];
+      const kind = getAnyCliOptionKind(key);
       if (kind !== "boolean") {
         throw new CliUsageError(`short option -${alias} requires its own value`);
       }
@@ -273,24 +179,20 @@ function validateParsedOptionValue(key: string, value: string, command?: Command
   }
 }
 
-function typedOptionKind(key: string, command?: Command): CliOptionValueKind | undefined {
-  if (command) {
-    const commandKind = CLI_COMMAND_TYPED_OPTIONS[command]?.[key];
-    if (commandKind) return commandKind;
-  }
-  return CLI_TYPED_OPTIONS[key];
+function typedOptionKind(key: string, command?: Command): CliCommandOptionKind | undefined {
+  return command ? getCliOptionKind(command, key) : getAnyCliOptionKind(key);
 }
 
 function cliOptionLabel(key: string): string {
   return key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
-function optionKindLabel(kind: CliOptionValueKind): string {
+function optionKindLabel(kind: CliCommandOptionKind): string {
   if (kind === "json") return "JSON value";
   return kind;
 }
 
-function optionKindPhrase(kind: CliOptionValueKind): string {
+function optionKindPhrase(kind: CliCommandOptionKind): string {
   const label = optionKindLabel(kind);
   return /^[aeiou]/i.test(label) ? `an ${label}` : `a ${label}`;
 }
@@ -305,6 +207,17 @@ function isOptionLike(value: string): boolean {
 
 function isNegativeNumber(value: string): boolean {
   return /^-\d+(?:\.\d+)?$/.test(value);
+}
+
+function validateCommandOptions(command: Command, options: ParsedCliOptions): void {
+  const definition = command ? getCliCommandDefinition(command) : null;
+  for (const key of Object.keys(options)) {
+    if (!getCliOptionKind(command, key)) {
+      const label = cliOptionLabel(key);
+      const suffix = definition ? ` for ${definition.name}` : "";
+      throw new CliUsageError(`unknown option --${label}${suffix}`);
+    }
+  }
 }
 
 export function optionValues(

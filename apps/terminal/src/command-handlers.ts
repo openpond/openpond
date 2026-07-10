@@ -4,6 +4,7 @@ import {
   type Approval,
   type BootstrapPayload,
   type OpenPondCommandAccessMode,
+  type Session,
 } from "@openpond/contracts";
 import type { TerminalOptions } from "./args.js";
 import { apiFetch } from "./connection.js";
@@ -57,6 +58,7 @@ export type TerminalCommandContext = {
   setPayload(payload: BootstrapPayload): void;
   getActiveSessionId(): string | null;
   setActiveSessionId(sessionId: string): void;
+  switchSession?: (create: () => Promise<Session>) => Promise<Session>;
   getActiveAgentId(): string | null;
   setActiveAgentId(agentId: string): void;
   getPendingCommandApproval?: () => Approval | null;
@@ -147,13 +149,20 @@ export async function handleTerminalSlashCommand(
       context.addItem(systemItem(`Project not found: ${command.id}\n\n${formatTerminalProjects(latest)}`, "warning"));
       return;
     }
-    context.options.project = target.id;
-    if (target.provider) {
-      context.options.provider = target.provider;
-      context.options.model = null;
-    }
-    const session = await createTerminalChatSession(connection, latest, context.options);
-    context.setActiveSessionId(session.id);
+    const nextOptions = {
+      ...context.options,
+      project: target.id,
+      provider: target.provider ?? context.options.provider,
+      model: target.provider ? null : context.options.model,
+    };
+    const session = await createAndActivateSession(
+      context,
+      () => createTerminalChatSession(connection, latest, nextOptions),
+    );
+    context.options.project = nextOptions.project;
+    context.options.provider = nextOptions.provider;
+    context.options.model = nextOptions.model;
+    context.options.cwd = nextOptions.cwd;
     context.addItem(systemItem(`Project set to ${target.kind}: ${target.label}`));
     context.render();
     return;
@@ -267,13 +276,25 @@ export async function handleTerminalSlashCommand(
   }
   if (command.type === "start") {
     const latest = context.getPayload() ?? (await context.refreshBootstrap());
-    const session = await createTerminalChatSession(connection, latest, context.options);
-    context.setActiveSessionId(session.id);
+    const session = await createAndActivateSession(
+      context,
+      () => createTerminalChatSession(connection, latest, context.options),
+    );
     context.addItem(systemItem(`Started ${session.id}`));
     context.render();
     return;
   }
   context.addItem(systemItem(`Unknown command: ${command.command}`, "warning"));
+}
+
+async function createAndActivateSession(
+  context: TerminalCommandContext,
+  create: () => Promise<Session>,
+): Promise<Session> {
+  if (context.switchSession) return context.switchSession(create);
+  const session = await create();
+  context.setActiveSessionId(session.id);
+  return session;
 }
 
 async function handlePermissionsCommand(

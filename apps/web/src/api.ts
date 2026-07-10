@@ -5,7 +5,6 @@ import type {
   BootstrapPayload,
   CloudWorkItemBackgroundRequest,
   CloudWorkItemDetail,
-  CompactSessionRequest,
   ChatAttachment,
   ChatAttachmentSummary,
   CreateCloudWorkItemRequest,
@@ -35,11 +34,9 @@ import type {
   ProviderValidationRequest,
   ReorderSidebarAppsRequest,
   RecordClientDiagnosticRequest,
-  RecordPreflightTurnFailureRequest,
   ResolveApprovalRequest,
   RemoteAccessStatus,
   RemoteAccessToggleResponse,
-  RunSessionCommandRequest,
   RuntimeEvent,
   SaveWorkspaceFileRequest,
   SaveOpenPondAccountRequest,
@@ -56,7 +53,6 @@ import type {
   SendCloudWorkItemMessageRequest,
   UploadLocalProjectCloudSourceRequest,
   Turn,
-  UpdateTurnCreatePipelineRequest,
   UpdateAppPreferencesRequest,
   UpdatePersonalizationRequest,
   UpdateProviderSettingsRequest,
@@ -75,8 +71,6 @@ import type {
   WorkspaceLspTouchRequest,
   WorkspaceState,
   WorkspaceTemplateConfigView,
-  WorkspaceToolRequest,
-  WorkspaceToolResult,
   TeamChatHostedAiThread,
   TeamChatAttachment,
   TeamChatAttachmentDownload,
@@ -89,6 +83,7 @@ import type {
 } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
+import { sessionApi } from "./api/session-api";
 import { sandboxApi } from "./api/sandbox";
 import type {
   CloudWorkItemCancelTaskResponse,
@@ -1029,65 +1024,7 @@ export const api = {
         body: JSON.stringify({}),
       },
     ),
-  sendTurn: (connection: ClientConnection, sessionId: string, input: SendTurnRequest) =>
-    apiFetch<Turn>(connection, `/v1/sessions/${sessionId}/turns`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  runSessionCommand: (
-    connection: ClientConnection,
-    sessionId: string,
-    input: RunSessionCommandRequest,
-  ) =>
-    apiFetch<{ session: Session; events: RuntimeEvent[]; result: unknown }>(
-      connection,
-      `/v1/sessions/${encodeURIComponent(sessionId)}/commands`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      },
-    ),
-  recordPreflightTurnFailure: (
-    connection: ClientConnection,
-    sessionId: string,
-    input: RecordPreflightTurnFailureRequest,
-  ) =>
-    apiFetch<BootstrapPayload>(connection, `/v1/sessions/${sessionId}/preflight-turns/failure`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  updateTurnCreatePipeline: (
-    connection: ClientConnection,
-    sessionId: string,
-    turnId: string,
-    input: UpdateTurnCreatePipelineRequest,
-  ) =>
-    apiFetch<Turn>(
-      connection,
-      `/v1/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/create-pipeline`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      },
-    ),
-  interruptTurn: (connection: ClientConnection, sessionId: string) =>
-    apiFetch<Turn>(connection, `/v1/sessions/${sessionId}/turns/interrupt`, {
-      method: "POST",
-    }),
-  compactSession: (
-    connection: ClientConnection,
-    sessionId: string,
-    input: CompactSessionRequest = { reason: "manual" },
-  ) =>
-    apiFetch<unknown>(connection, `/v1/sessions/${sessionId}/compact`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  workspaceTool: (connection: ClientConnection, sessionId: string, input: WorkspaceToolRequest) =>
-    apiFetch<WorkspaceToolResult>(connection, `/v1/sessions/${sessionId}/workspace-tools`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+  ...sessionApi,
   resolveApproval: (
     connection: ClientConnection,
     approvalId: string,

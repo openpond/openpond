@@ -6,6 +6,7 @@ import { AppToast as AppToastView } from "./AppToast";
 import { AppTopBar } from "./AppTopBar";
 import { MainPane } from "./MainPane";
 import { ProjectConfirmDialog } from "./ProjectConfirmDialog";
+import { RenderCommitBoundary } from "../../lib/render-commit-metrics";
 
 export type AppShellControllerProps = {
   className: string;
@@ -32,7 +33,9 @@ export function AppShellController({
 }: AppShellControllerProps) {
   return (
     <div className={className} style={style}>
-      <Sidebar {...sidebar} />
+      <RenderCommitBoundary id="sidebar">
+        <Sidebar {...sidebar} />
+      </RenderCommitBoundary>
 
       <div className="content-shell">
         <AppTopBar {...topBar} />

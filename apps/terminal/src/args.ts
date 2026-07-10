@@ -13,6 +13,7 @@ export type TerminalOptions = {
   provider: ChatProvider;
   model: string | null;
   cwd: string;
+  cwdExplicit?: boolean;
   project: string | null;
   resume: string | null;
   noServerStart: boolean;
@@ -76,6 +77,7 @@ export function parseTerminalArgs(
       options.model = selection.model;
     } else if (arg === "--cwd") {
       options.cwd = path.resolve(rest[++i] ?? options.cwd);
+      options.cwdExplicit = true;
     } else if (arg === "--project") {
       options.project = rest[++i] ?? null;
     } else if (arg === "--resume") {

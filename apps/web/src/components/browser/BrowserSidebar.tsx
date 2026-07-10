@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback } from "react";
+import "../../styles/browser/browser-sidebar.css";
 import { Globe2 } from "../icons";
 import { useBrowserSidebar } from "../../hooks/useBrowserSidebar";
 import { BrowserTabs } from "./BrowserTabs";

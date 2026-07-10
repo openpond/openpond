@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { writePrivateJsonFile } from "../private-json-file.js";
 
 export const SOURCE_UPLOAD_CACHE_PATH = ".openpond/source-upload-cache.json";
 const SOURCE_UPLOAD_CACHE_SCHEMA = "openpond.source-upload-cache.v1";
@@ -10,12 +11,14 @@ export type SourceUploadCacheFile = {
   absolutePath: string;
   size: number;
   mtimeMs: number;
+  ctimeMs: number;
 };
 
 export type SourceUploadCacheEntry = {
   path: string;
   size: number;
   mtimeMs: number;
+  ctimeMs: number;
   sha256: string;
   contentsBase64: string;
 };
@@ -98,6 +101,7 @@ export async function writeSourceUploadCache(
       path: item.file.path,
       size: item.file.size,
       mtimeMs: item.file.mtimeMs,
+      ctimeMs: item.file.ctimeMs,
       sha256: item.sha256,
       contentsBase64: item.entry.contentsBase64,
     };
@@ -105,29 +109,21 @@ export async function writeSourceUploadCache(
   }
 
   const cachePath = path.join(rootPath, SOURCE_UPLOAD_CACHE_PATH);
-  await mkdir(path.dirname(cachePath), { recursive: true });
-  await writeFile(
-    cachePath,
-    `${JSON.stringify(
-      {
-        schema: SOURCE_UPLOAD_CACHE_SCHEMA,
-        generatedAt: new Date().toISOString(),
-        entries,
-      } satisfies SourceUploadCacheManifest,
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
+  await writePrivateJsonFile(cachePath, {
+    schema: SOURCE_UPLOAD_CACHE_SCHEMA,
+    generatedAt: new Date().toISOString(),
+    entries,
+  } satisfies SourceUploadCacheManifest);
 }
 
 function cacheKeyForFile(input: {
   path: string;
   size: number;
   mtimeMs: number;
+  ctimeMs: number;
   sha256?: string;
 }): string {
-  return `${input.path}\0${input.size}\0${input.mtimeMs}`;
+  return `${input.path}\0${input.size}\0${input.mtimeMs}\0${input.ctimeMs}`;
 }
 
 function isCacheEntry(value: unknown): value is SourceUploadCacheEntry {
@@ -137,6 +133,7 @@ function isCacheEntry(value: unknown): value is SourceUploadCacheEntry {
     typeof record.path === "string" &&
     typeof record.size === "number" &&
     typeof record.mtimeMs === "number" &&
+    typeof record.ctimeMs === "number" &&
     typeof record.sha256 === "string" &&
     typeof record.contentsBase64 === "string"
   );

@@ -44,7 +44,7 @@ import {
   shouldPreserveMissingBootstrapSession,
   type SessionSidebarStateChangeTimes,
 } from "../lib/session-state";
-import { mergeBootstrapRuntimeEvents } from "../lib/runtime-event-lists";
+import { limitRuntimeEventList, mergeBootstrapRuntimeEvents } from "../lib/runtime-event-lists";
 import {
   appStartupState,
   type AppStartupStageId,
@@ -163,7 +163,9 @@ export function useAppBootstrap(params: {
       bootstrapServerIdRef.current = payload.server.id;
       latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
-      setEvents((current) => (sameServer ? mergeBootstrapRuntimeEvents(payload.events, current) : payload.events));
+      setEvents((current) => sameServer
+        ? mergeBootstrapRuntimeEvents(payload.events, current)
+        : limitRuntimeEventList(payload.events));
       setSessionsState((current) => {
         const next = sameServer
           ? mergeBootstrapSessionListPreservingLocalState(

@@ -18,6 +18,7 @@ import {
   resolveWorkspaceExecutionTarget,
   type WorkspaceExecutionTarget,
 } from "../workspace/workspace-execution-target.js";
+import { createCloudSessionReadinessService } from "../workspace/cloud-session-readiness.js";
 
 export type { WorkspaceToolExecutorDeps } from "./workspace-tool-executor-types.js";
 
@@ -86,6 +87,8 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
     payload: unknown,
     options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null }
   ) => Promise<WorkspaceToolResult>;
+  ensureCloudWorkspaceReady: (sessionId: string, payload: unknown) => Promise<unknown>;
+  closeCloudWorkspaceReadiness: () => Promise<void>;
 } {
   const {
     logger,
@@ -375,5 +378,13 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
     }
   }
 
-  return { executeWorkspaceTool };
+  const {
+    close: closeCloudWorkspaceReadiness,
+    ensureReady: ensureCloudWorkspaceReady,
+  } = createCloudSessionReadinessService({
+    getSession,
+    executeWorkspaceTool,
+    sandboxRequest: deps.sandboxRequest,
+  });
+  return { closeCloudWorkspaceReadiness, ensureCloudWorkspaceReady, executeWorkspaceTool };
 }

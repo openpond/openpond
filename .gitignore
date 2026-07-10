@@ -26,7 +26,9 @@ out/
 release-assets/
 release-smoke-artifacts/
 release/
+release-cli/
 apps/*/dist/
+apps/desktop/stage/
 apps/*/build/
 !apps/desktop/build/
 !apps/desktop/build/**

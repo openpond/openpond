@@ -81,7 +81,7 @@ export type StartupMetrics =
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   maxTotalJsBytes: 16 * 1024 * 1024,
   maxTotalCssBytes: 512 * 1024,
-  maxInitialAssetBytes: 1.5 * 1024 * 1024,
+  maxInitialAssetBytes: 1.25 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
 
@@ -399,6 +399,9 @@ async function main(): Promise<void> {
   for (const warning of warnings) {
     console.warn(`[budget-warning] ${warning.id}: ${warning.message}`);
   }
+  if (process.env.OPENPOND_BUDGETS_STRICT === "1") {
+    process.exitCode = 1;
+  }
 }
 
 async function measureJsonRoute(input: {
@@ -643,6 +646,6 @@ function delay(ms: number): Promise<void> {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   void main().catch((error) => {
     console.warn(`[budget-warning] performance budget script failed: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(0);
+    process.exit(process.env.OPENPOND_BUDGETS_STRICT === "1" ? 1 : 0);
   });
 }

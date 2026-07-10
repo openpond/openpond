@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import "../../styles/get-started/get-started.css";
 import { GetStartedDeckView } from "./GetStartedDeck";
 import { GET_STARTED_DECKS, type GetStartedDeckId } from "./get-started-content";
 

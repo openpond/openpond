@@ -13,8 +13,17 @@ type PendingAssistantDelta = {
   timer: ReturnType<typeof setTimeout> | null;
 };
 
+type RuntimeEventSubscriber = {
+  response: ServerResponse;
+  sessionId: string | null;
+  ready: boolean;
+  pending: RuntimeEvent[];
+};
+
 const DEFAULT_ASSISTANT_DELTA_FLUSH_MS = 40;
 const MAX_ASSISTANT_DELTA_BUFFER_CHARS = 4096;
+const MAX_PENDING_SUBSCRIBER_EVENTS = 1_000;
+const EVENT_CATCHUP_PAGE_SIZE = 500;
 
 export function truncateLogValue(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
@@ -42,7 +51,7 @@ export function createRuntimeEventBus({
   store: SqliteStore;
   assistantDeltaFlushMs?: number;
 }) {
-  const subscribers = new Set<ServerResponse>();
+  const subscribers = new Set<RuntimeEventSubscriber>();
   const pendingAssistantDeltas = new Map<string, PendingAssistantDelta>();
 
   function logRuntimeEvent(runtimeEvent: RuntimeEvent): void {
@@ -80,20 +89,71 @@ export function createRuntimeEventBus({
   }
 
   async function persistAndBroadcastRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void> {
-    await store.appendRuntimeEvent(runtimeEvent);
-    logRuntimeEvent(runtimeEvent);
-    const encoded = `event: runtime\ndata: ${JSON.stringify(runtimeEvent)}\n\n`;
+    const persistedRuntimeEvent = (await store.appendRuntimeEvent(runtimeEvent)) ?? runtimeEvent;
+    logRuntimeEvent(persistedRuntimeEvent);
     for (const subscriber of Array.from(subscribers)) {
-      if (subscriber.destroyed) {
+      if (subscriber.response.destroyed) {
         subscribers.delete(subscriber);
         continue;
       }
-      try {
-        subscriber.write(encoded);
-      } catch {
-        subscribers.delete(subscriber);
+      if (subscriber.sessionId && persistedRuntimeEvent.sessionId !== subscriber.sessionId) continue;
+      if (!subscriber.ready) {
+        subscriber.pending.push(persistedRuntimeEvent);
+        if (subscriber.pending.length > MAX_PENDING_SUBSCRIBER_EVENTS) {
+          disconnectSubscriber(subscriber);
+        }
+        continue;
       }
+      writeSubscriberEvent(subscriber, persistedRuntimeEvent);
     }
+  }
+
+  async function openEventSubscriber(input: {
+    response: ServerResponse;
+    afterSequence: number;
+    sessionId: string | null;
+  }): Promise<() => void> {
+    const subscriber: RuntimeEventSubscriber = {
+      response: input.response,
+      sessionId: input.sessionId,
+      ready: false,
+      pending: [],
+    };
+    subscribers.add(subscriber);
+    let cursor = Math.max(0, Math.trunc(input.afterSequence));
+    try {
+      while (!input.response.destroyed) {
+        const page = await store.runtimeEventPageRows({
+          sessionId: input.sessionId,
+          afterSequence: cursor,
+          beforeSequence: null,
+          limit: EVENT_CATCHUP_PAGE_SIZE,
+        });
+        for (const entry of page.entries) {
+          if (!writeSubscriberEvent(subscriber, entry.event)) break;
+          cursor = Math.max(cursor, entry.sequence);
+        }
+        if (page.entries.length < EVENT_CATCHUP_PAGE_SIZE) break;
+      }
+      const pending = subscriber.pending
+        .filter((event) => (event.sequence ?? 0) > cursor)
+        .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+      subscriber.pending = [];
+      subscriber.ready = true;
+      for (const event of pending) {
+        if (!writeSubscriberEvent(subscriber, event)) break;
+      }
+      return () => disconnectSubscriber(subscriber, false);
+    } catch (error) {
+      disconnectSubscriber(subscriber);
+      throw error;
+    }
+  }
+
+  function addLiveSubscriber(response: ServerResponse, sessionId: string | null = null): () => void {
+    const subscriber: RuntimeEventSubscriber = { response, sessionId, ready: true, pending: [] };
+    subscribers.add(subscriber);
+    return () => disconnectSubscriber(subscriber, false);
   }
 
   async function appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void> {
@@ -111,9 +171,9 @@ export function createRuntimeEventBus({
     for (const subscriber of Array.from(subscribers)) {
       subscribers.delete(subscriber);
       try {
-        subscriber.end();
+        subscriber.response.end();
       } catch {
-        subscriber.destroy();
+        subscriber.response.destroy();
       }
     }
   }
@@ -167,10 +227,36 @@ export function createRuntimeEventBus({
 
   return {
     appendRuntimeEvent,
+    addLiveSubscriber,
     closeEventSubscribers,
+    openEventSubscriber,
     subscribers,
     truncateLogValue,
   };
+
+  function writeSubscriberEvent(subscriber: RuntimeEventSubscriber, event: RuntimeEvent): boolean {
+    if (subscriber.response.destroyed) {
+      subscribers.delete(subscriber);
+      return false;
+    }
+    const encoded = `id: ${event.sequence ?? ""}\nevent: runtime\ndata: ${JSON.stringify(event)}\n\n`;
+    try {
+      if (!subscriber.response.write(encoded)) {
+        disconnectSubscriber(subscriber);
+        return false;
+      }
+      return true;
+    } catch {
+      disconnectSubscriber(subscriber);
+      return false;
+    }
+  }
+
+  function disconnectSubscriber(subscriber: RuntimeEventSubscriber, destroy = true): void {
+    subscribers.delete(subscriber);
+    subscriber.pending = [];
+    if (destroy && !subscriber.response.destroyed) subscriber.response.destroy();
+  }
 }
 
 function isCoalescibleAssistantDelta(runtimeEvent: RuntimeEvent): boolean {

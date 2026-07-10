@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
   type CSSProperties,
@@ -20,11 +19,7 @@ import type {
 } from "@openpond/contracts";
 import { buildConnectedAppStatusRows, localPathWorkspaceId } from "@openpond/contracts";
 import {
-  appReducer,
-  createAppSetters,
-  initialAppState,
   type AppToast,
-  type RightChatPanel,
   type ShowAppToast,
 } from "./app/app-state";
 import { api, type ClientConnection } from "./api";
@@ -33,84 +28,23 @@ import { useProjectConfirmDialog } from "./components/app-shell/ProjectConfirmDi
 import { isDesktopShell, isMacPlatform } from "./components/app-shell/WindowControls";
 import { AppSplash } from "./components/splash/AppSplash";
 import type { CloudSetupDialogState } from "./components/workspace/CloudSetupDialog";
-import {
-  modelRefForTurn,
-  normalizeChatModel,
-  SIDEBAR_SECTION_LIMIT,
-  type SidebarProjectItem,
-} from "./lib/app-models";
-import { buildCachedChatMessages } from "./lib/chat-messages";
+import { modelRefForTurn, type SidebarProjectItem } from "./lib/app-models";
 import { openPondOrganizationCacheKey } from "./lib/openpond-organization-memory";
-import {
-  appendPendingUserChatMessage,
-  hasMatchingUserMessage,
-  type PendingChatUserMessage,
-} from "./lib/pending-chat-messages";
-import {
-  latestRuntimeEventSequence,
-  mergeRuntimeEventLists,
-  mergeRuntimeEventsIntoSessionPageCache,
-} from "./lib/runtime-event-lists";
-import {
-  cloneRightSidebarConversationState,
-  defaultRightSidebarConversationStateForSwitch,
-  rightSidebarConversationState,
-  rightSidebarConversationStatesEqual,
-  rightSidebarWorkspacePanelStateKey,
-  type RightSidebarConversationState,
-} from "./lib/right-sidebar-conversation-state";
-import {
-  appendSubagentRightChatPanels,
-  createRightChatPanel,
-  newlyObservedSubagentSessions,
-} from "./lib/right-chat-panels";
-import {
-  cachedCodexHistoryThreadPayload,
-  CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT,
-  CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
-  CODEX_HISTORY_THREAD_TAIL_LIMIT,
-  loadCodexHistoryThreadPayload,
-} from "./lib/codex-history-thread-cache";
-import {
-  activeGoalRuntimeFromSessionMetadata,
-  latestGoalRuntimeFromEvents,
-  latestKnownActiveGoalRuntimeFromEvents,
-} from "./lib/goal-runtime";
+import { mergeLiveRuntimeEventLists } from "./lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "./lib/sidebar-session-projects";
-import { latestCreatePipelineRuntimeFromEvents } from "./lib/create-pipeline-runtime";
 import {
   migrateDraftTerminalTabs,
   terminalScopeForSelection,
   terminalScopesEqual,
   terminalScopeSummaries,
 } from "./components/terminal/terminal-state";
-import type {
-  TerminalQueuedCommand,
-  TerminalTab,
-} from "./components/terminal/terminal-overlay-types";
-import {
-  upsertSessionPreservingLocalSidebarState,
-  upsertSessionPreservingLocalSidebarStateAndRecency,
-} from "./lib/session-state";
-import {
-  buildRuntimeIndexes,
-  latestContextUsageForSession,
-  latestGoalRuntimeForSession,
-  latestPendingApprovalForSession,
-  runtimeEventsForSession,
-} from "./lib/runtime-indexes";
-import { contextWindowStatusFromUsage } from "./lib/context-window";
+import type { TerminalQueuedCommand, TerminalTab } from "./components/terminal/terminal-overlay-types";
+import { upsertSessionPreservingLocalSidebarStateAndRecency } from "./lib/session-state";
+import { runtimeEventsForSession } from "./lib/runtime-indexes";
 import type { ComposerSubmitOptions } from "./components/chat/Composer";
-import type { ComposerSlashCommand } from "./lib/composer-slash-commands";
-import {
-  buildSubmitIssueSlashPrompt,
-  hasGitHubIssueSubmitConnection,
-} from "./lib/submit-issue-command";
 import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
 import {
-  cloneWorkspaceDiffPanelViewState,
   defaultWorkspaceDiffPanelViewState,
-  workspaceDiffPanelViewStatesEqual,
   type WorkspaceDiffPanelViewState,
   type WorkspaceDiffTabRequest,
 } from "./components/workspace-diff/workspace-diff-panel-model";
@@ -124,7 +58,6 @@ import { queuedCloudWorkSubmission } from "./lib/queued-cloud-work";
 import { openPondAccountScopeKey } from "./lib/account-scope";
 import { resolveTeamChatOpenPondOrganization } from "./lib/cloud-project-utils";
 import { confirmedLinkedCloudProject } from "./lib/cloud-link-trust";
-import { latestTurnCompletionState } from "./lib/turn-completion-state";
 import {
   useActiveWorkspaceViewState,
   useWorkspaceTargetState,
@@ -139,22 +72,27 @@ import { useBrowserRevealRequests } from "./hooks/useBrowserRevealRequests";
 import { useChatActions } from "./hooks/useChatActions";
 import { useAppConversationContext } from "./hooks/useAppConversationContext";
 import { useCloudSessionReady } from "./hooks/useCloudSessionReady";
+import { useConversationSidebarState } from "./hooks/useConversationSidebarState";
 import { useCodexPreferenceActions } from "./hooks/useCodexPreferenceActions";
 import { useCloudWorkItems } from "./hooks/useCloudWorkItems";
 import { useCloudWorkspaceSetup } from "./hooks/useCloudWorkspaceSetup";
 import { useCodexHistoryEvents } from "./hooks/useCodexHistoryEvents";
 import { usePinnedSidebarDrag } from "./hooks/usePinnedSidebarDrag";
+import { usePendingChatMessages } from "./hooks/usePendingChatMessages";
 import { useOpenPondCommandAccessActions } from "./hooks/useOpenPondCommandAccessActions";
 import { useSidebarData } from "./hooks/useSidebarData";
+import { useSidebarRuntimeState } from "./hooks/useSidebarRuntimeState";
 import { useCommandShortcuts } from "./hooks/useAppEffects";
 import { useAppBootstrap } from "./hooks/useAppBootstrap";
+import { useAppState } from "./hooks/useAppState";
 import { useGitSetupNotifications } from "./hooks/useGitSetupNotifications";
 import { useLayoutPreferences } from "./hooks/useLayoutPreferences";
 import { useInsights } from "./hooks/useInsights";
 import { useOpenSandboxWorkspace } from "./hooks/useOpenSandboxWorkspace";
 import { useProjectActions } from "./hooks/useProjectActions";
 import { useProjectTargetActions } from "./hooks/useProjectTargetActions";
-import { useRunningSessionState } from "./hooks/useRunningSessionState";
+import { useRightChatPanels } from "./hooks/useRightChatPanels";
+import { useSelectedChatHistory } from "./hooks/useSelectedChatHistory";
 import { useRuntimeIndexes } from "./hooks/useRuntimeIndexes";
 import { useSandboxActionContext } from "./hooks/useSandboxActionContext";
 import { useSidebarExpansion } from "./hooks/useSidebarExpansion";
@@ -163,28 +101,12 @@ import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useTeamChat } from "./hooks/useTeamChat";
 import { useOpenPondOrganizations } from "./hooks/useOpenPondOrganizations";
-import { teamChatThreadTitle } from "./components/team-chat/TeamChatView";
-
-type ChatHistoryLoadState = {
-  cursorSequence: number | null;
-  hasMore: boolean;
-  loading: boolean;
-  totalMatchingEvents: number | null;
-};
+import { teamChatThreadTitle } from "./lib/team-chat-thread";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
-const CHAT_HISTORY_PAGE_LIMIT = 500;
-function promptForRightChatCommand(command: ComposerSlashCommand, prompt: string): string {
-  const args = prompt.trim();
-  if (command.id === "create") return `/create ${args}`;
-  if (command.id === "edit") return `/edit ${args}`;
-  if (command.id === "skill") return `/skill ${args}`;
-  if (command.id === "submit-issue") return buildSubmitIssueSlashPrompt(args);
-  return `Goal: ${args}`;
-}
 
 export function App() {
-  const [appState, appDispatch] = useReducer(appReducer, initialAppState);
+  const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: appState } = useAppState();
   const [pendingTerminalCommand, setPendingTerminalCommand] =
     useState<TerminalQueuedCommand | null>(null);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
@@ -198,40 +120,18 @@ export function App() {
   );
   const [workspaceDiffPanelViewState, setWorkspaceDiffPanelViewState] =
     useState<WorkspaceDiffPanelViewState>(defaultWorkspaceDiffPanelViewState);
-  const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [rightChatHistoryEvents, setRightChatHistoryEvents] = useState<
     Record<string, RuntimeEvent[]>
-  >({});
-  const [codexHistorySidebarEvents, setCodexHistorySidebarEvents] = useState<
-    Record<string, RuntimeEvent[]>
-  >({});
-  const [pendingChatUserMessages, setPendingChatUserMessages] = useState<
-    Record<string, PendingChatUserMessage>
-  >({});
-  const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<
-    Record<string, ChatHistoryLoadState>
   >({});
   const [mainComposerFocusRequestId, setMainComposerFocusRequestId] = useState(0);
   const [draftSubagentDelegationMode, setDraftSubagentDelegationMode] =
     useState<SubagentDelegationMode | null>(null);
-  const chatHistoryLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
-  const rightSidebarStateByConversationRef = useRef<Map<string, RightSidebarConversationState>>(
-    new Map(),
-  );
-  const knownSubagentChildSessionIdsRef = useRef<Set<string> | null>(null);
-  const pendingAutoDockSubagentSessionsRef = useRef<Map<string, Session>>(new Map());
-  const workspaceDiffPanelStateByScopeRef = useRef<Map<string, WorkspaceDiffPanelViewState>>(
-    new Map(),
-  );
-  const activeRightSidebarConversationRef = useRef<string | null>(null);
-  const activeWorkspaceDiffPanelStateKeyRef = useRef<string | null>(null);
   const rememberCloudWorkspaceState = useCallback((state: WorkspaceState) => {
     rememberWorkspaceStateRef.current?.(state);
   }, []);
   const { confirmProjectAction, projectConfirmDialog, resolveProjectConfirmDialog } =
     useProjectConfirmDialog();
-  const appSetters = useMemo(() => createAppSetters(appDispatch), [appDispatch]);
   const {
     query,
     searchOpen,
@@ -245,7 +145,6 @@ export function App() {
     selectedAppId,
     selectedProjectId,
     selectedSessionId,
-    prompt,
     draftProvider,
     draftModel,
     codexPermissionMode,
@@ -257,7 +156,6 @@ export function App() {
     rightPanelMode,
     rightChatPanels,
     terminalOpen,
-    syncingWorkspaceAppId,
     settingsSection,
     newProjectDialogOpen,
     newProjectMode,
@@ -293,7 +191,6 @@ export function App() {
     setCodexPermissionMode,
     setCodexReasoningEffort,
     setOpenPondCommandAccessMode,
-    setBusy,
     setDiffPanelOpen,
     setDiffPanelExpanded,
     setRightPanelMode,
@@ -316,7 +213,7 @@ export function App() {
     setError: setErrorState,
   } = appSetters;
   const connectionRef = useRef<ClientConnection | null>(null);
-  const latestErrorRef = useRef<string | null>(initialAppState.error);
+  const latestErrorRef = useRef<string | null>(null);
   const errorToastIdRef = useRef<number | null>(null);
   const toastSequenceRef = useRef(0);
   const showToast = useCallback<ShowAppToast>(
@@ -523,9 +420,7 @@ export function App() {
     activeWorkspaceKind,
     activeWorkspaceLocation,
     appDefaults,
-    cloudTargetName,
     cloudLinked,
-    localTargetName,
     selectedCodexHistoryPending,
     selectedSessionProjectId,
     startMessage,
@@ -711,304 +606,27 @@ export function App() {
     setQuery,
   });
   useEffect(() => {
-    setPagedSessionEvents({});
     setRightChatHistoryEvents({});
-    setCodexHistorySidebarEvents({});
-    setPendingChatUserMessages({});
-    setChatHistoryLoadStates({});
-    chatHistoryLoadingSessionIdsRef.current.clear();
   }, [bootstrap?.server.id]);
 
-  const loadMoreSelectedChatHistory = useCallback(async () => {
-    if (!connection || !selectedSessionId) return false;
-    if (chatHistoryLoadingSessionIdsRef.current.has(selectedSessionId)) return false;
-    const currentState = chatHistoryLoadStates[selectedSessionId];
-    if (currentState?.hasMore === false) return false;
-
-    if (isCodexHistorySessionId(selectedSessionId)) {
-      const currentLimit = Math.max(
-        currentState?.totalMatchingEvents ?? 0,
-        codexHistoryEvents.length,
-        CODEX_HISTORY_THREAD_TAIL_LIMIT,
-      );
-      const nextLimit = Math.min(
-        CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
-        Math.max(CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT, currentLimit * 2),
-      );
-
-      chatHistoryLoadingSessionIdsRef.current.add(selectedSessionId);
-      setChatHistoryLoadStates((current) => ({
-        ...current,
-        [selectedSessionId]: {
-          cursorSequence: null,
-          hasMore: true,
-          loading: true,
-          totalMatchingEvents:
-            current[selectedSessionId]?.totalMatchingEvents ?? codexHistoryEvents.length,
-        },
-      }));
-
-      try {
-        const payload = await loadCodexHistoryThreadPayload(connection, selectedSessionId, {
-          force: true,
-          limit: nextLimit,
-          tail: false,
-        });
-        setCodexHistoryEvents(payload.events);
-        setCodexHistorySessions((current) =>
-          upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
-        );
-        setChatHistoryLoadStates((current) => ({
-          ...current,
-          [selectedSessionId]: {
-            cursorSequence: null,
-            hasMore:
-              payload.events.length >= nextLimit &&
-              nextLimit < CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
-            loading: false,
-            totalMatchingEvents: nextLimit,
-          },
-        }));
-        return payload.events.length > codexHistoryEvents.length;
-      } catch (historyError) {
-        setError(historyError instanceof Error ? historyError.message : String(historyError));
-        setChatHistoryLoadStates((current) => ({
-          ...current,
-          [selectedSessionId]: {
-            cursorSequence: null,
-            hasMore: current[selectedSessionId]?.hasMore ?? true,
-            loading: false,
-            totalMatchingEvents:
-              current[selectedSessionId]?.totalMatchingEvents ?? codexHistoryEvents.length,
-          },
-        }));
-        return false;
-      } finally {
-        chatHistoryLoadingSessionIdsRef.current.delete(selectedSessionId);
-      }
-    }
-
-    const currentSessionEvents = mergeRuntimeEventLists(
-      pagedSessionEvents[selectedSessionId] ?? EMPTY_RUNTIME_EVENTS,
-      runtimeEventsForSession(runtimeIndexes, selectedSessionId),
-    );
-    const beforeSequence =
-      currentState?.cursorSequence ?? oldestRuntimeEventSequence(currentSessionEvents);
-    if (!beforeSequence) return false;
-
-    chatHistoryLoadingSessionIdsRef.current.add(selectedSessionId);
-    setChatHistoryLoadStates((current) => ({
-      ...current,
-      [selectedSessionId]: {
-        cursorSequence: current[selectedSessionId]?.cursorSequence ?? beforeSequence,
-        hasMore: current[selectedSessionId]?.hasMore ?? true,
-        loading: true,
-        totalMatchingEvents: current[selectedSessionId]?.totalMatchingEvents ?? null,
-      },
-    }));
-
-    try {
-      const page = await api.runtimeEventsPage(connection, {
-        sessionId: selectedSessionId,
-        beforeSequence,
-        limit: CHAT_HISTORY_PAGE_LIMIT,
-      });
-      const pageEvents = page.events.map((entry) => entry.event);
-      setPagedSessionEvents((current) => ({
-        ...current,
-        [selectedSessionId]: mergeRuntimeEventLists(
-          pageEvents,
-          current[selectedSessionId] ?? EMPTY_RUNTIME_EVENTS,
-        ),
-      }));
-      setChatHistoryLoadStates((current) => ({
-        ...current,
-        [selectedSessionId]: {
-          cursorSequence: page.previousSequence,
-          hasMore: page.hasMore,
-          loading: false,
-          totalMatchingEvents: page.totalMatchingEvents,
-        },
-      }));
-      return pageEvents.length > 0;
-    } catch (historyError) {
-      setError(historyError instanceof Error ? historyError.message : String(historyError));
-      setChatHistoryLoadStates((current) => ({
-        ...current,
-        [selectedSessionId]: {
-          cursorSequence: current[selectedSessionId]?.cursorSequence ?? beforeSequence,
-          hasMore: current[selectedSessionId]?.hasMore ?? true,
-          loading: false,
-          totalMatchingEvents: current[selectedSessionId]?.totalMatchingEvents ?? null,
-        },
-      }));
-      return false;
-    } finally {
-      chatHistoryLoadingSessionIdsRef.current.delete(selectedSessionId);
-    }
-  }, [
+  const {
     chatHistoryLoadStates,
-    codexHistoryEvents.length,
+    loadMoreSelectedChatHistory,
+    selectedPagedSessionEvents,
+    selectedRuntimeIndexes,
+  } = useSelectedChatHistory({
+    approvals,
+    codexHistoryEvents,
     connection,
-    pagedSessionEvents,
+    latestServerSequence: bootstrap?.eventWindow?.latestSequence,
     runtimeIndexes,
     selectedSessionId,
+    serverId: bootstrap?.server.id,
     setCodexHistoryEvents,
     setCodexHistorySessions,
     setError,
-  ]);
-
-  const selectedPagedSessionEvents = selectedSessionId
-    ? (pagedSessionEvents[selectedSessionId] ?? EMPTY_RUNTIME_EVENTS)
-    : EMPTY_RUNTIME_EVENTS;
-  const selectedRuntimeEventCount = useMemo(
-    () => runtimeEventsForSession(runtimeIndexes, selectedSessionId).length,
-    [runtimeIndexes, selectedSessionId],
-  );
-  const selectedForwardEventSyncKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId))
-      return undefined;
-    if (chatHistoryLoadingSessionIdsRef.current.has(selectedSessionId)) return undefined;
-    if (selectedPagedSessionEvents.length > 0 || selectedRuntimeEventCount > 0) return undefined;
-
-    const latestSequence = bootstrap?.eventWindow?.latestSequence;
-    if (!latestSequence) return undefined;
-
-    const historySessionId = selectedSessionId;
-    const beforeSequence = latestSequence + 1;
-    chatHistoryLoadingSessionIdsRef.current.add(historySessionId);
-    setChatHistoryLoadStates((current) => ({
-      ...current,
-      [historySessionId]: {
-        cursorSequence: current[historySessionId]?.cursorSequence ?? beforeSequence,
-        hasMore: current[historySessionId]?.hasMore ?? true,
-        loading: true,
-        totalMatchingEvents: current[historySessionId]?.totalMatchingEvents ?? null,
-      },
-    }));
-
-    void api
-      .runtimeEventsPage(connection, {
-        sessionId: historySessionId,
-        beforeSequence,
-        limit: CHAT_HISTORY_PAGE_LIMIT,
-      })
-      .then((page) => {
-        const pageEvents = page.events.map((entry) => entry.event);
-        setPagedSessionEvents((current) => ({
-          ...current,
-          [historySessionId]: mergeRuntimeEventLists(
-            pageEvents,
-            current[historySessionId] ?? EMPTY_RUNTIME_EVENTS,
-          ),
-        }));
-        setChatHistoryLoadStates((current) => ({
-          ...current,
-          [historySessionId]: {
-            cursorSequence: page.previousSequence,
-            hasMore: page.hasMore,
-            loading: false,
-            totalMatchingEvents: page.totalMatchingEvents,
-          },
-        }));
-      })
-      .catch((historyError) => {
-        setError(historyError instanceof Error ? historyError.message : String(historyError));
-        setChatHistoryLoadStates((current) => ({
-          ...current,
-          [historySessionId]: {
-            cursorSequence: current[historySessionId]?.cursorSequence ?? beforeSequence,
-            hasMore: current[historySessionId]?.hasMore ?? true,
-            loading: false,
-            totalMatchingEvents: current[historySessionId]?.totalMatchingEvents ?? null,
-          },
-        }));
-      })
-      .finally(() => {
-        chatHistoryLoadingSessionIdsRef.current.delete(historySessionId);
-      });
-
-    return undefined;
-  }, [
-    bootstrap?.eventWindow?.latestSequence,
-    connection,
-    selectedPagedSessionEvents.length,
-    selectedRuntimeEventCount,
-    selectedSessionId,
-    setError,
-  ]);
-  useEffect(() => {
-    if (!connection || !selectedSessionId || isCodexHistorySessionId(selectedSessionId))
-      return undefined;
-    if (chatHistoryLoadingSessionIdsRef.current.has(selectedSessionId)) return undefined;
-    const latestServerSequence = bootstrap?.eventWindow?.latestSequence;
-    if (!latestServerSequence) return undefined;
-
-    const selectedEvents = mergeRuntimeEventLists(
-      selectedPagedSessionEvents,
-      runtimeEventsForSession(runtimeIndexes, selectedSessionId),
-    );
-    const latestSelectedSequence = latestRuntimeEventSequence(selectedEvents);
-    if (!latestSelectedSequence || latestSelectedSequence >= latestServerSequence) return undefined;
-
-    const syncKey = `${selectedSessionId}:${latestSelectedSequence}:${latestServerSequence}`;
-    if (selectedForwardEventSyncKeyRef.current === syncKey) return undefined;
-    selectedForwardEventSyncKeyRef.current = syncKey;
-
-    let cancelled = false;
-    void api
-      .runtimeEventsPage(connection, {
-        sessionId: selectedSessionId,
-        afterSequence: latestSelectedSequence,
-        limit: CHAT_HISTORY_PAGE_LIMIT,
-      })
-      .then((page) => {
-        if (cancelled) return;
-        const pageEvents = page.events.map((entry) => entry.event);
-        if (pageEvents.length === 0) return;
-        setPagedSessionEvents((current) =>
-          mergeRuntimeEventsIntoSessionPageCache(current, selectedSessionId, pageEvents),
-        );
-        setEvents((current) => mergeRuntimeEventLists(current, pageEvents));
-      })
-      .catch((historyError) => {
-        if (cancelled) return;
-        selectedForwardEventSyncKeyRef.current = null;
-        setError(historyError instanceof Error ? historyError.message : String(historyError));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    bootstrap?.eventWindow?.latestSequence,
-    connection,
-    runtimeIndexes,
-    selectedPagedSessionEvents,
-    selectedSessionId,
-    setError,
     setEvents,
-  ]);
-  const selectedRuntimeIndexes = useMemo(() => {
-    if (isCodexHistorySessionId(selectedSessionId))
-      return buildRuntimeIndexes(codexHistoryEvents, []);
-    if (!selectedSessionId || selectedPagedSessionEvents.length === 0) return runtimeIndexes;
-    return buildRuntimeIndexes(
-      mergeRuntimeEventLists(
-        selectedPagedSessionEvents,
-        runtimeEventsForSession(runtimeIndexes, selectedSessionId),
-      ),
-      approvals,
-    );
-  }, [
-    approvals,
-    codexHistoryEvents,
-    runtimeIndexes,
-    selectedPagedSessionEvents,
-    selectedSessionId,
-  ]);
+  });
 
   const {
     activeSessions,
@@ -1043,42 +661,17 @@ export function App() {
     projectsExpanded,
     chatRowsVisibleCount,
   });
-  const recordPendingChatUserMessage = useCallback((message: PendingChatUserMessage) => {
-    setPendingChatUserMessages((current) => ({
-      ...current,
-      [message.sessionId]: message,
-    }));
-  }, []);
-  const clearPendingChatUserMessage = useCallback((sessionId: string, messageId: string) => {
-    setPendingChatUserMessages((current) => {
-      if (current[sessionId]?.id !== messageId) return current;
-      const next = { ...current };
-      delete next[sessionId];
-      return next;
-    });
-  }, []);
-  useEffect(() => {
-    setPendingChatUserMessages((current) => {
-      let next = current;
-      for (const [sessionId, pendingMessage] of Object.entries(current)) {
-        const realMessages = buildCachedChatMessages(
-          runtimeEventsForSession(runtimeIndexes, sessionId),
-        );
-        if (!hasMatchingUserMessage(realMessages, pendingMessage)) continue;
-        if (next === current) next = { ...current };
-        delete next[sessionId];
-      }
-      return next;
-    });
-  }, [runtimeIndexes]);
-  const visibleChatMessages = useMemo(
-    () =>
-      appendPendingUserChatMessage(
-        chatMessages,
-        selectedSessionId ? pendingChatUserMessages[selectedSessionId] : null,
-      ),
-    [chatMessages, pendingChatUserMessages, selectedSessionId],
-  );
+  const {
+    clearPendingChatUserMessage,
+    pendingChatUserMessages,
+    recordPendingChatUserMessage,
+    visibleChatMessages,
+  } = usePendingChatMessages({
+    chatMessages,
+    runtimeIndexes,
+    selectedSessionId,
+    serverId: bootstrap?.server.id,
+  });
   const activeTerminalScope = useMemo<TerminalScope>(
     () => terminalScopeForSelection({ selectedAppId, selectedProjectId, selectedSessionId }),
     [selectedAppId, selectedProjectId, selectedSessionId],
@@ -1102,199 +695,35 @@ export function App() {
     });
   }, [activeTerminalScope]);
   const terminalSummaries = useMemo(() => terminalScopeSummaries(terminalTabs), [terminalTabs]);
-  const codexHistoryPrefetchSessionKey = useMemo(() => {
-    const ids: string[] = [];
-    const seen = new Set<string>();
-    const addSession = (session: { id: string } | null | undefined) => {
-      if (
-        !session ||
-        session.id === selectedSessionId ||
-        !isCodexHistorySessionId(session.id) ||
-        seen.has(session.id)
-      ) {
-        return;
-      }
-      seen.add(session.id);
-      ids.push(session.id);
-    };
-
-    for (const item of visibleProjectRows) {
-      for (const session of (projectSessionRowsByProjectId[item.id] ?? []).slice(0, 2)) {
-        addSession(session);
-      }
-    }
-
-    for (const projectId of expandedProjectIds) {
-      for (const session of (projectSessionRowsByProjectId[projectId] ?? []).slice(
-        0,
-        SIDEBAR_SECTION_LIMIT,
-      )) {
-        addSession(session);
-      }
-    }
-
-    for (const session of pinnedSessions) addSession(session);
-    for (const session of visibleChatRows) addSession(session);
-
-    return ids.slice(0, 8).join("\n");
-  }, [
+  const {
+    runningSessionIds,
+    selectedSessionRunning,
+    selectedSteerAutoDispatchBlocked,
+    selectedSteerAutoDispatchReady,
+    sidebarGoalRuntimeBySessionId,
+    sidebarSubagentRuntimeBySessionId,
+  } = useSidebarRuntimeState({
+    codexHistoryEvents,
+    codexHistorySessions,
+    connection,
     expandedProjectIds,
+    goalRuntime,
+    pendingApproval,
     pinnedSessions,
     projectSessionRowsByProjectId,
-    selectedSessionId,
-    visibleChatRows,
-    visibleProjectRows,
-  ]);
-  const applySidebarCodexHistoryPayload = useCallback(
-    (payload: { session: Session; events: RuntimeEvent[] }) => {
-      setCodexHistorySidebarEvents((current) =>
-        current[payload.session.id] === payload.events
-          ? current
-          : { ...current, [payload.session.id]: payload.events },
-      );
-      setCodexHistorySessions((current) =>
-        upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
-      );
-    },
-    [setCodexHistorySessions],
-  );
-  useEffect(() => {
-    if (
-      !selectedSession ||
-      !selectedSessionId ||
-      !isCodexHistorySessionId(selectedSessionId) ||
-      codexHistoryEvents.length === 0
-    ) {
-      return;
-    }
-    applySidebarCodexHistoryPayload({
-      session: selectedSession,
-      events: codexHistoryEvents,
-    });
-  }, [applySidebarCodexHistoryPayload, codexHistoryEvents, selectedSession, selectedSessionId]);
-  useEffect(() => {
-    if (!connection || !codexHistoryPrefetchSessionKey) return undefined;
-    let cancelled = false;
-    const timers: number[] = [];
-    const prefetchConnection = connection;
-    const sessionIds = codexHistoryPrefetchSessionKey.split("\n").filter(Boolean);
-
-    const loadSidebarThread = (sessionId: string) => {
-      void loadCodexHistoryThreadPayload(prefetchConnection, sessionId)
-        .then((payload) => {
-          if (cancelled) return;
-          applySidebarCodexHistoryPayload(payload);
-        })
-        .catch(() => undefined);
-    };
-
-    sessionIds.forEach((sessionId, index) => {
-      const prefetch = () => {
-        const cachedPayload = cachedCodexHistoryThreadPayload(prefetchConnection, sessionId);
-        if (cachedPayload) applySidebarCodexHistoryPayload(cachedPayload);
-        if (!cachedPayload) loadSidebarThread(sessionId);
-      };
-      if (index === 0) {
-        prefetch();
-      } else {
-        timers.push(window.setTimeout(prefetch, Math.min(index * 250, 1000)));
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      for (const timer of timers) window.clearTimeout(timer);
-    };
-  }, [applySidebarCodexHistoryPayload, codexHistoryPrefetchSessionKey, connection]);
-  const sidebarSessionById = useMemo(
-    () => new Map(sidebarSessions.map((session) => [session.id, session])),
-    [sidebarSessions],
-  );
-  const sidebarGoalRuntimeBySessionId = useMemo(() => {
-    const next = new Map(runtimeIndexes.latestGoalRuntimeBySessionId);
-    for (const session of sidebarSessions) {
-      const metadataGoalRuntime =
-        session.status === "active" ? activeGoalRuntimeFromSessionMetadata(session.metadata) : null;
-      if (metadataGoalRuntime) next.set(session.id, metadataGoalRuntime);
-    }
-    for (const historyEventsBySessionId of [codexHistorySidebarEvents, rightChatHistoryEvents]) {
-      for (const [sessionId, historyEvents] of Object.entries(historyEventsBySessionId)) {
-        const historySession = sidebarSessionById.get(sessionId);
-        const metadataGoalRuntime =
-          historySession?.status === "active"
-            ? activeGoalRuntimeFromSessionMetadata(historySession.metadata)
-            : null;
-        const historyGoalRuntime =
-          latestCreatePipelineRuntimeFromEvents(historyEvents) ??
-          latestGoalRuntimeFromEvents(historyEvents) ??
-          (historySession?.status === "active"
-            ? (latestKnownActiveGoalRuntimeFromEvents(historyEvents) ?? metadataGoalRuntime)
-            : null);
-        if (historyGoalRuntime) {
-          next.set(sessionId, historyGoalRuntime);
-        } else {
-          next.delete(sessionId);
-        }
-      }
-    }
-    if (selectedSessionId) {
-      if (goalRuntime) {
-        next.set(selectedSessionId, goalRuntime);
-      } else if (selectedSession?.status === "active" && codexHistoryEvents.length > 0) {
-        const knownActiveGoalRuntime =
-          latestCreatePipelineRuntimeFromEvents(codexHistoryEvents) ??
-          latestKnownActiveGoalRuntimeFromEvents(codexHistoryEvents) ??
-          activeGoalRuntimeFromSessionMetadata(selectedSession.metadata);
-        if (knownActiveGoalRuntime) {
-          next.set(selectedSessionId, knownActiveGoalRuntime);
-        } else {
-          next.delete(selectedSessionId);
-        }
-      } else if (!isCodexHistorySessionId(selectedSessionId) || codexHistoryEvents.length > 0) {
-        next.delete(selectedSessionId);
-      }
-    }
-    return next;
-  }, [
-    codexHistoryEvents.length,
-    codexHistorySidebarEvents,
-    goalRuntime,
     rightChatHistoryEvents,
-    runtimeIndexes.latestGoalRuntimeBySessionId,
-    selectedSession?.status,
-    selectedSession?.metadata,
-    selectedSessionId,
-    sidebarSessionById,
-    sidebarSessions,
-  ]);
-  const sidebarSubagentRuntimeBySessionId = useMemo(() => {
-    const next = new Map(runtimeIndexes.latestSubagentRuntimeBySessionId);
-    if (selectedSessionId) {
-      if (subagentRuntime) {
-        next.set(selectedSessionId, subagentRuntime);
-      } else {
-        next.delete(selectedSessionId);
-      }
-    }
-    return next;
-  }, [runtimeIndexes.latestSubagentRuntimeBySessionId, selectedSessionId, subagentRuntime]);
-  const { runningSessionIds, selectedSessionRunning } = useRunningSessionState({
-    goalRuntime,
-    goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
     runtimeIndexes,
     selectedSession,
     selectedSessionId,
+    serverId: bootstrap?.server.id,
+    sessionEvents,
+    setCodexHistorySessions,
+    setError,
     sidebarSessions,
-    subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
+    subagentRuntime,
+    visibleChatRows,
+    visibleProjectRows,
   });
-  const selectedTurnCompletionState = useMemo(
-    () => latestTurnCompletionState(sessionEvents),
-    [sessionEvents],
-  );
-  const selectedSteerAutoDispatchReady =
-    selectedTurnCompletionState === "completed" && !pendingApproval && !selectedSessionRunning;
-  const selectedSteerAutoDispatchBlocked =
-    Boolean(pendingApproval) || selectedTurnCompletionState === "blocked";
   const {
     dragItem,
     pinnedPreviewKeys,
@@ -1422,98 +851,28 @@ export function App() {
             : view === "cloud"
               ? (selectedCloudWorkItem?.title ?? "Cloud")
               : (selectedSession?.title ?? "New task");
-  const browserConversationId =
-    selectedSessionId ??
-    `draft:${selectedProjectId ?? selectedAppId ?? selectedCloudProject?.id ?? "general"}`;
-  const workspaceDiffPanelSourceKey = useMemo(() => {
-    if (view === "cloud" && selectedCloudWorkItem?.id)
-      return `cloud-work:${selectedCloudWorkItem.id}`;
-    if (viewWorkspaceId) return `${viewWorkspaceKind ?? "workspace"}:${viewWorkspaceId}`;
-    if (viewWorkspaceAppId) return `app:${viewWorkspaceAppId}`;
-    if (selectedSession?.cwd && !isCloudWorkspaceKind(selectedSession.workspaceKind)) {
-      return `cwd:${selectedSession.cwd}`;
-    }
-    return "none";
-  }, [
-    selectedCloudWorkItem?.id,
-    selectedSession?.cwd,
-    selectedSession?.workspaceKind,
+  const {
+    browserConversationId,
+    handleWorkspaceDiffPanelViewStateChange,
+  } = useConversationSidebarState({
+    appDispatch,
+    diffPanelExpanded,
+    diffPanelOpen,
+    rightChatPanels,
+    rightPanelMode,
+    selectedAppId,
+    selectedCloudProject,
+    selectedCloudWorkItem,
+    selectedProjectId,
+    selectedSession,
+    selectedSessionId,
+    setWorkspaceDiffPanelViewState,
     view,
     viewWorkspaceAppId,
     viewWorkspaceId,
     viewWorkspaceKind,
-  ]);
-  const workspaceDiffPanelStateKey = rightSidebarWorkspacePanelStateKey({
-    conversationId: browserConversationId,
-    workspaceSourceKey: workspaceDiffPanelSourceKey,
+    workspaceDiffPanelViewState,
   });
-  const currentRightSidebarConversationState = useMemo(
-    () =>
-      rightSidebarConversationState({
-        diffPanelExpanded,
-        diffPanelOpen,
-        rightChatPanels,
-        rightPanelMode,
-      }),
-    [diffPanelExpanded, diffPanelOpen, rightChatPanels, rightPanelMode],
-  );
-  useEffect(() => {
-    const activeConversationId = activeRightSidebarConversationRef.current;
-    if (!activeConversationId) return;
-    rightSidebarStateByConversationRef.current.set(
-      activeConversationId,
-      cloneRightSidebarConversationState(currentRightSidebarConversationState),
-    );
-  }, [browserConversationId, currentRightSidebarConversationState]);
-  useEffect(() => {
-    const previousConversationId = activeRightSidebarConversationRef.current;
-    if (previousConversationId === browserConversationId) return;
-
-    activeRightSidebarConversationRef.current = browserConversationId;
-    const restoredState =
-      rightSidebarStateByConversationRef.current.get(browserConversationId) ??
-      defaultRightSidebarConversationStateForSwitch({
-        keepOpen: currentRightSidebarConversationState.diffPanelOpen,
-      });
-    if (rightSidebarConversationStatesEqual(currentRightSidebarConversationState, restoredState))
-      return;
-    appDispatch({
-      type: "patch",
-      patch: cloneRightSidebarConversationState(restoredState),
-    });
-  }, [browserConversationId, currentRightSidebarConversationState]);
-  useEffect(() => {
-    const activeStateKey = activeWorkspaceDiffPanelStateKeyRef.current;
-    if (!activeStateKey) return;
-    workspaceDiffPanelStateByScopeRef.current.set(
-      activeStateKey,
-      cloneWorkspaceDiffPanelViewState(workspaceDiffPanelViewState),
-    );
-  }, [workspaceDiffPanelStateKey, workspaceDiffPanelViewState]);
-  useEffect(() => {
-    const previousStateKey = activeWorkspaceDiffPanelStateKeyRef.current;
-    if (previousStateKey === workspaceDiffPanelStateKey) return;
-
-    activeWorkspaceDiffPanelStateKeyRef.current = workspaceDiffPanelStateKey;
-    const restoredWorkspaceDiffPanelState =
-      workspaceDiffPanelStateByScopeRef.current.get(workspaceDiffPanelStateKey) ??
-      defaultWorkspaceDiffPanelViewState();
-    setWorkspaceDiffPanelViewState((current) =>
-      workspaceDiffPanelViewStatesEqual(current, restoredWorkspaceDiffPanelState)
-        ? current
-        : cloneWorkspaceDiffPanelViewState(restoredWorkspaceDiffPanelState),
-    );
-  }, [workspaceDiffPanelStateKey]);
-  const handleWorkspaceDiffPanelViewStateChange = useCallback(
-    (state: WorkspaceDiffPanelViewState) => {
-      setWorkspaceDiffPanelViewState((current) =>
-        workspaceDiffPanelViewStatesEqual(current, state)
-          ? current
-          : cloneWorkspaceDiffPanelViewState(state),
-      );
-    },
-    [],
-  );
   const openSessionInChat = useCallback(
     (sessionId: string) => {
       setSelectedSessionId(sessionId);
@@ -1766,7 +1125,7 @@ export function App() {
     draftModel,
     draftProvider,
     expandProject,
-    prompt,
+    getPrompt: composerDraftStore.getSnapshot,
     apps: bootstrap?.apps ?? [],
     connectedAppMentions,
     mentionedAppId,
@@ -1822,7 +1181,6 @@ export function App() {
   const {
     changeWorkspaceTarget: changeWorkspaceTargetBase,
     moveProjectToCloud,
-    openCloudSetupForLocalProject,
     startCloudSetupUpload,
   } = useCloudWorkspaceSetup({
     account,
@@ -1988,7 +1346,7 @@ export function App() {
       promptOverride?: string,
       options: ComposerSubmitOptions = {},
     ) => {
-      const promptForSubmission = promptOverride ?? prompt;
+      const promptForSubmission = promptOverride ?? composerDraftStore.getSnapshot();
       const queuedSubmission = queuedCloudWorkSubmission({
         pendingWorkspaceTarget,
         actionSelected: Boolean(action),
@@ -2037,7 +1395,7 @@ export function App() {
     [
       createCloudWork,
       pendingWorkspaceTarget,
-      prompt,
+      composerDraftStore,
       selectedCloudProject?.id,
       selectedProjectConfirmedCloudProject?.id,
       selectedProject?.linkedSandboxProject?.defaultBranch,
@@ -2096,387 +1454,50 @@ export function App() {
     onOpenSession: openSessionInChat,
     onShowBrowserPanel: showBrowserPanel,
   });
-  const showRightPanelDiffTab = useCallback(
-    (tab: WorkspaceDiffTabRequest["tab"]) => {
-      setRightPanelTabRequest((current) => ({ id: (current?.id ?? 0) + 1, tab }));
-      showChangesPanel();
-    },
-    [showChangesPanel],
-  );
-  const openRightChatPanel = useCallback(
-    (session: Session | null = null) => {
-      const nextPanel = createRightChatPanel({
-        sessionId: session?.id ?? null,
-        provider: session?.provider ?? activeProvider,
-        model: session?.modelRef?.modelId ?? activeModel,
-      });
-      setRightChatPanels((current) => {
-        if (session?.id && current.some((panel) => panel.sessionId === session.id)) return current;
-        return [...current, nextPanel];
-      });
-      setDiffPanelOpen(true);
-      setRightPanelMode("chat");
-      setView("chat");
-    },
-    [activeModel, activeProvider, setDiffPanelOpen, setRightChatPanels, setRightPanelMode, setView],
-  );
-  useEffect(() => {
-    if (!startup.ready) return;
-
-    const knownSessionIds = knownSubagentChildSessionIdsRef.current;
-    if (!knownSessionIds) {
-      knownSubagentChildSessionIdsRef.current = new Set(
-        sidebarSessions
-          .filter((session) => Boolean(session.parentSessionId && session.subagentRunId))
-          .map((session) => session.id),
-      );
-      return;
-    }
-
-    const observed = newlyObservedSubagentSessions({
-      sessions: sidebarSessions,
-      knownSessionIds,
-    });
-    knownSubagentChildSessionIdsRef.current = observed.knownSessionIds;
-    for (const session of observed.newSessions) {
-      pendingAutoDockSubagentSessionsRef.current.set(session.id, session);
-    }
-
-    const activeParentSessionId = selectedSession?.parentSessionId ?? selectedSession?.id ?? null;
-    if (!activeParentSessionId) return;
-    const pendingForParent = [...pendingAutoDockSubagentSessionsRef.current.values()].filter(
-      (session) => session.parentSessionId === activeParentSessionId,
-    );
-    if (pendingForParent.length === 0) return;
-
-    for (const session of pendingForParent) {
-      pendingAutoDockSubagentSessionsRef.current.delete(session.id);
-    }
-    setRightChatPanels((current) => appendSubagentRightChatPanels(current, pendingForParent));
-    setDiffPanelOpen(true);
-    setRightPanelMode("chat");
-  }, [
-    selectedSession?.id,
-    selectedSession?.parentSessionId,
-    setDiffPanelOpen,
-    setRightChatPanels,
-    setRightPanelMode,
-    sidebarSessions,
-    startup.ready,
-  ]);
-  const showRightChatPanel = useCallback(() => {
-    if (rightChatPanels.length === 0) {
-      openRightChatPanel(null);
-      return;
-    }
-    setDiffPanelOpen(true);
-    setRightPanelMode("chat");
-    setView("chat");
-  }, [openRightChatPanel, rightChatPanels.length, setDiffPanelOpen, setRightPanelMode, setView]);
-  const closeRightChatPanel = useCallback(
-    (panelId: string) => {
-      const closesLastPanel =
-        rightChatPanels.length <= 1 && rightChatPanels.some((panel) => panel.id === panelId);
-      const removePanel = () => {
-        setRightChatPanels((current) => current.filter((panel) => panel.id !== panelId));
-      };
-      if (closesLastPanel && rightPanelMode === "chat") {
-        showRightPanelDiffTab("files");
-        if (typeof window === "undefined") {
-          removePanel();
-          return;
-        }
-        window.requestAnimationFrame(removePanel);
-        return;
-      }
-      removePanel();
-    },
-    [rightChatPanels, rightPanelMode, setRightChatPanels, showRightPanelDiffTab],
-  );
-  const updateRightChatPrompt = useCallback(
-    (panelId: string, nextPrompt: string) => {
-      setRightChatPanels((current) =>
-        current.map((panel) => (panel.id === panelId ? { ...panel, prompt: nextPrompt } : panel)),
-      );
-    },
-    [setRightChatPanels],
-  );
-  const updateRightChatModel = useCallback(
-    (panelId: string, model: string) => {
-      const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
-      if (panel) {
-        setDraftProvider(panel.provider);
-        setDraftModel(model);
-      }
-      setRightChatPanels((current) =>
-        current.map((panel) => (panel.id === panelId ? { ...panel, model } : panel)),
-      );
-    },
-    [rightChatPanels, setDraftModel, setDraftProvider, setRightChatPanels],
-  );
-  const updateRightChatProvider = useCallback(
-    (panelId: string, provider: RightChatPanel["provider"]) => {
-      const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
-      const model = normalizeChatModel(provider, panel?.model, bootstrap?.providers ?? null);
-      if (panel) {
-        setDraftProvider(provider);
-        setDraftModel(model);
-      }
-      setRightChatPanels((current) =>
-        current.map((panel) =>
-          panel.id === panelId
-            ? {
-                ...panel,
-                provider,
-                model: normalizeChatModel(provider, panel.model, bootstrap?.providers ?? null),
-              }
-            : panel,
-        ),
-      );
-    },
-    [bootstrap?.providers, rightChatPanels, setDraftModel, setDraftProvider, setRightChatPanels],
-  );
-  const rightCodexHistorySessionKey = useMemo(() => {
-    const seen = new Set<string>();
-    const sessionIds: string[] = [];
-    for (const panel of rightChatPanels) {
-      if (
-        !isCodexHistorySessionId(panel.sessionId) ||
-        !panel.sessionId ||
-        seen.has(panel.sessionId)
-      )
-        continue;
-      seen.add(panel.sessionId);
-      sessionIds.push(panel.sessionId);
-    }
-    return sessionIds.join("\n");
-  }, [rightChatPanels]);
-
-  useEffect(() => {
-    if (!connection || !rightCodexHistorySessionKey) return undefined;
-
-    const historyConnection = connection;
-    let cancelled = false;
-    const refreshTimers: number[] = [];
-    const sessionIds = rightCodexHistorySessionKey.split("\n").filter(Boolean);
-
-    function scheduleRefresh(sessionId: string) {
-      const timer = window.setTimeout(() => {
-        loadThread(sessionId, true);
-      }, 2500);
-      refreshTimers.push(timer);
-    }
-
-    function loadThread(sessionId: string, force: boolean) {
-      void loadCodexHistoryThreadPayload(historyConnection, sessionId, { force })
-        .then((payload) => {
-          if (cancelled) return;
-          applyRightCodexHistoryPayload(payload);
-          if (
-            payload.session.status === "active" ||
-            latestGoalRuntimeFromEvents(payload.events)?.tone === "active"
-          ) {
-            scheduleRefresh(sessionId);
-          }
-        })
-        .catch((historyError) => {
-          if (!cancelled)
-            setError(historyError instanceof Error ? historyError.message : String(historyError));
-        });
-    }
-
-    for (const sessionId of sessionIds) {
-      const cachedPayload = cachedCodexHistoryThreadPayload(historyConnection, sessionId);
-      if (cachedPayload) applyRightCodexHistoryPayload(cachedPayload);
-      loadThread(sessionId, Boolean(cachedPayload));
-    }
-
-    return () => {
-      cancelled = true;
-      for (const timer of refreshTimers) window.clearTimeout(timer);
-    };
-  }, [applyRightCodexHistoryPayload, connection, rightCodexHistorySessionKey, setError]);
-
-  const rightChatPanelViews = useMemo(() => {
-    const sessionById = new Map(sidebarSessions.map((session) => [session.id, session]));
-    return rightChatPanels.map((panel) => {
-      const session = panel.sessionId ? (sessionById.get(panel.sessionId) ?? null) : null;
-      const provider = session?.provider ?? panel.provider;
-      const isHistoryPanel = isCodexHistorySessionId(panel.sessionId);
-      const panelEvents = isHistoryPanel
-        ? ((panel.sessionId ? rightChatHistoryEvents[panel.sessionId] : undefined) ??
-          (panel.sessionId === selectedSessionId ? codexHistoryEvents : EMPTY_RUNTIME_EVENTS))
-        : runtimeEventsForSession(runtimeIndexes, panel.sessionId);
-      const panelIndexes = isHistoryPanel ? buildRuntimeIndexes(panelEvents, []) : runtimeIndexes;
-      const panelTurnCompletionState = latestTurnCompletionState(panelEvents);
-      const panelPendingApproval = latestPendingApprovalForSession(panelIndexes, panel.sessionId);
-      const panelRunning = Boolean(
-        session &&
-        (runningSessionIds.has(session.id) ||
-          (!session.systemKind &&
-            session.status === "active" &&
-            panelTurnCompletionState === "pending")),
-      );
-      const contextWindowStatusForPanel = contextWindowStatusFromUsage({
-        provider,
-        snapshot: latestContextUsageForSession(panelIndexes, panel.sessionId),
-        preferences: appDefaults.contextCompaction,
-      });
-      const workspaceRootPath = session?.cwd ?? null;
-      const activeWorkspaceAppIdForPanel =
-        session?.appId ??
-        session?.localProjectId ??
-        (session?.workspaceKind === "local_project" ? (session.workspaceId ?? null) : null) ??
-        (session?.cwd && !isCloudWorkspaceKind(session.workspaceKind)
-          ? localPathWorkspaceId(session.cwd)
-          : null);
-      const panelMessages = buildCachedChatMessages(panelEvents);
-      return {
-        ...panel,
-        session,
-        title: session?.title ?? "New task",
-        messages: appendPendingUserChatMessage(
-          panelMessages,
-          panel.sessionId ? pendingChatUserMessages[panel.sessionId] : null,
-        ),
-        contextWindowStatus: contextWindowStatusForPanel,
-        goalRuntime: latestGoalRuntimeForSession(panelIndexes, panel.sessionId),
-        pendingApproval: panelPendingApproval,
-        running: panelRunning,
-        steerAutoDispatchBlocked:
-          Boolean(panelPendingApproval) || panelTurnCompletionState === "blocked",
-        steerAutoDispatchReady:
-          panelTurnCompletionState === "completed" && !panelPendingApproval && !panelRunning,
-        workspaceRootPath,
-        activeWorkspaceAppId: activeWorkspaceAppIdForPanel,
-      };
-    });
-  }, [
+  const {
+    closeRightChatPanel,
+    openRightChatPanel,
+    rightChatPanelViews,
+    showRightChatPanel,
+    showRightPanelDiffTab,
+    submitRightChatPrompt,
+    updateRightChatModel,
+    updateRightChatPrompt,
+    updateRightChatProvider,
+  } = useRightChatPanels({
+    activeModel,
+    activeProvider,
+    applyRightCodexHistoryPayload,
     codexHistoryEvents,
+    connectedAppMentions,
+    connection,
+    contextCompaction: appDefaults.contextCompaction,
+    insights,
+    openPondCommandAccessMode,
+    pendingChatUserMessages,
+    providerSettings: bootstrap?.providers ?? null,
     rightChatHistoryEvents,
     rightChatPanels,
-    pendingChatUserMessages,
+    rightPanelMode,
     runtimeIndexes,
     runningSessionIds,
+    selectedSession,
     selectedSessionId,
+    sendPrompt,
+    setDiffPanelOpen,
+    setDraftModel,
+    setDraftProvider,
+    setError,
+    setRightChatHistoryEvents,
+    setRightChatPanels,
+    setRightPanelMode,
+    setRightPanelTabRequest,
+    setView,
+    showChangesPanel,
+    showToast,
     sidebarSessions,
-    appDefaults.contextCompaction,
-  ]);
-  const submitRightChatPrompt = useCallback(
-    async (
-      panelId: string,
-      attachments: ChatAttachment[] = [],
-      action: SandboxActionCatalogEntry | null = null,
-      command: ComposerSlashCommand | null = null,
-      options: ComposerSubmitOptions = {},
-    ) => {
-      const panel = rightChatPanels.find((candidate) => candidate.id === panelId);
-      if (!panel) return false;
-      const panelPromptForSubmit = options.promptOverride ?? panel.prompt;
-      if (command?.id === "insights") {
-        setView("insights");
-        if (!options.preservePrompt) updateRightChatPrompt(panelId, "");
-        const payload = await insights.runScan();
-        const activeCount = payload?.summary.activeCount ?? insights.summary?.activeCount ?? 0;
-        showToast(`${activeCount} active insight${activeCount === 1 ? "" : "s"}.`, "info");
-        return true;
-      }
-      if (command && !panelPromptForSubmit.trim()) {
-        showToast(`Add instructions after ${command.command}.`, "info");
-        return false;
-      }
-      if (command && attachments.length > 0) {
-        showToast(
-          `${command.command} tasks do not accept attachments yet. Add file context in the task thread.`,
-          "error",
-        );
-        return false;
-      }
-      if (command?.id === "submit-issue" && !hasGitHubIssueSubmitConnection(connectedAppMentions)) {
-        showToast("Connect the GitHub app before using /submit-issue.", "error");
-        return false;
-      }
-      const session = panel.sessionId
-        ? (sidebarSessions.find((candidate) => candidate.id === panel.sessionId) ?? null)
-        : null;
-      const panelOpenPondCommandAccessMode =
-        session?.provider === "codex"
-          ? openPondCommandAccessMode
-          : (session?.openPondCommandAccessMode ?? openPondCommandAccessMode);
-      const promptForTurn = command
-        ? promptForRightChatCommand(command, panelPromptForSubmit)
-        : panelPromptForSubmit;
-      const sessionEvents = isCodexHistorySessionId(panel.sessionId)
-        ? ((panel.sessionId ? rightChatHistoryEvents[panel.sessionId] : undefined) ??
-          (panel.sessionId === selectedSessionId ? codexHistoryEvents : EMPTY_RUNTIME_EVENTS))
-        : runtimeEventsForSession(runtimeIndexes, panel.sessionId);
-      const appendRightCodexHistoryEvent =
-        isCodexHistorySessionId(panel.sessionId) && panel.sessionId
-          ? (event: RuntimeEvent) => {
-              const historySessionId = panel.sessionId!;
-              setRightChatHistoryEvents((current) => ({
-                ...current,
-                [historySessionId]: mergeRuntimeEventLists(
-                  current[historySessionId] ?? sessionEvents,
-                  [event],
-                ),
-              }));
-            }
-          : undefined;
-      return sendPrompt(attachments, action, promptForTurn, {
-        session,
-        selectSession: false,
-        provider: panel.provider,
-        model: panel.model,
-        openPondCommandAccessMode: panelOpenPondCommandAccessMode,
-        chatMessages: buildCachedChatMessages(sessionEvents),
-        displayPrompt: options.displayPrompt,
-        usageAttribution:
-          command?.id === "submit-issue"
-            ? {
-                surface: "chat",
-                workflowKind: "slash_command",
-                commandName: command.command,
-                commandSource: "composer_selection",
-              }
-            : undefined,
-        onCodexHistoryOptimisticEvent: appendRightCodexHistoryEvent,
-        clearPrompt: options.preservePrompt
-          ? () => undefined
-          : () => updateRightChatPrompt(panelId, ""),
-        onSessionCreated: (createdSession) => {
-          setRightChatPanels((current) =>
-            current.map((candidate) =>
-              candidate.id === panelId
-                ? {
-                    ...candidate,
-                    sessionId: createdSession.id,
-                    provider: createdSession.provider,
-                    model: createdSession.modelRef?.modelId ?? candidate.model,
-                  }
-                : candidate,
-            ),
-          );
-        },
-      });
-    },
-    [
-      codexHistoryEvents,
-      connectedAppMentions,
-      rightChatHistoryEvents,
-      rightChatPanels,
-      runtimeIndexes,
-      selectedSessionId,
-      insights.runScan,
-      insights.summary?.activeCount,
-      openPondCommandAccessMode,
-      sendPrompt,
-      setRightChatPanels,
-      sidebarSessions,
-      showToast,
-      updateRightChatPrompt,
-    ],
-  );
+    startupReady: startup.ready,
+  });
   const openProfileSettings = useCallback(() => {
     setSectionMenuOpen(null);
     setView("profile");
@@ -2484,7 +1505,7 @@ export function App() {
   }, [setSectionMenuOpen, setSidebarOpen, setView]);
   const diagnosticEvents = useMemo(
     () =>
-      mergeRuntimeEventLists(
+      mergeLiveRuntimeEventLists(
         bootstrap?.diagnostics ?? EMPTY_RUNTIME_EVENTS,
         events.filter((event) => event.name === "diagnostic"),
       ),
@@ -2549,7 +1570,7 @@ export function App() {
   const selectedChatHistoryCursor = selectedSessionId
     ? (selectedChatHistoryLoadState?.cursorSequence ??
       oldestRuntimeEventSequence(
-        mergeRuntimeEventLists(
+        mergeLiveRuntimeEventLists(
           selectedPagedSessionEvents,
           runtimeEventsForSession(runtimeIndexes, selectedSessionId),
         ),
@@ -2766,7 +1787,7 @@ export function App() {
         goalRuntime,
         subagentRuntime,
         selectedSessionId,
-        prompt,
+        composerDraftStore,
         mainComposerFocusRequestId,
         steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
@@ -2884,7 +1905,6 @@ export function App() {
         approveCreatePipelineTurn,
         cancelCreatePipelineTurn,
         reviseCreatePipelineTurn,
-        setPrompt,
         setMentionedAppId,
         showToast,
         sendPrompt: sendPromptFromMainComposer,

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import "../../styles/cloud/cloud-work.css";
 import type {
   CloudProject,
   CloudWorkItem,

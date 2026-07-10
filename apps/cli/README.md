@@ -2,6 +2,8 @@
 
 OpenPond CLI
 
+The generated [command reference](./docs/command-reference.md) is the authoritative command and option inventory.
+
 Install:
 
 ```bash

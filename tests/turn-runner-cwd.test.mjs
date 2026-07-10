@@ -47,8 +47,42 @@ function baseSession(overrides = {}) {
 
 function createMemoryStore({ events, turns, approvals = [] }) {
   return {
-    async snapshot() {
-      return { events, turns, approvals };
+    async runtimeEventsForSession(sessionId, query = {}) {
+      return events
+        .map((event, index) => ({ ...event, sequence: event.sequence ?? index + 1 }))
+        .filter((event) =>
+          event.sessionId === sessionId &&
+          (query.afterSequence == null || event.sequence > query.afterSequence) &&
+          (!query.names?.length || query.names.includes(event.name))
+        )
+        .slice(0, query.limit ?? undefined);
+    },
+    async latestAssistantTextForSession(sessionId) {
+      return events.findLast((event) =>
+        event.sessionId === sessionId && event.name === "assistant.delta" && event.output?.trim()
+      )?.output?.trim() ?? null;
+    },
+    async currentOpenPondThreadGoal(sessionId) {
+      return goalFromEvents(events, sessionId, null);
+    },
+    async openPondThreadGoalById(sessionId, goalId) {
+      return goalFromEvents(events, sessionId, goalId);
+    },
+    async latestTurnForSession(sessionId, status) {
+      return turns.findLast((turn) => turn.sessionId === sessionId && (!status || turn.status === status)) ?? null;
+    },
+    async countTurnsForSession(sessionId) {
+      return turns.filter((turn) => turn.sessionId === sessionId).length;
+    },
+    async hasSubagentParentWakeTurn(sessionId, messageId) {
+      return turns.some((turn) =>
+        turn.sessionId === sessionId && turn.metadata?.subagentParentWake?.messageId === messageId
+      );
+    },
+    async countSubagentParentWakeTurns(sessionId, fromRunId) {
+      return turns.filter((turn) =>
+        turn.sessionId === sessionId && turn.metadata?.subagentParentWake?.fromRunId === fromRunId
+      ).length;
     },
     async getTurn(turnId) {
       return turns.find((turn) => turn.id === turnId) ?? null;
@@ -70,6 +104,19 @@ function createMemoryStore({ events, turns, approvals = [] }) {
       fn({ events, turns, approvals });
     },
   };
+}
+
+function goalFromEvents(events, sessionId, goalId) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.sessionId !== sessionId || event.name !== "diagnostic") continue;
+    const data = event.data && typeof event.data === "object" ? event.data : null;
+    const goal = data?.goal && typeof data.goal === "object" ? data.goal : null;
+    if (!goal || (goalId && goal.id !== goalId)) continue;
+    if (!goalId && ["completed", "failed", "cancelled", "stopped"].includes(goal.status)) return null;
+    return goal;
+  }
+  return null;
 }
 
 function upsertApprovalInto(approvals = []) {

@@ -1,7 +1,11 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
+import {
+  openPondConfigDirectory,
+  updatePrivateJsonFile,
+  writePrivateJsonFile,
+} from "./private-json-file.js";
 export type LocalSessionConfig = {
   token?: string;
   appId?: string | null;
@@ -194,7 +198,6 @@ export type LoadConfigOptions = {
   baseUrl?: string;
 };
 
-const GLOBAL_DIRNAME = ".openpond";
 const GLOBAL_CONFIG_FILENAME = "config.json";
 const DEFAULT_ACCOUNT_HANDLE = "default";
 const ACCOUNT_SCOPED_KEYS = [
@@ -212,15 +215,19 @@ export function getConfigPath(): string {
 }
 
 function getGlobalConfigPath(): string {
-  return path.join(os.homedir(), GLOBAL_DIRNAME, GLOBAL_CONFIG_FILENAME);
+  return path.join(openPondConfigDirectory(), GLOBAL_CONFIG_FILENAME);
 }
 
 async function loadConfigFile(filePath: string): Promise<LocalConfig> {
   try {
     const raw = await fs.readFile(filePath, "utf-8");
     return JSON.parse(raw) as LocalConfig;
-  } catch {
-    return {};
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    if (error instanceof SyntaxError) {
+      throw new Error(`OpenPond config is malformed JSON: ${filePath}`, { cause: error });
+    }
+    throw error;
   }
 }
 
@@ -969,14 +976,23 @@ function applyTopLevelPatch(global: LocalConfig, source: LocalConfig): void {
     }
   }
 }
-
 async function writeGlobalConfig(next: LocalConfig): Promise<void> {
-  const filePath = getGlobalConfigPath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const payload = JSON.stringify(next, null, 2);
-  await fs.writeFile(filePath, payload, "utf-8");
+  await writePrivateJsonFile(getGlobalConfigPath(), next);
 }
-
+async function updateGlobalConfig(update: (current: LocalConfig) => void): Promise<LocalConfig> {
+  try {
+    return await updatePrivateJsonFile<LocalConfig>(getGlobalConfigPath(), () => ({}), (raw) => {
+      const current = normalizeGlobalConfig(raw);
+      update(current);
+      return current;
+    });
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`OpenPond config is malformed JSON: ${getGlobalConfigPath()}`, { cause: error });
+    }
+    throw error;
+  }
+}
 export async function loadGlobalConfig(): Promise<LocalConfig> {
   const raw = await loadConfigFile(getGlobalConfigPath());
   return normalizeGlobalConfig(raw);
@@ -1039,24 +1055,22 @@ export async function setActiveProfile(
 ): Promise<ConfiguredProfile> {
   const requestedHandle = requireHandle(handle);
   const requestedBaseUrl = normalizeBaseUrl(options.baseUrl);
-  const global = await loadGlobalConfig();
-  const accounts = global.accounts ?? [];
-  const idx = findAccountIndexForSelector(
-    accounts,
-    requestedBaseUrl
-      ? { handle: requestedHandle, baseUrl: requestedBaseUrl }
-      : { handle: requestedHandle },
-    { requireUnambiguous: true }
-  );
-  if (idx === -1) {
-    throw new Error(`profile not found: ${requestedHandle}`);
-  }
-
-  global.activeProfile = selectorFromAccount(accounts[idx]!);
-  await writeGlobalConfig(global);
+  let selectedIndex = -1;
+  await updateGlobalConfig((global) => {
+    const accounts = global.accounts ?? [];
+    selectedIndex = findAccountIndexForSelector(
+      accounts,
+      requestedBaseUrl
+        ? { handle: requestedHandle, baseUrl: requestedBaseUrl }
+        : { handle: requestedHandle },
+      { requireUnambiguous: true }
+    );
+    if (selectedIndex === -1) throw new Error(`profile not found: ${requestedHandle}`);
+    global.activeProfile = selectorFromAccount(accounts[selectedIndex]!);
+  });
 
   const profiles = await listConfiguredProfiles();
-  return profiles.find((profile) => profile.isActive) ?? profiles[idx]!;
+  return profiles.find((profile) => profile.isActive) ?? profiles[selectedIndex]!;
 }
 
 export async function saveProfileApiKey(
@@ -1067,42 +1081,28 @@ export async function saveProfileApiKey(
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   const apiBaseUrl = normalizeBaseUrl(input.apiBaseUrl);
   const chatApiBaseUrl = normalizeBaseUrl(input.chatApiBaseUrl);
-  const global = await loadGlobalConfig();
-  const accounts = global.accounts ?? [];
-  const account = ensureAccount(accounts, handle, baseUrl);
-
-  account.apiKey = apiKey;
-  if (baseUrl) {
-    account.baseUrl = baseUrl;
-  }
-  if (apiBaseUrl) {
-    account.apiBaseUrl = apiBaseUrl;
-  } else if (input.apiBaseUrl === null) {
-    delete account.apiBaseUrl;
-  }
-  if (chatApiBaseUrl) {
-    account.chatApiBaseUrl = chatApiBaseUrl;
-  } else if (input.chatApiBaseUrl === null) {
-    delete account.chatApiBaseUrl;
-  }
-  if (input.environment === null) {
-    delete account.environment;
-  } else if (
-    typeof input.environment === "string" &&
-    input.environment.trim()
-  ) {
-    account.environment = input.environment.trim();
-  }
-
-  global.accounts = accounts;
-  if (input.setActive !== false) {
-    global.activeProfile = selectorFromAccount(account);
-  }
-  await writeGlobalConfig(global);
+  let savedSelector: ActiveProfileSelector = { handle };
+  await updateGlobalConfig((global) => {
+    const accounts = global.accounts ?? [];
+    const account = ensureAccount(accounts, handle, baseUrl);
+    account.apiKey = apiKey;
+    if (baseUrl) account.baseUrl = baseUrl;
+    if (apiBaseUrl) account.apiBaseUrl = apiBaseUrl;
+    else if (input.apiBaseUrl === null) delete account.apiBaseUrl;
+    if (chatApiBaseUrl) account.chatApiBaseUrl = chatApiBaseUrl;
+    else if (input.chatApiBaseUrl === null) delete account.chatApiBaseUrl;
+    if (input.environment === null) delete account.environment;
+    else if (typeof input.environment === "string" && input.environment.trim()) {
+      account.environment = input.environment.trim();
+    }
+    global.accounts = accounts;
+    savedSelector = selectorFromAccount(account);
+    if (input.setActive !== false) global.activeProfile = savedSelector;
+  });
 
   const profiles = await listConfiguredProfiles();
   const saved = profiles.find((profile) => {
-    if (!handleEquals(profile.handle, account.handle)) return false;
+    if (!handleEquals(profile.handle, savedSelector.handle)) return false;
     if (!baseUrl) return true;
     return normalizeBaseUrl(profile.baseUrl) === baseUrl;
   });
@@ -1120,8 +1120,8 @@ export async function saveConfig(next: LocalConfig): Promise<void> {
 }
 
 export async function saveGlobalConfig(next: LocalConfig): Promise<void> {
-  const current = await loadGlobalConfig();
-  applyTopLevelPatch(current, next);
-  applyAccountPatch(current, next, { undefinedDeletes: false });
-  await writeGlobalConfig(current);
+  await updateGlobalConfig((current) => {
+    applyTopLevelPatch(current, next);
+    applyAccountPatch(current, next, { undefinedDeletes: false });
+  });
 }

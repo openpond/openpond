@@ -1,4 +1,4 @@
-import { apiFetch, readApiJson } from "./api/core.js";
+import { apiFetch, LONG_STREAM_API_OPTIONS, readApiJson } from "./api/core.js";
 import type {
   AgentCreateRequest,
   AppCodeVisibilityUpdateResponse,
@@ -1029,19 +1029,19 @@ export async function chatRequest(
     return apiFetch(trimmed, token, "/chat/completions", {
       method: "POST",
       body: JSON.stringify(resolvedBody),
+      ...LONG_STREAM_API_OPTIONS,
     });
   }
   return apiFetch(trimmed, token, "/api/chat/apps", {
     method: "POST",
     body: JSON.stringify(resolvedBody),
+    ...LONG_STREAM_API_OPTIONS,
   });
 }
-
 function normalizeToolPathSegment(toolName: string): string {
   const trimmed = toolName.trim().replace(/^\/+/, "");
   return encodeURIComponent(trimmed || "tool");
 }
-
 export function resolveWorkerBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/$/, "");
   const workerEnv = process.env.OPENPOND_TOOL_URL;

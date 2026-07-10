@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "../../styles/workspace/git-dialogs.css";
 import { CloudUpload, GitBranch, GitCommitHorizontal, Github, Upload, X } from "../icons";
 
 export type CommitNextStep = "commit" | "commit_push" | "commit_publish" | "commit_pr";

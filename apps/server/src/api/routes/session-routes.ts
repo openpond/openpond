@@ -7,6 +7,7 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     patchSession,
     sendTurn,
     runSessionCommand,
+    ensureCloudWorkspaceReady,
     recordPreflightTurnFailure,
     updateTurnCreatePipeline,
     interruptSessionTurn,
@@ -42,6 +43,18 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
       200,
       await recordPreflightTurnFailure(
         decodeURIComponent(preflightFailureMatch[1]!),
+        await readJson(request),
+      ),
+    );
+    return true;
+  }
+  const workspaceReadyMatch = /^\/v1\/sessions\/([^/]+)\/workspace\/ensure-ready$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && workspaceReadyMatch) {
+    sendJson(
+      response,
+      200,
+      await ensureCloudWorkspaceReady(
+        decodeURIComponent(workspaceReadyMatch[1]!),
         await readJson(request),
       ),
     );

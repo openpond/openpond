@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { LocalProject, Session } from "@openpond/contracts";
+import type { BootstrapPayload, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../apps/web/src/api";
 import { ensureCloudWorkspaceRunning } from "../apps/web/src/lib/cloud-workspace-lifecycle";
-import { hybridWorkspaceSessionMetadata } from "../apps/web/src/lib/workspace-location";
 
 const originalFetch = globalThis.fetch;
 
@@ -10,381 +9,88 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe("cloud workspace lifecycle", () => {
-  test("materializes Hybrid sessions through sandbox_create runtime args", async () => {
-    const session = baseHybridSession();
-    const requests: Array<{
-      authorization: string | null;
-      body: unknown;
-      method: string;
-      path: string;
-    }> = [];
-
+describe("cloud workspace lifecycle client", () => {
+  test("delegates Cloud readiness to the server-owned operation", async () => {
+    const session = baseSession();
+    const readySession = { ...session, workspaceId: "sandbox-ready" };
+    const requests: Array<{ path: string; method: string; body: unknown }> = [];
     globalThis.fetch = (async (input, init) => {
       const url = new URL(String(input));
-      const headers = new Headers(init?.headers);
-      const body =
-        typeof init?.body === "string" ? JSON.parse(init.body) : null;
       requests.push({
-        authorization: headers.get("Authorization"),
-        body,
-        method: init?.method ?? "GET",
         path: url.pathname + url.search,
+        method: init?.method ?? "GET",
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : null,
       });
-
-      if (url.pathname === "/v1/sessions/session_hybrid/workspace-tools") {
-        return jsonResponse({
-          ok: true,
-          action: "sandbox_create",
-          output: "Started Hybrid sandbox.",
-          data: {
-            sandbox: {
-              id: "sandbox_hybrid",
-              name: "Hybrid Repo",
-              state: "running",
-              runtimeId: "runtime_hybrid",
-              projectId: "cloud_project_1",
-              teamId: "team_1",
-            },
-          },
-        });
+      if (url.pathname.endsWith("/workspace/ensure-ready")) {
+        return json({ session: readySession, status: "started", output: "ready" });
       }
-
       if (url.pathname === "/v1/bootstrap") {
-        return jsonResponse({
-          sessions: [
-            {
-              ...session,
-              workspaceId: "sandbox_hybrid",
-              workspaceName: "Hybrid Repo",
-            },
-          ],
-        });
+        return json({ sessions: [readySession] });
       }
-
-      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
+      return json({ error: "unexpected route" }, 404);
     }) as typeof fetch;
 
     const result = await ensureCloudWorkspaceRunning({
-      branch: "main",
+      branch: "feature/server-owned",
       connection: connection(),
-      localProject: localProject(),
       session,
-      source: "openpond-app-hybrid-chat-preflight",
+      source: "openpond-app-cloud-chat-preflight",
     });
 
-    expect(result.status).toBe("started");
-    expect(result.sandbox?.id).toBe("sandbox_hybrid");
-    expect(result.session.workspaceId).toBe("sandbox_hybrid");
-    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
-      "POST /v1/sessions/session_hybrid/workspace-tools",
-      "GET /v1/bootstrap?refreshCodex=1",
-    ]);
-    expect(requests[0]).toMatchObject({
-      authorization: "Bearer test-token",
-      body: {
-        action: "sandbox_create",
-        source: "ui_button",
-        args: {
-          teamId: "team_1",
-          projectId: "cloud_project_1",
-          reuseDefaultRuntime: false,
-          workflowMode: "feature",
-          runtimeBaseBranch: "main",
-          runtimePromotionPolicy: "manual",
-          runtime: {
-            runtimeProfileId: "openpond-coding-core-v1",
-            metadata: {
-              source: "openpond-app-hybrid-chat-preflight",
-              localProjectId: "local_project_1",
-              localProjectName: "Local Repo",
-            },
-          },
-          visibility: "team",
-          budget: { maxUsd: "0.05" },
-          quotas: {
-            idleTimeoutSeconds: 900,
-            maxSpendUsd: "0.05",
-          },
-          metadata: {
-            source: "openpond-app-hybrid-chat-preflight",
-            localProjectId: "local_project_1",
-            localProjectName: "Local Repo",
-          },
-        },
+    expect(result).toMatchObject({ status: "started", session: { workspaceId: "sandbox-ready" } });
+    expect(requests).toEqual([
+      {
+        path: "/v1/sessions/session-cloud/workspace/ensure-ready",
+        method: "POST",
+        body: { branch: "feature/server-owned", surface: "desktop" },
       },
-    });
-    expect(JSON.stringify(requests[0]?.body)).not.toContain("runtimeAgent");
-  });
-
-  test("fails bounded when a new Hybrid sandbox create stays creating during chat preflight", async () => {
-    const session = baseHybridSession();
-    const requests: Array<{
-      body: unknown;
-      method: string;
-      path: string;
-    }> = [];
-
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input));
-      const body =
-        typeof init?.body === "string" ? JSON.parse(init.body) : null;
-      requests.push({
-        body,
-        method: init?.method ?? "GET",
-        path: url.pathname + url.search,
-      });
-
-      if (url.pathname === "/v1/sessions/session_hybrid/workspace-tools") {
-        return jsonResponse({
-          ok: true,
-          action: "sandbox_create",
-          output: "Sandbox workspace attached: sandbox_new (creating)",
-          data: {
-            sandbox: {
-              id: "sandbox_new",
-              name: "Hybrid Repo",
-              state: "creating",
-              runtimeId: "runtime_hybrid",
-              projectId: "cloud_project_1",
-              teamId: "team_1",
-            },
-          },
-        });
-      }
-
-      if (url.pathname === "/v1/bootstrap") {
-        return jsonResponse({
-          sessions: [
-            {
-              ...session,
-              workspaceId: "sandbox_new",
-              workspaceName: "Hybrid Repo",
-            },
-          ],
-        });
-      }
-
-      if (url.pathname === "/v1/sandboxes/sandbox_new") {
-        return jsonResponse({
-          sandbox: {
-            id: "sandbox_new",
-            state: "creating",
-            runtimeId: "runtime_hybrid",
-            projectId: "cloud_project_1",
-            teamId: "team_1",
-          },
-        });
-      }
-
-      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
-    }) as typeof fetch;
-
-    let now = 0;
-    await expect(
-      ensureCloudWorkspaceRunning({
-        branch: "main",
-        connection: connection(),
-        localProject: localProject(),
-        session,
-        source: "openpond-app-hybrid-chat-preflight",
-        waitOptions: {
-          delay: async () => undefined,
-          now: () => {
-            const current = now;
-            now += 60_001;
-            return current;
-          },
-          pollMs: 0,
-        },
-      }),
-    ).rejects.toThrow("Timed out waiting for Cloud sandbox sandbox_new to start; latest state is creating.");
-
-    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
-      "POST /v1/sessions/session_hybrid/workspace-tools",
-      "GET /v1/bootstrap?refreshCodex=1",
-      "GET /v1/sandboxes/sandbox_new",
-    ]);
-    expect(requests[0]?.body).toMatchObject({
-      args: {
-        metadata: {
-          source: "openpond-app-hybrid-chat-preflight",
-        },
-      },
-    });
-  });
-
-  test("fails bounded when an attached Hybrid sandbox stays creating", async () => {
-    const session = { ...baseHybridSession(), workspaceId: "sandbox_creating" };
-    const requests: Array<{
-      method: string;
-      path: string;
-    }> = [];
-
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input));
-      requests.push({
-        method: init?.method ?? "GET",
-        path: url.pathname + url.search,
-      });
-
-      if (url.pathname === "/v1/sandboxes/sandbox_creating") {
-        return jsonResponse({
-          sandbox: {
-            id: "sandbox_creating",
-            state: "creating",
-            runtimeId: "runtime_hybrid",
-            projectId: "cloud_project_1",
-            teamId: "team_1",
-          },
-        });
-      }
-
-      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
-    }) as typeof fetch;
-
-    let now = 0;
-    await expect(
-      ensureCloudWorkspaceRunning({
-        branch: "main",
-        connection: connection(),
-        localProject: localProject(),
-        session,
-        source: "openpond-app-hybrid-chat-preflight",
-        waitOptions: {
-          delay: async () => undefined,
-          now: () => {
-            const current = now;
-            now += 2;
-            return current;
-          },
-          pollMs: 0,
-          timeoutMs: 1,
-        },
-      }),
-    ).rejects.toThrow("Timed out waiting for Cloud sandbox sandbox_creating to start; latest state is creating.");
-
-    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
-      "GET /v1/sandboxes/sandbox_creating",
-      "GET /v1/sandboxes/sandbox_creating",
+      { path: "/v1/bootstrap?refreshCodex=1", method: "GET", body: null },
     ]);
   });
 
-  test("fails immediately when an attached Hybrid sandbox is already stale creating", async () => {
-    const session = { ...baseHybridSession(), workspaceId: "sandbox_stale_creating" };
-    const requests: Array<{
-      method: string;
-      path: string;
-    }> = [];
-
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input));
-      requests.push({
-        method: init?.method ?? "GET",
-        path: url.pathname + url.search,
-      });
-
-      if (url.pathname === "/v1/sandboxes/sandbox_stale_creating") {
-        return jsonResponse({
-          sandbox: {
-            id: "sandbox_stale_creating",
-            state: "creating",
-            runtimeId: "runtime_hybrid",
-            projectId: "cloud_project_1",
-            teamId: "team_1",
-            createdAt: "1970-01-01T00:00:00.000Z",
-          },
-        });
-      }
-
-      return jsonResponse({ error: `unexpected ${url.pathname}` }, 404);
+  test("does not call readiness for local sessions", async () => {
+    const session = baseSession({ workspaceKind: "local_project" });
+    globalThis.fetch = (async () => {
+      throw new Error("local readiness must not call the server");
     }) as typeof fetch;
-
-    await expect(
-      ensureCloudWorkspaceRunning({
-        branch: "main",
-        connection: connection(),
-        localProject: localProject(),
-        session,
-        source: "openpond-app-hybrid-chat-preflight",
-        waitOptions: {
-          delay: async () => undefined,
-          now: () => 120_000,
-          pollMs: 0,
-          timeoutMs: 60_000,
-        },
-      }),
-    ).rejects.toThrow(
-      "Timed out waiting for Cloud sandbox sandbox_stale_creating to start; latest state is creating.",
-    );
-
-    expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual([
-      "GET /v1/sandboxes/sandbox_stale_creating",
-    ]);
+    await expect(ensureCloudWorkspaceRunning({
+      connection: connection(),
+      session,
+      source: "openpond-app-cloud-chat-preflight",
+    })).resolves.toMatchObject({ status: "already_running", session });
   });
 });
 
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
 }
 
 function connection(): ClientConnection {
-  return {
-    serverUrl: "https://app-server.test",
-    token: "test-token",
-    platform: "test",
-  };
+  return { serverUrl: "https://app-server.test", token: "test-token", platform: "test" };
 }
 
-function baseHybridSession(): Session {
+function baseSession(overrides: Partial<Session> = {}): Session {
   return {
-    id: "session_hybrid",
-    provider: "openai",
-    modelRef: { providerId: "openai", modelId: "gpt-4.1-mini" },
-    title: "Hybrid edit",
+    id: "session-cloud",
+    provider: "openpond",
+    modelRef: null,
+    title: "Cloud",
     appId: null,
     appName: null,
     workspaceKind: "sandbox",
     workspaceId: null,
-    workspaceName: "Hybrid Repo",
-    localProjectId: "local_project_1",
-    cloudProjectId: "cloud_project_1",
-    cloudTeamId: "team_1",
-    metadata: hybridWorkspaceSessionMetadata(),
-    cwd: "/workspace/local-repo",
+    workspaceName: "Cloud project",
+    localProjectId: "local-project",
+    cloudProjectId: "cloud-project",
+    cloudTeamId: "team-1",
+    cwd: "/workspace/project",
     codexThreadId: null,
-    createdAt: "2026-07-04T00:00:00.000Z",
-    updatedAt: "2026-07-04T00:00:00.000Z",
+    createdAt: "2026-07-10T00:00:00.000Z",
+    updatedAt: "2026-07-10T00:00:00.000Z",
     status: "idle",
     pinned: false,
     archived: false,
     order: 0,
-  };
-}
-
-function localProject(): LocalProject {
-  return {
-    id: "local_project_1",
-    name: "Local Repo",
-    path: "/workspace/local-repo",
-    workspacePath: "/workspace/local-repo",
-    repoPath: "/workspace/local-repo",
-    source: "git",
-    sandboxTemplate: null,
-    linkedOpenPondApp: null,
-    linkedSandboxProject: {
-      projectId: "cloud_project_1",
-      projectName: "Hybrid Repo",
-      teamId: "team_1",
-      defaultBranch: "main",
-      projectSlug: "hybrid-repo",
-      lastUploadedCommit: "abc123",
-    },
-    preferredSandboxAgentId: null,
-    createdAt: "2026-07-04T00:00:00.000Z",
-    updatedAt: "2026-07-04T00:00:00.000Z",
+    ...overrides,
   };
 }

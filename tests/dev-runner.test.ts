@@ -11,7 +11,7 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("dev runner", () => {
-  test("plans desktop dev with deterministic ports and only renderer plus desktop processes", () => {
+  test("plans desktop dev with a watched server plus renderer and desktop processes", () => {
     const options = parseDevRunnerArgs(["desktop"], {
       OPENPOND_APP_CHANNEL: "stable",
     });
@@ -23,15 +23,18 @@ describe("dev runner", () => {
       server: "http://127.0.0.1:17874",
       web: "http://127.0.0.1:17876",
     });
-    expect(plan.setupCommands.map((command) => command.id)).toEqual([
-      "bundle-server",
-      "build-desktop",
-    ]);
+    expect(plan.setupCommands.map((command) => command.id)).toEqual(["build-desktop"]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual([
+      "server",
       "renderer",
       "desktop",
     ]);
-    expect(plan.processes.some((processPlan) => processPlan.id === "server")).toBe(false);
+    expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
+      "--watch",
+      "apps/server/src/index.ts",
+      "--port",
+      "17874",
+    ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "desktop")?.env).toMatchObject({
       OPENPOND_SERVER_PORT: "17874",
       OPENPOND_WEB_PORT: "17876",
@@ -49,10 +52,11 @@ describe("dev runner", () => {
     const plan = buildDevRunnerPlan(options, {}, root);
 
     expect(plan.ports).toEqual({ server: 19074, web: 19076 });
-    expect(plan.setupCommands.map((command) => command.id)).toEqual(["bundle-server"]);
+    expect(plan.setupCommands).toEqual([]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server", "renderer"]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "apps/server/dist/index.js",
+      "--watch",
+      "apps/server/src/index.ts",
       "--port",
       "19074",
     ]);
@@ -87,7 +91,7 @@ describe("dev runner", () => {
     const plan = JSON.parse(result.stdout) as DevRunnerPlan;
     expect(plan.mode).toBe("server");
     expect(plan.ports).toEqual({ server: 19174, web: 19176 });
-    expect(plan.setupCommands.map((command) => command.id)).toEqual(["bundle-server"]);
+    expect(plan.setupCommands).toEqual([]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server"]);
   });
 });

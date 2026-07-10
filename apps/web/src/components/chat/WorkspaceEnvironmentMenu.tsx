@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import "../../styles/agents/create-agent.css";
 import type {
   LocalProject,
   BootstrapPayload,
@@ -64,7 +65,6 @@ import {
   starterManifestPreview,
   workspaceSourceLabel,
 } from "./workspace-environment-helpers";
-
 type SandboxChangeState = {
   status: "idle" | "loading" | "ready" | "error";
   changedFiles: number;

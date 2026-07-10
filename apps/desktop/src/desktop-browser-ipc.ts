@@ -23,6 +23,7 @@ import type {
 } from "./desktop-browser-types.js";
 
 const managers = new WeakMap<BrowserWindow, BrowserSidebarManager>();
+const activeManagers = new Set<BrowserSidebarManager>();
 let ipcRegistered = false;
 
 export type DesktopIpcRegistrar = typeof ipcMain.handle;
@@ -72,6 +73,12 @@ export function registerBrowserSidebarIpc(
 
 export function browserSidebarManagerForWindow(window: BrowserWindow): BrowserSidebarManager {
   return managerFor(window);
+}
+
+export async function closeBrowserSidebarManagers(): Promise<void> {
+  const managers = [...activeManagers];
+  activeManagers.clear();
+  await Promise.all(managers.map((manager) => manager.shutdown()));
 }
 
 async function command(
@@ -171,5 +178,6 @@ function managerFor(window: BrowserWindow): BrowserSidebarManager {
   if (existing) return existing;
   const manager = new BrowserSidebarManager(window, new BrowserSidebarStore(app.getPath("userData")));
   managers.set(window, manager);
+  activeManagers.add(manager);
   return manager;
 }

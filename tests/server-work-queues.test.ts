@@ -20,6 +20,7 @@ import {
 } from "../apps/server/src/runtime/background-worker-queue";
 import { createCodexBridge } from "../apps/server/src/runtime/codex-bridge";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
+import { withTurnRunnerTestStore } from "./helpers/turn-runner-test-harness";
 import { createWorkspaceSessionWorkflows } from "../apps/server/src/workspace/server-workspace-session-workflows";
 import type { SqliteStore } from "../apps/server/src/store/store";
 
@@ -198,7 +199,7 @@ describe("server work queues", () => {
     const turns = [turn];
     const runner = createTurnRunner({
       attachmentRootDir: path.join(repoPath, ".attachments"),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -217,7 +218,7 @@ describe("server work queues", () => {
         async getApproval(approvalId) {
           return approvals.find((approval) => approval.id === approvalId) ?? null;
         },
-      },
+      }),
       upsertApproval: async (approval) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);

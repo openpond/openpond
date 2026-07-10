@@ -2,6 +2,7 @@ import { style, surfaceLine, truncatePlain } from "./ansi.js";
 import type { ComposerState } from "./composer.js";
 import type { SlashCommandDefinition } from "./commands.js";
 import type { TranscriptItem } from "./transcript.js";
+import type { TranscriptLayoutCache } from "./transcript-layout-cache.js";
 
 export type TerminalStatus = {
   provider: string;
@@ -22,6 +23,7 @@ export type LayoutInput = {
   slashMenu: SlashMenuLayout | null;
   status: TerminalStatus;
   scrollOffset: number;
+  transcriptLayoutCache?: TranscriptLayoutCache;
 };
 
 export type SlashMenuLayout = {
@@ -49,7 +51,7 @@ export function buildFrame(input: LayoutInput): LayoutFrame {
   const footer = renderFooter(input.status, cols);
   const fixedRows = 1 + composer.lines.length + menuRows.length;
   const transcriptRows = Math.max(0, rows - fixedRows);
-  const transcriptLines = renderTranscript(input.transcript, cols);
+  const transcriptLines = renderTranscript(input.transcript, cols, input.transcriptLayoutCache);
   const start = Math.max(0, transcriptLines.length - transcriptRows - input.scrollOffset);
   const visibleTranscript =
     transcriptLines.length > 0
@@ -74,11 +76,16 @@ function renderFooter(status: TerminalStatus, cols: number): string {
   return style(truncatePlain(`${left}${" ".repeat(gap)}${right}`, cols), "muted");
 }
 
-function renderTranscript(items: TranscriptItem[], cols: number): string[] {
+function renderTranscript(
+  items: TranscriptItem[],
+  cols: number,
+  cache?: TranscriptLayoutCache,
+): string[] {
+  cache?.retain(new Set(items.map((item) => item.id)));
   const lines: string[] = [];
   for (const item of items) {
     if (lines.length > 0) lines.push("");
-    lines.push(...renderItem(item, cols));
+    lines.push(...renderItem(item, cols, cache));
   }
   return lines;
 }
@@ -109,9 +116,15 @@ export function renderWelcome(status: TerminalStatus, cols: number): string[] {
   ];
 }
 
-function renderItem(item: TranscriptItem, cols: number): string[] {
+function renderItem(item: TranscriptItem, cols: number, cache?: TranscriptLayoutCache): string[] {
   if (item.kind === "user") return renderUserMessage(item.text, cols);
-  if (item.kind === "assistant") return renderAssistantMessage(item.text || (item.streaming ? "..." : ""), cols);
+  if (item.kind === "assistant") {
+    return renderAssistantMessage(
+      item.text || (item.streaming ? "..." : ""),
+      cols,
+      cache ? (text, width) => cache.renderAssistant(item.id, text, width) : undefined,
+    );
+  }
   if (item.kind === "system") return renderBlock("!", item.text, cols, item.tone === "error" ? "error" : item.tone === "warning" ? "warning" : "muted", "muted");
   if (item.kind === "approval") {
     const body = `${item.title}${item.body ? `\n${item.body}` : ""}`;
@@ -156,10 +169,14 @@ function renderSlashMenu(menu: SlashMenuLayout | null, cols: number, maxRows: nu
   });
 }
 
-function renderAssistantMessage(body: string, cols: number): string[] {
-  const lines = body
-    .split(/\r?\n/)
-    .flatMap((line) => wrapPlain(line, Math.max(8, cols)))
+function renderAssistantMessage(
+  body: string,
+  cols: number,
+  wrap: ((text: string, width: number) => string[]) | undefined,
+): string[] {
+  const lines = (wrap
+    ? wrap(body, Math.max(8, cols))
+    : body.split(/\r?\n/).flatMap((line) => wrapPlain(line, Math.max(8, cols))))
     .map((line) => style(line, "text"));
   return [...lines, ""];
 }

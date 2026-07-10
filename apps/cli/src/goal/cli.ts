@@ -26,7 +26,7 @@ import {
   resolveHostedGoalApiUrl,
   resolveHostedGoalCredential,
 } from "./state/hosted";
-import type { GoalAnswer, GoalKind, GoalState, GoalStatus } from "./types";
+import type { GoalAnswer, GoalApproval, GoalKind, GoalState, GoalStatus } from "./types";
 
 type GoalOutputMode = "json" | "jsonl";
 
@@ -458,13 +458,13 @@ async function applyGoalLifecycle(params: {
     if (!pendingApproval) {
       throw new Error(`goal has no pending approval: ${params.goalId}`);
     }
-    const approvalStatus =
+    const approvalStatus: GoalApproval["status"] =
       params.action === "approve"
         ? "approved"
         : params.action === "reject"
           ? "rejected"
           : "cancelled";
-    const goalStatus =
+    const goalStatus: GoalStatus =
       params.action === "approve"
         ? "queued"
         : params.action === "reject"
@@ -480,7 +480,7 @@ async function applyGoalLifecycle(params: {
           }
         : approval
     );
-    let decidedGoal = {
+    let decidedGoal: GoalState = {
       ...goal,
       status: goalStatus,
       approvals,

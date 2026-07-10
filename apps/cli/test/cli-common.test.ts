@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { CliUsageError, optionValues, parseArgs, runCommand, runShellCommand } from "../src/cli/common";
 
@@ -33,6 +36,18 @@ describe("CLI common parsing", () => {
     expect(parsed.command).toBe("run");
     expect(parsed.options.json).toBe("true");
     expect(parsed.rest).toEqual(["chat", "--input", "{\"prompt\":\"hello\"}"]);
+  });
+
+  test("rejects unknown and cross-command options before passthrough", () => {
+    expect(() => parseArgs(["chat", "--definitely-unknown", "value"])).toThrow(
+      "unknown option --definitely-unknown for chat",
+    );
+    expect(() => parseArgs(["chat", "--team-id", "team_1"])).toThrow(
+      "unknown option --team-id for chat",
+    );
+
+    const passthrough = parseArgs(["chat", "--", "--definitely-unknown", "value"]);
+    expect(passthrough.rest).toEqual(["--definitely-unknown", "value"]);
   });
 
   test("records repeated option values while preserving last-value compatibility", () => {
@@ -202,5 +217,50 @@ describe("CLI common process runner", () => {
 
     expect(result.timedOut).toBe(true);
     expect(result.code).not.toBe(0);
+    expect(result.terminationReason).toBe("timeout");
+  });
+
+  test("reports signal exits separately from normal exit codes", async () => {
+    const result = await runCommand(
+      process.execPath,
+      ["-e", "process.kill(process.pid, 'SIGTERM')"],
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.signal).toBe("SIGTERM");
+    expect(result.terminationReason).toBe("signal");
+  });
+
+  const posixTest = process.platform === "win32" ? test.skip : test;
+  posixTest("terminates descendants in the timed-out process group", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-process-tree-"));
+    const pidFile = path.join(directory, "child.pid");
+    try {
+      const script = [
+        "const {spawn}=require('node:child_process');",
+        `spawn(process.execPath,['-e',${JSON.stringify(`require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>{},1000)`)}],{stdio:'ignore'});`,
+        "setInterval(()=>{},1000);",
+      ].join("");
+      const result = await runCommand(process.execPath, ["-e", script], { timeoutMs: 300 });
+      const childPid = Number(await readFile(pidFile, "utf8"));
+
+      expect(result.terminationReason).toBe("timeout");
+      expect(await waitForProcessExit(childPid)).toBe(true);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
+
+async function waitForProcessExit(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}

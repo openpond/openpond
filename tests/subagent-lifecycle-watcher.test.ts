@@ -664,7 +664,7 @@ describe("subagent lifecycle watcher", () => {
     });
   });
 
-  test("queries active watcher runs by parent session and exact goal scope", async () => {
+  test("bulk-loads active watcher runs and groups them by exact goal scope", async () => {
     const events: RuntimeEvent[] = [];
     const activeQueries: Array<Record<string, unknown>> = [];
     const scopeQueries: Array<Record<string, unknown>> = [];
@@ -721,21 +721,17 @@ describe("subagent lifecycle watcher", () => {
     const result = await watcher.tickNow("manual");
 
     expect(result).toMatchObject({
-      activeCount: 2,
+      activeCount: 3,
       wakeQueued: false,
     });
-    expect(scopeQueries).toHaveLength(3);
-    expect(activeQueries).toEqual([
-      expect.objectContaining({ parentSessionId: "session_parent", parentGoalId: "goal_1" }),
-      expect.objectContaining({ parentSessionId: "session_parent" }),
-    ]);
-    expect(activeQueries[1]).not.toHaveProperty("parentGoalId");
+    expect(scopeQueries).toHaveLength(0);
+    expect(activeQueries).toEqual([{ limit: 500 }]);
     expect(events.find((entry) => entry.data?.kind === "subagent_lifecycle_watcher_tick")).toMatchObject({
       data: {
-        activeRunIds: ["run_goal", "run_thread"],
-        scopeKeys: ["session_parent:goal_1", "session_parent:thread"],
+        activeRunIds: ["run_goal", "run_thread", "run_other_goal"],
+        scopeKeys: ["session_parent:goal_1", "session_parent:thread", "session_parent:goal_2"],
         parentSessionIds: ["session_parent"],
-        parentGoalIds: ["goal_1"],
+        parentGoalIds: ["goal_1", "goal_2"],
       },
     });
   });

@@ -887,44 +887,30 @@ export function createSubagentLifecycleWatcher(options: {
   }
 
   async function loadScopedRunSets(checkedAt: string): Promise<ScopedSubagentRuns[]> {
-    if (!options.store.listSubagentRunScopes) return loadGlobalScopedRunSets(checkedAt);
-    const recentUpdatedAtFrom = new Date(Date.parse(checkedAt) - staleAfterMs).toISOString();
-    const scopes = uniqueSubagentWatcherScopes([
-      ...await options.store.listSubagentRunScopes({
-        status: WATCHER_ACTIVE_STATUSES,
-        limit: 500,
-      }),
-      ...await options.store.listSubagentRunScopes({
-        status: "failed",
-        updatedAtFrom: recentUpdatedAtFrom,
-        limit: 500,
-      }),
-      ...await options.store.listSubagentRunScopes({
-        status: ["accepted", "completed"],
-        updatedAtFrom: recentUpdatedAtFrom,
-        limit: 500,
-      }),
-    ]);
-    return loadRunSetsForScopes(scopes, checkedAt);
+    return loadGlobalScopedRunSets(checkedAt);
   }
 
   async function loadGlobalScopedRunSets(checkedAt: string): Promise<ScopedSubagentRuns[]> {
-    const activeRuns = await options.store.listActiveSubagentRuns({ limit: 500 });
-    const failedRuns = options.store.listSubagentRuns
-      ? (await options.store.listSubagentRuns({ status: "failed", limit: 500 }))
-        .filter((run) => run.required && terminalRunUpdatedWithin(run, checkedAt, staleAfterMs))
-      : [];
-    const acceptedRuns = options.store.listSubagentRuns
-      ? (await options.store.listSubagentRuns({ status: ["accepted", "completed"], limit: 500 }))
-        .filter((run) => run.required && terminalRunUpdatedWithin(run, checkedAt, staleAfterMs))
-      : [];
-    const staleRuns = options.store.listStaleSubagentRuns
-      ? await options.store.listStaleSubagentRuns({
-          olderThanMs: staleAfterMs,
-          nowIso: checkedAt,
-          limit: 500,
-        })
-      : [];
+    const [activeRuns, rawFailedRuns, rawAcceptedRuns, staleRuns] = await Promise.all([
+      options.store.listActiveSubagentRuns({ limit: 500 }),
+      options.store.listSubagentRuns
+        ? options.store.listSubagentRuns({ status: "failed", limit: 500 })
+        : Promise.resolve([]),
+      options.store.listSubagentRuns
+        ? options.store.listSubagentRuns({ status: ["accepted", "completed"], limit: 500 })
+        : Promise.resolve([]),
+      options.store.listStaleSubagentRuns
+        ? options.store.listStaleSubagentRuns({
+            olderThanMs: staleAfterMs,
+            nowIso: checkedAt,
+            limit: 500,
+          })
+        : Promise.resolve([]),
+    ]);
+    const failedRuns = rawFailedRuns
+      .filter((run) => run.required && terminalRunUpdatedWithin(run, checkedAt, staleAfterMs));
+    const acceptedRuns = rawAcceptedRuns
+      .filter((run) => run.required && terminalRunUpdatedWithin(run, checkedAt, staleAfterMs));
     const scopes = uniqueSubagentWatcherScopes([
       ...activeRuns,
       ...failedRuns,
@@ -943,62 +929,6 @@ export function createSubagentLifecycleWatcher(options: {
       item.failedRuns.length > 0 ||
       item.acceptedRuns.length > 0
     );
-  }
-
-  async function loadRunSetsForScopes(
-    scopes: SubagentLifecycleWatcherScope[],
-    checkedAt: string,
-  ): Promise<ScopedSubagentRuns[]> {
-    const scopedRuns: ScopedSubagentRuns[] = [];
-    for (const scope of scopes) {
-      const scopedQuery = subagentWatcherScopeQuery(scope);
-      const [activeRuns, staleRuns, failedRuns, acceptedRuns] = await Promise.all([
-        options.store.listActiveSubagentRuns({
-          ...scopedQuery,
-          limit: 500,
-        }).then((runs) => runsInScope(runs, scope)),
-        options.store.listStaleSubagentRuns
-          ? options.store.listStaleSubagentRuns({
-              ...scopedQuery,
-              olderThanMs: staleAfterMs,
-              nowIso: checkedAt,
-              limit: 500,
-            }).then((runs) => runsInScope(runs, scope))
-          : Promise.resolve([]),
-        options.store.listSubagentRuns
-          ? options.store.listSubagentRuns({
-              ...scopedQuery,
-              status: "failed",
-              limit: 500,
-            }).then((runs) => runsInScope(runs, scope)
-              .filter((run) => run.required && terminalRunUpdatedWithin(run, checkedAt, staleAfterMs)))
-          : Promise.resolve([]),
-        options.store.listSubagentRuns
-          ? options.store.listSubagentRuns({
-              ...scopedQuery,
-              status: ["accepted", "completed"],
-              limit: 500,
-            }).then((runs) => runsInScope(runs, scope)
-              .filter((run) => run.required && terminalRunUpdatedWithin(run, checkedAt, staleAfterMs)))
-          : Promise.resolve([]),
-      ]);
-      if (
-        activeRuns.length === 0 &&
-        staleRuns.length === 0 &&
-        failedRuns.length === 0 &&
-        acceptedRuns.length === 0
-      ) {
-        continue;
-      }
-      scopedRuns.push({
-        scope,
-        activeRuns,
-        staleRuns,
-        failedRuns,
-        acceptedRuns,
-      });
-    }
-    return scopedRuns;
   }
 
   async function maybeQueueParentLifecycleWakes(input: {
@@ -1070,13 +1000,17 @@ export function createSubagentLifecycleWatcher(options: {
       });
     }
 
+    const allRuns = await options.store.listSubagentRuns({ limit: 10_000 });
+    const runsByScope = new Map<string, SubagentRun[]>();
+    for (const run of allRuns) {
+      const key = subagentWatcherScopeKey(subagentWatcherScopeFromRun(run));
+      const scoped = runsByScope.get(key) ?? [];
+      scoped.push(run);
+      runsByScope.set(key, scoped);
+    }
     const groups: LifecycleWakeGroup[] = [];
     for (const scope of scopes.values()) {
-      const scopedRuns = (await options.store.listSubagentRuns({
-        parentSessionId: scope.parentSessionId,
-        parentGoalId: scope.parentGoalId ?? undefined,
-        limit: 1000,
-      })).filter((run) => (run.parentGoalId ?? null) === scope.parentGoalId);
+      const scopedRuns = runsByScope.get(subagentWatcherScopeKey(scope)) ?? [];
       const requiredRuns = scopedRuns.filter((run) => run.required);
       if (requiredRuns.length === 0 || !requiredRuns.every(subagentRunAcceptedForWatcher)) continue;
       const candidates = requiredRuns.map((run): LifecycleWakeCandidate => ({
@@ -1831,16 +1765,6 @@ function subagentWatcherScopeFromRun(run: SubagentRun): SubagentLifecycleWatcher
 
 function subagentWatcherScopeKey(scope: SubagentLifecycleWatcherScope): string {
   return `${scope.parentSessionId}:${scope.parentGoalId ?? "thread"}`;
-}
-
-function subagentWatcherScopeQuery(scope: SubagentLifecycleWatcherScope): {
-  parentSessionId: string;
-  parentGoalId?: string;
-} {
-  return {
-    parentSessionId: scope.parentSessionId,
-    ...(scope.parentGoalId ? { parentGoalId: scope.parentGoalId } : {}),
-  };
 }
 
 function runsInScope(runs: SubagentRun[], scope: SubagentLifecycleWatcherScope): SubagentRun[] {

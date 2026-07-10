@@ -177,7 +177,7 @@ export function createInsightsService(options: {
     const usageStartedAtFrom = enabledSources.has("usage_anomaly")
       ? new Date(Date.parse(timestamp) - USAGE_ANOMALY_SCAN_WINDOW_MS).toISOString()
       : null;
-    const [eventWindow, pageRows, snapshot, usageRecords] = await Promise.all([
+    const [eventWindow, pageRows, turns, usageRecords] = await Promise.all([
       store.recentRuntimeEventWindow(2_000),
       store.runtimeEventPageRows({
         sessionId: null,
@@ -185,7 +185,7 @@ export function createInsightsService(options: {
         beforeSequence: null,
         limit: 2_000,
       }),
-      store.snapshot(),
+      store.recentTurns(2_000),
       usageStartedAtFrom
         ? store.listModelUsageRecords({
             startedAtFrom: usageStartedAtFrom,
@@ -198,7 +198,7 @@ export function createInsightsService(options: {
     const candidates = collectInsightEvidence({
       entries,
       contextEntries: eventWindow.entries,
-      turns: snapshot.turns,
+      turns,
       usageRecords,
       enabledSources,
       timestamp,

@@ -8,6 +8,7 @@ import {
   type ModelUsageRecord,
 } from "@openpond/contracts";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
+import { withTurnRunnerTestStore } from "./helpers/turn-runner-test-harness";
 import {
   createPipelineSnapshotFromPlannerDecision,
   runModelBackedCreatePipelinePlanner,
@@ -261,7 +262,7 @@ describe("model-backed create pipeline planner", () => {
 
     const runner = createTurnRunner({
       attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-planner-")),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -280,7 +281,7 @@ describe("model-backed create pipeline planner", () => {
         async getApproval(approvalId: string) {
           return approvals.find((candidate) => candidate.id === approvalId) ?? null;
         },
-      },
+      }),
       upsertApproval: async (approval: any) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);
@@ -419,7 +420,7 @@ describe("model-backed create pipeline planner", () => {
 
     const runner = createTurnRunner({
       attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-planner-usage-")),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -444,7 +445,7 @@ describe("model-backed create pipeline planner", () => {
           else usageRecords[index] = record;
           return record;
         },
-      },
+      }),
       upsertApproval: async (approval: any) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);
@@ -603,7 +604,7 @@ describe("model-backed create pipeline planner", () => {
 
     const runner = createTurnRunner({
       attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-planner-fail-")),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -622,7 +623,7 @@ describe("model-backed create pipeline planner", () => {
         async getApproval(approvalId: string) {
           return approvals.find((candidate) => candidate.id === approvalId) ?? null;
         },
-      },
+      }),
       upsertApproval: async (approval: any) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);
@@ -730,7 +731,7 @@ describe("model-backed create pipeline planner", () => {
 
     const runner = createTurnRunner({
       attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-tool-")),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -749,7 +750,7 @@ describe("model-backed create pipeline planner", () => {
         async getApproval(approvalId: string) {
           return approvals.find((candidate) => candidate.id === approvalId) ?? null;
         },
-      },
+      }),
       upsertApproval: async (approval: any) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);
@@ -1085,7 +1086,7 @@ describe("model-backed create pipeline planner", () => {
 
     const runner = createTurnRunner({
       attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-hybrid-create-approval-")),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -1104,7 +1105,7 @@ describe("model-backed create pipeline planner", () => {
         async getApproval(approvalId: string) {
           return approvals.find((candidate) => candidate.id === approvalId) ?? null;
         },
-      },
+      }),
       upsertApproval: async (approval: any) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);
@@ -1283,7 +1284,7 @@ describe("model-backed create pipeline planner", () => {
 
     const runner = createTurnRunner({
       attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-hybrid-create-ui-update-")),
-      store: {
+      store: withTurnRunnerTestStore({
         async snapshot() {
           return { events, turns, approvals };
         },
@@ -1302,7 +1303,7 @@ describe("model-backed create pipeline planner", () => {
         async getApproval(approvalId: string) {
           return approvals.find((candidate) => candidate.id === approvalId) ?? null;
         },
-      },
+      }),
       upsertApproval: async (approval: any) => {
         const index = approvals.findIndex((candidate) => candidate.id === approval.id);
         if (index === -1) approvals.push(approval);
@@ -1577,7 +1578,7 @@ async function runNativeCreatePipelineToolHarness(input: {
 
   const runner = createTurnRunner({
     attachmentRootDir: await mkdtemp(join(tmpdir(), "openpond-create-tool-harness-")),
-    store: {
+    store: withTurnRunnerTestStore({
       async snapshot() {
         return { events, turns, approvals };
       },
@@ -1596,7 +1597,7 @@ async function runNativeCreatePipelineToolHarness(input: {
       async getApproval(approvalId: string) {
         return approvals.find((candidate) => candidate.id === approvalId) ?? null;
       },
-    },
+    }),
     upsertApproval: async (approval: any) => {
       const index = approvals.findIndex((candidate) => candidate.id === approval.id);
       if (index === -1) approvals.push(approval);

@@ -10,6 +10,7 @@ import type {
 } from "@openpond/contracts";
 import type { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { CheckResult } from "./workspace-tool-common.js";
+import type { SandboxRequestAction } from "../openpond/sandboxes.js";
 
 export type WorkspaceToolLogger = {
   info(message: string, metadata?: Record<string, unknown>): void;
@@ -67,4 +68,5 @@ export type WorkspaceToolExecutorDeps = {
   openPondCacheScope: (accountState: AccountState) => string;
   upsertScaffoldApp: (scope: string, app: OpenPondApp) => Promise<void>;
   gitBaseUrlFromContext: (context: Awaited<ReturnType<typeof loadOpenPondAccountContext>>) => string | null;
+  sandboxRequest: (payload: SandboxRequestAction) => Promise<unknown>;
 };

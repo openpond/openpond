@@ -1150,5 +1150,3 @@ function typescriptSpawn(command: string, tsserver: string | null): LspSpawn {
     initializationOptions: tsserver ? { tsserver: { path: tsserver } } : undefined,
   };
 }
-
-export const workspaceLspManager = new WorkspaceLspManager();

@@ -33,8 +33,12 @@ export type HttpRouteDeps = {
   runtimeVersion: string;
   logger: HttpRouteLogger;
   slowRouteThresholdMs?: number;
-  subscribers: Set<ServerResponse>;
-  refreshCodexStatus: () => Promise<unknown>;
+  openEventSubscriber: (input: {
+    response: ServerResponse;
+    afterSequence: number;
+    sessionId: string | null;
+  }) => Promise<() => void>;
+  refreshCodexStatus: (force?: boolean) => Promise<unknown>;
   bootstrapPayload: (options?: { forceOpenPond?: boolean; ensureProfile?: boolean }) => Promise<BootstrapPayload>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
@@ -126,6 +130,7 @@ export type HttpRouteDeps = {
   patchSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   sendTurn: (sessionId: string, payload: unknown) => Promise<unknown>;
   runSessionCommand: (sessionId: string, payload: unknown) => Promise<unknown>;
+  ensureCloudWorkspaceReady: (sessionId: string, payload: unknown) => Promise<unknown>;
   recordPreflightTurnFailure: (sessionId: string, payload: unknown) => Promise<unknown>;
   updateTurnCreatePipeline: (
     sessionId: string,

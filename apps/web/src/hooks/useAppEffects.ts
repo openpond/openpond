@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { openEventStream, type ClientConnection } from "../api";
 import type { SidebarSectionMenuId } from "../app/app-state";
-import { mergeRuntimeEventLists } from "../lib/runtime-event-lists";
+import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
 type ShortcutInput = {
@@ -86,7 +86,7 @@ export function useRuntimeEvents({
       pendingRuntimeEvents = [];
       if (nextEvents.length === 0) return;
 
-      setEvents((current) => mergeRuntimeEventLists(current, nextEvents));
+      setEvents((current) => mergeLiveRuntimeEventLists(current, nextEvents));
       const childSessions = subagentChildSessionsFromRuntimeEvents(nextEvents);
       if (childSessions.length > 0) {
         setSessions((current) =>

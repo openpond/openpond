@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -68,7 +68,7 @@ describe("profile source upload", () => {
     ).toBe("alpha\n");
   });
 
-  test("profile upload reuses unchanged cached file contents without rereading", async () => {
+  test("profile upload invalidates same-size content with a restored mtime", async () => {
     const repoPath = await mkdtemp(join(tmpdir(), "openpond-profile-upload-cache-"));
     const sourcePath = join(repoPath, "profiles", "default", "agent", "agent.ts");
     await mkdir(join(repoPath, "profiles", "default", "agent"), { recursive: true });
@@ -81,10 +81,14 @@ describe("profile source upload", () => {
       "profiles/default/agent/agent.ts",
     ]);
 
-    await chmod(sourcePath, 0o000);
+    const originalStat = await stat(sourcePath);
+    await writeFile(sourcePath, "export const cached = nooo;\n", "utf8");
+    await utimes(sourcePath, originalStat.atime, originalStat.mtime);
     const secondUpload = await collectProfileSourceUploadEntries(repoPath);
 
-    expect(secondUpload.entries).toEqual(firstUpload.entries);
+    expect(Buffer.from(secondUpload.entries[0]!.contentsBase64, "base64").toString("utf8")).toBe(
+      "export const cached = nooo;\n",
+    );
     expect(secondUpload.totalBytes).toBe(firstUpload.totalBytes);
     expect(secondUpload.entries.map((entry) => entry.path)).not.toContain(SOURCE_UPLOAD_CACHE_PATH);
   });
@@ -113,7 +117,7 @@ describe("profile source upload", () => {
     ).toBe("bravo\n");
   });
 
-  test("project upload reuses unchanged cached file contents without rereading", async () => {
+  test("project upload invalidates same-size content with a restored mtime", async () => {
     const projectPath = await mkdtemp(join(tmpdir(), "openpond-project-upload-cache-"));
     const sourcePath = join(projectPath, "src", "cached.ts");
     await mkdir(join(projectPath, "src"), { recursive: true });
@@ -122,10 +126,14 @@ describe("profile source upload", () => {
     const firstUpload = await collectProjectSourceUploadEntries(projectPath);
     expect(firstUpload.entries.map((entry) => entry.path)).toEqual(["src/cached.ts"]);
 
-    await chmod(sourcePath, 0o000);
+    const originalStat = await stat(sourcePath);
+    await writeFile(sourcePath, "export const cached = nooo;\n", "utf8");
+    await utimes(sourcePath, originalStat.atime, originalStat.mtime);
     const secondUpload = await collectProjectSourceUploadEntries(projectPath);
 
-    expect(secondUpload.entries).toEqual(firstUpload.entries);
+    expect(Buffer.from(secondUpload.entries[0]!.contentsBase64, "base64").toString("utf8")).toBe(
+      "export const cached = nooo;\n",
+    );
     expect(secondUpload.totalBytes).toBe(firstUpload.totalBytes);
     expect(secondUpload.entries.map((entry) => entry.path)).not.toContain(SOURCE_UPLOAD_CACHE_PATH);
   });

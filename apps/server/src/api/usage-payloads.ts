@@ -19,7 +19,6 @@ import {
   type UsageThreadBreakdown,
   type UsageVisibilityFilter,
 } from "@openpond/contracts";
-import type { StoreData } from "../types.js";
 
 type UsageStore = {
   listModelUsageRecords(query?: {
@@ -31,7 +30,7 @@ type UsageStore = {
     status?: UsageStatusFilter | null;
     limit?: number;
   }): Promise<ModelUsageRecord[]>;
-  snapshot(): Promise<StoreData>;
+  sessionShells(): Promise<Session[]>;
 };
 
 type UsageQueryRange = {
@@ -66,16 +65,16 @@ export async function usageSummaryPayload(input: {
     status: input.requestUrl.searchParams.get("status") ?? undefined,
   });
   const range = usageQueryRange(query.range, input.now ?? new Date());
-  const [records, snapshot] = await Promise.all([
+  const [records, sessions] = await Promise.all([
     input.store.listModelUsageRecords({
       startedAtFrom: range.startedAtFrom,
       startedAtTo: range.startedAtTo,
       visibility: query.visibility,
       status: query.status,
     }),
-    input.store.snapshot(),
+    input.store.sessionShells(),
   ]);
-  const sessionById = new Map(snapshot.sessions.map((session) => [session.id, session]));
+  const sessionById = new Map(sessions.map((session) => [session.id, session]));
   const sortedRecords = [...records].sort((left, right) => left.startedAt.localeCompare(right.startedAt));
   const effectiveRange = query.range === "all" && sortedRecords[0]
     ? {

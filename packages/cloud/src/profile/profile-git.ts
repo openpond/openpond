@@ -18,6 +18,7 @@ const PROFILE_REPO_GITIGNORE = [
   "**/.openpond/vendor/",
   "**/.openpond/eval-results.json",
   "**/.openpond/artifact-index.json",
+  "**/.openpond/source-upload-cache.json",
   "",
 ].join("\n");
 

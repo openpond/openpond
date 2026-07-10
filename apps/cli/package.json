@@ -15,21 +15,20 @@
     "cli": "bun run src/cli/main.ts",
     "cli:package": "bun run src/cli/main.ts",
     "clean": "node scripts/clean-dist.mjs",
-    "build:cli": "bun build ./src/cli/main.ts --outfile=dist/cli.js --target=node --banner:js='#!/usr/bin/env node'",
+    "build:cli": "bun build ./src/cli/main.ts --outdir=dist --target=node --splitting --external sqlite3 --external node-pty --define __OPENPOND_COMPILED_CLI__=false --entry-naming=cli.js --chunk-naming=chunks/[name]-[hash].js --banner:js='#!/usr/bin/env node'",
     "build:package": "bun build src/index.ts src/sandbox-template/manifest.ts --outdir dist --target node",
+    "build:local-assets": "node scripts/stage-local-assets.mjs",
     "build:types": "tsc --project tsconfig.package.json && node scripts/flatten-types.mjs",
+    "docs:commands": "bun scripts/generate-command-reference.mjs",
     "lint": "npm run typecheck",
-    "typecheck": "npm run build:types",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "bun test",
-    "build": "npm run clean && npm run build:cli && npm run build:package && npm run build:types",
-    "prepublishOnly": "npm run build",
-    "changeset": "changeset",
-    "changeset:version": "changeset version",
-    "changeset:publish": "changeset publish",
-    "release": "npm run build && npm run changeset:publish"
+    "build": "npm run clean && npm run docs:commands && npm run build:cli && npm run build:package && npm run build:local-assets && npm run build:types",
+    "prepublishOnly": "npm run build"
   },
   "files": [
     "dist/**/*",
+    "docs/**/*",
     "README.md",
     "CHANGELOG.md",
     "RELEASE.md"
@@ -60,13 +59,24 @@
   },
   "dependencies": {
     "js-yaml": "^4.1.1",
+    "node-pty": "^1.1.0",
+    "sqlite3": "^5.1.7",
     "typescript": "^5.6.3",
     "typescript-language-server": "^4.3.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.5",
+    "@openpond/cloud": "workspace:*",
+    "@openpond/contracts": "workspace:*",
+    "@openpond/local-server": "workspace:*",
+    "@openpond/terminal": "workspace:*",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.24"
-  }
+  },
+  "openpondBundledSourceDependencies": [
+    "@openpond/cloud",
+    "@openpond/contracts",
+    "@openpond/local-server",
+    "@openpond/terminal"
+  ]
 }

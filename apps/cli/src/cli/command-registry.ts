@@ -1,56 +1,13 @@
+import { getInstalledCliVersion } from "./common/version";
+import { parseBooleanOption } from "./common/options";
+import type { Command } from "./common/types";
 import {
-  runAppsAgentCreate,
-  runAppsAssistant,
-  runAppsCodeVisibility,
-  runAppsDeploy,
-  runAppsEnvGet,
-  runAppsEnvSet,
-  runAppsList,
-  runAppsPerformance,
-  runAppsPositionsTx,
-  runAppsStoreEvents,
-  runAppsSummary,
-  runAppsTools,
-  runAppsToolsExecute,
-  runAppsTradeFacts,
-  runBacktestEvents,
-  runBacktestGet,
-} from "./apps";
-import { getInstalledCliVersion, parseBooleanOption, type Command } from "./common";
-import {
-  runAccount,
-  runBacktestRun,
-  runCheckUpdate,
-  runDeployWatch,
-  runHealth,
-  runLogin,
-  runOpentool,
-  runProfiles,
-  runRepoCreate,
-  runRepoPush,
-  runTemplateBranches,
-  runTemplateStatus,
-  runTemplateUpdate,
-  runToolList,
-  runToolRun,
-} from "./core-commands";
-import { printHelp } from "./help";
-import { runOpenPondServerCommand, runOpenPondTerminalCommand } from "./app-layer";
-import { runOpenPondEditCommand, runOpenPondExtendCommand } from "./extend";
-import { runHarnessCommand } from "./harness";
-import { runGoalCommand } from "../goal/cli";
-import { runOpChatCommand } from "./opchat";
-import { runOrganizationsCommand } from "./organizations";
-import {
-  runOpenPondAgentsCommand,
-  runOpenPondInitCommand,
-  runOpenPondProfileCommand,
-  runOpenPondProfileSdkAlias,
-} from "./profile";
-import { runAgentCommand, runProjectCommand } from "./project-agent";
-import { runSandboxCommand } from "./sandbox-command";
-import { runSandboxTemplateCommand } from "./sandbox-template";
-import { runTeamsBotCommand } from "./teams-bot";
+  AGENT_OPTION_SCHEMA,
+  CHAT_OPTION_SCHEMA,
+  PROJECT_OPTION_SCHEMA,
+  SANDBOX_OPTION_SCHEMA,
+  SANDBOX_TEMPLATE_OPTION_SCHEMA,
+} from "./command-option-schemas";
 
 export type CliCommandOptionKind =
   | "boolean"
@@ -70,21 +27,38 @@ export type CliCommandDefinition = {
   name: Command;
   aliases?: Command[];
   usage: string;
+  usages?: readonly string[];
   optionSchema: Record<string, CliCommandOptionKind>;
   handler: (context: CliCommandContext) => Promise<void> | void;
 };
 
-const GLOBAL_OPTION_SCHEMA = {
+export const CLI_GLOBAL_OPTION_SCHEMA = {
   account: "string",
   apiBaseUrl: "string",
+  apiBaseurl: "string",
   baseUrl: "string",
+  baseurl: "string",
   chatApiBaseUrl: "string",
+  chatApiBaseurl: "string",
+  checkUpdate: "boolean",
   cwd: "string",
   help: "boolean",
   json: "boolean",
   profile: "string",
+  sandboxApiUrl: "string",
+  sandboxApiurl: "string",
+  tui: "boolean",
   version: "boolean",
 } as const satisfies Record<string, CliCommandOptionKind>;
+
+export const CLI_SHORT_OPTION_ALIASES: Readonly<Record<string, string>> = {
+  C: "cwd",
+  f: "force",
+  h: "help",
+  j: "json",
+  v: "version",
+  y: "yes",
+};
 
 const TEAM_OPTION_SCHEMA = {
   teamId: "string",
@@ -103,7 +77,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     name: "help",
     usage: "openpond help",
     optionSchema: {},
-    handler: () => printHelp(),
+    handler: async () => (await import("./help")).printHelp(),
   },
   {
     name: "version",
@@ -115,19 +89,19 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     name: "check-update",
     usage: "openpond check-update",
     optionSchema: {},
-    handler: () => runCheckUpdate(),
+    handler: async () => (await import("./core-commands")).runCheckUpdate(),
   },
   {
     name: "login",
     usage: "openpond login [--base-url <url>]",
-    optionSchema: GLOBAL_OPTION_SCHEMA,
-    handler: ({ options }) => runLogin(options),
+    optionSchema: CLI_GLOBAL_OPTION_SCHEMA,
+    handler: async ({ options }) => (await import("./core-commands")).runLogin(options),
   },
   {
     name: "init",
     usage: "openpond init [--path <dir>]",
     optionSchema: { path: "string" },
-    handler: ({ options }) => runOpenPondInitCommand(options),
+    handler: async ({ options }) => (await import("./profile")).runOpenPondInitCommand(options),
   },
   {
     name: "profile",
@@ -156,56 +130,67 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       teamId: "string",
       workItemId: "string",
     },
-    handler: ({ options, rest }) => runOpenPondProfileCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./profile")).runOpenPondProfileCommand(options, rest),
   },
   {
     name: "agents",
     usage: "openpond agents [--json]",
     optionSchema: { json: "boolean" },
-    handler: ({ options, rest }) => runOpenPondAgentsCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./profile")).runOpenPondAgentsCommand(options, rest),
   },
   ...profileSdkAliasDefinitions(),
   {
     name: "extend",
     usage: "openpond extend <instructions>",
     optionSchema: { cwd: "string" },
-    handler: ({ options, rest }) => runOpenPondExtendCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./extend")).runOpenPondExtendCommand(options, rest),
   },
   {
     name: "edit",
     usage: "openpond edit <instructions>",
     optionSchema: { cwd: "string" },
-    handler: ({ options, rest }) => runOpenPondEditCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./extend")).runOpenPondEditCommand(options, rest),
   },
   {
     name: "profiles",
     usage: "openpond profiles [args]",
     optionSchema: { json: "boolean" },
-    handler: ({ options, rest }) => runProfiles(options, rest),
+    handler: async ({ options, rest }) => (await import("./core-commands")).runProfiles(options, rest),
   },
   {
     name: "account",
     usage: "openpond account",
     optionSchema: { json: "boolean" },
-    handler: ({ options }) => runAccount(options),
+    handler: async ({ options }) => (await import("./core-commands")).runAccount(options),
   },
   {
     name: "health",
     usage: "openpond health",
     optionSchema: { json: "boolean" },
-    handler: ({ options }) => runHealth(options),
+    handler: async ({ options }) => (await import("./core-commands")).runHealth(options),
   },
   {
     name: "serve",
     usage: "openpond serve [args]",
-    optionSchema: { port: "integer" },
-    handler: ({ options, rest }) => runOpenPondServerCommand("serve", options, rest),
+    optionSchema: {
+      host: "string",
+      hostname: "string",
+      listen: "string",
+      port: "integer",
+    },
+    handler: async ({ options, rest }) => (await import("./app-layer")).runOpenPondServerCommand("serve", options, rest),
   },
   {
     name: "ui",
     usage: "openpond ui [args]",
-    optionSchema: { port: "integer" },
-    handler: ({ options, rest }) => runOpenPondServerCommand("web", options, rest),
+    optionSchema: {
+      host: "string",
+      hostname: "string",
+      listen: "string",
+      port: "integer",
+      webRoot: "string",
+    },
+    handler: async ({ options, rest }) => (await import("./app-layer")).runOpenPondServerCommand("web", options, rest),
   },
   {
     name: "tui",
@@ -214,33 +199,18 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     optionSchema: {
       cwd: "string",
       model: "string",
+      noServerStart: "boolean",
       project: "string",
       provider: "string",
       server: "string",
     },
-    handler: ({ options, rest }) => runOpenPondTerminalCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./app-layer")).runOpenPondTerminalCommand(options, rest),
   },
   {
     name: "chat",
-    usage: "openpond chat [--provider <id>] [--model <id>] [--project <id>] (--message <text>|--message-file <path>|--stdin) --non-interactive [--yes] [--approval-policy <policy>] [--json] [--timeout-sec <n>] [--max-output-bytes <n>] [--sandbox <mode>]",
-    optionSchema: {
-      approvalPolicy: "string",
-      cwd: "string",
-      json: "boolean",
-      maxOutputBytes: "integer",
-      message: "string",
-      messageFile: "string",
-      model: "string",
-      nonInteractive: "boolean",
-      project: "string",
-      provider: "string",
-      sandbox: "string",
-      server: "string",
-      stdin: "boolean",
-      timeoutSec: "integer",
-      yes: "boolean",
-    },
-    handler: ({ options, rest }) => runOpenPondTerminalCommand(options, rest),
+    usage: "openpond chat (--message-file <path>|--message <text>|--stdin) --non-interactive [--provider <id>] [--model <id>] [--project <id>] [--yes] [--approval-policy <policy>] [--json] [--timeout-sec <n>] [--max-output-bytes <n>] [--sandbox <mode>]",
+    optionSchema: CHAT_OPTION_SCHEMA,
+    handler: async ({ options, rest }) => (await import("./app-layer")).runOpenPondTerminalCommand(options, rest),
   },
   {
     name: "tool",
@@ -275,13 +245,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   {
     name: "sandbox-template",
     usage: "openpond sandbox-template <command> [args]",
-    optionSchema: {
-      file: "string",
-      json: "boolean",
-      teamId: "string",
-      workflowMode: "string",
-    },
-    handler: ({ options, rest }) => runSandboxTemplateCommand(options, rest),
+    optionSchema: SANDBOX_TEMPLATE_OPTION_SCHEMA,
+    handler: async ({ options, rest }) => (await import("./sandbox-template")).runSandboxTemplateCommand(options, rest),
   },
   {
     name: "repo",
@@ -303,38 +268,26 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       open: "boolean",
       timeoutSeconds: "integer",
     },
-    handler: ({ options, rest }) => runOrganizationsCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./organizations")).runOrganizationsCommand(options, rest),
   },
   {
     name: "project",
     usage: "openpond project <list|create|upsert|get|update|sync|source-upload|archive> [args]",
-    optionSchema: {
-      ...TEAM_OPTION_SCHEMA,
-      json: "boolean",
-      path: "string",
-      projectId: "string",
-      sourceCheckDispatch: "string",
-    },
-    handler: ({ options, rest }) => runProjectCommand(options, rest),
+    optionSchema: PROJECT_OPTION_SCHEMA,
+    handler: async ({ options, rest }) => (await import("./project-agent")).runProjectCommand(options, rest),
   },
   {
     name: "agent",
     usage: "openpond agent <inspect|build|validate|eval|traces|list|create|upsert|get|update|run|run-test|bind-source|source|edit|archive> [args]",
-    optionSchema: {
-      ...TEAM_OPTION_SCHEMA,
-      ...PROFILE_SDK_OPTION_SCHEMA,
-      agentId: "string",
-      baseSha: "string",
-      checkKind: "string",
-      conversationId: "string",
-      dispatch: "string",
-      metadata: "json",
-      projectId: "string",
-      sourceCheckDispatch: "string",
-      sourceRef: "string",
-      targetProjectId: "string",
-    },
-    handler: ({ options, rest }) => runAgentCommand(options, rest),
+    usages: [
+      "openpond agent run <action> [--cwd <project>] [--input <json>]",
+      "openpond agent run <agentId> --team-id <id> [--conversation-id <id>] [--target-project-id <projectId>] [--input <json>]",
+      "openpond agent source check-status <workItemId> --team-id <id> [--limit <n>]",
+      "openpond agent edit open <agentId> --team-id <id> --project-id <id> [--message <text>]",
+      "openpond agent edit checkpoint-result|commit-result|pr-result <workItemId> --team-id <id> --ref <artifact-ref>",
+    ],
+    optionSchema: AGENT_OPTION_SCHEMA,
+    handler: async ({ options, rest }) => (await import("./project-agent")).runAgentCommand(options, rest),
   },
   {
     name: "goal",
@@ -346,7 +299,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       json: "boolean",
       goalId: "string",
     },
-    handler: ({ options, rest }) => runGoalCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("../goal/cli")).runGoalCommand(options, rest),
   },
   {
     name: "harness",
@@ -367,18 +320,13 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       token: "string",
       tokenFile: "string",
     },
-    handler: ({ options, rest }) => runHarnessCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./harness")).runHarnessCommand(options, rest),
   },
   {
     name: "sandbox",
     usage: "openpond sandbox <command> [args]",
-    optionSchema: {
-      ...TEAM_OPTION_SCHEMA,
-      json: "boolean",
-      projectId: "string",
-      sandboxApiUrl: "string",
-    },
-    handler: ({ options, rest }) => runSandboxCommand(options, rest),
+    optionSchema: SANDBOX_OPTION_SCHEMA,
+    handler: async ({ options, rest }) => (await import("./sandbox-command")).runSandboxCommand(options, rest),
   },
   {
     name: "opchat",
@@ -387,7 +335,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       json: "boolean",
       stream: "boolean",
     },
-    handler: ({ options, rest }) => runOpChatCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./opchat")).runOpChatCommand(options, rest),
   },
   {
     name: "teams-bot",
@@ -396,7 +344,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       json: "boolean",
       teamId: "string",
     },
-    handler: ({ options, rest }) => runTeamsBotCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./teams-bot")).runTeamsBotCommand(options, rest),
   },
   {
     name: "apps",
@@ -417,7 +365,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     name: "opentool",
     usage: "openpond opentool <init|validate|build> [args]",
     optionSchema: {},
-    handler: ({ rest }) => runOpentool(rest),
+    handler: async ({ rest }) => (await import("./core-commands")).runOpentool(rest),
   },
 ] as const;
 
@@ -437,6 +385,21 @@ export function getCliCommandDefinition(command: Command): CliCommandDefinition 
   return CLI_COMMAND_BY_NAME.get(command) ?? null;
 }
 
+export function getCliOptionKind(command: Command, key: string): CliCommandOptionKind | undefined {
+  const definition = command ? getCliCommandDefinition(command) : null;
+  return definition?.optionSchema[key] ?? CLI_GLOBAL_OPTION_SCHEMA[key as keyof typeof CLI_GLOBAL_OPTION_SCHEMA];
+}
+
+export function getAnyCliOptionKind(key: string): CliCommandOptionKind | undefined {
+  const globalKind = CLI_GLOBAL_OPTION_SCHEMA[key as keyof typeof CLI_GLOBAL_OPTION_SCHEMA];
+  if (globalKind) return globalKind;
+  for (const definition of CLI_COMMAND_REGISTRY) {
+    const kind = definition.optionSchema[key];
+    if (kind) return kind;
+  }
+  return undefined;
+}
+
 export async function runCliCommand(context: CliCommandContext): Promise<boolean> {
   const definition = getCliCommandDefinition(context.command);
   if (!definition) return false;
@@ -449,7 +412,11 @@ export async function runCliCommand(context: CliCommandContext): Promise<boolean
 }
 
 export function formatCliCommandUsage(definition: CliCommandDefinition): string {
-  const lines = [`Usage:`, `  ${definition.usage}`];
+  const lines = [
+    `Usage:`,
+    `  ${definition.usage}`,
+    ...(definition.usages ?? []).map((usage) => `  ${usage}`),
+  ];
   if (definition.aliases?.length) {
     lines.push("", `Aliases:`, `  ${definition.aliases.join(", ")}`);
   }
@@ -475,16 +442,17 @@ function cliOptionName(name: string): string {
 }
 
 function profileSdkAliasDefinitions(): CliCommandDefinition[] {
-  const aliases: Command[] = ["inspect", "build", "validate", "eval", "run"];
+  const aliases = ["inspect", "build", "validate", "eval", "run"] as const;
   return aliases.map((name) => ({
     name,
     usage: `openpond ${name} [args]`,
     optionSchema: PROFILE_SDK_OPTION_SCHEMA,
-    handler: ({ command, options, rest }) => runOpenPondProfileSdkAlias(command, options, rest),
+    handler: async ({ options, rest }) => (await import("./profile")).runOpenPondProfileSdkAlias(name, options, rest),
   }));
 }
 
 async function runToolCommand({ options, rest }: CliCommandContext): Promise<void> {
+  const { runToolList, runToolRun } = await import("./core-commands");
   const subcommand = rest[0];
   if (subcommand === "list") {
     const target = rest[1];
@@ -509,6 +477,8 @@ async function runToolCommand({ options, rest }: CliCommandContext): Promise<voi
 }
 
 async function runBacktestCommand({ options, rest }: CliCommandContext): Promise<void> {
+  const { runBacktestRun } = await import("./core-commands");
+  const { runBacktestEvents, runBacktestGet } = await import("./apps");
   const subcommand = rest[0] || "run";
   if (subcommand === "run") {
     const target = rest[1];
@@ -543,6 +513,7 @@ async function runBacktestCommand({ options, rest }: CliCommandContext): Promise
 }
 
 async function runDeployCommand({ options, rest }: CliCommandContext): Promise<void> {
+  const { runDeployWatch } = await import("./core-commands");
   const subcommand = rest[0] || "watch";
   if (subcommand !== "watch") {
     throw new Error(
@@ -559,6 +530,7 @@ async function runDeployCommand({ options, rest }: CliCommandContext): Promise<v
 }
 
 async function runTemplateCommand({ options, rest }: CliCommandContext): Promise<void> {
+  const { runTemplateBranches, runTemplateStatus, runTemplateUpdate } = await import("./core-commands");
   const subcommand = rest[0] || "status";
   const target = rest[1];
   if (!target) {
@@ -584,6 +556,7 @@ async function runTemplateCommand({ options, rest }: CliCommandContext): Promise
 }
 
 async function runRepoCommand({ options, rest }: CliCommandContext): Promise<void> {
+  const { runRepoCreate, runRepoPush } = await import("./core-commands");
   const subcommand = rest[0] || "create";
   if (subcommand === "create") {
     await runRepoCreate(options, rest.slice(1));
@@ -599,6 +572,22 @@ async function runRepoCommand({ options, rest }: CliCommandContext): Promise<voi
 }
 
 async function runAppsCommand({ options, rest }: CliCommandContext): Promise<void> {
+  const {
+    runAppsAgentCreate,
+    runAppsAssistant,
+    runAppsCodeVisibility,
+    runAppsDeploy,
+    runAppsEnvGet,
+    runAppsEnvSet,
+    runAppsList,
+    runAppsPerformance,
+    runAppsPositionsTx,
+    runAppsStoreEvents,
+    runAppsSummary,
+    runAppsTools,
+    runAppsToolsExecute,
+    runAppsTradeFacts,
+  } = await import("./apps");
   const subcommand = rest[0];
   if (subcommand === "list") {
     await runAppsList(options);

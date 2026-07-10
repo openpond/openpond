@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": ["turn-runner-public-contract.test.ts"]
+}

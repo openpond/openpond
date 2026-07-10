@@ -6,7 +6,6 @@ import {
   readFileSync,
   statSync,
   writeFileSync,
-  type Stats,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +16,10 @@ import {
   chatAttachmentImageContentType,
   safeChatAttachmentPathSegment,
 } from "./chat-attachments.js";
+import {
+  loadCodexHistoryFileIndex,
+  type CodexHistoryFile,
+} from "./codex-history-file-index.js";
 
 const CODEX_HISTORY_SESSION_PREFIX = "codex_history_";
 const CODEX_HISTORY_EVENT_SOURCE = "codex_history";
@@ -29,13 +32,6 @@ const PROMPT_MAX_LENGTH = 30_000;
 const ASSISTANT_MAX_LENGTH = 60_000;
 const TOOL_OUTPUT_MAX_LENGTH = 8_000;
 const MAX_CODEX_HISTORY_IMAGE_BYTES = 15 * 1024 * 1024;
-
-type CodexHistoryFile = {
-  threadId: string;
-  filePath: string;
-  archived: boolean;
-  stats: Stats;
-};
 
 type CodexHistoryIndexEntry = {
   id: string;
@@ -202,7 +198,7 @@ export async function loadCodexHistoryThreads(options: {
 } = {}): Promise<CodexHistoryThread[]> {
   const codexHome = options.codexHome ?? codexHomePath();
   const [files, history, index, globalState] = await Promise.all([
-    listCodexHistoryFiles(codexHome),
+    loadCodexHistoryFileIndex(codexHome),
     readPromptHistory(codexHome),
     readSessionIndex(codexHome),
     readGlobalState(codexHome),
@@ -695,42 +691,6 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   }
 
   return { accept, finish };
-}
-
-async function listCodexHistoryFiles(codexHome: string): Promise<CodexHistoryFile[]> {
-  const roots = [
-    { root: path.join(codexHome, "sessions"), archived: false },
-    { root: path.join(codexHome, "archived_sessions"), archived: true },
-  ];
-  const files: CodexHistoryFile[] = [];
-  for (const { root, archived } of roots) {
-    await walkCodexHistoryFiles(root, archived, files);
-  }
-  return files;
-}
-
-async function walkCodexHistoryFiles(root: string, archived: boolean, output: CodexHistoryFile[]): Promise<void> {
-  let entries: Array<import("node:fs").Dirent>;
-  try {
-    entries = await fs.readdir(root, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = path.join(root, entry.name);
-      if (entry.isDirectory()) {
-        await walkCodexHistoryFiles(entryPath, archived, output);
-        return;
-      }
-      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) return;
-      const threadId = threadIdFromFileName(entry.name);
-      if (!threadId) return;
-      const stats = await fs.stat(entryPath).catch(() => null);
-      if (!stats) return;
-      output.push({ threadId, filePath: entryPath, archived, stats });
-    }),
-  );
 }
 
 async function readPromptHistory(codexHome: string): Promise<Map<string, CodexHistoryPromptEntry>> {

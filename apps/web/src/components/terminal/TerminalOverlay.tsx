@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import "../../styles/terminal/terminal-overlay.css";
 import type { TerminalScope } from "@openpond/contracts";
 import { ChevronDown, Plus, X } from "../icons";
 import { terminalWebSocketProtocols, terminalWebSocketUrl, type ClientConnection } from "../../api";

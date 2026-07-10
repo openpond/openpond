@@ -45,3 +45,4 @@ export {
   updateOpenPondAppEnvironment,
 } from "./actions.js";
 export { getBundledRuntimeVersion } from "./version.js";
+export { createReadyLineParser, type ReadyLineParser } from "./ready-line-parser.js";

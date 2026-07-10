@@ -14,7 +14,7 @@ describe("runtime event bus assistant delta coalescing", () => {
       store: fakeStore(events),
       assistantDeltaFlushMs: 10_000,
     });
-    bus.subscribers.add(fakeSubscriber(writes));
+    bus.addLiveSubscriber(fakeSubscriber(writes));
 
     await bus.appendRuntimeEvent(runtimeEvent("delta-1", {
       name: "assistant.delta",
@@ -73,7 +73,7 @@ describe("runtime event bus assistant delta coalescing", () => {
       store: fakeStore(events),
       assistantDeltaFlushMs: 10_000,
     });
-    bus.subscribers.add(fakeSubscriber(writes));
+    bus.addLiveSubscriber(fakeSubscriber(writes));
     const largeOutput = `${"A".repeat(25_000)}middle-content-should-be-omitted${"Z".repeat(25_000)}`;
 
     await bus.appendRuntimeEvent(runtimeEvent("command-output-1", {
@@ -102,6 +102,59 @@ describe("runtime event bus assistant delta coalescing", () => {
     expect(writes).toHaveLength(1);
     expect(runtimeEventFromSseWrite(writes[0]!).output).toBe(stored.output);
   });
+
+  test("replays sequenced history before marking a subscriber live", async () => {
+    const history = [
+      { sequence: 4, event: { ...runtimeEvent("history-4", { name: "turn.started" }), sequence: 4 } },
+      { sequence: 5, event: { ...runtimeEvent("history-5", { name: "assistant.delta", output: "caught up" }), sequence: 5 } },
+    ];
+    const writes: string[] = [];
+    const store = {
+      async appendRuntimeEvent(event: RuntimeEvent) {
+        return event;
+      },
+      async runtimeEventPageRows() {
+        return {
+          entries: history,
+          totalMatchingEvents: history.length,
+          remainingMatchingEvents: history.length,
+        };
+      },
+    } as unknown as SqliteStore;
+    const bus = createRuntimeEventBus({ logger: testLogger(), store });
+
+    const close = await bus.openEventSubscriber({
+      response: fakeSubscriber(writes),
+      afterSequence: 3,
+      sessionId: "session-1",
+    });
+    close();
+
+    expect(writes.map(runtimeEventFromSseWrite).map((event) => event.sequence)).toEqual([4, 5]);
+    expect(writes[0]).toStartWith("id: 4\n");
+  });
+
+  test("disconnects subscribers that apply stream backpressure", async () => {
+    const events: RuntimeEvent[] = [];
+    let destroyed = false;
+    const bus = createRuntimeEventBus({ logger: testLogger(), store: fakeStore(events) });
+    bus.addLiveSubscriber({
+      destroyed: false,
+      write() {
+        return false;
+      },
+      destroy() {
+        destroyed = true;
+        this.destroyed = true;
+        return this;
+      },
+    } as unknown as ServerResponse);
+
+    await bus.appendRuntimeEvent(runtimeEvent("slow-client", { name: "turn.started" }));
+
+    expect(destroyed).toBe(true);
+    expect(bus.subscribers.size).toBe(0);
+  });
 });
 
 function runtimeEvent(
@@ -122,7 +175,9 @@ function runtimeEvent(
 function fakeStore(events: RuntimeEvent[]): SqliteStore {
   return {
     async appendRuntimeEvent(event: RuntimeEvent) {
-      events.push(event);
+      const persisted = { ...event, sequence: events.length + 1 };
+      events.push(persisted);
+      return persisted;
     },
   } as unknown as SqliteStore;
 }

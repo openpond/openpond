@@ -3,7 +3,7 @@
   <p><strong>Frontier-grade agent orchestration for any model, provider, or subscription.</strong></p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
-    <a href="apps/cli"><img alt="npm package status" src="https://img.shields.io/badge/npm-unpublished-lightgrey?logo=npm&logoColor=white" /></a>
+    <a href="https://www.npmjs.com/package/openpond"><img alt="npm package version" src="https://img.shields.io/npm/v/openpond?logo=npm&logoColor=white" /></a>
     <img alt="Runtime: Bun" src="https://img.shields.io/badge/runtime-Bun-000000?logo=bun&logoColor=white" />
     <img alt="Language: TypeScript" src="https://img.shields.io/badge/language-TypeScript-3178c6?logo=typescript&logoColor=white" />
   </p>
@@ -24,6 +24,7 @@ No login required for local work. Bring your own keys, models, providers, subscr
 
 | Product | Capability |
 | --- | --- |
+| Desktop, CLI, and TUI | Use the same local runtime through [Desktop](docs/public/desktop.md), the [CLI](docs/public/cli.md), or the [terminal UI](docs/public/tui.md). |
 | Orchestration | Run chats, agents, subagents, skills, tools, approvals, browser control, connected apps, and goal loops through one durable execution harness. |
 | Model access [(docs)](docs/public/model-access.md) | Bring Codex, BYOK providers, hosted OpenPond models, open source models, or subscription-backed model access to the same agent workflow. |
 | Agents [(docs)](docs/public/creating-agents.md) | Create durable agents from any chat; agent code is saved locally to your profile, with one-click cloud push when you want access from Slack, another computer, or OpenPond Web. |
@@ -114,7 +115,8 @@ bun run dev
 
 ```bash
 bun run dev                 # run the desktop development app
-bun run dev:web             # run the browser app flow
+bun run dev:web             # run watched local server plus browser renderer
+bun run dev:web:renderer    # run only the browser renderer
 bun run cli                 # run the CLI entrypoint
 bun run terminal            # run the terminal chat client
 bun run typecheck           # TypeScript project references
@@ -140,9 +142,7 @@ packages/
   codex-provider/  # Codex provider integration
   contracts/       # shared runtime, app, profile, and workspace contracts
   runtime/         # chat/runtime primitives
-packaging/
-  homebrew/        # draft Homebrew cask
-  winget/          # draft winget manifests
+packaging/         # active platform policy and release notes
 tests/             # root unit and integration-style tests
 ```
 
@@ -153,7 +153,8 @@ The root workspace is the source of truth for cross-package work. Prefer root co
 | Area | Command |
 | --- | --- |
 | Full local app | `bun run dev` |
-| Browser renderer | `bun run dev:web` |
+| Browser app | `bun run dev:web` |
+| Renderer only | `bun run dev:web:renderer` |
 | CLI package | `bun run cli`, `bun run cli:typecheck`, `bun run cli:test` |
 | Agent SDK | `bun run agent-sdk:typecheck`, `bun run agent-sdk:check` |
 | Server build | `bun run build:server` |
@@ -165,8 +166,14 @@ CI installs with Bun, then runs:
 
 ```bash
 bun run typecheck
+bun run cli:typecheck
 bun run build
 bun run budgets:warn
+bun run budgets:check
+bun run cli:build
+bun run budgets:cli
+bun run structure:check
+bun run dependencies:check
 bun run test
 ```
 
@@ -174,4 +181,4 @@ Coverage badges should be added only after coverage is collected and uploaded by
 
 ## Publishing Notes
 
-The CLI package lives in `apps/cli` and is configured as the public npm package `openpond` with the `openpond` and `op` binaries. The npm badge above is marked unpublished until the package is available in the public registry.
+The CLI package lives in `apps/cli` and is published as `openpond` with the `openpond` and `op` binaries. Stable tags publish npm provenance and GitHub CLI/Desktop artifacts only after the supported-platform smoke reports pass. Nightly tags publish GitHub artifacts without creating an npm version. See the [CLI guide](docs/public/cli.md) and [packaging policy](packaging/README.md).

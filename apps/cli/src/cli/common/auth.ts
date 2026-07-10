@@ -17,6 +17,11 @@ export function resolveApiKey(config: LocalConfig): string | null {
 }
 
 export async function promptForApiKey(): Promise<string> {
+  if (!input.isTTY || !output.isTTY) {
+    throw new Error(
+      "OpenPond API key is required in non-interactive mode. Set OPENPOND_API_KEY or run `openpond login` in a terminal.",
+    );
+  }
   console.log("Open the OpenPond UI to create an API key:");
   console.log(UI_API_KEY_URL);
   const rl = createInterface({ input, output });
