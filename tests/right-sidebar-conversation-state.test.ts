@@ -15,6 +15,7 @@ import {
   normalizeWorkspaceDiffPanelViewState,
   workspaceDiffPanelViewStatesEqual,
 } from "../apps/web/src/components/workspace-diff/workspace-diff-panel-model";
+import { shouldShowRightSidebarHomePanel } from "../apps/web/src/components/app-shell/MainPane";
 
 function panel(overrides: Partial<RightChatPanel> = {}): RightChatPanel {
   return {
@@ -28,6 +29,23 @@ function panel(overrides: Partial<RightChatPanel> = {}): RightChatPanel {
 }
 
 describe("right sidebar conversation state", () => {
+  test("uses Workspace as the fallback for an open sidebar with no content panel", () => {
+    expect(
+      shouldShowRightSidebarHomePanel({
+        supportedView: true,
+        open: true,
+        hasContentPanel: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowRightSidebarHomePanel({
+        supportedView: true,
+        open: true,
+        hasContentPanel: true,
+      }),
+    ).toBe(false);
+  });
+
   test("defaults to a closed changes sidebar", () => {
     expect(defaultRightSidebarConversationState()).toEqual({
       diffPanelOpen: false,

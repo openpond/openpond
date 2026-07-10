@@ -285,10 +285,10 @@ export function AppTopBar({
               {showDiffControls && (
                 <button
                   type="button"
-                  className={`topbar-diff-button ${diffPanelOpen ? "active" : ""}`}
-                  title={`${diffPanelOpen ? "Hide" : "Show"} sidebar${filesChanged ? `, ${filesChanged} changed files` : ""}`}
-                  aria-label={`${diffPanelOpen ? "Hide" : "Show"} sidebar`}
-                  aria-pressed={diffPanelOpen}
+                  className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
+                  title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar${filesChanged ? `, ${filesChanged} changed files` : ""}`}
+                  aria-label={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
+                  aria-pressed={rightSidebarOpen}
                   onClick={onToggleDiffPanel}
                 >
                   <PanelRight size={16} />

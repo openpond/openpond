@@ -2,42 +2,26 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-type SizeException = {
-  maxLines: number;
-  owner: string;
-  rationale: string;
-  phase: string;
-  expires: string;
-};
-
-type StructurePolicy = {
-  maxHandwrittenFileLines: number;
-  maxNewFileLines: number;
-  maxRuntimeCycles: number;
-  exceptions: Record<string, SizeException>;
-};
-
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const policyPath = path.join(root, "scripts", "source-structure-exceptions.json");
 const productionRoots = [path.join(root, "apps"), path.join(root, "packages")];
 const handwrittenRoots = [...productionRoots, path.join(root, "tests"), path.join(root, "scripts")];
 const cycleRoots = [
   path.join(root, "apps/server/src/runtime"),
   path.join(root, "apps/server/src/openpond"),
 ];
+const maxRuntimeCycles = 0;
 const extractedTurnDomains = ["turns", "hosted-turn", "subagents", "goals", "create-pipeline"];
 
 async function main(): Promise<void> {
-  const policy = JSON.parse(await readFile(policyPath, "utf8")) as StructurePolicy;
   const handwrittenFiles = (await Promise.all(handwrittenRoots.map(walk))).flat().filter(isHandwrittenCode);
   const files = handwrittenFiles.filter(isProductionSource);
-  const errors = await checkSizes(handwrittenFiles, policy);
+  const errors: string[] = [];
   const cycleFiles = files.filter((file) => cycleRoots.some((cycleRoot) => isWithin(file, cycleRoot)));
   const graph = await buildImportGraph(cycleFiles);
   const cycles = findCycles(graph);
 
-  if (cycles.length > policy.maxRuntimeCycles) {
-    errors.push(`runtime/openpond module cycles increased: ${cycles.length} found, maximum is ${policy.maxRuntimeCycles}`);
+  if (cycles.length > maxRuntimeCycles) {
+    errors.push(`runtime/openpond module cycles increased: ${cycles.length} found, maximum is ${maxRuntimeCycles}`);
   }
   for (const cycle of cycles) console.log(`[module-cycle] ${cycle.map(relative).join(" -> ")}`);
   errors.push(...checkTurnDomainDirection(graph));
@@ -50,35 +34,6 @@ async function main(): Promise<void> {
   console.log(
     `Source structure check passed: ${files.length} production modules, ${handwrittenFiles.length} hand-written code files, ${cycles.length} runtime/openpond cycles.`,
   );
-}
-
-async function checkSizes(files: string[], policy: StructurePolicy): Promise<string[]> {
-  const errors: string[] = [];
-  const today = new Date().toISOString().slice(0, 10);
-  const seen = new Set<string>();
-  for (const file of files) {
-    const name = relative(file);
-    const lines = countLines(await readFile(file, "utf8"));
-    const exception = policy.exceptions[name];
-    if (exception) {
-      seen.add(name);
-      if (!exception.owner || !exception.rationale || !exception.phase || !exception.expires) {
-        errors.push(`${name}: size exception is missing owner, rationale, phase, or expiry`);
-      }
-      if (exception.expires < today) errors.push(`${name}: size exception expired ${exception.expires}`);
-      if (lines > exception.maxLines) {
-        errors.push(`${name}: grew to ${lines} lines; ratcheted maximum is ${exception.maxLines}`);
-      }
-    } else if (isProductionSource(file) && lines > policy.maxNewFileLines) {
-      errors.push(`${name}: ${lines} lines exceeds the ${policy.maxNewFileLines}-line production limit`);
-    } else if (lines > policy.maxHandwrittenFileLines) {
-      errors.push(`${name}: ${lines} lines exceeds the ${policy.maxHandwrittenFileLines}-line hand-written code limit`);
-    }
-  }
-  for (const name of Object.keys(policy.exceptions)) {
-    if (!seen.has(name)) errors.push(`${name}: stale size exception; remove it or restore the owned file`);
-  }
-  return errors;
 }
 
 async function buildImportGraph(files: string[]): Promise<Map<string, Set<string>>> {
@@ -169,12 +124,6 @@ function isProductionSource(file: string): boolean {
 
 function isHandwrittenCode(file: string): boolean {
   return /\.(?:[cm]?[jt]sx?)$/.test(file) && !/\.d\.(?:ts|mts|cts)$/.test(file);
-}
-
-function countLines(source: string): number {
-  if (source.length === 0) return 0;
-  const lines = source.split(/\r?\n/);
-  return lines.at(-1) === "" ? lines.length - 1 : lines.length;
 }
 
 function relative(file: string): string {

@@ -10,12 +10,10 @@ import { BrowserViewport } from "./BrowserViewport";
 export function BrowserSidebar({
   conversationId,
   expanded,
-  onClose,
   onResizeStart,
 }: {
   conversationId: string;
   expanded: boolean;
-  onClose: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }) {
   const browser = useBrowserSidebar(conversationId);
@@ -57,7 +55,6 @@ export function BrowserSidebar({
         available={browser.available}
         onBack={() => void browser.back()}
         onClearData={clearData}
-        onClose={onClose}
         onForward={() => void browser.forward()}
         onNavigate={navigate}
         onOpenExternal={() => void browser.openExternal()}

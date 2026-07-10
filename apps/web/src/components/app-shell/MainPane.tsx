@@ -237,7 +237,6 @@ type MainPaneProps = {
     options?: ComposerSubmitOptions,
   ) => Promise<boolean>;
   onStopRightChat: (sessionId: string | null) => Promise<boolean>;
-  onCloseRightPanel: () => void;
   onCloseTerminal: () => void;
   onOpenCloudHome: () => void;
   onSetupCloudProject: (projectId: string) => void;
@@ -571,7 +570,6 @@ export function MainPane({
   onRightChatProviderChange,
   onSubmitRightChat,
   onStopRightChat,
-  onCloseRightPanel,
   onCloseTerminal,
   onOpenCloudHome,
   onSetupCloudProject,
@@ -670,8 +668,12 @@ export function MainPane({
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
-  const showRightHomePanel =
-    (view === "chat" || view === "cloud" || view === "profile") && diffPanelOpen && rightPanelMode === "home";
+  const showRightHomePanel = shouldShowRightSidebarHomePanel({
+    supportedView: view === "chat" || view === "cloud" || view === "profile",
+    open: diffPanelOpen,
+    hasContentPanel:
+      showDiffPanel || showBrowserPanel || showRightChatPanel || showTeamAiThreadPanel,
+  });
   const showRightPanel =
     showDiffPanel ||
     showBrowserPanel ||
@@ -1303,7 +1305,6 @@ export function MainPane({
     <BrowserSidebar
       conversationId={browserConversationId}
       expanded={diffPanelExpanded}
-      onClose={onCloseRightPanel}
       onResizeStart={onDiffPanelResizeStart}
     />
   ) : null;
@@ -1679,4 +1680,12 @@ export function MainPane({
       )}
     </main>
   );
+}
+
+export function shouldShowRightSidebarHomePanel(input: {
+  supportedView: boolean;
+  open: boolean;
+  hasContentPanel: boolean;
+}): boolean {
+  return input.supportedView && input.open && !input.hasContentPanel;
 }

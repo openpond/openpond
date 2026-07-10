@@ -1562,7 +1562,10 @@ export function App() {
     "--diff-panel-width": `${diffPanelWidth}px`,
   } as CSSProperties;
   const rightSidebarAvailableForView =
-    view === "chat" || view === "cloud" || view === "profile" || view === "team";
+    view === "chat" ||
+    view === "cloud" ||
+    view === "profile" ||
+    (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
     isMac ? "platform-macos" : "",
@@ -1879,7 +1882,6 @@ export function App() {
         onRightChatProviderChange: updateRightChatProvider,
         onSubmitRightChat: submitRightChatPrompt,
         onStopRightChat: (sessionId) => stopTurn(sessionId),
-        onCloseRightPanel: () => setDiffPanelOpen(false),
         onCloseTerminal: () => setTerminalOpen(false),
         onOpenCloudHome: openCloudHome,
         onSetupCloudProject: setupCloudProjectFromCloudView,

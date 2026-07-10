@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ExternalLink, MoreHorizontal, RefreshCw, Square, X } from "../icons";
+import { ArrowLeft, ArrowRight, ExternalLink, MoreHorizontal, RefreshCw, Square } from "../icons";
 import { useEffect, useState, type FormEvent } from "react";
 
 export function BrowserToolbar({
@@ -6,7 +6,6 @@ export function BrowserToolbar({
   available,
   onBack,
   onClearData,
-  onClose,
   onForward,
   onNavigate,
   onOpenExternal,
@@ -17,7 +16,6 @@ export function BrowserToolbar({
   available: boolean;
   onBack: () => void;
   onClearData: () => void;
-  onClose: () => void;
   onForward: () => void;
   onNavigate: (url: string) => void;
   onOpenExternal: () => void;
@@ -93,9 +91,6 @@ export function BrowserToolbar({
             </div>
           )}
         </div>
-        <button type="button" title="Close browser" aria-label="Close browser" onClick={onClose}>
-          <X size={14} />
-        </button>
       </div>
     </div>
   );

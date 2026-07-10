@@ -329,10 +329,15 @@
   app-region: no-drag;
 }
 
-.topbar-diff-button:hover,
-.topbar-diff-button.active {
+.topbar-diff-button:hover {
   color: #f3f3f3;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.topbar-diff-button.active {
+  color: #f3f3f3;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .topbar-diff-counts {

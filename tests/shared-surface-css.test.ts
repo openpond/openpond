@@ -33,7 +33,7 @@ describe("shared surface stylesheet ownership", () => {
 
   test("loads Team row styles with the eagerly rendered sidebar", async () => {
     const [component, sidebarCss, featureCss] = await Promise.all([
-      source("apps/web/src/components/sidebar/SidebarSectionList.tsx"),
+      source("apps/web/src/components/sidebar/SidebarTeamSection.tsx"),
       source("apps/web/src/styles/sidebar/team-sidebar.css"),
       source("apps/web/src/styles/team-chat/team-chat.css"),
     ]);
