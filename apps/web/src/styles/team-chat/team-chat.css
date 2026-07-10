@@ -30,33 +30,11 @@
 }
 
 .team-chat-main {
+  position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-}
-
-.team-chat-header {
-  display: flex;
-  align-items: center;
-  min-height: 54px;
-  border-bottom: 1px solid var(--border);
-  padding: 8px 22px;
-}
-
-.team-chat-header h2 {
-  margin: 0;
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.team-chat-header span {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .team-chat-error {
@@ -65,7 +43,7 @@
   align-items: center;
   gap: 10px;
   z-index: 3;
-  top: 62px;
+  top: 12px;
   left: 50%;
   max-width: min(520px, calc(100% - 32px));
   transform: translateX(-50%);
@@ -153,8 +131,7 @@
   background: rgba(255, 255, 255, 0.025);
 }
 
-.team-chat-avatar,
-.team-sidebar-avatar {
+.team-chat-avatar {
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
@@ -263,8 +240,7 @@
 .team-chat-icon-button:focus-visible,
 .team-chat-thread-link:focus-visible,
 .team-chat-message-images > a:focus-visible,
-.team-chat-message-image-retry:focus-visible,
-.team-sidebar-row:focus-visible {
+.team-chat-message-image-retry:focus-visible {
   outline: 2px solid #67d4c0;
   outline-offset: 2px;
 }
@@ -468,57 +444,6 @@
   padding-left: 12px;
 }
 
-.team-sidebar-row {
-  display: grid;
-  grid-template-columns: 21px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  min-height: 29px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted-strong);
-  padding: 2px 5px;
-  text-align: left;
-  font-size: 13px;
-}
-
-.team-sidebar-row:hover,
-.team-sidebar-row.selected {
-  background: rgba(255, 255, 255, 0.065);
-  color: var(--text);
-}
-
-.team-sidebar-channel {
-  text-align: center;
-  color: #888;
-  font-size: 16px;
-}
-
-.team-sidebar-avatar {
-  width: 20px;
-  height: 20px;
-  font-size: 8px;
-}
-
-.team-sidebar-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-sidebar-unread {
-  min-width: 18px;
-  border-radius: 8px;
-  background: #e8e8e8;
-  color: #181818;
-  padding: 1px 5px;
-  text-align: center;
-  font-size: 9px;
-  font-weight: 700;
-}
-
 @media (max-width: 980px) {
   .main-pane.team-active.diff-open {
     grid-template-columns: minmax(0, 1fr);
@@ -534,10 +459,6 @@
 }
 
 @media (max-width: 620px) {
-  .team-chat-header {
-    padding-inline: 14px;
-  }
-
   .team-chat-messages {
     padding-inline: 10px;
   }

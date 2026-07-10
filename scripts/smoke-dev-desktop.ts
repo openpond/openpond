@@ -225,6 +225,7 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   insightsButtonWidth: number;
   insightsButtonHeight: number;
   insightsDropdownHidden: boolean;
+  teamRowStyled: boolean;
 }> {
   const styles = await evaluateValue<{
     buttonWidth: number;
@@ -232,21 +233,37 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     buttonDisplay: string;
     dropdownVisibility: string | null;
     dropdownPointerEvents: string | null;
+    teamRowDisplay: string | null;
+    teamRowBackgroundColor: string | null;
   }>(
     cdp,
     `(() => {
       const button = document.querySelector(".topbar-insights-button");
       const dropdown = document.querySelector(".topbar-insights-dropdown");
+      const existingTeamRow = document.querySelector(".team-sidebar-row");
+      const teamRow = existingTeamRow instanceof HTMLElement
+        ? existingTeamRow
+        : Object.assign(document.createElement("button"), { className: "team-sidebar-row" });
+      if (!existingTeamRow) {
+        teamRow.style.position = "fixed";
+        teamRow.style.visibility = "hidden";
+        document.body.append(teamRow);
+      }
       if (!(button instanceof HTMLElement)) throw new Error("Insights top-bar button is missing.");
       const buttonStyle = getComputedStyle(button);
       const dropdownStyle = dropdown instanceof HTMLElement ? getComputedStyle(dropdown) : null;
-      return {
+      const teamRowStyle = getComputedStyle(teamRow);
+      const result = {
         buttonWidth: button.getBoundingClientRect().width,
         buttonHeight: button.getBoundingClientRect().height,
         buttonDisplay: buttonStyle.display,
         dropdownVisibility: dropdownStyle?.visibility ?? null,
-        dropdownPointerEvents: dropdownStyle?.pointerEvents ?? null
+        dropdownPointerEvents: dropdownStyle?.pointerEvents ?? null,
+        teamRowDisplay: teamRowStyle.display,
+        teamRowBackgroundColor: teamRowStyle.backgroundColor
       };
+      if (!existingTeamRow) teamRow.remove();
+      return result;
     })()`,
   );
   if (
@@ -262,10 +279,16 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   if (!insightsDropdownHidden) {
     throw new Error(`Insights dropdown was exposed at rest: ${JSON.stringify(styles)}`);
   }
+  const teamRowStyled =
+    styles.teamRowDisplay === "grid" && styles.teamRowBackgroundColor === "rgba(0, 0, 0, 0)";
+  if (!teamRowStyled) {
+    throw new Error(`Team sidebar row styles were not loaded: ${JSON.stringify(styles)}`);
+  }
   return {
     insightsButtonWidth: styles.buttonWidth,
     insightsButtonHeight: styles.buttonHeight,
     insightsDropdownHidden,
+    teamRowStyled,
   };
 }
 

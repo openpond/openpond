@@ -29,6 +29,8 @@ describe("team chat view", () => {
     const markup = render({ detail: emptyDetail() });
     expect(markup).toContain("No messages yet");
     expect(markup).toContain('contentEditable="true"');
+    expect(markup).toContain('aria-label="# general"');
+    expect(markup).not.toContain("team-chat-header");
   });
 
   test("renders interrupted AI state and an accessible close control", () => {

@@ -1,0 +1,64 @@
+.team-sidebar-row {
+  display: grid;
+  grid-template-columns: 21px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 29px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 2px 5px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.team-sidebar-row:hover,
+.team-sidebar-row.selected {
+  background: rgba(255, 255, 255, 0.065);
+  color: var(--text);
+}
+
+.team-sidebar-row:focus-visible {
+  outline: 2px solid #67d4c0;
+  outline-offset: 2px;
+}
+
+.team-sidebar-channel {
+  color: #888;
+  text-align: center;
+  font-size: 16px;
+}
+
+.team-sidebar-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #29433b;
+  color: #d1fae5;
+  object-fit: cover;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.team-sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-sidebar-unread {
+  min-width: 18px;
+  border-radius: 8px;
+  background: #e8e8e8;
+  color: #181818;
+  padding: 1px 5px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+}

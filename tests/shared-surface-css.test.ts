@@ -30,4 +30,20 @@ describe("shared surface stylesheet ownership", () => {
     expect(dialogCss).toContain(".git-dialog-backdrop");
     expect(dialogCss).toContain(".git-dialog {");
   });
+
+  test("loads Team row styles with the eagerly rendered sidebar", async () => {
+    const [component, sidebarCss, featureCss] = await Promise.all([
+      source("apps/web/src/components/sidebar/SidebarSectionList.tsx"),
+      source("apps/web/src/styles/sidebar/team-sidebar.css"),
+      source("apps/web/src/styles/team-chat/team-chat.css"),
+    ]);
+
+    expect(component).toContain('import "../../styles/sidebar/team-sidebar.css"');
+    expect(component).toContain('label="general"');
+    expect(component).not.toContain('label="# general"');
+    expect(sidebarCss).toContain(".team-sidebar-row {");
+    expect(sidebarCss).toContain("background: transparent");
+    expect(featureCss).not.toContain(".team-sidebar-row");
+    expect(featureCss).not.toContain(".team-sidebar-avatar");
+  });
 });

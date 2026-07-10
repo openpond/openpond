@@ -328,6 +328,47 @@ function cloudProjectSidebarRows(projects: CloudProject[]): SidebarProjectItem[]
 }
 
 describe("Cloud native UI", () => {
+  test("renders the general Team channel with one channel marker", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          teamChatEnabled: true,
+          selectedTeamThreadId: "thread_general",
+          currentUserId: "user_1",
+          teamMembers: [],
+          teamThreads: [
+            {
+              id: "thread_general",
+              teamId: "team_1",
+              kind: "general",
+              title: "general",
+              createdByUserId: "user_1",
+              lastMessageId: null,
+              lastMessageSequence: 0,
+              lastMessageAt: NOW,
+              createdAt: NOW,
+              updatedAt: NOW,
+              unreadCount: 0,
+              pinnedAt: null,
+              mutedAt: null,
+              archivedAt: null,
+              participants: [],
+              lastMessage: null,
+            },
+          ],
+          selectTeamThread: noop,
+          openTeamDm: noop,
+        }),
+      ),
+    );
+
+    expect(markup).toContain(
+      '<span class="team-sidebar-channel">#</span><span class="team-sidebar-label">general</span>',
+    );
+    expect(markup).not.toContain('<span class="team-sidebar-label"># general</span>');
+  });
+
   test("renders linked local and Cloud projects as one project row with hosted work", () => {
     const cloud = cloudProject({ name: "Shared Repo" });
     const local = localProject({

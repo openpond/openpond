@@ -55,6 +55,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 const STARTUP_SPLASH_FAST_MINIMUM_MS = 650;
 const STARTUP_SPLASH_SLOW_THRESHOLD_MS = 1200;
+const ORGANIZATION_REFRESH_INTERVAL_MS = 60_000;
 
 export function useAppBootstrap(params: {
   setDraftModel: SetState<string>;
@@ -86,6 +87,7 @@ export function useAppBootstrap(params: {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [appPreferences, setAppPreferencesState] = useState<SidebarAppPreferences>({});
   const [startupStage, setStartupStage] = useState<AppStartupStageId>("connecting");
+  const organizationRefreshAccountKey = openPondOrganizationCacheKey(bootstrap?.account);
   const appPreferenceChangeTimesRef = useRef<SidebarAppPreferenceChangeTimes>({});
   const sessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
   const codexHistorySessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
@@ -374,13 +376,8 @@ export function useAppBootstrap(params: {
 
     void preloadOpenPondOrganizations({
       accountKey,
-      fetchOrganizations: async () => {
-        const payload = await api.organizations(connection);
-        return payload.organizations
-          .map(normalizeOpenPondOrganization)
-          .filter((organization): organization is OpenPondOrganization => Boolean(organization))
-          .filter((organization) => organization.status === "active");
-      },
+      force: true,
+      fetchOrganizations: () => fetchActiveOpenPondOrganizations(connection),
     })
       .then(async (activeOrganizations) => {
         if (cancelled) return;
@@ -460,6 +457,38 @@ export function useAppBootstrap(params: {
     setBlockingStartupStage,
     setError,
   ]);
+
+  useEffect(() => {
+    if (!connection || !organizationRefreshAccountKey) return;
+    let refreshing = false;
+    const refreshOrganizations = () => {
+      if (refreshing) return;
+      refreshing = true;
+      void preloadOpenPondOrganizations({
+        accountKey: organizationRefreshAccountKey,
+        force: true,
+        fetchOrganizations: () => fetchActiveOpenPondOrganizations(connection),
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          refreshing = false;
+        });
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshOrganizations();
+    };
+    const intervalId = window.setInterval(
+      refreshOrganizations,
+      ORGANIZATION_REFRESH_INTERVAL_MS,
+    );
+    window.addEventListener("focus", refreshOrganizations);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOrganizations);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [connection, organizationRefreshAccountKey]);
 
   const load = useCallback(async () => {
     setBlockingStartupStage("connecting");
@@ -551,6 +580,16 @@ export function useAppBootstrap(params: {
     setEvents,
     setSessions,
   };
+}
+
+async function fetchActiveOpenPondOrganizations(
+  connection: ClientConnection,
+): Promise<OpenPondOrganization[]> {
+  const payload = await api.organizations(connection);
+  return payload.organizations
+    .map(normalizeOpenPondOrganization)
+    .filter((organization): organization is OpenPondOrganization => Boolean(organization))
+    .filter((organization) => organization.status === "active");
 }
 
 export function startupSplashRemainingMs(elapsedMs: number): number {

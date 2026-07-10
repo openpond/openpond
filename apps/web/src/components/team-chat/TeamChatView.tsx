@@ -16,7 +16,6 @@ import type {
   TeamChatHostedAiThread,
   TeamChatMember,
   TeamChatMessage,
-  TeamChatThread,
   TeamChatThreadDetail,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
@@ -155,14 +154,6 @@ export function TeamChatView(props: TeamChatViewProps) {
   return (
     <section className="team-chat-view">
       <div className="team-chat-main">
-        <header className="team-chat-header">
-          <div>
-            <h2>{title}</h2>
-            {props.detail?.thread.kind === "dm" ? (
-              <span>{dmMemberStatus(props.detail.thread, props.currentUserId)}</span>
-            ) : null}
-          </div>
-        </header>
         {props.error ? (
           <div className="team-chat-error" role="alert">
             <span>{props.error}</span>
@@ -691,11 +682,6 @@ function TeamAvatar({ member }: { member: TeamChatMember | null }) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
   return <span className="team-chat-avatar fallback">{initials}</span>;
-}
-
-function dmMemberStatus(thread: TeamChatThread, currentUserId: string | null): string {
-  const other = thread.participants.find((participant) => participant.userId !== currentUserId);
-  return other?.handle ? `@${other.handle}` : "Direct message";
 }
 
 function messageTime(value: string): string {

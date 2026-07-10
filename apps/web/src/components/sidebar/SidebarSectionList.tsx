@@ -1,5 +1,6 @@
 import type { Session, TeamChatMember, TeamChatThread } from "@openpond/contracts";
 import { useEffect, useState } from "react";
+import "../../styles/sidebar/team-sidebar.css";
 import {
   Cloud,
   Eye,
@@ -98,6 +99,7 @@ export function SidebarSectionList({
   selectedCloudWorkItemId,
   selectedTeamThreadId,
   teamChatEnabled,
+  teamChatLoading = false,
   currentUserId,
   teamMembers = [],
   teamThreads = [],
@@ -420,7 +422,7 @@ export function SidebarSectionList({
         <SidebarSection label="Team">
           {generalThread ? (
             <TeamSidebarRow
-              label="# general"
+              label="general"
               selected={view === "team" && selectedTeamThreadId === generalThread.id}
               unreadCount={generalThread.unreadCount}
               onSelect={() => selectTeamThread(generalThread.id)}
@@ -441,7 +443,11 @@ export function SidebarSectionList({
                 />
               );
             })}
-          {!generalThread && teamMembers.length === 0 ? <div className="empty-row">No team selected</div> : null}
+          {!generalThread && teamMembers.length === 0 ? (
+            <div className="empty-row">
+              {teamChatLoading ? "Loading team..." : "Team unavailable"}
+            </div>
+          ) : null}
         </SidebarSection>
       ) : null}
 

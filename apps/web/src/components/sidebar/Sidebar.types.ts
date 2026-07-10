@@ -30,6 +30,7 @@ export type SidebarProps = {
   selectedCloudWorkItemId: string | null;
   selectedTeamThreadId: string | null;
   teamChatEnabled: boolean;
+  teamChatLoading?: boolean;
   currentUserId: string | null;
   teamMembers: TeamChatMember[];
   teamThreads: TeamChatThread[];
