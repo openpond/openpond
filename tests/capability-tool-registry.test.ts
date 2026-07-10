@@ -202,7 +202,7 @@ describe("OpenPond capability tool registry", () => {
 
     expect(roleId.enum).toEqual(["coding", "review"]);
     expect(roleId.description).toContain("coding: Make scoped code changes");
-    expect(roleId.description).toContain("workspace_write, copy_on_write");
+    expect(roleId.description).toContain("full_tools, none");
     expect(roleId.description).toContain("model zai/glm-5.2");
     expect(roleId.description).toContain("review: Inspect diffs or implementation plans");
     expect(roleId.description).not.toContain("research:");

@@ -1,4 +1,4 @@
-import type { HostedChatMessage, HostedChatToolCall } from "@openpond/cloud";
+import type { HostedChatContinuation, HostedChatMessage, HostedChatToolCall } from "@openpond/cloud";
 
 export type NativeModelToolCall = {
   id: string;
@@ -65,13 +65,13 @@ export class NativeToolCallAccumulator {
 export function assistantMessageForNativeToolCalls(
   content: string,
   toolCalls: NativeModelToolCall[],
-  options: { reasoningContent?: string | null } = {},
+  options: { continuation?: HostedChatContinuation | null } = {},
 ): HostedChatMessage {
-  const reasoningContent = options.reasoningContent;
+  const continuation = options.continuation;
   return {
     role: "assistant",
-    content: content.trim() || (reasoningContent ? "" : null),
-    ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
+    content: content.trim() || (continuation ? "" : null),
+    ...(continuation ? { continuation } : {}),
     tool_calls: toolCalls.map((toolCall) => toolCall.hostedToolCall),
   };
 }

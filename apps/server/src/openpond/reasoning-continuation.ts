@@ -1,23 +1,57 @@
 import type { ChatProvider } from "@openpond/contracts";
+import type { HostedChatContinuation, HostedChatMessage } from "@openpond/cloud";
 
-export type ReasoningContinuationMode = "none" | "zai_preserved_thinking";
+export type ChatCompletionsReasoningPolicy = {
+  kind: "chat_completions_reasoning";
+  requestThinking: "zai_clear_thinking" | "deepseek_enabled";
+  supportsToolChoice: boolean;
+};
 
-export function reasoningContinuationMode(input: {
+export function chatCompletionsReasoningPolicy(input: {
   provider: ChatProvider;
   model: string | null | undefined;
-}): ReasoningContinuationMode {
-  if (input.provider !== "zai") return "none";
+}): ChatCompletionsReasoningPolicy | null {
   const model = input.model?.trim().toLowerCase() ?? "";
-  return /(?:^|[/_-])glm-(?:4\.(?:[5-9]|\d{2,})|[5-9](?:\.\d+)?)(?:$|[/_-])/.test(model)
-    ? "zai_preserved_thinking"
-    : "none";
+  if (
+    input.provider === "zai" &&
+    /(?:^|[/_-])glm-(?:4\.(?:[5-9]|\d{2,})|[5-9](?:\.\d+)?)(?:$|[/_-])/.test(model)
+  ) {
+    return {
+      kind: "chat_completions_reasoning",
+      requestThinking: "zai_clear_thinking",
+      supportsToolChoice: true,
+    };
+  }
+  if (
+    input.provider === "deepseek" &&
+    /(?:^|[/_-])deepseek-v(?:3\.2|[4-9](?:\.\d+)?)(?:$|[/_-])/.test(model)
+  ) {
+    return {
+      kind: "chat_completions_reasoning",
+      requestThinking: "deepseek_enabled",
+      supportsToolChoice: false,
+    };
+  }
+  return null;
 }
 
-export function reasoningContentForToolContinuation(input: {
+export function chatCompletionsContinuation(input: {
   provider: ChatProvider;
   model: string | null | undefined;
   reasoningText: string;
-}): string | null {
-  if (reasoningContinuationMode(input) === "none") return null;
-  return input.reasoningText.length > 0 ? input.reasoningText : null;
+  hasToolCalls: boolean;
+}): HostedChatContinuation | null {
+  if (!input.hasToolCalls || input.reasoningText.length === 0 || !chatCompletionsReasoningPolicy(input)) return null;
+  return {
+    kind: "chat_completions_reasoning",
+    reasoningContent: input.reasoningText,
+  };
+}
+
+export function hasChatCompletionsReasoningContinuation(messages: HostedChatMessage[]): boolean {
+  return messages.some(
+    (message) =>
+      message.continuation?.kind === "chat_completions_reasoning" &&
+      message.continuation.reasoningContent.length > 0,
+  );
 }

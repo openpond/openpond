@@ -441,6 +441,9 @@ export async function createOpenPondServer(
         if (delta.type === "reasoning_delta") {
           yield { reasoningText: delta.text, raw: delta.raw };
         }
+        if (delta.type === "continuation") {
+          yield { continuation: delta.continuation, raw: delta.raw };
+        }
         if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls, raw: delta.raw };
         if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
         if (delta.type === "finish") yield { finishReason: delta.finishReason, raw: delta.raw };

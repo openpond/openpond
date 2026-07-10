@@ -1275,7 +1275,7 @@ describe("turn runner subagent messaging and policy tools", () => {
         roleId: "research",
         objective: "Inspect the API boundary without changing files",
       },
-      preferences: preferences(),
+      preferences: preferencesWithSubagentRole("research", { toolPolicy: "read_only" }),
       initialEvents: [activeGoalEvent()],
     });
 
@@ -1372,7 +1372,7 @@ describe("turn runner subagent messaging and policy tools", () => {
         roleId: "research",
         objective: "Inspect the docs without changing files",
       },
-      preferences: preferences(),
+      preferences: preferencesWithSubagentRole("research", { toolPolicy: "read_only" }),
       initialEvents: [activeGoalEvent()],
       textBySessionId: {
         session_2: [
@@ -1398,7 +1398,7 @@ describe("turn runner subagent messaging and policy tools", () => {
     expect(childSession?.metadata).toMatchObject({
       subagent: {
         toolPolicy: "read_only",
-        requestedIsolationMode: "copy_on_write",
+        requestedIsolationMode: "none",
         effectiveIsolationMode: "none",
       },
     });

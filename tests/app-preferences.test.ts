@@ -12,6 +12,7 @@ import {
 
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../apps/server/src/constants";
 import { createOpenPondServer } from "../apps/server/src/index";
+import { normalizeAppPreferences } from "../apps/server/src/preferences";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 async function api<T>(
@@ -59,14 +60,14 @@ describe("app preferences", () => {
     expect(coding).toMatchObject({
       enabled: true,
       isolationMode: "none",
-      toolPolicy: "workspace_write",
+      toolPolicy: "full_tools",
       background: true,
       peerMessages: "goal_scoped",
       modelRef: null,
     });
     expect(research).toMatchObject({
       isolationMode: "none",
-      toolPolicy: "read_only",
+      toolPolicy: "full_tools",
       background: true,
     });
     expect(AppPreferencesSchema.parse({ subagents: { heartbeatIntervalSeconds: 10 } }).subagents.heartbeatIntervalSeconds).toBe(10);
@@ -127,6 +128,31 @@ describe("app preferences", () => {
     ).toThrow();
   });
 
+  test("migrates the previous built-in COW defaults once while preserving later explicit COW choices", () => {
+    const migrated = normalizeAppPreferences({
+      subagents: {
+        maxConcurrentRunsPerWorkspaceTarget: 2,
+        roles: [{ id: "coding", toolPolicy: "workspace_write", isolationMode: "copy_on_write" }],
+      },
+    });
+    expect(migrated.subagents.workspaceDefaultsVersion).toBe(1);
+    expect(migrated.subagents.maxConcurrentRunsPerWorkspaceTarget).toBe(1);
+    expect(migrated.subagents.roles.find((role) => role.id === "coding")).toMatchObject({
+      isolationMode: "none",
+      toolPolicy: "full_tools",
+    });
+
+    const explicitCow = normalizeAppPreferences({
+      subagents: {
+        workspaceDefaultsVersion: 1,
+        toolDefaultsVersion: 1,
+        roles: [{ id: "coding", toolPolicy: "workspace_write", isolationMode: "copy_on_write" }],
+      },
+    });
+    expect(explicitCow.subagents.roles.find((role) => role.id === "coding")?.isolationMode).toBe("copy_on_write");
+    expect(explicitCow.subagents.roles.find((role) => role.id === "coding")?.toolPolicy).toBe("workspace_write");
+  });
+
   test("normalizes subagent defaults for new, legacy, and partial preference records", async () => {
     const emptyStoreDir = await mkdtemp(join(tmpdir(), "openpond-subagent-empty-preferences-"));
     const emptyServer = await createOpenPondServer({
@@ -144,7 +170,7 @@ describe("app preferences", () => {
       expect(bootstrap.preferences.subagents.heartbeatIntervalSeconds).toBe(60);
       expect(bootstrap.preferences.subagents.roles.find((role) => role.id === "coding")).toMatchObject({
         isolationMode: "none",
-        toolPolicy: "workspace_write",
+        toolPolicy: "full_tools",
         reviewRouting: {
           broadEditSurfaceFileThreshold: 8,
           highRiskPathPatterns: [...SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS],
@@ -201,7 +227,7 @@ describe("app preferences", () => {
         maxConcurrentRuns: 1,
         maxTurns: null,
         maxTokens: null,
-        toolPolicy: "workspace_write",
+        toolPolicy: "full_tools",
         background: true,
         peerMessages: "goal_scoped",
         reviewRouting: {

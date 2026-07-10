@@ -619,6 +619,7 @@ describe("BYOK turn runner dispatch", () => {
         reason: "Regression test for a multi-round tool turn.",
       },
       reasoningTextOnToolCall: reasoningContent,
+      continuationOnToolCall: { kind: "chat_completions_reasoning", reasoningContent },
       finalText: "Goal started.",
     });
 
@@ -633,7 +634,7 @@ describe("BYOK turn runner dispatch", () => {
       expect.objectContaining({
         role: "assistant",
         content: "",
-        reasoning_content: reasoningContent,
+        continuation: { kind: "chat_completions_reasoning", reasoningContent },
         tool_calls: expect.arrayContaining([
           expect.objectContaining({ id: "call_goal_control" }),
         ]),

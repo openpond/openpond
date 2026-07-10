@@ -7,6 +7,7 @@ import {
 } from "@openpond/contracts";
 import type {
   HostedChatMessage,
+  HostedChatContinuation,
   HostedChatTool,
   HostedChatToolCall,
   HostedChatToolChoice,
@@ -19,7 +20,11 @@ import type {
   ProviderChatGptSubscriptionCredential,
   ProviderSecrets,
 } from "./provider-secrets.js";
-import { reasoningContinuationMode } from "./reasoning-continuation.js";
+import {
+  chatCompletionsContinuation,
+  chatCompletionsReasoningPolicy,
+  hasChatCompletionsReasoningContinuation,
+} from "./reasoning-continuation.js";
 
 export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
   "openai",
@@ -39,6 +44,7 @@ export type OpenAiCompatibleProviderId = (typeof OPENAI_COMPATIBLE_PROVIDER_IDS)
 export type OpenAiCompatibleStreamDelta =
   | { type: "text_delta"; text: string; raw: unknown }
   | { type: "reasoning_delta"; text: string; raw: unknown }
+  | { type: "continuation"; continuation: HostedChatContinuation; raw: unknown }
   | { type: "tool_call_delta"; toolCalls: HostedChatToolCall[]; raw: unknown }
   | { type: "usage"; usage: unknown; raw: unknown }
   | { type: "finish"; finishReason: string; raw: unknown };
@@ -269,16 +275,32 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
       `Provider ${provider.providerId} stream failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
     );
   }
+  let reasoningText = "";
+  let hasToolCalls = false;
+  let pendingFinish: OpenAiCompatibleStreamDelta | null = null;
+  let latestRaw: unknown = null;
   for await (const raw of parseSse(response.body, input.signal)) {
+    latestRaw = raw;
     if (raw && typeof raw === "object" && "error" in raw) {
       throw new Error(`Provider ${provider.providerId} stream failed: ${errorMessageFromPayload(raw)}`);
     }
     const usage = parseUsage(raw);
     if (usage) yield { type: "usage", usage, raw };
     for (const delta of streamDeltasFromChunk(raw)) {
-      yield delta;
+      if (delta.type === "reasoning_delta") reasoningText += delta.text;
+      if (delta.type === "tool_call_delta") hasToolCalls = true;
+      if (delta.type === "finish") pendingFinish = delta;
+      else yield delta;
     }
   }
+  const continuation = chatCompletionsContinuation({
+    provider: provider.providerId,
+    model: provider.model,
+    reasoningText,
+    hasToolCalls,
+  });
+  if (continuation) yield { type: "continuation", continuation, raw: latestRaw };
+  if (pendingFinish) yield pendingFinish;
 }
 
 async function* streamOpenAiSubscriptionResponses(input: {
@@ -326,14 +348,33 @@ async function* streamOpenAiSubscriptionResponses(input: {
     throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${response.status} ${errorDetail}`);
   }
   const seenToolArgumentDeltas = new Set<string>();
+  const reasoningItems = new Map<string, Record<string, unknown>>();
+  let hasToolCalls = false;
+  let pendingFinish: OpenAiCompatibleStreamDelta | null = null;
+  let latestRaw: unknown = null;
   for await (const raw of parseSse(response.body, input.signal)) {
+    latestRaw = raw;
     if (raw && typeof raw === "object" && "error" in raw) {
       throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${errorMessageFromPayload(raw)}`);
     }
+    for (const item of responsesReasoningItemsFromEvent(raw)) {
+      const key = stringValue(item.id) ?? JSON.stringify(item);
+      reasoningItems.set(key, item);
+    }
     for (const delta of responseDeltasFromChunk(raw, seenToolArgumentDeltas)) {
-      yield delta;
+      if (delta.type === "tool_call_delta") hasToolCalls = true;
+      if (delta.type === "finish") pendingFinish = delta;
+      else yield delta;
     }
   }
+  if (hasToolCalls && reasoningItems.size > 0) {
+    yield {
+      type: "continuation",
+      continuation: { kind: "responses_reasoning_items", items: [...reasoningItems.values()] },
+      raw: latestRaw,
+    };
+  }
+  if (pendingFinish) yield pendingFinish;
 }
 
 async function usableSubscriptionCredential(input: {
@@ -367,7 +408,7 @@ function buildChatCompletionBody(input: {
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.model,
-    messages: mergeSystemMessages(input.messages),
+    messages: chatCompletionMessages(mergeSystemMessages(input.messages)),
     stream: true,
   };
   if (input.tools) {
@@ -376,20 +417,30 @@ function buildChatCompletionBody(input: {
   if (input.providerId === "zai" && input.tools && input.tools.length > 0) {
     body.tool_stream = true;
   }
-  if (
-    input.tools &&
-    input.tools.length > 0 &&
-    reasoningContinuationMode({ provider: input.providerId, model: input.model }) === "zai_preserved_thinking"
-  ) {
+  const reasoningPolicy = chatCompletionsReasoningPolicy({ provider: input.providerId, model: input.model });
+  if (input.tools && input.tools.length > 0 && reasoningPolicy?.requestThinking === "zai_clear_thinking") {
     body.thinking = {
       type: "enabled",
-      clear_thinking: false,
+      clear_thinking: !hasChatCompletionsReasoningContinuation(input.messages),
     };
   }
-  if (input.toolChoice !== undefined) {
+  if (input.tools && input.tools.length > 0 && reasoningPolicy?.requestThinking === "deepseek_enabled") {
+    body.thinking = { type: "enabled" };
+  }
+  if (input.toolChoice !== undefined && reasoningPolicy?.supportsToolChoice !== false) {
     body.tool_choice = input.toolChoice;
   }
   return body;
+}
+
+function chatCompletionMessages(messages: HostedChatMessage[]): Array<Record<string, unknown>> {
+  return messages.map((message) => {
+    const { continuation, ...projected } = message;
+    if (continuation?.kind === "chat_completions_reasoning") {
+      return { ...projected, reasoning_content: continuation.reasoningContent };
+    }
+    return projected;
+  });
 }
 
 function buildResponsesBody(input: {
@@ -433,6 +484,9 @@ function responsesInputFromMessages(messages: HostedChatMessage[]): {
       });
       continue;
     }
+    if (message.continuation?.kind === "responses_reasoning_items") {
+      input.push(...message.continuation.items);
+    }
     if (content.trim()) {
       input.push({
         type: "message",
@@ -459,6 +513,26 @@ function responsesInputFromMessages(messages: HostedChatMessage[]): {
     instructions: instructions.join("\n\n") || null,
     input,
   };
+}
+
+function responsesReasoningItemsFromEvent(raw: unknown): Array<Record<string, unknown>> {
+  if (!raw || typeof raw !== "object") return [];
+  const record = raw as Record<string, unknown>;
+  const eventType = stringValue(record.type);
+  if (eventType === "response.output_item.done") {
+    const item = record.item && typeof record.item === "object" ? record.item as Record<string, unknown> : null;
+    return item?.type === "reasoning" ? [item] : [];
+  }
+  if (eventType !== "response.completed") return [];
+  const response = record.response && typeof record.response === "object"
+    ? record.response as Record<string, unknown>
+    : null;
+  return Array.isArray(response?.output)
+    ? response.output.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object" && (item as Record<string, unknown>).type === "reasoning",
+      )
+    : [];
 }
 
 function responsesTools(tools: HostedChatTool[] | undefined): unknown[] {

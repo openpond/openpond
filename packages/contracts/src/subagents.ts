@@ -132,43 +132,43 @@ export const SUBAGENT_ROLE_PRESETS: readonly SubagentRolePreset[] = [
     id: "coding",
     label: "Coding",
     description: "Make scoped code changes and return patch, diff, and test evidence.",
-    defaultToolPolicy: "workspace_write",
+    defaultToolPolicy: "full_tools",
   },
   {
     id: "research",
     label: "Research",
     description: "Inspect docs, code, web or repo context and return cited findings.",
-    defaultToolPolicy: "read_only",
+    defaultToolPolicy: "full_tools",
   },
   {
     id: "review",
     label: "Review",
     description: "Inspect diffs or implementation plans and return ranked findings.",
-    defaultToolPolicy: "read_only",
+    defaultToolPolicy: "full_tools",
   },
   {
     id: "test",
     label: "Test",
     description: "Run or design validation in isolation and return command evidence.",
-    defaultToolPolicy: "workspace_write",
+    defaultToolPolicy: "full_tools",
   },
   {
     id: "docs",
     label: "Docs",
     description: "Update or draft project documentation in an isolated target.",
-    defaultToolPolicy: "workspace_write",
+    defaultToolPolicy: "full_tools",
   },
   {
     id: "planner",
     label: "Planner",
     description: "Decompose a goal into child assignments and context packs.",
-    defaultToolPolicy: "read_only",
+    defaultToolPolicy: "full_tools",
   },
   {
     id: "summarizer",
     label: "Summarizer",
     description: "Compact transcripts, child results, and goal state for parent context.",
-    defaultToolPolicy: "read_only",
+    defaultToolPolicy: "full_tools",
   },
 ];
 
@@ -194,6 +194,7 @@ export type SubagentRoleSettings = z.infer<typeof SubagentRoleSettingsSchema>;
 export const SubagentPreferencesSchema = z.object({
   enabled: z.boolean().default(true),
   workspaceDefaultsVersion: z.literal(1).default(1),
+  toolDefaultsVersion: z.literal(1).default(1),
   delegationMode: SubagentDelegationModeSchema.default("balanced"),
   defaultModelRef: ChatModelRefSchema.nullable().default(null),
   roles: z

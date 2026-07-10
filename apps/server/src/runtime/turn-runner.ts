@@ -886,6 +886,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
               if (delta.reasoningText) yield { reasoningText: delta.reasoningText, raw: delta.raw };
+              if (delta.continuation) yield { continuation: delta.continuation, raw: delta.raw };
               if (delta.toolCalls) yield { toolCalls: delta.toolCalls, raw: delta.raw };
               if (delta.usage) yield { raw: delta.raw, usage: delta.usage };
               if (delta.finishReason !== undefined) yield { finishReason: delta.finishReason, raw: delta.raw };

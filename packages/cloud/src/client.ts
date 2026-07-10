@@ -183,6 +183,7 @@ export type {
 } from "./types.js";
 export type {
   HostedChatCompletion,
+  HostedChatContinuation,
   HostedChatMessage,
   HostedChatRequestOptions,
   HostedChatRole,

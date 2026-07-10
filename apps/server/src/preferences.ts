@@ -19,7 +19,7 @@ export function normalizeSidebarAppPreference(preference: SidebarAppPreference):
 }
 
 export function normalizeAppPreferences(value: unknown): AppPreferences {
-  const migrated = migrateSubagentWorkspaceDefaults(value);
+  const migrated = migrateSubagentDefaults(value);
   const parsed = AppPreferencesSchema.safeParse(migrated ?? {});
   const preferences = parsed.success ? parsed.data : AppPreferencesSchema.parse({});
   const defaultTeamId = preferences.defaultTeamId?.trim() || null;
@@ -37,20 +37,26 @@ export function normalizeAppPreferences(value: unknown): AppPreferences {
   };
 }
 
-function migrateSubagentWorkspaceDefaults(value: unknown): unknown {
+function migrateSubagentDefaults(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const preferences = value as Record<string, unknown>;
   const subagents = preferences.subagents;
   if (!subagents || typeof subagents !== "object" || Array.isArray(subagents)) return value;
   const subagentPreferences = subagents as Record<string, unknown>;
-  if (subagentPreferences.workspaceDefaultsVersion === 1) return value;
+  const workspaceDefaultsCurrent = subagentPreferences.workspaceDefaultsVersion === 1;
+  const toolDefaultsCurrent = subagentPreferences.toolDefaultsVersion === 1;
+  if (workspaceDefaultsCurrent && toolDefaultsCurrent) return value;
   const roles = Array.isArray(subagentPreferences.roles)
     ? subagentPreferences.roles.map((role) => {
         if (!role || typeof role !== "object" || Array.isArray(role)) return role;
         const roleRecord = role as Record<string, unknown>;
-        return roleRecord.isolationMode === "copy_on_write"
-          ? { ...roleRecord, isolationMode: "none" }
-          : role;
+        return {
+          ...roleRecord,
+          ...(!workspaceDefaultsCurrent && roleRecord.isolationMode === "copy_on_write"
+            ? { isolationMode: "none" }
+            : {}),
+          ...(!toolDefaultsCurrent ? { toolPolicy: "full_tools" } : {}),
+        };
       })
     : subagentPreferences.roles;
   return {
@@ -58,8 +64,9 @@ function migrateSubagentWorkspaceDefaults(value: unknown): unknown {
     subagents: {
       ...subagentPreferences,
       workspaceDefaultsVersion: 1,
+      toolDefaultsVersion: 1,
       maxConcurrentRunsPerWorkspaceTarget:
-        subagentPreferences.maxConcurrentRunsPerWorkspaceTarget === 2
+        !workspaceDefaultsCurrent && subagentPreferences.maxConcurrentRunsPerWorkspaceTarget === 2
           ? 1
           : subagentPreferences.maxConcurrentRunsPerWorkspaceTarget,
       ...(roles === undefined ? {} : { roles }),

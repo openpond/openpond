@@ -24,6 +24,7 @@ import type {
   HostedChatTool,
   HostedChatToolCall,
   HostedChatToolChoice,
+  HostedChatContinuation,
   ProfileSkillCommandResult,
   ProfileSkillGoalCommandInput,
 } from "@openpond/cloud";
@@ -48,6 +49,7 @@ export type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 export type HostedToolLoopDelta = {
   text?: string;
   reasoningText?: string;
+  continuation?: HostedChatContinuation;
   toolCalls?: HostedChatToolCall[];
   finishReason?: string | null;
   raw?: unknown;

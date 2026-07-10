@@ -49,7 +49,6 @@ import type {
   ProfileSkillInstructionMode,
 } from "../../openpond/hosted-turn-helpers.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
-import { reasoningContentForToolContinuation } from "../../openpond/reasoning-continuation.js";
 import { event } from "../../utils.js";
 import { requiresWorkspaceToolForPrompt } from "../workspace-tool-requirements.js";
 import { startProviderRequestUsageRecorder } from "../model-usage-recorder.js";
@@ -311,6 +310,7 @@ export function createHostedToolLoopRuntime(deps: {
       await appendContextUsage({ messages });
       let assistantText = "";
       let reasoningText = "";
+      let latestContinuation: import("@openpond/cloud").HostedChatContinuation | null = null;
       let latestUsage: unknown;
       let finishReason: string | null | undefined;
       const nativeToolAccumulator = new NativeToolCallAccumulator();
@@ -339,6 +339,7 @@ export function createHostedToolLoopRuntime(deps: {
           if (delta.usage) latestUsage = delta.usage;
           if (delta.text) assistantText += delta.text;
           if (delta.reasoningText) reasoningText += delta.reasoningText;
+          if (delta.continuation) latestContinuation = delta.continuation;
           if (delta.toolCalls) nativeToolAccumulator.append(delta.toolCalls);
           if (delta.finishReason !== undefined) finishReason = delta.finishReason;
         }
@@ -368,11 +369,7 @@ export function createHostedToolLoopRuntime(deps: {
       const nativeToolCalls = nativeToolAccumulator.completed();
       if (nativeToolCalls.length > 0) {
         messages.push(assistantMessageForNativeToolCalls(assistantText, nativeToolCalls, {
-          reasoningContent: reasoningContentForToolContinuation({
-            provider: params.provider,
-            model: params.model,
-            reasoningText,
-          }),
+          continuation: latestContinuation,
         }));
         const nativeResults = await executeNativeToolCalls({
           session,

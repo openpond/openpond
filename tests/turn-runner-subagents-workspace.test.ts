@@ -201,7 +201,7 @@ describe("turn runner subagent workspace and execution tools", () => {
         objective: "Implement the search index change",
         required: true,
       },
-      preferences: preferences(),
+      preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
       initialEvents: [activeGoalEvent()],
     });
 
@@ -251,7 +251,7 @@ describe("turn runner subagent workspace and execution tools", () => {
         result: {
           roleId: "coding",
           status: "blocked",
-          toolPolicy: "workspace_write",
+          toolPolicy: "full_tools",
         },
       },
     });
@@ -595,7 +595,7 @@ describe("turn runner subagent workspace and execution tools", () => {
       expect(worktreePath).not.toBe(repoPath);
       expect(worktreePath).toContain("openpond-subagents");
       await expect(readFile(path.join(worktreePath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
-      await expect(readFile(path.join(repoPath, "child-notes.md"), "utf8")).rejects.toThrow();
+      await expect(readFile(path.join(repoPath, "child-notes.md"), "utf8")).resolves.toBe("from child\n");
       expect((run?.metadata as any)?.subagentWorkspace).toMatchObject({
         implementation: "git_worktree",
         parentRepoPath: expectedParentRepoPath,
@@ -693,151 +693,6 @@ describe("turn runner subagent workspace and execution tools", () => {
       expect(highRiskFileCount).toBeGreaterThanOrEqual(1);
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  test.skip("retains isolated worktrees when subagent patch approvals are declined or cancelled", async () => {
-    const scenarios = [
-      {
-        decision: "decline" as const,
-        approvalStatus: "declined",
-        runStatus: "needs_revision",
-        reviewStatus: "needs_revision",
-        applyStatus: "declined",
-        followUpNeeded: true,
-        eventName: "subagent.needs_revision",
-      },
-      {
-        decision: "cancel" as const,
-        approvalStatus: "cancelled",
-        runStatus: "cancelled",
-        reviewStatus: "needs_user_input",
-        applyStatus: "cancelled",
-        followUpNeeded: false,
-        eventName: "subagent.cancelled",
-      },
-    ];
-
-    for (const scenario of scenarios) {
-      const tempRoot = await mkdtemp(path.join(os.tmpdir(), `openpond-subagent-patch-${scenario.decision}-test-`));
-      try {
-        const repoPath = path.join(tempRoot, "repo");
-        await mkdir(repoPath, { recursive: true });
-        git(repoPath, ["init"]);
-        git(repoPath, ["config", "user.email", "test@example.local"]);
-        git(repoPath, ["config", "user.name", "Test User"]);
-        await writeFile(path.join(repoPath, "README.md"), "parent\n", "utf8");
-        git(repoPath, ["add", "README.md"]);
-        git(repoPath, ["commit", "-m", "Initial commit"]);
-
-        const childPath = `child-notes-${scenario.decision}.md`;
-        const childContent = `from child ${scenario.decision}\n`;
-        const harness = createSubagentHarness({
-          toolName: "openpond_subagent_start",
-          toolArgs: {
-            roleId: "coding",
-            objective: `Create child notes for ${scenario.decision}`,
-          },
-          preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
-          sessionOverrides: {
-            cwd: repoPath,
-          },
-          writeOnChildReport: {
-            roleId: "coding",
-            path: childPath,
-            content: childContent,
-          },
-          textBySessionId: {
-            "role:coding": ["Coding report complete."],
-          },
-        });
-
-        await harness.runner.sendTurn("session_1", {
-          prompt: "Start a coding subagent for this goal",
-          modelRef: { providerId: "openrouter", modelId: "test/model" },
-        });
-        await harness.subagentQueue.drain();
-
-        const run = harness.runs.find((candidate) => candidate.roleId === "coding");
-        const childSession = [...harness.sessions.values()].find((session) => session.parentSessionId === "session_1");
-        const worktreePath = childSession?.cwd ?? "";
-        const approval = harness.approvals.find((candidate) => candidate.kind === "subagent_patch_apply");
-        expect(run?.status).toBe("submitted_for_review");
-        expect(approval).toMatchObject({
-          providerRequestId: run?.id,
-          status: "pending",
-        });
-        await expect(readFile(path.join(worktreePath, childPath), "utf8")).resolves.toBe(childContent);
-        await expect(readFile(path.join(repoPath, childPath), "utf8")).rejects.toThrow();
-
-        const resolved = await harness.runner.resolveSubagentPatchApplyApproval(approval!.id, {
-          decision: scenario.decision,
-        });
-
-        expect(resolved).toMatchObject({
-          id: approval?.id,
-          status: scenario.approvalStatus,
-        });
-        await expect(readFile(path.join(repoPath, childPath), "utf8")).rejects.toThrow();
-        await expect(readFile(path.join(worktreePath, childPath), "utf8")).resolves.toBe(childContent);
-        const reviewedRun = harness.runs.find((candidate) => candidate.id === run?.id);
-        expect(reviewedRun).toMatchObject({
-          status: scenario.runStatus,
-          report: {
-            followUpNeeded: scenario.followUpNeeded,
-          },
-          review: {
-            status: scenario.reviewStatus,
-            humanReviewRecommended: true,
-          },
-        });
-        expect((reviewedRun?.metadata as any)?.workspaceHandoff?.applyResult).toMatchObject({
-          status: scenario.applyStatus,
-          approvalId: approval?.id,
-          workspaceRetention: {
-            status: "retained",
-            reason: scenario.decision === "cancel"
-              ? "Patch approval cancelled; child workspace retained for inspection."
-              : "Patch approval declined; child workspace retained for revision.",
-            retainedAt: expect.any(String),
-            retentionPolicy: {
-              kind: "retain_for_inspection",
-              retentionDays: 7,
-              expiresAt: expect.any(String),
-              cleanupAfterExpiry: true,
-              trigger: scenario.decision === "cancel" ? "patch_approval_cancelled" : "patch_approval_declined",
-            },
-          },
-        });
-        expect((reviewedRun?.metadata as any)?.lifecycleCleanup).toBeUndefined();
-        expect(
-          harness.events.some(
-            (event) => event.name === "subagent.cleanup" && (event.data as any)?.run?.id === run?.id,
-          ),
-        ).toBe(false);
-        expect(
-          harness.events.some(
-            (event) => event.name === scenario.eventName && (event.data as any)?.run?.id === run?.id,
-          ),
-        ).toBe(true);
-        expect(
-          harness.events.find(
-            (event) => event.name === "subagent.workspace_retained" && (event.data as any)?.run?.id === run?.id,
-          ),
-        ).toMatchObject({
-          status: "completed",
-        });
-        expect(
-          harness.events.some(
-            (event) =>
-              event.name === "approval.resolved" &&
-              event.action === "subagent_patch_apply" &&
-              (event.data as any)?.status === scenario.approvalStatus,
-          ),
-        ).toBe(true);
-      } finally {
-        await rm(tempRoot, { recursive: true, force: true });
-      }
     }
   });
 
@@ -1159,7 +1014,7 @@ describe("turn runner subagent workspace and execution tools", () => {
         objective: "Mutate the Hybrid sandbox source",
         required: true,
       },
-      preferences: preferences(),
+      preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
       initialEvents: [activeGoalEvent()],
       sessionOverrides: {
         workspaceKind: "sandbox",
@@ -1202,7 +1057,7 @@ describe("turn runner subagent workspace and execution tools", () => {
       },
       review: {
         status: "submitted_for_review",
-        humanReviewRecommended: true,
+        humanReviewRecommended: false,
       },
       report: {
         followUpNeeded: true,
@@ -1537,7 +1392,7 @@ describe("turn runner subagent workspace and execution tools", () => {
     expect(completed?.output).toContain("Subagent provider openrouter concurrency limit reached: 1/1 active runs.");
   });
 
-  test("rejects subagent starts at the configured workspace target concurrency ceiling", async () => {
+  test("allows concurrent read-only subagents on the same workspace target", async () => {
     const activeRun = SubagentRunSchema.parse({
       id: "run_workspace_active",
       parentSessionId: "session_1",
@@ -1571,6 +1426,9 @@ describe("turn runner subagent workspace and execution tools", () => {
       preferences: preferences({
         subagents: {
           ...basePreferences.subagents,
+          roles: basePreferences.subagents.roles.map((role) =>
+            role.id === "review" ? { ...role, toolPolicy: "read_only" } : role,
+          ),
           maxConcurrentRunsPerProvider: null,
           maxConcurrentRunsPerWorkspaceTarget: 1,
         },
@@ -1584,6 +1442,59 @@ describe("turn runner subagent workspace and execution tools", () => {
     });
 
     expect(turn.status).toBe("completed");
+    expect(harness.runs).toHaveLength(2);
+    expect([...harness.sessions.values()].filter((session) => session.parentSessionId === "session_1")).toHaveLength(1);
+    const completed = harness.events.find(
+      (event) => event.name === "tool.completed" && event.action === "openpond_subagent_start",
+    );
+    expect(completed).toMatchObject({ status: "completed" });
+  });
+
+  test("rejects a second write-capable subagent on the same workspace across parent threads", async () => {
+    const activeRun = SubagentRunSchema.parse({
+      id: "run_workspace_writer",
+      parentSessionId: "session_other_thread",
+      parentTurnId: "turn_other",
+      childSessionId: "session_child_writer",
+      roleId: "coding",
+      objective: "Existing direct workspace edit",
+      modelRef: { providerId: "zai", modelId: "glm-5.2" },
+      isolationMode: "none",
+      toolPolicy: "workspace_write",
+      background: true,
+      peerMessages: "goal_scoped",
+      status: "running",
+      required: true,
+      createdAt: "2026-07-07T10:00:00.000Z",
+      metadata: {
+        concurrency: {
+          providerId: "zai",
+          workspaceTargetKey: "local:/tmp/openpond",
+        },
+      },
+    });
+    const basePreferences = preferences();
+    const harness = createSubagentHarness({
+      toolName: "openpond_subagent_start",
+      toolArgs: {
+        roleId: "coding",
+        objective: "Edit the same shared workspace",
+      },
+      preferences: preferences({
+        subagents: {
+          ...basePreferences.subagents,
+          maxConcurrentRunsPerProvider: null,
+          maxConcurrentRunsPerWorkspaceTarget: 1,
+        },
+      }),
+      initialRuns: [activeRun],
+    });
+
+    await harness.runner.sendTurn("session_1", {
+      prompt: "Start another workspace writer",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    });
+
     expect(harness.runs).toHaveLength(1);
     expect([...harness.sessions.values()].filter((session) => session.parentSessionId === "session_1")).toHaveLength(0);
     const completed = harness.events.find(

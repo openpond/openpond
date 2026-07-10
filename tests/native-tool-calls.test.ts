@@ -60,10 +60,42 @@ describe("native tool call accumulator", () => {
     ];
     const reasoningContent = "First inspect README.\nThen decide whether another file is needed.";
 
-    expect(assistantMessageForNativeToolCalls("", toolCalls, { reasoningContent })).toEqual({
+    expect(assistantMessageForNativeToolCalls("", toolCalls, {
+      continuation: { kind: "chat_completions_reasoning", reasoningContent },
+    })).toEqual({
       role: "assistant",
       content: "",
-      reasoning_content: reasoningContent,
+      continuation: { kind: "chat_completions_reasoning", reasoningContent },
+      tool_calls: [toolCalls[0]!.hostedToolCall],
+    });
+  });
+
+  test("preserves opaque Responses reasoning items on assistant tool-call messages", () => {
+    const reasoningItem = {
+      type: "reasoning",
+      id: "rs_1",
+      encrypted_content: "opaque-state",
+      summary: [],
+    };
+    const toolCalls = [
+      {
+        id: "call_1",
+        name: "resource_read",
+        argumentsJson: "{}",
+        hostedToolCall: {
+          id: "call_1",
+          type: "function",
+          function: { name: "resource_read", arguments: "{}" },
+        },
+      },
+    ];
+
+    expect(assistantMessageForNativeToolCalls("", toolCalls, {
+      continuation: { kind: "responses_reasoning_items", items: [reasoningItem] },
+    })).toEqual({
+      role: "assistant",
+      content: "",
+      continuation: { kind: "responses_reasoning_items", items: [reasoningItem] },
       tool_calls: [toolCalls[0]!.hostedToolCall],
     });
   });

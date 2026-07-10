@@ -737,7 +737,8 @@ export function createSubagentWorkspaceRuntime(deps: {
         artifactRef: sandboxRef,
         merge: {
           strategy: "sandbox_review",
-          requiresUserReview: true,
+          requiresParentReview: true,
+          requiresUserReview: false,
         },
       },
     };

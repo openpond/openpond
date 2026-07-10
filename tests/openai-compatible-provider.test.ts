@@ -160,10 +160,19 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(deltas[1]).toMatchObject({ type: "finish", finishReason: "tool_calls" });
   });
 
-  test("enables ZAI preserved thinking and forwards reasoning content on tool continuations", async () => {
+  test("captures and replays ZAI preserved thinking across tool requests", async () => {
     const requests: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_input, init) => {
       requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (requests.length === 1) {
+        return streamResponse([
+          'data: {"choices":[{"delta":{"reasoning_content":"The resource result "},"finish_reason":null}]}\n\n',
+          'data: {"choices":[{"delta":{"reasoning_content":"will determine the next step."},"finish_reason":null}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_resource","type":"function","function":{"name":"resource_read","arguments":"{\\"ref\\":\\"workspace:file:README.md\\"}"}}]},"finish_reason":null}]}\n\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }
       return streamResponse([
         'data: {"choices":[{"delta":{"content":"done"},"finish_reason":null}]}\n\n',
         'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
@@ -171,7 +180,7 @@ describe("OpenAI-compatible provider adapter", () => {
       ]);
     };
 
-    const reasoningContent = "The resource result confirms the next implementation step.";
+    const reasoningContent = "The resource result will determine the next step.";
     const tools = [
       {
         type: "function",
@@ -181,6 +190,23 @@ describe("OpenAI-compatible provider adapter", () => {
         },
       },
     ] as const;
+    const firstDeltas = [];
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState("https://provider.example/v1", "zai"),
+      providerId: "zai",
+      modelId: "glm-5.2",
+      messages: [{ role: "user", content: "inspect the resource" }],
+      tools: [...tools],
+      toolChoice: "auto",
+    })) {
+      firstDeltas.push(delta);
+    }
+    const continuation = firstDeltas.find((delta) => delta.type === "continuation");
+    expect(continuation).toMatchObject({
+      type: "continuation",
+      continuation: { kind: "chat_completions_reasoning", reasoningContent },
+    });
+
     for await (const _delta of streamOpenAiCompatibleChatCompletion({
       ...providerState("https://provider.example/v1", "zai"),
       providerId: "zai",
@@ -190,7 +216,7 @@ describe("OpenAI-compatible provider adapter", () => {
         {
           role: "assistant",
           content: "",
-          reasoning_content: reasoningContent,
+          continuation: continuation?.type === "continuation" ? continuation.continuation : undefined,
           tool_calls: [
             {
               id: "call_resource",
@@ -208,6 +234,15 @@ describe("OpenAI-compatible provider adapter", () => {
     }
 
     expect(requests).toEqual([
+      {
+        model: "glm-5.2",
+        messages: [{ role: "user", content: "inspect the resource" }],
+        stream: true,
+        tools,
+        tool_stream: true,
+        thinking: { type: "enabled", clear_thinking: true },
+        tool_choice: "auto",
+      },
       {
         model: "glm-5.2",
         messages: [
@@ -233,6 +268,49 @@ describe("OpenAI-compatible provider adapter", () => {
         tool_choice: "auto",
       },
     ]);
+  });
+
+  test("uses DeepSeek thinking-tool protocol without unsupported tool_choice", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return streamResponse([
+        'data: {"choices":[{"delta":{"reasoning_content":"Inspect first."},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_read","type":"function","function":{"name":"resource_read","arguments":"{}"}}]},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    };
+
+    const deltas = [];
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState("https://api.deepseek.com", "deepseek"),
+      providerId: "deepseek",
+      modelId: "deepseek-v4-pro",
+      messages: [{ role: "user", content: "inspect" }],
+      tools: [
+        {
+          type: "function",
+          function: { name: "resource_read", parameters: { type: "object" } },
+        },
+      ],
+      toolChoice: "auto",
+    })) {
+      deltas.push(delta);
+    }
+
+    expect(requests[0]).toMatchObject({
+      model: "deepseek-v4-pro",
+      thinking: { type: "enabled" },
+    });
+    expect(requests[0]).not.toHaveProperty("tool_choice");
+    expect(deltas).toContainEqual(expect.objectContaining({
+      type: "continuation",
+      continuation: {
+        kind: "chat_completions_reasoning",
+        reasoningContent: "Inspect first.",
+      },
+    }));
   });
 
   test("lists and validates provider models from /models", async () => {
@@ -446,6 +524,107 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(deltas[4]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
   });
 
+  test("captures and replays opaque Responses reasoning items across tool requests", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const reasoningItem = {
+      type: "reasoning",
+      id: "rs_opaque",
+      encrypted_content: "encrypted-reasoning-state",
+      summary: [],
+    };
+    globalThis.fetch = async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (requests.length === 1) {
+        return streamResponse([
+          sse({
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "function_call", call_id: "call_read", name: "resource_read", arguments: "{}" },
+          }),
+          sse({
+            type: "response.completed",
+            response: { output: [reasoningItem], usage: { total_tokens: 12 } },
+          }),
+        ]);
+      }
+      return streamResponse([
+        sse({ type: "response.output_text.delta", delta: "Done" }),
+        sse({ type: "response.completed", response: { output: [], usage: { total_tokens: 8 } } }),
+      ]);
+    };
+
+    const tools = [
+      {
+        type: "function",
+        function: { name: "resource_read", parameters: { type: "object" } },
+      },
+    ];
+    const firstDeltas = [];
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      ...subscriptionProviderState(),
+      providerId: "openai",
+      modelId: "gpt-5.5",
+      messages: [{ role: "user", content: "read README" }],
+      tools,
+      toolChoice: "auto",
+    })) {
+      firstDeltas.push(delta);
+    }
+    const continuation = firstDeltas.find((delta) => delta.type === "continuation");
+    expect(continuation).toMatchObject({
+      type: "continuation",
+      continuation: { kind: "responses_reasoning_items", items: [reasoningItem] },
+    });
+
+    for await (const _delta of streamOpenAiCompatibleChatCompletion({
+      ...subscriptionProviderState(),
+      providerId: "openai",
+      modelId: "gpt-5.5",
+      messages: [
+        { role: "user", content: "read README" },
+        {
+          role: "assistant",
+          content: "",
+          continuation: continuation?.type === "continuation" ? continuation.continuation : undefined,
+          tool_calls: [
+            {
+              id: "call_read",
+              type: "function",
+              function: { name: "resource_read", arguments: "{}" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_read", content: "README contents" },
+      ],
+      tools,
+      toolChoice: "auto",
+    })) {
+      // Drain the stream.
+    }
+
+    expect(requests[1]).toMatchObject({
+      input: [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "read README" }],
+        },
+        reasoningItem,
+        {
+          type: "function_call",
+          call_id: "call_read",
+          name: "resource_read",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_read",
+          output: "README contents",
+        },
+      ],
+    });
+  });
+
   test("normalizes endpoint-shaped base URLs before building requests", async () => {
     const requests: string[] = [];
     globalThis.fetch = async (input) => {
@@ -547,7 +726,7 @@ describe("OpenAI-compatible provider adapter", () => {
 
 function providerState(
   baseUrl = "https://provider.example/v1",
-  providerId: "openai" | "openrouter" | "xai" | "zai" = "openrouter",
+  providerId: "deepseek" | "openai" | "openrouter" | "xai" | "zai" = "openrouter",
   apiKey: string | null = "sk-test",
 ): { settings: ReturnType<typeof buildProviderSettings>; secrets: ProviderSecrets } {
   const file: ProvidersFile = {

@@ -36,10 +36,20 @@ export type HostedChatToolChoice =
       };
     };
 
+export type HostedChatContinuation =
+  | {
+      kind: "chat_completions_reasoning";
+      reasoningContent: string;
+    }
+  | {
+      kind: "responses_reasoning_items";
+      items: Array<Record<string, unknown>>;
+    };
+
 export type HostedChatMessage = {
   role: HostedChatRole;
   content?: string | null;
-  reasoning_content?: string | null;
+  continuation?: HostedChatContinuation;
   name?: string;
   tool_call_id?: string;
   tool_calls?: HostedChatToolCall[];
@@ -113,6 +123,11 @@ export type HostedChatStreamDelta =
   | {
       type: "reasoning_delta";
       text: string;
+      raw: unknown;
+    }
+  | {
+      type: "continuation";
+      continuation: HostedChatContinuation;
       raw: unknown;
     }
   | {

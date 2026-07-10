@@ -1510,6 +1510,14 @@ export function App() {
       ),
     [bootstrap?.diagnostics, events],
   );
+  const toggleRightSidebar = useCallback(() => {
+    if (diffPanelOpen) {
+      setDiffPanelOpen(false);
+      return;
+    }
+    setRightPanelMode("home");
+    setDiffPanelOpen(true);
+  }, [diffPanelOpen, setDiffPanelOpen, setRightPanelMode]);
 
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
@@ -1555,15 +1563,6 @@ export function App() {
   } as CSSProperties;
   const rightSidebarAvailableForView =
     view === "chat" || view === "cloud" || view === "profile" || view === "team";
-  const toggleRightSidebar = useCallback(() => {
-    if (diffPanelOpen) {
-      setDiffPanelOpen(false);
-      return;
-    }
-    // Default an otherwise empty right sidebar to Workspace (home).
-    setRightPanelMode("home");
-    setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen, setRightPanelMode]);
   const appShellClassName = [
     "app-shell",
     isMac ? "platform-macos" : "",

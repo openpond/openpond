@@ -202,6 +202,7 @@ export function createNativeGoalControlHarness(input: {
   modelId?: string;
   toolArgs?: Record<string, unknown> | null;
   reasoningTextOnToolCall?: string;
+  continuationOnToolCall?: import("../../packages/cloud/src/hosted-chat").HostedChatContinuation;
   initialEvents?: RuntimeEvent[];
   sessionOverrides?: Partial<Session>;
   finalText?: string;
@@ -387,6 +388,9 @@ export function createNativeGoalControlHarness(input: {
     if (pass === 1 && input.toolArgs) {
       if (input.reasoningTextOnToolCall) {
         yield { reasoningText: input.reasoningTextOnToolCall, raw: { pass, reasoning: true } };
+      }
+      if (input.continuationOnToolCall) {
+        yield { continuation: input.continuationOnToolCall, raw: { pass, continuation: true } };
       }
       yield {
         toolCalls: [

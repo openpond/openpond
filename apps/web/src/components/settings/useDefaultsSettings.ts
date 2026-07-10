@@ -254,6 +254,7 @@ export function useDefaultsSettings({
           subagents: {
             enabled: subagentsEnabled,
             workspaceDefaultsVersion: preferences.subagents.workspaceDefaultsVersion,
+            toolDefaultsVersion: preferences.subagents.toolDefaultsVersion,
             delegationMode: subagentDelegationMode,
             defaultModelRef: subagentsUseDefaultModel
               ? null
