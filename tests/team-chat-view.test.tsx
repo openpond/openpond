@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  TeamAgentConversationPanel,
   TeamAiThreadPanel,
   TeamChatView,
   type TeamChatViewProps,
@@ -70,6 +71,99 @@ describe("team chat view", () => {
     expect(markup).toContain('aria-label="Close thread"');
     expect(markup).toContain('role="log"');
   });
+
+  test("renders a canonical agent-run message ref in the team transcript", () => {
+    const detail = emptyDetail();
+    detail.messages = [
+      {
+        id: "message_agent_run",
+        threadId: detail.thread.id,
+        teamId: detail.thread.teamId,
+        clientRequestId: "request_agent_run",
+        authorType: "user",
+        authorUserId: "user_1",
+        authorAgentId: null,
+        sequence: 1,
+        kind: "text",
+        body: "Read the deterministic record",
+        metadata: {},
+        editedAt: null,
+        deletedAt: null,
+        createdAt: "2026-07-11T12:00:00.000Z",
+        attachments: [],
+        refs: [
+          {
+            id: "ref_agent_run",
+            messageId: "message_agent_run",
+            refType: "agent_run",
+            refId: "run_oauth_verifier",
+            preview: { status: "running" },
+            createdAt: "2026-07-11T12:00:00.000Z",
+          },
+        ],
+      },
+    ];
+
+    const markup = render({ detail });
+
+    expect(markup).toContain("Agent run");
+    expect(markup).toContain("Responding");
+  });
+
+  test("renders the shared agent conversation in the existing right sidebar", () => {
+    const props = baseProps();
+    props.agentConversation = {
+      conversationId: "conversation_oauth_verifier",
+      teamId: "team_1",
+      title: "OAuth verifier",
+      agent: {
+        id: "agent_oauth_verifier",
+        name: "OAuth Verifier Agent",
+        slug: "openpond-profile-oauth-verifier",
+      },
+      run: {
+        id: "run_oauth_verifier",
+        status: "succeeded",
+        metadata: {
+          profileProjectId: "project_profile",
+          sourceCommitSha: "source_sha",
+        },
+      },
+      messages: [
+        {
+          id: "agent_message_user",
+          sequence: 1,
+          role: "user",
+          body: "Read the deterministic record",
+          createdByUserId: "user_1",
+          createdAt: "2026-07-11T12:00:00.000Z",
+        },
+        {
+          id: "agent_message_assistant",
+          sequence: 2,
+          role: "assistant",
+          body: "Record read successfully.",
+          createdByUserId: null,
+          createdAt: "2026-07-11T12:00:01.000Z",
+        },
+      ],
+      pinnedRouting: {
+        profileProjectId: "project_profile",
+        sourceCommitSha: "source_sha",
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      createElement(TeamAgentConversationPanel, props),
+    );
+
+    expect(markup).toContain('aria-label="OAuth Verifier Agent run"');
+    expect(markup).toContain("Read the deterministic record");
+    expect(markup).toContain("Record read successfully.");
+    expect(markup).toContain('aria-label="Close agent run"');
+    expect(markup).toContain('role="log"');
+    expect(markup).toContain('contentEditable="true"');
+  });
 });
 
 function render(overrides: Partial<TeamChatViewProps>): string {
@@ -80,8 +174,10 @@ function baseProps(): TeamChatViewProps {
   return {
     currentUserId: "user_1",
     members: [],
+    agents: [],
     detail: null,
     aiThread: null,
+    agentConversation: null,
     loading: false,
     busy: false,
     error: null,
@@ -111,7 +207,10 @@ function baseProps(): TeamChatViewProps {
     onOpenProviderSettings: noop,
     onSendMessage: noopBoolean,
     onOpenAiThread: noopAsync,
+    onOpenAgentConversation: noopAsync,
     onCloseAiThread: noop,
+    onCloseAgentConversation: noop,
+    onSendAgentTurn: noopBoolean,
     onSendAiTurn: noopBoolean,
     onStopAiTurn: noopBoolean,
     onEditMessage: noopBoolean,

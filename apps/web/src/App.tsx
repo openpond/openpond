@@ -1799,6 +1799,7 @@ export function App() {
             teamChat.closeAgentConversation();
             setDiffPanelOpen(false);
           },
+          onSendAgentTurn: teamChat.sendAgentTurn,
           onSendAiTurn: teamChat.sendAiTurn,
           onStopAiTurn: teamChat.stopAiTurn,
           onEditMessage: teamChat.editMessage,

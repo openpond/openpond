@@ -104,6 +104,10 @@ export type TeamChatViewProps = {
   onOpenAgentConversation: (agentRunId: string) => Promise<void>;
   onCloseAiThread: () => void;
   onCloseAgentConversation: () => void;
+  onSendAgentTurn: (input: {
+    body: string;
+    clientRequestId: string;
+  }) => Promise<boolean>;
   onSendAiTurn: (input: { body: string; providerId: string; modelId: string }) => Promise<boolean>;
   onStopAiTurn: () => Promise<boolean>;
   onEditMessage: (message: TeamChatMessage, body: string) => Promise<boolean>;
@@ -274,40 +278,141 @@ export function TeamAgentConversationPanel(
     onResizeStart?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   },
 ) {
+  const [agentPrompt, setAgentPrompt] = useState("");
   const conversation = props.agentConversation!;
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const clientRequestIdRef = useRef<string | null>(null);
+  const latestSequence = conversation.messages.at(-1)?.sequence ?? 0;
+  const running = ["pending", "queued", "running"].includes(
+    conversation.run.status,
+  );
+
+  useEffect(() => {
+    const element = messagesRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [latestSequence, conversation.run.status]);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      props.onCloseAgentConversation();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.onCloseAgentConversation]);
+
+  async function submitAgentMessage(): Promise<boolean> {
+    const clientRequestId =
+      clientRequestIdRef.current ?? crypto.randomUUID();
+    clientRequestIdRef.current = clientRequestId;
+    const sent = await props.onSendAgentTurn({
+      body: agentPrompt,
+      clientRequestId,
+    });
+    if (sent) {
+      clientRequestIdRef.current = null;
+      setAgentPrompt("");
+    }
+    return sent;
+  }
+
   return (
-    <aside className="team-chat-ai-panel" aria-label={`${conversation.agent.name} run`}>
-      <div
-        className="workspace-diff-resize-handle"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize agent run panel"
-        onPointerDown={props.onResizeStart}
-      />
-      <header className="team-chat-ai-header">
+    <aside
+      className="workspace-diff-panel team-ai-thread-panel"
+      aria-label={`${conversation.agent.name} run`}
+    >
+      {props.onResizeStart ? (
+        <div
+          className="workspace-diff-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize agent run panel"
+          onPointerDown={props.onResizeStart}
+        />
+      ) : null}
+      <header>
         <div>
           <Bot size={15} />
           <strong>{conversation.agent.name}</strong>
-          <small>{conversation.run.status}</small>
+          <span>{conversation.run.status}</span>
         </div>
         <button
+          ref={closeButtonRef}
           type="button"
+          className="team-chat-icon-button"
           aria-label="Close agent run"
           onClick={props.onCloseAgentConversation}
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       </header>
-      <div className="team-chat-ai-messages" role="log" aria-live="polite">
+      <div
+        className="team-ai-thread-messages"
+        ref={messagesRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        tabIndex={0}
+      >
         {conversation.messages.map((message) => (
-          <article key={message.id} className={`team-chat-ai-message ${message.role}`}>
-            <strong>{message.role === "user" ? "Team member" : conversation.agent.name}</strong>
-            <MarkdownText content={message.body} />
+          <article key={message.id} className={`team-ai-message ${message.role}`}>
+            <div className="team-ai-message-author">
+              {message.role === "assistant" ? <Bot size={14} /> : null}
+              <strong>
+                {message.role === "user"
+                  ? "Team member"
+                  : conversation.agent.name}
+              </strong>
+            </div>
+            <MarkdownText connection={props.connection} content={message.body} />
           </article>
         ))}
         {conversation.messages.length === 0 ? (
           <div className="team-chat-empty">The agent run is starting.</div>
         ) : null}
+      </div>
+      <div className="team-ai-thread-composer">
+        <Composer
+          mode="dock"
+          surface="team"
+          teamUseModel={false}
+          teamUseModelLocked
+          prompt={agentPrompt}
+          contextWindowStatus={props.contextWindowStatus}
+          busy={props.busy || running}
+          running={running}
+          submissionScopeKey={`team-agent:${conversation.conversationId}`}
+          showProjectFooter={false}
+          connection={props.connection}
+          providerSettings={props.providerSettings}
+          provider={props.provider}
+          model={props.model}
+          projectTarget={NO_PROJECT_TARGET}
+          workspaceTarget={NO_WORKSPACE_TARGET}
+          codexPermissionMode={props.codexPermissionMode}
+          codexReasoningEffort={props.codexReasoningEffort}
+          openPondCommandAccessMode={props.openPondCommandAccessMode}
+          onProviderChange={props.onProviderChange}
+          onProviderSetupOpen={props.onOpenProviderSettings}
+          onProjectTargetChange={() => undefined}
+          onWorkspaceTargetChange={() => undefined}
+          onModelChange={props.onModelChange}
+          onCodexPermissionModeChange={props.onCodexPermissionModeChange}
+          onCodexReasoningEffortChange={props.onCodexReasoningEffortChange}
+          onOpenPondCommandAccessModeChange={
+            props.onOpenPondCommandAccessModeChange
+          }
+          onPromptChange={(value) => {
+            clientRequestIdRef.current = null;
+            setAgentPrompt(value);
+          }}
+          showToast={props.showToast}
+          onSubmit={submitAgentMessage}
+          onStop={() => false}
+        />
       </div>
     </aside>
   );

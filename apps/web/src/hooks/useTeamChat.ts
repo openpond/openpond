@@ -44,6 +44,35 @@ const INITIAL_STATE: TeamChatState = {
   error: null,
 };
 
+export function buildTeamChatAgentContinuationInput(input: {
+  teamId: string;
+  body: string;
+  clientRequestId: string;
+  conversation: NonNullable<TeamChatState["agentConversation"]>;
+}) {
+  return {
+    teamId: input.teamId,
+    body: input.body.trim(),
+    clientRequestId: input.clientRequestId,
+    selectedAgentId: input.conversation.agent.id,
+    conversationId: input.conversation.conversationId,
+  };
+}
+
+export function buildTeamChatSelectedActionRunInput(input: {
+  teamId: string;
+  body: string;
+  clientRequestId: string;
+  selectedActionKey: string;
+}) {
+  return {
+    teamId: input.teamId,
+    body: input.body.trim(),
+    clientRequestId: input.clientRequestId,
+    selectedActionKey: input.selectedActionKey,
+  };
+}
+
 export function useTeamChat(input: {
   connection: ClientConnection | null;
   teamId: string | null;
@@ -108,6 +137,25 @@ export function useTeamChat(input: {
     [input.connection, input.teamId],
   );
 
+  const refreshAgentConversation = useCallback(
+    async (agentRunId?: string | null) => {
+      const id = agentRunId ?? agentRunIdRef.current;
+      if (!input.connection || !input.teamId || !id) return null;
+      const agentConversation = await api.teamChatAgentConversation(
+        input.connection,
+        input.teamId,
+        id,
+      );
+      setState((current) =>
+        current.agentConversation?.run.id === id
+          ? { ...current, agentConversation }
+          : current,
+      );
+      return agentConversation;
+    },
+    [input.connection, input.teamId],
+  );
+
   useEffect(() => {
     selectedThreadIdRef.current = state.selectedThreadId;
   }, [state.selectedThreadId]);
@@ -119,6 +167,17 @@ export function useTeamChat(input: {
   useEffect(() => {
     agentRunIdRef.current = state.agentConversation?.run.id ?? null;
   }, [state.agentConversation?.run.id]);
+
+  useEffect(() => {
+    const status = state.agentConversation?.run.status;
+    if (!status || !["pending", "queued", "running"].includes(status)) return;
+    const timer = window.setInterval(() => {
+      void refreshAgentConversation().catch((error) => {
+        setState((current) => ({ ...current, error: errorMessage(error) }));
+      });
+    }, 2_500);
+    return () => window.clearInterval(timer);
+  }, [refreshAgentConversation, state.agentConversation?.run.status]);
 
   useEffect(() => {
     if (!input.connection || !input.teamId || !input.currentUserId) {
@@ -512,12 +571,16 @@ export function useTeamChat(input: {
         }
         setState((current) => ({ ...current, busy: true, error: null }));
         try {
-          await api.createTeamChatAgentRun(input.connection, threadId, {
-            teamId: input.teamId,
-            body: params.body.trim(),
-            clientRequestId,
-            selectedActionKey: params.selectedActionKey,
-          });
+          await api.createTeamChatAgentRun(
+            input.connection,
+            threadId,
+            buildTeamChatSelectedActionRunInput({
+              teamId: input.teamId,
+              body: params.body,
+              clientRequestId,
+              selectedActionKey: params.selectedActionKey,
+            }),
+          );
           await Promise.all([refreshThread(threadId), refreshThreads()]);
           setState((current) => ({ ...current, busy: false }));
           return true;
@@ -646,6 +709,68 @@ export function useTeamChat(input: {
     agentRunIdRef.current = null;
     setState((current) => ({ ...current, agentConversation: null }));
   }, []);
+
+  const sendAgentTurn = useCallback(
+    async (params: {
+      body: string;
+      clientRequestId: string;
+    }): Promise<boolean> => {
+      const threadId = selectedThreadIdRef.current;
+      const conversation = state.agentConversation;
+      if (
+        !input.connection ||
+        !input.teamId ||
+        !threadId ||
+        !conversation ||
+        !params.body.trim()
+      ) {
+        return false;
+      }
+      setState((current) => ({ ...current, busy: true, error: null }));
+      try {
+        const result = await api.createTeamChatAgentRun(
+          input.connection,
+          threadId,
+          buildTeamChatAgentContinuationInput({
+            teamId: input.teamId,
+            body: params.body,
+            clientRequestId: params.clientRequestId,
+            conversation,
+          }),
+        );
+        agentRunIdRef.current = result.run.id;
+        const [agentConversation] = await Promise.all([
+          api.teamChatAgentConversation(
+            input.connection,
+            input.teamId,
+            result.run.id,
+          ),
+          refreshThread(threadId),
+          refreshThreads(),
+        ]);
+        setState((current) => ({
+          ...current,
+          agentConversation,
+          busy: false,
+        }));
+        return true;
+      } catch (error) {
+        setState((current) => ({
+          ...current,
+          busy: false,
+          error: errorMessage(error),
+        }));
+        return false;
+      }
+    },
+    [
+      input.connection,
+      input.teamId,
+      refreshThread,
+      refreshThreads,
+      state.agentConversation,
+    ],
+  );
 
   const closeAiThread = useCallback(() => {
     aiConversationIdRef.current = null;
@@ -810,6 +935,7 @@ export function useTeamChat(input: {
     openAiThread,
     openAgentConversation,
     closeAgentConversation,
+    sendAgentTurn,
     closeAiThread,
     sendAiTurn,
     stopAiTurn,
@@ -818,7 +944,12 @@ export function useTeamChat(input: {
     retryMessage,
     dismissFailedMessage,
     refresh: async () => {
-      await Promise.all([refreshThreads(), refreshThread(), refreshAiThread()]);
+      await Promise.all([
+        refreshThreads(),
+        refreshThread(),
+        refreshAiThread(),
+        refreshAgentConversation(),
+      ]);
     },
   };
 }
