@@ -32,6 +32,14 @@ export async function handleTeamChatRoutes({
     );
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/team-chat/agents") {
+    sendJson(
+      response,
+      200,
+      await deps.teamChatPayload({ type: "agents", teamId: requiredTeamId(requestUrl) }),
+    );
+    return true;
+  }
   if (request.method === "GET" && requestUrl.pathname === "/v1/team-chat/threads") {
     sendJson(
       response,

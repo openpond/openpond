@@ -33,6 +33,12 @@ describe("server HTTP route table", () => {
         name: "sandboxPayload",
         args: [{ type: "list", payload: { teamId: "team-1" } }],
       });
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/team-chat/agents?teamId=team-1", 200),
+      ).resolves.toMatchObject({
+        name: "teamChatPayload",
+        args: [{ type: "agents", teamId: "team-1" }],
+      });
       await expect(expectJsonRequest(origin, "POST", "/v1/projects", 201, { name: "Local repo" })).resolves.toMatchObject({
         name: "createLocalProjectPayload",
         args: [{ name: "Local repo" }],
@@ -120,6 +126,7 @@ describe("server HTTP route table", () => {
         "profileCurrentPayload",
         "organizationPayload",
         "sandboxPayload",
+        "teamChatPayload",
         "createLocalProjectPayload",
         "listProviderModelsPayload",
         "recordClientDiagnosticPayload",

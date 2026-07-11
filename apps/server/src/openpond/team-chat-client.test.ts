@@ -3,6 +3,24 @@ import { describe, expect, mock, test } from "bun:test";
 import { apiBaseUrlFromSandboxApiUrl, teamChatRequestPayload } from "./team-chat-client.js";
 
 describe("team chat API base URL", () => {
+  test("forwards the desktop agent catalog request to the hosted team chat API", async () => {
+    const requests: string[] = [];
+    const fetchMock = mockFetch(async (url) => {
+      requests.push(url);
+      return Response.json({ agents: [] });
+    });
+    const result = await teamChatRequestPayload(
+      { type: "agents", teamId: "team_1" },
+      {
+        loadAccountContext: testAccountContext,
+        fetchImpl: fetchMock,
+      },
+    );
+
+    expect(result).toEqual({ agents: [] });
+    expect(requests).toEqual(["https://api.test/v1/team-chat/agents?teamId=team_1"]);
+  });
+
   test("derives the public API origin from sandbox collection URLs", () => {
     expect(apiBaseUrlFromSandboxApiUrl("https://api.openpond.ai/v1/sandboxes")).toBe(
       "https://api.openpond.ai",

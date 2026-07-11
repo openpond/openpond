@@ -12,6 +12,7 @@ import {
   TeamChatThreadDetailSchema,
   TeamChatThreadSchema,
   type TeamChatAiTurn,
+  type TeamChatAgentCatalogEntry,
   type ChatAttachment,
   type TeamChatAttachment,
   type TeamChatAttachmentDownload,
@@ -35,6 +36,7 @@ export type TeamChatClientDependencies = {
 
 export type TeamChatRequestAction =
   | { type: "members"; teamId: string }
+  | { type: "agents"; teamId: string }
   | { type: "threads"; teamId: string; includeArchived?: boolean }
   | { type: "events"; teamId: string; after?: number; limit?: number }
   | { type: "realtime_session"; teamId: string }
@@ -88,6 +90,7 @@ export type TeamChatRequestAction =
 
 export type TeamChatRequestResult =
   | { members: TeamChatMember[] }
+  | { agents: TeamChatAgentCatalogEntry[] }
   | { threads: TeamChatThread[] }
   | TeamChatThreadDetail
   | TeamChatMessage
@@ -100,6 +103,27 @@ export type TeamChatRequestResult =
   | { sequence: number };
 
 const MembersResponseSchema = z.object({ members: z.array(TeamChatMemberSchema) });
+const AgentsResponseSchema = z.object({
+  agents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      label: z.string(),
+      description: z.string().nullable(),
+      inputSchema: z.string().nullable(),
+      setupRequirements: z.array(z.record(z.string(), z.unknown())),
+      implementation: z.object({
+        type: z.literal("openpond-agent"),
+        agentId: z.string(),
+        agentName: z.string(),
+        actionId: z.string(),
+        profileProjectId: z.string(),
+        profileName: z.string(),
+      }),
+      invokesModel: z.boolean(),
+    }),
+  ),
+});
 const ThreadsResponseSchema = z.object({ threads: z.array(TeamChatThreadSchema) });
 const ReadResponseSchema = z.object({ sequence: z.number().int().nonnegative() });
 
@@ -153,6 +177,8 @@ function requestForAction(action: TeamChatRequestAction): {
       throw new Error("attachment uploads must use the coordinated upload path");
     case "members":
       return { path: `/v1/team-chat/members?${teamQuery}` };
+    case "agents":
+      return { path: `/v1/team-chat/agents?${teamQuery}` };
     case "threads":
       return {
         path: `/v1/team-chat/threads?${teamQuery}${action.includeArchived ? "&includeArchived=true" : ""}`,
@@ -262,6 +288,8 @@ function schemaForAction(action: TeamChatRequestAction): z.ZodType {
   switch (action.type) {
     case "members":
       return MembersResponseSchema;
+    case "agents":
+      return AgentsResponseSchema;
     case "threads":
       return ThreadsResponseSchema;
     case "events":
