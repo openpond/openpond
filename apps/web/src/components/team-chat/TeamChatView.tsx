@@ -14,6 +14,7 @@ import type {
   OpenPondCommandAccessMode,
   ProviderSettings,
   TeamChatHostedAiThread,
+  TeamChatAgentConversation,
   TeamChatMember,
   TeamChatMessage,
   TeamChatThreadDetail,
@@ -22,6 +23,7 @@ import { api, type ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { WorkspaceTargetState } from "../../lib/workspace-location";
+import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import { teamChatThreadTitle } from "../../lib/team-chat-thread";
 import { Composer } from "../chat/Composer";
 import type { ComposerProjectTargetState } from "../chat/ComposerControls";
@@ -67,8 +69,10 @@ const TEAM_CHAT_PROVIDER_IDS = new Set<ChatProvider>([
 export type TeamChatViewProps = {
   currentUserId: string | null;
   members: TeamChatMember[];
+  agents: SandboxActionCatalogEntry[];
   detail: TeamChatThreadDetail | null;
   aiThread: TeamChatHostedAiThread | null;
+  agentConversation: TeamChatAgentConversation | null;
   loading: boolean;
   busy: boolean;
   error: string | null;
@@ -94,9 +98,12 @@ export type TeamChatViewProps = {
     modelId: string;
     mentionUserIds?: string[];
     attachments?: ChatAttachment[];
+    selectedActionKey?: string | null;
   }) => Promise<boolean>;
   onOpenAiThread: (conversationId: string) => Promise<void>;
+  onOpenAgentConversation: (agentRunId: string) => Promise<void>;
   onCloseAiThread: () => void;
+  onCloseAgentConversation: () => void;
   onSendAiTurn: (input: { body: string; providerId: string; modelId: string }) => Promise<boolean>;
   onStopAiTurn: () => Promise<boolean>;
   onEditMessage: (message: TeamChatMessage, body: string) => Promise<boolean>;
@@ -128,7 +135,10 @@ export function TeamChatView(props: TeamChatViewProps) {
     if (element) element.scrollTop = element.scrollHeight;
   }, [lastMessageSequence, props.detail?.thread.id]);
 
-  async function submitTeamMessage(attachments: ChatAttachment[] = []): Promise<boolean> {
+  async function submitTeamMessage(
+    attachments: ChatAttachment[] = [],
+    action: SandboxActionCatalogEntry | null = null,
+  ): Promise<boolean> {
     if (
       attachments.some(
         (attachment) =>
@@ -146,6 +156,7 @@ export function TeamChatView(props: TeamChatViewProps) {
       modelId: teamModel,
       mentionUserIds: mentionedTeamMemberIds(prompt, props.members),
       attachments,
+      selectedActionKey: action?.id ?? null,
     });
     if (sent) setPrompt("");
     return sent;
@@ -200,6 +211,7 @@ export function TeamChatView(props: TeamChatViewProps) {
                 }
                 own={message.authorUserId === props.currentUserId}
                 onOpenAiThread={props.onOpenAiThread}
+                onOpenAgentConversation={props.onOpenAgentConversation}
                 onEdit={props.onEditMessage}
                 onDelete={props.onDeleteMessage}
                 onRetry={props.onRetryMessage}
@@ -219,6 +231,7 @@ export function TeamChatView(props: TeamChatViewProps) {
             teamMentionMembers={props.members.filter(
               (member) => member.userId !== props.currentUserId,
             )}
+            actionCatalog={props.agents}
             onTeamUseModelChange={setUseModel}
             prompt={prompt}
             contextWindowStatus={props.contextWindowStatus}
@@ -245,14 +258,58 @@ export function TeamChatView(props: TeamChatViewProps) {
             onOpenPondCommandAccessModeChange={props.onOpenPondCommandAccessModeChange}
             onPromptChange={setPrompt}
             showToast={props.showToast}
-            onSubmit={async (attachments) => {
-              return submitTeamMessage(attachments ?? []);
+            onSubmit={async (attachments, action) => {
+              return submitTeamMessage(attachments ?? [], action ?? null);
             }}
             onStop={() => false}
           />
         </div>
       </div>
     </section>
+  );
+}
+
+export function TeamAgentConversationPanel(
+  props: TeamChatViewProps & {
+    onResizeStart?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  },
+) {
+  const conversation = props.agentConversation!;
+  return (
+    <aside className="team-chat-ai-panel" aria-label={`${conversation.agent.name} run`}>
+      <div
+        className="workspace-diff-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize agent run panel"
+        onPointerDown={props.onResizeStart}
+      />
+      <header className="team-chat-ai-header">
+        <div>
+          <Bot size={15} />
+          <strong>{conversation.agent.name}</strong>
+          <small>{conversation.run.status}</small>
+        </div>
+        <button
+          type="button"
+          aria-label="Close agent run"
+          onClick={props.onCloseAgentConversation}
+        >
+          <X size={14} />
+        </button>
+      </header>
+      <div className="team-chat-ai-messages" role="log" aria-live="polite">
+        {conversation.messages.map((message) => (
+          <article key={message.id} className={`team-chat-ai-message ${message.role}`}>
+            <strong>{message.role === "user" ? "Team member" : conversation.agent.name}</strong>
+            <MarkdownText content={message.body} />
+          </article>
+        ))}
+        {conversation.messages.length === 0 ? (
+          <div className="team-chat-empty">The agent run is starting.</div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
@@ -419,6 +476,7 @@ function TeamChatMessageRow(props: {
   author: TeamChatMember | null;
   own: boolean;
   onOpenAiThread: (conversationId: string) => Promise<void>;
+  onOpenAgentConversation: (agentRunId: string) => Promise<void>;
   onEdit: (message: TeamChatMessage, body: string) => Promise<boolean>;
   onDelete: (message: TeamChatMessage) => Promise<boolean>;
   onRetry: (message: TeamChatMessage) => Promise<boolean>;
@@ -428,6 +486,7 @@ function TeamChatMessageRow(props: {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(props.message.body);
   const aiRef = props.message.refs.find((ref) => ref.refType === "hosted_ai_thread");
+  const agentRef = props.message.refs.find((ref) => ref.refType === "agent_run");
   const aiStatus = typeof aiRef?.preview.status === "string" ? aiRef.preview.status : null;
   const deliveryStatus =
     typeof props.message.metadata.deliveryStatus === "string"
@@ -541,6 +600,18 @@ function TeamChatMessageRow(props: {
             {aiStatus && aiStatus !== "completed" ? (
               <small>{threadStatusLabel(aiStatus)}</small>
             ) : null}
+            <span aria-hidden="true">›</span>
+          </button>
+        ) : null}
+        {agentRef ? (
+          <button
+            type="button"
+            className="team-chat-thread-link"
+            onClick={() => void props.onOpenAgentConversation(agentRef.refId)}
+          >
+            <Bot size={14} />
+            <span>Agent run</span>
+            <small>{threadStatusLabel(String(agentRef.preview.status ?? "queued"))}</small>
             <span aria-hidden="true">›</span>
           </button>
         ) : null}

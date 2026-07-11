@@ -2,6 +2,8 @@ import {
   CHAT_ATTACHMENT_LIMITS,
   TeamChatMessageSchema,
   type ChatAttachment,
+  type TeamChatAgentCatalogEntry,
+  type TeamChatAgentConversation,
   type TeamChatAttachment,
   type TeamChatEvent,
   type TeamChatHostedAiThread,
@@ -13,10 +15,12 @@ import {
 
 export type TeamChatState = {
   members: TeamChatMember[];
+  agents: TeamChatAgentCatalogEntry[];
   threads: TeamChatThread[];
   selectedThreadId: string | null;
   detail: TeamChatThreadDetail | null;
   aiThread: TeamChatHostedAiThread | null;
+  agentConversation: TeamChatAgentConversation | null;
   loading: boolean;
   busy: boolean;
   error: string | null;

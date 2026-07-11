@@ -27,3 +27,8 @@ export const TeamChatView = lazy(() =>
 export const TeamAiThreadPanel = lazy(() =>
   import("../team-chat/TeamChatView").then((module) => ({ default: module.TeamAiThreadPanel })),
 );
+export const TeamAgentConversationPanel = lazy(() =>
+  import("../team-chat/TeamChatView").then((module) => ({
+    default: module.TeamAgentConversationPanel,
+  })),
+);

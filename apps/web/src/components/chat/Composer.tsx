@@ -552,15 +552,17 @@ export function Composer({
     if (!mentionContext) return [];
     const needle = mentionContext.query;
     if (surface === "team") {
-      return teamMentionMembers
+      const memberMatches = teamMentionMembers
         .filter((member) => {
           if (!needle) return true;
           return [member.name, member.handle ?? ""]
             .map(normalizeMentionToken)
             .some((token) => token.includes(needle));
         })
-        .map((member) => ({ kind: "team-member" as const, member }))
-        .slice(0, 8);
+        .map((member) => ({ kind: "team-member" as const, member }));
+      const teamActionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
+        .map((action) => ({ kind: "action" as const, action }));
+      return [...memberMatches, ...teamActionMatches].slice(0, 8);
     }
     const appMatches = mentionApps
       .filter((app) => {
@@ -600,11 +602,8 @@ export function Composer({
     skillMenuDismissedPrompt !== activeSkillKey,
   );
   const activeSlashContext = useMemo(
-    () =>
-      surface === "team"
-        ? null
-        : activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
-    [cursorIndex, prompt, surface],
+    () => activeSlashCommandContext(prompt, Math.min(cursorIndex, prompt.length)),
+    [cursorIndex, prompt],
   );
   const activeSlashKey = activeSlashContext
     ? `${prompt}:${activeSlashContext.start}:${activeSlashContext.end}`
@@ -613,11 +612,15 @@ export function Composer({
     return activeSlashContext ? slashActionMatchesForQuery(actionCatalog, activeSlashContext.query) : [];
   }, [actionCatalog, activeSlashContext]);
   const appContextMatches = useMemo(() => {
-    return activeSlashContext ? slashAppContextMatchesForQuery(mentionApps, activeSlashContext.query) : [];
-  }, [activeSlashContext, mentionApps]);
+    return activeSlashContext && surface !== "team"
+      ? slashAppContextMatchesForQuery(mentionApps, activeSlashContext.query)
+      : [];
+  }, [activeSlashContext, mentionApps, surface]);
   const commandMatches = useMemo(() => {
-    return activeSlashContext ? slashCommandMatchesForQuery(activeSlashContext.query) : [];
-  }, [activeSlashContext]);
+    return activeSlashContext && surface !== "team"
+      ? slashCommandMatchesForQuery(activeSlashContext.query)
+      : [];
+  }, [activeSlashContext, surface]);
   const slashMatches = useMemo<SlashMenuItem[]>(
     () => [
       ...commandMatches.map((command) => ({ kind: "command" as const, command })),

@@ -10,6 +10,52 @@ export const TeamChatMemberSchema = z.object({
   image: z.string().nullable(),
 });
 
+export type TeamChatAgentCatalogEntry = {
+  id: string;
+  name: string;
+  label: string;
+  description: string | null;
+  inputSchema: string | null;
+  setupRequirements: Record<string, unknown>[];
+  implementation: {
+    type: "openpond-agent";
+    agentId: string;
+    agentName: string;
+    actionId: string;
+    profileProjectId: string;
+    profileName: string;
+  };
+  invokesModel: boolean;
+};
+
+export type TeamChatAgentRunResult = {
+  message: TeamChatMessage;
+  conversationId: string;
+  idempotentReplay: boolean;
+  agent: { id: string; name: string } & Record<string, unknown>;
+  run: { id: string; status: string; metadata: Record<string, unknown> } & Record<
+    string,
+    unknown
+  >;
+};
+
+export type TeamChatAgentConversation = {
+  conversationId: string;
+  teamId: string;
+  title: string | null;
+  agent: { id: string; name: string; slug: string };
+  run: TeamChatAgentRunResult["run"];
+  messages: Array<{
+    id: string;
+    sequence: number;
+    role: "user" | "assistant" | "system" | "action";
+    body: string;
+    createdByUserId: string | null;
+    createdAt: string;
+  }>;
+  pinnedRouting: Record<string, unknown>;
+};
+
 export const TeamChatParticipantSchema = z.object({
   userId: z.string(),
   role: z.enum(["owner", "admin", "member"]),

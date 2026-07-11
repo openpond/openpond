@@ -33,10 +33,12 @@ import { teamChatErrorMessage } from "../lib/team-chat-error";
 
 const INITIAL_STATE: TeamChatState = {
   members: [],
+  agents: [],
   threads: [],
   selectedThreadId: null,
   detail: null,
   aiThread: null,
+  agentConversation: null,
   loading: false,
   busy: false,
   error: null,
@@ -50,6 +52,7 @@ export function useTeamChat(input: {
   const [state, setState] = useState<TeamChatState>(INITIAL_STATE);
   const selectedThreadIdRef = useRef<string | null>(null);
   const aiConversationIdRef = useRef<string | null>(null);
+  const agentRunIdRef = useRef<string | null>(null);
   const eventCursorRef = useRef(0);
   const seenEventIdsRef = useRef(new Set<number>());
   const catchupRunningRef = useRef(false);
@@ -114,6 +117,10 @@ export function useTeamChat(input: {
   }, [state.aiThread?.conversationId]);
 
   useEffect(() => {
+    agentRunIdRef.current = state.agentConversation?.run.id ?? null;
+  }, [state.agentConversation?.run.id]);
+
+  useEffect(() => {
     if (!input.connection || !input.teamId || !input.currentUserId) {
       setState(INITIAL_STATE);
       setRealtimeSession(null);
@@ -131,16 +138,24 @@ export function useTeamChat(input: {
     pendingAttachmentsRef.current.clear();
     pendingMessagesRef.current.clear();
     seenEventIdsRef.current.clear();
-    setState((current) => ({ ...current, aiThread: null, loading: true, error: null }));
+    setState((current) => ({
+      ...current,
+      aiThread: null,
+      agentConversation: null,
+      loading: true,
+      error: null,
+    }));
     void (async () => {
       try {
         const baseline = await api.teamChatEvents(input.connection!, input.teamId!);
         if (cancelled) return;
         eventCursorRef.current = baseline.cursor;
         const membersPromise = api.teamChatMembers(input.connection!, input.teamId!);
+        const agentsPromise = api.teamChatAgents(input.connection!, input.teamId!);
         const general = await api.teamChatGeneral(input.connection!, input.teamId!);
-        const [members, threads] = await Promise.all([
+        const [members, agents, threads] = await Promise.all([
           membersPromise,
+          agentsPromise,
           api.teamChatThreads(input.connection!, input.teamId!),
         ]);
         if (cancelled) return;
@@ -157,6 +172,7 @@ export function useTeamChat(input: {
         setState((current) => ({
           ...current,
           members: members.members,
+          agents: agents.agents,
           threads: threads.threads,
           selectedThreadId,
           detail,
@@ -328,6 +344,7 @@ export function useTeamChat(input: {
         selectedThreadId: threadId,
         detail: current.detail?.thread.id === threadId ? current.detail : null,
         aiThread: threadChanged ? null : current.aiThread,
+        agentConversation: threadChanged ? null : current.agentConversation,
         loading: true,
         error: null,
       }));
@@ -375,6 +392,7 @@ export function useTeamChat(input: {
           selectedThreadId: detail.thread.id,
           detail,
           aiThread: threadChanged ? null : current.aiThread,
+          agentConversation: threadChanged ? null : current.agentConversation,
           busy: false,
         }));
         await refreshThreads();
@@ -433,6 +451,7 @@ export function useTeamChat(input: {
       modelId: string;
       mentionUserIds?: string[];
       attachments?: ChatAttachment[];
+      selectedActionKey?: string | null;
     }): Promise<boolean> => {
       const threadId = selectedThreadIdRef.current;
       const attachments = teamChatImageInputs(params.attachments ?? []);
@@ -483,6 +502,34 @@ export function useTeamChat(input: {
       }
 
       const clientRequestId = crypto.randomUUID();
+      if (params.selectedActionKey) {
+        if (attachments.length > 0) {
+          setState((current) => ({
+            ...current,
+            error: "Agent invocations do not support image attachments yet.",
+          }));
+          return false;
+        }
+        setState((current) => ({ ...current, busy: true, error: null }));
+        try {
+          await api.createTeamChatAgentRun(input.connection, threadId, {
+            teamId: input.teamId,
+            body: params.body.trim(),
+            clientRequestId,
+            selectedActionKey: params.selectedActionKey,
+          });
+          await Promise.all([refreshThread(threadId), refreshThreads()]);
+          setState((current) => ({ ...current, busy: false }));
+          return true;
+        } catch (error) {
+          setState((current) => ({
+            ...current,
+            busy: false,
+            error: errorMessage(error),
+          }));
+          return false;
+        }
+      }
       pendingAttachmentsRef.current.set(clientRequestId, {
         inputs: attachments,
         uploaded: null,
@@ -567,6 +614,38 @@ export function useTeamChat(input: {
     },
     [input.connection, input.teamId],
   );
+
+  const openAgentConversation = useCallback(
+    async (agentRunId: string) => {
+      if (!input.connection || !input.teamId) return;
+      agentRunIdRef.current = agentRunId;
+      setState((current) => ({ ...current, busy: true, error: null }));
+      try {
+        const agentConversation = await api.teamChatAgentConversation(
+          input.connection,
+          input.teamId,
+          agentRunId,
+        );
+        setState((current) => ({
+          ...current,
+          agentConversation,
+          busy: false,
+        }));
+      } catch (error) {
+        setState((current) => ({
+          ...current,
+          busy: false,
+          error: errorMessage(error),
+        }));
+      }
+    },
+    [input.connection, input.teamId],
+  );
+
+  const closeAgentConversation = useCallback(() => {
+    agentRunIdRef.current = null;
+    setState((current) => ({ ...current, agentConversation: null }));
+  }, []);
 
   const closeAiThread = useCallback(() => {
     aiConversationIdRef.current = null;
@@ -729,6 +808,8 @@ export function useTeamChat(input: {
     loadMoreMessages,
     sendMessage,
     openAiThread,
+    openAgentConversation,
+    closeAgentConversation,
     closeAiThread,
     sendAiTurn,
     stopAiTurn,

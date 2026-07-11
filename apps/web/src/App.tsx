@@ -1758,8 +1758,10 @@ export function App() {
         teamChat: {
           currentUserId: teamChat.currentUserId,
           members: teamChat.members,
+          agents: teamChat.agents,
           detail: teamChat.detail,
           aiThread: teamChat.aiThread,
+          agentConversation: teamChat.agentConversation,
           loading: teamChat.loading,
           busy: teamChat.busy,
           error: teamChat.error,
@@ -1782,8 +1784,21 @@ export function App() {
             setView("settings");
           },
           onSendMessage: teamChat.sendMessage,
-          onOpenAiThread: teamChat.openAiThread,
+          onOpenAiThread: async (conversationId) => {
+            await teamChat.openAiThread(conversationId);
+            setRightPanelMode("chat");
+            setDiffPanelOpen(true);
+          },
+          onOpenAgentConversation: async (agentRunId) => {
+            await teamChat.openAgentConversation(agentRunId);
+            setRightPanelMode("chat");
+            setDiffPanelOpen(true);
+          },
           onCloseAiThread: () => setDiffPanelOpen(false),
+          onCloseAgentConversation: () => {
+            teamChat.closeAgentConversation();
+            setDiffPanelOpen(false);
+          },
           onSendAiTurn: teamChat.sendAiTurn,
           onStopAiTurn: teamChat.stopAiTurn,
           onEditMessage: teamChat.editMessage,

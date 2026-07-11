@@ -72,6 +72,9 @@ import type {
   WorkspaceState,
   WorkspaceTemplateConfigView,
   TeamChatHostedAiThread,
+  TeamChatAgentCatalogEntry,
+  TeamChatAgentConversation,
+  TeamChatAgentRunResult,
   TeamChatAttachment,
   TeamChatAttachmentDownload,
   TeamChatEventPage,
@@ -168,6 +171,11 @@ export const api = {
       connection,
       `/v1/team-chat/members?teamId=${encodeURIComponent(teamId)}`,
     ),
+  teamChatAgents: (connection: ClientConnection, teamId: string) =>
+    apiFetch<{ agents: TeamChatAgentCatalogEntry[] }>(
+      connection,
+      `/v1/team-chat/agents?teamId=${encodeURIComponent(teamId)}`,
+    ),
   teamChatThreads: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ threads: TeamChatThread[] }>(
       connection,
@@ -249,6 +257,33 @@ export const api = {
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages`,
       { method: "POST", body: JSON.stringify(input) },
+    ),
+  createTeamChatAgentRun: (
+    connection: ClientConnection,
+    threadId: string,
+    input: {
+      teamId: string;
+      body: string;
+      clientRequestId: string;
+      selectedActionKey?: string | null;
+      selectedAgentId?: string | null;
+      conversationId?: string | null;
+      targetProjectId?: string | null;
+    },
+  ) =>
+    apiFetch<TeamChatAgentRunResult>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/agent-runs`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  teamChatAgentConversation: (
+    connection: ClientConnection,
+    teamId: string,
+    agentRunId: string,
+  ) =>
+    apiFetch<TeamChatAgentConversation>(
+      connection,
+      `/v1/team-chat/agent-runs/${encodeURIComponent(agentRunId)}?teamId=${encodeURIComponent(teamId)}`,
     ),
   editTeamChatMessage: (
     connection: ClientConnection,

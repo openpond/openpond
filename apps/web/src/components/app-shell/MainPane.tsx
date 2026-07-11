@@ -93,6 +93,7 @@ import {
   InsightsView,
   ProfileView,
   TeamAiThreadPanel,
+  TeamAgentConversationPanel,
   TeamChatView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
@@ -668,17 +669,27 @@ export function MainPane({
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
+  const showTeamAgentConversationPanel =
+    view === "team" &&
+    diffPanelOpen &&
+    rightPanelMode === "chat" &&
+    Boolean(teamChat.agentConversation);
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
     supportedView: view === "chat" || view === "cloud" || view === "profile",
     open: diffPanelOpen,
     hasContentPanel:
-      showDiffPanel || showBrowserPanel || showRightChatPanel || showTeamAiThreadPanel,
+      showDiffPanel ||
+      showBrowserPanel ||
+      showRightChatPanel ||
+      showTeamAiThreadPanel ||
+      showTeamAgentConversationPanel,
   });
   const showRightPanel =
     showDiffPanel ||
     showBrowserPanel ||
     showRightChatPanel ||
     showTeamAiThreadPanel ||
+    showTeamAgentConversationPanel ||
     showRightHomePanel;
   const rightPanelExpanded = showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
   const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
@@ -1315,6 +1326,13 @@ export function MainPane({
       onResizeStart={onDiffPanelResizeStart}
     />
   ) : null;
+  const teamAgentConversationPanel = showTeamAgentConversationPanel ? (
+    <TeamAgentConversationPanel
+      {...teamChat}
+      key={teamChat.agentConversation?.run.id}
+      onResizeStart={onDiffPanelResizeStart}
+    />
+  ) : null;
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
@@ -1369,7 +1387,13 @@ export function MainPane({
       onToggleTerminal={onToggleTerminal}
     />
   ) : null;
-  const rightPanel = teamAiThreadPanel ?? rightChatPanel ?? diffPanel ?? browserPanel ?? homePanel;
+  const rightPanel =
+    teamAgentConversationPanel ??
+    teamAiThreadPanel ??
+    rightChatPanel ??
+    diffPanel ??
+    browserPanel ??
+    homePanel;
   const terminalPanel = (
     <AppTerminalPanel
       open={terminalOpen}
