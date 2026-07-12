@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OpenPond</h1>
-  <p><strong>Frontier-grade agent orchestration for any model, provider, or subscription.</strong></p>
+  <p><strong>The open-source agent harness for teams.</strong></p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
     <a href="https://www.npmjs.com/package/openpond"><img alt="npm package version" src="https://img.shields.io/npm/v/openpond?logo=npm&logoColor=white" /></a>
@@ -9,14 +9,16 @@
   </p>
 </div>
 
-OpenPond is a local-first orchestration harness for running serious agent work across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
+OpenPond is a local-first orchestration harness for turning conversations into durable agents, shared team workflows, and training-ready Tasksets across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
 
-It gives chats, agents, subagents, skills, goal loops, approvals, connected apps, and hosted sandboxes a shared, source-owned runtime. Keep chat control, model settings, approvals, and source review local; send execution to [OpenPond Cloud](docs/public/cloud.md) when work needs clean compute, long-running processes, replayable runs, or teammate handoff.
+It gives people and agents one source-owned runtime for chats, subagents, skills, goal loops, approvals, connected apps, training evidence, and hosted sandboxes. Keep chat control, model settings, approvals, and source review local; send execution to [OpenPond Cloud](docs/public/cloud.md) when work needs clean compute, long-running processes, replayable runs, or teammate handoff.
 
 - **Model agnostic by design:** route work through Codex, BYOK providers, hosted models, open source models, or subscription-backed model access without locking the agent to one vendor.
 - **Frontier-grade orchestration:** coordinate agents, subagents, tools, goals, approvals, browser control, connected apps, and sandbox execution as one inspectable workflow.
 - **Source-owned by default:** agents and skills start as ordinary files in a local profile repo, then sync to OpenPond Cloud when you want cross-device or hosted execution.
 - **Local control, cloud execution:** review prompts, diffs, settings, and approvals locally while hosted sandboxes handle file reads, file writes, shell commands, dependency installs, actions, and long-running work.
+- **Built for teams:** share Team Chat, agents, projects, sandboxes, usage, and member limits without sharing Personal accounts or rebuilding a developer's local setup.
+- **Training from real work:** select useful chats, turn them into verifiable Tasksets, run baselines and graders, and prepare bundles for local or configured training destinations.
 
 No login required for local work. Bring your own keys, models, providers, subscriptions, and runtimes. First-class Codex support.
 
@@ -28,6 +30,8 @@ No login required for local work. Bring your own keys, models, providers, subscr
 | Orchestration | Run chats, agents, subagents, skills, tools, approvals, browser control, connected apps, and goal loops through one durable execution harness. |
 | Model access [(docs)](docs/public/model-access.md) | Bring Codex, BYOK providers, hosted OpenPond models, open source models, or subscription-backed model access to the same agent workflow. |
 | Agents [(docs)](docs/public/creating-agents.md) | Create durable agents from any chat; agent code is saved locally to your profile, with one-click cloud push when you want access from Slack, another computer, or OpenPond Web. |
+| Teams | Chat with people and agents in one workspace, then share agents, projects, cloud sandboxes, usage policy, and per-member limits through one Team account. |
+| Training | Turn selected chats into source-backed Tasksets with explicit tasks, verifiers, splits, baselines, graders, and portable training bundles. |
 | Goal loops [(docs)](docs/public/goals.md) | Build composable, bounded task loops with continuation, budgets, completion evidence, and explicit stop conditions for long-running work. |
 | Insights Agent [(docs)](docs/public/continuous-insights.md) | Run every 5 minutes by default to review your entire setup, track chat logs, runs, errors, and follow-ups, and turn useful work into explicit next steps. |
 | OpenPond Cloud [(docs)](docs/public/cloud.md) | Move between local projects, hosted workspaces, Hybrid sandbox execution, replayable runs, and cloud compute through [openpond.ai](https://openpond.ai). |
@@ -87,13 +91,30 @@ profiles/
 
 See [Creating durable agents](docs/public/creating-agents.md), [Agent SDK](docs/public/agent-sdk.md), and [OpenPond Git](docs/public/openpond-git.md) for the deeper contract.
 
+## Training From Real Work
+
+OpenPond treats conversations as evidence, not automatically as training data. From any useful chat, use `Add to training` or `/train` to select the conversations that demonstrate a repeatable job. The training workbench helps turn those sources into a reviewable Taskset with explicit tasks, validation and frozen-eval splits, verifiers, graders, and expected outcomes.
+
+Tasksets live as ordinary source inside the active profile. You can inspect and edit them, run baselines, compare model attempts, review grading evidence, and build a portable training bundle for a local or configured destination. This makes RFT and RL experimentation part of the same development loop as the agent itself:
+
+```text
+chat with models and subagents
+-> select useful conversations
+-> create and review a verifiable Taskset
+-> run baselines and grade attempts
+-> export or hand off a training bundle
+-> bring the improved model back to the same harness
+```
+
+The goal is not to train indiscriminately on chat history. It is to turn proven team workflows into inspectable evaluations and high-signal training inputs.
+
 ## Local <> Cloud
 
 OpenPond lets you keep orchestration local without forcing execution to run on your laptop. In local mode, the desktop app owns the chat, approvals, model and provider settings, subagent placement, and source review, while [OpenPond Cloud](docs/public/cloud.md) can provide the sandbox where execution actually happens.
 
 Think of it as local control with cloud execution. Your configured model path, BYOK provider, open source runtime, Codex session, or LLM subscription can drive the agent, while file reads, file writes, shell commands, dependency installs, hosted actions, and long-running work happen inside an OpenPond sandbox. Your local workspace stays reviewable, and the sandbox gives the agent a clean environment built for replay, preservation, and handoff.
 
-That split is useful when a teammate needs an agent in Slack, Microsoft Teams, OpenPond Web, or another machine: the same git-backed source and profile catalog can sync to the cloud, then run in hosted infrastructure without requiring the teammate to clone the repo, install dependencies, or understand the local setup.
+That split is useful when a teammate needs an agent in Team Chat, Slack, Microsoft Teams, OpenPond Web, or another machine: the same git-backed source, Tasksets, and profile catalog can sync to the cloud, then run in hosted infrastructure without requiring the teammate to clone the repo, install dependencies, or understand the local setup.
 
 ## Quick Start
 
