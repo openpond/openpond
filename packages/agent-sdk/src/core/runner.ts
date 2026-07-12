@@ -240,8 +240,44 @@ function createAgentContext(project: AgentProjectDefinition, state: RunState): A
     async runCommand(command, options) {
       state.commands.push({ command, options: redactRecord(options) });
       state.events.push(traceEvent("command.started", { command }));
-      state.events.push(traceEvent("command.completed", { command, status: "succeeded" }));
-      return { status: "succeeded", stdout: "" };
+      const cwd = typeof options?.cwd === "string" && options.cwd.trim()
+        ? options.cwd.trim()
+        : process.cwd();
+      const optionEnv = options?.env && typeof options.env === "object" && !Array.isArray(options.env)
+        ? Object.fromEntries(
+            Object.entries(options.env).flatMap(([key, value]) =>
+              typeof value === "string" ? [[key, value]] : [],
+            ),
+          )
+        : {};
+      try {
+        const process = Bun.spawn(["bash", "-lc", command], {
+          cwd,
+          env: { ...globalThis.process.env, ...optionEnv },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const [exitCode, stdout, stderr] = await Promise.all([
+          process.exited,
+          new Response(process.stdout).text(),
+          new Response(process.stderr).text(),
+        ]);
+        const status = exitCode === 0 ? "succeeded" : "failed";
+        state.events.push(traceEvent("command.completed", {
+          command,
+          status,
+          exitCode,
+        }));
+        return { status, stdout, stderr };
+      } catch (error) {
+        const stderr = errorMessage(error);
+        state.events.push(traceEvent("command.completed", {
+          command,
+          status: "failed",
+          error: stderr,
+        }));
+        return { status: "failed", stderr };
+      }
     },
     async workflow(name, input) {
       const workflow = (project.workflows ?? []).find((candidate) => candidate.name === name);

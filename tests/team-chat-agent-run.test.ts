@@ -1,12 +1,76 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
 import {
   buildTeamChatAgentContinuationInput,
   buildTeamChatSelectedActionRunInput,
+  clearTeamChatDetailUnreadCount,
+  clearTeamChatThreadUnreadCount,
+  markOpenedTeamChatThreadRead,
 } from "../apps/web/src/hooks/useTeamChat";
 import { actionMentionMatchesForQuery } from "../apps/web/src/lib/action-mentions";
+import { mentionedTeamMemberIds } from "../apps/web/src/lib/team-chat-mentions";
 
 describe("desktop Team Chat agent continuation", () => {
+  test("resolves known member tags without treating unknown text as a mention", () => {
+    const members = [
+      { userId: "user_1", role: "owner" as const, name: "Owner", handle: "owner", image: null },
+      {
+        userId: "user_2",
+        role: "member" as const,
+        name: "Member",
+        handle: "user-ifu070",
+        image: null,
+      },
+    ];
+
+    expect(mentionedTeamMemberIds("@USER-IFU070 hello @unknown", members)).toEqual(["user_2"]);
+  });
+
+  test("marks an opened DM through the hosted read endpoint", async () => {
+    const connection = {
+      serverUrl: "http://127.0.0.1:17874",
+      token: "test",
+      platform: "linux",
+    };
+    const markRead = mock(async () => ({ sequence: 4 }));
+    const marked = await markOpenedTeamChatThreadRead(
+      {
+        connection,
+        teamId: "team_1",
+        threadId: "dm_1",
+        lastMessageSequence: 4,
+      },
+      markRead,
+    );
+
+    expect(marked).toBe(true);
+    expect(markRead).toHaveBeenCalledWith(connection, "dm_1", "team_1", 4);
+  });
+
+  test("clears the opened thread unread badge in desktop state", () => {
+    const threads = [
+      { id: "general", unreadCount: 5 },
+      { id: "dm_1", unreadCount: 2 },
+    ];
+
+    expect(clearTeamChatThreadUnreadCount(threads as never, "general")).toMatchObject([
+      { id: "general", unreadCount: 0 },
+      { id: "dm_1", unreadCount: 2 },
+    ]);
+  });
+
+  test("clears unread state on the opened thread detail", () => {
+    const detail = {
+      thread: { id: "general", unreadCount: 5 },
+      messages: [],
+      hasMoreBefore: false,
+    };
+
+    expect(clearTeamChatDetailUnreadCount(detail as never)).toMatchObject({
+      thread: { id: "general", unreadCount: 0 },
+    });
+  });
+
   test("matches the hosted workspace agent in the shared desktop composer", () => {
     const action = {
       id: "project_profile:agent_oauth_verifier:read-record",
@@ -42,6 +106,7 @@ describe("desktop Team Chat agent continuation", () => {
       clientRequestId: "request_selected_action",
       selectedActionKey:
         "project_profile:agent_oauth_verifier:read-record",
+      approvalId: null,
     });
   });
 

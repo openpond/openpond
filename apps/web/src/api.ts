@@ -269,6 +269,7 @@ export const api = {
       selectedAgentId?: string | null;
       conversationId?: string | null;
       targetProjectId?: string | null;
+      approvalId?: string | null;
     },
   ) =>
     apiFetch<TeamChatAgentRunResult>(

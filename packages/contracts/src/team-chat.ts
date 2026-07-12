@@ -26,6 +26,10 @@ export type TeamChatAgentCatalogEntry = {
     profileName: string;
   };
   invokesModel: boolean;
+  approvalPolicy: {
+    required: boolean;
+    risk: "read" | "write" | "destructive";
+  };
 };
 
 export type TeamChatAgentRunResult = {

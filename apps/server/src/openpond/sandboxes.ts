@@ -489,6 +489,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
           ...(typeof input.message === "string" && input.message.trim()
             ? { message: input.message.trim() }
             : {}),
+          ...(input.source === "profile" ? { source: "profile" as const } : {}),
         },
         normalizeSandboxListInput(action.payload),
       )),

@@ -156,6 +156,26 @@ export function ComposerPrimaryControls({
   if (surface === "team") {
     return (
       <div className="composer-primary-controls team-chat-composer-controls">
+        <button
+          type="button"
+          className="composer-icon"
+          aria-label="Add photos and files"
+          disabled={disabled}
+          onClick={onOpenFilePicker}
+        >
+          <Plus size={18} />
+        </button>
+        <input
+          ref={fileInputRef}
+          className="composer-file-input"
+          type="file"
+          multiple
+          tabIndex={-1}
+          onChange={(event) => {
+            addFiles(Array.from(event.currentTarget.files ?? []));
+            event.currentTarget.value = "";
+          }}
+        />
         <label className="team-chat-model-toggle">
           <input
             type="checkbox"

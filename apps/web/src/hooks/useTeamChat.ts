@@ -44,6 +44,27 @@ const INITIAL_STATE: TeamChatState = {
   error: null,
 };
 
+export function clearTeamChatThreadUnreadCount(
+  threads: TeamChatState["threads"],
+  threadId: string,
+): TeamChatState["threads"] {
+  return threads.map((thread) =>
+    thread.id === threadId && thread.unreadCount !== 0
+      ? { ...thread, unreadCount: 0 }
+      : thread,
+  );
+}
+
+export function clearTeamChatDetailUnreadCount(
+  detail: TeamChatState["detail"],
+): TeamChatState["detail"] {
+  if (!detail || detail.thread.unreadCount === 0) return detail;
+  return {
+    ...detail,
+    thread: { ...detail.thread, unreadCount: 0 },
+  };
+}
+
 export function buildTeamChatAgentContinuationInput(input: {
   teamId: string;
   body: string;
@@ -64,13 +85,36 @@ export function buildTeamChatSelectedActionRunInput(input: {
   body: string;
   clientRequestId: string;
   selectedActionKey: string;
+  approvalId?: string | null;
 }) {
   return {
     teamId: input.teamId,
     body: input.body.trim(),
     clientRequestId: input.clientRequestId,
     selectedActionKey: input.selectedActionKey,
+    approvalId: input.approvalId ?? null,
   };
+}
+
+export async function markOpenedTeamChatThreadRead(
+  input: {
+    connection: ClientConnection;
+    teamId: string;
+    threadId: string;
+    lastMessageSequence: number;
+  },
+  markRead: typeof api.markTeamChatRead = api.markTeamChatRead,
+): Promise<boolean> {
+  if (input.lastMessageSequence <= 0) return false;
+  return markRead(
+    input.connection,
+    input.threadId,
+    input.teamId,
+    input.lastMessageSequence,
+  ).then(
+    () => true,
+    () => false,
+  );
 }
 
 export function useTeamChat(input: {
@@ -111,7 +155,11 @@ export function useTeamChat(input: {
       const detail = mergePendingThreadDetail(hostedDetail, pendingMessagesRef.current);
       setState((current) =>
         current.selectedThreadId === id
-          ? { ...current, detail: mergeThreadDetail(current.detail, detail) }
+          ? {
+              ...current,
+              threads: clearTeamChatThreadUnreadCount(current.threads, id),
+              detail: clearTeamChatDetailUnreadCount(mergeThreadDetail(current.detail, detail)),
+            }
           : current,
       );
       if (detail.thread.lastMessageSequence > 0) {
@@ -228,16 +276,23 @@ export function useTeamChat(input: {
             ? general
             : await api.teamChatThread(input.connection!, input.teamId!, selectedThreadId);
         if (cancelled) return;
+        const readDetail = clearTeamChatDetailUnreadCount(detail);
         setState((current) => ({
           ...current,
           members: members.members,
           agents: agents.agents,
-          threads: threads.threads,
+          threads: clearTeamChatThreadUnreadCount(threads.threads, selectedThreadId),
           selectedThreadId,
-          detail,
+          detail: readDetail,
           loading: false,
           error: null,
         }));
+        void markOpenedTeamChatThreadRead({
+          connection: input.connection!,
+          teamId: input.teamId!,
+          threadId: selectedThreadId,
+          lastMessageSequence: readDetail?.thread.lastMessageSequence ?? 0,
+        });
         setRealtimeBootstrapTeamId(input.teamId!);
       } catch (error) {
         if (cancelled) return;
@@ -400,8 +455,12 @@ export function useTeamChat(input: {
       if (threadChanged) aiConversationIdRef.current = null;
       setState((current) => ({
         ...current,
+        threads: clearTeamChatThreadUnreadCount(current.threads, threadId),
         selectedThreadId: threadId,
-        detail: current.detail?.thread.id === threadId ? current.detail : null,
+        detail:
+          current.detail?.thread.id === threadId
+            ? clearTeamChatDetailUnreadCount(current.detail)
+            : null,
         aiThread: threadChanged ? null : current.aiThread,
         agentConversation: threadChanged ? null : current.agentConversation,
         loading: true,
@@ -415,7 +474,12 @@ export function useTeamChat(input: {
           pendingAttachmentsRef.current,
         );
         const detail = mergePendingThreadDetail(hostedDetail, pendingMessagesRef.current);
-        setState((current) => ({ ...current, detail, loading: false }));
+        setState((current) => ({
+          ...current,
+          threads: clearTeamChatThreadUnreadCount(current.threads, threadId),
+          detail: clearTeamChatDetailUnreadCount(detail),
+          loading: false,
+        }));
         await api
           .markTeamChatRead(
             input.connection,
@@ -454,6 +518,12 @@ export function useTeamChat(input: {
           agentConversation: threadChanged ? null : current.agentConversation,
           busy: false,
         }));
+        await markOpenedTeamChatThreadRead({
+          connection: input.connection,
+          teamId: input.teamId,
+          threadId: detail.thread.id,
+          lastMessageSequence: detail.thread.lastMessageSequence,
+        });
         await refreshThreads();
         return detail;
       } catch (error) {
@@ -511,6 +581,7 @@ export function useTeamChat(input: {
       mentionUserIds?: string[];
       attachments?: ChatAttachment[];
       selectedActionKey?: string | null;
+      approvalId?: string | null;
     }): Promise<boolean> => {
       const threadId = selectedThreadIdRef.current;
       const attachments = teamChatImageInputs(params.attachments ?? []);
@@ -579,6 +650,7 @@ export function useTeamChat(input: {
               body: params.body,
               clientRequestId,
               selectedActionKey: params.selectedActionKey,
+              approvalId: params.approvalId,
             }),
           );
           await Promise.all([refreshThread(threadId), refreshThreads()]);

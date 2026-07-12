@@ -43,6 +43,17 @@ const slowWorkflow = defineWorkflow({
   },
 });
 
+const commandWorkflow = defineWorkflow({
+  name: "command-workflow",
+  async run(ctx) {
+    const result = await ctx.runCommand("printf 'command output'");
+    return {
+      text: result.stdout ?? "",
+      intent: result.status,
+    };
+  },
+});
+
 const answerIntent = defineIntent({
   name: "answer",
   description: "Answer a prompt.",
@@ -85,8 +96,9 @@ const project = defineAgentProject({
     action("direct", { target: { kind: "workflow", workflow: answerWorkflow } }),
     action("fail", { target: { kind: "workflow", workflow: failWorkflow } }),
     action("slow", { target: { kind: "workflow", workflow: slowWorkflow } }),
+    action("command", { target: { kind: "workflow", workflow: commandWorkflow } }),
   ],
-  workflows: [answerWorkflow, failWorkflow, slowWorkflow],
+  workflows: [answerWorkflow, failWorkflow, slowWorkflow, commandWorkflow],
 });
 
 describe("runtime harness contract", () => {
@@ -135,6 +147,27 @@ describe("runtime harness contract", () => {
 
     expect(result).toMatchObject({ text: "Answer: direct", intent: "answer" });
     expect(eventNames(state)).toContain("workflow.completed");
+  });
+
+  test("executes workflow commands and captures their output", async () => {
+    const state = createRunState();
+    const result = await executeAction(
+      project,
+      "command",
+      { prompt: "", channel: "api" },
+      state,
+    );
+
+    expect(result).toMatchObject({
+      text: "command output",
+      intent: "succeeded",
+    });
+    expect(state.events).toContainEqual(
+      expect.objectContaining({
+        name: "command.completed",
+        payload: expect.objectContaining({ status: "succeeded", exitCode: 0 }),
+      }),
+    );
   });
 
   test("records failure events for failing workflows", async () => {

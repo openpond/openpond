@@ -13,6 +13,8 @@ import {
   TeamChatThreadSchema,
   type TeamChatAiTurn,
   type TeamChatAgentCatalogEntry,
+  type TeamChatAgentConversation,
+  type TeamChatAgentRunResult,
   type ChatAttachment,
   type TeamChatAttachment,
   type TeamChatAttachmentDownload,
@@ -58,6 +60,19 @@ export type TeamChatRequestAction =
   | { type: "message_delete"; teamId: string; threadId: string; messageId: string }
   | { type: "read"; teamId: string; threadId: string; sequence: number }
   | {
+      type: "agent_run_create";
+      teamId: string;
+      threadId: string;
+      body: string;
+      clientRequestId: string;
+      selectedActionKey?: string | null;
+      selectedAgentId?: string | null;
+      conversationId?: string | null;
+      targetProjectId?: string | null;
+      approvalId?: string | null;
+    }
+  | { type: "agent_run"; teamId: string; agentRunId: string }
+  | {
       type: "ai_thread_create";
       teamId: string;
       threadId: string;
@@ -100,6 +115,8 @@ export type TeamChatRequestResult =
   | TeamChatRealtimeSession
   | TeamChatAttachment
   | TeamChatAttachmentDownload
+  | TeamChatAgentRunResult
+  | TeamChatAgentConversation
   | { sequence: number };
 
 const MembersResponseSchema = z.object({ members: z.array(TeamChatMemberSchema) });
@@ -121,11 +138,46 @@ const AgentsResponseSchema = z.object({
         profileName: z.string(),
       }),
       invokesModel: z.boolean(),
+      approvalPolicy: z.object({
+        required: z.boolean(),
+        risk: z.enum(["read", "write", "destructive"]),
+      }),
     }),
   ),
 });
 const ThreadsResponseSchema = z.object({ threads: z.array(TeamChatThreadSchema) });
 const ReadResponseSchema = z.object({ sequence: z.number().int().nonnegative() });
+const AgentRunResponseSchema = z.object({
+  message: TeamChatMessageSchema,
+  conversationId: z.string(),
+  idempotentReplay: z.boolean(),
+  agent: z.object({ id: z.string(), name: z.string() }).passthrough(),
+  run: z
+    .object({
+      id: z.string(),
+      status: z.string(),
+      metadata: z.record(z.string(), z.unknown()),
+    })
+    .passthrough(),
+});
+const AgentConversationResponseSchema = z.object({
+  conversationId: z.string(),
+  teamId: z.string(),
+  title: z.string().nullable(),
+  agent: z.object({ id: z.string(), name: z.string(), slug: z.string() }),
+  run: AgentRunResponseSchema.shape.run,
+  messages: z.array(
+    z.object({
+      id: z.string(),
+      sequence: z.number().int(),
+      role: z.enum(["user", "assistant", "system", "action"]),
+      body: z.string(),
+      createdByUserId: z.string().nullable(),
+      createdAt: z.string(),
+    }),
+  ),
+  pinnedRouting: z.record(z.string(), z.unknown()),
+});
 
 export async function teamChatRequestPayload(
   action: TeamChatRequestAction,
@@ -235,6 +287,21 @@ function requestForAction(action: TeamChatRequestAction): {
         teamId: action.teamId,
         sequence: action.sequence,
       });
+    case "agent_run_create":
+      return post(`/v1/team-chat/threads/${encodeURIComponent(action.threadId)}/agent-runs`, {
+        teamId: action.teamId,
+        body: action.body,
+        clientRequestId: action.clientRequestId,
+        selectedActionKey: action.selectedActionKey ?? null,
+        selectedAgentId: action.selectedAgentId ?? null,
+        conversationId: action.conversationId ?? null,
+        targetProjectId: action.targetProjectId ?? null,
+        approvalId: action.approvalId ?? null,
+      });
+    case "agent_run":
+      return {
+        path: `/v1/team-chat/agent-runs/${encodeURIComponent(action.agentRunId)}?${teamQuery}`,
+      };
     case "ai_thread_create":
       return post(`/v1/team-chat/threads/${encodeURIComponent(action.threadId)}/ai-threads`, {
         teamId: action.teamId,
@@ -308,6 +375,10 @@ function schemaForAction(action: TeamChatRequestAction): z.ZodType {
       return TeamChatMessageSchema;
     case "read":
       return ReadResponseSchema;
+    case "agent_run_create":
+      return AgentRunResponseSchema;
+    case "agent_run":
+      return AgentConversationResponseSchema;
     case "ai_thread_create":
     case "ai_thread":
     case "ai_turn_create":

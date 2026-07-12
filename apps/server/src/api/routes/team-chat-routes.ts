@@ -8,6 +8,8 @@ const ATTACHMENT_UPLOAD_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/attachments\
 const ATTACHMENT_DOWNLOAD_PATH = /^\/v1\/team-chat\/attachments\/([^/]+)\/download$/;
 const MESSAGE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/messages\/([^/]+)$/;
 const READ_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/read$/;
+const AGENT_RUN_CREATE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/agent-runs$/;
+const AGENT_RUN_PATH = /^\/v1\/team-chat\/agent-runs\/([^/]+)$/;
 const AI_THREAD_CREATE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/ai-threads$/;
 const AI_THREAD_PATH = /^\/v1\/team-chat\/ai-threads\/([^/]+)$/;
 const AI_TURN_COLLECTION_PATH = /^\/v1\/team-chat\/ai-threads\/([^/]+)\/turns$/;
@@ -199,6 +201,40 @@ export async function handleTeamChatRoutes({
     );
     return true;
   }
+  const agentRunCreateMatch = AGENT_RUN_CREATE_PATH.exec(requestUrl.pathname);
+  if (request.method === "POST" && agentRunCreateMatch) {
+    const body = asRecord(await readJson(request));
+    sendJson(
+      response,
+      201,
+      await deps.teamChatPayload({
+        type: "agent_run_create",
+        teamId: requiredString(body.teamId),
+        threadId: decode(agentRunCreateMatch[1]),
+        body: requiredString(body.body),
+        clientRequestId: requiredString(body.clientRequestId),
+        selectedActionKey: optionalString(body.selectedActionKey),
+        selectedAgentId: optionalString(body.selectedAgentId),
+        conversationId: optionalString(body.conversationId),
+        targetProjectId: optionalString(body.targetProjectId),
+        approvalId: optionalString(body.approvalId),
+      }),
+    );
+    return true;
+  }
+  const agentRunMatch = AGENT_RUN_PATH.exec(requestUrl.pathname);
+  if (request.method === "GET" && agentRunMatch) {
+    sendJson(
+      response,
+      200,
+      await deps.teamChatPayload({
+        type: "agent_run",
+        teamId: requiredTeamId(requestUrl),
+        agentRunId: decode(agentRunMatch[1]),
+      }),
+    );
+    return true;
+  }
   const aiThreadCreateMatch = AI_THREAD_CREATE_PATH.exec(requestUrl.pathname);
   if (request.method === "POST" && aiThreadCreateMatch) {
     const body = asRecord(await readJson(request));
@@ -332,6 +368,11 @@ function stringValue(value: unknown): string {
 
 function rawString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function optionalString(value: unknown): string | null {
+  const result = stringValue(value);
+  return result || null;
 }
 
 function stringArray(value: unknown): string[] {

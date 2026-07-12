@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import "../../styles/team-chat/team-chat.css";
+import "../../styles/workspace/git-dialogs.css";
 import type {
   ChatAttachment,
   ChatProvider,
@@ -24,10 +25,12 @@ import type { ShowAppToast } from "../../app/app-state";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { WorkspaceTargetState } from "../../lib/workspace-location";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
+import { mentionedTeamMemberIds } from "../../lib/team-chat-mentions";
 import { teamChatThreadTitle } from "../../lib/team-chat-thread";
 import { Composer } from "../chat/Composer";
 import type { ComposerProjectTargetState } from "../chat/ComposerControls";
 import { MarkdownText } from "../chat/MarkdownText";
+import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
 import { Bot, MessageSquare, RefreshCw, SquarePen, Trash2, X } from "../icons";
 
 const NO_PROJECT_TARGET: ComposerProjectTargetState = {
@@ -99,6 +102,7 @@ export type TeamChatViewProps = {
     mentionUserIds?: string[];
     attachments?: ChatAttachment[];
     selectedActionKey?: string | null;
+    approvalId?: string | null;
   }) => Promise<boolean>;
   onOpenAiThread: (conversationId: string) => Promise<void>;
   onOpenAgentConversation: (agentRunId: string) => Promise<void>;
@@ -123,6 +127,7 @@ export function TeamChatView(props: TeamChatViewProps) {
   const [useModel, setUseModel] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToLatestRef = useRef(true);
+  const { confirmAction, confirmDialog, resolveConfirmDialog } = useConfirmDialog();
   const membersById = useMemo(
     () => new Map(props.members.map((member) => [member.userId, member])),
     [props.members],
@@ -153,6 +158,21 @@ export function TeamChatView(props: TeamChatViewProps) {
       props.showToast("Team chat supports PNG, JPEG, WebP, and GIF images.", "error");
       return false;
     }
+    const approvalRisk = action?.approvalPolicy?.risk;
+    let approvalId: string | null = null;
+    if (action?.approvalPolicy?.required && approvalRisk && approvalRisk !== "read") {
+      const destructive = approvalRisk === "destructive";
+      const approved = await confirmAction({
+        title: destructive ? "Approve destructive action?" : "Approve external write?",
+        body: `${action.label ?? action.name ?? "This agent action"} will use the workspace connection to ${
+          destructive ? "perform a destructive operation" : "write external data"
+        }. Approve this run only?`,
+        confirmLabel: destructive ? "Approve destructive action" : "Approve write",
+        tone: destructive ? "danger" : "default",
+      });
+      if (!approved) return false;
+      approvalId = crypto.randomUUID();
+    }
     const sent = await props.onSendMessage({
       body: prompt,
       useModel,
@@ -161,6 +181,7 @@ export function TeamChatView(props: TeamChatViewProps) {
       mentionUserIds: mentionedTeamMemberIds(prompt, props.members),
       attachments,
       selectedActionKey: action?.id ?? null,
+      approvalId,
     });
     if (sent) setPrompt("");
     return sent;
@@ -269,6 +290,7 @@ export function TeamChatView(props: TeamChatViewProps) {
           />
         </div>
       </div>
+      <ConfirmDialog state={confirmDialog} onResolve={resolveConfirmDialog} />
     </section>
   );
 }
@@ -865,19 +887,4 @@ function messageTime(value: string): string {
   return Number.isFinite(date.getTime())
     ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
-}
-
-function mentionedTeamMemberIds(body: string, members: TeamChatMember[]): string[] {
-  const tokens = new Set(
-    Array.from(body.matchAll(/(?:^|\s)@([a-zA-Z0-9_-]+)/g), (match) =>
-      (match[1] ?? "").toLowerCase(),
-    ),
-  );
-  return members
-    .filter((member) => {
-      const handle = member.handle?.toLowerCase();
-      const normalizedName = member.name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-      return (handle && tokens.has(handle)) || tokens.has(normalizedName);
-    })
-    .map((member) => member.userId);
 }

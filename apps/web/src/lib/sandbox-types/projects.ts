@@ -77,7 +77,10 @@ export type SandboxActionCatalogEntry = {
   visibility?: string | null;
   inputSchema?: string | Record<string, unknown> | null;
   outputSchema?: string | Record<string, unknown> | null;
-  approvalPolicy?: Record<string, unknown> | null;
+  approvalPolicy?: (Record<string, unknown> & {
+    required?: boolean;
+    risk?: "read" | "write" | "destructive";
+  }) | null;
   artifactPolicy?: Record<string, unknown> | null;
   setupRequirements?: Record<string, unknown>[];
   implementation?: Record<string, unknown> | null;

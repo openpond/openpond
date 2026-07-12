@@ -35,6 +35,39 @@ describe("team chat API base URL", () => {
       "https://example.test/staging",
     );
   });
+
+  test("forwards shared agent runs and conversation reads", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = mockFetch(async (url, init) => {
+      requests.push({ url, init });
+      return init?.method === "POST"
+        ? jsonResponse(agentRunPayload())
+        : jsonResponse(agentConversationPayload());
+    });
+
+    const created = await teamChatRequestPayload(
+      {
+        type: "agent_run_create",
+        teamId: "team_1",
+        threadId: "thread_1",
+        body: "verify",
+        clientRequestId: "request_1",
+        selectedActionKey: "agent:chat",
+      },
+      { loadAccountContext: testAccountContext, fetchImpl: fetchMock },
+    );
+    const conversation = await teamChatRequestPayload(
+      { type: "agent_run", teamId: "team_1", agentRunId: "run_1" },
+      { loadAccountContext: testAccountContext, fetchImpl: fetchMock },
+    );
+
+    expect(created).toMatchObject({ conversationId: "conversation_1", run: { id: "run_1" } });
+    expect(conversation).toMatchObject({ conversationId: "conversation_1", teamId: "team_1" });
+    expect(requests.map((request) => request.url)).toEqual([
+      "https://api.test/v1/team-chat/threads/thread_1/agent-runs",
+      "https://api.test/v1/team-chat/agent-runs/run_1?teamId=team_1",
+    ]);
+  });
 });
 
 describe("team chat attachment upload", () => {
@@ -109,6 +142,45 @@ function attachmentUploadAction() {
       kind: "image" as const,
       contentsBase64: Buffer.from([1, 2, 3]).toString("base64"),
     },
+  };
+}
+
+function agentRunPayload() {
+  return {
+    message: {
+      id: "message_1",
+      threadId: "thread_1",
+      teamId: "team_1",
+      clientRequestId: "request_1",
+      authorType: "user",
+      authorUserId: "user_1",
+      authorAgentId: null,
+      sequence: 1,
+      kind: "text",
+      body: "verify",
+      metadata: {},
+      editedAt: null,
+      deletedAt: null,
+      createdAt: "2026-07-11T12:00:00.000Z",
+      refs: [],
+      attachments: [],
+    },
+    conversationId: "conversation_1",
+    idempotentReplay: false,
+    agent: { id: "agent_1", name: "Verifier" },
+    run: { id: "run_1", status: "completed", metadata: {} },
+  };
+}
+
+function agentConversationPayload() {
+  return {
+    conversationId: "conversation_1",
+    teamId: "team_1",
+    title: null,
+    agent: { id: "agent_1", name: "Verifier", slug: "verifier" },
+    run: { id: "run_1", status: "completed", metadata: {} },
+    messages: [],
+    pinnedRouting: {},
   };
 }
 
