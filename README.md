@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OpenPond</h1>
-  <p><strong>The open-source agent harness for teams.</strong></p>
+  <p><strong>Open source. Built for multiplayer.</strong></p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
     <a href="https://www.npmjs.com/package/openpond"><img alt="npm package version" src="https://img.shields.io/npm/v/openpond?logo=npm&logoColor=white" /></a>
@@ -9,7 +9,7 @@
   </p>
 </div>
 
-OpenPond is a local-first orchestration harness for turning conversations into durable agents, shared team workflows, and training-ready Tasksets across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
+OpenPond is the open-source agent harness for teams. It turns conversations into durable agents, shared workflows, and training-ready Tasksets across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
 
 It gives people and agents one source-owned runtime for chats, subagents, skills, goal loops, approvals, connected apps, training evidence, and hosted sandboxes. Keep chat control, model settings, approvals, and source review local; send execution to [OpenPond Cloud](docs/public/cloud.md) when work needs clean compute, long-running processes, replayable runs, or teammate handoff.
 
