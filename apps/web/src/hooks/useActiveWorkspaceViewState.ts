@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { localPathWorkspaceId } from "@openpond/contracts";
 import type {
+  AccountState,
   BootstrapPayload,
   ChatProvider,
   CloudProject,
@@ -27,6 +28,30 @@ import {
   type WorkspaceTargetOptionState,
   type WorkspaceTargetState,
 } from "../lib/workspace-location";
+
+function firstPresentText(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
+export function accountWelcomeIdentity(account: AccountState | null | undefined): string {
+  if (account?.state !== "signed_in") return "";
+  const activeAccount = account.accounts.find((candidate) => candidate.isActive) ?? null;
+  return firstPresentText(
+    account.email,
+    account.profile?.email,
+    activeAccount?.email,
+    account.label,
+    account.profile?.name,
+    account.profile?.handle,
+    activeAccount?.displayLabel,
+    activeAccount?.handle,
+    account.activeProfile?.handle,
+  );
+}
 
 export function useActiveWorkspaceViewState({
   bootstrap,
@@ -132,8 +157,8 @@ export function useActiveWorkspaceViewState({
     : accountSignedOut
       ? "Sign in"
       : (account?.label ?? account?.activeProfile?.handle ?? "Account");
-  const activeUserHandle = account?.activeProfile?.handle?.trim() ?? "";
-  const startMessage = activeUserHandle ? `Welcome, ${activeUserHandle}` : "Welcome";
+  const welcomeIdentity = accountWelcomeIdentity(account);
+  const startMessage = welcomeIdentity ? `Welcome, ${welcomeIdentity}` : "Welcome";
   const workspaceName =
     selectedSession?.workspaceName ??
     selectedSession?.appName ??

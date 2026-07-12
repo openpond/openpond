@@ -3,6 +3,7 @@ import type { CloudProject, CloudWorkItem, LocalProject, Session, SubagentRun, W
 import {
   Archive,
   ArchiveRestore,
+  ChartColumnStacked,
   ChevronDown,
   ChevronRight,
   Cloud,
@@ -176,6 +177,7 @@ export function SidebarSessionRow({
   onTogglePin,
   onDockRight,
   onArchive,
+  onAddToTraining,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -201,6 +203,7 @@ export function SidebarSessionRow({
   onTogglePin: () => void;
   onDockRight?: () => void;
   onArchive: () => void;
+  onAddToTraining?: () => void;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
@@ -219,7 +222,7 @@ export function SidebarSessionRow({
     : goalRunning && goalRuntime
       ? sidebarGoalRuntimeTooltip(goalRuntime)
       : "Running";
-  const rowClassName = [onDockRight ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
+  const rowClassName = [onDockRight && onAddToTraining ? "actions-4" : onDockRight || onAddToTraining ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
     .filter(Boolean)
     .join(" ");
   const rowShellRef = useRef<HTMLDivElement | null>(null);
@@ -312,6 +315,11 @@ export function SidebarSessionRow({
           {onDockRight ? (
             <SidebarRowAction label="Open in right panel" onClick={onDockRight}>
               <PanelRight size={13} />
+            </SidebarRowAction>
+          ) : null}
+          {onAddToTraining ? (
+            <SidebarRowAction label="Add to training" onClick={onAddToTraining}>
+              <ChartColumnStacked size={13} />
             </SidebarRowAction>
           ) : null}
           <SidebarRowAction label={archived ? "Restore chat" : "Archive chat"} onClick={onArchive}>

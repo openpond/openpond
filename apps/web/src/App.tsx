@@ -88,6 +88,7 @@ import { useAppState } from "./hooks/useAppState";
 import { useGitSetupNotifications } from "./hooks/useGitSetupNotifications";
 import { useLayoutPreferences } from "./hooks/useLayoutPreferences";
 import { useInsights } from "./hooks/useInsights";
+import { useTraining } from "./hooks/useTraining";
 import { useOpenSandboxWorkspace } from "./hooks/useOpenSandboxWorkspace";
 import { useProjectActions } from "./hooks/useProjectActions";
 import { useProjectTargetActions } from "./hooks/useProjectTargetActions";
@@ -332,6 +333,10 @@ export function App() {
     };
   }, [connection]);
   const insights = useInsights({ connection });
+  const training = useTraining({
+    connection,
+    profileId: bootstrap?.profile?.activeProfile ?? "default",
+  });
   useEffect(() => {
     const session = insights.systemSession;
     if (!session) return;
@@ -486,7 +491,7 @@ export function App() {
       ? openPondCommandAccessMode
       : (selectedSession?.openPondCommandAccessMode ?? openPondCommandAccessMode);
   const profileWorkspaceId =
-    view === "profile" && bootstrap?.profile?.mode === "local" && bootstrap.profile.repoPath
+    (view === "profile" || view === "training") && bootstrap?.profile?.mode === "local" && bootstrap.profile.repoPath
       ? localPathWorkspaceId(bootstrap.profile.repoPath)
       : null;
   const profileWorkspaceName = profileWorkspaceId
@@ -756,7 +761,7 @@ export function App() {
   const rightPanelDiffBacked = rightPanelMode === "changes" || rightPanelMode === "goal";
   const shouldLoadWorkspaceDiff = Boolean(
     viewWorkspaceAppId &&
-    (view === "chat" || view === "profile") &&
+    (view === "chat" || view === "profile" || view === "training") &&
     (commitDialogOpen || (diffPanelOpen && rightPanelDiffBacked)),
   );
 
@@ -842,6 +847,8 @@ export function App() {
       ? "Apps"
       : view === "insights"
         ? "Insights"
+        : view === "training"
+          ? "Training"
         : view === "team"
           ? teamChat.detail
             ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
@@ -1515,9 +1522,15 @@ export function App() {
       setDiffPanelOpen(false);
       return;
     }
+    if (view === "training") {
+      setRightPanelMode("changes");
+      setRightPanelTabRequest({ id: Date.now(), tab: "files" });
+      setDiffPanelOpen(true);
+      return;
+    }
     setRightPanelMode("home");
     setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen, setRightPanelMode]);
+  }, [diffPanelOpen, setDiffPanelOpen, setRightPanelMode, setRightPanelTabRequest, view]);
 
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
@@ -1565,6 +1578,7 @@ export function App() {
     view === "chat" ||
     view === "cloud" ||
     view === "profile" ||
+    view === "training" ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -1696,6 +1710,13 @@ export function App() {
         archiveSession,
         restoreSession,
         renameSession,
+        addSessionToTraining: (session) => {
+          void training.actions.addSource(session.id).then((source) => {
+            if (!source) return;
+            setView("training");
+            showToast("Added chat to training sources.", "info");
+          });
+        },
         expandProject,
         toggleProjectExpanded,
         startPinnedDrag,
@@ -1719,7 +1740,7 @@ export function App() {
         managedWorkspace,
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat" || view === "cloud" || Boolean(profileWorkspaceId),
+        showDiffControls: view === "chat" || view === "cloud" || view === "profile",
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
@@ -1748,7 +1769,7 @@ export function App() {
         onOpenSandboxWorkspace: openSandboxWorkspace,
         onShowSidebar: () => setSidebarOpen(true),
         platform,
-        showWorkspaceControls: view !== "team",
+        showWorkspaceControls: view !== "team" && view !== "training",
         insightsItems: insights.items,
         insightsSummary: insights.summary,
         insightsScanning: insights.scanRunning,
@@ -1869,6 +1890,8 @@ export function App() {
         insightsScanStartedAt: insights.scanStartedAt,
         insightsScanning: insights.scanning,
         insightsError: insights.error,
+        training,
+        trainingSessions: sidebarSessions,
         onRunInsightsScan: insights.runScan,
         onAskInsightsQuestion: insights.askQuestion,
         onPatchInsightStatus: insights.patchStatus,
@@ -1889,6 +1912,10 @@ export function App() {
         onShowBrowserPanel: showBrowserPanel,
         onShowFilesPanel: () => showRightPanelDiffTab("files"),
         onShowGoalSidebarTab: showGoalSidebarTab,
+        onShowTrainingDraftPanel: () => {
+          setRightPanelMode("training");
+          setDiffPanelOpen(true);
+        },
         onShowRightChatPanel: showRightChatPanel,
         onAddRightChat: () => openRightChatPanel(null),
         onTerminalTabsChange: setTerminalTabs,

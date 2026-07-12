@@ -50,6 +50,12 @@ apps/cli/runs/
 # Generated TypeScript state
 *.tsbuildinfo
 
+# Python runtime state
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
 # Package artifacts
 *.tgz
 

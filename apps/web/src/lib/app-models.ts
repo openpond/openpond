@@ -23,6 +23,7 @@ import type {
 } from "@openpond/contracts";
 import {
   DEFAULT_CHAT_PROVIDER,
+  DEFAULT_CHAT_MODEL,
   DEFAULT_CODEX_CHAT_MODEL,
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
@@ -40,6 +41,7 @@ export type AppView =
   | "cloud"
   | "get-started"
   | "insights"
+  | "training"
   | "profile"
   | "settings";
 export type SettingsSection =
@@ -50,6 +52,7 @@ export type SettingsSection =
   | "goals"
   | "context"
   | "insights"
+  | "training"
   | "subagents"
   | "editor"
   | "providers"
@@ -218,7 +221,7 @@ export type DropdownOption = {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   defaultChatProvider: DEFAULT_CHAT_PROVIDER,
-  defaultChatModel: DEFAULT_OPENPOND_CHAT_MODEL,
+  defaultChatModel: DEFAULT_CHAT_MODEL,
   insightsEnabled: true,
   insightsModelRef: null,
   insightsEvidenceSources: {
@@ -243,6 +246,11 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     autoEnabled: true,
     triggerPercent: 85,
     summaryModel: "same_model",
+  },
+  training: {
+    defaultModelRef: null,
+    creationMode: "customize",
+    autoApproveEvidence: false,
   },
   sidebarWidth: 332,
   diffPanelWidth: 560,
@@ -701,6 +709,15 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
       summaryModel:
         preferences?.contextCompaction?.summaryModel ??
         DEFAULT_APP_PREFERENCES.contextCompaction.summaryModel,
+    },
+    training: {
+      defaultModelRef:
+        preferences?.training?.defaultModelRef ?? DEFAULT_APP_PREFERENCES.training.defaultModelRef,
+      creationMode:
+        preferences?.training?.creationMode ?? DEFAULT_APP_PREFERENCES.training.creationMode,
+      autoApproveEvidence:
+        preferences?.training?.autoApproveEvidence ??
+        DEFAULT_APP_PREFERENCES.training.autoApproveEvidence,
     },
     sidebarWidth: preferences?.sidebarWidth ?? DEFAULT_APP_PREFERENCES.sidebarWidth,
     diffPanelWidth: preferences?.diffPanelWidth ?? DEFAULT_APP_PREFERENCES.diffPanelWidth,

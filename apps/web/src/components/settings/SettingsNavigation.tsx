@@ -45,6 +45,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
       { section: "goals", label: "Goals", Icon: ScrollText },
       { section: "context", label: "Context", Icon: BookOpenText },
       { section: "insights", label: "Insights", Icon: Lightbulb },
+      { section: "training", label: "Training", Icon: Workflow },
       { section: "subagents", label: "Subagents", Icon: Workflow },
     ],
   },

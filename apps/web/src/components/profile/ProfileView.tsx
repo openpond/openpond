@@ -1,5 +1,8 @@
 import type { BootstrapPayload } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
+import "../../styles/settings/settings-layout.css";
+import "../../styles/settings/settings-forms.css";
+import "../../styles/settings/settings-lists.css";
 import { ProfileSettingsSection } from "../settings/ProfileSettingsSection";
 
 export function ProfileView({

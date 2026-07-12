@@ -6,6 +6,7 @@ export type ComposerSlashCommandId =
   | "goal-local"
   | "goal-remote"
   | "insights"
+  | "train"
   | "submit-issue"
   | "sync-cloud";
 
@@ -63,6 +64,12 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/goal-local",
     label: "Run a local goal",
     description: "Keep the goal in the current local OpenPond workspace.",
+  },
+  {
+    id: "train",
+    command: "/train",
+    label: "Create training task",
+    description: "Create a training plan from this chat or select chats in Training.",
   },
   {
     id: "insights",
@@ -150,6 +157,13 @@ export function composerSlashCommandMatches({
   if (!prompt.startsWith("/")) return [];
   const query = prompt.slice(1).trim().toLowerCase();
   if (!query) return commands.slice(0, limit);
+
+  const commandPrefixMatches = commands.filter((command) =>
+    command.id.startsWith(query),
+  );
+  if (commandPrefixMatches.length > 0) {
+    return commandPrefixMatches.slice(0, limit);
+  }
 
   const primaryMatches = commands.filter((command) =>
     composerSlashCommandPrimarySearchText(command).toLowerCase().includes(query),

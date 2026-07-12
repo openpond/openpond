@@ -18,6 +18,7 @@ import type {
   InsightsScanResponse,
   InsightsAskRequest,
   InsightsAskResponse,
+  TrainingStateResponse,
   LocalAgentSchedulesResponse,
   LocalAgentScheduleRunsResponse,
   LocalAgentScheduleRunResponse,
@@ -473,6 +474,17 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  trainingState: (connection: ClientConnection, profileId: string) =>
+    apiFetch<TrainingStateResponse>(connection, `/v1/training?profileId=${encodeURIComponent(profileId)}`),
+  trainingRequest: <T>(
+    connection: ClientConnection,
+    path: string,
+    input: unknown,
+    method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST",
+  ) => apiFetch<T>(connection, `/v1/training${path}`, {
+    method,
+    body: method === "DELETE" ? undefined : JSON.stringify(input),
+  }),
   localAgentSchedules: (
     connection: ClientConnection,
     input: { localProjectId?: string | null } = {},

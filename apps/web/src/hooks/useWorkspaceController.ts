@@ -44,7 +44,7 @@ export function useWorkspaceController({
       ? (workspaceStates[activeWorkspaceAppId] ?? (workspaceState?.appId === activeWorkspaceAppId ? workspaceState : null))
       : null;
   const visibleWorkspaceDiff = workspaceDiff?.appId === activeWorkspaceAppId ? workspaceDiff : null;
-  const shouldTrackActiveWorkspace = view === "chat" || view === "profile";
+  const shouldTrackActiveWorkspace = view === "chat" || view === "profile" || view === "training";
 
   const rememberWorkspaceState = useCallback((state: WorkspaceState) => {
     requestedWorkspaceStatusAppIds.current.add(state.appId);

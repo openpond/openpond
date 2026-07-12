@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "openpond.localTrainingGolden.v1",
+  "seed": 17,
+  "record": {
+    "id": "train-1",
+    "input": { "prompt": "Say hello" },
+    "expectedOutput": { "text": "Hello friend" },
+    "tags": ["fixture"]
+  },
+  "tokenizerHash": "18fa361c0e0d69477f1d7f8082bbf08cbbfe7077acb1e0f6a2510c3f089a0b9d",
+  "chatTemplateHash": "8fbeb0e13317cb06cdc0429014b20ed10d3f03dd737b344730199d6a1d346f87"
+}

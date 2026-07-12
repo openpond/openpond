@@ -11,11 +11,13 @@ import { handleSessionRoutes } from "./session-routes.js";
 import { handleSettingsRoutes } from "./settings-routes.js";
 import { handleUsageRoutes } from "./usage-routes.js";
 import { handleTeamChatRoutes } from "./team-chat-routes.js";
+import { handleTrainingRoutes } from "./training-routes.js";
 import { handleWorkspaceRoutes } from "./workspace-routes.js";
 
 export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "events", handle: handleEventRoutes },
   { id: "insights", handle: handleInsightsRoutes },
+  { id: "training", handle: handleTrainingRoutes },
   { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
   { id: "usage", handle: handleUsageRoutes },
   { id: "core", handle: handleCoreRoutes },

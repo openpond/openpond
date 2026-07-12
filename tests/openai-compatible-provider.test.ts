@@ -85,6 +85,24 @@ describe("OpenAI-compatible provider adapter", () => {
     ]);
   });
 
+  test("passes the selected reasoning effort to raw OpenAI authoring requests", async () => {
+    let body: Record<string, unknown> | null = null;
+    globalThis.fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return streamResponse(['data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n', "data: [DONE]\n\n"]);
+    };
+    for await (const _delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState("https://api.openai.com/v1", "openai"),
+      providerId: "openai",
+      modelId: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      messages: [{ role: "user", content: "author a grader" }],
+    })) {
+      // Drain the stream.
+    }
+    expect(body).toMatchObject({ model: "gpt-5.6-sol", reasoning_effort: "high" });
+  });
+
   test("sends native tools to BYOK providers and streams tool call deltas", async () => {
     const requests: Array<{ url: string; authorization: string | null; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {

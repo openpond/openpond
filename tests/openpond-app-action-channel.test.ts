@@ -156,6 +156,7 @@ describe("OpenPond App action channel", () => {
       "goal",
       "goal-remote",
       "goal-local",
+      "train",
       "insights",
       "submit-issue",
       "sync-cloud",

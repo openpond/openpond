@@ -427,6 +427,15 @@
   padding-left: 25px;
 }
 
+.sidebar-row.actions-4 {
+  grid-template-columns: 18px minmax(0, 1fr) 102px;
+}
+
+.sidebar-row.iconless.actions-4 {
+  grid-template-columns: minmax(0, 1fr) 102px;
+  padding-left: 25px;
+}
+
 .sidebar-row.sidebar-project-row {
   grid-template-columns: 18px minmax(0, 1fr) 72px;
   gap: 5px;
@@ -446,6 +455,11 @@
 
 .sidebar-row.nested.iconless.actions-3 {
   grid-template-columns: minmax(0, 1fr) 78px;
+  padding-left: 10px;
+}
+
+.sidebar-row.nested.iconless.actions-4 {
+  grid-template-columns: minmax(0, 1fr) 102px;
   padding-left: 10px;
 }
 
@@ -851,6 +865,11 @@ button.sidebar-project-location-row:disabled {
 .sidebar-row.actions-3 .row-meta {
   width: 78px;
   min-width: 78px;
+}
+
+.sidebar-row.actions-4 .row-meta {
+  width: 102px;
+  min-width: 102px;
 }
 
 .sidebar-project-row .row-meta {

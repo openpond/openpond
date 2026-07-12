@@ -7,10 +7,11 @@ import {
 } from "./providers.js";
 import { SubagentPreferencesSchema } from "./subagents.js";
 
-export const DEFAULT_CHAT_PROVIDER = "openpond" as const;
 export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.6-sol" as const;
+export const DEFAULT_CHAT_PROVIDER = "openai" as const;
+export const DEFAULT_CHAT_MODEL = DEFAULT_CODEX_CHAT_MODEL;
 export const DEFAULT_CODEX_PERMISSION_MODE = "default" as const;
-export const DEFAULT_CODEX_REASONING_EFFORT = "low" as const;
+export const DEFAULT_CODEX_REASONING_EFFORT = "high" as const;
 export const DEFAULT_OPENPOND_COMMAND_ACCESS_MODE = "ask" as const;
 export const DEFAULT_OPENPOND_CHAT_MODEL = "openpond-chat" as const;
 
@@ -179,9 +180,17 @@ export const ContextCompactionPreferencesSchema = z.object({
 
 export type ContextCompactionPreferences = z.infer<typeof ContextCompactionPreferencesSchema>;
 
+export const TrainingPreferencesSchema = z.object({
+  defaultModelRef: ChatModelRefSchema.nullable().default(null),
+  creationMode: z.enum(["defaults", "customize"]).default("customize"),
+  autoApproveEvidence: z.boolean().default(false),
+});
+
+export type TrainingPreferences = z.infer<typeof TrainingPreferencesSchema>;
+
 export const AppPreferencesSchema = z.object({
   defaultChatProvider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
-  defaultChatModel: z.string().min(1).default(DEFAULT_OPENPOND_CHAT_MODEL),
+  defaultChatModel: z.string().min(1).default(DEFAULT_CHAT_MODEL),
   defaultChatModelRef: ChatModelRefSchema.nullable().optional(),
   insightsEnabled: z.boolean().default(true),
   insightsModelRef: ChatModelRefSchema.nullable().optional().default(null),
@@ -200,6 +209,7 @@ export const AppPreferencesSchema = z.object({
   contextCompaction: ContextCompactionPreferencesSchema.optional().default(() =>
     ContextCompactionPreferencesSchema.parse({}),
   ),
+  training: TrainingPreferencesSchema.optional().default(() => TrainingPreferencesSchema.parse({})),
   sidebarWidth: z.number().int().min(244).max(560).default(332),
   diffPanelWidth: z.number().int().min(320).max(2400).default(560),
   sidebarSectionsCollapsed: SidebarSectionsCollapsedSchema.optional().default(() => SidebarSectionsCollapsedSchema.parse({})),

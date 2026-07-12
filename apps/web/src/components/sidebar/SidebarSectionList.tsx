@@ -54,6 +54,7 @@ export function previousSidebarChatVisibleCount(currentCount: number, totalCount
 
 export function SidebarSectionList({
   addProjectFolder,
+  addSessionToTraining,
   archivedChatsOpen,
   archiveSession,
   beginNewChat,
@@ -296,6 +297,7 @@ export function SidebarSectionList({
               onSelect={() => selectSession(session)}
               onTogglePin={() => toggleSessionPinned(session)}
               onDockRight={() => dockSessionRight(session)}
+              onAddToTraining={() => addSessionToTraining(session)}
               onArchive={() => archiveSession(session)}
               onRename={renameSession}
             />
@@ -401,6 +403,7 @@ export function SidebarSectionList({
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
             onDockRight={() => dockSessionRight(session)}
+            onAddToTraining={() => addSessionToTraining(session)}
             onArchive={() => archiveSession(session)}
             onRename={renameSession}
           />
@@ -488,6 +491,7 @@ export function SidebarSectionList({
                 onSelect={() => selectSession(row.session)}
                 onTogglePin={() => toggleSessionPinned(row.session)}
                 onDockRight={() => dockSessionRight(row.session)}
+                onAddToTraining={() => addSessionToTraining(row.session)}
                 onArchive={() => archiveSession(row.session)}
                 onRename={renameSession}
                 onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
@@ -732,6 +736,7 @@ export function SidebarSectionList({
                 }}
                 onTogglePin={() => toggleSessionPinned(session)}
                 onDockRight={() => dockSessionRight(session)}
+                onAddToTraining={() => addSessionToTraining(session)}
                 onArchive={() => restoreSession(session)}
                 onRename={renameSession}
               />
@@ -753,6 +758,7 @@ export function SidebarSectionList({
                 onSelect={() => selectSession(session)}
                 onTogglePin={() => toggleSessionPinned(session)}
                 onDockRight={() => dockSessionRight(session)}
+                onAddToTraining={() => addSessionToTraining(session)}
                 onArchive={() => archiveSession(session)}
                 onRename={renameSession}
               />

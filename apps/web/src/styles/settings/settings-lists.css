@@ -684,6 +684,43 @@
   color: #858585;
 }
 
+@container profile-view (max-width: 620px) {
+  .profile-summary-head,
+  .profile-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-control-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-agent-table-head,
+  .profile-skill-table-head {
+    display: none;
+  }
+
+  .profile-agent-row,
+  .profile-skill-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .profile-skill-actions {
+    justify-content: flex-start;
+  }
+
+  .product-row .profile-schedule-actions {
+    justify-content: flex-start;
+    grid-template-columns: minmax(0, max-content) max-content;
+  }
+
+  .profile-schedule-expression {
+    flex: 0 1 auto;
+    text-align: left;
+  }
+}
+
 .settings-footnote {
   display: flex;
   justify-content: space-between;

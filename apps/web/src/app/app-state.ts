@@ -7,10 +7,10 @@ import type {
 } from "@openpond/contracts";
 import {
   DEFAULT_CHAT_PROVIDER,
+  DEFAULT_CHAT_MODEL,
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
-  DEFAULT_OPENPOND_CHAT_MODEL,
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
 import { SIDEBAR_SECTION_LIMIT, type AppView, type SettingsSection } from "../lib/app-models";
@@ -33,7 +33,7 @@ export type ShowAppToast = (
 export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";
 
 export type NewProjectMode = "local" | "cloud" | "existing-local";
-export type RightPanelMode = "home" | "changes" | "browser" | "goal" | "chat";
+export type RightPanelMode = "home" | "changes" | "browser" | "goal" | "chat" | "training";
 export type RightChatPanel = {
   id: string;
   sessionId: string | null;
@@ -102,7 +102,7 @@ export const initialAppState: AppState = {
   prompt: "",
   promptDrafts: {},
   draftProvider: DEFAULT_CHAT_PROVIDER,
-  draftModel: DEFAULT_OPENPOND_CHAT_MODEL,
+  draftModel: DEFAULT_CHAT_MODEL,
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,

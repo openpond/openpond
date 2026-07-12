@@ -24,3 +24,6 @@ export * from "./goal-status.js";
 export * from "./usage.js";
 export * from "./local-agent-schedules.js";
 export * from "./team-chat.js";
+export * from "./tasksets.js";
+export * from "./task-mining.js";
+export * from "./training.js";

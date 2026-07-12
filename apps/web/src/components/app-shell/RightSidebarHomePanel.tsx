@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   Clipboard,
+  ChartColumnStacked,
   FolderOpen,
   Globe2,
   Maximize2,
@@ -28,6 +29,8 @@ export function RightSidebarHomePanel({
   onOpenFiles,
   onOpenReview,
   onOpenSideChat,
+  onOpenTrainingDraft,
+  trainingDraftAvailable,
   onResizeStart,
   onToggleExpanded,
   onToggleTerminal,
@@ -39,6 +42,8 @@ export function RightSidebarHomePanel({
   onOpenFiles: () => void;
   onOpenReview: () => void;
   onOpenSideChat: () => void;
+  onOpenTrainingDraft: () => void;
+  trainingDraftAvailable: boolean;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
   onToggleTerminal: () => void;
@@ -54,6 +59,14 @@ export function RightSidebarHomePanel({
       icon: MessageSquare,
       onSelect: onOpenSideChat,
       disabled: !sideChatAvailable,
+    },
+    {
+      id: "training-draft",
+      label: "Task draft",
+      meta: "Training",
+      icon: ChartColumnStacked,
+      onSelect: onOpenTrainingDraft,
+      disabled: !trainingDraftAvailable,
     },
     {
       id: "terminal",

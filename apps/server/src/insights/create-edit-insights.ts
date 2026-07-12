@@ -43,26 +43,23 @@ import {
   detectUsageAnomalyInsights,
   type UsageAnomalyInsightDetectorCandidate,
 } from "./usage-anomaly-insights.js";
+import {
+  detectAbandonedGoals,
+  detectLongRunningUnresolvedConversations,
+  detectRepeatedToolFailures,
+  detectRepeatedUserCorrections,
+  detectStuckOrFailedTurns,
+  type InsightEvidenceCandidate,
+  type RuntimeEventEntry,
+} from "./insight-evidence-detectors.js";
 
 const MAX_INSIGHT_SUMMARY_CHARS = 360;
 const INSIGHTS_RUN_PROMPT_MAX_JSON_CHARS = 14_000;
 const USAGE_ANOMALY_SCAN_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
-export type RuntimeEventEntry = {
-  sequence: number;
-  event: RuntimeEvent;
-};
-
 export type CreateEditInsightDetectorCandidate = {
   item: InsightItem | null;
   createPipelineId: string;
-  keepFingerprint: string | null;
-};
-
-type InsightEvidenceCandidate = {
-  item: InsightItem | null;
-  evidenceSource: InsightEvidenceSource;
-  evidenceKey: string;
   keepFingerprint: string | null;
 };
 
@@ -792,190 +789,6 @@ function usageAnomalyEvidenceCandidate(candidate: UsageAnomalyInsightDetectorCan
   };
 }
 
-function detectRepeatedToolFailures(entries: RuntimeEventEntry[], timestamp: string): InsightEvidenceCandidate[] {
-  const groups = new Map<string, RuntimeEventEntry[]>();
-  for (const entry of entries) {
-    if (!isFailedToolEvent(entry.event)) continue;
-    const sessionId = entry.event.sessionId ?? "global";
-    const action = eventActionLabel(entry.event);
-    const key = `${sessionId}:${action}`;
-    groups.set(key, [...(groups.get(key) ?? []), entry]);
-  }
-  return Array.from(groups.entries())
-    .filter(([, group]) => group.length >= 2)
-    .map(([key, group]) => {
-      const latest = group[group.length - 1]!;
-      const action = eventActionLabel(latest.event);
-      return evidenceCandidateFromItem(insightItem({
-        evidenceSource: "tool_failure",
-        evidenceKey: key,
-        timestamp,
-        severity: group.length >= 3 ? "blocker" : "concern",
-        type: "tool.repeated_failure",
-        title: `Repeated ${action} failures`,
-        summary: compactInsightSummary(`${group.length} failed ${action} events were observed in this chat.`),
-        scopeType: latest.event.sessionId ? "session" : "global",
-        scopeId: latest.event.sessionId ?? "local",
-        payload: {
-          action,
-          failureCount: group.length,
-          sessionId: latest.event.sessionId ?? null,
-          turnId: latest.event.turnId ?? null,
-          eventIds: group.map((entry) => entry.event.id),
-          sourceEventSequence: latest.sequence,
-        },
-      }));
-    });
-}
-
-function detectStuckOrFailedTurns(turns: Turn[], timestamp: string): InsightEvidenceCandidate[] {
-  const timestampMs = Date.parse(timestamp);
-  return turns
-    .filter((turn) => !isInsightsTurn(turn) && (turn.status === "failed" || isTurnOlderThan(turn, timestampMs, 15 * 60_000)))
-    .map((turn) => {
-      const stuck = turn.status === "in_progress";
-      return evidenceCandidateFromItem(insightItem({
-        evidenceSource: "stuck_turn",
-        evidenceKey: turn.id,
-        timestamp,
-        severity: stuck ? "concern" : "blocker",
-        type: stuck ? "turn.stuck" : "turn.failed",
-        title: stuck ? "Turn appears stuck" : "Turn failed",
-        summary: compactInsightSummary(
-          stuck
-            ? `A turn has been running since ${turn.startedAt}.`
-            : turn.error ?? "A turn failed without completing successfully.",
-        ),
-        scopeType: "session",
-        scopeId: turn.sessionId,
-        payload: {
-          sessionId: turn.sessionId,
-          turnId: turn.id,
-          prompt: compactInsightSummary(turn.prompt),
-          turnStatus: turn.status,
-          startedAt: turn.startedAt,
-          completedAt: turn.completedAt,
-          error: turn.error,
-        },
-      }));
-    });
-}
-
-function detectAbandonedGoals(entries: RuntimeEventEntry[], timestamp: string): InsightEvidenceCandidate[] {
-  const latestByGoalId = new Map<string, { entry: RuntimeEventEntry; goal: Record<string, unknown> }>();
-  for (const entry of entries) {
-    const data = entry.event.data;
-    if (!data || typeof data !== "object") continue;
-    const record = data as Record<string, unknown>;
-    if (record.kind !== "thread_goal" || !record.goal || typeof record.goal !== "object") continue;
-    const goal = record.goal as Record<string, unknown>;
-    const goalId = textValue(goal.id);
-    if (!goalId) continue;
-    latestByGoalId.set(goalId, { entry, goal });
-  }
-  const timestampMs = Date.parse(timestamp);
-  return Array.from(latestByGoalId.entries())
-    .filter(([, latest]) => {
-      const status = textValue(latest.goal.status);
-      if (status !== "active") return false;
-      const startedAt = textValue(latest.goal.startedAt) ?? latest.entry.event.timestamp;
-      return isOlderThan(startedAt, timestampMs, 30 * 60_000);
-    })
-    .map(([goalId, latest]) => evidenceCandidateFromItem(insightItem({
-      evidenceSource: "abandoned_goal",
-      evidenceKey: goalId,
-      timestamp,
-      severity: "concern",
-      type: "goal.abandoned",
-      title: "Goal appears abandoned",
-      summary: compactInsightSummary(`Goal "${textValue(latest.goal.objective) ?? goalId}" is still active without a completion event.`),
-      scopeType: latest.entry.event.sessionId ? "session" : "global",
-      scopeId: latest.entry.event.sessionId ?? "local",
-      payload: {
-        goalId,
-        goalStatus: textValue(latest.goal.status),
-        goalObjective: textValue(latest.goal.objective),
-        sessionId: latest.entry.event.sessionId ?? null,
-        turnId: latest.entry.event.turnId ?? null,
-        sourceEventSequence: latest.entry.sequence,
-      },
-    })));
-}
-
-function detectRepeatedUserCorrections(entries: RuntimeEventEntry[], timestamp: string): InsightEvidenceCandidate[] {
-  const groups = new Map<string, RuntimeEventEntry[]>();
-  for (const entry of entries) {
-    if (entry.event.name !== "turn.started") continue;
-    const prompt = textValue((entry.event.args as Record<string, unknown> | undefined)?.prompt);
-    if (!prompt || !looksLikeUserCorrection(prompt)) continue;
-    const key = entry.event.sessionId ?? "global";
-    groups.set(key, [...(groups.get(key) ?? []), entry]);
-  }
-  return Array.from(groups.entries())
-    .filter(([, group]) => group.length >= 2)
-    .map(([sessionId, group]) => {
-      const latest = group[group.length - 1]!;
-      return evidenceCandidateFromItem(insightItem({
-        evidenceSource: "user_correction",
-        evidenceKey: sessionId,
-        timestamp,
-        severity: "concern",
-        type: "conversation.repeated_corrections",
-        title: "Repeated user corrections",
-        summary: compactInsightSummary(`${group.length} recent turns look like corrections or repeated instructions.`),
-        scopeType: latest.event.sessionId ? "session" : "global",
-        scopeId: latest.event.sessionId ?? "local",
-        payload: {
-          sessionId: latest.event.sessionId ?? null,
-          turnId: latest.event.turnId ?? null,
-          correctionCount: group.length,
-          latestPrompt: textValue((latest.event.args as Record<string, unknown> | undefined)?.prompt),
-          sourceEventSequence: latest.sequence,
-        },
-      }));
-    });
-}
-
-function detectLongRunningUnresolvedConversations(turns: Turn[], timestamp: string): InsightEvidenceCandidate[] {
-  const bySession = new Map<string, Turn[]>();
-  for (const turn of turns) {
-    if (isInsightsTurn(turn)) continue;
-    bySession.set(turn.sessionId, [...(bySession.get(turn.sessionId) ?? []), turn]);
-  }
-  return Array.from(bySession.entries())
-    .filter(([, sessionTurns]) => sessionTurns.length >= 8)
-    .map(([sessionId, sessionTurns]) => ({
-      sessionId,
-      turns: sessionTurns.sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
-    }))
-    .filter(({ turns: sessionTurns }) => {
-      const latest = sessionTurns[sessionTurns.length - 1]!;
-      return latest.status !== "completed" || sessionTurns.slice(-4).some((turn) => turn.status === "failed");
-    })
-    .map(({ sessionId, turns: sessionTurns }) => {
-      const latest = sessionTurns[sessionTurns.length - 1]!;
-      return evidenceCandidateFromItem(insightItem({
-        evidenceSource: "unresolved_conversation",
-        evidenceKey: sessionId,
-        timestamp,
-        severity: "nit",
-        type: "conversation.long_running_unresolved",
-        title: "Long-running chat may be unresolved",
-        summary: compactInsightSummary(`${sessionTurns.length} turns are present and the latest work does not look cleanly resolved.`),
-        scopeType: "session",
-        scopeId: sessionId,
-        payload: {
-          sessionId,
-          turnId: latest.id,
-          turnCount: sessionTurns.length,
-          latestTurnStatus: latest.status,
-          startedAt: sessionTurns[0]?.startedAt ?? null,
-          latestTurnStartedAt: latest.startedAt,
-        },
-      }));
-    });
-}
-
 function parseCreatePipelineSnapshotFromEvent(event: RuntimeEvent): CreatePipelineSnapshot | null {
   if (event.name !== "create_pipeline.updated") return null;
   const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
@@ -1094,58 +907,6 @@ function insightItemForSnapshot(input: {
   };
 }
 
-function insightItem(input: {
-  evidenceSource: InsightEvidenceSource;
-  evidenceKey: string;
-  timestamp: string;
-  severity: InsightSeverity;
-  type: string;
-  title: string;
-  summary: string;
-  scopeType: InsightItem["scopeType"];
-  scopeId: string;
-  payload: Record<string, unknown>;
-}): InsightItem {
-  const fingerprint = [
-    "openpond.insights",
-    input.evidenceSource,
-    input.evidenceKey,
-    input.type,
-  ].join(":");
-  return {
-    id: `insight_${hashId(fingerprint)}`,
-    scopeType: input.scopeType,
-    scopeId: input.scopeId,
-    severity: input.severity,
-    type: input.type,
-    status: "active",
-    fingerprint,
-    title: input.title,
-    summary: input.summary,
-    payload: {
-      ...input.payload,
-      evidenceSource: input.evidenceSource,
-      evidenceKey: input.evidenceKey,
-    },
-    lastRunId: null,
-    lastRunSessionId: null,
-    lastRunTurnId: null,
-    createdAt: input.timestamp,
-    updatedAt: input.timestamp,
-    resolvedAt: null,
-    dismissedAt: null,
-  };
-}
-
-function evidenceCandidateFromItem(item: InsightItem): InsightEvidenceCandidate {
-  return {
-    item,
-    evidenceSource: insightEvidenceSource(item) ?? "create_edit",
-    evidenceKey: insightEvidenceKey(item) ?? item.id,
-    keepFingerprint: item.fingerprint,
-  };
-}
-
 function withEvidencePayload(
   item: InsightItem,
   evidenceSource: InsightEvidenceSource,
@@ -1200,60 +961,6 @@ function isInsightEvidenceSource(value: unknown): value is InsightEvidenceSource
     value === "unresolved_conversation" ||
     value === "usage_anomaly"
   );
-}
-
-function isFailedToolEvent(event: RuntimeEvent): boolean {
-  if (event.name !== "tool.completed" && event.name !== "workspace_action_result") return false;
-  return event.status === "failed" || Boolean(event.error);
-}
-
-function eventActionLabel(event: RuntimeEvent): string {
-  const args = event.args && typeof event.args === "object" ? event.args as Record<string, unknown> : {};
-  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
-  return (
-    textValue(event.action) ??
-    textValue(args.action) ??
-    textValue(args.tool) ??
-    textValue(args.name) ??
-    textValue(data.action) ??
-    textValue(data.tool) ??
-    textValue(data.name) ??
-    event.name
-  );
-}
-
-function isTurnOlderThan(turn: Turn, timestampMs: number, thresholdMs: number): boolean {
-  if (turn.status !== "in_progress" || isInsightsTurn(turn)) return false;
-  return isOlderThan(turn.startedAt, timestampMs, thresholdMs);
-}
-
-function isOlderThan(value: string, timestampMs: number, thresholdMs: number): boolean {
-  const time = Date.parse(value);
-  return Number.isFinite(time) && Number.isFinite(timestampMs) && timestampMs - time >= thresholdMs;
-}
-
-function looksLikeUserCorrection(prompt: string): boolean {
-  const normalized = prompt.toLowerCase();
-  return [
-    "i told you",
-    "not what i asked",
-    "that's wrong",
-    "that is wrong",
-    "you didn't",
-    "you did not",
-    "again",
-    "still not",
-    "fix this",
-    "why did you",
-  ].some((phrase) => normalized.includes(phrase));
-}
-
-function textValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function isInsightsTurn(turn: Turn): boolean {
-  return Boolean(turn.metadata?.insightsRun || turn.metadata?.insightsQuestion);
 }
 
 function linkInsightItemToRun(input: InsightItem, run: {

@@ -10,6 +10,8 @@
     { "path": "../../packages/contracts" },
     { "path": "../../packages/codex-provider" },
     { "path": "../../packages/runtime" }
+    ,{ "path": "../../packages/taskset-sdk" }
+    ,{ "path": "../../packages/training-sdk" }
   ],
   "include": ["src/**/*.ts"]
 }

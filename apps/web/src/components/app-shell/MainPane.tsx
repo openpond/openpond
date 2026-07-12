@@ -40,7 +40,7 @@ import type {
   TerminalScope,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
-import type { AppView, ChatMessage } from "../../lib/app-models";
+import { normalizePreferences, type AppView, type ChatMessage } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
@@ -78,6 +78,10 @@ import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
+import { TrainingDraftPanel } from "../training/TrainingDraftPanel";
+import { TrainingCreationPanel, TrainingStatusReceipt } from "../training/TrainingCreationPanel";
+import { startConfiguredTaskCreation, trainingCreationForSession } from "../training/training-flow";
+import type { TrainingLaunchRequest } from "../training/TrainingView";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
 import type {
   WorkspaceDiffPanelViewState,
@@ -85,12 +89,14 @@ import type {
   WorkspaceFileSourceSwitcher,
 } from "../workspace-diff/workspace-diff-panel-model";
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
+import type { useTraining } from "../../hooks/useTraining";
 import {
   AppsView,
   BrowserSidebar,
   CloudWorkView,
   GetStartedView,
   InsightsView,
+  TrainingView,
   ProfileView,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
@@ -161,6 +167,8 @@ type MainPaneProps = {
   insightsScanStartedAt: string | null;
   insightsScanning: boolean;
   insightsError: string | null;
+  training: ReturnType<typeof useTraining>;
+  trainingSessions: Session[];
   onRunInsightsScan: (input?: { trigger?: InsightRunTrigger }) => Promise<unknown>;
   onAskInsightsQuestion: (question: string) => Promise<unknown>;
   onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
@@ -222,6 +230,7 @@ type MainPaneProps = {
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
   onShowGoalSidebarTab: () => void;
+  onShowTrainingDraftPanel: () => void;
   onShowFilesPanel: () => void;
   onShowRightChatPanel: () => void;
   onAddRightChat: () => void;
@@ -516,6 +525,8 @@ export function MainPane({
   insightsScanStartedAt,
   insightsScanning,
   insightsError,
+  training,
+  trainingSessions,
   onRunInsightsScan,
   onAskInsightsQuestion,
   onPatchInsightStatus,
@@ -561,6 +572,7 @@ export function MainPane({
   onToggleDiffPanelExpanded,
   onShowDiffPanel,
   onShowBrowserPanel,
+  onShowTrainingDraftPanel,
   onShowFilesPanel,
   onShowRightChatPanel,
   onAddRightChat,
@@ -602,6 +614,26 @@ export function MainPane({
   );
   const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{ id: number; path: string } | null>(null);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] = useState<RightSidebarFileSource | null>(null);
+  const [trainingLaunchRequest, setTrainingLaunchRequest] = useState<TrainingLaunchRequest | null>(null);
+  const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<string | null>(null);
+  const appPreferences = useMemo(
+    () => normalizePreferences(bootstrap?.preferences),
+    [bootstrap?.preferences],
+  );
+  const trainingPreferences = appPreferences.training;
+  const activeTrainingTasksetId = useMemo(() => {
+    const tasksets = training.payload?.tasksets ?? [];
+    return tasksets.some((taskset) => taskset.id === selectedTrainingTasksetId)
+      ? selectedTrainingTasksetId
+      : tasksets[0]?.id ?? null;
+  }, [selectedTrainingTasksetId, training.payload?.tasksets]);
+  const trainingTasksetRootPath = view === "training" && activeTrainingTasksetId
+    ? `profiles/${bootstrap?.profile.activeProfile ?? "default"}/tasksets/${activeTrainingTasksetId}`
+    : null;
+  const selectedTrainingCreation = useMemo(
+    () => trainingCreationForSession(training.payload, selectedSessionId),
+    [selectedSessionId, training.payload],
+  );
   const selectedCloudSandboxId = useMemo(
     () => cloudWorkItemSandboxId(selectedCloudWorkItem, cloudWorkItemDetail),
     [cloudWorkItemDetail, selectedCloudWorkItem],
@@ -613,7 +645,7 @@ export function MainPane({
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails)) &&
     Boolean(selectedCloudWorkItem);
-  const showLocalDiffPanel = (view === "chat" || view === "profile") && Boolean(activeWorkspaceAppId);
+  const showLocalDiffPanel = (view === "chat" || view === "profile" || view === "training") && Boolean(activeWorkspaceAppId);
   const showEmptyRightChatFallbackPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
   const chatSandboxId = isCloudWorkspaceKind(activeWorkspaceKind)
@@ -667,6 +699,7 @@ export function MainPane({
   const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
+  const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
   const showTeamAgentConversationPanel =
@@ -675,12 +708,13 @@ export function MainPane({
     rightPanelMode === "chat" &&
     Boolean(teamChat.agentConversation);
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
-    supportedView: view === "chat" || view === "cloud" || view === "profile",
+    supportedView: view === "chat" || view === "cloud" || view === "profile" || view === "training",
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
       showBrowserPanel ||
       showRightChatPanel ||
+      showTrainingDraftPanel ||
       showTeamAiThreadPanel ||
       showTeamAgentConversationPanel,
   });
@@ -688,6 +722,7 @@ export function MainPane({
     showDiffPanel ||
     showBrowserPanel ||
     showRightChatPanel ||
+    showTrainingDraftPanel ||
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
     showRightHomePanel;
@@ -724,7 +759,7 @@ export function MainPane({
   const viewClass =
     view === "team"
       ? "team-active"
-      : view === "apps" || view === "get-started" || view === "insights" || view === "profile"
+      : view === "apps" || view === "get-started" || view === "insights" || view === "training" || view === "profile"
       ? "page-active"
       : view === "cloud"
         ? "cloud-active"
@@ -777,6 +812,33 @@ export function MainPane({
               const severity = summary.highestActiveSeverity ? ` Highest severity: ${summary.highestActiveSeverity}.` : "";
               showToast(`${activeCount} active insight${activeCount === 1 ? "" : "s"}.${severity}`, "info");
             }
+            return true;
+          }
+          if (command.command === "train") {
+            if (attachments.length > 0) {
+              showToast("/train uses the selected chat; add other chats from the Training page.", "error");
+              return false;
+            }
+            if (!selectedSessionId) {
+              clearMainPrompt();
+              setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null });
+              setView("training");
+              showToast("Choose the chats that should become evidence for this training plan.", "info");
+              return true;
+            }
+            clearMainPrompt();
+            const source = await training.actions.addSource(selectedSessionId);
+            if (!source) return false;
+            await startConfiguredTaskCreation({
+              training,
+              sourceIds: [source.id],
+              surface: "slash_train",
+              objective: command.args || null,
+              preferences: trainingPreferences,
+              fallbackModel: { providerId: activeProvider, modelId: activeModel },
+              reasoningEffort: codexReasoningEffort,
+            });
+            showToast("Training plan started in this chat.", "info");
             return true;
           }
           if (!command.args && command.command !== "skill" && command.command !== "sync-cloud") {
@@ -837,6 +899,8 @@ export function MainPane({
       });
     },
     [
+      activeModel,
+      activeProvider,
       activeWorkspaceKind,
       bootstrap?.profile,
       connectedAppMentions,
@@ -846,10 +910,12 @@ export function MainPane({
       onRunInsightsScan,
       composerDraftStore,
       sendPrompt,
+      selectedSessionId,
       setMentionedAppId,
       setView,
       showToast,
       slashCommandCloudProjectId,
+      training,
       view,
     ],
   );
@@ -1270,6 +1336,7 @@ export function MainPane({
       connection={connection}
       runtimeEvents={runtimeEvents}
       diff={rightSidebarUsesSandbox ? null : workspaceDiff}
+      fileRootPath={rightSidebarUsesSandbox ? null : trainingTasksetRootPath}
       editorPreferences={bootstrap?.preferences.editor ?? null}
       loading={rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
       openFileRequest={openDiffFileRequest}
@@ -1382,9 +1449,21 @@ export function MainPane({
       onOpenFiles={onShowFilesPanel}
       onOpenReview={onShowDiffPanel}
       onOpenSideChat={onAddRightChat}
+      onOpenTrainingDraft={onShowTrainingDraftPanel}
+      trainingDraftAvailable={Boolean(selectedSessionId)}
       onResizeStart={onDiffPanelResizeStart}
       onToggleExpanded={onToggleDiffPanelExpanded}
       onToggleTerminal={onToggleTerminal}
+    />
+  ) : null;
+  const trainingDraftPanel = showTrainingDraftPanel ? (
+    <TrainingDraftPanel
+      training={training}
+      sessionId={selectedSessionId}
+      expanded={diffPanelExpanded}
+      onOpenTraining={() => setView("training")}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
     />
   ) : null;
   const rightPanel =
@@ -1393,6 +1472,7 @@ export function MainPane({
     rightChatPanel ??
     diffPanel ??
     browserPanel ??
+    trainingDraftPanel ??
     homePanel;
   const terminalPanel = (
     <AppTerminalPanel
@@ -1506,6 +1586,35 @@ export function MainPane({
             onOpenSession={onOpenInsightsSession}
           />
         </Suspense>
+      ) : view === "training" ? (
+        rightPanelExpanded ? (
+          <Suspense fallback={null}>{rightPanel}</Suspense>
+        ) : (
+          <>
+            <Suspense fallback={null}>
+              <TrainingView
+            training={training}
+            sessions={trainingSessions}
+            connection={connection}
+            defaultModel={{ providerId: activeProvider, modelId: activeModel }}
+            onError={onError}
+            onSettingsPreferences={(payload) => {
+              if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
+            }}
+            onOpenChat={onOpenInsightsSession}
+            launchRequest={trainingLaunchRequest}
+            onLaunchHandled={(id) => setTrainingLaunchRequest((current) => current?.id === id ? null : current)}
+            preferences={trainingPreferences}
+            settingsPreferences={appPreferences}
+            providerSettings={bootstrap?.providers ?? null}
+            reasoningEffort={codexReasoningEffort}
+            selectedTasksetId={activeTrainingTasksetId}
+            onSelectedTasksetIdChange={setSelectedTrainingTasksetId}
+              />
+            </Suspense>
+            {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
+          </>
+        )
       ) : view === "cloud" ? (
         <>
           <Suspense fallback={null}>{cloudView}</Suspense>
@@ -1546,8 +1655,17 @@ export function MainPane({
                   />
                 ),
               )}
+              {selectedTrainingCreation ? <TrainingStatusReceipt creation={selectedTrainingCreation} /> : null}
             </section>
             <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`} ref={composerStackRef}>
+              {selectedTrainingCreation ? (
+                <TrainingCreationPanel
+                  compact
+                  creation={selectedTrainingCreation}
+                  training={training}
+                  onOpenTraining={() => setView("training")}
+                />
+              ) : null}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               {showScrollToBottomButton && !chatThreadPreparingInitialScroll ? (
                 <div className="chat-scroll-controls" aria-label="Message navigation">

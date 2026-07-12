@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.trainingArtifact.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "adapter",
+        "checkpoint",
+        "metrics",
+        "log",
+        "manifest",
+        "evaluation"
+      ]
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256
+    },
+    "sizeBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "baseModelId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "baseModelRevision": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tokenizerRevision": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "chatTemplateHash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nonProduction": {
+      "type": "boolean"
+    },
+    "createdAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "jobId",
+    "kind",
+    "path",
+    "sha256",
+    "sizeBytes",
+    "baseModelId",
+    "baseModelRevision",
+    "tokenizerRevision",
+    "chatTemplateHash",
+    "nonProduction",
+    "createdAt",
+    "metadata"
+  ],
+  "additionalProperties": false
+}

@@ -52,6 +52,7 @@ export function WorkspaceDiffPanel({
   workspaceInitialized,
   workspaceError,
   expanded,
+  fileRootPath,
   openFileRequest,
   sideChatTabs,
   sourceSwitcher,
@@ -80,6 +81,7 @@ export function WorkspaceDiffPanel({
   workspaceInitialized: boolean;
   workspaceError: string | null;
   expanded: boolean;
+  fileRootPath?: string | null;
   openFileRequest?: { id: number; path: string } | null;
   sideChatTabs?: WorkspaceDiffSideChatTab[];
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
@@ -110,6 +112,7 @@ export function WorkspaceDiffPanel({
       workspaceInitialized={workspaceInitialized}
       workspaceError={workspaceError}
       expanded={expanded}
+      fileRootPath={fileRootPath ?? null}
       openFileRequest={openFileRequest}
       sideChatTabs={sideChatTabs ?? []}
       sourceSwitcher={sourceSwitcher ?? null}
@@ -231,6 +234,7 @@ function WorkspaceDiffPanelInner({
   workspaceInitialized,
   workspaceError,
   expanded,
+  fileRootPath,
   openFileRequest,
   sideChatTabs,
   sourceSwitcher,
@@ -258,6 +262,7 @@ function WorkspaceDiffPanelInner({
   workspaceInitialized: boolean;
   workspaceError: string | null;
   expanded: boolean;
+  fileRootPath: string | null;
   openFileRequest?: { id: number; path: string } | null;
   sideChatTabs: WorkspaceDiffSideChatTab[];
   sourceSwitcher: WorkspaceFileSourceSwitcher | null;
@@ -1256,6 +1261,7 @@ function WorkspaceDiffPanelInner({
             <WorkspaceDiffFiles
               diff={displayDiff}
               expandedFolderPaths={expandedFileTreeFolders}
+              rootPath={fileRootPath}
               repoFiles={repoFiles}
               onOpenFile={openFile}
               onToggleFolder={toggleFileTreeFolder}

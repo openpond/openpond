@@ -1,5 +1,6 @@
 import {
   AppPreferencesSchema,
+  DEFAULT_CHAT_PROVIDER,
   DEFAULT_CODEX_CHAT_MODEL,
   DEFAULT_CODEX_REASONING_EFFORT,
   type AppPreferences,
@@ -26,9 +27,18 @@ export function normalizeAppPreferences(value: unknown): AppPreferences {
   const legacyCodexDefaultModel =
     preferences.defaultChatProvider === "codex" &&
     (preferences.defaultChatModel === "codex-default" || preferences.defaultChatModel === "gpt-5.5");
+  const legacyOpenPondDefault =
+    preferences.defaultChatProvider === "openpond" &&
+    preferences.defaultChatModel === "openpond-chat";
   return {
     ...preferences,
     defaultTeamId,
+    ...(legacyOpenPondDefault ? {
+      defaultChatProvider: DEFAULT_CHAT_PROVIDER,
+      defaultChatModel: DEFAULT_CODEX_CHAT_MODEL,
+      defaultChatModelRef: null,
+      codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
+    } : {}),
     ...(legacyCodexDefaultModel ? { defaultChatModel: DEFAULT_CODEX_CHAT_MODEL } : {}),
     ...(legacyCodexDefaultModel && preferences.codexReasoningEffort === "medium"
       ? { codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT }

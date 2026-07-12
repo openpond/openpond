@@ -1,6 +1,7 @@
 import {
   ProviderModelSchema,
   type ProviderId,
+  type CodexReasoningEffort,
   type ProviderModel,
   type ProviderModelCapabilities,
   type ProviderSettings,
@@ -231,6 +232,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
+  reasoningEffort?: CodexReasoningEffort | null;
   signal?: AbortSignal;
   requestTimeoutMs?: number;
   errorBodyLimitBytes?: number;
@@ -263,6 +265,7 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
+        reasoningEffort: input.reasoningEffort,
       })),
       signal: requestSignal.signal,
     });
@@ -312,6 +315,7 @@ async function* streamOpenAiSubscriptionResponses(input: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
+  reasoningEffort?: CodexReasoningEffort | null;
   signal?: AbortSignal;
   requestTimeoutMs?: number;
   errorBodyLimitBytes?: number;
@@ -337,6 +341,7 @@ async function* streamOpenAiSubscriptionResponses(input: {
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
+        reasoningEffort: input.reasoningEffort,
       })),
       signal: requestSignal.signal,
     });
@@ -405,6 +410,7 @@ function buildChatCompletionBody(input: {
   messages: HostedChatMessage[];
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
+  reasoningEffort?: CodexReasoningEffort | null;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.model,
@@ -414,6 +420,7 @@ function buildChatCompletionBody(input: {
   if (input.tools) {
     body.tools = input.tools;
   }
+  if (input.providerId === "openai" && input.reasoningEffort) body.reasoning_effort = input.reasoningEffort;
   if (input.providerId === "zai" && input.tools && input.tools.length > 0) {
     body.tool_stream = true;
   }
@@ -448,6 +455,7 @@ function buildResponsesBody(input: {
   messages: HostedChatMessage[];
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
+  reasoningEffort?: CodexReasoningEffort | null;
 }): Record<string, unknown> {
   const projected = responsesInputFromMessages(input.messages);
   const body: Record<string, unknown> = {
@@ -457,6 +465,7 @@ function buildResponsesBody(input: {
     store: false,
   };
   if (projected.instructions) body.instructions = projected.instructions;
+  if (input.reasoningEffort) body.reasoning = { effort: input.reasoningEffort, summary: "auto" };
   const tools = responsesTools(input.tools);
   if (tools.length > 0) body.tools = tools;
   const toolChoice = responsesToolChoice(input.toolChoice);

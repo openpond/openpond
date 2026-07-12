@@ -517,7 +517,8 @@ describe("Cloud native UI", () => {
     expect(markup).not.toContain('data-tooltip="Move to Cloud"');
     expect(markup).not.toContain("lucide-cloud-upload");
     expect(markup).toContain('data-tooltip="Open in right panel"');
-    expect(markup).toContain("actions-3");
+    expect(markup).toContain("actions-4");
+    expect(markup).toContain('data-tooltip="Add to training"');
     expect(markup).not.toContain("All tasks");
     expect(markup).not.toContain("Start from GitHub repo");
     expect(markup).not.toContain("Start from template");

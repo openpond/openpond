@@ -457,6 +457,69 @@ export class SqliteStoreCore {
     }
   }
 
+  async createTrainingTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS training_sources (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, session_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS training_sources_profile_updated_idx ON training_sources(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS training_sources_session_idx ON training_sources(session_id);
+      CREATE TABLE IF NOT EXISTS task_creation_snapshots (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS task_creation_profile_updated_idx ON task_creation_snapshots(profile_id, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS tasksets (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS tasksets_profile_status_updated_idx ON tasksets(profile_id, status, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS task_candidates (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS task_candidates_profile_fingerprint_idx ON task_candidates(profile_id, fingerprint);
+      CREATE INDEX IF NOT EXISTS task_candidates_profile_status_updated_idx ON task_candidates(profile_id, status, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS task_attempts (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, split TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS task_attempts_taskset_split_idx ON task_attempts(taskset_id, split, created_at DESC);
+      CREATE TABLE IF NOT EXISTS grade_results (id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS grade_results_attempt_idx ON grade_results(attempt_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS baseline_reports (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS baseline_reports_taskset_idx ON baseline_reports(taskset_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS readiness_reports (taskset_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_miner_configs (profile_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS training_plans (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, destination_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS training_plans_taskset_idx ON training_plans(taskset_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS training_bundles (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, content_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS training_bundles_content_hash_idx ON training_bundles(content_hash);
+      CREATE TABLE IF NOT EXISTS training_jobs (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, destination_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS training_jobs_status_updated_idx ON training_jobs(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS training_jobs_plan_idx ON training_jobs(plan_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS training_approvals (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, bundle_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS training_approvals_plan_idx ON training_approvals(plan_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS training_job_events (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, sequence INTEGER NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(job_id, sequence));
+      CREATE INDEX IF NOT EXISTS training_job_events_job_sequence_idx ON training_job_events(job_id, sequence);
+      CREATE TABLE IF NOT EXISTS training_artifacts (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS training_artifacts_job_kind_idx ON training_artifacts(job_id, kind, created_at DESC);
+      CREATE TABLE IF NOT EXISTS model_artifact_lineage (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS model_lineage_artifact_idx ON model_artifact_lineage(artifact_id);
+      CREATE INDEX IF NOT EXISTS model_lineage_taskset_idx ON model_artifact_lineage(taskset_id, created_at DESC);
+    `);
+  }
+
+  async createTaskCreationProjectionTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS task_creation_transcripts (creation_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS task_creation_transcript_profile_idx ON task_creation_transcripts(profile_id, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS task_design_proposals (creation_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, profile_id TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS task_design_proposal_id_idx ON task_design_proposals(proposal_id);
+    `);
+  }
+
+  async createGraderAuditTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS grader_audit_reports (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS grader_audit_taskset_idx ON grader_audit_reports(taskset_id, created_at DESC);
+    `);
+  }
+
+  async createTaskAttemptArtifactTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS task_attempt_artifacts (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, attempt_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS task_attempt_artifacts_attempt_idx ON task_attempt_artifacts(attempt_id, created_at);
+      CREATE INDEX IF NOT EXISTS task_attempt_artifacts_taskset_idx ON task_attempt_artifacts(taskset_id, created_at);
+    `);
+  }
+
   protected async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
     const rows = await this.all<TableInfoRow>(`PRAGMA table_info(${table})`);
     if (rows.some((row) => row.name === column)) return;
@@ -798,5 +861,21 @@ const SQLITE_MIGRATIONS: Migration[] = [
   {
     version: 10,
     run: (store) => store.createOpenPondThreadGoalTable(),
+  },
+  {
+    version: 11,
+    run: (store) => store.createTrainingTables(),
+  },
+  {
+    version: 12,
+    run: (store) => store.createTaskCreationProjectionTables(),
+  },
+  {
+    version: 13,
+    run: (store) => store.createGraderAuditTables(),
+  },
+  {
+    version: 14,
+    run: (store) => store.createTaskAttemptArtifactTables(),
   },
 ];

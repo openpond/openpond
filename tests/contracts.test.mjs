@@ -27,7 +27,7 @@ import {
 
 describe("contracts", () => {
   test("session and turn requests validate defaults", () => {
-    assert.equal(CreateSessionRequestSchema.parse({}).provider, "openpond");
+    assert.equal(CreateSessionRequestSchema.parse({}).provider, "openai");
     assert.equal(
       AppPreferencesSchema.parse({}).openPondCommandAccessMode,
       DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -565,8 +565,9 @@ describe("contracts", () => {
       diagnostics: [],
     });
     assert.equal(payload.account.balanceLabel, "$0.00");
-    assert.equal(payload.preferences.defaultChatProvider, "openpond");
-    assert.equal(payload.preferences.defaultChatModel, "openpond-chat");
+    assert.equal(payload.preferences.defaultChatProvider, "openai");
+    assert.equal(payload.preferences.defaultChatModel, "gpt-5.6-sol");
+    assert.equal(payload.preferences.codexReasoningEffort, "high");
     assert.equal(payload.preferences.codexPermissionMode, "default");
     assert.equal(payload.preferences.defaultBranchPrefix, "feat/");
     assert.equal(payload.preferences.defaultNewProjectDirectory, "");

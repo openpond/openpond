@@ -21,6 +21,9 @@ export const CloudWorkView = lazy(() =>
 export const InsightsView = lazy(() =>
   import("../insights/InsightsView").then((module) => ({ default: module.InsightsView })),
 );
+export const TrainingView = lazy(() =>
+  import("../training/TrainingView").then((module) => ({ default: module.TrainingView })),
+);
 export const TeamChatView = lazy(() =>
   import("../team-chat/TeamChatView").then((module) => ({ default: module.TeamChatView })),
 );

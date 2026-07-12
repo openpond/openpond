@@ -107,6 +107,7 @@ export type SidebarProps = {
   archiveSession: (session: Session) => void;
   restoreSession: (session: Session) => void;
   renameSession: (session: Session, title: string) => void;
+  addSessionToTraining: (session: Session) => void;
   expandProject: (projectId: string) => void;
   toggleProjectExpanded: (projectId: string) => void;
   startPinnedDrag: (event: DragEvent<HTMLDivElement>, item: SidebarDragItem) => void;

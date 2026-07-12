@@ -309,7 +309,7 @@ describe("app preferences", () => {
 
       expect(saved.preferences.defaultChatProvider).toBe("codex");
       expect(saved.preferences.defaultChatModel).toBe("gpt-5.6-sol");
-      expect(saved.preferences.codexReasoningEffort).toBe("low");
+      expect(saved.preferences.codexReasoningEffort).toBe("high");
       expect(saved.preferences.subagents.roles.find((role) => role.id === "coding")?.modelRef).toEqual({
         providerId: "zai",
         modelId: "glm-5.2",

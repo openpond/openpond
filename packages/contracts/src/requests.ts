@@ -15,6 +15,7 @@ import {
   InsightsEvidenceSourceSettingsSchema,
   PersonalizationTemplateIdSchema,
   SidebarSectionsCollapsedSchema,
+  TrainingPreferencesSchema,
   WorkspaceEditorPreferencesSchema,
   WorkspaceKindSchema,
 } from "./settings.js";
@@ -412,6 +413,7 @@ export const UpdateAppPreferencesRequestSchema = z.object({
   defaultTeamId: z.string().trim().max(191).nullable().optional(),
   advancedWorkspaceControls: z.boolean().optional(),
   contextCompaction: ContextCompactionPreferencesSchema.optional(),
+  training: TrainingPreferencesSchema.optional(),
   sidebarWidth: z.number().int().min(244).max(560).optional(),
   diffPanelWidth: z.number().int().min(320).max(2400).optional(),
   sidebarSectionsCollapsed: SidebarSectionsCollapsedSchema.optional(),

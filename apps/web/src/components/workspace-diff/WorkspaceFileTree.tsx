@@ -6,12 +6,14 @@ import { buildFileTree, type FileTreeNode } from "./workspace-diff-summary-model
 export function WorkspaceFileTree({
   changedByPath,
   expandedFolderPaths,
+  rootPath,
   repoFiles,
   onOpenFile,
   onToggleFolder,
 }: {
   changedByPath: Map<string, WorkspaceDiffFile>;
   expandedFolderPaths: ReadonlySet<string>;
+  rootPath?: string | null;
   repoFiles: string[];
   onOpenFile: (path: string) => void;
   onToggleFolder: (path: string) => void;
@@ -22,7 +24,7 @@ export function WorkspaceFileTree({
     <div className="workspace-file-tree-view">
       <div className="workspace-file-tree-header">
         <FolderOpen size={14} />
-        <strong>Files</strong>
+        <strong title={rootPath ?? undefined}>{rootPath ? rootPath.split("/").at(-1) : "Files"}</strong>
         <span>{repoFiles.length}</span>
       </div>
       <div className="workspace-file-tree">
@@ -32,6 +34,7 @@ export function WorkspaceFileTree({
             expandedFolderPaths={expandedFolderPaths}
             key={`${node.type}:${node.path}`}
             node={node}
+            rootPath={rootPath}
             onOpenFile={onOpenFile}
             onToggleFolder={onToggleFolder}
           />
@@ -46,6 +49,7 @@ function FileTreeNodeRow({
   depth = 0,
   expandedFolderPaths,
   node,
+  rootPath,
   onOpenFile,
   onToggleFolder,
 }: {
@@ -53,11 +57,13 @@ function FileTreeNodeRow({
   depth?: number;
   expandedFolderPaths: ReadonlySet<string>;
   node: FileTreeNode;
+  rootPath?: string | null;
   onOpenFile: (path: string) => void;
   onToggleFolder: (path: string) => void;
 }) {
-  const open = node.type === "folder" && expandedFolderPaths.has(node.path);
-  const changed = changedByPath.get(node.path);
+  const resolvedPath = rootPath ? `${rootPath}/${node.path}` : node.path;
+  const open = node.type === "folder" && expandedFolderPaths.has(resolvedPath);
+  const changed = changedByPath.get(resolvedPath);
   const rowPaddingLeft = 2 + depth * 11;
 
   if (node.type === "folder") {
@@ -68,7 +74,7 @@ function FileTreeNodeRow({
           className="workspace-file-tree-row folder"
           aria-expanded={open}
           style={{ paddingLeft: rowPaddingLeft }}
-          onClick={() => onToggleFolder(node.path)}
+          onClick={() => onToggleFolder(resolvedPath)}
         >
           {open ? <FolderOpen size={14} /> : <Folder size={14} />}
           <span>{node.name}</span>
@@ -81,6 +87,7 @@ function FileTreeNodeRow({
               expandedFolderPaths={expandedFolderPaths}
               key={`${child.type}:${child.path}`}
               node={child}
+              rootPath={rootPath}
               onOpenFile={onOpenFile}
               onToggleFolder={onToggleFolder}
             />
@@ -93,7 +100,7 @@ function FileTreeNodeRow({
       type="button"
       className={`workspace-file-tree-row file ${changed ? "changed" : ""}`}
       style={{ paddingLeft: rowPaddingLeft }}
-      onClick={() => onOpenFile(node.path)}
+      onClick={() => onOpenFile(resolvedPath)}
     >
       <File size={13} />
       <span>{node.name}</span>

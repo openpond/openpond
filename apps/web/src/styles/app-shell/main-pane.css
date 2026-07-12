@@ -157,6 +157,8 @@
 }
 
 .profile-view {
+  container-name: profile-view;
+  container-type: inline-size;
   display: grid;
   align-content: start;
   gap: 22px;

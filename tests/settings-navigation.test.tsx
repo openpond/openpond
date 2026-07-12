@@ -32,4 +32,17 @@ describe("SettingsNavigation", () => {
     expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Wallet"));
     expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Harness"));
   });
+
+  test("places Training with the other harness controls", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SettingsNavigation, {
+        section: "training",
+        onBack: () => undefined,
+        onSectionChange: () => undefined,
+      }),
+    );
+    expect(markup.indexOf("Insights")).toBeLessThan(markup.indexOf("Training"));
+    expect(markup.indexOf("Training")).toBeLessThan(markup.indexOf("Subagents"));
+    expect(markup).toContain('class="settings-nav-item active"');
+  });
 });

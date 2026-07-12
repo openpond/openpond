@@ -25,6 +25,7 @@ import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { RemoteAccessSettingsSection } from "./RemoteAccessSettingsSection";
 import { SettingsNavigation } from "./SettingsNavigation";
 import { UsageSettingsSection } from "./UsageSettingsSection";
+import { TrainingSettingsSection } from "./TrainingSettingsSection";
 import { WalletView } from "../wallet/WalletView";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
@@ -183,6 +184,14 @@ export function SettingsView({
             preferences={preferences}
             providers={payload?.providers ?? null}
             {...defaultsSettings}
+          />
+        ) : section === "training" ? (
+          <TrainingSettingsSection
+            connection={connection}
+            onError={onError}
+            onPreferences={applyPreferencesPayload}
+            preferences={preferences}
+            providers={payload?.providers ?? null}
           />
         ) : section === "subagents" ? (
           <SubagentsSettingsSection

@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import {
   CompactSessionRequestSchema,
   InsightsAskRequestSchema,
   PatchInsightRequestSchema,
   RunSessionCommandRequestSchema,
+  TaskAttemptResultSchema,
+  TaskAttemptArtifactSchema,
   type Approval,
   type ChatProvider,
+  type ChatModelRef,
+  type CodexReasoningEffort,
+  type TaskDataRecord,
   type CodexStatus,
   type InsightStatus,
   type InsightsListResponse,
@@ -71,7 +77,7 @@ import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
 import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
-import { isCodexHistorySessionId } from "./codex-history.js";
+import { isCodexHistorySessionId, readCodexHistoryThreadPayload } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
@@ -100,6 +106,15 @@ import {
 } from "./openpond/scripted-chat-provider.js";
 import { createTeamChatAiExecutionService } from "./openpond/team-chat-executor.js";
 import { teamChatRequestPayload } from "./openpond/team-chat-client.js";
+import { contentHash, sha256 } from "@openpond/taskset-sdk";
+import { createTaskCreatorService } from "./training/task-creator.js";
+import { authorTaskDesignWithModel } from "./training/task-authoring-model.js";
+import { loadTasksetAuthoringSkillBundle } from "./training/task-authoring-skill.js";
+import { createTaskMinerService } from "./training/task-miner.js";
+import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
+import { createTaskEvaluationService } from "./training/evaluation-service.js";
+import { createTrainingService } from "./training/training-service.js";
+import { createTrainingApi } from "./training/training-api.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
@@ -342,6 +357,104 @@ export async function createOpenPondServer(
       }),
     };
   }
+  async function trainingModelText(input: {
+    model: ChatModelRef;
+    reasoningEffort?: CodexReasoningEffort | null;
+    messages: Array<{ role: "system" | "user"; content: string }>;
+    signal: AbortSignal;
+    requestId: string;
+  }): Promise<string> {
+    let text = "";
+    if (input.model.providerId === "openpond") {
+      for await (const delta of streamOpenPondHostedChatTurn({ model: input.model.modelId, messages: input.messages, requestId: input.requestId, signal: input.signal })) {
+        if (delta.type === "text_delta" && delta.text) text += delta.text;
+      }
+      return text;
+    }
+    const state = await localByokRuntimeState();
+    for await (const delta of streamOpenAiCompatibleChatCompletion({ providerId: input.model.providerId, settings: state.settings, secrets: state.secrets, modelId: input.model.modelId, messages: input.messages, requestId: input.requestId, signal: input.signal, reasoningEffort: input.reasoningEffort })) {
+      if (delta.type === "text_delta" && delta.text) text += delta.text;
+    }
+    return text;
+  }
+
+  const tasksetAuthoringSkillText = await loadTasksetAuthoringSkillBundle();
+  const taskCreatorService = createTaskCreatorService({
+    store,
+    authoringSkillHash: contentHash(tasksetAuthoringSkillText),
+    loadCodexHistoryThread: (sessionId) => readCodexHistoryThreadPayload(sessionId, {
+      attachmentRootDir,
+      maxEvents: 100_000,
+    }),
+    authorProposal: (input) => authorTaskDesignWithModel({
+      ...input,
+      skillText: tasksetAuthoringSkillText,
+      stream: async function* ({ model, reasoningEffort, messages, signal }) {
+        yield { text: await trainingModelText({ model, reasoningEffort, messages, signal, requestId: `task-authoring:${contentHash(input.id).slice(0, 40)}` }) };
+      },
+    }),
+  });
+  const taskMinerService = createTaskMinerService({ store });
+  const taskEvaluationService = createTaskEvaluationService({
+    store,
+    runAttempt: async (input) => runTrainingBaselineAttempt(input),
+    modelJudge: async ({ grader, task, attempt }) => {
+      const raw = await trainingModelText({
+        model: grader.judge,
+        signal: new AbortController().signal,
+        requestId: `task-judge:${attempt.id}:${grader.id}`,
+        messages: [
+          { role: "system", content: `Apply this rubric and return JSON only with score (0..1), passed, and feedback.\n\n${grader.rubric}` },
+          { role: "user", content: JSON.stringify({ input: task.input, expectedOutput: task.expectedOutput, output: attempt.output }) },
+        ],
+      });
+      const parsed = parseModelJudgeResult(raw);
+      if (!parsed) throw new Error("Model judge returned invalid structured output.");
+      return parsed;
+    },
+  });
+  const trainingService = createTrainingService({
+    store,
+    storeDir,
+    localWorkerProjectDir: path.resolve(process.cwd(), "python", "openpond-training"),
+  });
+  const trainingApi = createTrainingApi({ store, taskCreator: taskCreatorService, taskMiner: taskMinerService, evaluation: taskEvaluationService, training: trainingService });
+
+  async function runTrainingBaselineAttempt(input: { tasksetId: string; task: TaskDataRecord; model: ChatModelRef; seed: number; attempt: number }) {
+    const startedAt = now();
+    const requestId = `training-baseline:${input.task.id}:${input.model.providerId}:${input.model.modelId}:${input.seed}:${input.attempt}`;
+    try {
+      const text = await trainingModelText({
+        model: input.model,
+        signal: new AbortController().signal,
+        requestId,
+        messages: [
+          { role: "system", content: `Complete the task using only policy-visible input. Sampling seed: ${input.seed}.` },
+          { role: "user", content: JSON.stringify(input.task.input) },
+        ],
+      });
+      const completedAt = now();
+      const attemptId = `attempt_${contentHash([requestId, text]).slice(0, 24)}`;
+      const artifact = await persistBaselineRawArtifact({ tasksetId: input.tasksetId, taskId: input.task.id, attemptId, requestId, payload: { model: input.model, seed: input.seed, attempt: input.attempt, output: { text }, startedAt, completedAt } });
+      return TaskAttemptResultSchema.parse({ schemaVersion: "openpond.taskAttempt.v1", id: attemptId, tasksetId: input.tasksetId, taskId: input.task.id, split: input.task.split, attempt: input.attempt, seed: input.seed, modelRef: input.model, startedAt, completedAt, output: { text }, runtimeEventRefs: [], artifactRefs: [artifact.id], privilegedOutcomeRef: input.task.privilegedContextRef, infrastructureError: null, costUsd: null, latencyMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)), userInterventions: 0, metadata: { requestId } });
+    } catch (error) {
+      const completedAt = now();
+      const message = error instanceof Error ? error.message : String(error);
+      const attemptId = `attempt_${contentHash([requestId, "failure"]).slice(0, 24)}`;
+      const artifact = await persistBaselineRawArtifact({ tasksetId: input.tasksetId, taskId: input.task.id, attemptId, requestId, payload: { model: input.model, seed: input.seed, attempt: input.attempt, error: message, startedAt, completedAt } });
+      return TaskAttemptResultSchema.parse({ schemaVersion: "openpond.taskAttempt.v1", id: attemptId, tasksetId: input.tasksetId, taskId: input.task.id, split: input.task.split, attempt: input.attempt, seed: input.seed, modelRef: input.model, startedAt, completedAt, output: {}, runtimeEventRefs: [], artifactRefs: [artifact.id], privilegedOutcomeRef: null, infrastructureError: message, costUsd: null, latencyMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)), userInterventions: 0, metadata: { requestId } });
+    }
+  }
+
+  async function persistBaselineRawArtifact(input: { tasksetId: string; taskId: string; attemptId: string; requestId: string; payload: Record<string, unknown> }) {
+    const directory = path.join(storeDir, "training", "baseline-artifacts", input.tasksetId);
+    const file = path.join(directory, `${input.attemptId}.json`);
+    const bytes = Buffer.from(`${JSON.stringify({ schemaVersion: "openpond.rawBaselineArtifact.v1", requestId: input.requestId, ...input.payload }, null, 2)}\n`, "utf8");
+    await mkdir(directory, { recursive: true });
+    await writeFile(file, bytes, { mode: 0o600 });
+    const artifact = TaskAttemptArtifactSchema.parse({ schemaVersion: "openpond.taskAttemptArtifact.v1", id: `attempt_artifact_${contentHash([input.attemptId, sha256(bytes)]).slice(0, 24)}`, tasksetId: input.tasksetId, taskId: input.taskId, attemptId: input.attemptId, kind: "raw_model_response", path: file, sha256: sha256(bytes), sizeBytes: bytes.byteLength, createdAt: now(), metadata: { requestId: input.requestId, localOnly: true } });
+    return store.saveTaskAttemptArtifact(artifact);
+  }
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -482,6 +595,7 @@ export async function createOpenPondServer(
     isClosing: () => closing,
     logger,
   });
+  const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({ service: taskMinerService, loadProfileState: loadOpenPondProfileState, isClosing: () => closing, logger });
   const localAgentScheduleLoop = createLocalAgentScheduleLoop({
     store,
     queue: workQueues.localAgentSchedule,
@@ -1020,6 +1134,7 @@ export async function createOpenPondServer(
       runInsightsScanPayload,
       askInsightsPayload,
       patchInsightPayload,
+      trainingPayload: trainingApi.request,
       listLocalAgentSchedulesPayload,
       syncLocalAgentSchedulesPayload,
       patchLocalAgentSchedulePayload,
@@ -1137,6 +1252,7 @@ export async function createOpenPondServer(
   });
   actualPort = await listenOpenPondHttpServer({ host, httpServer, logger, port, serverId });
   insightsBackgroundLoop.start();
+  taskMinerBackgroundLoop.start();
   localAgentScheduleLoop.start();
   subagentLifecycleWatcher.start();
 
@@ -1157,11 +1273,11 @@ export async function createOpenPondServer(
     workQueues,
     codexSessions: codexSessions.values(),
     markClosing: () => { closing = true; },
-    backgroundLoops: [insightsBackgroundLoop, localAgentScheduleLoop, subagentLifecycleWatcher],
+    backgroundLoops: [insightsBackgroundLoop, taskMinerBackgroundLoop, localAgentScheduleLoop, subagentLifecycleWatcher],
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,
-    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close,
+    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close, trainingService.close,
       closeCloudWorkspaceReadiness, closeWorkspaceLsp, voiceTranscription.close],
   });
 
@@ -1177,6 +1293,22 @@ export async function createOpenPondServer(
       workQueueReceipts: workQueues.receipts,
     },
   };
+}
+
+function parseModelJudgeResult(raw: string): { score: number; passed: boolean; feedback: string; evidenceRefs: string[] } | null {
+  const normalized = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  try {
+    const value = JSON.parse(normalized) as Record<string, unknown>;
+    if (typeof value.score !== "number" || typeof value.passed !== "boolean") return null;
+    return {
+      score: Math.max(0, Math.min(1, value.score)),
+      passed: value.passed,
+      feedback: typeof value.feedback === "string" ? value.feedback.slice(0, 20_000) : "Model judge completed.",
+      evidenceRefs: [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 function resolveMaxHostedWorkspaceToolRounds(optionValue: number | undefined): number {
