@@ -5,6 +5,7 @@ import {
 } from "@openpond/contracts";
 import {
   openManagedEventSocket,
+  type ManagedEventSocketOptions,
   type ManagedEventWebSocketFactory,
 } from "./managed-event-websocket";
 
@@ -21,6 +22,7 @@ export function openTeamChatRealtime(
     onError?: (error: unknown) => void;
   },
   webSocketFactory?: ManagedEventWebSocketFactory,
+  options?: ManagedEventSocketOptions,
 ): TeamChatRealtimeHandle {
   const channels = [
     `/team-chat/users/${input.session.userId}/${input.session.teamId}`,
@@ -40,5 +42,6 @@ export function openTeamChatRealtime(
       onError: input.onError,
     },
     webSocketFactory,
+    options,
   );
 }

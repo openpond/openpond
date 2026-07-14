@@ -17,6 +17,10 @@ export type ManagedEventWebSocketFactory = (
   protocols: string[],
 ) => ManagedEventWebSocket;
 
+export type ManagedEventSocketOptions = {
+  reconnectDelayMs?: (attempt: number) => number;
+};
+
 type ManagedEventSocketInput = {
   realtimeUrl: string;
   httpUrl: string;
@@ -38,8 +42,13 @@ export function openManagedEventSocket(
   input: ManagedEventSocketInput,
   webSocketFactory: ManagedEventWebSocketFactory = (url, protocols) =>
     new WebSocket(url, protocols),
+  options: ManagedEventSocketOptions = {},
 ): ManagedEventSocketHandle {
-  const connection = new ManagedEventConnection(input, webSocketFactory);
+  const connection = new ManagedEventConnection(
+    input,
+    webSocketFactory,
+    options.reconnectDelayMs ?? defaultReconnectDelayMs,
+  );
   connection.open();
   return { close: () => connection.close() };
 }
@@ -62,6 +71,7 @@ class ManagedEventConnection {
   constructor(
     private readonly input: ManagedEventSocketInput,
     private readonly webSocketFactory: ManagedEventWebSocketFactory,
+    private readonly reconnectDelayMs: (attempt: number) => number,
   ) {}
 
   open(): void {
@@ -255,9 +265,8 @@ class ManagedEventConnection {
 
   private scheduleReconnect(): void {
     if (this.closed || this.reconnectTimer) return;
-    const ceiling = Math.min(MAX_RECONNECT_DELAY_MS, 500 * 2 ** Math.min(this.reconnectAttempt, 5));
+    const delay = Math.max(0, Math.floor(this.reconnectDelayMs(this.reconnectAttempt)));
     this.reconnectAttempt += 1;
-    const delay = Math.max(100, Math.floor(Math.random() * ceiling));
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
@@ -286,6 +295,11 @@ class ManagedEventConnection {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
   }
+}
+
+function defaultReconnectDelayMs(attempt: number): number {
+  const ceiling = Math.min(MAX_RECONNECT_DELAY_MS, 500 * 2 ** Math.min(attempt, 5));
+  return Math.max(100, Math.floor(Math.random() * ceiling));
 }
 
 function base64Url(value: string): string {

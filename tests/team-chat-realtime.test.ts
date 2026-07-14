@@ -127,24 +127,19 @@ describe("team chat managed realtime client", () => {
 
   test("reconnects after an unexpected close", async () => {
     const sockets: FakeWebSocket[] = [];
-    const originalRandom = Math.random;
-    Math.random = () => 0;
-    try {
-      const handle = openTeamChatRealtime(
-        { session, threadIds: [], onEvent: () => undefined },
-        (url, protocols) => {
-          const socket = new FakeWebSocket(url, protocols);
-          sockets.push(socket);
-          return socket;
-        },
-      );
-      sockets[0]!.disconnect();
-      await new Promise((resolve) => setTimeout(resolve, 120));
-      expect(sockets).toHaveLength(2);
-      handle.close();
-    } finally {
-      Math.random = originalRandom;
-    }
+    const handle = openTeamChatRealtime(
+      { session, threadIds: [], onEvent: () => undefined },
+      (url, protocols) => {
+        const socket = new FakeWebSocket(url, protocols);
+        sockets.push(socket);
+        return socket;
+      },
+      { reconnectDelayMs: () => 0 },
+    );
+    sockets[0]!.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sockets).toHaveLength(2);
+    handle.close();
   });
 });
 
