@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { loadTasksetAuthoringSkillBundle } from "../apps/server/src/training/task-authoring-skill";
+import {
+  loadTasksetAuthoringSkillBundle,
+  resolveTasksetAuthoringSkillRoot,
+} from "../apps/server/src/training/task-authoring-skill";
 
 describe("bundled Taskset Authoring skill", () => {
   test("ships one progressive skill with focused references", async () => {
@@ -39,6 +42,22 @@ describe("bundled Taskset Authoring skill", () => {
       expect(bundle).toContain("Bundled reference: task-design.md");
     } finally {
       await rm(packageRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("resolves the skill beside a compiled CLI executable", async () => {
+    const releaseRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-compiled-skill-"));
+    try {
+      const skillRoot = path.join(releaseRoot, "skills", "openpond-taskset-authoring");
+      await cp("apps/cli/skills/openpond-taskset-authoring", skillRoot, { recursive: true });
+      expect(
+        await resolveTasksetAuthoringSkillRoot(
+          path.join(releaseRoot, "unrelated-cwd"),
+          path.join(releaseRoot, "openpond"),
+        ),
+      ).toBe(skillRoot);
+    } finally {
+      await rm(releaseRoot, { recursive: true, force: true });
     }
   });
 });

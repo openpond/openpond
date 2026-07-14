@@ -31,6 +31,7 @@ await run(process.execPath, [
 await chmod(path.join(stageDir, "openpond"), 0o755);
 await symlink("openpond", path.join(stageDir, "op"));
 await cp(path.join(root, "apps", "web", "dist"), path.join(stageDir, "web"), { recursive: true });
+await cp(path.join(root, "apps", "cli", "dist", "skills"), path.join(stageDir, "skills"), { recursive: true });
 await cp(path.join(root, "apps", "cli", "package.json"), path.join(stageDir, "package.json"));
 await stageNodePtyHelper();
 

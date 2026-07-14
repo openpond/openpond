@@ -25,11 +25,15 @@ export async function loadTasksetAuthoringSkillBundle(repoRoot = process.cwd()):
   ].join("\n");
 }
 
-export async function resolveTasksetAuthoringSkillRoot(repoRoot = process.cwd()): Promise<string> {
+export async function resolveTasksetAuthoringSkillRoot(
+  repoRoot = process.cwd(),
+  executablePath = process.execPath,
+): Promise<string> {
   const candidates = [
     process.env.OPENPOND_TASKSET_AUTHORING_SKILL_ROOT,
     path.resolve(repoRoot, "apps", "cli", "skills", SKILL_DIRECTORY),
     path.resolve(repoRoot, "dist", "skills", SKILL_DIRECTORY),
+    path.resolve(path.dirname(executablePath), "skills", SKILL_DIRECTORY),
     path.resolve(moduleDirectory, "skills", SKILL_DIRECTORY),
     path.resolve(moduleDirectory, "..", "skills", SKILL_DIRECTORY),
   ].filter((candidate): candidate is string => Boolean(candidate));
