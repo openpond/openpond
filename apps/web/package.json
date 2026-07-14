@@ -1,6 +1,7 @@
 {
   "name": "@openpond/web",
   "version": "0.0.22",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

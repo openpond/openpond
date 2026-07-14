@@ -37,6 +37,7 @@ describe("desktop runtime staging", () => {
     expect(config.npmRebuild).toBe(false);
     expect(config.files).toContain("!node_modules/**/*");
     expect(config.extraResources?.map((entry) => entry.from)).toContain("apps/desktop/stage/runtime");
+    expect(config.extraResources).toContainEqual({ from: "LICENSE", to: "LICENSE.openpond.txt" });
     expect(JSON.stringify(config.extraResources)).not.toContain("node_modules/sqlite3");
     expect(JSON.stringify(config.extraResources)).not.toContain("node_modules/node-pty");
   });

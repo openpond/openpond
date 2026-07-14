@@ -12,6 +12,7 @@ setDefaultTimeout(15_000);
 
 describe("CLI headless chat", () => {
   beforeAll(async () => {
+    if (process.env.OPENPOND_TEST_REUSE_BUILD === "1") return;
     const build = await runProcessCommand(process.execPath, ["run", "build:cli"], {
       cwd: CLI_ROOT,
       timeoutMs: 30_000,

@@ -1,6 +1,7 @@
 {
   "name": "openpond",
   "version": "0.0.22",
+  "license": "MIT",
   "description": "OpenPond CLI and local harness",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,6 +31,7 @@
     "dist/**/*",
     "docs/**/*",
     "README.md",
+    "LICENSE",
     "CHANGELOG.md",
     "RELEASE.md"
   ],

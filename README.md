@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OpenPond</h1>
-  <p><strong>Open source. Built for multiplayer.</strong></p>
+  <p><strong>Team based agents, turning Chats into Trainable Datasets.</strong></p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
     <a href="https://www.npmjs.com/package/openpond"><img alt="npm package version" src="https://img.shields.io/npm/v/openpond?logo=npm&logoColor=white" /></a>
@@ -9,112 +9,31 @@
   </p>
 </div>
 
-OpenPond is the open-source agent harness for teams. It turns conversations into durable agents, shared workflows, and training-ready Tasksets across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
+OpenPond is an open-source harness/Desktop App/CLI that turns conversations into **durable team based agents** and **training-ready** tasks/jobs across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
 
-It gives people and agents one source-owned runtime for chats, subagents, skills, goal loops, approvals, connected apps, training evidence, and hosted sandboxes. Keep chat control, model settings, approvals, and source review local; send execution to [OpenPond Cloud](docs/public/cloud.md) when work needs clean compute, long-running processes, replayable runs, or teammate handoff.
+- We aim to provide feature parity with the Codex (ChatGPT now?) desktop app but fully opensource and geared towards moving your work product into trainable agents/models of all levels.
+- Feel free to use this repository as a drop in replace for the Codex app, while using your OpenAI/Codex, Z.ai and any other API or subscription based LLM service. 
+- We also provide premium features related to: Team communication in app, Agent hosting on our Sandbox infra, OAUTH connections, and Managed training service (coming soon). Find out more: OpenPond Cloud [(docs)](docs/public/cloud.md)
 
-- **Model agnostic by design:** route work through Codex, BYOK providers, hosted models, open source models, or subscription-backed model access without locking the agent to one vendor.
-- **Frontier-grade orchestration:** coordinate agents, subagents, tools, goals, approvals, browser control, connected apps, and sandbox execution as one inspectable workflow.
-- **Source-owned by default:** agents and skills start as ordinary files in a local profile repo, then sync to OpenPond Cloud when you want cross-device or hosted execution.
-- **Local control, cloud execution:** review prompts, diffs, settings, and approvals locally while hosted sandboxes handle file reads, file writes, shell commands, dependency installs, actions, and long-running work.
-- **Built for teams:** share Team Chat, agents, projects, sandboxes, usage, and member limits without sharing Personal accounts or rebuilding a developer's local setup.
-- **Training from real work:** select useful chats, turn them into verifiable Tasksets, run baselines and graders, and prepare bundles for local or configured training destinations.
-
-No login required for local work. Bring your own keys, models, providers, subscriptions, and runtimes. First-class Codex support.
-
-## Features
-
-| Product | Capability |
-| --- | --- |
-| Desktop, CLI, and TUI | Use the same local runtime through [Desktop](docs/public/desktop.md), the [CLI](docs/public/cli.md), or the [terminal UI](docs/public/tui.md). |
-| Orchestration | Run chats, agents, subagents, skills, tools, approvals, browser control, connected apps, and goal loops through one durable execution harness. |
-| Model access [(docs)](docs/public/model-access.md) | Bring Codex, BYOK providers, hosted OpenPond models, open source models, or subscription-backed model access to the same agent workflow. |
-| Agents [(docs)](docs/public/creating-agents.md) | Create durable agents from any chat; agent code is saved locally to your profile, with one-click cloud push when you want access from Slack, another computer, or OpenPond Web. |
-| Teams | Chat with people and agents in one workspace, then share agents, projects, cloud sandboxes, usage policy, and per-member limits through one Team account. |
-| Training | Turn selected chats into source-backed Tasksets with explicit tasks, verifiers, splits, baselines, graders, and portable training bundles. |
-| Goal loops [(docs)](docs/public/goals.md) | Build composable, bounded task loops with continuation, budgets, completion evidence, and explicit stop conditions for long-running work. |
-| Insights Agent [(docs)](docs/public/continuous-insights.md) | Run every 5 minutes by default to review your entire setup, track chat logs, runs, errors, and follow-ups, and turn useful work into explicit next steps. |
-| OpenPond Cloud [(docs)](docs/public/cloud.md) | Move between local projects, hosted workspaces, Hybrid sandbox execution, replayable runs, and cloud compute through [openpond.ai](https://openpond.ai). |
-| OpenPond Connect [(docs)](docs/public/openpond-connect.md) | Connect Google Drive, Twitter/X, Slack, docs, calendars, and other provider-backed systems through [openpond.ai](https://openpond.ai) without committing secrets. |
-
-## More Features
-
-- Subagent orchestration for splitting work across focused executors with their own context, tools, continuation state, and evidence.
-- Skill creation for reusable profile-backed behavior and project-specific workflows.
-- Auto compaction to keep long-running work moving without losing important context.
-- YOLO mode for trusted workspaces where explicit approval prompts should not slow down execution.
-- Full-featured sidebar for projects, chats, cloud workspaces, agents, history, and workspace state.
-- In-app browser with browser control for visible web navigation, inspection, clicking, typing, and scrolling.
-- Side chats for branching into focused work without losing the main conversation.
-- Server mode for running OpenPond as a local app-layer daemon.
-- TUI and CLI modes for terminal-first workflows.
-- Connected apps and provider mentions for bringing external context into chats and agents.
-- Workspace diff review, file inspection, and source preservation before cloud promotion.
-- Sandbox templates, hosted actions, snapshots, replays, and scheduled runs.
-- Approval policies, sandbox controls, usage tracking, and goal budgets for bounded agent execution.
+Explore Desktop, CLI, TUI, model access, goals, Cloud, Connect, and other capabilities in the [public docs](docs/public/README.md).
 
 ## Agents & Skills
 
-OpenPond agents and skills start local by default. When you create one from chat, OpenPond writes it into your active profile repo as ordinary source files, keeps it git-backed, and updates the profile catalog so the desktop app, CLI, TUI, and local chats can discover it.
+Our agents and skills exist as a first class git backed citizen called Profiles, and follow our agents-sdk package. Sync your profile with Openpond Premium to share with your team. This helps you ship softeware to your non technical teammembers. You can also chat in app with your team members and use agents directly in chat in a slack-like experience.
 
-Agents are full source packages for durable workflows: code, actions, instructions, evals, generated OpenPond artifacts, and setup requirements. They can call tools, coordinate subagents, run goal loops, and move between local and hosted execution without becoming hidden chat state. Skills are lighter reusable instruction packages. A profile skill is intentionally just a `SKILL.md`; if the workflow needs code, tools, scripts, fixtures, or evals, make it an agent instead.
-
-Sync the same profile repo with [OpenPond Cloud](docs/public/cloud.md) when you want it to work everywhere: OpenPond Web, another computer, hosted sandboxes, Slack, or Microsoft Teams can all run against the same git-backed source instead of a hidden chat transcript.
-
-A profile package might look like this:
-
-```text
-openpond-profile.json
-profiles/
-  default/
-    settings/
-      profile.yaml
-    agents/
-      customer-support-tracker/
-        package.json
-        agent/
-          agent.ts
-          actions.ts
-          instructions.md
-          workflows/
-            chat.ts
-          evals/
-            basic.eval.ts
-        .openpond/
-          agent-manifest.json
-          action-registry.json
-          agent-inspect.json
-    skills/
-      release-notes/
-        SKILL.md
-```
-
-See [Creating durable agents](docs/public/creating-agents.md), [Agent SDK](docs/public/agent-sdk.md), and [OpenPond Git](docs/public/openpond-git.md) for the deeper contract.
+Learn how they are stored and when to use each one in the [Agents and skills guide](docs/public/agents-and-skills.md).
 
 ## Training From Real Work
 
-OpenPond treats conversations as evidence, not automatically as training data. From any useful chat, use `Add to training` or `/train` to select the conversations that demonstrate a repeatable job. The training workbench helps turn those sources into a reviewable Taskset with explicit tasks, validation and frozen-eval splits, verifiers, graders, and expected outcomes.
+Select your chats, add them to a dataset and let our model suggest what training algorithm (SFT, RL, GRPO etc.) is best suited to speed up your work and save you money on frontier model mistakes. Currently working with local models, but tasksets (datasets/jobs) can be exported to Runpod, Prime Hosting, or work with Openpond Manged Training (coming soon).
 
-Tasksets live as ordinary source inside the active profile. You can inspect and edit them, run baselines, compare model attempts, review grading evidence, and build a portable training bundle for a local or configured destination. This makes RFT and RL experimentation part of the same development loop as the agent itself:
+See how conversations become reviewable Tasksets and training bundles in [Training from real work](docs/public/training.md).
 
-```text
-chat with models and subagents
--> select useful conversations
--> create and review a verifiable Taskset
--> run baselines and grade attempts
--> export or hand off a training bundle
--> bring the improved model back to the same harness
-```
+## Hybrid: Local <> Cloud
 
-The goal is not to train indiscriminately on chat history. It is to turn proven team workflows into inspectable evaluations and high-signal training inputs.
+Hybrid mode allows you to use your subscriptions on your local machine, while editting your code on our cloud sandboxes. We spin up a sandbox for you coding sessions and the harness overtakes your local editting tools and instead uses our sandboxed tools.
 
-## Local <> Cloud
-
-OpenPond lets you keep orchestration local without forcing execution to run on your laptop. In local mode, the desktop app owns the chat, approvals, model and provider settings, subagent placement, and source review, while [OpenPond Cloud](docs/public/cloud.md) can provide the sandbox where execution actually happens.
-
-Think of it as local control with cloud execution. Your configured model path, BYOK provider, open source runtime, Codex session, or LLM subscription can drive the agent, while file reads, file writes, shell commands, dependency installs, hosted actions, and long-running work happen inside an OpenPond sandbox. Your local workspace stays reviewable, and the sandbox gives the agent a clean environment built for replay, preservation, and handoff.
-
-That split is useful when a teammate needs an agent in Team Chat, Slack, Microsoft Teams, OpenPond Web, or another machine: the same git-backed source, Tasksets, and profile catalog can sync to the cloud, then run in hosted infrastructure without requiring the teammate to clone the repo, install dependencies, or understand the local setup.
+Learn what stays local and how sandbox changes come back in the [Hybrid execution guide](docs/public/local-cloud.md).
 
 ## Quick Start
 
@@ -134,72 +53,84 @@ bun run dev
 
 ## Common Commands
 
-```bash
-bun run dev                 # run the desktop development app
-bun run dev:web             # run watched local server plus browser renderer
-bun run dev:web:renderer    # run only the browser renderer
-bun run cli                 # run the CLI entrypoint
-bun run terminal            # run the terminal chat client
-bun run typecheck           # TypeScript project references
-bun run build               # typecheck, bundle server, and build web
-bun run test                # unit, CLI, and agent SDK test suites
-bun run budgets:warn        # performance budget checks
-bun run cli:pack:dry-run    # inspect the CLI npm package contents
-bun run agent-sdk:check     # SDK build, tests, examples, hygiene, and pack checks
-```
+| Command | Use |
+| --- | --- |
+| `bun run dev` | Start the watched app server, Vite renderer, and Electron desktop app. |
+| `bun run dev:web` | Start the watched app server and renderer for browser development. |
+| `bun run dev:server` | Start only the watched local app server. |
+| `bun run dev:web:renderer` | Start only the renderer against an existing server. |
+| `bun run cli` | Run the source CLI entrypoint. |
+| `bun run terminal` | Start the source terminal UI; it connects to or starts the local server. |
+| `bun run typecheck` | Build-check the app TypeScript project-reference graph. |
+| `bun run verify:quick` | Run the workspace typecheck and isolated unit suite. |
+| `bun run test` | Run unit, integration, contract, and release suites. |
+| `bun run build` | Typecheck and build the server, web, and desktop artifacts. |
+| `bun run verify:push` | Run the complete local equivalent of the required CI gate. |
 
 ## Repository Layout
 
 ```text
 apps/
-  cli/       # openpond/op command and TUI entrypoint
-  desktop/   # Electron shell
-  server/    # local app-layer daemon
-  terminal/  # server-attached terminal UI
-  web/       # shared renderer for desktop and browser mode
+  cli/            # published openpond/op CLI and bundled runtime assets
+  desktop/        # Electron main process, preload, and packaging config
+  server/         # local API, persistence, orchestration, and training services
+  terminal/       # server-backed terminal UI
+  web/            # React renderer shared by desktop and browser mode
 packages/
-  agent-sdk/       # TypeScript-first agent SDK, templates, examples, evals
-  cloud/           # cloud profile and hosted-workspace helpers
-  codex-provider/  # Codex provider integration
-  contracts/       # shared runtime, app, profile, and workspace contracts
-  runtime/         # chat/runtime primitives
-packaging/         # active platform policy and release notes
-tests/             # root unit and integration-style tests
+  agent-sdk/       # agent authoring SDK, CLI, templates, examples, and evals
+  cloud/           # OpenPond API, profile, Git, and hosted-workspace clients
+  codex-provider/  # Codex app-server provider integration
+  connected-apps/  # shared connected-app catalog and capability contracts
+  contracts/       # shared schemas and cross-process TypeScript contracts
+  runtime/         # provider-neutral turn, tool, and orchestration primitives
+  taskset-sdk/     # Taskset validation, materialization, graders, and baselines
+  training-sdk/    # training plans, bundles, destinations, and adapters
+python/
+  openpond-training/ # optional local training and inference worker
+docs/
+  public/          # user-facing product and workflow guides
+  working-docs/    # implementation plans, investigations, and evidence
+scripts/           # dev supervision, builds, verification, and release tooling
+tests/             # root unit, integration, contract, live, and smoke tests
+packaging/         # platform packaging policy and release metadata
 ```
 
 ## Development Flow
 
-The root workspace is the source of truth for cross-package work. Prefer root commands when changing shared behavior, and package-local commands when iterating on a focused area.
+Install from the repository root and keep the root workspace as the source of truth for shared changes. `bun run dev` supervises the server, renderer, and Electron processes together; if that stack is already running, use it instead of starting a second copy.
 
-| Area | Command |
+Make contract changes in `packages/contracts` first, then update the owning SDK/runtime, the server API, and finally the web, desktop, CLI, or terminal consumer. Keep generated output in ignored `dist`, `stage`, release, or temporary directories.
+
+Use the narrowest relevant checks while iterating, then run the full gate before pushing:
+
+| Change area | Focused checks |
 | --- | --- |
-| Full local app | `bun run dev` |
-| Browser app | `bun run dev:web` |
-| Renderer only | `bun run dev:web:renderer` |
-| CLI package | `bun run cli`, `bun run cli:typecheck`, `bun run cli:test` |
-| Agent SDK | `bun run agent-sdk:typecheck`, `bun run agent-sdk:check` |
-| Server build | `bun run build:server` |
-| Desktop packaging | `bun run package:linux`, `bun run package:mac`, `bun run package:win` |
+| Shared runtime, server, web, or desktop | `bun run typecheck`, then `bun test <relevant-test-file>` |
+| CLI | `bun run cli:typecheck`, then `bun run cli:test` |
+| Agent SDK | `bun run agent-sdk:check` |
+| Taskset SDK | `bun run --cwd packages/taskset-sdk typecheck`, then `bun run --cwd packages/taskset-sdk test` |
+| Training SDK | `bun run --cwd packages/training-sdk typecheck`, then `bun run --cwd packages/training-sdk test` |
+| Python training worker | `uv run --project python/openpond-training pytest` |
+| Cross-package or pre-push | `bun run verify:push` |
+
+The Python worker requires Python `>=3.10,<3.13` and `uv`; neither is required for the normal Desktop, web, CLI, or TUI development loop.
 
 ## Quality Gates
 
-CI installs with Bun, then runs:
+`bun install` configures the repository-owned pre-push hook in `.githooks`. Every push runs the canonical verifier below and rejects either a failed check or a test/build that changes source files:
 
 ```bash
-bun run typecheck
-bun run cli:typecheck
-bun run build
-bun run budgets:warn
-bun run budgets:check
-bun run cli:build
-bun run budgets:cli
-bun run structure:check
-bun run dependencies:check
-bun run test
+bun run verify:push
 ```
+
+CI executes the same quality, unit, integration, contract, and release-artifact gates in parallel, then reports one required `Checks` result. Release builds wait for that result and reuse the verified source artifacts across the platform matrix instead of rebuilding and retesting each target.
 
 Coverage badges should be added only after coverage is collected and uploaded by CI. Until then, the CI badge is the accurate project health signal.
 
 ## Publishing Notes
 
 The CLI package lives in `apps/cli` and is published as `openpond` with the `openpond` and `op` binaries. Stable tags publish npm provenance and GitHub CLI/Desktop artifacts only after the supported-platform smoke reports pass. Nightly tags publish GitHub artifacts without creating an npm version. See the [CLI guide](docs/public/cli.md) and [packaging policy](packaging/README.md).
+
+## License
+
+OpenPond is available under the [MIT License](LICENSE).

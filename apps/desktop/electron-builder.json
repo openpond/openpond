@@ -26,6 +26,10 @@
     {
       "from": "apps/desktop/build/icons",
       "to": "icons"
+    },
+    {
+      "from": "LICENSE",
+      "to": "LICENSE.openpond.txt"
     }
   ],
   "mac": {

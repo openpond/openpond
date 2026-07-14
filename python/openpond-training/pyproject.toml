@@ -2,6 +2,7 @@
 name = "openpond-training"
 version = "0.0.1"
 description = "OpenPond provider-neutral local training worker"
+license = "MIT"
 requires-python = ">=3.10,<3.13"
 dependencies = [
   "datasets==4.4.1",

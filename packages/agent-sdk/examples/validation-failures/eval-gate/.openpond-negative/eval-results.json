@@ -43,9 +43,9 @@
         "events": 4,
         "artifacts": 0
       },
-      "startedAt": "2026-07-14T16:09:40.714Z",
-      "finishedAt": "2026-07-14T16:09:40.717Z",
-      "traceArtifactRef": ".openpond-negative/traces/fails-gate-1784045380716.jsonl",
+      "startedAt": "2026-07-14T16:28:43.814Z",
+      "finishedAt": "2026-07-14T16:28:43.816Z",
+      "traceArtifactRef": ".openpond-negative/traces/fails-gate-1784046523816.jsonl",
       "events": 4,
       "artifacts": [],
       "assertions": [

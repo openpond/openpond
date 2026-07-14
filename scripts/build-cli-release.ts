@@ -33,6 +33,7 @@ await symlink("openpond", path.join(stageDir, "op"));
 await cp(path.join(root, "apps", "web", "dist"), path.join(stageDir, "web"), { recursive: true });
 await cp(path.join(root, "apps", "cli", "dist", "skills"), path.join(stageDir, "skills"), { recursive: true });
 await cp(path.join(root, "apps", "cli", "package.json"), path.join(stageDir, "package.json"));
+await cp(path.join(root, "LICENSE"), path.join(stageDir, "LICENSE"));
 await stageNodePtyHelper();
 
 const inventory: ReleaseInventory = {
