@@ -18,7 +18,6 @@ import { modelRefForTurn, normalizeBranchPrefix, normalizeChatModel } from "../.
 export function useDefaultsSettings({
   connection,
   onError,
-  onPayload,
   onPreferences,
   preferences,
   providers,

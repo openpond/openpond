@@ -5,24 +5,17 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
 import type {
   ChatAttachment,
-  ConnectedAppStatusRow,
   RuntimeEvent,
   Session,
   SubagentDelegationMode,
   WorkspaceState,
   TerminalScope,
 } from "@openpond/contracts";
-import { buildConnectedAppStatusRows, localPathWorkspaceId } from "@openpond/contracts";
-import {
-  type AppToast,
-  type ShowAppToast,
-} from "./app/app-state";
-import { api, type ClientConnection } from "./api";
+import { localPathWorkspaceId } from "@openpond/contracts";
+import { api } from "./api";
 import { AppSettingsController, AppShellController } from "./components/app-shell/AppControllers";
 import { useProjectConfirmDialog } from "./components/app-shell/ProjectConfirmDialog";
 import { isDesktopShell, isMacPlatform } from "./components/app-shell/WindowControls";
@@ -84,6 +77,7 @@ import { useSidebarData } from "./hooks/useSidebarData";
 import { useSidebarRuntimeState } from "./hooks/useSidebarRuntimeState";
 import { useCommandShortcuts } from "./hooks/useAppEffects";
 import { useAppBootstrap } from "./hooks/useAppBootstrap";
+import { useAppErrorReporter } from "./hooks/useAppErrorReporter";
 import { useAppState } from "./hooks/useAppState";
 import { useGitSetupNotifications } from "./hooks/useGitSetupNotifications";
 import { useLayoutPreferences } from "./hooks/useLayoutPreferences";
@@ -102,6 +96,7 @@ import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useTeamChat } from "./hooks/useTeamChat";
 import { useOpenPondOrganizations } from "./hooks/useOpenPondOrganizations";
+import { useConnectedAppStatusRows } from "./hooks/useConnectedAppStatusRows";
 import { teamChatThreadTitle } from "./lib/team-chat-thread";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
@@ -113,9 +108,6 @@ export function App() {
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
   const [trainingDetailTasksetId, setTrainingDetailTasksetId] = useState<string | null>(null);
   const [mentionedAppId, setMentionedAppId] = useState<string | null>(null);
-  const [connectedAppRows, setConnectedAppRows] = useState<ConnectedAppStatusRow[]>(() =>
-    buildConnectedAppStatusRows(),
-  );
   const [cloudSetupDialog, setCloudSetupDialog] = useState<CloudSetupDialogState | null>(null);
   const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(
     null,
@@ -214,69 +206,11 @@ export function App() {
     setBranchDialogName,
     setError: setErrorState,
   } = appSetters;
-  const connectionRef = useRef<ClientConnection | null>(null);
-  const latestErrorRef = useRef<string | null>(null);
-  const errorToastIdRef = useRef<number | null>(null);
-  const toastSequenceRef = useRef(0);
-  const showToast = useCallback<ShowAppToast>(
-    (
-      message: string,
-      tone: "success" | "error" | "info" = "info",
-      options: Pick<AppToast, "actionLabel" | "onAction" | "persistent"> = {},
-    ) => {
-      const id = Date.now() + ++toastSequenceRef.current;
-      appDispatch({ type: "showToast", toast: { id, message, tone, ...options } });
-      return id;
-    },
-    [],
-  );
-  const openDiagnosticsSettings = useCallback(() => {
-    appDispatch({
-      type: "patch",
-      patch: {
-        settingsSection: "diagnostics",
-        sidebarOpen: true,
-        view: "settings",
-      },
-    });
-  }, []);
-  const setError = useCallback<Dispatch<SetStateAction<string | null>>>(
-    (value) => {
-      const current = latestErrorRef.current;
-      const next = typeof value === "function" ? value(current) : value;
-      if (Object.is(current, next)) return;
-
-      latestErrorRef.current = next;
-      setErrorState(next);
-      if (!next) {
-        if (errorToastIdRef.current !== null) {
-          appDispatch({ type: "clearToast", toastId: errorToastIdRef.current });
-          errorToastIdRef.current = null;
-        }
-        return;
-      }
-
-      errorToastIdRef.current = showToast(next, "error", {
-        actionLabel: "Settings",
-        onAction: openDiagnosticsSettings,
-        persistent: true,
-      });
-      const connection = connectionRef.current;
-      if (!connection) return;
-      void api
-        .recordClientDiagnostic(connection, {
-          message: next,
-          surface: "app",
-          context: {
-            href: window.location.href,
-          },
-        })
-        .catch((diagnosticError) => {
-          console.warn("Unable to record client diagnostic.", diagnosticError);
-        });
-    },
-    [openDiagnosticsSettings, setErrorState, showToast],
-  );
+  const { connectionRef, setError, showToast } = useAppErrorReporter({
+    appDispatch,
+    error,
+    setErrorState,
+  });
   const {
     appPreferences,
     applyBootstrapPayload,
@@ -304,35 +238,7 @@ export function App() {
     setSelectedSessionId,
   });
   connectionRef.current = connection;
-  useEffect(() => {
-    latestErrorRef.current = error;
-    if (error || errorToastIdRef.current === null) return;
-    appDispatch({ type: "clearToast", toastId: errorToastIdRef.current });
-    errorToastIdRef.current = null;
-  }, [error]);
-  useEffect(() => {
-    let active = true;
-    if (!connection) {
-      setConnectedAppRows(buildConnectedAppStatusRows());
-      return () => {
-        active = false;
-      };
-    }
-    void api
-      .connectedAppStatus(connection, {
-        status: "all",
-      })
-      .then((payload) => {
-        if (active) setConnectedAppRows(payload.apps);
-      })
-      .catch((caught) => {
-        console.warn("Unable to load connected app mention status.", caught);
-        if (active) setConnectedAppRows(buildConnectedAppStatusRows());
-      });
-    return () => {
-      active = false;
-    };
-  }, [connection]);
+  const connectedAppRows = useConnectedAppStatusRows(connection);
   const insights = useInsights({ connection });
   const training = useTraining({
     connection,

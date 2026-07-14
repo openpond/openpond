@@ -104,7 +104,7 @@ function opChatBaseFromPublicApiBase(publicApiBaseUrl: string): string {
   return normalizeOpChatApiBaseUrl(publicApiBaseUrl) ?? DEFAULT_OPENPOND_OPCHAT_API_BASE_URL;
 }
 
-export function deriveEnvironment(baseUrl?: string | null, fallback?: string | null): string {
+export function deriveEnvironment(fallback?: string | null): string {
   if (fallback?.trim()) return fallback.trim();
   return "production";
 }

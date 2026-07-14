@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type {
-  BootstrapPayload,
   Session,
   WorkspaceDiffSummary,
   WorkspaceState,
@@ -61,7 +60,6 @@ export function AppLazyPanels({
   commitMessage,
   commitNextStep,
   canPublishOpenPondProject,
-  connection,
   expandProject,
   newProjectBusy,
   newProjectDialogOpen,
@@ -88,7 +86,6 @@ export function AppLazyPanels({
   setNewProjectDialogOpen,
   setNewProjectName,
   setNewProjectPath,
-  setPrompt,
   setQuery,
   setSearchOpen,
   submitCommitDialog,

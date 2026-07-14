@@ -15,7 +15,6 @@ import { normalizeChatModel } from "../../lib/app-models";
 export function useProviderSettings({
   connection,
   onError,
-  onPayload,
   onPreferences,
   onProviders,
   preferences,

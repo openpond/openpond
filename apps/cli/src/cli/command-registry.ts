@@ -60,9 +60,6 @@ export const CLI_SHORT_OPTION_ALIASES: Readonly<Record<string, string>> = {
   y: "yes",
 };
 
-const TEAM_OPTION_SCHEMA = {
-  teamId: "string",
-} as const satisfies Record<string, CliCommandOptionKind>;
 
 const PROFILE_SDK_OPTION_SCHEMA = {
   cwd: "string",
@@ -161,7 +158,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     name: "account",
     usage: "openpond account",
     optionSchema: { json: "boolean" },
-    handler: async ({ options }) => (await import("./core-commands")).runAccount(options),
+    handler: async () => (await import("./core-commands")).runAccount(),
   },
   {
     name: "health",

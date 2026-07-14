@@ -161,9 +161,6 @@ export function workspaceImageContentType(filePath: string): string | null {
   return WORKSPACE_IMAGE_CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) ?? null;
 }
 
-function isWorkspaceImageFile(filePath: string): boolean {
-  return Boolean(workspaceImageContentType(filePath));
-}
 
 export async function readWorkspaceImageFile(repoPath: string, filePath: string): Promise<WorkspaceImageFile | null> {
   const normalizedPath = normalizeWorkspaceFilePath(filePath);

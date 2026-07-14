@@ -7,7 +7,6 @@ import {
   SftRecipeSchema,
   TrainingApprovalSchema,
   TrainingPlanSchema,
-  type SftRecipe,
   type TrainingDestinationId,
   type ComputeInventory,
 } from "@openpond/contracts";

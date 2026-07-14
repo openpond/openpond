@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { CreateLocalProjectRequestSchema } from "./apps.js";
 import {
   CreatePipelineRequestSchema,
   CreatePipelineSnapshotSchema,

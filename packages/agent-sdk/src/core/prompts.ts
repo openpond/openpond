@@ -5,7 +5,6 @@ import path from "node:path";
 import type {
   AgentProjectDefinition,
   GeneratedMarkdownSource,
-  InstructionsDefinition,
   SkillDefinition,
 } from "../index";
 import { formatSkillMarkdown } from "../skills/format";

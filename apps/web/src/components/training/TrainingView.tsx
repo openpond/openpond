@@ -92,7 +92,7 @@ export function TrainingView({
         <div className="training-tabs training-header-tabs" role="tablist" aria-label="Training sections">
           {(["models", "tasksets"] as const).map((item) => (
             <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "active" : ""} onClick={() => { setTab(item); if (item !== "models") onDetailTasksetIdChange(null); }}>
-              {label(item)} {countFor(item, state) ? <span>{countFor(item, state)}</span> : null}
+              {label(item)} {countFor(state) ? <span>{countFor(state)}</span> : null}
             </button>
           ))}
         </div>
@@ -229,5 +229,5 @@ function SuggestionCard({ candidate, candidates, training, defaultModel, prefere
 
 function EmptyDetail() { return <div className="training-empty-detail"><Play size={22} /><h2>No Tasksets yet</h2><p>Start a model to create one from selected chats.</p></div>; }
 function label(value: MainTab) { return value[0]!.toUpperCase() + value.slice(1); }
-function countFor(value: MainTab, state: TrainingController["payload"]) { if (!state) return 0; return state.tasksets.length; }
+function countFor(state: TrainingController["payload"]) { if (!state) return 0; return state.tasksets.length; }
 function percent(value: number) { return `${Math.round(value * 100)}%`; }

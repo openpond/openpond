@@ -7,6 +7,6 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "electron"]
   },
-  "references": [{ "path": "../../packages/runtime" }],
+  "references": [{ "path": "../../packages/logging" }, { "path": "../../packages/runtime" }],
   "include": ["src/**/*.ts"]
 }

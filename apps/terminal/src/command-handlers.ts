@@ -155,7 +155,7 @@ export async function handleTerminalSlashCommand(
       provider: target.provider ?? context.options.provider,
       model: target.provider ? null : context.options.model,
     };
-    const session = await createAndActivateSession(
+    await createAndActivateSession(
       context,
       () => createTerminalChatSession(connection, latest, nextOptions),
     );

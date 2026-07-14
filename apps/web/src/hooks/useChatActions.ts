@@ -295,7 +295,6 @@ export function useChatActions({
   selectedProject,
   selectedProjectLinkedOpenPondApp,
   selectedSession,
-  sessions,
   workspaceTarget,
   subagentDelegationMode,
   setDraftModel,

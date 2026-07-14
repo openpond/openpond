@@ -5,9 +5,7 @@ import {
   TasksetSchema,
   TaskAttemptResultSchema,
   type ChatModelRef,
-  type GraderSpec,
   type TaskAttemptResult,
-  type TaskDataRecord,
 } from "@openpond/contracts";
 import { buildTaskset, computeTasksetHash, contentHash, gradeAttempt, runBaseline, type BaselineAttemptRunner, type ModelJudgeRunner } from "@openpond/taskset-sdk";
 import { loadOpenPondProfileState } from "@openpond/cloud";

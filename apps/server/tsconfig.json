@@ -9,6 +9,7 @@
     { "path": "../../packages/cloud" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/codex-provider" },
+    { "path": "../../packages/logging" },
     { "path": "../../packages/runtime" }
     ,{ "path": "../../packages/taskset-sdk" }
     ,{ "path": "../../packages/training-sdk" }

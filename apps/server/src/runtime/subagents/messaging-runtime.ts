@@ -3,7 +3,6 @@ import {
   SubagentMessageDeliverySchema,
   SubagentMessageSchema,
   SubagentRunSchema,
-  type ModelUsageRecord,
   type RuntimeEvent,
   type Session,
   type SubagentMessage,

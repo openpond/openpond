@@ -145,7 +145,7 @@ export function toAccountState(input: {
   const healthState = authFailed ? "auth_error" : token ? "signed_in" : "signed_out";
   const label = profile?.name || profile?.handle || profile?.email || displayHandle || "Signed out";
   const baseUrl = normalizeBaseUrl(activeProfileRow?.baseUrl || account?.baseUrl || DEFAULT_OPENPOND_WEB_BASE_URL);
-  const environment = deriveEnvironment(baseUrl, activeProfileRow?.environment || account?.environment);
+  const environment = deriveEnvironment(activeProfileRow?.environment || account?.environment);
   const activeProfile =
     normalizeActiveProfile(activeSelector) ??
     (displayHandle ? normalizeActiveProfile({ handle: displayHandle, baseUrl: activeProfileRow?.baseUrl ?? account?.baseUrl }) : null);
@@ -188,7 +188,6 @@ export function toAccountState(input: {
     apiHealth: normalizeHealth(health ?? null, apiBaseUrl),
     accounts: visibleProfileRows.map((candidate) => {
       const candidateBaseUrl = normalizeBaseUrl(candidate.baseUrl);
-      const candidateDisplayBaseUrl = candidateBaseUrl ?? DEFAULT_OPENPOND_WEB_BASE_URL;
       const profileLookup = accountProfiles?.[profileKey(candidate.handle, candidateBaseUrl)] ?? null;
       const candidateProfile = normalizeProfile(profileLookup?.response ?? null);
       return {
@@ -196,7 +195,7 @@ export function toAccountState(input: {
         baseUrl: candidateBaseUrl,
         apiBaseUrl: normalizeBaseUrl(candidate.apiBaseUrl),
         chatApiBaseUrl: normalizeBaseUrl(candidate.chatApiBaseUrl),
-        environment: deriveEnvironment(candidateDisplayBaseUrl, candidate.environment),
+        environment: deriveEnvironment(candidate.environment),
         isActive: activeProfile ? profileMatchesSelector(candidate, activeProfile) : false,
         authHealth: profileLookup?.authFailed ? "auth_error" : profileAuthHealth(candidate),
         displayLabel: candidateProfile?.name || candidateProfile?.handle || candidateProfile?.email || candidate.handle,

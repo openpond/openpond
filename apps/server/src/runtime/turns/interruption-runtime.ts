@@ -1,4 +1,4 @@
-import type { Session, Turn } from "@openpond/contracts";
+import type { Turn } from "@openpond/contracts";
 import type { ActiveTurnRegistry } from "./active-turn-registry.js";
 import type { ActiveTurn, TurnRunnerDependencies } from "./ports.js";
 

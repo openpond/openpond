@@ -44,7 +44,6 @@ export function useSidebarRuntimeState(input: {
 }) {
   const {
     codexHistoryEvents,
-    codexHistorySessions,
     connection,
     expandedProjectIds,
     goalRuntime,
@@ -58,7 +57,6 @@ export function useSidebarRuntimeState(input: {
     serverId,
     sessionEvents,
     setCodexHistorySessions,
-    setError,
     sidebarSessions,
     subagentRuntime,
     visibleChatRows,

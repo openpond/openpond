@@ -4,7 +4,6 @@ import path from "node:path";
 import {
   SubagentRunSchema,
   type RuntimeEvent,
-  type SendTurnRequest,
   type Session,
   type SubagentRoleSettings,
   type SubagentRun,

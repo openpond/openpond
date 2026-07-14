@@ -187,9 +187,7 @@ export async function runProfiles(
   throw new Error("usage: profiles <list|use|save> [args]");
 }
 
-export async function runAccount(
-  options: Record<string, string | boolean>
-): Promise<void> {
+export async function runAccount(): Promise<void> {
   const config = await loadConfig();
   const uiBase = resolveBaseUrl(config);
   const apiBase = resolvePublicApiBaseUrl(config);

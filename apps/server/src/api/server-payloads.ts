@@ -162,6 +162,9 @@ import {
   codexHistorySessionConfig,
   type ActiveCodexHistoryTurn,
   type CodexHistoryTurnInterruptResponse,
+  assertApplyableLocalWorkspace,
+  countPatchFiles,
+  latestRuntimeSessionSandboxId,
 } from "./server-payload-helpers.js";
 export { assertCreatePipelineBackgroundApproved } from "./server-payload-helpers.js";
 import { createProfilePayloads } from "./profile-payloads.js";
@@ -1818,37 +1821,6 @@ export function createServerPayloads(deps: {
       throw new Error("No linked local checkout exists for this Cloud Project.");
     }
     return localProject;
-  }
-
-  function latestRuntimeSessionSandboxId(detail: CloudWorkItemDetail): string | null {
-    return detail.runtimeSessions.find((session) => session.sandboxId)?.sandboxId ?? null;
-  }
-
-  async function assertApplyableLocalWorkspace(workspaceState: WorkspaceState): Promise<void> {
-    if (!workspaceState.initialized) {
-      throw new Error(workspaceState.error || "Local checkout is not initialized.");
-    }
-    const repoCheck = await runWorkspaceCommand(
-      "git",
-      ["rev-parse", "--is-inside-work-tree"],
-      workspaceState.repoPath,
-    );
-    if (repoCheck.code !== 0 || repoCheck.stdout.trim() !== "true") {
-      throw new Error("Local checkout must be a Git repository before applying a Cloud patch.");
-    }
-    if (workspaceState.dirty) {
-      throw new Error("Commit or discard local changes before applying a Cloud patch.");
-    }
-  }
-
-  function countPatchFiles(patchText: string): number {
-    const paths = new Set<string>();
-    for (const line of patchText.split("\n")) {
-      const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line.trim());
-      if (!match) continue;
-      paths.add(match[2]!);
-    }
-    return paths.size;
   }
 
   async function currentSidebarScope(): Promise<string> {

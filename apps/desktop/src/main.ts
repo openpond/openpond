@@ -1,7 +1,6 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -357,7 +356,7 @@ function rendererUrlForDesktop(url: string): string {
   return parsed.toString();
 }
 
-async function ensureRenderer(server: ServerConnection): Promise<string> {
+async function ensureRenderer(): Promise<string> {
   const rendererUrl = process.env.OPENPOND_WEB_URL || defaultRendererDevUrl();
   if (await urlAvailable(rendererUrl)) return rendererUrlForDesktop(rendererUrl);
 
@@ -401,7 +400,7 @@ async function loadMainWindow(window: BrowserWindow): Promise<void> {
   try {
     const server = await ensureServer();
     if (!app.isPackaged) {
-      trustedRendererUrl = await ensureRenderer(server);
+      trustedRendererUrl = await ensureRenderer();
       await window.loadURL(trustedRendererUrl);
     } else {
       const rendererPath = path.join(process.resourcesPath, "web", "index.html");

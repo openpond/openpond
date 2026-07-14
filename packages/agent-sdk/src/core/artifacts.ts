@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import type { AgentProjectDefinition } from "../index";
-import { ARTIFACT_SCHEMAS, SDK_SCHEMA_VERSION, traceDir } from "./constants";
+import { ARTIFACT_SCHEMAS, SDK_SCHEMA_VERSION } from "./constants";
 import type { CompiledPromptArtifacts } from "./prompts";
 import { pathExists, writeJson } from "./files";
 

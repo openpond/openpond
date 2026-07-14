@@ -8,8 +8,6 @@ import type {
   ActionDefinition,
   ActionMcpExportDefinition,
   ActionSchedulePolicyDefinition,
-  ActionSetupRequirementDefinition,
-  ActionTracePolicyDefinition,
   AgentProjectDefinition,
 } from "../index";
 import { ARTIFACT_DIR, ARTIFACT_SCHEMAS, DEFAULT_AGENT_CONFIG, OPENPOND_MANIFEST, SDK_SCHEMA_VERSION, traceDir } from "./constants";

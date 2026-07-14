@@ -44,13 +44,17 @@
     "budgets:cli": "bun run cli:build && bun run budgets:cli:check",
     "budgets:cli:check": "bun scripts/check-cli-distribution.ts",
     "structure:check": "bun scripts/check-source-structure.ts",
+    "reachability:check": "bun scripts/check-production-entrypoints.ts",
     "dependencies:check": "bun scripts/check-workspace-dependencies.ts",
+    "hygiene:check": "bun scripts/check-repository-hygiene.ts",
+    "workflows:check": "bun scripts/check-workflows.ts && bun scripts/run-actionlint.ts",
     "cycles:server-runtime": "bun scripts/report-server-runtime-cycles.ts",
     "benchmark:turn-runtime": "bun scripts/benchmark-turn-runtime-queries.ts",
     "baseline:optimization": "bun scripts/capture-optimization-baseline.ts",
     "test": "bun scripts/run-tests.ts all",
     "test:unit": "bun scripts/run-tests.ts unit",
     "test:integration": "bun scripts/run-tests.ts integration",
+    "test:python": "uv run --project python/openpond-training --frozen pytest",
     "test:contract": "bun scripts/run-tests.ts contract",
     "test:release": "bun scripts/run-tests.ts release",
     "test:cli": "bun scripts/run-tests.ts cli",
@@ -94,37 +98,32 @@
     "package:win:docker": "bash scripts/package-win-docker.sh",
     "dist": "bun run build && bun run package:linux"
   },
-  "dependencies": {
-    "lucide-react": "^0.561.0",
-    "monaco-editor": "^0.55.1",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "shell-quote": "^1.9.0",
-    "zod": "^4.1.13"
-  },
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
+    "@openpond/cloud": "workspace:*",
+    "@openpond/codex-provider": "workspace:*",
+    "@openpond/connected-apps": "workspace:*",
+    "@openpond/contracts": "workspace:*",
+    "@openpond/logging": "workspace:*",
+    "@openpond/runtime": "workspace:*",
     "@types/bun": "^1.3.5",
     "@types/node": "^22.19.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12",
+    "openpond-agent-sdk": "workspace:*",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "sqlite3": "^5.1.7",
     "typescript": "^5.9.3",
-    "vite": "^7.2.7"
+    "zod": "^4.1.13"
   },
   "description": "<div align=\"center\">   <h1>OpenPond</h1>   <p><strong>Frontier-grade agent orchestration for any model, provider, or subscription.</strong></p>   <p>     <a href=\"https://github.com/openpond/openpond/actions/workflows/ci.yml\"><img alt=\"CI\" src=\"https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg\" /></a>     <a href=\"apps/cli\"><img alt=\"npm package status\" src=\"https://img.shields.io/badge/npm-unpublished-lightgrey?logo=npm&logoColor=white\" /></a>     <img alt=\"Runtime: Bun\" src=\"https://img.shields.io/badge/runtime-Bun-000000?logo=bun&logoColor=white\" />     <img alt=\"Language: TypeScript\" src=\"https://img.shields.io/badge/language-TypeScript-3178c6?logo=typescript&logoColor=white\" />   </p> </div>",
-  "main": "preload.js",
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openpond/openpond.git"
   },
-  "keywords": [],
-  "author": "",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/openpond/openpond/issues"

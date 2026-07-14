@@ -68,7 +68,6 @@ export function sandboxResumeArgs(target: SandboxResumeTarget): Record<string, u
 }
 
 export function workspaceEnvironmentActionItems({
-  busy,
   canCreateSandboxProject,
   canInitGit,
   defaultSandboxRepoUrl,

@@ -339,7 +339,6 @@ export function RightChatPanelStack({
 
 function RightChatPane({
   panel,
-  busy,
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,

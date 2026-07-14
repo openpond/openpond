@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import sqlite3 from "sqlite3";
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
-import type { Logger } from "../logger.js";
+import type { Logger } from "@openpond/logging";
 import type { PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store-schema.js";

@@ -1,6 +1,8 @@
-export type ReadyLineParser<T> = {
+export type ReadyLineParser<T = unknown> = {
   push(chunk: string): void;
   flush(): void;
+  /** Type-only marker preserving the parser's payload contract for consumers. */
+  readonly __payloadType?: T;
 };
 
 export function createReadyLineParser<T>(

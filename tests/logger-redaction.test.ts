@@ -4,10 +4,9 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
-import { createLogger as createDesktopLogger } from "../apps/desktop/src/logger";
-import { createLogger as createServerLogger } from "../apps/server/src/logger";
+import { createLogger } from "@openpond/logging";
 
-type LoggerFactory = typeof createServerLogger;
+type LoggerFactory = typeof createLogger;
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "openpond-logger-"));
@@ -35,21 +34,8 @@ async function writeSensitiveLog(createLogger: LoggerFactory): Promise<string> {
 }
 
 describe("logger redaction", () => {
-  test("redacts URL credentials, token params, bearer values, and secret-key fields in server logs", async () => {
-    const content = await writeSensitiveLog(createServerLogger);
-
-    expect(content).toContain("[REDACTED]");
-    expect(content).not.toContain("hash-secret");
-    expect(content).not.toContain("header-secret");
-    expect(content).not.toContain("remote-secret");
-    expect(content).not.toContain("query-secret");
-    expect(content).not.toContain("terminal-secret");
-    expect(content).not.toContain("error-secret");
-    expect(content).not.toContain("error-url-secret");
-  });
-
-  test("redacts the same sensitive URL forms in desktop logs", async () => {
-    const content = await writeSensitiveLog(createDesktopLogger);
+  test("redacts URL credentials, token params, bearer values, and secret-key fields", async () => {
+    const content = await writeSensitiveLog(createLogger);
 
     expect(content).toContain("[REDACTED]");
     expect(content).not.toContain("hash-secret");
@@ -63,7 +49,7 @@ describe("logger redaction", () => {
 
   test("rotates logs after removing existing destinations", async () => {
     await withTempDir(async (dir) => {
-      const logger = createServerLogger({
+      const logger = createLogger({
         channel: "rotate",
         logDir: dir,
         maxBytes: 180,

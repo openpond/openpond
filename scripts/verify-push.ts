@@ -22,9 +22,13 @@ const steps: VerificationStep[] = [
   step("Check CLI distribution", "run", "budgets:cli:check"),
   step("Check performance budgets", "run", "budgets:check"),
   step("Check source structure", "run", "structure:check"),
+  step("Check production entrypoints", "run", "reachability:check"),
   step("Check workspace dependencies", "run", "dependencies:check"),
+  step("Check repository hygiene", "run", "hygiene:check"),
+  step("Check GitHub workflows", "run", "workflows:check"),
   suite("Run unit tests", "unit"),
   suite("Run integration tests", "integration"),
+  step("Run Python tests", "run", "test:python"),
   suite("Run contract tests", "contract"),
   suite("Run release smoke tests", "release"),
 ];

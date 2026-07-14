@@ -18,6 +18,7 @@ import {
   type ProjectAgentSdkDependencyType,
   type RuntimeEvent,
   type UsageRequestAttribution,
+  type WorkspaceState,
 } from "@openpond/contracts";
 import type { CodexAppServerClient } from "@openpond/codex-provider";
 import { assertCreatePipelineMutationApproved } from "../create-pipeline-guards.js";
@@ -27,6 +28,7 @@ import {
   collectLocalProjectSourceUploadBundle,
   pushLocalProjectSourceToGit,
 } from "../workspace/local-project-source-upload.js";
+import { runWorkspaceCommand } from "../workspace/workspaces.js";
 
 type OpenPondOrganizationSummary = {
   teamId: string;
@@ -53,7 +55,6 @@ const AGENT_SDK_DEPENDENCY_FIELDS: ProjectAgentSdkDependencyType[] = [
   "peerDependencies",
   "optionalDependencies",
 ];
-const CLOUD_PROJECT_CACHE_TYPE = "openpond.cloudProjects";
 
 export type ActiveCodexHistoryTurn = {
   client: CodexAppServerClient;
@@ -71,6 +72,36 @@ export type CodexHistoryTurnInterruptResponse =
 
 export function hasObjectKey(value: unknown, key: string): boolean {
   return Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key));
+}
+
+export function latestRuntimeSessionSandboxId(detail: { runtimeSessions: CloudWorkItemRuntimeSession[] }): string | null {
+  return detail.runtimeSessions.find((session) => session.sandboxId)?.sandboxId ?? null;
+}
+
+export async function assertApplyableLocalWorkspace(workspaceState: WorkspaceState): Promise<void> {
+  if (!workspaceState.initialized) {
+    throw new Error(workspaceState.error || "Local checkout is not initialized.");
+  }
+  const repoCheck = await runWorkspaceCommand(
+    "git",
+    ["rev-parse", "--is-inside-work-tree"],
+    workspaceState.repoPath,
+  );
+  if (repoCheck.code !== 0 || repoCheck.stdout.trim() !== "true") {
+    throw new Error("Local checkout must be a Git repository before applying a Cloud patch.");
+  }
+  if (workspaceState.dirty) {
+    throw new Error("Commit or discard local changes before applying a Cloud patch.");
+  }
+}
+
+export function countPatchFiles(patchText: string): number {
+  const paths = new Set<string>();
+  for (const line of patchText.split("\n")) {
+    const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line.trim());
+    if (match?.[2]) paths.add(match[2]);
+  }
+  return paths.size;
 }
 
 export function assertCreatePipelineBackgroundApproved(input: {
