@@ -330,7 +330,7 @@ jobs:
           set -euo pipefail
           test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
           npm install --global npm@11.5.1
-          bun run build:web
+          bun run build
           bun run cli:build
           npm publish ./apps/cli --access public --provenance
 
