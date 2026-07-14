@@ -8,6 +8,7 @@ import {
   launchTargetForPath,
   packagedAppCandidates,
 } from "../scripts/smoke-packaged-desktop";
+import { stageReleaseSourceArtifacts } from "../scripts/stage-release-source-artifacts";
 import { validatePackagedSmokeReports } from "../scripts/validate-packaged-smoke-reports";
 
 const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
@@ -58,21 +59,12 @@ describe("release workflow", () => {
     expect(workflow.match(/bun run cli:build/g)).toHaveLength(1);
     expect(workflow).not.toContain("- run: bun run build\n");
     expect(workflow).toContain("name: release-source-artifacts");
-    for (const artifactPath of [
-      "apps/server/dist",
-      "apps/web/dist",
-      "apps/desktop/dist",
-      "apps/cli/dist",
-      "packages/cloud/dist",
-      "packages/codex-provider/dist",
-      "packages/connected-apps/dist",
-      "packages/contracts/dist",
-      "packages/runtime/dist",
-      "packages/taskset-sdk/dist",
-      "packages/training-sdk/dist",
-    ]) {
-      expect(workflow).toContain(`            ${artifactPath}`);
-    }
+    expect(workflow).toContain("name: Stage release source artifacts");
+    expect(workflow).toContain("run: bun run release:source-artifacts:stage");
+    expect(workflow).toMatch(
+      /name: release-source-artifacts\n\s+path: release-source-artifacts\n\s+if-no-files-found: error/,
+    );
+    expect(workflow).not.toMatch(/path:\s*\|\n(?:\s+(?:apps|packages)\/.+\/dist\n)+/);
     expect(
       workflow.match(
         /actions\/download-artifact@[0-9a-f]{40} # v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: \./g,
@@ -163,6 +155,33 @@ describe("release workflow", () => {
     expect(packageJson.scripts?.["bundle:server"]).toMatch(
       /^tsc -b apps\/server && bun build apps\/server\/src\/index\.ts /,
     );
+  });
+
+  test("stages every built app and workspace package without a hardcoded package list", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openpond-release-source-artifacts-"));
+    const outputDirectory = join(root, "release-source-artifacts");
+    try {
+      await mkdir(join(root, "apps", "server", "dist"), { recursive: true });
+      await mkdir(join(root, "packages", "logging", "dist"), { recursive: true });
+      await mkdir(join(root, "packages", "source-only", "src"), { recursive: true });
+      await mkdir(outputDirectory, { recursive: true });
+      await writeFile(join(root, "apps", "server", "dist", "index.js"), "server");
+      await writeFile(join(root, "packages", "logging", "dist", "index.js"), "logging");
+      await writeFile(join(root, "packages", "source-only", "src", "index.ts"), "source");
+      await writeFile(join(outputDirectory, "stale.txt"), "stale");
+
+      await expect(stageReleaseSourceArtifacts({ root, outputDirectory })).resolves.toEqual([
+        "apps/server/dist",
+        "packages/logging/dist",
+      ]);
+      expect(readFileSync(join(outputDirectory, "apps", "server", "dist", "index.js"), "utf8"))
+        .toBe("server");
+      expect(readFileSync(join(outputDirectory, "packages", "logging", "dist", "index.js"), "utf8"))
+        .toBe("logging");
+      expect(() => readFileSync(join(outputDirectory, "stale.txt"), "utf8")).toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("packaged smoke resolver supports stable and nightly unpacked app names", () => {

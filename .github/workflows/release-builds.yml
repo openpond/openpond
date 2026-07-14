@@ -188,21 +188,13 @@ jobs:
       - run: bun run build:artifacts
       - run: bun run cli:build
 
+      - name: Stage release source artifacts
+        run: bun run release:source-artifacts:stage
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-source-artifacts
-          path: |
-            apps/server/dist
-            apps/web/dist
-            apps/desktop/dist
-            apps/cli/dist
-            packages/cloud/dist
-            packages/codex-provider/dist
-            packages/connected-apps/dist
-            packages/contracts/dist
-            packages/runtime/dist
-            packages/taskset-sdk/dist
-            packages/training-sdk/dist
+          path: release-source-artifacts
           if-no-files-found: error
 
   build:
