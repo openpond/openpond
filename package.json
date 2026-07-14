@@ -87,6 +87,7 @@
     "release:patch": "bun scripts/release-stable.ts patch",
     "release:minor": "bun scripts/release-stable.ts minor",
     "release:major": "bun scripts/release-stable.ts major",
+    "release:source-artifacts:stage": "bun scripts/stage-release-source-artifacts.ts",
     "release:inventory": "bun scripts/generate-release-inventory.ts",
     "release:sbom": "bun x @cyclonedx/cdxgen@12.2.0 -t js -o release-assets/openpond-sbom.cdx.json .",
     "package:linux": "bun run stage:desktop && electron-builder --config apps/desktop/electron-builder.json --linux AppImage --publish never",

@@ -32,6 +32,7 @@ out/
 release-assets/
 release-smoke-artifacts/
 release-smoke/
+release-source-artifacts/
 release/
 release-cli/
 apps/*/dist/
