@@ -1,4 +1,4 @@
-import type { AppPreferences, ChatModelRef, CodexReasoningEffort, TaskCreationSnapshot, TrainingStateResponse } from "@openpond/contracts";
+import type { AppPreferences, ChatModelRef, CodexReasoningEffort, TaskCreationRequest, TaskCreationSnapshot, TrainingStateResponse } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
 
 type TrainingController = ReturnType<typeof useTraining>;
@@ -14,6 +14,7 @@ export async function startConfiguredTaskCreation(input: {
   training: TrainingController;
   sourceIds: string[];
   objective?: string | null;
+  methodHint?: TaskCreationRequest["methodHint"];
   surface: "slash_train" | "training_page";
   preferences: AppPreferences["training"];
   fallbackModel: ChatModelRef;
@@ -25,6 +26,7 @@ export async function startConfiguredTaskCreation(input: {
     surface: input.surface,
     mode: input.mode ?? input.preferences.creationMode,
     objective: input.objective?.trim() || undefined,
+    methodHint: input.methodHint ?? null,
     analysisModel: input.analysisModel ?? trainingAuthoringModel(input.preferences, input.fallbackModel),
     analysisReasoningEffort: input.reasoningEffort,
   });

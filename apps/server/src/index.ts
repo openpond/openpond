@@ -115,6 +115,20 @@ import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
 import { createTrainingService } from "./training/training-service.js";
 import { createTrainingApi } from "./training/training-api.js";
+import { createTrainingChatSearchService } from "./training/training-chat-search.js";
+import { createComputeService } from "./compute/compute-service.js";
+import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
+import {
+  createCrossSystemChatToolRuntime,
+  createFrontierBaselineChatSource,
+  recordFrontierBaselineSources,
+  type CrossSystemFrontierModelStream,
+} from "./training/cross-system-operations/index.js";
+import {
+  LOCAL_ADAPTER_PROVIDER_ID,
+  listLocalAdapterProviderModels,
+  withLocalAdapterProviderModels,
+} from "./training/local-adapter-models.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
@@ -343,18 +357,19 @@ export async function createOpenPondServer(
   });
 
   async function localByokRuntimeState() {
-    const [file, secrets] = await Promise.all([
+    const [file, secrets, localAdapterModels] = await Promise.all([
       readProvidersFile(providersFilePath),
       readProviderSecrets(providerSecretPaths),
+      listLocalAdapterProviderModels(store),
     ]);
     return {
       secrets,
-      settings: buildProviderSettings({
+      settings: withLocalAdapterProviderModels(buildProviderSettings({
         file,
         secrets,
         codex: codexStatusService.get(),
         catalog: cachedProviderCatalog(file),
-      }),
+      }), localAdapterModels),
     };
   }
   async function trainingModelText(input: {
@@ -365,6 +380,17 @@ export async function createOpenPondServer(
     requestId: string;
   }): Promise<string> {
     let text = "";
+    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
+      for await (const delta of localAdapterChatRuntime.stream({
+        modelId: input.model.modelId,
+        messages: input.messages,
+        requestId: input.requestId,
+        signal: input.signal,
+      })) {
+        if (delta.text) text += delta.text;
+      }
+      return text;
+    }
     if (input.model.providerId === "openpond") {
       for await (const delta of streamOpenPondHostedChatTurn({ model: input.model.modelId, messages: input.messages, requestId: input.requestId, signal: input.signal })) {
         if (delta.type === "text_delta" && delta.text) text += delta.text;
@@ -413,12 +439,121 @@ export async function createOpenPondServer(
       return parsed;
     },
   });
+  const computeService = createComputeService({
+    storeDir,
+    localWorkerProjectDir: path.resolve(process.cwd(), "python", "openpond-training"),
+  });
+  const computePayload = async (action: string, payload: unknown) => {
+    if (action === "state") return computeService.state();
+    if (action === "scan") return computeService.scan();
+    if (action === "update_settings") {
+      const settings = await computeService.updateSettings(payload);
+      await computeService.scan();
+      return settings;
+    }
+    if (action === "download_smollm2") return computeService.startModelDownload();
+    if (action === "cancel_download") {
+      const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+      if (typeof input.jobId !== "string" || !input.jobId) throw new Error("jobId is required.");
+      return computeService.cancelModelDownload(input.jobId);
+    }
+    throw new Error(`Unknown compute action ${action}.`);
+  };
   const trainingService = createTrainingService({
     store,
     storeDir,
     localWorkerProjectDir: path.resolve(process.cwd(), "python", "openpond-training"),
+    revalidateCompute: async () => { await computeService.scan(); },
+    resolveModelPath: computeService.modelPath,
+    modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
+    computeInventory: computeService.inventory,
   });
-  const trainingApi = createTrainingApi({ store, taskCreator: taskCreatorService, taskMiner: taskMinerService, evaluation: taskEvaluationService, training: trainingService });
+  const localAdapterChatRuntime = createLocalAdapterChatRuntime({
+    store,
+    projectDir: path.resolve(process.cwd(), "python", "openpond-training"),
+    resolveModelPath: computeService.modelPath,
+  });
+  const crossSystemChatToolRuntime = createCrossSystemChatToolRuntime({ store });
+  const trainingChatSearchService = createTrainingChatSearchService({ store });
+  const crossSystemFrontierModelStream: CrossSystemFrontierModelStream = async function* (input) {
+    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
+      for await (const delta of localAdapterChatRuntime.stream({
+        modelId: input.model.modelId,
+        messages: input.messages,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+        requestId: input.requestId,
+        signal: input.signal,
+      })) {
+        yield { text: delta.text, toolCalls: delta.toolCalls };
+      }
+      return;
+    }
+    if (input.model.providerId === "openpond") {
+      for await (const delta of streamOpenPondHostedChatTurn({
+        model: input.model.modelId,
+        messages: input.messages,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+        requestId: input.requestId,
+        signal: input.signal,
+      })) {
+        if (delta.type === "text_delta") yield { text: delta.text };
+        if (delta.type === "continuation") yield { continuation: delta.continuation };
+        if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls };
+      }
+      return;
+    }
+    const state = await localByokRuntimeState();
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      providerId: input.model.providerId,
+      settings: state.settings,
+      secrets: state.secrets,
+      modelId: input.model.modelId,
+      messages: input.messages,
+      tools: input.tools,
+      toolChoice: input.toolChoice,
+      requestId: input.requestId,
+      signal: input.signal,
+      reasoningEffort: input.reasoningEffort,
+      saveChatGptSubscriptionCredential: async (providerId, credential) => {
+        await writeProviderChatGptSubscriptionCredential({
+          paths: providerSecretPaths,
+          providerId,
+          credential,
+          timestamp: now(),
+        });
+      },
+    })) {
+      if (delta.type === "text_delta") yield { text: delta.text };
+      if (delta.type === "continuation") yield { continuation: delta.continuation };
+      if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls };
+    }
+  };
+  const trainingApi = createTrainingApi({
+    store,
+    taskCreator: taskCreatorService,
+    taskMiner: taskMinerService,
+    evaluation: taskEvaluationService,
+    training: trainingService,
+    chatSearch: trainingChatSearchService,
+    runCrossSystemFrontierBaseline: (input) => recordFrontierBaselineSources({
+      ...input,
+      store,
+      stream: crossSystemFrontierModelStream,
+      approvedBy: "local_user_visible_baseline_action",
+      createEvidenceSource: ({ profileId, task, trajectory }) => createFrontierBaselineChatSource({
+        store,
+        profileId,
+        model: input.model,
+        task,
+        trajectory,
+        createSession,
+        appendRuntimeEvent,
+        addSessionSource: taskCreatorService.addSessionSource,
+      }),
+    }),
+  });
 
   async function runTrainingBaselineAttempt(input: { tasksetId: string; task: TaskDataRecord; model: ChatModelRef; seed: number; attempt: number }) {
     const startedAt = now();
@@ -512,6 +647,7 @@ export async function createOpenPondServer(
       sandboxRequestPayload({ type: "delete", sandboxId }),
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
+    executeCrossSystemTool: crossSystemChatToolRuntime.execute,
     loadOpenPondProfileState,
     readOpenPondProfileSkill: readProfileSkill,
     executeProfileSkillCommand: ({ prompt }) => runProfileSkillCommandFromPrompt(prompt),
@@ -528,6 +664,17 @@ export async function createOpenPondServer(
     appendAssistantText,
     appendHostedContextUsage,
     streamLocalByokChatTurn: async function* (input) {
+      if (input.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
+        yield* localAdapterChatRuntime.stream({
+          modelId: input.modelId,
+          messages: input.messages,
+          tools: input.tools,
+          toolChoice: input.toolChoice,
+          requestId: input.requestId,
+          signal: input.signal,
+        });
+        return;
+      }
       const state = await localByokRuntimeState();
       for await (const delta of streamOpenAiCompatibleChatCompletion({
         providerId: input.providerId,
@@ -1135,6 +1282,7 @@ export async function createOpenPondServer(
       askInsightsPayload,
       patchInsightPayload,
       trainingPayload: trainingApi.request,
+      computePayload,
       listLocalAgentSchedulesPayload,
       syncLocalAgentSchedulesPayload,
       patchLocalAgentSchedulePayload,
@@ -1277,7 +1425,7 @@ export async function createOpenPondServer(
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,
-    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close, trainingService.close,
+    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close, localAdapterChatRuntime.close, crossSystemChatToolRuntime.close, trainingService.close, computeService.close,
       closeCloudWorkspaceReadiness, closeWorkspaceLsp, voiceTranscription.close],
   });
 

@@ -27,3 +27,5 @@ export * from "./team-chat.js";
 export * from "./tasksets.js";
 export * from "./task-mining.js";
 export * from "./training.js";
+export * from "./compute.js";
+export * from "./cross-system-operations.js";

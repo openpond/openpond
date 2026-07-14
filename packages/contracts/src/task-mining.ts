@@ -20,6 +20,7 @@ export const TaskCandidateStatusSchema = z.enum([
 
 export const TrainingTacticSchema = z.enum([
   "no_training",
+  "prompting",
   "retrieval",
   "sft",
   "preference",
@@ -106,6 +107,28 @@ export const RunTaskMinerRequestSchema = z.object({
   config: TaskMinerConfigSchema.optional(),
 });
 
+export const TaskMinerRunSchema = z.object({
+  schemaVersion: z.literal("openpond.taskMinerRun.v1"),
+  id: IdSchema,
+  profileId: IdSchema,
+  status: z.enum(["queued", "running", "cancelling", "cancelled", "succeeded", "failed"]),
+  config: TaskMinerConfigSchema,
+  sourceIds: z.array(IdSchema).max(100_000),
+  progress: z.object({
+    stage: z.enum(["queued", "preparing", "clustering", "persisting", "complete"]),
+    processedSources: z.number().int().nonnegative(),
+    totalSources: z.number().int().nonnegative(),
+    candidatesFound: z.number().int().nonnegative(),
+  }),
+  candidateIds: z.array(IdSchema).max(100_000),
+  cancelRequested: z.boolean(),
+  error: z.string().trim().min(1).max(20_000).nullable(),
+  createdAt: TimestampSchema,
+  startedAt: TimestampSchema.nullable(),
+  completedAt: TimestampSchema.nullable(),
+  updatedAt: TimestampSchema,
+});
+
 export type TaskCandidateStatus = z.infer<typeof TaskCandidateStatusSchema>;
 export type TrainingTactic = z.infer<typeof TrainingTacticSchema>;
 export type TaskCandidateEvidence = z.infer<typeof TaskCandidateEvidenceSchema>;
@@ -116,3 +139,4 @@ export type TaskMinerConfig = z.infer<typeof TaskMinerConfigSchema>;
 export type TaskCandidateListResponse = z.infer<typeof TaskCandidateListResponseSchema>;
 export type PatchTaskCandidateRequest = z.infer<typeof PatchTaskCandidateRequestSchema>;
 export type RunTaskMinerRequest = z.infer<typeof RunTaskMinerRequestSchema>;
+export type TaskMinerRun = z.infer<typeof TaskMinerRunSchema>;

@@ -16,6 +16,7 @@ import {
 export type ProcessHandle = {
   child: ChildProcessWithoutNullStreams;
   stderr: string[];
+  processGroup: boolean;
 };
 
 export type IsolatedDesktopHarness = {
@@ -26,6 +27,7 @@ export type IsolatedDesktopHarness = {
   webUrl: string;
   connection: DesktopHarnessConnection;
   cdp: CdpClient;
+  restart(): Promise<{ connection: DesktopHarnessConnection; cdp: CdpClient }>;
   close(): Promise<void>;
 };
 
@@ -66,21 +68,26 @@ export async function launchIsolatedDesktopHarness(input: {
     runSetup(input.repoRoot, "build-desktop", [bunBinary(), "run", "build:desktop"]);
     renderer = startRenderer(input.repoRoot, webPort);
     await waitForUrl(webUrl, input.timeoutMs);
-    desktop = launchDevElectron({
-      repoRoot: input.repoRoot,
-      appHome,
-      devtoolsPort,
-      userData,
-      webUrl,
-      webPort,
-    });
-    const target = await waitForDevtoolsTarget(devtoolsPort, input.timeoutMs, (candidate) =>
-      candidate.url === webUrl || candidate.url.startsWith(`${webUrl}/`) || candidate.url.startsWith(`${webUrl}?`),
-    );
-    cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
-    await waitForRendererBridge(cdp, input.timeoutMs);
-    const connection = await rendererConnection(cdp);
-    if (!connection.token) throw new Error("Desktop renderer connection did not expose a capability token.");
+    const startDesktop = async () => {
+      desktop = launchDevElectron({
+        repoRoot: input.repoRoot,
+        appHome,
+        devtoolsPort,
+        userData,
+        webUrl,
+        webPort,
+      });
+      const target = await waitForDevtoolsTarget(devtoolsPort, input.timeoutMs, (candidate) =>
+        candidate.url === webUrl || candidate.url.startsWith(`${webUrl}/`) || candidate.url.startsWith(`${webUrl}?`),
+      );
+      cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
+      await waitForRendererBridge(cdp, input.timeoutMs);
+      const connection = await rendererConnection(cdp);
+      if (!connection.token) throw new Error("Desktop renderer connection did not expose a capability token.");
+      return { connection, cdp };
+    };
+    const started = await startDesktop();
+    const connection = started.connection;
     return {
       appHome,
       userData,
@@ -88,7 +95,14 @@ export async function launchIsolatedDesktopHarness(input: {
       devtoolsPort,
       webUrl,
       connection,
-      cdp,
+      cdp: started.cdp,
+      restart: async () => {
+        cdp?.close();
+        await stopProcess(desktop);
+        desktop = null;
+        cdp = null;
+        return startDesktop();
+      },
       close: async () => {
         cdp?.close();
         await stopProcess(desktop);
@@ -173,6 +187,7 @@ function startRenderer(repoRoot: string, webPort: number): ProcessHandle {
       ...process.env,
       OPENPOND_WEB_PORT: String(webPort),
     },
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
   return trackProcess("renderer", child);
@@ -206,6 +221,7 @@ function launchDevElectron(input: {
       OPENPOND_WEB_PORT: String(input.webPort),
       OPENPOND_WEB_URL: input.webUrl,
     },
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
   return trackProcess("desktop", child);
@@ -308,6 +324,7 @@ function launchPackagedElectron(input: {
       OPENPOND_APP_HOME: input.appHome,
       OPENPOND_SERVER_PORT: "0",
     },
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
   return trackProcess("packaged-desktop", child);
@@ -330,7 +347,7 @@ function trackProcess(label: string, child: ChildProcessWithoutNullStreams): Pro
     if (code === 0 || signal || expectedStops.has(child)) return;
     console.error(`${label} exited early with code ${code}. stderr:\n${stderr.join("")}`);
   });
-  return { child, stderr };
+  return { child, stderr, processGroup: process.platform !== "win32" };
 }
 
 async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
@@ -377,9 +394,62 @@ async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: num
 async function stopProcess(handle: ProcessHandle | null): Promise<void> {
   if (!handle || handle.child.exitCode !== null) return;
   expectedStops.add(handle.child);
-  handle.child.kill("SIGTERM");
+  const descendants = handle.child.pid ? descendantPids(handle.child.pid) : [];
+  signalProcess(handle, "SIGTERM");
+  signalPids(descendants, "SIGTERM");
   const stopped = await waitForExit(handle.child, 3_000);
-  if (!stopped && handle.child.exitCode === null) handle.child.kill("SIGKILL");
+  if (!stopped && handle.child.exitCode === null) {
+    signalProcess(handle, "SIGKILL");
+    await waitForExit(handle.child, 1_000);
+  }
+  signalPids(descendants, "SIGKILL");
+}
+
+function signalProcess(handle: ProcessHandle, signal: NodeJS.Signals): void {
+  if (handle.processGroup && handle.child.pid) {
+    try {
+      process.kill(-handle.child.pid, signal);
+      return;
+    } catch {
+      // Fall through when the process group already exited between the liveness check and signal.
+    }
+  }
+  handle.child.kill(signal);
+}
+
+function descendantPids(rootPid: number): number[] {
+  if (process.platform === "win32") return [];
+  const result = spawnSync("ps", ["-eo", "pid=,ppid="], { encoding: "utf8" });
+  if (result.status !== 0 || typeof result.stdout !== "string") return [];
+  const children = new Map<number, number[]>();
+  for (const line of result.stdout.split("\n")) {
+    const [pidText, parentText] = line.trim().split(/\s+/);
+    const pid = Number(pidText);
+    const parent = Number(parentText);
+    if (!Number.isInteger(pid) || !Number.isInteger(parent)) continue;
+    const current = children.get(parent) ?? [];
+    current.push(pid);
+    children.set(parent, current);
+  }
+  const ordered: number[] = [];
+  const visit = (pid: number) => {
+    for (const child of children.get(pid) ?? []) {
+      visit(child);
+      ordered.push(child);
+    }
+  };
+  visit(rootPid);
+  return ordered;
+}
+
+function signalPids(pids: number[], signal: NodeJS.Signals): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // The descendant may already have exited through its parent's graceful shutdown.
+    }
+  }
 }
 
 function wrapForDisplay(command: string, args: string[]): { command: string; args: string[] } {

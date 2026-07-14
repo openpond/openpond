@@ -32,6 +32,8 @@ describe("grader execution", () => {
       await writeFile(module, "export function verify({ attempt }) { return { score: attempt.output.text ? 1 : 0, passed: Boolean(attempt.output.text), feedback: 'verified' }; }\n");
       const grader = { id: "custom", version: "1", label: "Custom", kind: "custom_verifier" as const, weight: 1, hardGate: true, rewardEligible: true, privileged: true, module: "graders/verify.js", exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" as const, metadata: {} };
       await expect(runSandboxedVerifier({ grader, task: tasksetFixture().tasks[1]!, attempt: attemptFixture(), allowedRoot: root })).resolves.toMatchObject({ score: 1, passed: true });
+      await writeFile(module, "export function verify({ output, expectedOutput }) { const passed = output.text === expectedOutput.text; return { passed, reason: passed ? 'flat aliases matched' : 'mismatch' }; }\n");
+      await expect(runSandboxedVerifier({ grader, task: tasksetFixture().tasks[1]!, attempt: attemptFixture(), allowedRoot: root })).resolves.toMatchObject({ score: 1, passed: true, feedback: "flat aliases matched" });
       await writeFile(module, "export function verify() { return process.env; }\n");
       await expect(runSandboxedVerifier({ grader, task: tasksetFixture().tasks[1]!, attempt: attemptFixture(), allowedRoot: root })).rejects.toThrow("forbidden capability");
       await expect(runSandboxedVerifier({ ...{ grader }, grader: { ...grader, module: "../outside.js" }, task: tasksetFixture().tasks[1]!, attempt: attemptFixture(), allowedRoot: root })).rejects.toThrow();

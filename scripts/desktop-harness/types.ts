@@ -86,6 +86,7 @@ export type DesktopHarness = {
   readonly api: DesktopHarnessApi;
   readonly renderer: DesktopHarnessRenderer;
   readonly events: DesktopHarnessEvents;
+  restart?(): Promise<void>;
   uniqueTitle(prefix: string): string;
   recordEvent(label: string): void;
   recordAssertion(name: string, value: unknown): void;

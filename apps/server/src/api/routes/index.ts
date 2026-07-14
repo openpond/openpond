@@ -1,5 +1,6 @@
 import type { HttpRouteModule } from "../http-route-types.js";
 import { handleCoreRoutes } from "./core-routes.js";
+import { handleComputeRoutes } from "./compute-routes.js";
 import { handleDesktopBrowserRoutes } from "./desktop-browser-routes.js";
 import { handleEventRoutes } from "./event-routes.js";
 import { handleInsightsRoutes } from "./insights-routes.js";
@@ -18,6 +19,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "events", handle: handleEventRoutes },
   { id: "insights", handle: handleInsightsRoutes },
   { id: "training", handle: handleTrainingRoutes },
+  { id: "compute", handle: handleComputeRoutes },
   { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
   { id: "usage", handle: handleUsageRoutes },
   { id: "core", handle: handleCoreRoutes },

@@ -22,7 +22,7 @@ def write_bundle(root: Path) -> Path:
         "schemaVersion": "openpond.sftRecipe.v1",
         "method": "sft",
         "parameterization": "lora",
-        "baseModel": {"id": "openpond/tiny-cpu-gpt2-fixture", "revision": "architecture-v1-seed-17", "tokenizerRevision": "wordlevel-v1", "chatTemplateHash": "fixture00000000"},
+        "baseModel": {"id": "openpond/tiny-cpu-gpt2-fixture", "revision": "architecture-v2-seed-17-context-512", "tokenizerRevision": "wordlevel-v1", "chatTemplateHash": "fixture00000000"},
         "dataset": {"trainSplit": "train", "validationSplit": "frozen_eval", "completionOnly": True, "maxSequenceLength": 64},
         "lora": {"rank": 2, "alpha": 4, "dropout": 0, "targetModules": ["c_attn"]},
         "optimizer": {"learningRate": 0.01, "epochs": 1, "maxSteps": 2, "batchSize": 1, "gradientAccumulationSteps": 1, "seed": 17},
@@ -63,9 +63,14 @@ def test_cpu_lora_worker_saves_reloads_and_evaluates(tmp_path: Path, monkeypatch
     assert metrics["adapterParameterCount"] > 0
     events = [json.loads(line) for line in stream.getvalue().splitlines() if line.startswith("{")]
     event_types = [event["type"] for event in events]
+    step_metrics = [event for event in events if event["type"] == "metric" and event["payload"].get("metricKind") == "sft_step"]
     assert event_types[0] == "start"
     assert "progress" in event_types
     assert event_types[-2:] == ["metric", "complete"]
+    assert len(step_metrics) == 2
+    assert [metric["payload"]["step"] for metric in step_metrics] == [1, 2]
+    assert all(metric["payload"]["loss"] >= 0 for metric in step_metrics)
+    assert (output / "step-metrics.jsonl").is_file()
 
 
 def test_worker_failure_is_structured(tmp_path: Path, monkeypatch) -> None:

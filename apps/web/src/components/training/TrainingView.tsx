@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { AppPreferences, ChatModelRef, CodexReasoningEffort, ProviderSettings, Session, Taskset, TrainingBundleManifest, TrainingDestinationId, TrainingPlan } from "@openpond/contracts";
+import type { AppPreferences, ChatModelRef, CodexReasoningEffort, ProviderSettings, Session, TaskCreationSnapshot, Taskset } from "@openpond/contracts";
 import type { ClientConnection, PreferencesPayload } from "../../api";
+import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
 import { CircleAlert, Loader2, Play, Plus, RefreshCw, Settings } from "../icons";
 import { TrainingTasksetDetail } from "./TrainingTasksetDetail";
@@ -13,8 +14,7 @@ import { trainingAuthoringModel } from "./training-flow";
 
 type TrainingController = ReturnType<typeof useTraining>;
 type MainTab = "models" | "tasksets";
-type PreparedHandoff = { tasksetId: string; plan: TrainingPlan; manifest: TrainingBundleManifest; directory: string };
-export type TrainingLaunchRequest = { id: number; objective: string | null };
+export type TrainingLaunchRequest = { id: number; objective: string | null; initialSessionIds?: string[] };
 
 export function TrainingView({
   training,
@@ -22,10 +22,16 @@ export function TrainingView({
   connection,
   defaultModel,
   onError,
+  onToast,
   onSettingsPreferences,
   onOpenChat,
+  onChatWithModel,
+  onOpenTasksetFiles,
   selectedTasksetId,
   onSelectedTasksetIdChange,
+  onSelectedTrainingJobIdChange,
+  detailTasksetId,
+  onDetailTasksetIdChange,
   launchRequest,
   onLaunchHandled,
   preferences,
@@ -38,10 +44,16 @@ export function TrainingView({
   connection: ClientConnection | null;
   defaultModel: ChatModelRef;
   onError: (message: string | null) => void;
+  onToast: ShowAppToast;
   onSettingsPreferences: (payload: PreferencesPayload) => void;
   onOpenChat: (sessionId: string) => void;
+  onChatWithModel: (modelId: string) => void;
+  onOpenTasksetFiles: () => void;
   selectedTasksetId: string | null;
   onSelectedTasksetIdChange: (id: string | null) => void;
+  onSelectedTrainingJobIdChange: (id: string | null) => void;
+  detailTasksetId: string | null;
+  onDetailTasksetIdChange: (id: string | null) => void;
   launchRequest: TrainingLaunchRequest | null;
   onLaunchHandled: (id: number) => void;
   preferences: AppPreferences["training"];
@@ -52,7 +64,6 @@ export function TrainingView({
   const [tab, setTab] = useState<MainTab>("models");
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [preparedHandoff, setPreparedHandoff] = useState<PreparedHandoff | null>(null);
   const state = training.payload;
   const selectedTaskset = state?.tasksets.find((item) => item.id === selectedTasksetId) ?? state?.tasksets[0] ?? null;
   useEffect(() => {
@@ -65,36 +76,26 @@ export function TrainingView({
     if (launchRequest) onLaunchHandled(launchRequest.id);
   }
 
-  function finishRunSetup(nextTab: MainTab) {
+  function finishTasksetCreation(creation: TaskCreationSnapshot) {
     setRunDialogOpen(false);
-    setTab(nextTab);
+    if (creation.materializedTasksetId) {
+      onSelectedTasksetIdChange(creation.materializedTasksetId);
+      onDetailTasksetIdChange(creation.materializedTasksetId);
+      setTab("models");
+    }
     if (launchRequest) onLaunchHandled(launchRequest.id);
-  }
-
-  async function prepareTraining(taskset: Taskset, destinationId: TrainingDestinationId = "local_cpu_fixture") {
-    const plan = await training.actions.createPlan({
-      tasksetId: taskset.id,
-      destinationId,
-      exportApproved: true,
-      recipe: fixtureRecipe(),
-    });
-    if (!plan) return;
-    const bundle = await training.actions.buildBundle(plan.id);
-    if (!bundle) return;
-    setPreparedHandoff({ tasksetId: taskset.id, plan, manifest: bundle.manifest, directory: bundle.directory });
-  }
-
-  async function launchBundle(plan: TrainingPlan, manifest: TrainingBundleManifest) {
-    const approval = await training.actions.approveTraining(plan.id, manifest.id);
-    if (!approval) return;
-    const job = await training.actions.launch(plan.id, approval.id);
-    if (job) { setPreparedHandoff(null); setTab("models"); }
   }
 
   return (
     <section className="training-view" aria-label="Training">
       <div className="training-header">
-        <h1>Training</h1>
+        <div className="training-tabs training-header-tabs" role="tablist" aria-label="Training sections">
+          {(["models", "tasksets"] as const).map((item) => (
+            <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "active" : ""} onClick={() => { setTab(item); if (item !== "models") onDetailTasksetIdChange(null); }}>
+              {label(item)} {countFor(item, state) ? <span>{countFor(item, state)}</span> : null}
+            </button>
+          ))}
+        </div>
         <div className="training-header-actions">
           <button className="training-icon-button" type="button" aria-label="Refresh training" title="Refresh" disabled={training.loading} onClick={() => void training.refresh()}>
             <RefreshCw className={training.loading ? "spin" : undefined} size={15} />
@@ -108,14 +109,6 @@ export function TrainingView({
         </div>
       </div>
 
-      <div className="training-tabs" role="tablist" aria-label="Training sections">
-        {(["models", "tasksets"] as const).map((item) => (
-          <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {label(item)} {countFor(item, state) ? <span>{countFor(item, state)}</span> : null}
-          </button>
-        ))}
-      </div>
-
       {training.error ? <div className="training-banner error"><CircleAlert size={15} />{training.error}</div> : null}
       {training.busyAction ? <div className="training-banner"><Loader2 className="spin" size={15} />Working on {training.busyAction.replaceAll("-", " ")}…</div> : null}
 
@@ -123,12 +116,15 @@ export function TrainingView({
         <>
           <TrainingModels
             training={training}
-            preparedHandoff={preparedHandoff}
-            onClearPrepared={() => setPreparedHandoff(null)}
-            onDownloadBundle={(bundleId) => void training.actions.downloadBundle(bundleId)}
-            onLaunchBundle={launchBundle}
-            onOpenTaskset={(tasksetId) => { onSelectedTasksetIdChange(tasksetId); setTab("tasksets"); }}
-            onPrepareTraining={prepareTraining}
+            connection={connection}
+            onOpenTasksetFiles={(tasksetId) => { onSelectedTasksetIdChange(tasksetId); onOpenTasksetFiles(); }}
+            onOpenTaskset={(tasksetId) => { onSelectedTasksetIdChange(tasksetId); onDetailTasksetIdChange(null); setTab("tasksets"); }}
+            onSelectedTasksetIdChange={onSelectedTasksetIdChange}
+            onSelectedJobIdChange={onSelectedTrainingJobIdChange}
+            onChatWithModel={onChatWithModel}
+            onToast={onToast}
+            detailTasksetId={detailTasksetId}
+            onDetailTasksetIdChange={onDetailTasksetIdChange}
           />
           {state?.candidates.length ? <Suggestions training={training} defaultModel={defaultModel} preferences={preferences} reasoningEffort={reasoningEffort} onPlanStarted={() => setTab("models")} /> : null}
         </>
@@ -146,10 +142,9 @@ export function TrainingView({
         <TrainingRunDialog
           defaultModel={defaultModel}
           initialObjective={launchRequest?.objective ?? null}
-          minerConfig={state.minerConfig}
+          initialSessionIds={launchRequest?.initialSessionIds ?? []}
           onClose={closeRunDialog}
-          onManualStarted={() => finishRunSetup("models")}
-          onMiningStarted={() => finishRunSetup("models")}
+          onTasksetCreated={finishTasksetCreation}
           preferences={preferences}
           providerSettings={providerSettings}
           reasoningEffort={reasoningEffort}
@@ -234,9 +229,5 @@ function SuggestionCard({ candidate, candidates, training, defaultModel, prefere
 
 function EmptyDetail() { return <div className="training-empty-detail"><Play size={22} /><h2>No Tasksets yet</h2><p>Start a model to create one from selected chats.</p></div>; }
 function label(value: MainTab) { return value[0]!.toUpperCase() + value.slice(1); }
-function countFor(value: MainTab, state: TrainingController["payload"]) { if (!state) return 0; return value === "tasksets" ? state.tasksets.length : state.tasksets.length + state.creations.filter((creation) => !creation.materializedTasksetId && !["cancelled", "failed"].includes(creation.state)).length; }
+function countFor(value: MainTab, state: TrainingController["payload"]) { if (!state) return 0; return state.tasksets.length; }
 function percent(value: number) { return `${Math.round(value * 100)}%`; }
-
-function fixtureRecipe() {
-  return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: "openpond/tiny-cpu-gpt2-fixture", revision: "architecture-v1-seed-17", tokenizerRevision: "wordlevel-v1", chatTemplateHash: "fixture00000000" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: 64 }, lora: { rank: 2, alpha: 4, dropout: 0, targetModules: ["c_attn"] }, optimizer: { learningRate: 0.01, epochs: 1, maxSteps: 2, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 } };
-}

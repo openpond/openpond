@@ -27,6 +27,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 type HarnessRuntime = {
   connection: DesktopHarnessConnection | null;
   cdp: CdpClient | null;
+  restart?(): Promise<{ connection: DesktopHarnessConnection; cdp: CdpClient | null }>;
   close(): Promise<void>;
 };
 
@@ -102,9 +103,9 @@ async function runScenario(input: {
     metadata: {},
     screenshots: [],
   };
-  const api = new DesktopHarnessApiClient(input.runtime.connection);
-  const renderer = new CdpDesktopHarnessRenderer(input.runtime.cdp, path.join(input.artifactsDir, input.scenario.name), input.timeoutMs);
-  const events = new DesktopHarnessEventWaiter(api, input.timeoutMs, (event) => {
+  let api = new DesktopHarnessApiClient(input.runtime.connection);
+  let renderer = new CdpDesktopHarnessRenderer(input.runtime.cdp, path.join(input.artifactsDir, input.scenario.name), input.timeoutMs);
+  let events = new DesktopHarnessEventWaiter(api, input.timeoutMs, (event) => {
     state.events.push(eventLabel(event));
     if (event.id) state.eventIds.push(event.id);
   });
@@ -113,9 +114,19 @@ async function runScenario(input: {
     artifactsDir: path.join(input.artifactsDir, input.scenario.name),
     launchMode: input.launchMode,
     timeoutMs: input.timeoutMs,
-    api,
-    renderer,
-    events,
+    get api() { return api; },
+    get renderer() { return renderer; },
+    get events() { return events; },
+    restart: input.runtime.restart ? async () => {
+      renderer.close();
+      const restarted = await input.runtime.restart!();
+      api = new DesktopHarnessApiClient(restarted.connection);
+      renderer = new CdpDesktopHarnessRenderer(restarted.cdp, path.join(input.artifactsDir, input.scenario.name), input.timeoutMs);
+      events = new DesktopHarnessEventWaiter(api, input.timeoutMs, (event) => {
+        state.events.push(eventLabel(event));
+        if (event.id) state.eventIds.push(event.id);
+      });
+    } : undefined,
     uniqueTitle(prefix: string) {
       return `${prefix}-${Date.now().toString(36)}`;
     },
@@ -240,6 +251,7 @@ function isolatedRuntime(isolated: IsolatedDesktopHarness): HarnessRuntime {
   return {
     connection: isolated.connection,
     cdp: isolated.cdp,
+    restart: isolated.restart,
     close: isolated.close,
   };
 }

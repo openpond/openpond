@@ -13,9 +13,9 @@ Use this skill when `/train`, the Training page, a selected conversation, or a T
 
 1. Inspect only the explicitly selected evidence. Cite source IDs; never copy unrelated conversation history.
 2. Separate policy-visible input from privileged outcome and grader state.
-3. Inventory existing demonstrations, corrections, preferences, labels, feedback, and verifiable rewards. Do not fabricate expert approval.
-4. Recommend `no_training` or retrieval when weights are not the right memory layer.
-5. Draft one provider-neutral `TaskDesignProposal` with a bounded objective, task instances, split-cluster keys, graders, calibration fixtures, and assumptions. Keep the user-facing name and objective natural: describe the repeated job and desired outcome in one or two short sentences.
+3. Inventory existing demonstrations, corrections, preferences, labels, feedback, and verifiable rewards. Historical assistant messages are candidate outcomes, not automatically approved demonstrations. Do not fabricate expert approval.
+4. Diagnose the stable behavior separately from changing knowledge, required runtime context, and tool use. Recommend `no_training`, prompting, or retrieval when weights are not the right intervention.
+5. Draft one provider-neutral `TaskDesignProposal` with a bounded objective and a typed capability diagnosis. Only training-eligible proposals include task instances, split-cluster keys, graders, calibration fixtures, and assumptions. Keep the user-facing name and objective natural: describe the repeated job and desired outcome in one or two short sentences.
 6. Ask a question only for a blocking ambiguity: objective, consent, success signal, privacy/licensing boundary, or mutually exclusive interpretations.
 7. Prefer deterministic graders. A model judge must be declared, pinned, calibrated, versioned, and recorded; it is not deterministic.
 8. Run validation, positive/negative/boundary/adversarial grader fixtures, baselines, leakage checks, and reward-hacking checks.
@@ -25,6 +25,8 @@ Use this skill when `/train`, the Training page, a selected conversation, or a T
 Never put source IDs, hashes, cluster keys, split-placement rules, consent boilerplate, privileged expected values, encodings, or grader implementation details in the proposal name or objective. Keep those details in source references, policy boundaries, grader configuration, assumptions, warnings, and generated code.
 
 Treat synthetic smoke fixtures as diagnostics, not representative business tasks. When the only evidence is a trivial fixed response or exact string, recommend `no_training`, explain that application logic or prompting is sufficient, and still use a short human description if a diagnostic Taskset is explicitly requested.
+
+Label every proposed example as `extracted`, `corrected`, `synthetic`, or `expert_authored`. Extracted examples must exactly match their cited source turn. Corrected and synthetic examples must remain visibly transformed and may not be represented as expert-approved merely because an authoring model produced them.
 
 Use `Create with defaults` when evidence is sufficient. Record reversible assumptions and proceed to the single materialization approval. Use `Customize` for a conversational design pass.
 

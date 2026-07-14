@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import {
   TaskCandidateSchema,
   TaskMinerConfigSchema,
+  TaskMinerRunSchema,
   type TaskCandidate,
   type TaskCandidateEvidence,
   type TaskCandidateScorecard,
   type TaskMinerConfig,
+  type TaskMinerRun,
   type TrainingSourceRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
@@ -24,6 +26,7 @@ export const DEFAULT_TASK_MINER_CONFIG: TaskMinerConfig = TaskMinerConfigSchema.
 });
 
 export function createTaskMinerService(deps: { store: SqliteStore }) {
+  const activeRuns = new Map<string, AbortController>();
   async function config(profileId: string): Promise<TaskMinerConfig> {
     return (await deps.store.getTaskMinerConfig(profileId)) ?? DEFAULT_TASK_MINER_CONFIG;
   }
@@ -32,19 +35,35 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     return deps.store.saveTaskMinerConfig(profileId, TaskMinerConfigSchema.parse(value));
   }
 
-  async function run(input: { profileId: string; sourceIds?: string[]; config?: TaskMinerConfig }): Promise<TaskCandidate[]> {
+  async function run(input: {
+    profileId: string;
+    sourceIds?: string[];
+    config?: TaskMinerConfig;
+    signal?: AbortSignal;
+    onProgress?: (progress: TaskMinerRun["progress"]) => Promise<void> | void;
+  }): Promise<TaskCandidate[]> {
     const activeConfig = TaskMinerConfigSchema.parse(input.config ?? await config(input.profileId));
     if (input.config) await deps.store.saveTaskMinerConfig(input.profileId, activeConfig);
+    throwIfAborted(input.signal);
+    await input.onProgress?.({ stage: "preparing", processedSources: 0, totalSources: 0, candidatesFound: 0 });
     const allSources = await deps.store.listTrainingSources(input.profileId);
     const sourceFilter = input.sourceIds?.length ? new Set(input.sourceIds) : null;
     const cutoff = Date.now() - activeConfig.observationWindowDays * 24 * 60 * 60 * 1_000;
     const sources = allSources.filter((source) => (!sourceFilter || sourceFilter.has(source.id)) && Date.parse(source.occurredAt) >= cutoff && (!activeConfig.consentRequired || source.consent.status === "granted"));
     const groups = clusterSources(sources);
     const candidates: TaskCandidate[] = [];
+    let processedSources = 0;
+    await input.onProgress?.({ stage: "clustering", processedSources, totalSources: sources.length, candidatesFound: 0 });
     for (const [signature, group] of groups) {
-      if (group.length < activeConfig.minimumRecurrence) continue;
+      throwIfAborted(input.signal);
+      processedSources += group.length;
+      if (group.length < activeConfig.minimumRecurrence) {
+        await input.onProgress?.({ stage: "clustering", processedSources, totalSources: sources.length, candidatesFound: candidates.length });
+        continue;
+      }
       const evidence = group.map((source) => evidenceFromSource(source, signature));
       const scorecard = scoreCandidate(group, evidence);
+      const crossSystem = crossSystemBaseline(group);
       const fingerprint = contentHash([input.profileId, signature]);
       const existing = await deps.store.findTaskCandidateByFingerprint(input.profileId, fingerprint);
       const timestamp = now();
@@ -59,16 +78,90 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
         workflowSignature: signature,
         evidence,
         scorecard,
-        recommendation: recommendTrainingTactic({ evidence, scorecard, changingFacts: group.some((source) => source.metadata.changingFacts === true) }),
+        recommendation: recommendTrainingTactic({ evidence, scorecard, changingFacts: group.some((source) => source.metadata.changingFacts === true), baselineReward: crossSystem?.reward }),
         mergedIntoId: existing?.mergedIntoId ?? null,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
-        metadata: { sourceCount: group.length, clustering: activeConfig.clustering },
+        metadata: {
+          sourceCount: group.length,
+          clustering: activeConfig.clustering,
+          ...(crossSystem ? {
+            flagship: "cross-system-operations",
+            toolContractHash: crossSystem.toolContractHash,
+            baselineReward: crossSystem.reward,
+            approvedSuccessfulTrajectoryIds: crossSystem.approvedSuccessfulTrajectoryIds,
+          } : {}),
+        },
       });
       await deps.store.upsertTaskCandidate(candidate);
       candidates.push(candidate);
+      await input.onProgress?.({ stage: "persisting", processedSources, totalSources: sources.length, candidatesFound: candidates.length });
     }
+    await input.onProgress?.({ stage: "complete", processedSources: sources.length, totalSources: sources.length, candidatesFound: candidates.length });
     return candidates;
+  }
+
+  async function startRun(input: { profileId: string; sourceIds?: string[]; config?: TaskMinerConfig }): Promise<TaskMinerRun> {
+    const activeConfig = TaskMinerConfigSchema.parse(input.config ?? await config(input.profileId));
+    const timestamp = now();
+    const runRecord = TaskMinerRunSchema.parse({
+      schemaVersion: "openpond.taskMinerRun.v1",
+      id: `task_miner_run_${randomUUID()}`,
+      profileId: input.profileId,
+      status: "queued",
+      config: activeConfig,
+      sourceIds: input.sourceIds ?? [],
+      progress: { stage: "queued", processedSources: 0, totalSources: input.sourceIds?.length ?? 0, candidatesFound: 0 },
+      candidateIds: [],
+      cancelRequested: false,
+      error: null,
+      createdAt: timestamp,
+      startedAt: null,
+      completedAt: null,
+      updatedAt: timestamp,
+    });
+    await deps.store.saveTaskMinerRun(runRecord);
+    const controller = new AbortController();
+    activeRuns.set(runRecord.id, controller);
+    queueMicrotask(() => void executeRun(runRecord, controller));
+    return runRecord;
+  }
+
+  async function executeRun(initial: TaskMinerRun, controller: AbortController): Promise<void> {
+    const startedAt = now();
+    let current = await deps.store.saveTaskMinerRun({ ...initial, status: "running", startedAt, updatedAt: startedAt });
+    try {
+      const candidates = await run({
+        profileId: current.profileId,
+        sourceIds: current.sourceIds,
+        config: current.config,
+        signal: controller.signal,
+        onProgress: async (progress) => {
+          const persisted = await deps.store.getTaskMinerRun(current.id);
+          if (persisted?.cancelRequested) controller.abort();
+          throwIfAborted(controller.signal);
+          current = await deps.store.saveTaskMinerRun({ ...current, status: "running", progress, updatedAt: now() });
+        },
+      });
+      throwIfAborted(controller.signal);
+      const completedAt = now();
+      current = await deps.store.saveTaskMinerRun({ ...current, status: "succeeded", candidateIds: candidates.map((candidate) => candidate.id), progress: { ...current.progress, stage: "complete", candidatesFound: candidates.length }, completedAt, updatedAt: completedAt });
+    } catch (error) {
+      const completedAt = now();
+      const cancelled = controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
+      current = await deps.store.saveTaskMinerRun({ ...current, status: cancelled ? "cancelled" : "failed", cancelRequested: cancelled || current.cancelRequested, error: cancelled ? null : error instanceof Error ? error.message : String(error), completedAt, updatedAt: completedAt });
+    } finally {
+      activeRuns.delete(initial.id);
+    }
+  }
+
+  async function cancelRun(id: string): Promise<TaskMinerRun> {
+    const runRecord = await deps.store.getTaskMinerRun(id);
+    if (!runRecord) throw new Error("Task Miner run not found.");
+    if (["cancelled", "succeeded", "failed"].includes(runRecord.status)) return runRecord;
+    const updated = await deps.store.saveTaskMinerRun({ ...runRecord, status: "cancelling", cancelRequested: true, updatedAt: now() });
+    activeRuns.get(id)?.abort();
+    return updated;
   }
 
   async function patch(id: string, input: { status?: TaskCandidate["status"]; mergeIntoId?: string | null }): Promise<TaskCandidate> {
@@ -81,7 +174,14 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     return deps.store.upsertTaskCandidate(TaskCandidateSchema.parse({ ...candidate, status: input.mergeIntoId ? "retired" : input.status ?? candidate.status, mergedIntoId: input.mergeIntoId ?? candidate.mergedIntoId, updatedAt: now() }));
   }
 
-  return { config, updateConfig, run, patch };
+  return { config, updateConfig, run, startRun, cancelRun, patch };
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const error = new Error("Task Miner scan was cancelled.");
+  error.name = "AbortError";
+  throw error;
 }
 
 function clusterSources(sources: TrainingSourceRef[]): Map<string, TrainingSourceRef[]> {
@@ -104,28 +204,54 @@ function workflowSignature(source: TrainingSourceRef): string {
 }
 
 function evidenceFromSource(source: TrainingSourceRef, signature: string): TaskCandidateEvidence {
+  const crossSystem = metadataRecord(source.metadata.crossSystemOperations);
   const kind = source.metadata.acceptedCorrection === true
     ? "accepted_correction"
     : source.metadata.runtimeFeedback === true
       ? "runtime_feedback"
-      : source.metadata.agentAction === true
+      : source.metadata.agentAction === true || crossSystem
         ? "agent_action_recurrence"
         : source.metadata.outcomeLinkedChange === true
           ? "outcome_linked_change"
           : source.metadata.frontierCost === true
             ? "frontier_cost"
             : "repeated_success";
-  return { id: `task_evidence_${contentHash([source.id, kind]).slice(0, 20)}`, kind, sourceRefIds: [source.id], occurredAt: source.occurredAt, signature, summary: source.title, confidence: typeof source.metadata.confidence === "number" ? Math.max(0, Math.min(1, source.metadata.confidence)) : 0.75, consented: source.consent.status === "granted", metadata: {} };
+  return { id: `task_evidence_${contentHash([source.id, kind]).slice(0, 20)}`, kind, sourceRefIds: [source.id], occurredAt: source.occurredAt, signature, summary: source.title, confidence: typeof source.metadata.confidence === "number" ? Math.max(0, Math.min(1, source.metadata.confidence)) : crossSystem ? 0.95 : 0.75, consented: source.consent.status === "granted", metadata: crossSystem ? { trajectoryId: crossSystem.trajectoryId, outcome: crossSystem.outcome, reward: crossSystem.reward, toolContractHash: crossSystem.toolContractHash } : {} };
 }
 
 function scoreCandidate(sources: TrainingSourceRef[], evidence: TaskCandidateEvidence[]): TaskCandidateScorecard {
   const recurrence = Math.min(1, sources.length / 10);
-  const verifiable = sources.some((source) => source.metadata.verifiableOutcome === true) ? 0.9 : sources.some((source) => source.metadata.acceptedCorrection === true) ? 0.65 : 0.45;
+  const isCrossSystem = sources.some((source) => metadataRecord(source.metadata.crossSystemOperations));
+  const verifiable = isCrossSystem ? 0.98 : sources.some((source) => source.metadata.verifiableOutcome === true) ? 0.9 : sources.some((source) => source.metadata.acceptedCorrection === true) ? 0.65 : 0.45;
   const privacyRisk = sources.some((source) => source.secretScanStatus === "blocked") ? 1 : sources.some((source) => source.piiScanStatus === "review") ? 0.5 : 0.1;
   const frontierCost = sources.some((source) => source.metadata.frontierCost === true) ? 0.9 : 0.4;
   const signalQuality = evidence.reduce((sum, item) => sum + item.confidence, 0) / Math.max(1, evidence.length);
   const overall = Math.max(0, Math.min(1, recurrence * 0.2 + verifiable * 0.2 + signalQuality * 0.25 + frontierCost * 0.15 + (1 - privacyRisk) * 0.2));
-  return { frequency: recurrence, businessValue: 0.6, frontierCost, signalQuality, verifiability: verifiable, repeatability: recurrence, privacyRisk, overall };
+  return { frequency: recurrence, businessValue: isCrossSystem ? 0.85 : 0.6, frontierCost, signalQuality, verifiability: verifiable, repeatability: recurrence, privacyRisk, overall };
+}
+
+function crossSystemBaseline(sources: TrainingSourceRef[]): {
+  toolContractHash: string;
+  reward: { count: number; mean: number; min: number; max: number; variance: number };
+  approvedSuccessfulTrajectoryIds: string[];
+} | null {
+  const traces = sources.map((source) => metadataRecord(source.metadata.crossSystemOperations)).filter((value): value is Record<string, unknown> => Boolean(value));
+  if (traces.length !== sources.length || traces.length < 3) return null;
+  const hashes = new Set(traces.map((trace) => typeof trace.toolContractHash === "string" ? trace.toolContractHash : ""));
+  if (hashes.size !== 1 || ![...hashes][0]) return null;
+  const rewards = traces.map((trace) => typeof trace.reward === "number" ? trace.reward : null).filter((value): value is number => value !== null && Number.isFinite(value));
+  if (rewards.length < 3) return null;
+  const mean = rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length;
+  const variance = rewards.reduce((sum, reward) => sum + (reward - mean) ** 2, 0) / rewards.length;
+  return {
+    toolContractHash: [...hashes][0]!,
+    reward: { count: rewards.length, mean, min: Math.min(...rewards), max: Math.max(...rewards), variance },
+    approvedSuccessfulTrajectoryIds: traces.flatMap((trace) => trace.outcome === "correct" && trace.approved === true && typeof trace.trajectoryId === "string" ? [trace.trajectoryId] : []),
+  };
+}
+
+function metadataRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function titleForGroup(sources: TrainingSourceRef[]): string {

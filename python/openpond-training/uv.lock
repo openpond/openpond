@@ -777,6 +777,7 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
+    { name = "huggingface-hub" },
     { name = "jsonschema" },
     { name = "peft" },
     { name = "safetensors" },
@@ -795,6 +796,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "datasets", specifier = "==4.4.1" },
+    { name = "huggingface-hub", specifier = "==0.36.2" },
     { name = "jsonschema", specifier = "==4.25.1" },
     { name = "peft", specifier = "==0.18.0" },
     { name = "safetensors", specifier = "==0.7.0" },

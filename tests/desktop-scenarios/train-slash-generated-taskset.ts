@@ -4,7 +4,7 @@ import { TasksetSchema, type TaskCreationSnapshot } from "@openpond/contracts";
 import { inspectTaskset } from "../../packages/taskset-sdk/src";
 import { desktopScenario } from "../../scripts/desktop-harness/scenario";
 import type { DesktopHarness } from "../../scripts/desktop-harness/types";
-import { reloadRenderer } from "./helpers";
+import { reloadRenderer, waitForRendererCondition } from "./helpers";
 import {
   createTrainingChat,
   initializeTrainingProfile,
@@ -28,11 +28,27 @@ export default desktopScenario({
       "Approved incident review",
       "Review this incident summary and return the approved response.",
     );
+    const testSession = await createTrainingChat(
+      harness,
+      model,
+      "Approved incident review follow-up",
+      "Review this separate incident summary and return the approved response.",
+    );
 
     await reloadRenderer(harness);
     await harness.renderer.assertText(session.title, { label: "source chat visible" });
     await harness.renderer.selectSession(session.id);
     await harness.renderer.submitComposer(`/train ${OBJECTIVE}`);
+    await waitForRendererCondition(harness, `(() => {
+      const row = [...document.querySelectorAll('.training-source-options label')].find((item) => item.textContent?.includes(${JSON.stringify(testSession.title)}));
+      const checkbox = row?.querySelector('input[type=checkbox]');
+      if (!(checkbox instanceof HTMLInputElement)) return false;
+      if (!checkbox.checked) checkbox.click();
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Create training plan');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+      button.click();
+      return true;
+    })()`, "two-chat training selection");
 
     const disclosed = await waitForCreation(harness, (creation) =>
       creation.request.surface === "slash_train" && creation.request.objective === OBJECTIVE,
@@ -72,7 +88,7 @@ export default desktopScenario({
     harness.recordAssertion("tasksetValid", inspection.report.valid);
     harness.recordAssertion("generatedVerifierReadable", verifier.includes("export function verify") && verifier.includes("Approved response matched."));
     harness.recordAssertion("skillProvenanceRecorded", taskset.authoringProvenance.model?.modelId === model.modelId && taskset.authoringProvenance.skillHash.length >= 8);
-    harness.recordAssertion("singleSourceNotSftReady", taskset.tasks.every((task) => task.split === "frozen_eval") && taskset.learningSignals.demonstrations.length === 0);
+    harness.recordAssertion("independentTrainAndTestSplits", taskset.tasks.some((task) => task.split === "train") && taskset.tasks.some((task) => task.split === "frozen_eval") && taskset.learningSignals.demonstrations.length > 0);
 
     const audit = await harness.api.fetchJson<{ report: { passed: boolean; hackingChecksPassed: boolean; leakageChecksPassed: boolean; infrastructureSafetyPassed: boolean } }>(
       "/v1/training/audit-graders",

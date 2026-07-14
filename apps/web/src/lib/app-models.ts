@@ -56,6 +56,7 @@ export type SettingsSection =
   | "subagents"
   | "editor"
   | "providers"
+  | "compute"
   | "remote"
   | "usage"
   | "personalization"
@@ -289,6 +290,7 @@ export const PROVIDER_OPTIONS: Array<DropdownOption & { value: ChatProvider }> =
   { value: "codex", label: "OpenAI Codex", description: "Codex login" },
 ];
 export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
+  "local-adapter",
   "openai",
   "xai",
   "openrouter",

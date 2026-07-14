@@ -49,6 +49,7 @@ export { default as GitCommitHorizontal } from "lucide-react/dist/esm/icons/git-
 export { default as Github } from "lucide-react/dist/esm/icons/github.js";
 export { default as Globe2 } from "lucide-react/dist/esm/icons/earth.js";
 export { default as Hammer } from "lucide-react/dist/esm/icons/hammer.js";
+export { default as HardDrive } from "lucide-react/dist/esm/icons/hard-drive.js";
 export { default as HelpCircle } from "lucide-react/dist/esm/icons/circle-question-mark.js";
 export { default as ImageIcon } from "lucide-react/dist/esm/icons/image.js";
 export { default as Info } from "lucide-react/dist/esm/icons/info.js";

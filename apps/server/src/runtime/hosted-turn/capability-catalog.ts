@@ -35,6 +35,7 @@ export function createCapabilityCatalogRuntime(deps: {
   executeWorkspaceTool: TurnRunnerDependencies["executeWorkspaceTool"];
   executeWebSearch: TurnRunnerDependencies["executeWebSearch"];
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
+  executeCrossSystemTool: TurnRunnerDependencies["executeCrossSystemTool"];
 }) {
   return function createNativeModelToolDefinitions(
     openPondActionCatalog: OpenPondActionCatalogEntry[],
@@ -101,6 +102,7 @@ export function createCapabilityCatalogRuntime(deps: {
         actionCatalog: openPondActionCatalog,
         executeWorkspaceTool: deps.executeWorkspaceTool,
         executeProfileAction: deps.executeProfileAction,
+        executeCrossSystemTool: deps.executeCrossSystemTool,
       }));
     }
     return definitions;

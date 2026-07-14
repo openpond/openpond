@@ -477,6 +477,9 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS baseline_reports_taskset_idx ON baseline_reports(taskset_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS readiness_reports (taskset_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS task_miner_configs (profile_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_miner_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS task_miner_runs_profile_updated_idx ON task_miner_runs(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
       CREATE TABLE IF NOT EXISTS training_plans (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, destination_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS training_plans_taskset_idx ON training_plans(taskset_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS training_bundles (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, content_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -517,6 +520,57 @@ export class SqliteStoreCore {
       CREATE TABLE IF NOT EXISTS task_attempt_artifacts (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, attempt_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS task_attempt_artifacts_attempt_idx ON task_attempt_artifacts(attempt_id, created_at);
       CREATE INDEX IF NOT EXISTS task_attempt_artifacts_taskset_idx ON task_attempt_artifacts(taskset_id, created_at);
+    `);
+  }
+
+  async createTrainingChatSearchTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS training_chat_search_documents (
+        session_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        title TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        eligible INTEGER NOT NULL,
+        body_indexed INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE INDEX IF NOT EXISTS training_chat_search_documents_source_idx
+        ON training_chat_search_documents(source);
+      CREATE VIRTUAL TABLE IF NOT EXISTS training_chat_search_fts USING fts5(
+        session_id UNINDEXED,
+        title,
+        body,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+    `);
+  }
+
+  async resetTrainingChatSearchForProgressiveIndexing(): Promise<void> {
+    await this.addColumnIfMissing("training_chat_search_documents", "body_indexed", "INTEGER NOT NULL DEFAULT 1");
+    await this.exec(`
+      DROP TABLE IF EXISTS training_chat_search_fts;
+      CREATE VIRTUAL TABLE training_chat_search_fts USING fts5(
+        session_id UNINDEXED,
+        title,
+        body,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+    `);
+    await this.run("DELETE FROM training_chat_search_documents", []);
+  }
+
+  async createTaskMinerRunTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS task_miner_runs (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS task_miner_runs_profile_updated_idx ON task_miner_runs(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
     `);
   }
 
@@ -877,5 +931,17 @@ const SQLITE_MIGRATIONS: Migration[] = [
   {
     version: 14,
     run: (store) => store.createTaskAttemptArtifactTables(),
+  },
+  {
+    version: 15,
+    run: (store) => store.createTrainingChatSearchTables(),
+  },
+  {
+    version: 16,
+    run: (store) => store.resetTrainingChatSearchForProgressiveIndexing(),
+  },
+  {
+    version: 17,
+    run: (store) => store.createTaskMinerRunTables(),
   },
 ];

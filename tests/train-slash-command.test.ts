@@ -6,14 +6,13 @@ import { ComposerSlashMenu } from "../apps/web/src/components/chat/ComposerSlash
 import { readFile } from "node:fs/promises";
 
 describe("/train command", () => {
-  test("uses the typed existing slash catalog and routes into Task Creator", async () => {
+  test("uses the typed existing slash catalog and opens manual source selection", async () => {
     expect(COMPOSER_SLASH_COMMANDS.find((item) => item.id === "train")).toMatchObject({ command: "/train", label: "Create training task" });
     expect(parseComposerSlashCommandPrompt("/train")).toEqual({ command: "train", args: "" });
     const mainPane = await readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8");
     expect(mainPane).toContain('command.command === "train"');
-    expect(mainPane).toContain('surface: "slash_train"');
-    expect(mainPane).toContain("startConfiguredTaskCreation");
     expect(mainPane).toContain("setTrainingLaunchRequest");
+    expect(mainPane).toContain("initialSessionIds: [selectedSessionId]");
     expect(mainPane).toContain("TrainingCreationPanel");
     expect(mainPane).toContain("TrainingStatusReceipt");
   });

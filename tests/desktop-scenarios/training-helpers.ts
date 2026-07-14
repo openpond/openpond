@@ -12,7 +12,7 @@ export async function initializeTrainingProfile(harness: DesktopHarness) {
 export async function createTrainingChat(harness: DesktopHarness, modelRef: ReturnType<typeof scriptedTrainingModel>, title: string, prompt: string) {
   const session = await harness.api.createSession<Session>({ provider: "openpond", modelRef, title, cwd: harness.repoRoot });
   await harness.api.createTurn(session.id, { prompt, modelRef });
-  const output = `scripted turn 1 response for: ${prompt}`;
+  const output = `scripted turn 1 response for: ${prompt.slice(0, 80)}`;
   const delta = await waitForAssistantOutput(harness, session.id, output, `${title} assistant output`);
   await waitForCompletedTurn(harness, session.id, delta, `${title} completion`);
   return session;
@@ -56,4 +56,43 @@ export async function registerTrainingModel(harness: DesktopHarness, suffix: str
   const model = scriptedTrainingModel(suffix);
   await registerScriptedOpenPondModel(harness, model);
   return model;
+}
+
+export function fixtureSftRecipe() {
+  return {
+    schemaVersion: "openpond.sftRecipe.v1",
+    method: "sft",
+    parameterization: "lora",
+    baseModel: {
+      id: "openpond/tiny-cpu-gpt2-fixture",
+      revision: "architecture-v2-seed-17-context-512",
+      tokenizerRevision: "wordlevel-v1",
+      chatTemplateHash: "fixture00000000",
+    },
+    dataset: {
+      trainSplit: "train",
+      validationSplit: "frozen_eval",
+      completionOnly: true,
+      maxSequenceLength: 512,
+    },
+    lora: {
+      rank: 2,
+      alpha: 4,
+      dropout: 0,
+      targetModules: ["c_attn"],
+    },
+    optimizer: {
+      learningRate: 0.01,
+      epochs: 1,
+      maxSteps: 2,
+      batchSize: 1,
+      gradientAccumulationSteps: 1,
+      seed: 17,
+    },
+    resourceLimits: {
+      cpuThreads: 2,
+      memoryBytes: 2_000_000_000,
+      wallTimeMs: 120_000,
+    },
+  };
 }

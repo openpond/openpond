@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 14;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 17;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -269,6 +269,26 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS training_sources_profile_updated_idx ON training_sources(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS training_sources_session_idx ON training_sources(session_id);
 
+  CREATE TABLE IF NOT EXISTS training_chat_search_documents (
+    session_id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    title TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    eligible INTEGER NOT NULL,
+    body_indexed INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE INDEX IF NOT EXISTS training_chat_search_documents_source_idx
+    ON training_chat_search_documents(source);
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS training_chat_search_fts USING fts5(
+    session_id UNINDEXED,
+    title,
+    body,
+    tokenize = 'unicode61 remove_diacritics 2'
+  );
+
   CREATE TABLE IF NOT EXISTS task_creation_snapshots (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
@@ -374,6 +394,17 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     payload TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS task_miner_runs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS task_miner_runs_profile_updated_idx ON task_miner_runs(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS training_plans (
     id TEXT PRIMARY KEY,

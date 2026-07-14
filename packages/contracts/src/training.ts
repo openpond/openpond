@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BaselineReportSchema, GraderAuditReportSchema, TaskCreationSnapshotSchema, TasksetSchema, TrainingSourceRefSchema } from "./tasksets.js";
-import { TaskCandidateSchema, TaskMinerConfigSchema } from "./task-mining.js";
+import { TaskCandidateSchema, TaskMinerConfigSchema, TaskMinerRunSchema } from "./task-mining.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -17,6 +17,7 @@ export const TrainingDestinationIdSchema = z.enum([
   "prime_hosted",
   "fireworks",
   "local_cuda",
+  "local_mlx",
   "ssh_gpu",
   "runpod_byoc",
 ]);
@@ -166,6 +167,73 @@ export const TrainingJobEventSchema = z.object({
   payload: MetadataSchema,
 });
 
+export const SftStepMetricSchema = z.object({
+  schemaVersion: z.literal("openpond.sftStepMetric.v1"),
+  step: z.number().int().nonnegative(),
+  maxSteps: z.number().int().positive(),
+  timestamp: TimestampSchema,
+  epoch: z.number().nonnegative().nullable(),
+  loss: z.number().nonnegative().nullable(),
+  learningRate: z.number().nonnegative().nullable(),
+  gradientNorm: z.number().nonnegative().nullable(),
+  entropy: z.number().nonnegative().nullable(),
+  meanTokenAccuracy: z.number().min(0).max(1).nullable(),
+  inputTokensSeen: z.number().int().nonnegative().nullable(),
+  memoryBytes: z.number().int().nonnegative().nullable(),
+  elapsedSeconds: z.number().nonnegative().nullable(),
+});
+
+export const TrainingEvaluationAggregateSchema = z.object({
+  count: z.number().int().nonnegative(),
+  scoredCount: z.number().int().nonnegative(),
+  meanScore: z.number().min(0).max(1).nullable(),
+  passedCount: z.number().int().nonnegative(),
+  passRate: z.number().min(0).max(1).nullable(),
+});
+
+export const TrainingEvaluationGradeSchema = z.object({
+  status: z.enum(["scored", "unavailable"]),
+  score: z.number().min(0).max(1).nullable(),
+  passed: z.boolean(),
+  rewardEligible: z.boolean(),
+  failureClass: z.enum(["policy_failure", "grader_failure", "environment_failure", "infrastructure_failure", "timeout", "cancelled"]).nullable(),
+  feedback: z.array(z.string().trim().min(1).max(20_000)).max(1_000),
+  components: z.array(z.object({
+    graderId: IdSchema,
+    score: z.number().min(0).max(1),
+    passed: z.boolean(),
+    feedback: z.string().trim().max(20_000).nullable(),
+  })).max(1_000),
+});
+
+export const TrainingEvaluationExampleSchema = z.object({
+  taskId: IdSchema,
+  input: z.record(z.string(), z.unknown()),
+  baseOutput: z.record(z.string(), z.unknown()).nullable(),
+  trainedOutput: z.record(z.string(), z.unknown()).nullable(),
+  baseGrade: TrainingEvaluationGradeSchema.nullable(),
+  trainedGrade: TrainingEvaluationGradeSchema.nullable(),
+});
+
+export const TrainingEvaluationSummarySchema = z.object({
+  schemaVersion: z.literal("openpond.trainingEvaluationSummary.v1"),
+  jobId: IdSchema,
+  tasksetId: IdSchema,
+  base: TrainingEvaluationAggregateSchema,
+  trained: TrainingEvaluationAggregateSchema,
+  meanScoreDelta: z.number().min(-1).max(1).nullable(),
+  examples: z.array(TrainingEvaluationExampleSchema).max(1_000_000),
+});
+
+export const TrainingRunDetailSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingRunDetail.v1"),
+  job: TrainingJobSchema,
+  events: z.array(TrainingJobEventSchema),
+  stepMetrics: z.array(SftStepMetricSchema),
+  evaluation: TrainingEvaluationSummarySchema.nullable(),
+  generatedAt: TimestampSchema,
+});
+
 export const TrainingArtifactSchema = z.object({
   schemaVersion: z.literal("openpond.trainingArtifact.v1"),
   id: IdSchema,
@@ -182,6 +250,23 @@ export const TrainingArtifactSchema = z.object({
   createdAt: TimestampSchema,
   metadata: MetadataSchema,
 });
+
+export const LocalModelChatConfigurationSchema = z.object({
+  schemaVersion: z.literal("openpond.localModelChatConfiguration.v1").default("openpond.localModelChatConfiguration.v1"),
+  profile: z.enum(["efficient", "full_harness", "custom"]).default("efficient"),
+  systemPromptMode: z.enum(["lean", "full_harness", "custom"]).default("lean"),
+  customSystemPrompt: z.string().max(20_000).nullable().default(null),
+  contextWindowTokens: z.number().int().min(128).max(32_768).default(1_024),
+  maxOutputTokens: z.number().int().min(1).max(512).default(64),
+  temperature: z.number().min(0).max(2).default(0),
+  repetitionPenalty: z.number().min(0.5).max(2).default(1.1),
+  noRepeatNgramSize: z.number().int().min(0).max(10).default(3),
+  compaction: z.enum(["off", "when_needed"]).default("when_needed"),
+  keepWarmSeconds: z.number().int().min(0).max(3_600).default(300),
+  updatedAt: TimestampSchema.nullable().default(null),
+});
+
+export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION = LocalModelChatConfigurationSchema.parse({});
 
 export const ModelArtifactLineageSchema = z.object({
   schemaVersion: z.literal("openpond.modelArtifactLineage.v1"),
@@ -202,6 +287,7 @@ export const ModelArtifactLineageSchema = z.object({
   status: z.enum(["imported", "rejected"]).default("imported"),
   rejectedAt: TimestampSchema.nullable().default(null),
   rejectionReason: z.string().trim().min(1).max(5_000).nullable().default(null),
+  chatConfiguration: LocalModelChatConfigurationSchema.default(DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION),
 });
 
 export const ManagedTrainingClientConfigSchema = z.object({
@@ -228,6 +314,7 @@ export const TrainingStateResponseSchema = z.object({
   graderAuditReports: z.array(GraderAuditReportSchema),
   candidates: z.array(TaskCandidateSchema),
   minerConfig: TaskMinerConfigSchema,
+  minerRuns: z.array(TaskMinerRunSchema).default([]),
   plans: z.array(TrainingPlanSchema),
   bundles: z.array(TrainingBundleManifestSchema),
   jobs: z.array(TrainingJobSchema),
@@ -251,6 +338,13 @@ export type TrainingBundleExport = z.infer<typeof TrainingBundleExportSchema>;
 export type TrainingApproval = z.infer<typeof TrainingApprovalSchema>;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;
 export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
+export type SftStepMetric = z.infer<typeof SftStepMetricSchema>;
+export type TrainingEvaluationAggregate = z.infer<typeof TrainingEvaluationAggregateSchema>;
+export type TrainingEvaluationGrade = z.infer<typeof TrainingEvaluationGradeSchema>;
+export type TrainingEvaluationExample = z.infer<typeof TrainingEvaluationExampleSchema>;
+export type TrainingEvaluationSummary = z.infer<typeof TrainingEvaluationSummarySchema>;
+export type TrainingRunDetail = z.infer<typeof TrainingRunDetailSchema>;
 export type TrainingArtifact = z.infer<typeof TrainingArtifactSchema>;
+export type LocalModelChatConfiguration = z.infer<typeof LocalModelChatConfigurationSchema>;
 export type ModelArtifactLineage = z.infer<typeof ModelArtifactLineageSchema>;
 export type TrainingStateResponse = z.infer<typeof TrainingStateResponseSchema>;

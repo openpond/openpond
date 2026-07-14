@@ -4,6 +4,7 @@ import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
 import "../../styles/settings/remote-access.css";
 import "../../styles/settings/usage-settings.css";
+import "../../styles/settings/compute-settings.css";
 import "../../styles/wallet/wallet.css";
 import type { BootstrapPayload, ProviderSettings, RuntimeEvent } from "@openpond/contracts";
 import type { ClientConnection, PreferencesPayload } from "../../api";
@@ -26,6 +27,7 @@ import { RemoteAccessSettingsSection } from "./RemoteAccessSettingsSection";
 import { SettingsNavigation } from "./SettingsNavigation";
 import { UsageSettingsSection } from "./UsageSettingsSection";
 import { TrainingSettingsSection } from "./TrainingSettingsSection";
+import { ComputeSettingsSection } from "./ComputeSettingsSection";
 import { WalletView } from "../wallet/WalletView";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
@@ -34,6 +36,7 @@ import { useEditorSettings } from "./useEditorSettings";
 import { usePersonalizationSettings } from "./usePersonalizationSettings";
 import { useProviderSettings } from "./useProviderSettings";
 import { useRemoteAccessSettings } from "./useRemoteAccessSettings";
+import { useComputeSettings } from "./useComputeSettings";
 import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/WindowControls";
 
 export function SettingsView({
@@ -107,6 +110,7 @@ export function SettingsView({
   const personalizationSettings = usePersonalizationSettings({ connection, onError, onPayload, personalization });
   const diagnosticsSettings = useDiagnosticsSettings({ onError, section });
   const remoteAccessSettings = useRemoteAccessSettings({ connection, enabled: section === "remote", onError, onToast });
+  const computeSettings = useComputeSettings({ connection, enabled: section === "compute", onError });
   const confirmSubagentsNavigation = useCallback(() => {
     if (section !== "subagents" || !defaultsSettings.subagentsDirty) return true;
     return window.confirm("You have unsaved changes. Leave Subagents without saving?");
@@ -172,6 +176,15 @@ export function SettingsView({
             codex={codex}
             providers={payload?.providers ?? null}
             {...providerSettings}
+          />
+        ) : section === "compute" ? (
+          <ComputeSettingsSection
+            state={computeSettings.state}
+            busy={computeSettings.busy}
+            onScan={computeSettings.scan}
+            onSave={computeSettings.save}
+            onDownloadSmolLm2={computeSettings.downloadSmolLm2}
+            onCancelDownload={computeSettings.cancelDownload}
           />
         ) : section === "defaults" ? (
           <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />

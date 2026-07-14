@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppPreferences,
   ChatModelRef,
@@ -6,32 +6,43 @@ import type {
   CodexReasoningEffort,
   ProviderSettings,
   Session,
+  TaskCandidate,
+  TaskCreationSnapshot,
   TaskMinerConfig,
+  TaskMinerRun,
+  TrainingChatSearchEntry,
   TrainingSourceRef,
 } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
-import { Search, X } from "../icons";
-import { DropdownSelect } from "../DropdownSelect";
-import { CodexModelReasoningMenu } from "../chat/ComposerControls";
-import {
-  modelOptionsForProvider,
-  normalizeChatModel,
-  providerModelSupportsReasoning,
-  providerOptionsFromSettings,
-} from "../../lib/app-models";
-import { startConfiguredTaskCreation, trainingAuthoringModel } from "./training-flow";
+import type { CrossSystemFrontierBaselineResult } from "../../hooks/useTraining";
+import { normalizeChatModel } from "../../lib/app-models";
+import { ArrowLeft, Loader2, X } from "../icons";
+import { trainingAuthoringModel } from "./training-flow";
+import { TrainingAutomaticCandidatesStep } from "./TrainingAutomaticCandidatesStep";
+import { TrainingAutomaticScopeStep } from "./TrainingAutomaticScopeStep";
+import { TrainingManualGoalStep } from "./TrainingManualGoalStep";
+import { TrainingRunReviewStep } from "./TrainingRunReviewStep";
+import { TrainingSourceStep } from "./TrainingSourceStep";
+import { TrainingStartModeStep } from "./TrainingStartModeStep";
 
 type TrainingController = ReturnType<typeof useTraining>;
-type RunMode = "manual" | "automated";
-const MAX_VISIBLE_CHAT_OPTIONS = 100;
+type NewModelMode = "automated" | "manual";
+type NewModelStep =
+  | "start"
+  | "automatic_scope"
+  | "automatic_candidates"
+  | "manual_goal"
+  | "evidence"
+  | "recommendation";
+
+const CHAT_SEARCH_PAGE_SIZE = 20;
 
 export function TrainingRunDialog({
   defaultModel,
   initialObjective,
-  minerConfig,
+  initialSessionIds = [],
   onClose,
-  onManualStarted,
-  onMiningStarted,
+  onTasksetCreated,
   preferences,
   providerSettings,
   reasoningEffort,
@@ -41,10 +52,9 @@ export function TrainingRunDialog({
 }: {
   defaultModel: ChatModelRef;
   initialObjective: string | null;
-  minerConfig: TaskMinerConfig;
+  initialSessionIds?: string[];
   onClose: () => void;
-  onManualStarted: () => void;
-  onMiningStarted: () => void;
+  onTasksetCreated: (creation: TaskCreationSnapshot) => void;
   preferences: AppPreferences["training"];
   providerSettings: ProviderSettings | null;
   reasoningEffort: CodexReasoningEffort;
@@ -53,43 +63,154 @@ export function TrainingRunDialog({
   training: TrainingController;
 }) {
   const initialAuthoringModel = trainingAuthoringModel(preferences, defaultModel);
-  const [mode, setMode] = useState<RunMode>("automated");
+  const [step, setStep] = useState<NewModelStep>("start");
+  const [mode, setMode] = useState<NewModelMode | null>(null);
   const [objective, setObjective] = useState(initialObjective ?? "");
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [authoringProvider, setAuthoringProvider] = useState<ChatProvider>(initialAuthoringModel.providerId);
   const [authoringModel, setAuthoringModel] = useState(initialAuthoringModel.modelId);
   const [authoringReasoningEffort, setAuthoringReasoningEffort] = useState(reasoningEffort);
-  const [observationWindowDays, setObservationWindowDays] = useState(minerConfig.observationWindowDays);
-  const [minimumRecurrence, setMinimumRecurrence] = useState(minerConfig.minimumRecurrence);
   const [search, setSearch] = useState("");
-  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [searchEntries, setSearchEntries] = useState<TrainingChatSearchEntry[]>([]);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchIndexing, setSearchIndexing] = useState(false);
+  const [indexedChats, setIndexedChats] = useState(0);
+  const [totalIndexChats, setTotalIndexChats] = useState(0);
+  const [searchRefreshNonce, setSearchRefreshNonce] = useState(0);
+  const searchRequestRef = useRef(0);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(() => new Set(initialSessionIds));
   const [estimatesBySessionId, setEstimatesBySessionId] = useState<Record<string, { messageCount: number; estimatedTokens: number }>>({});
-  const eligibleSessions = useMemo(
-    () => sessions.filter((session) => !session.systemKind && !session.hiddenFromDefaultSidebar && session.status !== "active"),
-    [sessions],
+  const [creation, setCreation] = useState<TaskCreationSnapshot | null>(null);
+  const [evidenceChanged, setEvidenceChanged] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [preparingScan, setPreparingScan] = useState(false);
+  const [frontierBaseline, setFrontierBaseline] = useState<CrossSystemFrontierBaselineResult | null>(null);
+  const [frontierBaselineRunning, setFrontierBaselineRunning] = useState(false);
+  const [activeMinerRunId, setActiveMinerRunId] = useState<string | null>(null);
+  const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
+  const [minerConfig, setMinerConfig] = useState<TaskMinerConfig>(() => training.payload?.minerConfig ?? defaultMinerConfig());
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  const eligibleSessions = useMemo(() => sessions.filter((session) => !session.systemKind && !session.hiddenFromDefaultSidebar && session.status !== "active"), [sessions]);
+  const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
+  const sourceBySession = useMemo(() => new Map(sources.map((source) => [source.sessionId, source])), [sources]);
+  const chatSearchCandidates = useMemo(() => eligibleSessions.slice(0, 500).map((session) => ({ sessionId: session.id, title: session.title, updatedAt: session.updatedAt })), [eligibleSessions]);
+  const selectedEntries = useMemo(() => [...selectedSessionIds].flatMap((sessionId) => {
+    const current = searchEntries.find((entry) => entry.sessionId === sessionId);
+    if (current) return [current];
+    const session = sessionById.get(sessionId);
+    if (session) return [{ sessionId, title: session.title, updatedAt: session.updatedAt, snippet: null }];
+    const source = sourceBySession.get(sessionId);
+    return source ? [{ sessionId, title: source.title, updatedAt: source.occurredAt, snippet: null }] : [];
+  }), [searchEntries, selectedSessionIds, sessionById, sourceBySession]);
+  const visibleSessionKey = useMemo(
+    () => [...new Set([...selectedEntries, ...searchEntries].map((entry) => entry.sessionId))]
+      .filter((sessionId) => !estimatesBySessionId[sessionId])
+      .join("\n"),
+    [estimatesBySessionId, searchEntries, selectedEntries],
   );
-  const matchingSessions = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return query
-      ? eligibleSessions.filter((session) => session.title.toLowerCase().includes(query))
-      : eligibleSessions;
-  }, [eligibleSessions, search]);
-  const visibleSessions = matchingSessions.slice(0, MAX_VISIBLE_CHAT_OPTIONS);
-  const visibleSessionKey = visibleSessions.map((session) => session.id).join("\n");
-  const selectedCount = selectedSessionIds.size;
-  const busy = Boolean(training.busyAction);
-  const providerOptions = useMemo(
-    () => providerOptionsFromSettings(providerSettings, { enabledOnly: true }),
-    [providerSettings],
-  );
-  const modelOptions = useMemo(
-    () => modelOptionsForProvider(authoringProvider, providerSettings),
-    [authoringProvider, providerSettings],
-  );
-  const showReasoning = providerModelSupportsReasoning(authoringProvider, authoringModel, providerSettings);
+  const activeMinerRun = useMemo(() => training.payload?.minerRuns.find((run) => run.id === activeMinerRunId) ?? null, [activeMinerRunId, training.payload?.minerRuns]);
+  const scanning = preparingScan || Boolean(activeMinerRun && ["queued", "running", "cancelling"].includes(activeMinerRun.status));
+  const busy = analyzing || preparingScan || frontierBaselineRunning || Boolean(training.busyAction);
+
+  useEffect(() => setObjective(initialObjective ?? ""), [initialObjective]);
 
   useEffect(() => {
-    setObjective(initialObjective ?? "");
-  }, [initialObjective]);
+    if (step !== "automatic_scope" || activeMinerRunId) return;
+    const persisted = training.payload?.minerRuns.find((run) => ["queued", "running", "cancelling"].includes(run.status));
+    if (persisted) setActiveMinerRunId(persisted.id);
+  }, [activeMinerRunId, step, training.payload?.minerRuns]);
+
+  useEffect(() => {
+    if (!activeMinerRun || activeMinerRun.status !== "succeeded") return;
+    const candidateIds = new Set(activeMinerRun.candidateIds);
+    setScanCandidates(training.payload?.candidates.filter((candidate) => candidateIds.has(candidate.id)) ?? []);
+    setStep("automatic_candidates");
+  }, [activeMinerRun, training.payload?.candidates]);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => previousFocusRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const target = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus], [aria-label^='Back']");
+      target?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== "evidence") return;
+    setSearchEntries([]);
+    setSearchTotal(0);
+    setSearchHasMore(false);
+    setSearchError(null);
+  }, [search, step]);
+
+  useEffect(() => {
+    if (step !== "evidence") return undefined;
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+    setSearchLoading(true);
+    setSearchError(null);
+    const timer = window.setTimeout(() => {
+      void training.actions.searchChats(search, chatSearchCandidates, 0, CHAT_SEARCH_PAGE_SIZE).then((result) => {
+        if (searchRequestRef.current !== requestId) return;
+        setSearchEntries(result.entries);
+        setSearchTotal(result.total);
+        setSearchHasMore(result.hasMore);
+        setSearchIndexing(result.indexing);
+        setIndexedChats(result.indexedChats);
+        setTotalIndexChats(result.totalChats);
+      }).catch((error) => {
+        if (searchRequestRef.current !== requestId) return;
+        setSearchEntries([]);
+        setSearchTotal(0);
+        setSearchHasMore(false);
+        setSearchIndexing(false);
+        setSearchError(error instanceof Error ? error.message : String(error));
+      }).finally(() => {
+        if (searchRequestRef.current === requestId) setSearchLoading(false);
+      });
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [chatSearchCandidates, search, searchRefreshNonce, step, training.actions]);
+
+  useEffect(() => {
+    if (step !== "evidence" || !search.trim() || !searchIndexing) return undefined;
+    const timer = window.setTimeout(() => setSearchRefreshNonce((current) => current + 1), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [search, searchIndexing, step]);
+
+  const loadMoreChats = useCallback(async () => {
+    if (searchLoading || !searchHasMore) return;
+    const requestId = searchRequestRef.current;
+    const offset = searchEntries.length;
+    setSearchLoading(true);
+    try {
+      const result = await training.actions.searchChats(search, chatSearchCandidates, offset, CHAT_SEARCH_PAGE_SIZE);
+      if (searchRequestRef.current !== requestId) return;
+      setSearchEntries((current) => {
+        const seen = new Set(current.map((entry) => entry.sessionId));
+        return [...current, ...result.entries.filter((entry) => !seen.has(entry.sessionId))];
+      });
+      setSearchTotal(result.total);
+      setSearchHasMore(result.hasMore);
+      setSearchIndexing(result.indexing);
+      setIndexedChats(result.indexedChats);
+      setTotalIndexChats(result.totalChats);
+    } catch (error) {
+      if (searchRequestRef.current === requestId) setSearchError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (searchRequestRef.current === requestId) setSearchLoading(false);
+    }
+  }, [chatSearchCandidates, search, searchEntries.length, searchHasMore, searchLoading, training.actions]);
 
   useEffect(() => {
     const known = Object.fromEntries(sources.flatMap((source) => {
@@ -101,189 +222,345 @@ export function TrainingRunDialog({
   }, [sources]);
 
   useEffect(() => {
-    if (!visibleSessionKey) return undefined;
+    if (step !== "evidence" || !visibleSessionKey) return undefined;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void training.actions.estimateSources(visibleSessionKey.split("\n")).then((estimates) => {
         if (cancelled) return;
         setEstimatesBySessionId((current) => ({
           ...current,
-          ...Object.fromEntries(estimates.map((estimate) => [estimate.sessionId, {
-            messageCount: estimate.messageCount,
-            estimatedTokens: estimate.estimatedTokens,
-          }])),
+          ...Object.fromEntries(estimates.map((estimate) => [estimate.sessionId, { messageCount: estimate.messageCount, estimatedTokens: estimate.estimatedTokens }])),
         }));
       }).catch(() => undefined);
     }, 200);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [training.actions, visibleSessionKey]);
+  }, [step, training.actions, visibleSessionKey]);
 
-  const selectedEstimate = useMemo(() => {
-    let messageCount = 0;
-    let estimatedTokens = 0;
-    let measuredChats = 0;
-    for (const sessionId of selectedSessionIds) {
-      const estimate = estimatesBySessionId[sessionId];
-      if (!estimate) continue;
-      measuredChats += 1;
-      messageCount += estimate.messageCount;
-      estimatedTokens += estimate.estimatedTokens;
-    }
-    return { messageCount, estimatedTokens, measuredChats };
-  }, [estimatesBySessionId, selectedSessionIds]);
+  useEffect(() => {
+    if (step !== "automatic_scope" || !eligibleSessions.length) return undefined;
+    const missing = eligibleSessions.map((session) => session.id).filter((sessionId) => !estimatesBySessionId[sessionId]);
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    void training.actions.estimateSources(missing).then((estimates) => {
+      if (cancelled) return;
+      setEstimatesBySessionId((current) => ({
+        ...current,
+        ...Object.fromEntries(estimates.map((estimate) => [estimate.sessionId, { messageCount: estimate.messageCount, estimatedTokens: estimate.estimatedTokens }])),
+      }));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [eligibleSessions, estimatesBySessionId, step, training.actions]);
+
+  const selectedEstimate = useMemo(() => aggregateEstimate([...selectedSessionIds], estimatesBySessionId), [estimatesBySessionId, selectedSessionIds]);
+  const scanEstimate = useMemo(() => aggregateEstimate(eligibleSessions.map((session) => session.id), estimatesBySessionId), [eligibleSessions, estimatesBySessionId]);
+
+  function selectMode(nextMode: NewModelMode) {
+    if (nextMode !== mode && mode !== null) setEvidenceChanged(true);
+    setMode(nextMode);
+  }
+
+  function continueFromStart() {
+    if (mode === "automated") setStep("automatic_scope");
+    if (mode === "manual") setStep("manual_goal");
+  }
+
+  function changeObjective(value: string) {
+    if (value !== objective) setEvidenceChanged(true);
+    setObjective(value);
+  }
 
   function changeAuthoringProvider(provider: ChatProvider) {
+    setEvidenceChanged(true);
     setAuthoringProvider(provider);
     setAuthoringModel((current) => normalizeChatModel(provider, current, providerSettings));
   }
 
+  function changeAuthoringModel(model: string) {
+    setEvidenceChanged(true);
+    setAuthoringModel(model);
+  }
+
+  function changeReasoningEffort(value: CodexReasoningEffort) {
+    setEvidenceChanged(true);
+    setAuthoringReasoningEffort(value);
+  }
+
   function toggleVisible() {
+    setEvidenceChanged(true);
     setSelectedSessionIds((current) => {
       const next = new Set(current);
-      const everyVisibleSelected = visibleSessions.length > 0 && visibleSessions.every((session) => next.has(session.id));
-      for (const session of visibleSessions) everyVisibleSelected ? next.delete(session.id) : next.add(session.id);
+      const everyVisibleSelected = searchEntries.length > 0 && searchEntries.every((entry) => next.has(entry.sessionId));
+      for (const entry of searchEntries) everyVisibleSelected ? next.delete(entry.sessionId) : next.add(entry.sessionId);
+      return next;
+    });
+  }
+
+  function toggleSession(sessionId: string, selected: boolean) {
+    setEvidenceChanged(true);
+    setSelectedSessionIds((current) => {
+      const next = new Set(current);
+      selected ? next.add(sessionId) : next.delete(sessionId);
       return next;
     });
   }
 
   async function ensureSelectedSources(): Promise<TrainingSourceRef[]> {
-    const sourceBySession = new Map(sources.map((source) => [source.sessionId, source]));
     const selected: TrainingSourceRef[] = [];
     const missingSessionIds: string[] = [];
     for (const sessionId of selectedSessionIds) {
       const existing = sourceBySession.get(sessionId);
-      if (existing) {
-        selected.push(existing);
-        continue;
-      }
-      missingSessionIds.push(sessionId);
+      existing ? selected.push(existing) : missingSessionIds.push(sessionId);
     }
     if (missingSessionIds.length) selected.push(...await training.actions.addSources(missingSessionIds) ?? []);
     return selected;
   }
 
-  async function submit() {
-    const selectedSources = await ensureSelectedSources();
-    if (!selectedSources.length) return;
-    if (mode === "automated") {
-      const nextConfig = {
-        ...minerConfig,
-        enabled: true,
-        observationWindowDays,
-        minimumRecurrence,
-      };
-      if (
-        !minerConfig.enabled ||
-        observationWindowDays !== minerConfig.observationWindowDays ||
-        minimumRecurrence !== minerConfig.minimumRecurrence
-      ) await training.actions.configureMiner(nextConfig);
-      await training.actions.runMiner(selectedSources.map((source) => source.id));
-      onMiningStarted();
-      return;
+  async function scanForCandidates() {
+    setPreparingScan(true);
+    try {
+      const scopedSources = await training.actions.addSources(eligibleSessions.map((session) => session.id)) ?? [];
+      const sourceIds = [...new Set([...sources, ...scopedSources].map((source) => source.id))];
+      const nextConfig = { ...minerConfig, enabled: true };
+      await training.actions.configureMiner(nextConfig);
+      const runRecord: TaskMinerRun | null = await training.actions.runMiner(sourceIds);
+      if (runRecord) setActiveMinerRunId(runRecord.id);
+    } finally {
+      setPreparingScan(false);
     }
-    const creation = await startConfiguredTaskCreation({
-      training,
-      sourceIds: selectedSources.map((source) => source.id),
-      objective,
-      surface: "training_page",
-      preferences,
-      fallbackModel: defaultModel,
-      analysisModel: { providerId: authoringProvider, modelId: authoringModel },
-      reasoningEffort: authoringReasoningEffort,
-    });
-    if (creation) onManualStarted();
+  }
+
+  async function runFrontierBaseline() {
+    setFrontierBaselineRunning(true);
+    try {
+      const result = await training.actions.runCrossSystemFrontierBaseline(
+        { providerId: authoringProvider, modelId: authoringModel },
+        authoringReasoningEffort,
+      );
+      if (result) setFrontierBaseline(result);
+    } finally {
+      setFrontierBaselineRunning(false);
+    }
+  }
+
+  async function cancelScan() {
+    if (!activeMinerRunId) return;
+    await training.actions.cancelMinerRun(activeMinerRunId);
+  }
+
+  function selectCandidate(candidate: TaskCandidate) {
+    const sourceIds = new Set(candidate.evidence.flatMap((evidence) => evidence.sourceRefIds));
+    const sessionIds = sources.filter((source) => sourceIds.has(source.id)).map((source) => source.sessionId);
+    setSelectedSessionIds(new Set(sessionIds));
+    setSelectedCandidateId(candidate.id);
+    setObjective(candidate.title);
+    setEvidenceChanged(true);
+    setStep("evidence");
+  }
+
+  async function analyze() {
+    setAnalyzing(true);
+    try {
+      const selectedSources = await ensureSelectedSources();
+      if (creation && evidenceChanged && !["cancelled", "failed", "ready"].includes(creation.state)) {
+        const staleCreation = creation;
+        await training.actions.cancelCreation(staleCreation.id);
+      }
+      const next = await training.actions.startCreation(selectedSources.map((source) => source.id), {
+        surface: mode === "automated" ? "task_candidate" : "training_page",
+        mode: "defaults",
+        entryMode: mode ?? "manual",
+        objective: objective.trim() || undefined,
+        methodHint: null,
+        candidateId: selectedCandidateId,
+        analysisModel: { providerId: authoringProvider, modelId: authoringModel },
+        analysisReasoningEffort: authoringReasoningEffort,
+      });
+      if (!next) return;
+      setCreation(next);
+      setEvidenceChanged(false);
+      if (next.state !== "awaiting_disclosure_approval") setStep("recommendation");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function approveDisclosure() {
+    if (!creation || creation.state !== "awaiting_disclosure_approval") return;
+    setAnalyzing(true);
+    try {
+      const next = await training.actions.approveDisclosure(creation.id, true);
+      if (!next) return;
+      setCreation(next);
+      setStep("recommendation");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function declineDisclosure() {
+    if (creation?.state === "awaiting_disclosure_approval") await training.actions.approveDisclosure(creation.id, false);
+    setCreation(null);
+    setEvidenceChanged(true);
+  }
+
+  function goBack() {
+    if (step === "automatic_scope") setStep("start");
+    else if (step === "automatic_candidates") setStep("automatic_scope");
+    else if (step === "manual_goal") setStep("start");
+    else if (step === "evidence") {
+      if (creation?.state === "awaiting_disclosure_approval") void declineDisclosure();
+      setStep(mode === "automated" ? "automatic_candidates" : "manual_goal");
+    } else if (step === "recommendation") setStep("evidence");
+  }
+
+  async function closeDialog() {
+    const activeCreation = creation;
+    const hasMaterialChanges = step !== "start" || Boolean(objective.trim()) || selectedSessionIds.size > 0 || Boolean(activeCreation);
+    if (hasMaterialChanges && !window.confirm("Close New model? The current selections will be discarded and any active authoring operation will be cancelled.")) return;
+    if (activeCreation && !["cancelled", "failed", "ready"].includes(activeCreation.state)) await training.actions.cancelCreation(activeCreation.id);
+    onClose();
+  }
+
+  async function createTaskset() {
+    if (!creation || creation.state !== "awaiting_materialization_approval") return;
+    const next = await training.actions.materialize(creation.id, true);
+    if (!next) return;
+    setCreation(next);
+    if (next.state === "ready") onTasksetCreated(next);
   }
 
   return (
-    <div className="training-dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="training-dialog training-run-dialog" role="dialog" aria-modal="true" aria-label="Start training run" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="training-dialog-backdrop" role="presentation" onMouseDown={() => void closeDialog()}>
+      <section
+        ref={dialogRef}
+        className={`training-dialog training-run-dialog ${step === "start" ? "training-run-start-step" : "training-run-workflow-step"}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New model"
+        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); void closeDialog(); } }}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="training-dialog-header">
-          <div>
-            <h2>New model</h2>
+          <div className="training-run-dialog-title">
+            {step !== "start" ? <button data-autofocus type="button" aria-label={backLabel(step)} onClick={goBack}><ArrowLeft size={16} /></button> : null}
+            <h2>{step === "recommendation" ? "Recommendation" : "New model"}</h2>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose}><X size={16} /></button>
+          <button type="button" aria-label="Close" onClick={() => void closeDialog()}><X size={16} /></button>
         </div>
 
-        <div className="training-tabs training-dialog-mode-tabs" role="tablist" aria-label="Run setup mode">
-          <button type="button" role="tab" aria-selected={mode === "automated"} className={mode === "automated" ? "active" : ""} onClick={() => setMode("automated")}>Automated</button>
-          <button type="button" role="tab" aria-selected={mode === "manual"} className={mode === "manual" ? "active" : ""} onClick={() => setMode("manual")}>Manual</button>
-        </div>
-
-        {mode === "manual" ? (
-          <div className="training-manual-setup">
-            <label className="training-objective-field">
-              <span>What should the model learn?</span>
-              <textarea value={objective} onChange={(event) => setObjective(event.target.value)} placeholder="Describe the repeatable capability. You can leave this blank and answer in the guided plan." />
-            </label>
-            <div className="training-authoring-controls" aria-label="Authoring model">
-              <DropdownSelect compact placement="bottom" label="Provider" value={authoringProvider} options={providerOptions} disabled={busy} onChange={(value) => changeAuthoringProvider(value as ChatProvider)} />
-              {showReasoning ? (
-                <CodexModelReasoningMenu disabled={busy} model={authoringModel} modelOptions={modelOptions} placement="bottom" reasoningEffort={authoringReasoningEffort} onModelChange={setAuthoringModel} onReasoningEffortChange={setAuthoringReasoningEffort} />
-              ) : (
-                <DropdownSelect compact placement="bottom" label="Model" value={authoringModel} options={modelOptions} disabled={busy} onChange={setAuthoringModel} />
-              )}
-            </div>
+        {step === "start" ? (
+          <TrainingStartModeStep mode={mode} onChange={selectMode} onContinue={continueFromStart} />
+        ) : step === "automatic_scope" ? (
+          <TrainingAutomaticScopeStep
+            chatCount={eligibleSessions.length}
+            config={minerConfig}
+            estimate={scanEstimate}
+            frontierBaseline={frontierBaseline}
+            frontierBaselineModel={`${authoringProvider} · ${authoringModel}`}
+            frontierBaselineRunning={frontierBaselineRunning}
+            onCancel={() => void cancelScan()}
+            onConfigChange={setMinerConfig}
+            onRunFrontierBaseline={() => void runFrontierBaseline()}
+            onScan={() => void scanForCandidates()}
+            run={activeMinerRun}
+            scanning={scanning}
+          />
+        ) : step === "automatic_candidates" ? (
+          <TrainingAutomaticCandidatesStep candidates={scanCandidates} onRescan={() => setStep("automatic_scope")} onSelect={selectCandidate} />
+        ) : step === "manual_goal" ? (
+          <TrainingManualGoalStep objective={objective} onChange={changeObjective} onContinue={() => setStep("evidence")} />
+        ) : step === "evidence" && mode ? (
+          <TrainingSourceStep
+            authoringModel={authoringModel}
+            authoringProvider={authoringProvider}
+            authoringReasoningEffort={authoringReasoningEffort}
+            busy={busy}
+            disclosurePending={creation?.state === "awaiting_disclosure_approval"}
+            estimatesBySessionId={estimatesBySessionId}
+            matchingSessionCount={searchTotal}
+            mode={mode}
+            objective={objective}
+            onAnalyze={() => void analyze()}
+            onApproveDisclosure={() => void approveDisclosure()}
+            onAuthoringModelChange={changeAuthoringModel}
+            onAuthoringProviderChange={changeAuthoringProvider}
+            onAuthoringReasoningEffortChange={changeReasoningEffort}
+            onDeclineDisclosure={() => void declineDisclosure()}
+            onSearchChange={setSearch}
+            onLoadMore={() => void loadMoreChats()}
+            onReturnToRecommendation={() => setStep("recommendation")}
+            onToggleSession={toggleSession}
+            onToggleVisible={toggleVisible}
+            providerSettings={providerSettings}
+            recommendationAvailable={Boolean(creation?.proposal) && !evidenceChanged}
+            search={search}
+            searchError={searchError}
+            searchHasMore={searchHasMore}
+            searchIndexedChats={indexedChats}
+            searchIndexing={searchIndexing}
+            searchLoading={searchLoading}
+            searchTotalChats={totalIndexChats}
+            selectedEntries={selectedEntries}
+            selectedEstimate={selectedEstimate}
+            selectedSessionIds={selectedSessionIds}
+            visibleSessions={searchEntries}
+          />
+        ) : step === "recommendation" && creation?.proposal ? (
+          <TrainingRunReviewStep
+            busy={busy}
+            creation={creation}
+            onAddChats={() => setStep("evidence")}
+            onClose={() => void closeDialog()}
+            onCreateTaskset={() => void createTaskset()}
+            onCreationChange={setCreation}
+            sources={sources}
+            training={training}
+          />
+        ) : step === "recommendation" && creation?.state === "awaiting_questions" ? (
+          <div className="training-evidence-required">
+            <div className="training-dialog-scroll-body"><div className="training-run-step-heading"><h3>More evidence is needed</h3><p>{creation.blockingQuestions[0]?.prompt ?? creation.blockedReason ?? "Add supporting evidence before authoring continues."}</p></div></div>
+            <div className="training-dialog-actions"><button className="training-button" type="button" onClick={() => setStep("evidence")}>Add chats</button></div>
           </div>
         ) : (
-          <div className="training-automated-setup" aria-label="Automated search options">
-            <label><span>Lookback window</span><select aria-label="Lookback window" value={observationWindowDays} onChange={(event) => setObservationWindowDays(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>1 year</option></select></label>
-            <label><span>Minimum recurrence</span><select aria-label="Minimum recurrence" value={minimumRecurrence} onChange={(event) => setMinimumRecurrence(Number(event.target.value))}><option value={2}>2 similar chats</option><option value={3}>3 similar chats</option><option value={5}>5 similar chats</option><option value={10}>10 similar chats</option></select></label>
+          <div className="training-recommendation-loading">
+            {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>Preparing the recommendation…</p></>}
           </div>
         )}
-
-        <div className="training-source-toolbar">
-          <label className="training-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search chats" /></label>
-          <button className="training-text-button" type="button" disabled={!visibleSessions.length} onClick={toggleVisible}>
-            {visibleSessions.length > 0 && visibleSessions.every((session) => selectedSessionIds.has(session.id)) ? "Clear visible" : "Select visible"}
-          </button>
-        </div>
-        <div className="training-source-result-count">
-          Showing {visibleSessions.length} of {matchingSessions.length} matching chats
-        </div>
-        <div className="training-source-options">
-          {visibleSessions.map((session) => (
-            <label key={session.id}>
-              <input
-                className="training-chat-checkbox"
-                type="checkbox"
-                checked={selectedSessionIds.has(session.id)}
-                onChange={(event) => setSelectedSessionIds((current) => {
-                  const next = new Set(current);
-                  event.target.checked ? next.add(session.id) : next.delete(session.id);
-                  return next;
-                })}
-              />
-              <span><strong>{session.title}</strong><small>{new Date(session.updatedAt).toLocaleString()}<ChatEstimate estimate={estimatesBySessionId[session.id]} /></small></span>
-            </label>
-          ))}
-          {!visibleSessions.length ? <p className="training-empty">No completed chats match this search.</p> : null}
-        </div>
-
-        <div className="training-dialog-actions">
-          <span className="training-selection-count">
-            {selectedCount === 0
-              ? "Select chats to estimate scan size"
-              : selectedEstimate.measuredChats === selectedCount
-                ? <><span>{selectedCount} chat{selectedCount === 1 ? "" : "s"}</span><span>{selectedEstimate.messageCount} messages</span><span>About {formatTokens(selectedEstimate.estimatedTokens)} tokens</span></>
-                : <><span>{selectedCount} chat{selectedCount === 1 ? "" : "s"}</span><span>Estimating scan size…</span></>}
-          </span>
-          <button className="training-button secondary" type="button" onClick={onClose}>Cancel</button>
-          <button className="training-button" type="button" disabled={!selectedCount || busy} onClick={() => void submit()}>
-            {mode === "automated" ? "Search selected chats" : "Create training plan"}
-          </button>
-        </div>
       </section>
     </div>
   );
 }
 
-function ChatEstimate({ estimate }: { estimate?: { messageCount: number; estimatedTokens: number } }) {
-  if (!estimate) return <span className="training-chat-estimate"><span>Estimating…</span></span>;
-  return <span className="training-chat-estimate"><span>{estimate.messageCount} messages</span><span>About {formatTokens(estimate.estimatedTokens)} tokens</span></span>;
+function aggregateEstimate(sessionIds: string[], estimates: Record<string, { messageCount: number; estimatedTokens: number }>) {
+  let messageCount = 0;
+  let estimatedTokens = 0;
+  let measuredChats = 0;
+  for (const sessionId of sessionIds) {
+    const estimate = estimates[sessionId];
+    if (!estimate) continue;
+    measuredChats += 1;
+    messageCount += estimate.messageCount;
+    estimatedTokens += estimate.estimatedTokens;
+  }
+  return { messageCount, estimatedTokens, measuredChats };
 }
 
-function formatTokens(tokens: number): string {
-  if (tokens < 1_000) return String(tokens);
-  if (tokens < 1_000_000) return `${(tokens / 1_000).toFixed(tokens >= 10_000 ? 0 : 1)}K`;
-  return `${(tokens / 1_000_000).toFixed(tokens >= 10_000_000 ? 0 : 1)}M`;
+function backLabel(step: NewModelStep): string {
+  if (step === "automatic_scope") return "Back to start mode";
+  if (step === "automatic_candidates") return "Back to scan scope";
+  if (step === "manual_goal") return "Back to start mode";
+  if (step === "evidence") return "Back to capability";
+  return "Back to evidence";
+}
+
+function defaultMinerConfig(): TaskMinerConfig {
+  return {
+    schemaVersion: "openpond.taskMinerConfig.v1",
+    enabled: false,
+    localOnly: true,
+    observationWindowDays: 30,
+    minimumRecurrence: 3,
+    clustering: "hybrid_deterministic_first",
+    consentRequired: true,
+  };
 }

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { runBaseline } from "../packages/taskset-sdk/src";
+import { computeTasksetHash, runBaseline } from "../packages/taskset-sdk/src";
+import { TasksetSchema } from "../packages/contracts/src";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";
+import { buildTasksetReadiness } from "../apps/server/src/training/readiness";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("baseline evaluator", () => {
@@ -11,9 +13,32 @@ describe("baseline evaluator", () => {
 
     const readiness = await service.readiness(taskset.id);
 
-    expect(readiness).toMatchObject({ ready: true, recommendedMethod: "sft", baselineReportId: null, blockers: [] });
+    expect(readiness).toMatchObject({ ready: true, recommendedMethod: "sft", trainingPath: { primaryMethod: "sft", bootstrap: null }, baselineReportId: null, blockers: [] });
     expect((await store.listGraderAuditReports(taskset.id))[0]).toMatchObject({ passed: true });
     expect(await store.getTaskset(taskset.id)).toMatchObject({ status: "ready", readiness: { ready: true } });
+  }));
+
+  test("preserves GRPO as primary while representing local SFT only as a trajectory bootstrap", async () => withTrainingStore(async ({ store }) => {
+    const base = tasksetFixture();
+    const draft = TasksetSchema.parse({
+      ...base,
+      contentHash: "00000000",
+      capabilities: { ...base.capabilities, supportedSignals: ["demonstration", "reward"], compatibleMethods: ["grpo", "sft"], requiresTools: true, requiresState: true },
+      metadata: { ...base.metadata, trainingMethod: "grpo" },
+    });
+    const taskset = TasksetSchema.parse({ ...draft, contentHash: computeTasksetHash(draft) });
+    await store.upsertTaskset(taskset);
+    const service = createTaskEvaluationService({ store, loadProfileState: async () => ({ mode: "empty", sourcePath: null } as any) });
+
+    const readiness = await service.readiness(taskset.id);
+
+    expect(readiness).toMatchObject({
+      ready: true,
+      recommendedMethod: "grpo",
+      trainingPath: { primaryMethod: "grpo", bootstrap: { method: "sft", purpose: "trajectory_bootstrap", demonstrationRefs: ["demo_train"] } },
+    });
+    expect(readiness.compatibleDestinationClasses).not.toContain("local_cpu_fixture");
+    expect(readiness.trainingPath?.bootstrap?.limitations.join(" ")).toContain("does not satisfy the primary GRPO recommendation");
   }));
 
   test("runs repeated models/seeds and reports pass@k, reward, failures, cost, and interventions", async () => {
@@ -25,6 +50,30 @@ describe("baseline evaluator", () => {
     expect(result.report.reward).toMatchObject({ count: 4, mean: 0.5, variance: 0.25 });
     expect(result.report.totalCostUsd).toBeCloseTo(0.04);
     expect(result.report.userInterventions).toBe(2);
+  });
+
+  test("blocks training readiness when the grader audit fails", () => {
+    const taskset = tasksetFixture();
+    const readiness = buildTasksetReadiness({
+      taskset,
+      baseline: null,
+      graderAudit: {
+        schemaVersion: "openpond.graderAuditReport.v1",
+        id: "grader_audit_failed_fixture",
+        tasksetId: taskset.id,
+        tasksetHash: taskset.contentHash,
+        fixtureRefs: ["fixture_negative"],
+        gradeRefs: ["grade_false_positive"],
+        passed: false,
+        hackingChecksPassed: false,
+        leakageChecksPassed: true,
+        infrastructureSafetyPassed: true,
+        failures: [{ fixtureId: "fixture_negative", label: "negative", gradeId: "grade_false_positive", reason: "The negative fixture incorrectly passed." }],
+        createdAt: "2026-07-13T00:00:00.000Z",
+      },
+    });
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockers.map((blocker) => blocker.code)).toEqual(expect.arrayContaining(["grader_audit_failed", "grader_hacking"]));
   });
 
   test("persists fixture audits, attempts, component grades, baseline, and readiness", async () => withTrainingStore(async ({ store }) => {

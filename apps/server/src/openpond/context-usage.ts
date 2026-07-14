@@ -23,7 +23,8 @@ export function hostedContextLimit(_provider: HostedContextProvider, model: stri
 }
 
 export function usableHostedContextLimit(maxContextTokens: number): number {
-  const reserve = Math.max(MIN_CONTEXT_RESERVE_TOKENS, Math.ceil(maxContextTokens * 0.08));
+  const scaledMinimumReserve = Math.min(MIN_CONTEXT_RESERVE_TOKENS, Math.ceil(maxContextTokens * 0.25));
+  const reserve = Math.min(maxContextTokens - 1, Math.max(scaledMinimumReserve, Math.ceil(maxContextTokens * 0.08)));
   return Math.max(1, maxContextTokens - reserve);
 }
 

@@ -140,6 +140,10 @@ export async function loadCodexHistorySessions(options: {
   return threads.map((thread) => thread.session);
 }
 
+export async function loadCodexHistorySearchFiles(codexHome = codexHomePath()): Promise<CodexHistoryFile[]> {
+  return loadCodexHistoryFileIndex(codexHome);
+}
+
 export async function readCodexHistoryThreadPayload(
   sessionId: string,
   options: {
@@ -277,6 +281,21 @@ export function parseCodexSessionRecords(
   const parser = createCodexRecordParser(input);
   for (const record of records) parser.accept(record);
   return parser.finish();
+}
+
+export async function readCodexHistorySearchText(thread: Pick<CodexHistoryThread, "filePath">): Promise<string> {
+  const messages: string[] = [];
+  await readJsonlRecords(thread.filePath, (record) => {
+    const payload = asRecord(record.payload);
+    const responsePayload = responsePayloadFromCodexRecord(record, payload);
+    if (responsePayload?.type !== "message") return;
+    const role = stringValue(responsePayload.role);
+    if (role !== "user" && role !== "assistant") return;
+    const text = textFromContent(responsePayload.content).trim();
+    if (!text || (role === "user" && codexControlMessage(text))) return;
+    messages.push(text);
+  });
+  return messages.join("\n");
 }
 
 async function parseCodexSessionFile(input: ParseCodexSessionInput & { filePath: string }): Promise<ParsedCodexSession> {

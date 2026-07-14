@@ -28,7 +28,7 @@ export class ExportTrainingDestination implements TrainingDestination {
 }
 
 export class UnavailableTrainingDestination implements TrainingDestination {
-  constructor(readonly id: Extract<TrainingDestinationId, "openpond_managed" | "custom">, private readonly reason: string, private readonly resolveTaskset: TasksetResolver) {}
+  constructor(readonly id: Exclude<TrainingDestinationId, "export" | "local_cpu_fixture">, private readonly reason: string, private readonly resolveTaskset: TasksetResolver) {}
   async capabilities(): Promise<TrainingDestinationCapabilities> { return capabilities(this.id, false, this.id === "custom", this.reason); }
   async validate(plan: TrainingPlan): Promise<TrainingCompatibilityReport> { const taskset = await this.resolveTaskset(plan.tasksetId); if (!taskset) throw new Error("Taskset not found."); return validateAgainst(taskset, plan, await this.capabilities()); }
   async quote(): Promise<{ estimatedCostUsd: number | null; assumptions: string[] }> { throw new Error(this.reason); }

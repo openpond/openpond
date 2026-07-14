@@ -34,4 +34,36 @@ describe("task mining evidence detectors", () => {
     expect(result.candidates[0]?.workflowSignature).toBe("automatic-workflow");
     expect(result.candidates[0]?.metadata.clustering).toBe("hybrid_deterministic_first");
   }));
+
+  test("persists user-triggered scan progress and candidate lineage", async () => withTrainingStore(async ({ store }) => {
+    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`run_${index}`, `cluster_${index}`), metadata: { workflowSignature: "persisted-run" } });
+    const service = createTaskMinerService({ store });
+    const started = await service.startRun({ profileId: "default" });
+    expect(started).toMatchObject({ status: "queued", progress: { stage: "queued" }, candidateIds: [] });
+    const completed = await waitForMinerRun(store, started.id);
+    expect(completed).toMatchObject({ status: "succeeded", progress: { stage: "complete", processedSources: 3, totalSources: 3, candidatesFound: 1 } });
+    expect(completed.candidateIds).toHaveLength(1);
+    expect((await store.listTaskMinerRuns("default"))[0]?.id).toBe(started.id);
+  }));
+
+  test("persists cancellation for an active scan", async () => withTrainingStore(async ({ store }) => {
+    for (let index = 0; index < 200; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`cancel_${index}`, `cluster_${index}`), metadata: { workflowSignature: `cancel-${index}` } });
+    const service = createTaskMinerService({ store });
+    const started = await service.startRun({ profileId: "default" });
+    await service.cancelRun(started.id);
+    const completed = await waitForMinerRun(store, started.id);
+    expect(completed.status).toBe("cancelled");
+    expect(completed.cancelRequested).toBe(true);
+    expect(completed.error).toBeNull();
+  }));
 });
+
+async function waitForMinerRun(store: any, id: string) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const run = await store.getTaskMinerRun(id);
+    if (run && ["succeeded", "failed", "cancelled"].includes(run.status)) return run;
+    await Bun.sleep(10);
+  }
+  throw new Error(`Timed out waiting for Task Miner run ${id}.`);
+}

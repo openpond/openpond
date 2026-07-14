@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ChatModelRefSchema } from "./providers.js";
 import { CodexReasoningEffortSchema } from "./settings.js";
+import { TrainingTacticSchema } from "./task-mining.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -30,6 +31,7 @@ export const TaskCreationSurfaceSchema = z.enum([
   "task_candidate",
 ]);
 export const TaskCreationModeSchema = z.enum(["defaults", "customize"]);
+export const NewModelModeSchema = z.enum(["automated", "manual"]);
 
 export const TrainingSourceConsentSchema = z.object({
   status: z.enum(["pending", "granted", "denied", "revoked"]),
@@ -64,6 +66,37 @@ export const TrainingSourceEstimateSchema = z.object({
   messageCount: z.number().int().nonnegative(),
   estimatedTokens: z.number().int().nonnegative(),
   textBytes: z.number().int().nonnegative(),
+});
+
+export const TrainingChatSearchRequestSchema = z.object({
+  query: z.string().max(500).default(""),
+  offset: z.number().int().nonnegative().default(0),
+  limit: z.number().int().min(1).max(100).default(20),
+  candidates: z.array(z.object({
+    sessionId: IdSchema,
+    title: z.string().trim().min(1).max(500),
+    updatedAt: TimestampSchema,
+  })).max(500).default([]),
+});
+
+export const TrainingChatSearchEntrySchema = z.object({
+  sessionId: IdSchema,
+  title: z.string().trim().min(1).max(500),
+  updatedAt: TimestampSchema,
+  snippet: z.string().max(2_000).nullable(),
+});
+
+export const TrainingChatSearchResultSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingChatSearchResult.v1"),
+  query: z.string(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
+  indexedChats: z.number().int().nonnegative(),
+  totalChats: z.number().int().nonnegative(),
+  indexing: z.boolean(),
+  entries: z.array(TrainingChatSearchEntrySchema),
 });
 
 export const TaskPolicyBoundarySchema = z.object({
@@ -323,17 +356,52 @@ export const GraderAuditReportSchema = z.object({
   createdAt: TimestampSchema,
 });
 
+export const TrainingPathRecommendationSchema = z.object({
+  primaryMethod: z.enum(["sft", "dpo", "grpo", "sdft", "opsd", "sdpo"]),
+  bootstrap: z.object({
+    method: z.literal("sft"),
+    purpose: z.literal("trajectory_bootstrap"),
+    demonstrationRefs: z.array(IdSchema).min(1).max(100_000),
+    limitations: z.array(z.string().trim().min(1).max(5_000)).min(1).max(100),
+  }).nullable(),
+});
+
 export const TasksetReadinessReportSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetReadiness.v1"),
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
   ready: z.boolean(),
   recommendedMethod: z.enum(["none", "retrieval", "sft", "dpo", "grpo", "sdft", "opd", "opsd", "sdpo"]),
+  trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
   compatibleDestinationClasses: z.array(z.enum(["export", "local_cpu_fixture", "custom", "openpond_managed", "hosted_byok"])),
   blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
   baselineReportId: NullableIdSchema,
   generatedAt: TimestampSchema,
+});
+
+export const CapabilityDiagnosisSchema = z.object({
+  schemaVersion: z.literal("openpond.capabilityDiagnosis.v1"),
+  summary: z.string().trim().min(1).max(10_000),
+  stableBehavior: z.array(z.string().trim().min(1).max(5_000)).max(100).default([]),
+  changingKnowledge: z.array(z.string().trim().min(1).max(5_000)).max(100).default([]),
+  requiredContext: z.array(z.string().trim().min(1).max(5_000)).max(100).default([]),
+  requiredTools: z.array(IdSchema).max(100).default([]),
+  intervention: TrainingTacticSchema,
+  trainingEligible: z.boolean(),
+  rationale: z.array(z.string().trim().min(1).max(5_000)).min(1).max(100),
+  confidence: z.number().min(0).max(1),
+});
+
+export const TaskExampleProposalSchema = z.object({
+  id: IdSchema,
+  sourceId: IdSchema,
+  sourceTurnId: NullableIdSchema,
+  split: TasksetSplitSchema,
+  origin: z.enum(["extracted", "corrected", "synthetic", "expert_authored"]),
+  inputPrompt: z.string().trim().min(1).max(100_000),
+  expectedOutputText: z.string().trim().min(1).max(200_000).nullable(),
+  rationale: z.string().trim().min(1).max(5_000),
 });
 
 export const AuthoringRepairSchema = z.object({ attempt: z.number().int().positive(), summary: z.string().trim().min(1).max(5_000), createdAt: TimestampSchema });
@@ -378,14 +446,28 @@ export const TaskDesignProposalSchema = z.object({
   id: IdSchema,
   name: z.string().trim().min(1).max(500),
   objective: z.string().trim().min(1).max(20_000),
+  diagnosis: CapabilityDiagnosisSchema.default({
+    schemaVersion: "openpond.capabilityDiagnosis.v1",
+    summary: "Reproduce the selected approved behavior.",
+    stableBehavior: [],
+    changingKnowledge: [],
+    requiredContext: [],
+    requiredTools: [],
+    intervention: "sft",
+    trainingEligible: true,
+    rationale: ["The selected examples were supplied as demonstrations."],
+    confidence: 0.5,
+  }),
   taskKind: TasksetCapabilityManifestSchema.shape.taskKind,
   sourceIds: z.array(IdSchema).min(1).max(100_000),
   assumptions: z.array(z.string().trim().min(1).max(5_000)).max(1_000),
   successCriteria: z.array(z.string().trim().min(1).max(5_000)).min(1).max(1_000),
-  proposedGraders: z.array(GraderSpecSchema).min(1).max(1_000),
-  graderFixtures: z.array(TaskDesignFixtureTemplateSchema).min(1).max(100_000),
+  proposedGraders: z.array(GraderSpecSchema).max(1_000).default([]),
+  graderFixtures: z.array(TaskDesignFixtureTemplateSchema).max(100_000).default([]),
   generatedFiles: z.array(GeneratedTaskFileSchema).max(1_000).default([]),
+  proposedExamples: z.array(TaskExampleProposalSchema).max(100_000).default([]),
   proposedMethod: TasksetReadinessReportSchema.shape.recommendedMethod,
+  trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
   policy: TaskPolicyBoundarySchema,
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
   createdAt: TimestampSchema,
@@ -397,11 +479,21 @@ export const TaskCreationRequestSchema = z.object({
   profileId: IdSchema,
   surface: TaskCreationSurfaceSchema,
   mode: TaskCreationModeSchema,
+  entryMode: NewModelModeSchema.default("manual"),
   objective: z.string().trim().min(1).max(20_000).nullable(),
-  sourceIds: z.array(IdSchema).min(1).max(100_000),
+  methodHint: z.enum(["sft", "dpo", "grpo"]).nullable().default(null),
+  sourceIds: z.array(IdSchema).max(100_000),
   candidateId: NullableIdSchema,
   analysisModel: ChatModelRefSchema.nullable(),
   analysisReasoningEffort: CodexReasoningEffortSchema.nullable().default(null),
+  disclosure: z.object({
+    status: z.enum(["not_required", "pending", "approved", "declined"]),
+    content: z.literal("raw_excerpts"),
+    sourceIds: z.array(IdSchema).max(100_000),
+    providerModel: ChatModelRefSchema.nullable(),
+    approvalId: NullableIdSchema,
+    approvedAt: TimestampSchema.nullable(),
+  }).default({ status: "not_required", content: "raw_excerpts", sourceIds: [], providerModel: null, approvalId: null, approvedAt: null }),
   createdAt: TimestampSchema,
 });
 
@@ -409,7 +501,7 @@ export const TaskCreationSnapshotSchema = z.object({
   schemaVersion: z.literal("openpond.taskCreationSnapshot.v1"),
   id: IdSchema,
   request: TaskCreationRequestSchema,
-  state: z.enum(["planning", "awaiting_disclosure_approval", "awaiting_questions", "awaiting_materialization_approval", "materializing", "validating", "ready", "blocked", "failed", "cancelled"]),
+  state: z.enum(["planning", "awaiting_disclosure_approval", "awaiting_questions", "recommendation_ready", "awaiting_materialization_approval", "materializing", "validating", "ready", "blocked", "failed", "cancelled"]),
   proposal: TaskDesignProposalSchema.nullable(),
   materializedTasksetId: NullableIdSchema,
   disclosureApprovalId: NullableIdSchema,
@@ -432,8 +524,12 @@ export const TaskCreationTranscriptSchema = z.object({
 
 export type TrainingSourceRef = z.infer<typeof TrainingSourceRefSchema>;
 export type TrainingSourceEstimate = z.infer<typeof TrainingSourceEstimateSchema>;
+export type TrainingChatSearchRequest = z.infer<typeof TrainingChatSearchRequestSchema>;
+export type TrainingChatSearchEntry = z.infer<typeof TrainingChatSearchEntrySchema>;
+export type TrainingChatSearchResult = z.infer<typeof TrainingChatSearchResultSchema>;
 export type TaskCreationSurface = z.infer<typeof TaskCreationSurfaceSchema>;
 export type TaskCreationMode = z.infer<typeof TaskCreationModeSchema>;
+export type NewModelMode = z.infer<typeof NewModelModeSchema>;
 export type TaskDataRecord = z.infer<typeof TaskDataRecordSchema>;
 export type LearningSignalInventory = z.infer<typeof LearningSignalInventorySchema>;
 export type TasksetEnvironmentContract = z.infer<typeof TasksetEnvironmentContractSchema>;
@@ -448,7 +544,10 @@ export type GradeComponent = z.infer<typeof GradeComponentSchema>;
 export type GradeResult = z.infer<typeof GradeResultSchema>;
 export type BaselineReport = z.infer<typeof BaselineReportSchema>;
 export type GraderAuditReport = z.infer<typeof GraderAuditReportSchema>;
+export type TrainingPathRecommendation = z.infer<typeof TrainingPathRecommendationSchema>;
 export type TasksetReadinessReport = z.infer<typeof TasksetReadinessReportSchema>;
+export type CapabilityDiagnosis = z.infer<typeof CapabilityDiagnosisSchema>;
+export type TaskExampleProposal = z.infer<typeof TaskExampleProposalSchema>;
 export type AuthoringProvenance = z.infer<typeof AuthoringProvenanceSchema>;
 export type AuthoringRepair = z.infer<typeof AuthoringRepairSchema>;
 export type Taskset = z.infer<typeof TasksetSchema>;

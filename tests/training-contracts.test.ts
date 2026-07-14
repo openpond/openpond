@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-import { AppPreferencesSchema, SftRecipeSchema, TrainingBundleManifestSchema, TrainingPlanSchema, TrainingRecipeSchema, UnsupportedTrainingRecipeSchema, UpdateAppPreferencesRequestSchema } from "../packages/contracts/src";
+import { AppPreferencesSchema, LocalModelChatConfigurationSchema, SftRecipeSchema, TrainingBundleManifestSchema, TrainingPlanSchema, TrainingRecipeSchema, UnsupportedTrainingRecipeSchema, UpdateAppPreferencesRequestSchema } from "../packages/contracts/src";
 import { planFixture, sftRecipeFixture } from "./helpers/training-fixtures";
 
 describe("training contracts", () => {
@@ -36,5 +36,19 @@ describe("training contracts", () => {
       creationMode: "defaults",
       autoApproveEvidence: true,
     } }).training?.defaultModelRef?.providerId).toBe("openai");
+  });
+
+  test("defaults imported local models to an efficient, bounded chat configuration", () => {
+    const configuration = LocalModelChatConfigurationSchema.parse({});
+    expect(configuration).toMatchObject({
+      profile: "efficient",
+      systemPromptMode: "lean",
+      contextWindowTokens: 1024,
+      maxOutputTokens: 64,
+      repetitionPenalty: 1.1,
+      noRepeatNgramSize: 3,
+      compaction: "when_needed",
+      keepWarmSeconds: 300,
+    });
   });
 });

@@ -9,6 +9,7 @@ import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { GoalDetailsView, type GoalDetailsCreateRuntime } from "../goal/GoalDetailsView";
 import { SandboxWorkspaceSummary } from "./SandboxWorkspaceSummary";
+import { TrainingRunSidebarSummary, type TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
 import { WorkspaceDiffFiles } from "./WorkspaceDiffFiles";
 import { WorkspaceDiffTabs, WorkspaceDiffToolbar } from "./WorkspaceDiffPanelChrome";
 import { FilePreview } from "./WorkspaceFilePreview";
@@ -68,6 +69,7 @@ export function WorkspaceDiffPanel({
   onSelectSideChat,
   goalDetails,
   sandboxFileSource,
+  trainingSummary,
 }: {
   appId: string | null;
   workspaceId: string | null;
@@ -98,6 +100,7 @@ export function WorkspaceDiffPanel({
   onSelectSideChat?: (panelId: string) => void;
   goalDetails?: WorkspaceGoalDetails | null;
   sandboxFileSource?: SandboxFileSource | null;
+  trainingSummary?: TrainingSidebarSummary | null;
 }) {
   return (
     <WorkspaceDiffPanelInner
@@ -128,6 +131,7 @@ export function WorkspaceDiffPanel({
       onSelectSideChat={onSelectSideChat}
       goalDetails={goalDetails ?? null}
       sandboxFileSource={sandboxFileSource ?? null}
+      trainingSummary={trainingSummary ?? null}
     />
   );
 }
@@ -250,6 +254,7 @@ function WorkspaceDiffPanelInner({
   onSelectSideChat,
   goalDetails,
   sandboxFileSource,
+  trainingSummary,
 }: {
   appId: string | null;
   workspaceKind: WorkspaceKind | null;
@@ -278,6 +283,7 @@ function WorkspaceDiffPanelInner({
   onSelectSideChat?: (panelId: string) => void;
   goalDetails: WorkspaceGoalDetails | null;
   sandboxFileSource: SandboxFileSource | null;
+  trainingSummary: TrainingSidebarSummary | null;
 }) {
   const initialViewState = viewState ?? defaultWorkspaceDiffPanelViewState();
   const [activeTab, setActiveTab] = useState<DiffTab>(initialViewState.activeTab);
@@ -324,7 +330,7 @@ function WorkspaceDiffPanelInner({
   const editorHandleRef = useRef<WorkspaceMonacoEditorHandle | null>(null);
   const sandboxId = sandboxFileSource?.sandboxId?.trim() || null;
   const sandboxMode = Boolean(sandboxFileSource);
-  const summaryAvailable = sandboxMode && Boolean(sandboxId);
+  const summaryAvailable = Boolean(trainingSummary) || (sandboxMode && Boolean(sandboxId));
   const sourceKey = sandboxMode ? `sandbox:${sandboxId ?? "pending"}` : `workspace:${appId ?? "none"}`;
   const canOpenRequestedFile = sandboxMode ? Boolean(sandboxId) : Boolean(appId);
   const previousSourceKeyRef = useRef(sourceKey);
@@ -1214,10 +1220,7 @@ function WorkspaceDiffPanelInner({
           onRunSubagentLifecycleAction={connection ? runSubagentLifecycleAction : undefined}
         />
       ) : visibleTab === "summary" && summaryAvailable ? (
-        <SandboxWorkspaceSummary
-          sandboxId={sandboxId}
-          connection={connection}
-        />
+        trainingSummary ? <TrainingRunSidebarSummary summary={trainingSummary}/> : <SandboxWorkspaceSummary sandboxId={sandboxId} connection={connection}/>
       ) : !hasPanelContent ? (
         <div className="workspace-diff-empty">
           <span>{emptyMessage}</span>

@@ -15,6 +15,7 @@ import { ArrowDown, ArrowLeft, ArrowRight, DownloadCloud } from "../icons";
 import type {
   BootstrapPayload,
   ChatAttachment,
+  ChatModelRef,
   ChatProvider,
   CloudProject,
   CloudWorkItem,
@@ -80,8 +81,9 @@ import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelSt
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { TrainingDraftPanel } from "../training/TrainingDraftPanel";
 import { TrainingCreationPanel, TrainingStatusReceipt } from "../training/TrainingCreationPanel";
-import { startConfiguredTaskCreation, trainingCreationForSession } from "../training/training-flow";
+import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/TrainingView";
+import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
 import type {
   WorkspaceDiffPanelViewState,
@@ -169,6 +171,8 @@ type MainPaneProps = {
   insightsError: string | null;
   training: ReturnType<typeof useTraining>;
   trainingSessions: Session[];
+  trainingDetailTasksetId: string | null;
+  onTrainingDetailTasksetIdChange: (tasksetId: string | null) => void;
   onRunInsightsScan: (input?: { trigger?: InsightRunTrigger }) => Promise<unknown>;
   onAskInsightsQuestion: (question: string) => Promise<unknown>;
   onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
@@ -196,6 +200,7 @@ type MainPaneProps = {
   changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
   setDraftProvider: (provider: ChatProvider) => void;
   setDraftModel: (model: string) => void;
+  onBeginNewChatWithModel: (model: ChatModelRef) => void;
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
   changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
@@ -527,6 +532,8 @@ export function MainPane({
   insightsError,
   training,
   trainingSessions,
+  trainingDetailTasksetId,
+  onTrainingDetailTasksetIdChange,
   onRunInsightsScan,
   onAskInsightsQuestion,
   onPatchInsightStatus,
@@ -554,6 +561,7 @@ export function MainPane({
   changeWorkspaceTarget,
   setDraftProvider,
   setDraftModel,
+  onBeginNewChatWithModel,
   changeCodexPermissionMode,
   changeCodexReasoningEffort,
   changeOpenPondCommandAccessMode,
@@ -616,6 +624,7 @@ export function MainPane({
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] = useState<RightSidebarFileSource | null>(null);
   const [trainingLaunchRequest, setTrainingLaunchRequest] = useState<TrainingLaunchRequest | null>(null);
   const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<string | null>(null);
+  const [selectedTrainingJobId, setSelectedTrainingJobId] = useState<string | null>(null);
   const appPreferences = useMemo(
     () => normalizePreferences(bootstrap?.preferences),
     [bootstrap?.preferences],
@@ -630,6 +639,19 @@ export function MainPane({
   const trainingTasksetRootPath = view === "training" && activeTrainingTasksetId
     ? `profiles/${bootstrap?.profile.activeProfile ?? "default"}/tasksets/${activeTrainingTasksetId}`
     : null;
+  const trainingSidebarSummary = useMemo<TrainingSidebarSummary | null>(() => {
+    if (view !== "training" || !activeTrainingTasksetId || !training.payload) return null;
+    const taskset = training.payload.tasksets.find((item) => item.id === activeTrainingTasksetId);
+    if (!taskset) return null;
+    const plans = training.payload.plans.filter((plan) => plan.tasksetId === taskset.id);
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const jobs = training.payload.jobs.filter((item) => planIds.has(item.planId)).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    const job = jobs.find((item) => item.id === selectedTrainingJobId) ?? jobs[0] ?? null;
+    const plan = job ? plans.find((item) => item.id === job.planId) ?? null : plans.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
+    const lineage = job ? training.payload.models.find((item) => item.jobId === job.id) ?? null : null;
+    const artifacts = job ? training.payload.artifacts.filter((item) => item.jobId === job.id) : [];
+    return { taskset, plan, job, lineage, artifacts };
+  }, [activeTrainingTasksetId, selectedTrainingJobId, training.payload, view]);
   const selectedTrainingCreation = useMemo(
     () => trainingCreationForSession(training.payload, selectedSessionId),
     [selectedSessionId, training.payload],
@@ -821,24 +843,13 @@ export function MainPane({
             }
             if (!selectedSessionId) {
               clearMainPrompt();
-              setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null });
+              setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [] });
               setView("training");
-              showToast("Choose the chats that should become evidence for this training plan.", "info");
               return true;
             }
             clearMainPrompt();
-            const source = await training.actions.addSource(selectedSessionId);
-            if (!source) return false;
-            await startConfiguredTaskCreation({
-              training,
-              sourceIds: [source.id],
-              surface: "slash_train",
-              objective: command.args || null,
-              preferences: trainingPreferences,
-              fallbackModel: { providerId: activeProvider, modelId: activeModel },
-              reasoningEffort: codexReasoningEffort,
-            });
-            showToast("Training plan started in this chat.", "info");
+            setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [selectedSessionId] });
+            setView("training");
             return true;
           }
           if (!command.args && command.command !== "skill" && command.command !== "sync-cloud") {
@@ -1377,6 +1388,7 @@ export function MainPane({
           }
           : null
       }
+      trainingSummary={trainingSidebarSummary}
     />
   ) : null;
   const browserPanel = showBrowserPanel ? (
@@ -1598,10 +1610,13 @@ export function MainPane({
             connection={connection}
             defaultModel={{ providerId: activeProvider, modelId: activeModel }}
             onError={onError}
+            onToast={showToast}
             onSettingsPreferences={(payload) => {
               if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
             }}
             onOpenChat={onOpenInsightsSession}
+            onChatWithModel={(modelId) => onBeginNewChatWithModel({ providerId: "local-adapter", modelId })}
+            onOpenTasksetFiles={onShowFilesPanel}
             launchRequest={trainingLaunchRequest}
             onLaunchHandled={(id) => setTrainingLaunchRequest((current) => current?.id === id ? null : current)}
             preferences={trainingPreferences}
@@ -1610,6 +1625,9 @@ export function MainPane({
             reasoningEffort={codexReasoningEffort}
             selectedTasksetId={activeTrainingTasksetId}
             onSelectedTasksetIdChange={setSelectedTrainingTasksetId}
+            onSelectedTrainingJobIdChange={setSelectedTrainingJobId}
+            detailTasksetId={trainingDetailTasksetId}
+            onDetailTasksetIdChange={onTrainingDetailTasksetIdChange}
               />
             </Suspense>
             {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}

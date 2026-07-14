@@ -20,6 +20,7 @@ import type {
   ModelUsageStatus,
   ModelUsageVisibility,
   TrainingSourceRef,
+  TrainingChatSearchResult,
   TaskCreationSnapshot,
   Taskset,
   TaskCandidate,
@@ -31,6 +32,7 @@ import type {
   GraderAuditReport,
   TasksetReadinessReport,
   TaskMinerConfig,
+  TaskMinerRun,
   TrainingPlan,
   TrainingApproval,
   TrainingBundleManifest,
@@ -57,6 +59,7 @@ import {
   GraderAuditReportSchema,
   TasksetReadinessReportSchema,
   TaskMinerConfigSchema,
+  TaskMinerRunSchema,
   TrainingPlanSchema,
   TrainingApprovalSchema,
   TrainingBundleManifestSchema,
@@ -122,6 +125,34 @@ type TableInfoRow = {
 
 type EventPagePayloadRow = PayloadRow & {
   sequence: number;
+};
+
+export type TrainingChatSearchDocument = {
+  sessionId: string;
+  source: "openpond" | "codex";
+  signature: string;
+  title: string;
+  body: string;
+  updatedAt: string;
+  eligible: boolean;
+  bodyIndexed: boolean;
+};
+
+type TrainingChatSearchDocumentRow = {
+  session_id: string;
+  signature: string;
+};
+
+type TrainingChatSearchResultRow = {
+  session_id: string;
+  title: string;
+  updated_at: string;
+  snippet: string | null;
+};
+
+type TrainingChatSearchEvidenceRow = {
+  session_id: string;
+  payload: string;
 };
 
 type OpenPondThreadGoalRow = {
@@ -359,6 +390,193 @@ export class SqliteStore extends SqliteStoreCore {
       [sessionId],
     );
     return row?.count ?? 0;
+  }
+
+  async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
+    await this.ready;
+    await this.writeQueue;
+    const rows = await this.all<TrainingChatSearchDocumentRow>(
+      "SELECT session_id, signature FROM training_chat_search_documents WHERE source = ?",
+      [source],
+    );
+    return new Map(rows.map((row) => [row.session_id, row.signature]));
+  }
+
+  async openPondTrainingChatSearchEvidence(candidateIdsInput: string[]): Promise<Array<{ session: Session; body: string }>> {
+    await this.ready;
+    await this.writeQueue;
+    const candidateIds = [...new Set(candidateIdsInput)].slice(0, 500);
+    if (!candidateIds.length) return [];
+    const placeholders = candidateIds.map(() => "?").join(", ");
+    const [sessionRows, turnRows, eventRows] = await Promise.all([
+      this.all<PayloadRow>(
+        `SELECT payload FROM projection_session_shells WHERE id IN (${placeholders})`,
+        candidateIds,
+      ),
+      this.all<TrainingChatSearchEvidenceRow>(
+        `SELECT session_id, payload FROM turns WHERE session_id IN (${placeholders}) ORDER BY sort_index ASC`,
+        candidateIds,
+      ),
+      this.all<TrainingChatSearchEvidenceRow>(
+        `SELECT session_id, payload FROM events
+         WHERE name = 'assistant.delta' AND session_id IN (${placeholders})
+         ORDER BY sequence ASC`,
+        candidateIds,
+      ),
+    ]);
+    const textBySession = new Map<string, string[]>();
+    for (const row of turnRows) {
+      const turn = JSON.parse(row.payload) as Turn;
+      if (turn.prompt.trim()) appendTrainingChatSearchText(textBySession, row.session_id, turn.prompt);
+    }
+    for (const row of eventRows) {
+      const event = JSON.parse(row.payload) as RuntimeEvent;
+      if (event.output?.trim()) appendTrainingChatSearchText(textBySession, row.session_id, event.output);
+    }
+    return sessionRows.map((row) => {
+      const session = normalizeSessionPayload(JSON.parse(row.payload));
+      return { session, body: textBySession.get(session.id)?.join("\n") ?? "" };
+    });
+  }
+
+  async syncTrainingChatSearchDocuments(
+    source: TrainingChatSearchDocument["source"],
+    documents: TrainingChatSearchDocument[],
+  ): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      const existingRows = await this.all<TrainingChatSearchDocumentRow>(
+        "SELECT session_id, signature FROM training_chat_search_documents WHERE source = ?",
+        [source],
+      );
+      const existing = new Map(existingRows.map((row) => [row.session_id, row.signature]));
+      const incomingIds = new Set(documents.map((document) => document.sessionId));
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        for (const sessionId of existing.keys()) {
+          if (incomingIds.has(sessionId)) continue;
+          await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [sessionId]);
+          await this.run("DELETE FROM training_chat_search_documents WHERE session_id = ?", [sessionId]);
+        }
+        for (const document of documents) {
+          if (existing.get(document.sessionId) === document.signature) continue;
+          await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [document.sessionId]);
+          await this.run(
+            `INSERT INTO training_chat_search_documents (session_id, source, signature, title, updated_at, eligible, body_indexed)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(session_id) DO UPDATE SET
+               source = excluded.source,
+               signature = excluded.signature,
+               title = excluded.title,
+               updated_at = excluded.updated_at,
+               eligible = excluded.eligible,
+               body_indexed = excluded.body_indexed`,
+            [document.sessionId, document.source, document.signature, document.title, document.updatedAt, document.eligible ? 1 : 0, document.bodyIndexed ? 1 : 0],
+          );
+          await this.run(
+            "INSERT INTO training_chat_search_fts (session_id, title, body) VALUES (?, ?, ?)",
+            [document.sessionId, document.title, document.body],
+          );
+        }
+        await this.exec("COMMIT");
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+  }
+
+  async upsertTrainingChatSearchDocument(document: TrainingChatSearchDocument): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        await this.run("DELETE FROM training_chat_search_fts WHERE session_id = ?", [document.sessionId]);
+        await this.run(
+          `INSERT INTO training_chat_search_documents (session_id, source, signature, title, updated_at, eligible, body_indexed)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(session_id) DO UPDATE SET
+             source = excluded.source,
+             signature = excluded.signature,
+             title = excluded.title,
+             updated_at = excluded.updated_at,
+             eligible = excluded.eligible,
+             body_indexed = excluded.body_indexed`,
+          [document.sessionId, document.source, document.signature, document.title, document.updatedAt, document.eligible ? 1 : 0, document.bodyIndexed ? 1 : 0],
+        );
+        await this.run(
+          "INSERT INTO training_chat_search_fts (session_id, title, body) VALUES (?, ?, ?)",
+          [document.sessionId, document.title, document.body],
+        );
+        await this.exec("COMMIT");
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+  }
+
+  async searchTrainingChats(input: { query: string; offset: number; limit: number; candidateIds: string[] }): Promise<TrainingChatSearchResult> {
+    await this.ready;
+    await this.writeQueue;
+    const query = input.query.trim();
+    const offset = Math.max(0, Math.trunc(input.offset));
+    const limit = Math.max(1, Math.min(100, Math.trunc(input.limit)));
+    const candidateIds = [...new Set(input.candidateIds)].slice(0, 500);
+    if (!candidateIds.length) return trainingChatSearchResult(query, offset, limit, 0, [], 0, 0);
+    const candidatePlaceholders = candidateIds.map(() => "?").join(", ");
+    const progress = await this.get<{ indexed: number; total: number }>(
+      `SELECT SUM(CASE WHEN body_indexed = 1 THEN 1 ELSE 0 END) AS indexed, COUNT(*) AS total
+       FROM training_chat_search_documents
+       WHERE eligible = 1 AND session_id IN (${candidatePlaceholders})`,
+      candidateIds,
+    );
+    const indexedChats = progress?.indexed ?? 0;
+    const totalChats = progress?.total ?? 0;
+    if (!query) {
+      const total = await this.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM training_chat_search_documents
+         WHERE eligible = 1 AND session_id IN (${candidatePlaceholders})`,
+        candidateIds,
+      );
+      const rows = await this.all<TrainingChatSearchResultRow>(
+        `SELECT session_id, title, updated_at, NULL AS snippet
+         FROM training_chat_search_documents
+         WHERE eligible = 1 AND session_id IN (${candidatePlaceholders})
+         ORDER BY updated_at DESC, session_id ASC
+         LIMIT ? OFFSET ?`,
+        [...candidateIds, limit, offset],
+      );
+      return trainingChatSearchResult(query, offset, limit, total?.count ?? 0, rows, indexedChats, totalChats);
+    }
+    const match = trainingChatFtsQuery(query);
+    if (!match) return trainingChatSearchResult(query, offset, limit, 0, [], indexedChats, totalChats);
+    const total = await this.get<{ count: number }>(
+      `SELECT COUNT(*) AS count
+       FROM training_chat_search_fts
+       JOIN training_chat_search_documents AS documents
+         ON documents.session_id = training_chat_search_fts.session_id
+       WHERE training_chat_search_fts MATCH ? AND documents.eligible = 1
+         AND documents.session_id IN (${candidatePlaceholders})`,
+      [match, ...candidateIds],
+    );
+    const rows = await this.all<TrainingChatSearchResultRow>(
+      `SELECT documents.session_id, documents.title, documents.updated_at,
+              snippet(training_chat_search_fts, 2, '', '', ' … ', 22) AS snippet
+       FROM training_chat_search_fts
+       JOIN training_chat_search_documents AS documents
+         ON documents.session_id = training_chat_search_fts.session_id
+       WHERE training_chat_search_fts MATCH ? AND documents.eligible = 1
+         AND documents.session_id IN (${candidatePlaceholders})
+       ORDER BY bm25(training_chat_search_fts, 0.0, 8.0, 1.0), documents.updated_at DESC
+       LIMIT ? OFFSET ?`,
+      [match, ...candidateIds, limit, offset],
+    );
+    return trainingChatSearchResult(query, offset, limit, total?.count ?? 0, rows, indexedChats, totalChats);
   }
 
   async hasSubagentParentWakeTurn(sessionId: string, messageId: string): Promise<boolean> {
@@ -1966,6 +2184,38 @@ export class SqliteStore extends SqliteStoreCore {
     return taskset;
   }
 
+  async deleteTasksetData(id: string): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
+        await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM baseline_reports WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
+        await this.run("DELETE FROM training_job_events WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
+        await this.run("DELETE FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
+        await this.run("DELETE FROM training_approvals WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
+        await this.run("DELETE FROM training_bundles WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
+        await this.run("DELETE FROM model_artifact_lineage WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM training_plans WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM task_design_proposals WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
+        await this.run("DELETE FROM task_creation_transcripts WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
+        await this.run("DELETE FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?", [id]);
+        await this.run("DELETE FROM tasksets WHERE id = ?", [id]);
+        await this.exec("COMMIT");
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+  }
+
   async listTaskCandidates(profileId: string, status?: TaskCandidateStatus | "all"): Promise<TaskCandidate[]> {
     const sql = status && status !== "all"
       ? "SELECT payload FROM task_candidates WHERE profile_id = ? AND status = ? ORDER BY updated_at DESC"
@@ -2086,6 +2336,24 @@ export class SqliteStore extends SqliteStoreCore {
 
   async getTaskMinerConfig(profileId: string): Promise<TaskMinerConfig | null> {
     return this.getParsedPayload("SELECT payload FROM task_miner_configs WHERE profile_id = ?", [profileId], TaskMinerConfigSchema.parse);
+  }
+
+  async saveTaskMinerRun(runInput: TaskMinerRun): Promise<TaskMinerRun> {
+    const run = TaskMinerRunSchema.parse(runInput);
+    await this.upsertPayload(
+      `INSERT INTO task_miner_runs (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [run.id, run.profileId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
+    );
+    return run;
+  }
+
+  async getTaskMinerRun(id: string): Promise<TaskMinerRun | null> {
+    return this.getParsedPayload("SELECT payload FROM task_miner_runs WHERE id = ?", [id], TaskMinerRunSchema.parse);
+  }
+
+  async listTaskMinerRuns(profileId: string): Promise<TaskMinerRun[]> {
+    return this.listParsedPayloads("SELECT payload FROM task_miner_runs WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TaskMinerRunSchema.parse);
   }
 
   async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {
@@ -2231,4 +2499,44 @@ export class SqliteStore extends SqliteStoreCore {
     return row ? parse(JSON.parse(row.payload)) : null;
   }
 
+}
+
+function trainingChatSearchResult(
+  query: string,
+  offset: number,
+  limit: number,
+  total: number,
+  rows: TrainingChatSearchResultRow[],
+  indexedChats: number,
+  totalChats: number,
+): TrainingChatSearchResult {
+  return {
+    schemaVersion: "openpond.trainingChatSearchResult.v1",
+    query,
+    offset,
+    limit,
+    total,
+    hasMore: offset + rows.length < total,
+    indexedChats,
+    totalChats,
+    indexing: indexedChats < totalChats,
+    entries: rows.map((row) => ({
+      sessionId: row.session_id,
+      title: row.title,
+      updatedAt: row.updated_at,
+      snippet: row.snippet?.trim() || null,
+    })),
+  };
+}
+
+function trainingChatFtsQuery(query: string): string | null {
+  const tokens = query.normalize("NFKC").match(/[\p{L}\p{N}_]+/gu)?.slice(0, 24) ?? [];
+  if (!tokens.length) return null;
+  return tokens.map((token) => `"${token.replaceAll('"', '""')}"*`).join(" AND ");
+}
+
+function appendTrainingChatSearchText(target: Map<string, string[]>, sessionId: string, text: string): void {
+  const values = target.get(sessionId) ?? [];
+  values.push(text);
+  target.set(sessionId, values);
 }

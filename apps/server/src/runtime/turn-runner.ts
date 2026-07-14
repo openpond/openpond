@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
+  LocalModelChatConfigurationSchema,
   SendTurnRequestSchema,
   SubagentExplorationSteeringPolicySchema,
   type AppPreferences,
   type ChatModelRef,
   type ChatProvider,
+  type LocalModelChatConfiguration,
   type OpenPondActionCatalogEntry,
   type RuntimeEvent,
   type Session,
@@ -106,6 +108,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     cleanupSandboxForSubagent,
     executeOpenPondCommand,
     executeProfileAction,
+    executeCrossSystemTool,
     loadOpenPondProfileState,
     readOpenPondProfileSkill,
     executeProfileSkillCommand,
@@ -523,6 +526,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWorkspaceTool,
     executeWebSearch,
     executeProfileAction,
+    executeCrossSystemTool,
   });
 
   function createNativeModelToolDefinitions(
@@ -802,25 +806,31 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           providerSettings?.providers[session.provider]?.defaultModel ??
           providerSettings?.modelCaches[session.provider]?.models.find((candidate) => candidate.id.trim())?.id ??
           null;
-        const contextLimitTokens = trustedProviderContextLimit({
-          provider: session.provider,
-          model: runtimeModel,
-          settings: providerSettings,
-        });
+        const providerModel = providerSettings?.modelCaches[session.provider]?.models.find((candidate) => candidate.id === runtimeModel);
+        const localModelConfiguration = session.provider === "local-adapter"
+          ? LocalModelChatConfigurationSchema.safeParse(providerModel?.raw?.chatConfiguration).data ?? null
+          : null;
+        const contextLimitTokens = localModelConfiguration?.contextWindowTokens ?? trustedProviderContextLimit({ provider: session.provider, model: runtimeModel, settings: providerSettings });
         await updateStoredTurn(turn.id, (current) => ({ ...current, providerTurnId }));
-        const systemPrompt = await hostedSystemPrompt(HOSTED_CHAT_SYSTEM_PROMPT, personalizationSoul, session, {
-          mentionedApps,
-          openPondActionCatalog: input.openPondActionCatalog,
-          openPondProfileSkills: profileSkillRuntime.skills,
-          loadedProfileSkills,
-          connectedApps,
-          toolInstructionMode: hostedToolInstructionModeForProvider(hostedToolFlags, session.provider),
-          actionCatalogInstructionMode: actionCatalogInstructionModeForProvider(session.provider),
-          profileSkillInstructionMode: profileSkillInstructionModeForProvider(session.provider, profileSkillRuntime),
-          browserControlAvailable: browserControlAvailable(session),
-          extraSystemContext,
-        });
-        const hostedPriorEvents = await maybeAutoCompactHostedContext({
+        const systemPrompt = localModelConfiguration && localModelConfiguration.systemPromptMode !== "full_harness"
+          ? localModelSystemPrompt(localModelConfiguration)
+          : await hostedSystemPrompt(HOSTED_CHAT_SYSTEM_PROMPT, personalizationSoul, session, {
+              mentionedApps,
+              openPondActionCatalog: input.openPondActionCatalog,
+              openPondProfileSkills: profileSkillRuntime.skills,
+              loadedProfileSkills,
+              connectedApps,
+              toolInstructionMode: hostedToolInstructionModeForProvider(hostedToolFlags, session.provider),
+              actionCatalogInstructionMode: actionCatalogInstructionModeForProvider(session.provider),
+              profileSkillInstructionMode: profileSkillInstructionModeForProvider(session.provider, profileSkillRuntime),
+              browserControlAvailable: browserControlAvailable(session),
+              extraSystemContext,
+            });
+        const canCompactLocalModel = !localModelConfiguration || (
+          localModelConfiguration.compaction === "when_needed" &&
+          priorEvents.some((item) => item.name === "turn.started")
+        );
+        const hostedPriorEvents = canCompactLocalModel ? await maybeAutoCompactHostedContext({
           session,
           turn,
           provider: session.provider,
@@ -846,7 +856,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               if (delta.usage) yield { usage: delta.usage, raw: delta.raw };
             }
           },
-        });
+        }) : priorEvents;
         const messages = buildChatMessagesForProvider(hostedPriorEvents, providerPrompt, systemPrompt);
         await throwIfAutoCompactionOffWouldExceedLimit({
           provider: session.provider,
@@ -986,4 +996,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     runSubagentLifecycleAction,
     cleanupExpiredRetainedSubagentWorkspace,
   };
+}
+
+function localModelSystemPrompt(configuration: LocalModelChatConfiguration): string {
+  if (configuration.systemPromptMode === "custom" && configuration.customSystemPrompt) {
+    return configuration.customSystemPrompt;
+  }
+  return "You are a helpful assistant. Answer the user directly and concisely. Follow the behavior learned for this task when it applies.";
 }

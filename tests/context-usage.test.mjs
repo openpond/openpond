@@ -7,6 +7,10 @@ import {
 } from "../apps/server/dist/openpond/context-usage.js";
 
 describe("hosted context usage", () => {
+  test("keeps small local-model context windows usable", () => {
+    assert.equal(usableHostedContextLimit(1024), 768);
+  });
+
   test("counts projected hosted messages for heuristic snapshots", () => {
     const messages = [
       { role: "system", content: "System prompt." },

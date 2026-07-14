@@ -48,6 +48,7 @@ export type HttpRouteDeps = {
   askInsightsPayload: (payload: unknown) => Promise<unknown>;
   patchInsightPayload: (insightId: string, payload: unknown) => Promise<unknown>;
   trainingPayload: (action: string, payload: unknown, requestUrl?: URL) => Promise<unknown>;
+  computePayload: (action: string, payload: unknown) => Promise<unknown>;
   listLocalAgentSchedulesPayload: (payload?: unknown) => Promise<unknown>;
   syncLocalAgentSchedulesPayload: () => Promise<unknown>;
   patchLocalAgentSchedulePayload: (scheduleId: string, payload: unknown) => Promise<unknown>;

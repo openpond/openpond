@@ -11,13 +11,15 @@ export function recommendTrainingTactic(input: {
   scorecard: TaskCandidateScorecard;
   changingFacts?: boolean;
   baseline?: BaselineReport | null;
+  baselineReward?: BaselineReport["reward"] | null;
 }): TrainingTacticRecommendation {
   const kinds = new Set(input.evidence.map((item) => item.kind));
   const baseline = input.baseline ?? null;
+  const baselineReward = baseline?.reward ?? input.baselineReward ?? null;
   if (input.changingFacts) return recommendation("retrieval", true, ["The primary signal is changing factual context; keep it in retrieval rather than weights."], [], ["versioned documents"], baseline ? "baseline_reassessment" : "decision_table");
   if (input.scorecard.privacyRisk >= 0.8) return recommendation("no_training", false, ["Privacy risk exceeds the local training threshold."], ["Resolve consent and privacy findings."], [], baseline ? "baseline_reassessment" : "decision_table");
   if (input.scorecard.repeatability < 0.35 || input.evidence.length < 2) return recommendation("no_training", false, ["The workflow is not yet repeated enough to justify training."], ["Collect more independent successful executions."], [], baseline ? "baseline_reassessment" : "decision_table");
-  if (baseline && baseline.reward.count > 0 && (baseline.reward.variance ?? 0) > 0 && (baseline.reward.mean ?? 0) > 0.05 && (baseline.reward.mean ?? 0) < 0.95 && input.scorecard.verifiability >= 0.7) {
+  if (baselineReward && baselineReward.count > 0 && (baselineReward.variance ?? 0) > 0 && (baselineReward.mean ?? 0) > 0.05 && (baselineReward.mean ?? 0) < 1.15 && input.scorecard.verifiability >= 0.7) {
     return recommendation("grpo_rft", true, ["The frozen grader has non-trivial reward variance and the base policy reaches reward-bearing states."], [], ["frozen scalar reward", "executable environment"], "baseline_reassessment");
   }
   if (kinds.has("runtime_feedback") && input.scorecard.verifiability >= 0.5) return recommendation("sdpo", true, ["Runtime or reviewer feedback is attached to policy attempts."], [], ["versioned attempt feedback"], baseline ? "baseline_reassessment" : "decision_table");

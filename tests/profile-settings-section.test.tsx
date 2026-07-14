@@ -170,7 +170,7 @@ function profilePayload(): BootstrapPayload {
 }
 
 describe("ProfileSettingsSection", () => {
-  test("renders profile create-plan review state from pending approvals", () => {
+  test("renders summary metrics above the profile controls without the full summary card", () => {
     const html = renderToStaticMarkup(
       createElement(ProfileSettingsSection, {
         payload: profilePayload(),
@@ -182,15 +182,8 @@ describe("ProfileSettingsSection", () => {
 
     expect(html).toContain("Plan review");
     expect(html).toContain("1 pending");
-    expect(html).toContain('aria-label="Pending profile plan reviews"');
-    expect(html).toContain("Review release notes agent plan");
-    expect(html).toContain("Create plan review pending before source mutation.");
-    expect(html).toContain("session: session_release_notes");
-    expect(html).toContain("turn: turn_create_plan");
-    expect(html).toContain("Hosted materialized: uploaded");
-    expect(html).toContain("Hosted checks: requested");
-    expect(html).toContain("Hosted publish: published");
-    expect(html).toContain("Hosted run: running");
+    expect(html).toContain('aria-label="Profile summary"');
+    expect(html).toContain("profile-summary-overview");
     expect(html).toContain("Action");
     expect(html).toContain("Check");
     expect(html).toContain("Synced");
@@ -209,22 +202,29 @@ describe("ProfileSettingsSection", () => {
     expect(html).not.toContain("Commit message");
     expect(html).not.toContain("Confirm sync");
     expect(html).not.toContain("Shell command approval");
+    expect(html).not.toContain("<span>Summary</span>");
+    expect(html).not.toContain("Review release notes agent plan");
 
+    const summaryIndex = html.indexOf('aria-label="Profile summary"');
+    const detailsIndex = html.indexOf(">Details<");
     const commitIndex = html.indexOf(">Commit<");
     const syncIndex = html.indexOf(">Sync<");
     const repoIndex = html.indexOf(">Repo<");
-    const agentsIndex = html.indexOf("<span>Agents</span>");
-    const summaryIndex = html.indexOf("<span>Summary</span>");
+    const agentsIndex = html.indexOf(
+      'class="account-list-heading profile-agent-list-heading"><span>Agents</span>',
+    );
 
+    expect(summaryIndex).toBeGreaterThan(-1);
+    expect(detailsIndex).toBeGreaterThan(-1);
     expect(commitIndex).toBeGreaterThan(-1);
     expect(syncIndex).toBeGreaterThan(-1);
     expect(repoIndex).toBeGreaterThan(-1);
     expect(agentsIndex).toBeGreaterThan(-1);
-    expect(summaryIndex).toBeGreaterThan(-1);
+    expect(summaryIndex).toBeLessThan(detailsIndex);
     expect(commitIndex).toBeLessThan(agentsIndex);
     expect(syncIndex).toBeLessThan(agentsIndex);
     expect(repoIndex).toBeLessThan(agentsIndex);
-    expect(agentsIndex).toBeLessThan(summaryIndex);
+    expect(detailsIndex).toBeLessThan(agentsIndex);
   });
 
   test("renders profile skills beside profile agents", () => {

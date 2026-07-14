@@ -30,6 +30,9 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/sources", action: "add_source", status: 201 },
     { method: "POST", path: "/v1/training/sources/batch", action: "add_sources", status: 201 },
     { method: "POST", path: "/v1/training/sources/estimate", action: "estimate_sources" },
+    { method: "POST", path: "/v1/training/sources/search", action: "search_sources" },
+    { method: "POST", path: "/v1/training/cross-system-operations/frontier-baseline", action: "run_cross_system_frontier_baseline", status: 201 },
+    { method: "POST", path: "/v1/training/cross-system-operations/fixture-baseline", action: "record_cross_system_fixture_baseline", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
@@ -42,6 +45,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/bundles", action: "build_bundle", status: 201 },
     { method: "POST", path: "/v1/training/approvals", action: "approve_training", status: 201 },
     { method: "POST", path: "/v1/training/launch", action: "launch", status: 202 },
+    { method: "POST", path: "/v1/training/start", action: "start", status: 202 },
     { method: "POST", path: "/v1/training/import", action: "import_artifact", status: 202 },
     { method: "POST", path: "/v1/training/credentials", action: "save_credential" },
   ];
@@ -52,15 +56,21 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
   }
   const dynamic = [
     { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)$/, method: "DELETE", action: "delete_taskset", key: "tasksetId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/disclosure$/, method: "POST", action: "approve_disclosure", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/questions$/, method: "POST", action: "answer_questions", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/materialize$/, method: "POST", action: "approve_materialization", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/chat$/, method: "POST", action: "chat_creation", key: "creationId" },
+    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/name$/, method: "PATCH", action: "rename_creation", key: "creationId" },
+    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/cancel$/, method: "POST", action: "cancel_creation", key: "creationId" },
+    { pattern: /^\/v1\/training\/miner\/runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_miner_run", key: "runId" },
     { pattern: /^\/v1\/training\/candidates\/([^/]+)$/, method: "PATCH", action: "patch_candidate", key: "candidateId", wrap: "patch" },
     { pattern: /^\/v1\/training\/candidates\/([^/]+)\/create$/, method: "POST", action: "create_candidate", key: "candidateId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_job", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/events$/, method: "GET", action: "job_events", key: "jobId" },
+    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/detail$/, method: "GET", action: "run_detail", key: "jobId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/reject$/, method: "POST", action: "reject_model", key: "modelId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/configuration$/, method: "PATCH", action: "update_model_configuration", key: "modelId", wrap: "configuration" },
   ];
   for (const item of dynamic) {
     const match = item.pattern.exec(requestUrl.pathname);

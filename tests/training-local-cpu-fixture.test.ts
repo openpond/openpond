@@ -15,11 +15,12 @@ describe.serial("local CPU training fixture", () => {
     const completed = await waitForTerminal(destination, job.id);
     expect(completed).toMatchObject({ status: "succeeded", nonProduction: true, metadata: { reloadVerified: true, frozenEvaluationExecuted: true } });
     const [events, artifacts, models] = await Promise.all([store.listTrainingJobEvents(job.id), store.listTrainingArtifacts(job.id), store.listModelArtifactLineage(setup.taskset.id)]);
-    expect(events.map((event) => event.type)).toEqual(["start", "progress", "progress", "metric", "complete"]);
+    expect(events.map((event) => event.type)).toEqual(["start", "progress", "metric", "progress", "metric", "metric", "complete"]);
+    expect(events.filter((event) => event.payload.metricKind === "sft_step")).toHaveLength(2);
     expect(artifacts.some((artifact) => artifact.kind === "adapter" && artifact.path.endsWith("adapter_model.safetensors"))).toBe(true);
     expect(artifacts.some((artifact) => artifact.kind === "evaluation")).toBe(true);
     expect(artifacts.some((artifact) => artifact.kind === "log")).toBe(true);
-    expect(await store.listTaskAttemptArtifacts({ tasksetId: setup.taskset.id })).toHaveLength(1);
+    expect(await store.listTaskAttemptArtifacts({ tasksetId: setup.taskset.id })).toHaveLength(2);
     expect(models[0]).toMatchObject({ promotable: false, status: "imported", frozenEvaluationArtifactId: expect.any(String) });
     expect(job.workerPid && processIsAlive(job.workerPid)).toBe(false);
     const importedJob = await destination.importExternal({ planId: setup.plan.id, bundleId: setup.bundle.id, artifactDirectory: String(completed.metadata.outputDirectory) });
@@ -55,14 +56,27 @@ describe.serial("local CPU training fixture", () => {
       await setup.destination.close();
     }
   }), 30_000);
+
+  test("executes the Taskset's sandboxed verifier for frozen evaluation", async () => withTrainingStore(async ({ store, directory }) => {
+    const setup = await setupFixture(store, directory, { customVerifier: true });
+    try {
+      const job = await setup.destination.launch(setup.plan, setup.approval);
+      expect((await waitForTerminal(setup.destination, job.id)).status).toBe("succeeded");
+      const grades = await store.listGradeResultsForTaskset(setup.taskset.id);
+      expect(grades).toHaveLength(2);
+      expect(grades.every((grade: any) => grade.feedback.includes("Sandbox verifier executed."))).toBe(true);
+      expect(grades.some((grade: any) => grade.feedback.some((feedback: string) => feedback.includes("unavailable")))).toBe(false);
+    } finally { await setup.destination.close(); }
+  }), 30_000);
 });
 
-async function setupFixture(store: any, directory: string) {
-  const taskset = tasksetFixture({ ready: true });
+async function setupFixture(store: any, directory: string, options: { customVerifier?: boolean } = {}) {
+  const customGrader = { id: "sandbox_exact", version: "1", label: "Sandbox exact match", kind: "custom_verifier" as const, weight: 1, hardGate: true, rewardEligible: false, privileged: true, module: "graders/exact.js", exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" as const, metadata: {} };
+  const taskset = tasksetFixture({ ready: true, graders: options.customVerifier ? [customGrader] : undefined });
   const plan = planFixture(taskset);
   const profileSource = path.join(directory, "profile");
   await mkdir(profileSource, { recursive: true });
-  await buildTaskset(taskset, path.join(profileSource, "tasksets", taskset.id));
+  await buildTaskset(taskset, path.join(profileSource, "tasksets", taskset.id), options.customVerifier ? { generatedFiles: [{ path: "graders/exact.js", role: "verifier", content: "export function verify({ task, attempt }) { const passed = attempt.output.text === task.expectedOutput.text; return { score: passed ? 1 : 0, passed, feedback: 'Sandbox verifier executed.' }; }\n" }] } : undefined);
   await store.upsertTaskset(taskset);
   await store.saveTrainingPlan(plan);
   const bundleDirectory = path.join(directory, "training", "bundles", plan.id);

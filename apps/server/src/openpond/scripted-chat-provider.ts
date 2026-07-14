@@ -104,15 +104,35 @@ function isTasksetAuthoringTurn(messages: HostedChatMessage[]): boolean {
 
 function scriptedTasksetAuthoringEnvelope(messages: HostedChatMessage[]): string {
   const request = parseTasksetAuthoringRequest(latestUserText(messages));
-  const sourceIds = Array.isArray(request.evidence)
-    ? request.evidence.flatMap((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-        const source = (item as Record<string, unknown>).source;
-        if (!source || typeof source !== "object" || Array.isArray(source)) return [];
-        const id = (source as Record<string, unknown>).id;
-        return typeof id === "string" && id.trim() ? [id] : [];
-      })
-    : [];
+  const evidence = Array.isArray(request.evidence) ? request.evidence.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+  const sourceIds = evidence.flatMap((item) => {
+    const source = item.source;
+    if (!source || typeof source !== "object" || Array.isArray(source)) return [];
+    const id = (source as Record<string, unknown>).id;
+    return typeof id === "string" && id.trim() ? [id] : [];
+  });
+  const proposedExamples = evidence.flatMap((item, sourceIndex) => {
+    const source = item.source;
+    if (!source || typeof source !== "object" || Array.isArray(source)) return [];
+    const sourceId = (source as Record<string, unknown>).id;
+    if (typeof sourceId !== "string") return [];
+    const excerpts = Array.isArray(item.excerpts) ? item.excerpts.filter((excerpt): excerpt is Record<string, unknown> => Boolean(excerpt) && typeof excerpt === "object" && !Array.isArray(excerpt)) : [];
+    return excerpts.flatMap((excerpt, excerptIndex) => {
+      if (excerpt.role !== "user" || typeof excerpt.text !== "string" || typeof excerpt.turnId !== "string") return [];
+      const assistant = excerpts.find((candidate) => candidate.role === "assistant" && candidate.turnId === excerpt.turnId && typeof candidate.text === "string");
+      if (!assistant || typeof assistant.text !== "string") return [];
+      return [{
+        id: `scripted_example_${sourceIndex}_${excerptIndex}`,
+        sourceId,
+        sourceTurnId: excerpt.turnId,
+        split: sourceIndex === evidence.length - 1 && evidence.length > 1 ? "frozen_eval" : "train",
+        origin: "extracted",
+        inputPrompt: excerpt.text,
+        expectedOutputText: assistant.text,
+        rationale: "Candidate example extracted from an explicitly selected conversation.",
+      }];
+    });
+  });
   const objective = typeof request.instruction === "string" && request.instruction.trim()
     ? request.instruction.trim()
     : "Reproduce the approved response behavior from the selected chat.";
@@ -135,10 +155,22 @@ function scriptedTasksetAuthoringEnvelope(messages: HostedChatMessage[]): string
       id: proposalId,
       name: "Reproduce the approved chat workflow",
       objective,
+      diagnosis: {
+        schemaVersion: "openpond.capabilityDiagnosis.v1",
+        summary: objective,
+        stableBehavior: [objective],
+        changingKnowledge: [],
+        requiredContext: [],
+        requiredTools: [],
+        intervention: "sft",
+        trainingEligible: true,
+        rationale: ["The selected conversations contain candidate input-output demonstrations."],
+        confidence: 0.5,
+      },
       taskKind: "chat",
       sourceIds,
       assumptions: [
-        "The selected completed assistant response is an approved demonstration.",
+        "The selected completed assistant response is a candidate demonstration pending Taskset approval.",
         "The generated verifier is evaluated before it can contribute reward.",
       ],
       successCriteria: ["Return the approved response for the reconstructed task input."],
@@ -159,6 +191,7 @@ function scriptedTasksetAuthoringEnvelope(messages: HostedChatMessage[]): string
       }],
       graderFixtures: scriptedTasksetGraderFixtures(),
       generatedFiles: [{ path: "graders/approved-response.js", role: "verifier", content: verifierSource }],
+      proposedExamples,
       proposedMethod: "sft",
       policy: {
         policyVisibleFields: ["input.prompt"],
@@ -167,7 +200,7 @@ function scriptedTasksetAuthoringEnvelope(messages: HostedChatMessage[]): string
         connectedAppScopes: [],
       },
       warnings: sourceIds.length < 2
-        ? ["Add an independent source cluster before treating this Taskset as SFT-ready."]
+        ? ["The selected chat supplies training demonstrations. Add an independent evaluation chat before treating this Taskset as SFT-ready."]
         : [],
       createdAt: new Date().toISOString(),
     },

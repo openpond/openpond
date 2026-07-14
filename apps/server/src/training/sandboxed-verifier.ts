@@ -26,7 +26,14 @@ export async function runSandboxedVerifier(input: {
   const verifier = script.runInContext(context, { timeout: Math.min(input.grader.timeoutMs, 5_000) }) as (value: unknown) => unknown;
   if (typeof verifier !== "function") throw new Error("Verifier export did not evaluate to a function.");
   const result = await withTimeout(
-    Promise.resolve(verifier(structuredClone({ task: input.task, attempt: input.attempt }))),
+    Promise.resolve(verifier(structuredClone({
+      task: input.task,
+      attempt: input.attempt,
+      input: input.task.input,
+      expectedOutput: input.task.expectedOutput,
+      output: input.attempt.output,
+      infrastructureError: input.attempt.infrastructureError,
+    }))),
     input.grader.timeoutMs,
   );
   return normalizeResult(result);
@@ -56,7 +63,8 @@ function normalizeResult(value: unknown): { score: number; passed: boolean; feed
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Verifier must return an object.");
   const record = value as Record<string, unknown>;
   const score = typeof record.score === "number" ? Math.max(0, Math.min(1, record.score)) : record.passed === true ? 1 : 0;
-  return { score, passed: record.passed === true, feedback: typeof record.feedback === "string" ? record.feedback.slice(0, 20_000) : "Custom verifier completed.", evidenceRefs: Array.isArray(record.evidenceRefs) ? record.evidenceRefs.filter((item): item is string => typeof item === "string").slice(0, 10_000) : [] };
+  const feedback = typeof record.feedback === "string" ? record.feedback : typeof record.reason === "string" ? record.reason : "Custom verifier completed.";
+  return { score, passed: record.passed === true, feedback: feedback.slice(0, 20_000), evidenceRefs: Array.isArray(record.evidenceRefs) ? record.evidenceRefs.filter((item): item is string => typeof item === "string").slice(0, 10_000) : [] };
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

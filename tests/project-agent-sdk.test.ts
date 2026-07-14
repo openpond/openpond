@@ -15,6 +15,24 @@ async function withTempProject(fn: (projectDir: string) => Promise<void>) {
 }
 
 describe("project agent SDK detection", () => {
+  test("detects the first-party Cross-System Operations project through the normal import path", async () => {
+    const projectDir = path.resolve("packages/agent-sdk/examples/cross-system-operations");
+
+    const detected = await detectProjectAgentSdk({
+      selectedPath: projectDir,
+      workspacePath: projectDir,
+    });
+
+    expect(detected).toEqual({
+      detected: true,
+      packageName: "openpond-agent-sdk",
+      rootPath: projectDir,
+      manifestPath: path.join(projectDir, "package.json"),
+      version: "file:../..",
+      dependencyType: "dependencies",
+    });
+  });
+
   test("detects openpond-agent-sdk in a root package manifest", async () => {
     await withTempProject(async (projectDir) => {
       const manifestPath = path.join(projectDir, "package.json");

@@ -10,7 +10,7 @@ export type WorkspaceDiffPanelViewState = {
 
 export type WorkspaceDiffTabRequest = {
   id: number;
-  tab: Extract<DiffTab, "files">;
+  tab: Extract<DiffTab, "files" | "summary">;
 };
 
 export type WorkspaceDiffSideChatTab = {

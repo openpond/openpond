@@ -37,6 +37,14 @@ const examples = [
       channel: "openpond_chat",
     },
   },
+  {
+    name: "cross-system-operations",
+    cwd: "examples/cross-system-operations",
+    runInput: {
+      prompt: "Which synthetic accounts need operational review?",
+      channel: "openpond_chat",
+    },
+  },
 ] as const;
 
 const commandMatrix = [

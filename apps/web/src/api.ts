@@ -19,6 +19,10 @@ import type {
   InsightsAskRequest,
   InsightsAskResponse,
   TrainingStateResponse,
+  TrainingRunDetail,
+  ComputeStateResponse,
+  ComputeSettings,
+  ModelDownloadJob,
   LocalAgentSchedulesResponse,
   LocalAgentScheduleRunsResponse,
   LocalAgentScheduleRunResponse,
@@ -476,6 +480,8 @@ export const api = {
     }),
   trainingState: (connection: ClientConnection, profileId: string) =>
     apiFetch<TrainingStateResponse>(connection, `/v1/training?profileId=${encodeURIComponent(profileId)}`),
+  trainingRunDetail: (connection: ClientConnection, jobId: string) =>
+    apiFetch<TrainingRunDetail>(connection, `/v1/training/jobs/${encodeURIComponent(jobId)}/detail`),
   trainingRequest: <T>(
     connection: ClientConnection,
     path: string,
@@ -485,6 +491,22 @@ export const api = {
     method,
     body: method === "DELETE" ? undefined : JSON.stringify(input),
   }),
+  computeState: (connection: ClientConnection) =>
+    apiFetch<ComputeStateResponse>(connection, "/v1/compute"),
+  scanCompute: (connection: ClientConnection) =>
+    apiFetch<ComputeStateResponse["inventory"]>(connection, "/v1/compute/scan", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  updateComputeSettings: (connection: ClientConnection, input: { modelStorePath?: string | null; defaultDeviceIds?: string[]; additionalModelPaths?: string[] }) =>
+    apiFetch<ComputeSettings>(connection, "/v1/compute/settings", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  downloadSmolLm2: (connection: ClientConnection) =>
+    apiFetch<ModelDownloadJob>(connection, "/v1/compute/models/smollm2/download", { method: "POST", body: JSON.stringify({}) }),
+  cancelModelDownload: (connection: ClientConnection, jobId: string) =>
+    apiFetch<ModelDownloadJob>(connection, `/v1/compute/downloads/${encodeURIComponent(jobId)}/cancel`, { method: "POST", body: JSON.stringify({}) }),
   localAgentSchedules: (
     connection: ClientConnection,
     input: { localProjectId?: string | null } = {},

@@ -53,6 +53,10 @@
   gap: 8px;
 }
 
+.profile-summary-overview {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .profile-metric {
   display: grid;
   gap: 3px;
@@ -186,10 +190,10 @@
   width: min(460px, calc(100vw - 34px));
 }
 
-.profile-summary-dialog {
+.git-dialog.profile-summary-dialog {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  width: min(720px, calc(100vw - 34px));
-  max-height: calc(100vh - 34px);
+  width: min(1040px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
   overflow: hidden;
 }
 
@@ -205,6 +209,10 @@
 
 .profile-summary-dialog .profile-summary-panel {
   border-bottom: 0;
+}
+
+.profile-summary-dialog .profile-metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .profile-dialog-summary {
@@ -686,7 +694,8 @@
 
 @container profile-view (max-width: 620px) {
   .profile-summary-head,
-  .profile-metric-grid {
+  .profile-metric-grid,
+  .profile-summary-dialog .profile-metric-grid {
     grid-template-columns: 1fr;
   }
 

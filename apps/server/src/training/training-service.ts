@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { loadOpenPondProfileState } from "@openpond/cloud";
 import {
+  LocalModelChatConfigurationSchema,
   SftRecipeSchema,
   TrainingApprovalSchema,
   TrainingPlanSchema,
   type SftRecipe,
   type TrainingDestinationId,
+  type ComputeInventory,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import {
@@ -20,20 +23,30 @@ import type { SqliteStore } from "../store/store.js";
 import { ExportTrainingDestination, UnavailableTrainingDestination } from "./destinations.js";
 import { listTrainingDestinationSecretRefs, writeTrainingDestinationSecret } from "./destination-secrets.js";
 import { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
+import { HardwareGatedTrainingDestination } from "./hardware-gated-destination.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
   storeDir: string;
   localWorkerProjectDir: string;
   registerDestinations?: (registry: TrainingDestinationRegistry) => void;
+  revalidateCompute?: () => Promise<void>;
+  resolveModelPath?: (modelId: string, revision: string) => Promise<string | null>;
+  modelArtifactStore?: () => Promise<string | null>;
+  computeInventory?: () => Promise<ComputeInventory | null>;
 }) {
   const registry = new TrainingDestinationRegistry();
   const resolveTaskset = (id: string) => deps.store.getTaskset(id);
   registry.register(new ExportTrainingDestination(resolveTaskset));
-  const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir });
+  const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir, resolveModelPath: deps.resolveModelPath, modelArtifactStore: deps.modelArtifactStore });
   registry.register(localCpu);
   registry.register(new UnavailableTrainingDestination("openpond_managed", "OpenPond Managed is a client stub; the managed service is not implemented in this repository.", resolveTaskset));
   registry.register(new UnavailableTrainingDestination("custom", "Register a custom TrainingDestination implementation before launch.", resolveTaskset));
+  registry.register(new UnavailableTrainingDestination("prime_hosted", "Prime hosted training is not connected in this open-source build.", resolveTaskset));
+  registry.register(new UnavailableTrainingDestination("fireworks", "Fireworks training is not connected in this open-source build.", resolveTaskset));
+  registry.register(new HardwareGatedTrainingDestination("local_cuda", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
+  registry.register(new HardwareGatedTrainingDestination("local_mlx", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
+  registry.register(new UnavailableTrainingDestination("ssh_gpu", "User-owned SSH GPU execution is deferred until its worker conformance suite is complete.", resolveTaskset));
   deps.registerDestinations?.(registry);
   void localCpu.reconcile();
 
@@ -64,6 +77,33 @@ export function createTrainingService(deps: {
     return { manifest, directory, validation };
   }
 
+  async function deleteTaskset(tasksetId: string) {
+    const taskset = await deps.store.getTaskset(tasksetId);
+    if (!taskset) throw new Error("Taskset not found.");
+    const [plans, jobs, artifacts] = await Promise.all([
+      deps.store.listTrainingPlans(),
+      deps.store.listTrainingJobs(),
+      deps.store.listTrainingArtifacts(),
+    ]);
+    const planIds = new Set(plans.filter((plan) => plan.tasksetId === tasksetId).map((plan) => plan.id));
+    const relatedJobs = jobs.filter((job) => planIds.has(job.planId));
+    const activeJob = relatedJobs.find((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status));
+    if (activeJob) throw new Error("Cancel the active training job before deleting this model.");
+    const jobIds = new Set(relatedJobs.map((job) => job.id));
+    const managedTrainingRoot = path.resolve(deps.storeDir, "training");
+    for (const artifact of artifacts.filter((artifact) => jobIds.has(artifact.jobId))) {
+      const artifactPath = path.resolve(artifact.path);
+      if (isInside(managedTrainingRoot, artifactPath)) await rm(artifactPath, { force: true, recursive: true });
+    }
+    for (const planId of planIds) await rm(path.join(managedTrainingRoot, "bundles", planId), { force: true, recursive: true });
+    const profile = await loadOpenPondProfileState();
+    if (profile.sourcePath && (profile.activeProfile ?? "default") === taskset.profileId) {
+      await rm(path.join(profile.sourcePath, "tasksets", taskset.id), { force: true, recursive: true });
+    }
+    await deps.store.deleteTasksetData(tasksetId);
+    return { deleted: true, tasksetId };
+  }
+
   async function approve(input: { planId: string; bundleId: string; approvedBy?: string; maximumCostUsd?: number | null }) {
     const plan = await deps.store.getTrainingPlan(input.planId);
     const bundle = await deps.store.getTrainingBundle(input.bundleId);
@@ -83,6 +123,16 @@ export function createTrainingService(deps: {
     const job = await registry.get(plan.destinationId).launch(plan, approval);
     await deps.store.saveTrainingJob(job);
     return job;
+  }
+
+  async function start(input: { tasksetId: string; destinationId: TrainingDestinationId; recipe: unknown; exportApproved?: boolean; maximumCostUsd?: number | null }) {
+    await deps.revalidateCompute?.();
+    const plan = await createPlan({ tasksetId: input.tasksetId, destinationId: input.destinationId, recipe: input.recipe, exportApproved: input.exportApproved });
+    const bundle = await buildBundle(plan.id);
+    const approval = await approve({ planId: plan.id, bundleId: bundle.manifest.id, maximumCostUsd: input.maximumCostUsd });
+    await deps.revalidateCompute?.();
+    const job = await launch({ planId: plan.id, approvalId: approval.id });
+    return { plan, bundle: bundle.manifest, approval, job };
   }
 
   async function state() {
@@ -116,6 +166,16 @@ export function createTrainingService(deps: {
     return deps.store.saveModelArtifactLineage({ ...model, status: "rejected", rejectedAt: new Date().toISOString(), rejectionReason: input.reason });
   }
 
+  async function updateModelConfiguration(input: { modelId: string; configuration: unknown }) {
+    const model = await deps.store.getModelArtifactLineage(input.modelId);
+    if (!model || model.status !== "imported") throw new Error("Imported model not found.");
+    const configuration = LocalModelChatConfigurationSchema.parse({
+      ...(input.configuration as Record<string, unknown>),
+      updatedAt: new Date().toISOString(),
+    });
+    return deps.store.saveModelArtifactLineage({ ...model, chatConfiguration: configuration });
+  }
+
   async function saveCredential(input: { destinationId: string; value: string }) {
     if (input.destinationId === "openpond_managed") throw new Error("OpenPond Managed uses account authentication, not a local BYOK credential.");
     return writeTrainingDestinationSecret({ directory: path.join(deps.storeDir, "secrets"), destinationId: input.destinationId, value: input.value, timestamp: new Date().toISOString() });
@@ -123,5 +183,10 @@ export function createTrainingService(deps: {
 
   async function close(): Promise<void> { await localCpu.close(); }
 
-  return { registry, destinations, createPlan, buildBundle, approve, launch, state, importExternal, exportBundle, artifactDownload, rejectModel, saveCredential, close };
+  return { registry, destinations, createPlan, buildBundle, deleteTaskset, approve, launch, start, state, importExternal, exportBundle, artifactDownload, rejectModel, updateModelConfiguration, saveCredential, close };
+}
+
+function isInside(root: string, target: string) {
+  const relative = path.relative(root, target);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }

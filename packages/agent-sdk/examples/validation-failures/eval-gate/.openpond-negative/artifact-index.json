@@ -189,6 +189,12 @@
       "kind": "trace-jsonl",
       "schema": "openpond.agent.trace.v1",
       "format": "jsonl"
+    },
+    {
+      "path": ".openpond-negative/traces/fails-gate-1783995175670.jsonl",
+      "kind": "trace-jsonl",
+      "schema": "openpond.agent.trace.v1",
+      "format": "jsonl"
     }
   ]
 }

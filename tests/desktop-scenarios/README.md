@@ -19,6 +19,7 @@ Implemented scenarios:
 - `subagent-blocked-approval.ts`: write-capable child isolation blocker with parent blocked activity and linked child row proof.
 - `goal-scoped-subagent-details.ts`: active goal runtime plus running/submitted child state in the composer strip and right sidebar Goal details.
 - `context-compaction-followup.ts`: manual OpenPond summary compaction status row, persisted summary event, usage record, and post-compaction composer follow-up.
+- `new-model-end-to-end.ts`: networkless Cross-System Operations proof from deterministic worlds and baseline traces through Miner/Creator, GRPO plus SFT-bootstrap lineage, local fixture training, frozen evaluation, constrained normal chat tools, and a real desktop/server restart.
 - `subagent-suite.ts`: the deterministic desktop regression suite for subagent additions.
 
 Artifact convention:
@@ -47,6 +48,7 @@ bun scripts/desktop-harness.ts run tests/desktop-scenarios/subagent-bounded-work
 bun scripts/desktop-harness.ts run tests/desktop-scenarios/subagent-blocked-approval.ts --isolated --json tmp/desktop-harness/subagent-blocked-approval/report.json
 bun scripts/desktop-harness.ts run tests/desktop-scenarios/goal-scoped-subagent-details.ts --isolated --json tmp/desktop-harness/goal-scoped-subagent-details/report.json
 bun scripts/desktop-harness.ts run tests/desktop-scenarios/context-compaction-followup.ts --isolated --json tmp/desktop-harness/context-compaction-followup/report.json
+bun scripts/desktop-harness.ts run tests/desktop-scenarios/new-model-end-to-end.ts --isolated --timeout-ms 300000 --json tmp/desktop-harness/new-model-end-to-end/report.json
 bun run test:desktop:subagents
 bun scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts tests/desktop-scenarios/subagent-heartbeat-settings.ts tests/desktop-scenarios/subagent-heartbeat-no-progress-wake.ts tests/desktop-scenarios/subagent-heartbeat-thread-scoped.ts tests/desktop-scenarios/subagent-heartbeat-stale.ts tests/desktop-scenarios/subagent-visible-lifecycle.ts tests/desktop-scenarios/subagent-running-state.ts tests/desktop-scenarios/subagent-handoff-parent-wake.ts tests/desktop-scenarios/subagent-watch-submission-wake.ts tests/desktop-scenarios/subagent-review-revision-loop.ts tests/desktop-scenarios/subagent-bounded-worker-contract.ts tests/desktop-scenarios/subagent-blocked-approval.ts tests/desktop-scenarios/goal-scoped-subagent-details.ts tests/desktop-scenarios/context-compaction-followup.ts --isolated --timeout-ms 300000 --json tmp/desktop-harness/desktop-scenarios/report.json
 bun scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts --packaged --app release/linux-unpacked/openpond --json tmp/desktop-harness/packaged-chat/report.json

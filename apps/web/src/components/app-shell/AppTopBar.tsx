@@ -13,6 +13,7 @@ import type {
 import { lazy, Suspense, useEffect, useState, type MouseEvent } from "react";
 import "../../styles/app-shell/topbar-insights.css";
 import {
+  ArrowLeft,
   ChevronRight,
   Lightbulb,
   MoreHorizontal,
@@ -40,6 +41,7 @@ export function AppTopBar({
   title,
   conversationId,
   breadcrumbs,
+  backAction,
   workspaceName,
   workspaceId,
   busy,
@@ -80,6 +82,7 @@ export function AppTopBar({
   title: string;
   conversationId?: string | null;
   breadcrumbs?: TopBarBreadcrumb[];
+  backAction?: { label: string; onSelect: () => void } | null;
   workspaceName: string | null;
   workspaceId: string | null;
   busy: boolean;
@@ -163,6 +166,11 @@ export function AppTopBar({
             <PanelLeft size={16} />
           </button>
         )}
+        {backAction ? (
+          <button className="titlebar-icon" type="button" aria-label={backAction.label} title={backAction.label} onClick={backAction.onSelect}>
+            <ArrowLeft size={16} />
+          </button>
+        ) : null}
         {breadcrumbs?.length ? (
           <nav className="titlebar-breadcrumbs" aria-label="Breadcrumb">
             {breadcrumbs.map((item, index) => {

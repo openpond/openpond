@@ -16,7 +16,7 @@ export function TrainingTasksetDetail({
 }) {
   const requestedValidationRef = useRef<string | null>(null);
   const readinessCurrent = taskset.readiness?.tasksetHash === taskset.contentHash;
-  const trainingExamples = taskset.tasks.filter((task) => task.split === "train").length;
+  const trainingExamples = taskset.learningSignals.demonstrations.filter((demonstration) => demonstration.approved).length;
   const evaluationExamples = taskset.tasks.filter((task) => task.split === "frozen_eval").length;
   const method = taskset.readiness?.recommendedMethod && taskset.readiness.recommendedMethod !== "none"
     ? taskset.readiness.recommendedMethod
@@ -35,7 +35,7 @@ export function TrainingTasksetDetail({
       <dl className="training-taskset-facts" aria-label="Taskset summary">
         <div><dt>Method</dt><dd>{method.toUpperCase()}</dd></div>
         <div><dt>Training examples</dt><dd>{trainingExamples}</dd></div>
-        <div><dt>Evaluation examples</dt><dd>{evaluationExamples}</dd></div>
+        <div><dt>Test examples</dt><dd>{evaluationExamples}</dd></div>
       </dl>
 
       <div className="training-taskset-content">
@@ -85,7 +85,6 @@ function ReadinessSummary({ taskset }: { taskset: Taskset }) {
 function friendlyBlocker(code: string, fallback: string) {
   const messages: Record<string, string> = {
     sft_demonstrations_missing: "Add another successful chat as a training example.",
-    frozen_eval_missing: "Add another chat as an evaluation example.",
     grader_audit_missing: "Review the evaluation setup.",
     grader_audit_stale: "The evaluation setup changed and needs to be checked again.",
     grader_hacking: "The evaluation accepted an adversarial example.",

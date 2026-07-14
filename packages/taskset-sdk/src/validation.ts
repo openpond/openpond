@@ -96,10 +96,10 @@ function validateSourceConsent(taskset: Taskset, issues: TasksetValidationIssue[
     if (source.secretScanStatus !== "passed") {
       issues.push({ code: "source_secret_scan", severity: "error", message: `Source ${source.id} did not pass secret scanning.`, path: `sourceRefs.${index}.secretScanStatus` });
     }
-    if (!(["passed", "review"] as string[]).includes(source.piiScanStatus)) {
+    if (source.piiScanStatus !== "passed") {
       issues.push({ code: "source_pii_scan", severity: "error", message: `Source ${source.id} has unresolved PII policy.`, path: `sourceRefs.${index}.piiScanStatus` });
     }
-    if (!(["approved", "review"] as string[]).includes(source.licensingStatus)) {
+    if (source.licensingStatus !== "approved") {
       issues.push({ code: "source_license", severity: "error", message: `Source ${source.id} has unresolved licensing policy.`, path: `sourceRefs.${index}.licensingStatus` });
     }
   }
@@ -118,7 +118,7 @@ function validateSplitIsolation(taskset: Taskset, issues: TasksetValidationIssue
     }
   }
   const frozenCount = taskset.tasks.filter((task) => task.split === "frozen_eval").length;
-  if (frozenCount === 0) issues.push({ code: "frozen_eval_missing", severity: "error", message: "At least one frozen evaluation task is required.", path: "tasks" });
+  if (frozenCount === 0) issues.push({ code: "frozen_eval_missing", severity: "warning", message: "Add an independent test example before training.", path: "tasks" });
 }
 
 function validatePolicyBoundary(taskset: Taskset, issues: TasksetValidationIssue[]): void {

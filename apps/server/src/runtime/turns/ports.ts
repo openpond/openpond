@@ -37,6 +37,7 @@ import type { HostedToolInstructionMode } from "../../openpond/hosted-tool-proto
 import type { HostedProfileSkillBody, ProfileSkillInstructionMode } from "../../openpond/hosted-turn-helpers.js";
 import type { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import type { ProfileSkillReadResult } from "../../openpond/model-tool-registry.js";
+import type { NativeModelToolResult } from "../../openpond/native-tool-calls.js";
 import type { WebSearchExecutor } from "../../openpond/web-search.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
@@ -244,6 +245,15 @@ export type TurnRunnerDependencies = {
   cleanupSandboxForSubagent?: SubagentWorkspacePort["cleanupSandboxForSubagent"];
   executeOpenPondCommand?: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  executeCrossSystemTool?: (input: {
+    modelId: string;
+    turnId: string;
+    callId: string;
+    name: string;
+    args: Record<string, unknown>;
+    userPrompt: string;
+    signal: AbortSignal;
+  }) => Promise<NativeModelToolResult>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
   readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
   executeProfileSkillCommand?: (input: { prompt: string }) => Promise<ProfileSkillCommandResult | null>;

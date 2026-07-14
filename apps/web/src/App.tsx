@@ -111,6 +111,7 @@ export function App() {
   const [pendingTerminalCommand, setPendingTerminalCommand] =
     useState<TerminalQueuedCommand | null>(null);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
+  const [trainingDetailTasksetId, setTrainingDetailTasksetId] = useState<string | null>(null);
   const [mentionedAppId, setMentionedAppId] = useState<string | null>(null);
   const [connectedAppRows, setConnectedAppRows] = useState<ConnectedAppStatusRow[]>(() =>
     buildConnectedAppStatusRows(),
@@ -1524,7 +1525,7 @@ export function App() {
     }
     if (view === "training") {
       setRightPanelMode("changes");
-      setRightPanelTabRequest({ id: Date.now(), tab: "files" });
+      setRightPanelTabRequest({ id: Date.now(), tab: "summary" });
       setDiffPanelOpen(true);
       return;
     }
@@ -1728,6 +1729,9 @@ export function App() {
       topBar={{
         sidebarOpen,
         title,
+        backAction: view === "training" && trainingDetailTasksetId
+          ? { label: "Back to models", onSelect: () => setTrainingDetailTasksetId(null) }
+          : null,
         conversationId: view === "chat" ? selectedSessionId : null,
         workspaceName: viewWorkspaceName,
         workspaceId: viewWorkspaceId,
@@ -1892,6 +1896,8 @@ export function App() {
         insightsError: insights.error,
         training,
         trainingSessions: sidebarSessions,
+        trainingDetailTasksetId,
+        onTrainingDetailTasksetIdChange: setTrainingDetailTasksetId,
         onRunInsightsScan: insights.runScan,
         onAskInsightsQuestion: insights.askQuestion,
         onPatchInsightStatus: insights.patchStatus,
@@ -1951,6 +1957,11 @@ export function App() {
         changeWorkspaceTarget,
         setDraftProvider,
         setDraftModel,
+        onBeginNewChatWithModel: (model) => {
+          setDraftProvider(model.providerId);
+          setDraftModel(model.modelId);
+          beginNewChat(null);
+        },
         changeCodexPermissionMode,
         changeCodexReasoningEffort,
         changeOpenPondCommandAccessMode,

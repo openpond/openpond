@@ -140,6 +140,13 @@ export function ProfileSettingsSection({
     <section className="account-settings">
       {profile?.mode === "local" ? (
         <>
+          <ProfileSummaryMetrics
+            className="profile-summary-overview"
+            profile={profile}
+            pendingCreatePlanReviews={pendingCreatePlanReviews}
+            selectedDefaultTeamId={selectedDefaultTeamId}
+          />
+
           <ProfileControls
             connection={connection}
             profile={profile}
@@ -211,12 +218,6 @@ export function ProfileSettingsSection({
           <ProfileSkillsSection
             onSkillCommand={onSkillCommand}
             profile={profile}
-          />
-
-          <ProfileSummaryCard
-            profile={profile}
-            pendingCreatePlanReviews={pendingCreatePlanReviews}
-            selectedDefaultTeamId={selectedDefaultTeamId}
           />
 
           {summaryDialogOpen ? (
@@ -329,16 +330,11 @@ function ProfileSummaryCard({
             {profile.summary?.message ?? profileSyncMessage(profile)}
           </div>
         </div>
-        <div className="profile-metric-grid">
-          <ProfileMetric label="Git" value={profileGitValue(profile)} />
-          <ProfileMetric label="Hosted" value={profileHostedValue(profile, selectedDefaultTeamId)} />
-          <ProfileMetric label="Catalog" value={profileCatalogValue(profile)} />
-          <ProfileMetric label="Setup gate" value={profileSetupGateValue(profile)} />
-          <ProfileMetric label="Default action" value={profile.summary.defaultAction ?? "None"} />
-          <ProfileMetric label="Agents" value={`${profile.agents.length} tracked`} />
-          <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile, selectedDefaultTeamId)} />
-          <ProfileMetric label="Plan review" value={profilePlanReviewValue(pendingCreatePlanReviews)} />
-        </div>
+        <ProfileSummaryMetrics
+          profile={profile}
+          pendingCreatePlanReviews={pendingCreatePlanReviews}
+          selectedDefaultTeamId={selectedDefaultTeamId}
+        />
         {pendingCreatePlanReviews.length ? (
           <div className="profile-plan-review-list" aria-label="Pending profile plan reviews">
             {pendingCreatePlanReviews.map((approval) => (
@@ -426,6 +422,34 @@ function ProfileSummaryCard({
         ) : null}
         {profile.error ? <div className="profile-footline warning">{profile.error}</div> : null}
       </div>
+    </div>
+  );
+}
+
+function ProfileSummaryMetrics({
+  className,
+  profile,
+  pendingCreatePlanReviews,
+  selectedDefaultTeamId,
+}: {
+  className?: string;
+  profile: ProfileState;
+  pendingCreatePlanReviews: Approval[];
+  selectedDefaultTeamId: string;
+}) {
+  return (
+    <div
+      aria-label="Profile summary"
+      className={`profile-metric-grid${className ? ` ${className}` : ""}`}
+    >
+      <ProfileMetric label="Git" value={profileGitValue(profile)} />
+      <ProfileMetric label="Hosted" value={profileHostedValue(profile, selectedDefaultTeamId)} />
+      <ProfileMetric label="Catalog" value={profileCatalogValue(profile)} />
+      <ProfileMetric label="Setup gate" value={profileSetupGateValue(profile)} />
+      <ProfileMetric label="Default action" value={profile.summary.defaultAction ?? "None"} />
+      <ProfileMetric label="Agents" value={`${profile.agents.length} tracked`} />
+      <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile, selectedDefaultTeamId)} />
+      <ProfileMetric label="Plan review" value={profilePlanReviewValue(pendingCreatePlanReviews)} />
     </div>
   );
 }

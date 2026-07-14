@@ -165,6 +165,11 @@ import {
 } from "./server-payload-helpers.js";
 export { assertCreatePipelineBackgroundApproved } from "./server-payload-helpers.js";
 import { createProfilePayloads } from "./profile-payloads.js";
+import {
+  LOCAL_ADAPTER_PROVIDER_ID,
+  listLocalAdapterProviderModels,
+  withLocalAdapterProviderModels,
+} from "../training/local-adapter-models.js";
 
 export type ServerPayloads = ReturnType<typeof createServerPayloads>;
 
@@ -281,17 +286,18 @@ export function createServerPayloads(deps: {
     codex?: CodexStatus | null;
     refreshCatalog?: boolean;
   } = {}): Promise<ProviderSettings> {
-    const [providerState, secrets] = await Promise.all([
+    const [providerState, secrets, localAdapterModels] = await Promise.all([
       loadProvidersFileWithCatalog({ refresh: input.refreshCatalog ?? true }),
       readProviderSecrets(providerSecretPaths),
+      listLocalAdapterProviderModels(store),
     ]);
-    return buildProviderSettings({
+    return withLocalAdapterProviderModels(buildProviderSettings({
       file: providerState.file,
       secrets,
       account: input.account,
       codex: input.codex ?? getCodexStatus(),
       catalog: providerState.catalog,
-    });
+    }), localAdapterModels);
   }
 
   async function updateAppPreferencesPayload(payload: unknown): Promise<{ preferences: AppPreferences }> {
@@ -334,18 +340,19 @@ export function createServerPayloads(deps: {
 
   async function providerSettingsPayload(): Promise<ProviderSettings> {
     return providerDiagnostics.track("provider_settings", null, async () => {
-      const [openPond, providerState, secrets] = await Promise.all([
+      const [openPond, providerState, secrets, localAdapterModels] = await Promise.all([
         loadOpenPondData({ force: false }),
         loadProvidersFileWithCatalog({ refresh: true }),
         readProviderSecrets(providerSecretPaths),
+        listLocalAdapterProviderModels(store),
       ]);
-      return buildProviderSettings({
+      return withLocalAdapterProviderModels(buildProviderSettings({
         file: providerState.file,
         secrets,
         account: openPond.account,
         codex: getCodexStatus(),
         catalog: providerState.catalog,
-      });
+      }), localAdapterModels);
     });
   }
 
@@ -355,21 +362,22 @@ export function createServerPayloads(deps: {
     catalog: ProviderCatalog | null;
     settings: ProviderSettings;
   }> {
-    const [file, secrets] = await Promise.all([
+    const [file, secrets, localAdapterModels] = await Promise.all([
       loadProvidersFile(),
       readProviderSecrets(providerSecretPaths),
+      listLocalAdapterProviderModels(store),
     ]);
     const catalog = cachedProviderCatalog(file);
     return {
       file,
       secrets,
       catalog,
-      settings: buildProviderSettings({
+      settings: withLocalAdapterProviderModels(buildProviderSettings({
         file,
         secrets,
         codex: getCodexStatus(),
         catalog,
-      }),
+      }), localAdapterModels),
     };
   }
 
@@ -388,6 +396,18 @@ export function createServerPayloads(deps: {
 
   async function refreshProviderModelsPayload(providerIdValue: string, payload: unknown): Promise<unknown> {
     const providerId = parseProviderId(providerIdValue);
+    if (providerId === LOCAL_ADAPTER_PROVIDER_ID) {
+      const request = parseProviderModelsRefreshRequest(payload);
+      const providers = await providerSettingsPayload();
+      return {
+        ...listProviderModels(providers, providerId, {
+          query: request.query,
+          refresh: false,
+          limit: 100,
+        }),
+        providers,
+      };
+    }
     return providerDiagnostics.track("model_discovery", providerId, async () => {
       const request = parseProviderModelsRefreshRequest(payload);
       const state = await localProviderRuntimeState();

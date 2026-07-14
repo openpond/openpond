@@ -158,6 +158,23 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
     ],
   },
   {
+    id: "local-adapter",
+    displayName: "Local trained models",
+    credentialModes: [],
+    routing: { localRuntime: true },
+    capabilities: {
+      chatCompletions: true,
+      streaming: true,
+      modelDiscovery: "manual",
+      toolCalling: false,
+      reasoning: false,
+    },
+    defaultEnabled: true,
+    defaultModel: null,
+    modelCacheSource: "manual",
+    models: [],
+  },
+  {
     id: "anthropic",
     displayName: "Anthropic",
     credentialModes: ["local-byok"],
@@ -845,6 +862,15 @@ function credentialStatusForPreset(input: {
           : input.codex?.appServer.lastError ?? null,
     });
   }
+  if (input.preset.id === "local-adapter") {
+    return ProviderCredentialStatusSchema.parse({
+      connected: true,
+      source: "none",
+      redacted: "Local runtime",
+      lastValidatedAt: null,
+      lastError: null,
+    });
+  }
   return credentialStatusFromSecret(input.secret);
 }
 
@@ -852,11 +878,15 @@ function providerAvailable(input: {
   preset: ServerProviderPreset;
   config: ProviderConfig;
   credentialConnected: boolean;
+  modelCount: number;
   codex?: CodexStatus | null;
 }): boolean {
   if (input.preset.id === "openpond") return input.credentialConnected;
   if (input.preset.id === "codex") {
     return Boolean(input.codex?.available) && input.credentialConnected;
+  }
+  if (input.preset.id === "local-adapter") {
+    return input.config.enabled && input.modelCount > 0;
   }
   return input.config.enabled && input.credentialConnected;
 }
@@ -883,6 +913,7 @@ function providerStatus(input: {
       preset: input.preset,
       config: input.config,
       credentialConnected: credential.connected,
+      modelCount: input.cache.models.length,
       codex: input.codex,
     }),
     defaultModel: input.config.defaultModel,

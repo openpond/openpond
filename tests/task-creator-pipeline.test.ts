@@ -11,7 +11,7 @@ describe("Task Creator pipeline", () => {
     const session = {
       id: sessionId,
       provider: "codex" as const,
-      title: "Codex chat",
+      title: "Codex chat ",
       appId: null,
       appName: null,
       cwd: "/tmp/openpond",
@@ -28,10 +28,11 @@ describe("Task Creator pipeline", () => {
       { id: "history_answer", sessionId, turnId: "history_turn", name: "assistant.delta" as const, timestamp: session.updatedAt, output: "Prepared the launch brief from the approved requests." },
       { id: "history_completed", sessionId, turnId: "history_turn", name: "turn.completed" as const, timestamp: session.updatedAt },
     ];
+    let historyReads = 0;
     const service = createTaskCreatorService({
       store,
       authoringSkillHash: contentHash("skill"),
-      loadCodexHistoryThread: async () => ({ session, events }),
+      loadCodexHistoryThread: async () => ({ session: { ...session, updatedAt: new Date(Date.parse(session.updatedAt) + historyReads++ * 1_000).toISOString() }, events }),
     });
 
     const [estimate] = await service.estimateSessionSources([sessionId]);
@@ -41,7 +42,29 @@ describe("Task Creator pipeline", () => {
     const source = await service.addSessionSource({ profileId: "default", sessionId });
     expect(source.turnIds).toEqual(["history_turn"]);
     expect(source.metadata).toMatchObject({ messageCount: 2, estimatedTokens: estimate!.estimatedTokens });
+    expect(source.licensingStatus).toBe("approved");
+    expect(source.metadata.licensingBasis).toBe("local_user_selected_chat");
     expect(source.metadata.workflowSignature).not.toBe("general_workflow");
+    await store.upsertTrainingSource({ ...source, licensingStatus: "review", metadata: { ...source.metadata, licensingBasis: "legacy_review" } });
+    const creation = await service.start({ profileId: "default", sourceIds: [source.id], surface: "training_page", mode: "defaults", objective: "Create a stable task draft." });
+    expect((await store.getTrainingSource(source.id))?.licensingStatus).toBe("approved");
+    expect(creation.state).toBe("recommendation_ready");
+    expect(creation.materializedTasksetId).toBeNull();
+    expect(creation.proposal?.warnings).toContain("No independent evaluation example was proposed.");
+  }));
+
+  test("keeps connected-app chat licensing under review", async () => withTrainingStore(async ({ store }) => {
+    const { session } = await seedConversation(store, { sessionId: "session_connected", turnId: "turn_connected", title: "Connected support chat" });
+    await store.mutate((data) => {
+      const index = data.sessions.findIndex((item) => item.id === session.id);
+      data.sessions[index] = { ...data.sessions[index]!, appId: "slack", appName: "Slack" };
+    });
+    const service = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill") });
+    const source = await service.addSessionSource({ profileId: "default", sessionId: session.id });
+    expect(source.connectedAppIds).toEqual(["slack"]);
+    expect(source.licensingStatus).toBe("review");
+    await service.start({ profileId: "default", sourceIds: [source.id], surface: "training_page", mode: "defaults", objective: "Review this workflow." });
+    expect((await store.getTrainingSource(source.id))?.licensingStatus).toBe("review");
   }));
 
   test("turns selected chats into an approved source-owned Taskset", async () => withTrainingStore(async ({ store, directory }) => {
@@ -66,5 +89,31 @@ describe("Task Creator pipeline", () => {
     await access(path.join(root, "taskset.json"));
     await access(path.join(root, "environment", "taskset.ts"));
     expect(await readFile(path.join(root, "fixtures", "grader-fixtures.json"), "utf8")).toContain("prompt_injection");
+  }));
+
+  test("does not materialize a trainable Taskset without an independent test chat", async () => withTrainingStore(async ({ store, directory }) => {
+    const profileSource = path.join(directory, "profile");
+    await mkdir(profileSource, { recursive: true });
+    await seedConversation(store, { sessionId: "session_only", turnId: "turn_only", title: "Approved workflow", assistant: "Approved training response." });
+    const service = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill"), loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource, git: { head: "commit123" } } as any) });
+    const source = await service.addSessionSource({ profileId: "default", sessionId: "session_only" });
+    const creation = await service.start({ profileId: "default", sourceIds: [source.id], surface: "slash_train", mode: "defaults", objective: "Reproduce the approved workflow.", methodHint: "grpo" });
+    expect(creation.proposal?.proposedMethod).toBe("grpo");
+    expect(creation.state).toBe("recommendation_ready");
+    expect(creation.materializedTasksetId).toBeNull();
+    expect(creation.proposal?.warnings).toContain("No independent evaluation example was proposed.");
+    expect(await store.listTasksets("default")).toHaveLength(0);
+    await expect(service.approveMaterialization(creation.id, true)).rejects.toThrow("Task creation is not ready for materialization approval.");
+  }));
+
+  test("carries preference tuning as a typed authoring preference", async () => withTrainingStore(async ({ store }) => {
+    await seedConversation(store, { sessionId: "session_preference", turnId: "turn_preference", title: "Reviewed response correction", assistant: "Approved corrected response." });
+    const service = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill") });
+    const source = await service.addSessionSource({ profileId: "default", sessionId: "session_preference" });
+    const creation = await service.start({ profileId: "default", sourceIds: [source.id], surface: "training_page", mode: "defaults", objective: "Learn from reviewed response corrections.", methodHint: "dpo" });
+    expect(creation.request.methodHint).toBe("dpo");
+    expect(creation.proposal?.proposedMethod).toBe("dpo");
+    expect(creation.proposal?.diagnosis.intervention).toBe("preference");
+    expect(creation.state).toBe("recommendation_ready");
   }));
 });

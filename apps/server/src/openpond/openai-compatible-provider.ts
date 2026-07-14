@@ -28,6 +28,7 @@ import {
 } from "./reasoning-continuation.js";
 
 export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
+  "local-adapter",
   "openai",
   "xai",
   "openrouter",

@@ -25,6 +25,7 @@ const VERIFIED_NATIVE_TOOL_PROVIDERS = new Set<ChatProvider>([
   "together",
   "groq",
   "fireworks",
+  "local-adapter",
 ]);
 
 const DEFAULT_HOSTED_TOOL_ROLLOUT_FLAGS: HostedToolRolloutFlags = {

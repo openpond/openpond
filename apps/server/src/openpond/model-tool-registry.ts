@@ -11,7 +11,7 @@ import type {
   WorkspaceDiffSummary,
   WorkspaceToolResult,
 } from "@openpond/contracts";
-import { connectedAppIntegrationSkillByProvider } from "@openpond/contracts";
+import { connectedAppIntegrationSkillByProvider, CROSS_SYSTEM_TOOL_DEFINITIONS, CROSS_SYSTEM_TOOL_NAMES } from "@openpond/contracts";
 import {
   commandResultForModel,
   type OpenPondCommandExecutionInput,
@@ -977,11 +977,42 @@ export function createOpenPondActionModelToolDefinitions(deps: {
     options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null },
   ) => Promise<WorkspaceToolResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  executeCrossSystemTool?: (input: {
+    modelId: string;
+    turnId: string;
+    callId: string;
+    name: string;
+    args: Record<string, unknown>;
+    userPrompt: string;
+    signal: AbortSignal;
+  }) => Promise<NativeModelToolResult>;
 }): ModelToolDefinition[] {
   if (deps.actionCatalog.length === 0) return [];
   const actionById = new Map(deps.actionCatalog.map((action) => [action.id, action]));
   const enabled = () => actionById.size > 0;
+  const directCrossSystemActions = new Map(deps.actionCatalog.flatMap((action) => {
+    const name = action.sourceActionId ?? action.name ?? action.id;
+    return (CROSS_SYSTEM_TOOL_NAMES as readonly string[]).includes(name) ? [[name, action] as const] : [];
+  }));
+  const directCrossSystemTools: ModelToolDefinition[] = deps.executeCrossSystemTool && CROSS_SYSTEM_TOOL_NAMES.every((name) => directCrossSystemActions.has(name))
+    ? CROSS_SYSTEM_TOOL_DEFINITIONS.map((definition) => ({
+        name: definition.name,
+        description: definition.description,
+        parameters: structuredClone(definition.parameters) as Record<string, unknown>,
+        enabled,
+        execute: (context) => deps.executeCrossSystemTool!({
+          modelId: context.model,
+          turnId: context.turnId,
+          callId: context.callId,
+          name: definition.name,
+          args: context.args,
+          userPrompt: context.userPrompt,
+          signal: context.signal,
+        }),
+      }))
+    : [];
   return [
+    ...directCrossSystemTools,
     {
       name: "openpond_action_search",
       description:
