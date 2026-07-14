@@ -31,7 +31,7 @@
     "build:codex": "tsc -b packages/codex-provider",
     "build:runtime": "tsc -b packages/runtime",
     "build:server": "bun run build:openpond && tsc -b apps/server",
-    "bundle:server": "bun build apps/server/src/index.ts --target=node --external sqlite3 --external node-pty --outfile apps/server/dist/index.js",
+    "bundle:server": "tsc -b apps/server && bun build apps/server/src/index.ts --target=node --external sqlite3 --external node-pty --outfile apps/server/dist/index.js",
     "build:terminal": "tsc -b apps/terminal",
     "build:web": "bun run --cwd apps/web build",
     "build:desktop": "tsc -b apps/desktop && bun build apps/desktop/src/main.ts --target=node --format=esm --external electron --outfile apps/desktop/dist/main.js && bun build apps/desktop/src/preload.ts --target=node --format=cjs --external electron --outfile apps/desktop/dist/preload.js",

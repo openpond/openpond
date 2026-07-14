@@ -132,6 +132,16 @@ describe("release workflow", () => {
     expect(packageJson.scripts?.["build:artifacts"]).toContain("bun run build:desktop");
   });
 
+  test("builds server workspace dependencies before bundling release artifacts", () => {
+    const packageJson = JSON.parse(readFileSync(ROOT_PACKAGE_PATH, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["bundle:server"]).toMatch(
+      /^tsc -b apps\/server && bun build apps\/server\/src\/index\.ts /,
+    );
+  });
+
   test("packaged smoke resolver supports stable and nightly unpacked app names", () => {
     const root = "/repo";
 
