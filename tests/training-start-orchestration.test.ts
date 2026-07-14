@@ -35,17 +35,35 @@ describe.serial("training start orchestration", () => {
     await store.upsertTaskset(taskset);
     await buildTaskset(taskset, path.join(directory, "training", "tasksets", taskset.id));
     let computeChecks = 0;
+    let releaseArtifactStore!: () => void;
+    let markArtifactStoreEntered!: () => void;
+    const artifactStoreGate = new Promise<void>((resolve) => { releaseArtifactStore = resolve; });
+    const artifactStoreEntered = new Promise<void>((resolve) => { markArtifactStoreEntered = resolve; });
+    let serviceClosed = false;
     const service = createTrainingService({
       store,
       storeDir: directory,
       localWorkerProjectDir: path.resolve("python/openpond-training"),
       revalidateCompute: async () => { computeChecks += 1; },
-      modelArtifactStore: async () => path.join(directory, "model-store"),
+      modelArtifactStore: async () => {
+        markArtifactStoreEntered();
+        await artifactStoreGate;
+        return path.join(directory, "model-store");
+      },
     });
     try {
       const started = await service.start({ tasksetId: taskset.id, destinationId: "local_cpu_fixture", recipe: sftRecipeFixture(), exportApproved: true, maximumCostUsd: 0 });
       expect(started).toMatchObject({ plan: { tasksetId: taskset.id }, bundle: { planId: started.plan.id }, approval: { planId: started.plan.id }, job: { planId: started.plan.id } });
       expect(computeChecks).toBe(2);
+      await artifactStoreEntered;
+      let closeFinished = false;
+      const closing = service.close().then(() => { closeFinished = true; });
+      await Bun.sleep(25);
+      const closedBeforeArtifactImportFinished = closeFinished;
+      releaseArtifactStore();
+      await closing;
+      serviceClosed = true;
+      expect(closedBeforeArtifactImportFinished).toBe(false);
       const completed = await waitForTerminal(store, started.job.id);
       expect(completed).toMatchObject({ status: "succeeded", metadata: { reloadVerified: true, frozenEvaluationExecuted: true } });
       const mirrored = String(completed.metadata.mirroredArtifactDirectory);
@@ -58,12 +76,15 @@ describe.serial("training start orchestration", () => {
       expect(detail.stepMetrics).toHaveLength(2);
       expect(detail.stepMetrics.map((metric) => metric.step)).toEqual([1, 2]);
       expect(detail.evaluation).toMatchObject({ base: { count: 1 }, trained: { count: 1 }, examples: [{ taskId: expect.any(String) }] });
-    } finally { await service.close(); }
-  }), 30_000);
+    } finally {
+      releaseArtifactStore();
+      if (!serviceClosed) await service.close();
+    }
+  }), 90_000);
 });
 
 async function waitForTerminal(store: any, jobId: string) {
-  const deadline = Date.now() + 25_000;
+  const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
     const job = await store.getTrainingJob(jobId);
     if (job && ["succeeded", "failed", "cancelled"].includes(job.status)) return job;

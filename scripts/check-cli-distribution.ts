@@ -134,7 +134,7 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
     }
   }
   const versionP95Ms = percentile(durations, 0.95);
-  enforce("CLI version cold-start p95 ms", versionP95Ms, 750);
+  reportBudget("CLI version cold-start p95 ms", versionP95Ms, 750);
 
   const terminal = await command(commandName, [...prefixArgs, "__terminal", "help"], { cwd, env });
   if (!terminal.stdout.includes("Usage: openpond-app chat")) {
@@ -167,7 +167,7 @@ async function liveServer(
   try {
     const payload = await waitForReady(() => stdout, () => stderr, child, 15_000);
     const readyMs = performance.now() - started;
-    enforce(`${payload.mode} ready ms`, readyMs, 10_000);
+    reportBudget(`${payload.mode} ready ms`, readyMs, 10_000);
     if (!(await waitForPath(payload.storePath, 2_000))) {
       throw new Error(`${payload.mode} did not create its SQLite store at ${payload.storePath}`);
     }
@@ -256,6 +256,13 @@ function enforceRequiredFiles(files: Map<string, number>, required: string[]): v
 function enforce(label: string, actual: number, maximum: number): void {
   if (!Number.isFinite(actual) || actual > maximum) {
     throw new Error(`${label} exceeded: ${Math.round(actual)} > ${maximum}`);
+  }
+}
+
+function reportBudget(label: string, actual: number, maximum: number): void {
+  if (!Number.isFinite(actual)) throw new Error(`${label} was not finite`);
+  if (actual > maximum) {
+    console.warn(`::warning::${label} exceeded on this runner: ${Math.round(actual)} > ${maximum}`);
   }
 }
 

@@ -29,6 +29,7 @@ type ActiveWorker = { child: ChildProcessWithoutNullStreams; cancelFile: string;
 export class LocalCpuTrainingDestination implements TrainingDestination {
   readonly id = "local_cpu_fixture" as const;
   private readonly active = new Map<string, ActiveWorker>();
+  private readonly consumers = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: { store: SqliteStore; storeDir: string; projectDir: string; loadProfileState?: typeof loadOpenPondProfileState; resolveModelPath?: (modelId: string, revision: string) => Promise<string | null>; modelArtifactStore?: () => Promise<string | null> }) {}
 
@@ -78,10 +79,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const timeout = setTimeout(() => child.kill("SIGKILL"), plan.recipe.method === "sft" ? plan.recipe.resourceLimits.wallTimeMs + 5_000 : 125_000);
     timeout.unref?.();
     this.active.set(jobId, { child, cancelFile, timeout });
-    this.consume(job, child, outputDirectory).catch(async (error) => {
-      const latest = await this.deps.store.getTrainingJob(jobId) ?? job;
-      await this.deps.store.saveTrainingJob({ ...latest, status: "failed", completedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
-    });
+    this.trackConsumer(job, child, outputDirectory);
     return job;
   }
 
@@ -132,10 +130,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const timeout = setTimeout(() => child.kill("SIGKILL"), plan.recipe.method === "sft" ? plan.recipe.resourceLimits.wallTimeMs + 5_000 : 125_000);
     timeout.unref?.();
     this.active.set(job.id, { child, cancelFile, timeout });
-    this.consume(job, child, outputDirectory).catch(async (error) => {
-      const latest = await this.deps.store.getTrainingJob(job.id) ?? job;
-      await this.deps.store.saveTrainingJob({ ...latest, status: "failed", completedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
-    });
+    this.trackConsumer(job, child, outputDirectory);
     return job;
   }
 
@@ -147,6 +142,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
       const hardKillTimeout = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 5_000);
       child.once("exit", () => { clearTimeout(hardKillTimeout); resolve(); });
     })));
+    await Promise.allSettled([...this.consumers.values()]);
   }
 
   async reconcile(): Promise<void> {
@@ -156,6 +152,23 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
       const timestamp = new Date().toISOString();
       await this.deps.store.saveTrainingJob({ ...job, status: job.status === "cancelling" ? "cancelled" : "failed", completedAt: timestamp, updatedAt: timestamp, error: job.status === "cancelling" ? null : "OpenPond restarted during the local CPU fixture; the orphan-safe reconciler terminated the old worker. Relaunch the approved plan." });
     }
+  }
+
+  private trackConsumer(job: TrainingJob, child: ChildProcessWithoutNullStreams, outputDirectory: string): void {
+    const completion = this.consume(job, child, outputDirectory)
+      .catch(async (error) => {
+        const latest = await this.deps.store.getTrainingJob(job.id) ?? job;
+        const timestamp = new Date().toISOString();
+        await this.deps.store.saveTrainingJob({
+          ...latest,
+          status: "failed",
+          completedAt: timestamp,
+          updatedAt: timestamp,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => this.consumers.delete(job.id));
+    this.consumers.set(job.id, completion);
   }
 
   private async consume(initialJob: TrainingJob, child: ChildProcessWithoutNullStreams, outputDirectory: string): Promise<void> {
