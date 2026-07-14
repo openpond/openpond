@@ -2,6 +2,7 @@ import { Download, PanelLeft } from "../icons";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import { SidebarNavigation } from "./SidebarNavigation";
 import { SidebarSectionList } from "./SidebarSectionList";
+import { SidebarBrandButton } from "./SidebarBrandButton";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { profileHasUncommittedLocalChanges } from "../../lib/profile-status";
@@ -52,7 +53,7 @@ export function Sidebar(props: SidebarProps) {
       </div>
 
       <div className="sidebar-wordmark-row">
-        <img className="sidebar-wordmark" src="/openpond-wordlogo-white.png" alt="OpenPond" />
+        <SidebarBrandButton onOpenHome={() => beginNewChat(null)} />
       </div>
 
       <SidebarNavigation

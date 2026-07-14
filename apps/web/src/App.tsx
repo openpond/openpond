@@ -461,6 +461,7 @@ export function App() {
     connection,
     teamId: teamChatTeamId,
     currentUserId: account?.profile?.id ?? null,
+    refreshToken: bootstrap?.accountMeta.asOf ?? null,
   });
   const teamAiThreadId = teamChat.aiThread?.conversationId ?? null;
   const teamAiSidebarOpen =

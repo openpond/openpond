@@ -35,19 +35,18 @@ import {
 import { showLoadError } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
 import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
+import {
+  bundledServerLaunchPort,
+  isCompatibleDesktopServer,
+  stopStaleLocalDesktopServer,
+  type DesktopServerHealth,
+} from "./desktop-server-compatibility.js";
 
 type ServerConnection = {
   serverUrl: string;
   token: string;
   platform: string;
   arch: string;
-};
-
-type ServerHealth = {
-  ok: boolean;
-  server?: string;
-  version?: string;
-  runtimeVersion?: string;
 };
 
 type ClientDiagnosticPayload = {
@@ -91,11 +90,11 @@ async function readToken(): Promise<string | null> {
   });
 }
 
-async function health(url: string): Promise<ServerHealth | null> {
+async function health(url: string): Promise<DesktopServerHealth | null> {
   try {
     const response = await fetch(`${url}/health`);
     if (!response.ok) return null;
-    return (await response.json()) as ServerHealth;
+    return (await response.json()) as DesktopServerHealth;
   } catch {
     return null;
   }
@@ -210,8 +209,11 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
 }
 
 async function ensureServer(): Promise<ServerConnection> {
+  const desktopVersion = app.getVersion();
   if (connection) {
-    if (await health(connection.serverUrl)) return connection;
+    if (isCompatibleDesktopServer(await health(connection.serverUrl), desktopVersion)) {
+      return connection;
+    }
     await backendManager.stopServer();
     connection = null;
     serverProcess = null;
@@ -221,11 +223,11 @@ async function ensureServer(): Promise<ServerConnection> {
   const serverPort = defaultServerPort();
   const existingUrl = process.env.OPENPOND_SERVER_URL || `http://127.0.0.1:${serverPort}`;
   const existingToken = await readToken();
-  const existingHealth = existingToken ? await health(existingUrl) : null;
+  const existingHealth = await health(existingUrl);
   const explicitServerUrl = Boolean(process.env.OPENPOND_SERVER_URL);
   const shouldReuseExistingServer =
     existingToken &&
-    existingHealth?.ok &&
+    isCompatibleDesktopServer(existingHealth, desktopVersion) &&
     (explicitServerUrl || app.isPackaged || process.env.OPENPOND_REUSE_SERVER === "1");
   if (shouldReuseExistingServer) {
     desktopLogger().info("reusing existing server", { serverUrl: existingUrl });
@@ -235,14 +237,44 @@ async function ensureServer(): Promise<ServerConnection> {
     return connection;
   }
 
+  if (explicitServerUrl && existingHealth?.ok) {
+    throw new Error(
+      `Configured OpenPond server version ${existingHealth.version ?? "unknown"} does not match Desktop ${desktopVersion}.`,
+    );
+  }
+
+  let launchPort = serverPort;
+  if (existingHealth?.ok) {
+    desktopLogger().warn("incompatible existing server", {
+      serverUrl: existingUrl,
+      desktopVersion,
+      serverVersion: existingHealth.version ?? null,
+      serverName: existingHealth.server ?? null,
+    });
+    const retirement =
+      existingToken && existingHealth.server === "openpond-app-server"
+        ? await stopStaleLocalDesktopServer(existingUrl)
+        : { stopped: false, processIds: [] };
+    desktopLogger()[retirement.stopped ? "info" : "warn"]("stale server retirement", {
+      serverUrl: existingUrl,
+      stopped: retirement.stopped,
+      processIds: retirement.processIds,
+    });
+    launchPort = bundledServerLaunchPort(
+      serverPort,
+      await health(existingUrl),
+      retirement.stopped,
+    );
+  }
+
   const root = repoRoot();
   const serverEntry = app.isPackaged
     ? path.join(process.resourcesPath, "server", "index.js")
     : path.join(root, "apps", "server", "dist", "index.js");
   const command = app.isPackaged ? process.execPath : nodeBinary();
   const args = app.isPackaged
-    ? [serverEntry, "web", "--port", String(serverPort)]
-    : [serverEntry, "--port", String(existingHealth?.ok ? 0 : serverPort)];
+    ? [serverEntry, "web", "--port", String(launchPort)]
+    : [serverEntry, "--port", String(launchPort)];
   desktopLogger().info("spawning server", { command, args, packaged: app.isPackaged });
   serverProcess = spawn(command, args, {
     cwd: serverWorkingDirectory(),
@@ -282,6 +314,12 @@ async function ensureServer(): Promise<ServerConnection> {
     serverUrl = await waitForReady(serverProcess, existingUrl);
     token = await readToken();
     if (!token) throw new Error("OpenPond App server did not write a capability token");
+    const launchedHealth = await health(serverUrl);
+    if (!isCompatibleDesktopServer(launchedHealth, desktopVersion)) {
+      throw new Error(
+        `Bundled OpenPond server version ${launchedHealth?.version ?? "unknown"} does not match Desktop ${desktopVersion}.`,
+      );
+    }
   } catch (error) {
     serverProcessSampler.stop();
     await backendManager.stopServer();

@@ -157,6 +157,12 @@ describe("AccountSettingsSection", () => {
     expect(html).not.toContain("Connect this app to your OpenPond account");
   });
 
+  test("labels account refresh as a team data refresh", () => {
+    const html = renderAccountSettings(accountState());
+
+    expect(html).toContain('aria-label="Refresh accounts and team data"');
+  });
+
   test("does not render endpoint URLs in the account row", () => {
     const html = renderAccountSettings(
       accountState({

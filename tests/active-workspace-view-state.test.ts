@@ -26,17 +26,17 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
 }
 
 describe("accountWelcomeIdentity", () => {
-  test("prefers the authenticated email over the local profile selector", () => {
-    expect(accountWelcomeIdentity(accountState())).toBe("sam+qa-user-4@openpond.ai");
+  test("uses a human-readable account label instead of the authenticated email", () => {
+    expect(accountWelcomeIdentity(accountState({ label: "Sam Cesario" }))).toBe("Sam Cesario");
   });
 
-  test("uses authenticated profile data before the configured selector", () => {
+  test("prefers the authenticated profile name over other account labels", () => {
     expect(accountWelcomeIdentity(accountState({
-      email: null,
+      label: "Sam's account",
       profile: {
         id: "user-e6e4aw",
         email: "sam+qa-user-4@openpond.ai",
-        name: null,
+        name: "Sam Cesario",
         handle: "user-e6e4aw",
         image: null,
         timezone: null,
@@ -48,7 +48,26 @@ describe("accountWelcomeIdentity", () => {
         turnkeyWalletAddress: null,
         turnkeyOperatingWalletAddress: null,
       },
-    }))).toBe("sam+qa-user-4@openpond.ai");
+    }))).toBe("Sam Cesario");
+  });
+
+  test("does not expose an email when no display name is available", () => {
+    expect(accountWelcomeIdentity(accountState({
+      label: "sam+qa-user-4@openpond.ai",
+      activeProfile: { handle: "sam+sandbox-test@openpond.ai", baseUrl: "https://staging.openpond.ai" },
+      accounts: [{
+        handle: "sam+qa-user-4@openpond.ai",
+        baseUrl: "https://staging.openpond.ai",
+        apiBaseUrl: "https://staging.openpond.ai/api",
+        chatApiBaseUrl: "https://staging.openpond.ai/api",
+        environment: "staging",
+        isActive: true,
+        authHealth: "signed_in",
+        displayLabel: "sam+qa-user-4@openpond.ai",
+        email: "sam+qa-user-4@openpond.ai",
+        avatarUrl: null,
+      }],
+    }))).toBe("");
   });
 
   test("does not expose a saved selector while signed out", () => {

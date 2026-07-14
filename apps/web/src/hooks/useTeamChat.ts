@@ -121,6 +121,7 @@ export function useTeamChat(input: {
   connection: ClientConnection | null;
   teamId: string | null;
   currentUserId: string | null;
+  refreshToken?: string | null;
 }) {
   const [state, setState] = useState<TeamChatState>(INITIAL_STATE);
   const selectedThreadIdRef = useRef<string | null>(null);
@@ -140,6 +141,22 @@ export function useTeamChat(input: {
     const threads = mergePendingThreadList(payload.threads, pendingMessagesRef.current);
     setState((current) => ({ ...current, threads }));
     return threads;
+  }, [input.connection, input.teamId]);
+
+  const refreshDirectory = useCallback(async () => {
+    if (!input.connection || !input.teamId) {
+      return { members: [], agents: [] };
+    }
+    const [members, agents] = await Promise.all([
+      api.teamChatMembers(input.connection, input.teamId),
+      api.teamChatAgents(input.connection, input.teamId),
+    ]);
+    setState((current) => ({
+      ...current,
+      members: members.members,
+      agents: agents.agents,
+    }));
+    return { members: members.members, agents: agents.agents };
   }, [input.connection, input.teamId]);
 
   const refreshThread = useCallback(
@@ -306,7 +323,7 @@ export function useTeamChat(input: {
     return () => {
       cancelled = true;
     };
-  }, [input.connection, input.currentUserId, input.teamId]);
+  }, [input.connection, input.currentUserId, input.refreshToken, input.teamId]);
 
   const applyRealtimeEvent = useCallback(
     (event: TeamChatEvent) => {
@@ -1017,6 +1034,7 @@ export function useTeamChat(input: {
     dismissFailedMessage,
     refresh: async () => {
       await Promise.all([
+        refreshDirectory(),
         refreshThreads(),
         refreshThread(),
         refreshAiThread(),

@@ -317,8 +317,8 @@ export function AccountSettingsSection({
       <button
         className="settings-icon-button ghost"
         disabled={!connection || saving || refreshingAccounts}
-        title="Full OpenPond refresh"
-        aria-label="Full OpenPond refresh"
+        title="Refresh accounts and team data"
+        aria-label="Refresh accounts and team data"
         type="button"
         onClick={() => void refreshAccounts()}
       >

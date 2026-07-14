@@ -37,17 +37,21 @@ function firstPresentText(...values: Array<string | null | undefined>): string {
   return "";
 }
 
+function firstPresentNonEmailText(...values: Array<string | null | undefined>): string {
+  return firstPresentText(...values.map((value) => {
+    const trimmed = value?.trim();
+    return trimmed && !trimmed.includes("@") ? trimmed : null;
+  }));
+}
+
 export function accountWelcomeIdentity(account: AccountState | null | undefined): string {
   if (account?.state !== "signed_in") return "";
   const activeAccount = account.accounts.find((candidate) => candidate.isActive) ?? null;
-  return firstPresentText(
-    account.email,
-    account.profile?.email,
-    activeAccount?.email,
-    account.label,
+  return firstPresentNonEmailText(
     account.profile?.name,
-    account.profile?.handle,
+    account.label,
     activeAccount?.displayLabel,
+    account.profile?.handle,
     activeAccount?.handle,
     account.activeProfile?.handle,
   );
