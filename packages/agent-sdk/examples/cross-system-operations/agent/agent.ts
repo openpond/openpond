@@ -10,7 +10,11 @@ import {
 } from "openpond-agent-sdk";
 import { defineChannel } from "openpond-agent-sdk/channels";
 import { defineEval } from "openpond-agent-sdk/eval";
-import { crossSystemTools } from "./tools";
+import {
+  crossSystemInputSchemaName,
+  crossSystemInputSchemas,
+  crossSystemTools,
+} from "./tools";
 
 const toolsByName = new Map(crossSystemTools.map((tool) => [tool.name, tool]));
 
@@ -23,6 +27,7 @@ export default defineAgentProject({
   runtime: { base: "node-bun-workspace", networkPolicy: "none", toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH },
   model: { provider: "openpond-managed", required: true, temperature: 0, maxOutputTokens: 1_024 },
   instructions: defineInstructions("./agent/instructions.md"),
+  inputSchemas: crossSystemInputSchemas,
   defaultAction: "chat",
   actions: [
     action("chat", {
@@ -34,7 +39,7 @@ export default defineAgentProject({
       description: definition.description,
       visibility: "end_user",
       target: { kind: "tool", tool: toolsByName.get(definition.name)! },
-      inputSchema: definition.parameters,
+      inputSchema: crossSystemInputSchemaName(definition.name),
       approval: { mode: "never", reason: "Read-only synthetic data with no network or production credentials." },
     })),
   ],

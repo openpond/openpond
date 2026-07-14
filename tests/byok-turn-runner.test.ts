@@ -153,7 +153,7 @@ describe("BYOK turn runner dispatch", () => {
       providerId: "openpond",
       modelId: "openpond-1k",
       toolArgs: null,
-      initialEvents: hostedCompactionPriorEvents(),
+      initialEvents: hostedCompactionPriorEvents(2200),
       finalText: "Hosted answer after compaction.",
       usageByPass: {
         1: { prompt_tokens: 90, completion_tokens: 14, total_tokens: 104 },
@@ -249,7 +249,7 @@ describe("BYOK turn runner dispatch", () => {
   test("auto compacts local BYOK context with the selected provider and model", async () => {
     const harness = createNativeGoalControlHarness({
       toolArgs: null,
-      initialEvents: hostedCompactionPriorEvents(),
+      initialEvents: hostedCompactionPriorEvents(4800),
       finalText: "BYOK answer after compaction.",
       usageByPass: {
         1: { prompt_tokens: 80, completion_tokens: 10, total_tokens: 90 },
@@ -309,7 +309,7 @@ describe("BYOK turn runner dispatch", () => {
   test("preserves BYOK context and continues when summary compaction fails below the hard ceiling", async () => {
     const harness = createNativeGoalControlHarness({
       toolArgs: null,
-      initialEvents: hostedCompactionPriorEvents(),
+      initialEvents: hostedCompactionPriorEvents(4800),
       finalText: "BYOK answer after failed compaction.",
       failOnPass: 1,
       usageByPass: {
@@ -399,7 +399,7 @@ describe("BYOK turn runner dispatch", () => {
       model: "test/model",
       usedTokens: 1250,
       maxContextTokens: 10000,
-      usableContextTokens: 2000,
+      usableContextTokens: 7500,
       percentFull: 13,
       source: "provider_usage",
     });

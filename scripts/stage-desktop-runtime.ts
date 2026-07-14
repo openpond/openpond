@@ -32,6 +32,10 @@ export async function stageDesktopRuntime(
     path.join(options.root, "apps", "server", "dist", "index.js"),
     path.join(runtimeRoot, "server", "index.js"),
   );
+  await copyTree(
+    path.join(options.root, "apps", "cli", "skills", "openpond-taskset-authoring"),
+    path.join(runtimeRoot, "server", "skills", "openpond-taskset-authoring"),
+  );
   await copyTree(path.join(options.root, "apps", "web", "dist"), path.join(runtimeRoot, "web"));
   await stageSqliteRuntime(options.root, runtimeRoot);
   await stageNodePtyRuntime(options.root, runtimeRoot, platform, arch);

@@ -68,10 +68,10 @@ describe("hosted context projection", () => {
     const loudDecision = hostedAutoCompactionDecision({
       provider: "openpond",
       model: "openpond-10k",
-      messages: [{ role: "user", content: "x".repeat(7200) }],
+      messages: [{ role: "user", content: "x".repeat(25500) }],
     });
     assert.equal(loudDecision.shouldCompact, true);
-    assert.equal(loudDecision.thresholdTokens, 1700);
+    assert.equal(loudDecision.thresholdTokens, 6375);
     assert.ok(loudDecision.projectedTokens >= loudDecision.thresholdTokens);
   });
 });

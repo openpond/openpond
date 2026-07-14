@@ -489,7 +489,9 @@ describe("CLI headless chat", () => {
   });
 
   test("missing provider model exits 1 before posting a terminal turn", async () => {
-    const fake = startCliHeadlessChatFakeServer([]);
+    const fake = startCliHeadlessChatFakeServer([], {
+      bootstrapBody: bootstrapFixture(false),
+    });
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-no-model-"));
     const homeDir = path.join(tempRoot, "home");
     const taskDir = path.join(tempRoot, "task");
@@ -1121,11 +1123,18 @@ function startCliHeadlessChatFakeServer(
   };
 }
 
-function bootstrapFixture(): Record<string, unknown> {
+function bootstrapFixture(withDefaultModel = true): Record<string, unknown> {
   return {
     providers: {
       version: 1,
-      providers: {},
+      providers: withDefaultModel
+        ? {
+            openai: {
+              enabled: true,
+              defaultModel: "gpt-5.6-sol",
+            },
+          }
+        : {},
       statuses: {},
       modelCaches: {},
     },

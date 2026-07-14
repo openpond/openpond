@@ -234,6 +234,25 @@ describe("pilot example contract", () => {
     expect(runtimeManifest).toContain("targetPath: volumes/drawing-plans/drawings");
   });
 
+  test("binds Cross-System Operations actions and tools to shared named input schemas", async () => {
+    const project = await importProject("cross-system-operations");
+    const expectedSchemaNames = [
+      "query_billing.input",
+      "run_python.input",
+      "search_crm.input",
+      "search_support.input",
+    ];
+
+    expect(Object.keys(project.inputSchemas ?? {}).sort()).toEqual(expectedSchemaNames);
+    expect(
+      project.actions
+        .filter((entry) => entry.name !== "chat")
+        .map((entry) => entry.inputSchema)
+        .sort(),
+    ).toEqual(expectedSchemaNames);
+    expect(project.tools?.map((entry) => entry.inputSchema).sort()).toEqual(expectedSchemaNames);
+  });
+
   test("detects manifest drift on a real pilot copy", async () => {
     const driftCwd = path.join(fixtureRoot, "blank-agent-drift");
     await cp(example("blank-agent"), driftCwd, { recursive: true });

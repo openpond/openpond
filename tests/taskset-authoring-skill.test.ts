@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFile, readdir } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { loadTasksetAuthoringSkillBundle } from "../apps/server/src/training/task-authoring-skill";
 
 describe("bundled Taskset Authoring skill", () => {
@@ -22,5 +24,21 @@ describe("bundled Taskset Authoring skill", () => {
       expect(bundle).toContain(`Bundled reference: ${name}`);
     }
     expect(bundle).toContain("Prefer deterministic graders");
+  });
+
+  test("loads the skill from an installed CLI distribution", async () => {
+    const packageRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-installed-skill-"));
+    try {
+      await cp(
+        "apps/cli/skills/openpond-taskset-authoring",
+        path.join(packageRoot, "dist", "skills", "openpond-taskset-authoring"),
+        { recursive: true },
+      );
+      const bundle = await loadTasksetAuthoringSkillBundle(packageRoot);
+      expect(bundle).toContain("OpenPond Taskset Authoring");
+      expect(bundle).toContain("Bundled reference: task-design.md");
+    } finally {
+      await rm(packageRoot, { recursive: true, force: true });
+    }
   });
 });

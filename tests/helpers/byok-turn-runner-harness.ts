@@ -466,7 +466,7 @@ export function openRouterProviderSettingsWithContextWindow(contextWindow: numbe
   });
 }
 
-export function hostedCompactionPriorEvents(): RuntimeEvent[] {
+export function hostedCompactionPriorEvents(paddingCharacters = 0): RuntimeEvent[] {
   return [
     {
       id: "prior_turn_1_started",
@@ -484,7 +484,9 @@ export function hostedCompactionPriorEvents(): RuntimeEvent[] {
       name: "assistant.delta",
       timestamp: "2026-07-03T09:00:01.000Z",
       source: "provider",
-      output: "Support workflow requirements were captured with local-only constraints.",
+      output:
+        "Support workflow requirements were captured with local-only constraints." +
+        "x".repeat(paddingCharacters),
     },
     {
       id: "prior_turn_2_started",
