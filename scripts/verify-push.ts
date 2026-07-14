@@ -23,6 +23,7 @@ const steps: VerificationStep[] = [
   step("Check performance budgets", "run", "budgets:check"),
   step("Check source structure", "run", "structure:check"),
   step("Check workspace dependencies", "run", "dependencies:check"),
+  step("Check repository hygiene", "run", "hygiene:check"),
   suite("Run unit tests", "unit"),
   suite("Run integration tests", "integration"),
   suite("Run contract tests", "contract"),

@@ -34,6 +34,7 @@ jobs:
       - run: bun run budgets:check
       - run: bun run structure:check
       - run: bun run dependencies:check
+      - run: bun run hygiene:check
 
       - uses: actions/upload-artifact@v7
         with:
