@@ -8,6 +8,8 @@ import { listCliCommandDefinitions } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
 
 const cliRoot = join(import.meta.dir, "..");
+const installedServerSmokeTest =
+  process.env.OPENPOND_SKIP_RELEASE_SOURCE_CLI_SERVER_SMOKE === "1" ? test.skip : test;
 
 type CliPackageJson = {
   version: string;
@@ -58,7 +60,7 @@ describe("CLI installed-package smoke", () => {
     expect(result.stderr.trim()).toBe("");
   });
 
-  test("starts the embedded local server companion from an unrelated cwd", async () => {
+  installedServerSmokeTest("starts the embedded local server companion from an unrelated cwd", async () => {
     const cwd = await mkdtemp(join(os.tmpdir(), "openpond-installed-cli-cwd-"));
     const appHome = await mkdtemp(join(os.tmpdir(), "openpond-installed-cli-home-"));
     try {

@@ -154,6 +154,10 @@ jobs:
 
       - name: Run tests once before packaging
         run: bun run test
+        env:
+          # The build matrix below performs a stronger installed-package and
+          # compiled-archive server readiness check with a 15 second deadline.
+          OPENPOND_SKIP_RELEASE_SOURCE_CLI_SERVER_SMOKE: "1"
 
   build:
     name: ${{ matrix.name }}

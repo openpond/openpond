@@ -48,3 +48,5 @@ jobs:
       - run: bun run dependencies:check
 
       - run: bun run test
+        env:
+          OPENPOND_SKIP_CI_LONG_CLI_TESTS: "1"
