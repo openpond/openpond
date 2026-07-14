@@ -70,6 +70,9 @@ describe("release workflow", () => {
     expect(workflow).toContain("bun run cli:build");
     expect(workflow).toContain("bun run cli:release:build");
     expect(workflow).toContain("bun scripts/check-cli-distribution.ts --archive");
+    expect(workflow).toContain("id: npm_publish_auth");
+    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+    expect(workflow).toContain("steps.npm_publish_auth.outputs.enabled == 'true'");
     expect(workflow).toContain("name: Publish stable CLI package to npm");
     expect(workflow).toContain("npm install --global npm@11.5.1\n          bun run build\n          bun run cli:build");
     expect(workflow).toContain("npm publish ./apps/cli --access public --provenance");

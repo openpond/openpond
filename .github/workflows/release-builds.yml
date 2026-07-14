@@ -322,10 +322,24 @@ jobs:
       - name: Validate packaged smoke reports
         run: bun run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts
 
-      - name: Publish stable CLI package to npm
+      - id: npm_publish_auth
+        name: Resolve npm publishing availability
         if: needs.meta.outputs.channel == 'stable'
         env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping npm publish because the NPM_TOKEN repository secret is not configured."
+          fi
+
+      - name: Publish stable CLI package to npm
+        if: needs.meta.outputs.channel == 'stable' && steps.npm_publish_auth.outputs.enabled == 'true'
+        env:
           NPM_CONFIG_PROVENANCE: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
