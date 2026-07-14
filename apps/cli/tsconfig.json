@@ -17,6 +17,8 @@
       "openpond-agent-sdk/*": ["../../packages/agent-sdk/src/*"]
     },
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "skipLibCheck": true
   },
   "include": ["src"]

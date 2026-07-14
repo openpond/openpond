@@ -25,7 +25,6 @@ import { buildCompactionSummaryMessages, compactionInputCharBudget } from "./pro
 import { selectEventsForHostedCompaction } from "./tail-selection.js";
 import type {
   ContextCompactionStream,
-  ContextCompactionStreamDelta,
   HostedAutoCompactionDecision,
   HostedCompactionInput,
   HostedCompactionProvider,
@@ -43,7 +42,6 @@ export type {
   HostedCompactionResult,
 } from "./types.js";
 
-const HOSTED_AUTO_COMPACT_THRESHOLD_RATIO = 0.85;
 
 export function hostedAutoCompactionDecision(input: {
   provider: HostedCompactionProvider;

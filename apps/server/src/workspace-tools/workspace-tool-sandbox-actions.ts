@@ -14,6 +14,18 @@ import { sandboxRequestPayload } from "../openpond/sandboxes.js";
 import { localProjectStateWorkspace, localProjectWorkspacePaths } from "../workspace/local-projects.js";
 import { runWorkspaceCommand } from "../workspace/workspace-command.js";
 import { loadWorkspaceStateAtPath } from "../workspace/workspace-state.js";
+import {
+  arrayArg,
+  asRecord,
+  booleanArg,
+  numberArg,
+  numberValue,
+  recordArg,
+  requiredStringArg,
+  stringArg,
+  stringValue,
+} from "./workspace-tool-arguments.js";
+import { editSandboxFile } from "./workspace-tool-sandbox-file-edit.js";
 
 type SandboxToolAction = Extract<
   WorkspaceToolRequest["action"],
@@ -976,92 +988,6 @@ function sandboxTeamIdFromResult(result: unknown): string {
   return typeof teamId === "string" ? teamId : "";
 }
 
-async function editSandboxFile(input: {
-  sandboxId: string;
-  args: Record<string, unknown>;
-}): Promise<Record<string, unknown>> {
-  const filePath = requiredStringArg(input.args, "path");
-  const oldText = requiredStringArg(input.args, "oldText");
-  const newText =
-    typeof input.args.newText === "string" ? input.args.newText : "";
-  const replaceAll = booleanArg(input.args, "replaceAll") === true;
-  const maxBytes = numberArg(input.args, "maxBytes") ?? 2 * 1024 * 1024;
-  const currentPayload = asRecord(
-    await sandboxRequestPayload({
-      type: "download_file",
-      sandboxId: input.sandboxId,
-      payload: {
-        path: filePath,
-        maxBytes,
-      },
-    }),
-  );
-  const currentFile = asRecord(currentPayload.file);
-  const currentText = sandboxTextFileContents(currentFile, filePath);
-  const replacements = currentText.split(oldText).length - 1;
-  if (replacements === 0) {
-    throw new Error(`Text not found in ${filePath}`);
-  }
-  if (replacements > 1 && !replaceAll) {
-    throw new Error(
-      `Text matched ${replacements} times in ${filePath}; provide a longer oldText that matches only the intended location, or set replaceAll true.`
-    );
-  }
-  const nextText = currentText.split(oldText).join(newText);
-  const uploadPayload = asRecord(
-    await sandboxRequestPayload({
-      type: "upload_file",
-      sandboxId: input.sandboxId,
-      payload: {
-        path: filePath,
-        contents: nextText,
-      },
-    }),
-  );
-  const verifyPayload = asRecord(
-    await sandboxRequestPayload({
-      type: "download_file",
-      sandboxId: input.sandboxId,
-      payload: {
-        path: filePath,
-        maxBytes: Math.max(1, Buffer.byteLength(nextText, "utf8")),
-      },
-    }),
-  );
-  const verifiedText = sandboxTextFileContents(
-    asRecord(verifyPayload.file),
-    filePath,
-  );
-  if (verifiedText !== nextText) {
-    throw new Error(`Failed to verify sandbox edit for ${filePath}`);
-  }
-  return {
-    ...uploadPayload,
-    edit: {
-      path: filePath,
-      replacements,
-      verified: true,
-      sizeBytes: Buffer.byteLength(nextText, "utf8"),
-    },
-  };
-}
-
-function sandboxTextFileContents(
-  file: Record<string, unknown>,
-  filePath: string,
-): string {
-  if (file.isBinary === true) {
-    throw new Error(`Cannot text-edit binary sandbox file ${filePath}`);
-  }
-  if (file.truncated === true) {
-    throw new Error(`Cannot text-edit truncated sandbox file ${filePath}`);
-  }
-  if (typeof file.contentsBase64 !== "string") {
-    throw new Error(`Sandbox file ${filePath} did not return text contents`);
-  }
-  return Buffer.from(file.contentsBase64, "base64").toString("utf8");
-}
-
 async function createSandboxFromToolArgs(params: {
   args: Record<string, unknown>;
   session: Session;
@@ -1707,20 +1633,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function numberValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function sandboxIdFromPayload(value: unknown): string {
   const payload = asRecord(value);
   const sandbox = asRecord(payload.sandbox);
@@ -1798,17 +1710,6 @@ function mergeSandboxPreviewResult(sandboxResult: unknown, previewResult: unknow
   };
 }
 
-function requiredStringArg(args: Record<string, unknown>, key: string): string {
-  const value = stringArg(args, key, "");
-  if (!value) throw new Error(`${key} is required.`);
-  return value;
-}
-
-function stringArg(args: Record<string, unknown>, key: string, fallback: string): string {
-  const value = args[key];
-  return typeof value === "string" ? value.trim() : fallback;
-}
-
 function sandboxCatalogPayload(args: Record<string, unknown>): Record<string, unknown> {
   return {
     teamId: stringArg(args, "teamId", ""),
@@ -1822,11 +1723,6 @@ function sandboxCatalogPayload(args: Record<string, unknown>): Record<string, un
   };
 }
 
-function numberArg(args: Record<string, unknown>, key: string): number | undefined {
-  const value = Number(args[key]);
-  return Number.isFinite(value) ? value : undefined;
-}
-
 function previewPortArg(args: Record<string, unknown>): number | undefined {
   const value = Number(args.previewPort);
   if (
@@ -1837,22 +1733,6 @@ function previewPortArg(args: Record<string, unknown>): number | undefined {
     return undefined;
   }
   return value;
-}
-
-function booleanArg(args: Record<string, unknown>, key: string): boolean | undefined {
-  return typeof args[key] === "boolean" ? (args[key] as boolean) : undefined;
-}
-
-function recordArg(args: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
-  const value = args[key];
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function arrayArg(args: Record<string, unknown>, key: string): unknown[] | undefined {
-  const value = args[key];
-  return Array.isArray(value) ? value : undefined;
 }
 
 function sandboxName(sandbox: Record<string, unknown>): string {

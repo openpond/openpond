@@ -75,7 +75,7 @@ describe("release workflow", () => {
     }
     expect(
       workflow.match(
-        /actions\/download-artifact@v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: \./g,
+        /actions\/download-artifact@[0-9a-f]{40} # v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: \./g,
       ),
     ).toHaveLength(2);
     expect(workflow).not.toMatch(
@@ -127,7 +127,7 @@ describe("release workflow", () => {
     expect(ciWorkflow).toContain("bun run test:contract");
     expect(ciWorkflow).toContain("bun run test:release");
     expect(ciWorkflow).toMatch(
-      /release_smoke:[\s\S]*?actions\/download-artifact@v8[\s\S]*?path: apps/,
+      /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: apps/,
     );
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_CI_LONG_CLI_TESTS");
   });
@@ -139,12 +139,12 @@ describe("release workflow", () => {
     expect(workflow).toMatch(/release:\n[\s\S]*?permissions:\n\s+contents: write\n\s+id-token: write/);
     expect(workflow.match(/contents: write/g)).toHaveLength(1);
     expect(workflow.match(/id-token: write/g)).toHaveLength(1);
-    expect(workflow).toContain("actions/checkout@v7");
-    expect(workflow).toContain("actions/setup-node@v6");
-    expect(workflow).toContain("actions/upload-artifact@v7");
-    expect(workflow).toContain("actions/download-artifact@v8");
-    expect(workflow).toContain("softprops/action-gh-release@v3");
-    expect(workflow).not.toMatch(/actions\/(?:checkout|setup-node|upload-artifact|download-artifact)@v4/);
+    expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/);
+    expect(workflow).toMatch(/actions\/setup-node@[0-9a-f]{40} # v6/);
+    expect(workflow).toMatch(/actions\/upload-artifact@[0-9a-f]{40} # v7/);
+    expect(workflow).toMatch(/actions\/download-artifact@[0-9a-f]{40} # v8/);
+    expect(workflow).toMatch(/softprops\/action-gh-release@[0-9a-f]{40} # v3/);
+    expect(workflow).not.toMatch(/^\s*(?:-\s*)?uses:\s+[^\s#]+@v\d+/m);
   });
 
   test("builds standalone desktop bundles before staging release packages", () => {

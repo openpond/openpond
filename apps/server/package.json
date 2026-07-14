@@ -7,6 +7,7 @@
     "@openpond/cloud": "workspace:*",
     "@openpond/codex-provider": "workspace:*",
     "@openpond/contracts": "workspace:*",
+    "@openpond/logging": "workspace:*",
     "@openpond/runtime": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/training-sdk": "workspace:*",

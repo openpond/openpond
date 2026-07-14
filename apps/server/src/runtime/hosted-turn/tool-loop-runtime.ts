@@ -4,7 +4,6 @@ import {
   SubagentRunSchema,
   type AppPreferences,
   type ChatProvider,
-  type ConnectedAppIntegrationSkill,
   type ModelUsageRecord,
   type OpenPondActionCatalogEntry,
   type OpenPondApp,
@@ -16,11 +15,9 @@ import {
   type Turn,
   type WorkspaceDiffSummary,
   type WorkspaceToolRequest,
-  type WorkspaceToolResult,
 } from "@openpond/contracts";
 import type {
   HostedChatTool,
-  HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
@@ -45,7 +42,6 @@ import {
   type ModelToolDefinition,
 } from "../../openpond/model-tool-registry.js";
 import type {
-  HostedProfileSkillBody,
   ProfileSkillInstructionMode,
 } from "../../openpond/hosted-turn-helpers.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
@@ -67,7 +63,6 @@ import type { HostedToolLoopDelta, TurnRunnerDependencies } from "../turns/ports
 import { isTerminalOneShotTurn } from "../turns/request-context.js";
 import {
   recordFromUnknown,
-  stringFromRecord,
   truncateForModelAside,
 } from "../turns/value-utils.js";
 import { normalizeMentionedSandboxToolRequest } from "../create-pipeline/snapshots.js";

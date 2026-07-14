@@ -1,49 +1,20 @@
 import { createOpenPondSandboxClient, normalizeSandboxApiUrl } from "@openpond/cloud";
 import type {
-  SandboxRuntimeCreateInput,
-  SandboxRuntimeSandboxCreateInput,
   OpenPondSandboxClient,
   OpenPondOrganization,
-  SandboxCreateInput,
   SandboxRecord,
-  SandboxExecInput,
-  SandboxFileDownloadInput,
-  SandboxForkInput,
-  SandboxGitBranchInput,
-  SandboxGitCommitInput,
-  SandboxGitPullInput,
-  SandboxGitPushInput,
   SandboxIntegrationConnection,
-  SandboxIntegrationConnectionLeaseInput,
   SandboxIntegrationConnectionStatusFilter,
-  SandboxOpenPortInput,
-  SandboxProcessStartInput,
-  SandboxPtyInput,
-  SandboxPtyStartInput,
-  SandboxReplayInput,
   SandboxScheduleCreateInput,
-  SandboxSnapshotInput,
-  SandboxTemplateBuildCreateInput,
-  SandboxTemplateLaunchInput,
-  SandboxSnapshotValidateInput,
-  SandboxSnapshotUpdateInput,
-  SandboxEnvVarInput,
 } from "@openpond/cloud";
 import {
   buildConnectedAppStatusRows,
-  connectedAppBundleByProvider,
-  normalizeConnectedAppProviderFamilyId,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
 } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
-import { pipefailSandboxShellCommand } from "./shell-command.js";
 import {
   normalizeOptionalUrl,
   asRecord,
-  sanitizeCreateMetadata,
-  sanitizeSandboxRuntimeInput,
   normalizeCreateInput,
   normalizeSandboxRuntimeCreateInput,
   normalizeSandboxRuntimeSandboxCreateInput,
@@ -52,19 +23,7 @@ import {
   normalizeReplayStartInput,
   normalizeIntegrationStatusFilter,
   normalizeIntegrationAttachInput,
-  normalizeIntegrationLeaseRefsForRuntime,
-  normalizeIntegrationLeaseRefForRuntime,
-  normalizeLeaseableIntegrationProvider,
-  assertNoSensitiveIntegrationLeaseKeys,
-  validateIntegrationCapabilitiesForProvider,
   normalizeIntegrationLeaseId,
-  normalizeStringArray,
-  normalizeOptionalStringArray,
-  normalizeIntegrationTtlSeconds,
-  normalizeIntegrationExpiresAt,
-  normalizeIntegrationResourcePolicy,
-  assertNoSensitiveResourcePolicyKeys,
-  isSensitivePolicyKey,
   normalizeExecInput,
   normalizeProcessStartInput,
   normalizePtyStartInput,
@@ -74,7 +33,6 @@ import {
   normalizeSnapshotUpdateInput,
   normalizeSnapshotValidateInput,
   normalizeForkInput,
-  normalizeSandboxEnvRefsForApp,
   normalizeSnapshotForkInput,
   normalizeTemplateLaunchInput,
   normalizeTemplateBuildListInput,
@@ -100,7 +58,6 @@ export {
   normalizeSandboxEnvRefsForApp,
 } from "./sandbox-inputs.js";
 
-type SandboxRuntimeIntegrationLease = NonNullable<SandboxCreateInput["integrationLeases"]>[number];
 
 export type SandboxRequestAction =
   | { type: "list"; payload?: unknown }
@@ -1339,7 +1296,6 @@ const terminalSandboxLifecycleStates = new Set<SandboxRecord["state"]>([
   "error",
 ]);
 
-type IntegrationConnectionsResult = Awaited<ReturnType<OpenPondSandboxClient["integrationConnections"]>>;
 type ConnectedAppStatusConnectionsResult = {
   teamId: string | null;
   connections: SandboxIntegrationConnection[];
@@ -1652,20 +1608,4 @@ function resolveSandboxBaseUrl(context: RuntimeAccountContext): string {
     normalizeOptionalUrl(context.config.baseUrl) ??
     DEFAULT_OPENPOND_SANDBOX_BASE_URL
   );
-}
-
-function webBaseFromApiBase(value: string): string | null {
-  const normalized = normalizeOptionalUrl(value);
-  if (!normalized) return null;
-  try {
-    const url = new URL(normalized);
-    if (url.hostname === "api.openpond.ai") return "https://openpond.ai";
-    if (url.hostname.startsWith("api.")) {
-      url.hostname = url.hostname.slice(4);
-      return url.toString().replace(/\/$/, "");
-    }
-  } catch {
-    return null;
-  }
-  return normalized;
 }

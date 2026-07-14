@@ -10,6 +10,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@openpond/logging": "workspace:*",
     "@openpond/runtime": "workspace:*",
     "electron": "^39.2.7"
   }

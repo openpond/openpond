@@ -83,7 +83,7 @@ export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGrou
   const text = formatActivityClauses(clauses, runClause) || genericSummary || fallbackLabel || "Ran command";
 
   return {
-    kind: summaryKind(counters, clauses, runClause),
+    kind: summaryKind(counters, runClause),
     text,
   };
 }
@@ -391,7 +391,6 @@ function countSubagentClause(count: number, status: SubagentActivityStatus): str
 
 function summaryKind(
   counters: ActivityCounters,
-  clauses: string[],
   runClause: string,
 ): ActivityGroupSummaryKind {
   const activeKinds: ActivityGroupSummaryKind[] = [];

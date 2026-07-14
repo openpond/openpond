@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import type { Approval, RuntimeEvent, Session } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import {
-  cachedCodexHistoryThreadPayload,
   CODEX_HISTORY_THREAD_FULL_PAGE_LIMIT,
   CODEX_HISTORY_THREAD_MAX_EVENT_LIMIT,
   CODEX_HISTORY_THREAD_TAIL_LIMIT,
@@ -54,7 +53,6 @@ export function useSelectedChatHistory(input: {
     setCodexHistoryEvents,
     setCodexHistorySessions,
     setError,
-    setEvents,
   } = input;
   const [pagedSessionEvents, setPagedSessionEvents] = useState<Record<string, RuntimeEvent[]>>({});
   const [chatHistoryLoadStates, setChatHistoryLoadStates] = useState<

@@ -4,7 +4,6 @@ import {
   sendHostedChatTurn,
   streamHostedChatTurn,
   type HostedChatCompletion,
-  type HostedChatStreamDelta,
   type HostedChatToolCall,
   type HostedChatUsage,
 } from "./hosted-chat.js";

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createLogger, type Logger } from "./logger.js";
+import { createLogger, type Logger } from "@openpond/logging";
 
 export const desktopDirname = path.dirname(fileURLToPath(import.meta.url));
 let cachedReleaseChannel: ReleaseChannel | null = null;

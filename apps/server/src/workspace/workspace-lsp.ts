@@ -17,24 +17,9 @@ import { WorkspaceEditorPreferencesSchema } from "@openpond/contracts";
 import { now, textFromUnknown } from "../utils.js";
 import { resolveForPreview } from "../workspace-tools/workspace-tool-file-system.js";
 
-type LspSeverityNumber = 1 | 2 | 3 | 4;
-
 type LspPosition = {
   line: number;
   character: number;
-};
-
-type LspRange = {
-  start: LspPosition;
-  end: LspPosition;
-};
-
-type LspDiagnostic = {
-  range: LspRange;
-  severity?: LspSeverityNumber;
-  message: string;
-  source?: string;
-  code?: string | number;
 };
 
 type WorkspaceLspActionOperation = WorkspaceLspActionResponse["operation"];

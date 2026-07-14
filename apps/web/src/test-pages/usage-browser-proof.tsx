@@ -1,4 +1,4 @@
-import React, { StrictMode, useState } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { ModelUsageRecord, UsageRecordsResponse, UsageSummaryResponse } from "@openpond/contracts";
 import { UsageSettingsContent } from "../components/settings/UsageSettingsSection";

@@ -143,7 +143,7 @@ function setupRequirementFromRecord(input: {
     kind ??
     "setup requirement";
   const required = input.record.required !== false;
-  const status = setupStatus(input.record, required);
+  const status = setupStatus(input.record);
   const ref = [
     source,
     input.actionId ?? "source",
@@ -166,7 +166,7 @@ function setupRequirementActionId(record: Record<string, unknown>): string | nul
   return text(record.actionId) ?? text(record.sourceActionId) ?? text(record.actionName);
 }
 
-function setupStatus(record: Record<string, unknown>, required: boolean): string {
+function setupStatus(record: Record<string, unknown>): string {
   const explicit = text(record.status) ?? text(record.state);
   if (explicit) {
     if (explicit === "satisfied" || explicit === "connected" || explicit === "provided") {

@@ -14,7 +14,6 @@ export function useEditorSettings({
   connection,
   enabled,
   onError,
-  onPayload,
   onPreferences,
   onToast,
   preferences,

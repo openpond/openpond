@@ -25,10 +25,6 @@ import {
   type OpenPondProfileGitFileChange,
   type OpenPondProfileGitState,
   type OpenPondProfileHostedBinding,
-  type OpenPondProfileSetupGate,
-  type OpenPondProfileSetupRequirement,
-  type OpenPondProfileSkill,
-  type OpenPondProfileSkillCatalogState,
   type OpenPondProfileState,
   type OpenPondProfileSummary,
 } from "./local-profile-types.js";

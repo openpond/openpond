@@ -771,7 +771,7 @@ async function createLinkedSandboxForTemplate(
   reportProgress?: WorkspaceActionProgressReporter,
 ): Promise<LinkedSandboxRecord> {
   let payload: unknown;
-  const cloudScope = sandboxTemplateCloudScope(project, source);
+  const cloudScope = sandboxTemplateCloudScope(project);
   try {
     await reportSandboxTemplateProgress(
       reportProgress,
@@ -844,7 +844,6 @@ async function createLinkedSandboxForTemplate(
 
 function sandboxTemplateCloudScope(
   project: LocalProject,
-  source: SandboxTemplateSource,
 ): SandboxTemplateCloudScope | null {
   const linkedProject = project.linkedSandboxProject;
   const teamId = linkedProject?.teamId?.trim() ?? "";

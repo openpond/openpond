@@ -166,7 +166,6 @@ export function FilePreview({
         collapsed={collapsed}
         file={file}
         hideWhiteSpace={hideWhiteSpace}
-        loading={loading}
         onSelectBreadcrumbPath={onSelectBreadcrumbPath}
         wordDiffs={wordDiffs}
         wordWrap={wordWrap}
@@ -178,7 +177,6 @@ export function FilePreview({
         collapsed={collapsed}
         file={file}
         hideWhiteSpace={hideWhiteSpace}
-        loading={loading}
         wordWrap={wordWrap}
         workspaceName={workspaceName}
         workspaceRootPath={workspaceRootPath}
@@ -243,7 +241,6 @@ export function UnifiedDiffPreview({
   collapsed = false,
   file,
   hideWhiteSpace = false,
-  loading = false,
   wordWrap,
   workspaceName,
   workspaceRootPath,
@@ -252,7 +249,6 @@ export function UnifiedDiffPreview({
   collapsed?: boolean;
   file: WorkspaceDiffFile;
   hideWhiteSpace?: boolean;
-  loading?: boolean;
   wordWrap: boolean;
   workspaceName?: string | null;
   workspaceRootPath?: string | null;
@@ -309,7 +305,6 @@ export function SplitDiffPreview({
   collapsed,
   file,
   hideWhiteSpace,
-  loading,
   wordDiffs,
   wordWrap,
   workspaceName,
@@ -319,7 +314,6 @@ export function SplitDiffPreview({
   collapsed: boolean;
   file: WorkspaceDiffFile;
   hideWhiteSpace: boolean;
-  loading: boolean;
   wordDiffs: boolean;
   wordWrap: boolean;
   workspaceName: string | null;

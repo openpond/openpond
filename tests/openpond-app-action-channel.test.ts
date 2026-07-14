@@ -19,7 +19,7 @@ import {
   sandboxIdFromWorkspaceName,
   shouldSubmitComposerSlashCommandToChat,
   shouldRunCreatePipelineCommandLocally,
-} from "../apps/web/src/components/app-shell/MainPane";
+} from "../apps/web/src/components/app-shell/main-pane-helpers";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import {
   composerActionCatalogMatches,

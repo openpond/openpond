@@ -22,8 +22,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openpond/contracts": "workspace:*",
-    "zod": "^4.1.13"
+    "@openpond/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

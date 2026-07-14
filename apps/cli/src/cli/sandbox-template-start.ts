@@ -6,7 +6,6 @@ import type { OpenPondSandboxClient } from "../sandbox/client";
 import type {
   SandboxCreateInput,
   SandboxRecord,
-  SandboxScheduleCreateInput,
 } from "../sandbox/types/index";
 import {
   OPENPOND_MANIFEST_FILE_NAME,

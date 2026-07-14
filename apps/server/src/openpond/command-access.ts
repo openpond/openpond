@@ -5,12 +5,11 @@ import {
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   ResolveApprovalRequestSchema,
   type Approval,
-  type OpenPondCommandAccessMode,
   type ResolveApprovalRequest,
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
-import { event, now, textFromUnknown } from "../utils.js";
+import { event, now } from "../utils.js";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 import { pipefailLocalShellCommand } from "./shell-command.js";
 

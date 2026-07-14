@@ -9,7 +9,6 @@ import {
   CreatePipelineSnapshotSchema,
   WorkflowCaptureArtifactSchema,
   type ChatModelRef,
-  type CreatePipelineQuestion,
   type CreatePipelineRequest,
   type CreatePipelineSnapshot,
 } from "@openpond/contracts";

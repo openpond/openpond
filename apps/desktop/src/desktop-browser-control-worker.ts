@@ -6,7 +6,7 @@ import type {
   BrowserHarnessResult,
   ParsedBrowserHarnessRequest,
 } from "./desktop-browser-harness-types.js";
-import type { Logger } from "./logger.js";
+import type { Logger } from "@openpond/logging";
 
 type DesktopBrowserControlWorkerOptions = {
   serverUrl: string;

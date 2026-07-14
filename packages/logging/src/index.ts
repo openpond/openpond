@@ -3,7 +3,7 @@ import path from "node:path";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
-type LoggerOptions = {
+export type LoggerOptions = {
   channel: string;
   logDir: string;
   filename?: string;

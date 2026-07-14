@@ -1,15 +1,4 @@
-.agent-create-view {
-  display: grid;
-  align-content: start;
-  gap: 22px;
-  width: min(1120px, calc(100% - 72px));
-  min-width: 0;
-  justify-self: center;
-  padding: 28px 0;
-}
-
-.agent-schedule-section,
-.agent-hosted-section {
+.agent-schedule-section {
   display: grid;
   gap: 12px;
   min-width: 0;
@@ -83,8 +72,7 @@
   padding: 14px;
 }
 
-.agent-card-topline,
-.agent-card-footer {
+.agent-card-topline {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -92,8 +80,7 @@
   min-width: 0;
 }
 
-.agent-card-topline span,
-.agent-card-footer span {
+.agent-card-topline span {
   min-width: 0;
   overflow: hidden;
   color: #9b9b9b;
@@ -252,9 +239,6 @@
 }
 
 @media (max-width: 900px) {
-  .agent-create-view {
-    width: min(100% - 28px, 680px);
-  }
 
   .agent-card-grid {
     grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));

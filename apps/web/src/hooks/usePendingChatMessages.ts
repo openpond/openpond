@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RuntimeEvent } from "@openpond/contracts";
 import { appendPendingUserChatMessage, hasMatchingUserMessage, type PendingChatUserMessage } from "../lib/pending-chat-messages";
 import { buildCachedChatMessages } from "../lib/chat-messages";
 import { buildRuntimeIndexes, runtimeEventsForSession } from "../lib/runtime-indexes";

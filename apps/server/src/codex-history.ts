@@ -1557,9 +1557,6 @@ function stringMap(record: Record<string, unknown> | null): Map<string, string> 
   return map;
 }
 
-function threadIdFromFileName(fileName: string): string | null {
-  return /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(fileName)?.[1] ?? null;
-}
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 96) || "item";

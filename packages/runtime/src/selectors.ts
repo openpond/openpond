@@ -93,7 +93,7 @@ export function fallbackProfilesFromConfig(config: RuntimeLocalConfig): Configur
       baseUrl: normalizeBaseUrl(account.baseUrl),
       apiBaseUrl: normalizeBaseUrl(account.apiBaseUrl),
       chatApiBaseUrl: normalizeBaseUrl(account.chatApiBaseUrl),
-      environment: deriveEnvironment(account.baseUrl, account.environment),
+      environment: deriveEnvironment(account.environment),
       isActive: activeProfile ? accountMatchesSelector(account, activeProfile) : false,
       hasApiKey: Boolean(account.apiKey?.trim()),
       hasSessionToken: Boolean(account.session?.token?.trim() || account.token?.trim()),
@@ -113,7 +113,7 @@ export function normalizeProfiles(profiles: ConfiguredProfile[]): ConfiguredProf
       baseUrl: normalizedBaseUrl,
       apiBaseUrl: normalizeBaseUrl(profile.apiBaseUrl),
       chatApiBaseUrl: normalizeBaseUrl(profile.chatApiBaseUrl),
-      environment: deriveEnvironment(normalizedBaseUrl, profile.environment),
+      environment: deriveEnvironment(profile.environment),
       isActive: profile.isActive,
     };
     const current = result.get(key);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import {
   CompactSessionRequestSchema,
   InsightsAskRequestSchema,
@@ -14,7 +14,6 @@ import {
   type ChatModelRef,
   type CodexReasoningEffort,
   type TaskDataRecord,
-  type CodexStatus,
   type InsightStatus,
   type InsightsListResponse,
   type InsightsScanResponse,
@@ -35,7 +34,7 @@ import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
 import { trustedProviderContextLimit } from "./openpond/context-usage.js";
-import { createLogger } from "./logger.js";
+import { createLogger } from "@openpond/logging";
 import {
   appDataDir,
   ensureCapabilityToken,
@@ -233,7 +232,6 @@ export async function createOpenPondServer(
     linkLocalProjectOpenPondApp,
     workspaceStatePayload,
     workspaceTemplateConfigPayload,
-    ensureSessionWorkspace,
     resolveSessionWorkspaceCwd,
     defaultSessionCwd,
     createWorkspaceBranchPayload,

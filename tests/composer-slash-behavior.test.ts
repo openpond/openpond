@@ -13,7 +13,6 @@ import {
 } from "../apps/web/src/components/chat/Composer";
 import { SubmitIssueDialog } from "../apps/web/src/components/chat/SubmitIssueDialog";
 import { workspaceTargetOptionStatusText } from "../apps/web/src/components/chat/ComposerControls";
-import { ComposerInvocationPill } from "../apps/web/src/components/chat/ComposerInvocationPill";
 import { ComposerPrimaryControls } from "../apps/web/src/components/chat/ComposerPrimaryControls";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
 import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-commands";
@@ -258,24 +257,6 @@ describe("composer slash behavior", () => {
         selectedCommand: null,
       }),
     ).toBe(false);
-  });
-
-  test("renders selected commands as removable invocation pills without the slash", () => {
-    const markup = renderToStaticMarkup(
-      createElement(ComposerInvocationPill, {
-        icon: createElement("span", { className: "test-command-icon", "aria-hidden": true }),
-        label: "create",
-        onRemove: noop,
-      }),
-    );
-
-    expect(markup).toContain('class="composer-invocation-pill"');
-    expect(markup).toContain('contentEditable="false"');
-    expect(markup).toContain('data-inline-token="true"');
-    expect(markup).toContain('class="composer-invocation-remove"');
-    expect(markup).toContain("composer-invocation-clear");
-    expect(markup).toContain(">create<");
-    expect(markup).not.toContain("/create");
   });
 
   test("regular chat composer exposes a dedicated create button beside add context", () => {

@@ -2,6 +2,7 @@ import { builtinModules } from "node:module";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 type PackageManifest = {
   name?: string;
@@ -13,11 +14,10 @@ type PackageManifest = {
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const builtin = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`), "bun", "bun:test"]);
-const importPattern = /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*)["']([^"']+)["']/g;
+const builtin = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`), "node:test", "bun", "bun:test"]);
 
 async function main(): Promise<void> {
-  const packageDirs = await workspacePackageDirectories();
+  const packageDirs = [root, ...await workspacePackageDirectories()];
   const workspaceNames = new Set<string>();
   for (const packageDir of packageDirs) {
     const manifest = await readManifest(packageDir);
@@ -44,8 +44,8 @@ async function main(): Promise<void> {
     for (const file of files) {
       const production = file.includes(`${path.sep}src${path.sep}`) && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
       const source = await fs.readFile(file, "utf8");
-      for (const match of source.matchAll(importPattern)) {
-        const specifier = match[1];
+      for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
+        const specifier = imported.fileName;
         if (!specifier || specifier.startsWith(".") || specifier.startsWith("/") || builtin.has(specifier)) continue;
         const packageName = importedPackageName(specifier);
         if (packageName === manifest.name) continue;

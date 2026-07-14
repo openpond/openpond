@@ -1,6 +1,5 @@
 import { BrowserWindow } from "electron";
 import { spawn } from "node:child_process";
-import { desktopLogger } from "./desktop-environment.js";
 
 function mediaSourceWindowId(window: BrowserWindow): string | null {
   const match = /^window:(\d+):/.exec(window.getMediaSourceId());

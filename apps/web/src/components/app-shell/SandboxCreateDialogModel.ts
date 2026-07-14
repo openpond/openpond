@@ -1,7 +1,5 @@
 import type { SandboxTemplateManifest, WorkspaceToolResult } from "@openpond/contracts";
 import {
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
   sandboxTemplateExecutableEntries,
 } from "@openpond/contracts";
 import type {

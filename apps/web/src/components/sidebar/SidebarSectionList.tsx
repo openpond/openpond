@@ -79,7 +79,6 @@ export function SidebarSectionList({
   createCloudEnvironment,
   pinnedCollapsed,
   pinnedRows,
-  pinnedSessions,
   previewPinnedDrop,
   localProjectRows,
   projectsCollapsed,

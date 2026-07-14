@@ -2,7 +2,6 @@ import type { StreamCallbacks } from "./stream.js";
 import type {
   AgentCreateRequest,
   AppEnvironmentGetResponse,
-  AppEnvironmentUpdateRequest,
   AppEnvironmentUpdateResponse,
   AppExecutionTimelineResponse,
   AppListItem,

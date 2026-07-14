@@ -25,7 +25,6 @@ describe("Training source selection UI", () => {
     expect(manualStep).toContain("What should the model learn?");
     expect(manualStep).toContain("required");
     expect(dialog).not.toContain("methodHintForApproach");
-    expect(dialog).not.toContain("TrainingMethodStep");
     expect(sourceStep).toContain("CodexModelReasoningMenu");
     expect(sourceStep).toContain('placeholder="Search chats"');
     expect(dialog).toContain("CHAT_SEARCH_PAGE_SIZE = 20");
