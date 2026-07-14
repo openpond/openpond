@@ -21,11 +21,8 @@ import {
   writeSourceUploadEntriesToDirectory,
 } from "./cli-sandbox-fixture";
 
-const longCliScenarioTest =
-  process.env.OPENPOND_SKIP_CI_LONG_CLI_TESTS === "1" ? test.skip : test;
-
 describe("project and agent sandbox CLI scenarios", () => {
-  longCliScenarioTest("project and agent commands use first-class sandbox API resources", async () => {
+  test("project and agent commands use first-class sandbox API resources", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {
       const projectList = await runCli([

@@ -25,10 +25,14 @@ type ReadyPayload = {
 const MiB = 1024 * 1024;
 const root = path.resolve(import.meta.dir, "..");
 const archiveArg = valueAfter("--archive");
+const skipNpm = process.argv.includes("--skip-npm");
 const tempRoots: string[] = [];
 
 try {
-  const npmMetrics = await checkNpmPackage();
+  if (skipNpm && !archiveArg) {
+    throw new Error("--skip-npm requires --archive so at least one distribution is checked");
+  }
+  const npmMetrics = skipNpm ? null : await checkNpmPackage();
   const archiveMetrics = archiveArg ? await checkCompiledArchive(path.resolve(archiveArg)) : null;
   console.log(JSON.stringify({ npm: npmMetrics, archive: archiveMetrics }, null, 2));
 } finally {

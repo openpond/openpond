@@ -1,11 +1,17 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-type Suite = "unit" | "cli" | "agent-sdk" | "all" | "live";
+import {
+  ALL_TEST_SUITES,
+  CLI_INTEGRATION_TESTS,
+  CLI_RELEASE_TESTS,
+  ROOT_INTEGRATION_TESTS,
+  type TestSuite,
+} from "./test-suite-config";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const bunBinary =
@@ -37,7 +43,7 @@ const nonDeterministicEnvKeys = [
 
 async function main(): Promise<void> {
   const suite = parseSuite(process.argv[2]);
-  const suites = expandSuite(suite);
+  const suites = suite === "all" ? ALL_TEST_SUITES : [suite];
   const isolated = suite !== "live";
   const testEnv = isolated ? await createIsolatedTestEnv() : process.env;
   const tempHome = isolated ? testEnv.HOME : null;
@@ -45,11 +51,11 @@ async function main(): Promise<void> {
   try {
     for (const current of suites) {
       if (current === "unit") await runUnitTests(testEnv);
-      if (current === "cli") await runCommand(bunBinary, ["test", "--cwd", "apps/cli"], { env: testEnv });
-      if (current === "agent-sdk") {
-        await runCommand(bunBinary, ["run", "--cwd", "packages/agent-sdk", "build"], { env: testEnv });
-        await runCommand(bunBinary, ["test", "--cwd", "packages/agent-sdk"], { env: testEnv });
-      }
+      if (current === "integration") await runIntegrationTests(testEnv);
+      if (current === "contract") await runContractTests(testEnv);
+      if (current === "release") await runReleaseTests(testEnv);
+      if (current === "cli") await runCliCompatibilitySuite(testEnv);
+      if (current === "agent-sdk") await runAgentSdkTests(testEnv);
       if (current === "live") await runLiveTests(process.env);
     }
   } finally {
@@ -57,16 +63,23 @@ async function main(): Promise<void> {
   }
 }
 
-function parseSuite(raw: string | undefined): Suite {
+function parseSuite(raw: string | undefined): TestSuite {
   const suite = raw ?? "all";
-  if (suite === "unit" || suite === "cli" || suite === "agent-sdk" || suite === "all" || suite === "live") {
+  if (
+    suite === "unit"
+    || suite === "integration"
+    || suite === "contract"
+    || suite === "release"
+    || suite === "cli"
+    || suite === "agent-sdk"
+    || suite === "all"
+    || suite === "live"
+  ) {
     return suite;
   }
-  throw new Error(`unknown test suite "${suite}". Expected unit, cli, agent-sdk, all, or live.`);
-}
-
-function expandSuite(suite: Suite): Suite[] {
-  return suite === "all" ? ["unit", "cli", "agent-sdk"] : [suite];
+  throw new Error(
+    `unknown test suite "${suite}". Expected unit, integration, contract, release, all, cli, agent-sdk, or live.`,
+  );
 }
 
 async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
@@ -94,14 +107,53 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
 }
 
 async function runUnitTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await runCommand(bunBinary, ["x", "tsc", "-b", "apps/server"], { env });
-  const files = await discoverRootTests();
-  if (files.node.length > 0) {
-    await runCommand(nodeBinary, ["--test", ...files.node], { env });
+  const rootFiles = await discoverRootUnitTests();
+  if (rootFiles.length > 0) await runCommand(bunBinary, ["test", ...rootFiles], { env });
+  await runCliTests(await discoverCliUnitTests(), env);
+}
+
+async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {
+  await assertFilesExist(ROOT_INTEGRATION_TESTS);
+  await assertFilesExist(CLI_INTEGRATION_TESTS.map((entry) => path.join("apps/cli", entry)));
+  for (const file of ROOT_INTEGRATION_TESTS) {
+    await runCommand(bunBinary, ["test", file], { env });
   }
-  if (files.bun.length > 0) {
-    await runCommand(bunBinary, ["test", ...files.bun], { env });
+  for (const file of CLI_INTEGRATION_TESTS) {
+    await runCliTests([file], env);
   }
+}
+
+async function runContractTests(env: NodeJS.ProcessEnv): Promise<void> {
+  if (process.env.OPENPOND_TEST_REUSE_BUILD !== "1") {
+    await runCommand(bunBinary, ["x", "tsc", "-b", "apps/server"], { env });
+  }
+  const nodeFiles = await discoverNodeContractTests();
+  if (nodeFiles.length > 0) await runCommand(nodeBinary, ["--test", ...nodeFiles], { env });
+  await runAgentSdkTests(env);
+}
+
+async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
+  if (process.env.OPENPOND_TEST_REUSE_BUILD !== "1") {
+    await runCommand(bunBinary, ["run", "build:web"], { env });
+    await runCommand(bunBinary, ["run", "cli:build"], { env });
+  }
+  await assertFilesExist([
+    "apps/cli/dist/cli.js",
+    "apps/cli/dist/web/index.html",
+    "apps/cli/dist/skills/openpond-taskset-authoring/SKILL.md",
+  ]);
+  await runCliTests([...CLI_RELEASE_TESTS], env);
+}
+
+async function runCliCompatibilitySuite(env: NodeJS.ProcessEnv): Promise<void> {
+  await runCliTests(await discoverCliUnitTests(), env);
+  await runCliTests([...CLI_INTEGRATION_TESTS], env);
+  await runReleaseTests(env);
+}
+
+async function runAgentSdkTests(env: NodeJS.ProcessEnv): Promise<void> {
+  await runCommand(bunBinary, ["run", "--cwd", "packages/agent-sdk", "build"], { env });
+  await runCommand(bunBinary, ["test", "--cwd", "packages/agent-sdk"], { env });
 }
 
 async function runLiveTests(env: NodeJS.ProcessEnv): Promise<void> {
@@ -114,17 +166,14 @@ async function runLiveTests(env: NodeJS.ProcessEnv): Promise<void> {
   await runCommand(nodeBinary, ["--test", ...liveFiles], { env });
 }
 
-async function discoverRootTests(): Promise<{ node: string[]; bun: string[] }> {
+async function discoverRootUnitTests(): Promise<string[]> {
   const entries = await readdir(path.join(root, "tests"));
-  const node = entries
-    .filter((entry) => entry.endsWith(".test.mjs"))
-    .filter((entry) => !entry.startsWith("live-"))
-    .sort()
-    .map((entry) => path.join("tests", entry));
+  const integration = new Set<string>(ROOT_INTEGRATION_TESTS);
   const bun = entries
     .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
-    .sort()
-    .map((entry) => path.join("tests", entry));
+    .map((entry) => path.join("tests", entry))
+    .filter((entry) => !integration.has(entry))
+    .sort();
   for (const testRoot of ["apps/server/src", "packages/cloud/src"]) {
     const colocated = await readdir(path.join(root, testRoot), { recursive: true });
     bun.push(
@@ -134,7 +183,26 @@ async function discoverRootTests(): Promise<{ node: string[]; bun: string[] }> {
     );
   }
   bun.sort();
-  return { node, bun };
+  return bun;
+}
+
+async function discoverNodeContractTests(): Promise<string[]> {
+  const entries = await readdir(path.join(root, "tests"));
+  return entries
+    .filter((entry) => entry.endsWith(".test.mjs"))
+    .filter((entry) => !entry.startsWith("live-"))
+    .sort()
+    .map((entry) => path.join("tests", entry));
+}
+
+async function discoverCliUnitTests(): Promise<string[]> {
+  const excluded = new Set<string>([...CLI_INTEGRATION_TESTS, ...CLI_RELEASE_TESTS]);
+  const entries = await readdir(path.join(root, "apps", "cli", "test"));
+  return entries
+    .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
+    .map((entry) => path.join("test", entry))
+    .filter((entry) => !excluded.has(entry))
+    .sort();
 }
 
 async function discoverLiveTests(): Promise<string[]> {
@@ -160,6 +228,17 @@ async function runCommand(
   const [code, signal] = (await once(child, "exit")) as [number | null, NodeJS.Signals | null];
   if (code === 0) return;
   throw new Error(`${command} ${args.join(" ")} failed with ${signal ?? `exit code ${code}`}`);
+}
+
+async function runCliTests(files: string[], env: NodeJS.ProcessEnv): Promise<void> {
+  if (files.length === 0) return;
+  await runCommand(bunBinary, ["test", "--cwd", "apps/cli", ...files], { env });
+}
+
+async function assertFilesExist(files: readonly string[]): Promise<void> {
+  for (const file of files) {
+    await access(path.join(root, file));
+  }
 }
 
 void main().catch((error) => {

@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: release-builds-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}', github.ref, inputs.channel) || github.ref }}
@@ -132,9 +133,42 @@ jobs:
             echo "should_release=${should_release}"
           } >> "$GITHUB_OUTPUT"
 
-  validate:
-    name: Validate release source
+  ci_gate:
+    name: Require green CI
     needs: meta
+    if: needs.meta.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the required CI check on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.meta.outputs.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            check_run="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs" \
+              --jq '[.check_runs[] | select(.name == "Checks" and .app.slug == "github-actions")] | sort_by(.started_at) | last // {}')"
+            status="$(jq -r '.status // empty' <<<"${check_run}")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"${check_run}")"
+            url="$(jq -r '.html_url // empty' <<<"${check_run}")"
+            if [[ "${status}" == "completed" && "${conclusion}" == "success" ]]; then
+              echo "Required CI check passed: ${url}"
+              exit 0
+            fi
+            if [[ "${status}" == "completed" && -n "${conclusion}" ]]; then
+              echo "Required CI check concluded ${conclusion}: ${url}" >&2
+              exit 1
+            fi
+            echo "Waiting for required CI check on ${RELEASE_SHA} (attempt ${attempt}/60)."
+            sleep 10
+          done
+          echo "Timed out waiting for the required Checks result on ${RELEASE_SHA}." >&2
+          exit 1
+
+  source_artifacts:
+    name: Build release source artifacts once
+    needs: [meta, ci_gate]
     if: needs.meta.outputs.should_release == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -146,22 +180,27 @@ jobs:
         with:
           bun-version: "1.3.13"
 
-      - uses: astral-sh/setup-uv@v8.3.2
-
       - run: bun install --frozen-lockfile
 
-      - run: bun run build
+      - name: Prepare release build config
+        run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
-      - name: Run tests once before packaging
-        run: bun run test
-        env:
-          # The build matrix below performs a stronger installed-package and
-          # compiled-archive server readiness check with a 15 second deadline.
-          OPENPOND_SKIP_RELEASE_SOURCE_CLI_SERVER_SMOKE: "1"
+      - run: bun run build:artifacts
+      - run: bun run cli:build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-source-artifacts
+          path: |
+            apps/server/dist
+            apps/web/dist
+            apps/desktop/dist
+            apps/cli/dist
+          if-no-files-found: error
 
   build:
     name: ${{ matrix.name }}
-    needs: [meta, validate]
+    needs: [meta, source_artifacts]
     if: needs.meta.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -201,7 +240,10 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun run build
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-source-artifacts
+          path: .
 
       - name: Prepare release build config
         run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
@@ -211,16 +253,15 @@ jobs:
       - name: Enforce desktop package budgets
         run: bun run budgets:desktop-package
 
-      - name: Build and verify CLI distributions
+      - name: Build and verify native CLI archive
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          bun run cli:build
           bun run cli:release:build
           cli_archive="$(find release -maxdepth 1 -type f -name 'openpond-cli-*.tar.gz' -print -quit)"
           test -n "${cli_archive}"
-          bun scripts/check-cli-distribution.ts --archive "${cli_archive}"
+          bun scripts/check-cli-distribution.ts --archive "${cli_archive}" --skip-npm
 
       - name: Install Linux packaged-smoke display dependency
         if: runner.os == 'Linux'
@@ -308,6 +349,11 @@ jobs:
           merge-multiple: true
           path: release-smoke-artifacts
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-source-artifacts
+          path: .
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.13"
@@ -344,9 +390,7 @@ jobs:
           set -euo pipefail
           test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
           npm install --global npm@11.5.1
-          bun run build
-          bun run cli:build
-          npm publish ./apps/cli --access public --provenance
+          npm publish ./apps/cli --access public --provenance --ignore-scripts
 
       - name: Generate SBOM
         run: bun run release:sbom

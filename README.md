@@ -141,8 +141,13 @@ bun run dev:web:renderer    # run only the browser renderer
 bun run cli                 # run the CLI entrypoint
 bun run terminal            # run the terminal chat client
 bun run typecheck           # TypeScript project references
-bun run build               # typecheck, bundle server, and build web
-bun run test                # unit, CLI, and agent SDK test suites
+bun run build               # typecheck and build server, web, and desktop artifacts
+bun run test                # unit, integration, contract, and release smoke suites
+bun run test:unit           # fast isolated root and CLI tests
+bun run test:integration    # process, training, and sandbox integration tests
+bun run test:contract       # compiled server and Agent SDK contracts
+bun run test:release        # installed CLI artifact smoke tests
+bun run verify:push         # complete local equivalent of the required CI gate
 bun run budgets:warn        # performance budget checks
 bun run cli:pack:dry-run    # inspect the CLI npm package contents
 bun run agent-sdk:check     # SDK build, tests, examples, hygiene, and pack checks
@@ -183,20 +188,13 @@ The root workspace is the source of truth for cross-package work. Prefer root co
 
 ## Quality Gates
 
-CI installs with Bun, then runs:
+`bun install` configures the repository-owned pre-push hook in `.githooks`. Every push runs the canonical verifier below and rejects either a failed check or a test/build that changes source files:
 
 ```bash
-bun run typecheck
-bun run cli:typecheck
-bun run build
-bun run budgets:warn
-bun run budgets:check
-bun run cli:build
-bun run budgets:cli
-bun run structure:check
-bun run dependencies:check
-bun run test
+bun run verify:push
 ```
+
+CI executes the same quality, unit, integration, contract, and release-artifact gates in parallel, then reports one required `Checks` result. Release builds wait for that result and reuse the verified source artifacts across the platform matrix instead of rebuilding and retesting each target.
 
 Coverage badges should be added only after coverage is collected and uploaded by CI. Until then, the CI badge is the accurate project health signal.
 

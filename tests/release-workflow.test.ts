@@ -47,10 +47,17 @@ describe("release workflow", () => {
     expect(workflow).not.toMatch(/^\s*os:\s*windows-latest$/m);
     expect(workflow).not.toMatch(/^\s*package_script:\s*package:win:release$/m);
 
-    expect(workflow).toContain("name: Run tests once before packaging");
-    expect(workflow.match(/bun run test/g)).toHaveLength(1);
+    expect(workflow).toContain("name: Require green CI");
+    expect(workflow).toContain("name: Build release source artifacts once");
+    expect(workflow).toContain("name: Wait for the required CI check on this commit");
+    expect(workflow).toContain('select(.name == "Checks" and .app.slug == "github-actions")');
+    expect(workflow.match(/bun run test/g) ?? []).toHaveLength(0);
     expect(workflow).not.toContain("name: Run tests on Windows");
     expect(workflow).not.toContain("bun test tests/*.test.ts");
+    expect(workflow.match(/bun run build:artifacts/g)).toHaveLength(1);
+    expect(workflow.match(/bun run cli:build/g)).toHaveLength(1);
+    expect(workflow).not.toContain("- run: bun run build\n");
+    expect(workflow).toContain("name: release-source-artifacts");
 
     expect(workflow).toContain("name: Smoke packaged desktop");
     expect(workflow).toContain("name: Prove renderer commit boundaries in the dev browser harness");
@@ -66,16 +73,14 @@ describe("release workflow", () => {
     expect(workflow).toContain("path: release-smoke-artifacts");
     expect(workflow).toContain("name: Validate packaged smoke reports");
     expect(workflow).toContain("bun run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts");
-    expect(workflow).toContain("name: Build and verify CLI distributions");
-    expect(workflow).toContain("bun run cli:build");
+    expect(workflow).toContain("name: Build and verify native CLI archive");
     expect(workflow).toContain("bun run cli:release:build");
-    expect(workflow).toContain("bun scripts/check-cli-distribution.ts --archive");
+    expect(workflow).toContain("bun scripts/check-cli-distribution.ts --archive \"${cli_archive}\" --skip-npm");
     expect(workflow).toContain("id: npm_publish_auth");
     expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
     expect(workflow).toContain("steps.npm_publish_auth.outputs.enabled == 'true'");
     expect(workflow).toContain("name: Publish stable CLI package to npm");
-    expect(workflow).toContain("npm install --global npm@11.5.1\n          bun run build\n          bun run cli:build");
-    expect(workflow).toContain("npm publish ./apps/cli --access public --provenance");
+    expect(workflow).toContain("npm install --global npm@11.5.1\n          npm publish ./apps/cli --access public --provenance --ignore-scripts");
     expect(workflow).toContain("release/*.tar.gz");
     expect(workflow).toContain('basename "${files[$index]}"');
     expect(workflow).toContain("builder-debug.yml");
@@ -91,6 +96,14 @@ describe("release workflow", () => {
     expect(releaseWorkflow).not.toMatch(/push:\n\s+branches:/);
     expect(releaseWorkflow).toContain('- "!v*-nightly.*"');
     expect(releaseWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'schedule' }}");
+    expect(releaseWorkflow).toContain("checks: read");
+    expect(ciWorkflow).toContain("name: Checks");
+    expect(ciWorkflow).toContain("needs: [quality, unit, integration, contract, release_smoke]");
+    expect(ciWorkflow).toContain("bun run test:unit");
+    expect(ciWorkflow).toContain("bun run test:integration");
+    expect(ciWorkflow).toContain("bun run test:contract");
+    expect(ciWorkflow).toContain("bun run test:release");
+    expect(ciWorkflow).not.toContain("OPENPOND_SKIP_CI_LONG_CLI_TESTS");
   });
 
   test("scopes release credentials to the publishing job and uses current action runtimes", () => {
@@ -112,7 +125,8 @@ describe("release workflow", () => {
     const packageJson = JSON.parse(readFileSync(ROOT_PACKAGE_PATH, "utf8")) as {
       scripts?: Record<string, string>;
     };
-    expect(packageJson.scripts?.build).toContain("bun run build:desktop");
+    expect(packageJson.scripts?.build).toContain("bun run build:artifacts");
+    expect(packageJson.scripts?.["build:artifacts"]).toContain("bun run build:desktop");
   });
 
   test("packaged smoke resolver supports stable and nightly unpacked app names", () => {
