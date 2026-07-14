@@ -1,6 +1,7 @@
 {
   "name": "@openpond/runtime",
   "version": "0.0.22",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

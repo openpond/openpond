@@ -60,6 +60,7 @@ async function checkNpmPackage() {
   enforceRequiredFiles(fileMap, [
     "dist/cli.js",
     "dist/web/index.html",
+    "LICENSE",
     "README.md",
     "docs/agent-edit-check-status-json.md",
   ]);
@@ -99,6 +100,7 @@ async function checkCompiledArchive(archivePath: string) {
   const cli = path.join(extracted, "openpond");
   requireFile(cli);
   requireFile(path.join(extracted, "web", "index.html"));
+  requireFile(path.join(extracted, "LICENSE"));
   const op = await lstat(path.join(extracted, "op"));
   if (!op.isSymbolicLink()) throw new Error("compiled archive op alias must be a symlink");
   const binaryBytes = (await stat(cli)).size;

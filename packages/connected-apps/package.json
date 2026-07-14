@@ -1,6 +1,7 @@
 {
   "name": "@openpond/connected-apps",
   "version": "0.0.11",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
