@@ -58,6 +58,14 @@ describe("release workflow", () => {
     expect(workflow.match(/bun run cli:build/g)).toHaveLength(1);
     expect(workflow).not.toContain("- run: bun run build\n");
     expect(workflow).toContain("name: release-source-artifacts");
+    expect(
+      workflow.match(
+        /actions\/download-artifact@v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: apps/g,
+      ),
+    ).toHaveLength(2);
+    expect(workflow).not.toMatch(
+      /name: release-source-artifacts\n\s+path: \./,
+    );
 
     expect(workflow).toContain("name: Smoke packaged desktop");
     expect(workflow).toContain("name: Prove renderer commit boundaries in the dev browser harness");
