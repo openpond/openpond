@@ -220,6 +220,24 @@ describe("CLI common process runner", () => {
     expect(result.terminationReason).toBe("timeout");
   });
 
+  test("terminates long-running commands after expected stdout", async () => {
+    const result = await runCommand(
+      process.execPath,
+      [
+        "-e",
+        "process.stdout.write('OPENPOND_'); setTimeout(() => process.stdout.write('READY'), 10); setInterval(() => {}, 1000);",
+      ],
+      {
+        timeoutMs: 2_000,
+        terminateWhenStdoutIncludes: "OPENPOND_READY",
+      },
+    );
+
+    expect(result.stdout).toContain("OPENPOND_READY");
+    expect(result.timedOut).toBe(false);
+    expect(result.terminationReason).toBe("output");
+  });
+
   test("reports signal exits separately from normal exit codes", async () => {
     const result = await runCommand(
       process.execPath,

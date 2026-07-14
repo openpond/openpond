@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 export type ProcessCommandResult = {
   code: number | null;
   signal: NodeJS.Signals | null;
-  terminationReason: "exit" | "signal" | "timeout";
+  terminationReason: "exit" | "output" | "signal" | "timeout";
   stdout: string;
   stderr: string;
   timedOut: boolean;
@@ -21,6 +21,7 @@ export type ProcessCommandOptions = {
   stdin?: string | Buffer | Uint8Array;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  terminateWhenStdoutIncludes?: string;
 };
 
 export const DEFAULT_PROCESS_TIMEOUT_MS = 10 * 60 * 1000;
@@ -31,6 +32,12 @@ export function runProcessCommand(
   args: string[] = [],
   options: ProcessCommandOptions = {}
 ): Promise<ProcessCommandResult> {
+  if (options.inherit && options.terminateWhenStdoutIncludes !== undefined) {
+    return Promise.reject(new Error("terminateWhenStdoutIncludes requires captured stdout"));
+  }
+  if (options.terminateWhenStdoutIncludes === "") {
+    return Promise.reject(new Error("terminateWhenStdoutIncludes must not be empty"));
+  }
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options.cwd,
@@ -47,6 +54,7 @@ export function runProcessCommand(
     const timeoutMs = options.timeoutMs ?? DEFAULT_PROCESS_TIMEOUT_MS;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let forceKill: ReturnType<typeof setTimeout> | undefined;
+    let requestedTermination: "output" | "timeout" | null = null;
     let settled = false;
 
     const clearTimers = () => {
@@ -54,19 +62,33 @@ export function runProcessCommand(
       if (forceKill) clearTimeout(forceKill);
     };
 
+    const requestTermination = (reason: "output" | "timeout") => {
+      if (requestedTermination !== null || settled) return;
+      requestedTermination = reason;
+      timedOut = reason === "timeout";
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
+      terminateProcessTree(proc.pid, "SIGTERM");
+      forceKill = setTimeout(() => {
+        if (proc.exitCode === null && proc.signalCode === null) terminateProcessTree(proc.pid, "SIGKILL");
+      }, 5000);
+    };
+
     if (timeoutMs > 0) {
       timeout = setTimeout(() => {
-        timedOut = true;
-        terminateProcessTree(proc.pid, "SIGTERM");
-        forceKill = setTimeout(() => {
-          if (proc.exitCode === null && proc.signalCode === null) terminateProcessTree(proc.pid, "SIGKILL");
-        }, 5000);
+        requestTermination("timeout");
       }, timeoutMs);
     }
 
     if (!options.inherit) {
       proc.stdout?.on("data", (chunk) => {
         stdout.append(chunk);
+        const marker = options.terminateWhenStdoutIncludes;
+        if (marker !== undefined && stdout.text().includes(marker)) {
+          requestTermination("output");
+        }
       });
       proc.stderr?.on("data", (chunk) => {
         stderr.append(chunk);
@@ -85,7 +107,7 @@ export function runProcessCommand(
       resolve({
         code,
         signal,
-        terminationReason: timedOut ? "timeout" : signal ? "signal" : "exit",
+        terminationReason: requestedTermination ?? (signal ? "signal" : "exit"),
         stdout: stdout.text(),
         stderr: stderr.text(),
         timedOut,
