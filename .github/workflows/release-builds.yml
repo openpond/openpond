@@ -196,6 +196,13 @@ jobs:
             apps/web/dist
             apps/desktop/dist
             apps/cli/dist
+            packages/cloud/dist
+            packages/codex-provider/dist
+            packages/connected-apps/dist
+            packages/contracts/dist
+            packages/runtime/dist
+            packages/taskset-sdk/dist
+            packages/training-sdk/dist
           if-no-files-found: error
 
   build:
@@ -243,7 +250,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-source-artifacts
-          path: apps
+          path: .
 
       - name: Prepare release build config
         run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
@@ -352,7 +359,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-source-artifacts
-          path: apps
+          path: .
 
       - uses: oven-sh/setup-bun@v2
         with:

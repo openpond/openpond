@@ -58,13 +58,28 @@ describe("release workflow", () => {
     expect(workflow.match(/bun run cli:build/g)).toHaveLength(1);
     expect(workflow).not.toContain("- run: bun run build\n");
     expect(workflow).toContain("name: release-source-artifacts");
+    for (const artifactPath of [
+      "apps/server/dist",
+      "apps/web/dist",
+      "apps/desktop/dist",
+      "apps/cli/dist",
+      "packages/cloud/dist",
+      "packages/codex-provider/dist",
+      "packages/connected-apps/dist",
+      "packages/contracts/dist",
+      "packages/runtime/dist",
+      "packages/taskset-sdk/dist",
+      "packages/training-sdk/dist",
+    ]) {
+      expect(workflow).toContain(`            ${artifactPath}`);
+    }
     expect(
       workflow.match(
-        /actions\/download-artifact@v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: apps/g,
+        /actions\/download-artifact@v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: \./g,
       ),
     ).toHaveLength(2);
     expect(workflow).not.toMatch(
-      /name: release-source-artifacts\n\s+path: \./,
+      /name: release-source-artifacts\n\s+path: apps/,
     );
 
     expect(workflow).toContain("name: Smoke packaged desktop");
