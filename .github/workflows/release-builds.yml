@@ -243,7 +243,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-source-artifacts
-          path: .
+          path: apps
 
       - name: Prepare release build config
         run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
@@ -352,7 +352,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-source-artifacts
-          path: .
+          path: apps
 
       - uses: oven-sh/setup-bun@v2
         with:
