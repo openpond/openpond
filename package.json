@@ -57,6 +57,7 @@
     "test:agent-sdk": "bun scripts/run-tests.ts agent-sdk",
     "test:live": "bun scripts/run-tests.ts live",
     "test:e2e": "bun scripts/run-tests.ts live",
+    "verify:quick": "bun run typecheck && OPENPOND_TEST_REUSE_BUILD=1 bun scripts/run-tests.ts unit",
     "verify:push": "bun scripts/verify-push.ts",
     "hooks:install": "bun scripts/install-git-hooks.ts",
     "prepare": "bun run hooks:install",

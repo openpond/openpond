@@ -92,7 +92,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: verified-build-${{ github.sha }}
-          path: .
+          # upload-artifact strips the shared `apps/` ancestor from these paths.
+          path: apps
       - run: bun run test:release
         env:
           OPENPOND_TEST_REUSE_BUILD: "1"

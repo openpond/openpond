@@ -103,6 +103,9 @@ describe("release workflow", () => {
     expect(ciWorkflow).toContain("bun run test:integration");
     expect(ciWorkflow).toContain("bun run test:contract");
     expect(ciWorkflow).toContain("bun run test:release");
+    expect(ciWorkflow).toMatch(
+      /release_smoke:[\s\S]*?actions\/download-artifact@v8[\s\S]*?path: apps/,
+    );
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_CI_LONG_CLI_TESTS");
   });
 

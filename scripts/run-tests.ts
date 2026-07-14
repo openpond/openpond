@@ -14,6 +14,7 @@ import {
 } from "./test-suite-config";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+let serverWorkspaceBuildReady = false;
 const bunBinary =
   process.env.BUN_BINARY ||
   (((process.versions as Record<string, string | undefined>).bun ? process.execPath : null) ?? "bun");
@@ -107,12 +108,14 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
 }
 
 async function runUnitTests(env: NodeJS.ProcessEnv): Promise<void> {
+  await ensureServerWorkspaceBuild(env);
   const rootFiles = await discoverRootUnitTests();
   if (rootFiles.length > 0) await runCommand(bunBinary, ["test", ...rootFiles], { env });
   await runCliTests(await discoverCliUnitTests(), env);
 }
 
 async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {
+  await ensureServerWorkspaceBuild(env);
   await assertFilesExist(ROOT_INTEGRATION_TESTS);
   await assertFilesExist(CLI_INTEGRATION_TESTS.map((entry) => path.join("apps/cli", entry)));
   for (const file of ROOT_INTEGRATION_TESTS) {
@@ -124,16 +127,14 @@ async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 async function runContractTests(env: NodeJS.ProcessEnv): Promise<void> {
-  if (process.env.OPENPOND_TEST_REUSE_BUILD !== "1") {
-    await runCommand(bunBinary, ["x", "tsc", "-b", "apps/server"], { env });
-  }
+  await ensureServerWorkspaceBuild(env);
   const nodeFiles = await discoverNodeContractTests();
   if (nodeFiles.length > 0) await runCommand(nodeBinary, ["--test", ...nodeFiles], { env });
   await runAgentSdkTests(env);
 }
 
 async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
-  if (process.env.OPENPOND_TEST_REUSE_BUILD !== "1") {
+  if (env.OPENPOND_TEST_REUSE_BUILD !== "1") {
     await runCommand(bunBinary, ["run", "build:web"], { env });
     await runCommand(bunBinary, ["run", "cli:build"], { env });
   }
@@ -145,7 +146,14 @@ async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
   await runCliTests([...CLI_RELEASE_TESTS], env);
 }
 
+async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void> {
+  if (env.OPENPOND_TEST_REUSE_BUILD === "1" || serverWorkspaceBuildReady) return;
+  await runCommand(bunBinary, ["x", "tsc", "-b", "apps/server"], { env });
+  serverWorkspaceBuildReady = true;
+}
+
 async function runCliCompatibilitySuite(env: NodeJS.ProcessEnv): Promise<void> {
+  await ensureServerWorkspaceBuild(env);
   await runCliTests(await discoverCliUnitTests(), env);
   await runCliTests([...CLI_INTEGRATION_TESTS], env);
   await runReleaseTests(env);

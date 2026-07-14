@@ -34,9 +34,24 @@ describe("test suite boundaries", () => {
       scripts: Record<string, string>;
     };
     const ciWorkflow = await readFile(path.join(root, ".github", "workflows", "ci.yml"), "utf8");
+    const prePushHook = await readFile(path.join(root, ".githooks", "pre-push"), "utf8");
+    const testRunner = await readFile(path.join(root, "scripts", "run-tests.ts"), "utf8");
 
+    expect(packageJson.scripts["verify:quick"]).toContain("run-tests.ts unit");
     expect(packageJson.scripts["verify:push"]).toBe("bun scripts/verify-push.ts");
     expect(packageJson.scripts.prepare).toBe("bun run hooks:install");
+    expect(prePushHook).toContain("bun run verify:quick");
+    expect(prePushHook).not.toContain("bun run verify:push");
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_");
+    expect(testRunner).toMatch(
+      /async function runUnitTests[\s\S]*?await ensureServerWorkspaceBuild\(env\)/,
+    );
+    expect(testRunner).toMatch(
+      /async function runIntegrationTests[\s\S]*?await ensureServerWorkspaceBuild\(env\)/,
+    );
+    expect(testRunner).toMatch(
+      /async function runCliCompatibilitySuite[\s\S]*?await ensureServerWorkspaceBuild\(env\)/,
+    );
+    expect(testRunner).toContain('env.OPENPOND_TEST_REUSE_BUILD === "1"');
   });
 });

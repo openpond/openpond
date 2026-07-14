@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OpenPond</h1>
-  <p><strong>Open source. Built for multiplayer.</strong></p>
+  <p><strong>Open source. Chats -> Trainable Datasets.</strong></p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
     <a href="https://www.npmjs.com/package/openpond"><img alt="npm package version" src="https://img.shields.io/npm/v/openpond?logo=npm&logoColor=white" /></a>
@@ -9,18 +9,11 @@
   </p>
 </div>
 
-OpenPond is the open-source agent harness for teams. It turns conversations into durable agents, shared workflows, and training-ready Tasksets across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
+OpenPond is an open-source harness/Desktop App/CLI that turns conversations into **durable team based agents** and **training-ready** tasks/jobs across whatever model path you want: BYOK providers, hosted OpenPond models, open source models, or the LLM subscriptions you already pay for.
 
-It gives people and agents one source-owned runtime for chats, subagents, skills, goal loops, approvals, connected apps, training evidence, and hosted sandboxes. Keep chat control, model settings, approvals, and source review local; send execution to [OpenPond Cloud](docs/public/cloud.md) when work needs clean compute, long-running processes, replayable runs, or teammate handoff.
-
-- **Model agnostic by design:** route work through Codex, BYOK providers, hosted models, open source models, or subscription-backed model access without locking the agent to one vendor.
-- **Frontier-grade orchestration:** coordinate agents, subagents, tools, goals, approvals, browser control, connected apps, and sandbox execution as one inspectable workflow.
-- **Source-owned by default:** agents and skills start as ordinary files in a local profile repo, then sync to OpenPond Cloud when you want cross-device or hosted execution.
-- **Local control, cloud execution:** review prompts, diffs, settings, and approvals locally while hosted sandboxes handle file reads, file writes, shell commands, dependency installs, actions, and long-running work.
-- **Built for teams:** share Team Chat, agents, projects, sandboxes, usage, and member limits without sharing Personal accounts or rebuilding a developer's local setup.
-- **Training from real work:** select useful chats, turn them into verifiable Tasksets, run baselines and graders, and prepare bundles for local or configured training destinations.
-
-No login required for local work. Bring your own keys, models, providers, subscriptions, and runtimes. First-class Codex support.
+- We aim to provide feature parity with the Codex (ChatGPT now?) desktop app but fully opensource and geared towards moving your work product into trainable agents/models of all levels.
+- Feel free to use this repository as a drop in replace for the Codex app, while using your OpenAI/Codex, Z.ai and any other API or subscription based LLM service. 
+- We also provide premium features related to: Team communication in app, Agent hosting on our Sandbox infra, OAUTH connections, and Managed training service (coming soon). Find out more: OpenPond Cloud [(docs)](docs/public/cloud.md)
 
 ## Features
 
