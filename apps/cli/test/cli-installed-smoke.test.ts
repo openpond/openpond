@@ -74,8 +74,14 @@ describe("CLI installed-package smoke", () => {
           timeoutMs: 1_500,
         },
       );
-      expect(result.stdout).toContain("OPENPOND_APP_SERVER_READY");
-      expect(result.terminationReason).toBe("timeout");
+      const diagnostics = [
+        `exit code: ${result.code ?? "none"}`,
+        `signal: ${result.signal ?? "none"}`,
+        `termination: ${result.terminationReason}`,
+        `stderr: ${result.stderr.trim() || "<empty>"}`,
+      ].join("\n");
+      expect(result.stdout, diagnostics).toContain("OPENPOND_APP_SERVER_READY");
+      expect(result.terminationReason, diagnostics).toBe("timeout");
     } finally {
       await Promise.all([
         rm(cwd, { recursive: true, force: true }),
