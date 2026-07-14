@@ -10,6 +10,7 @@ export async function runCommand(
     inherit?: boolean;
     timeoutMs?: number;
     maxOutputBytes?: number;
+    terminateWhenStdoutIncludes?: string;
   } = {}
 ): Promise<CommandResult> {
   return runProcessCommand(command, args, {
@@ -17,6 +18,7 @@ export async function runCommand(
     inherit: options.inherit,
     timeoutMs: options.timeoutMs,
     maxOutputBytes: options.maxOutputBytes,
+    terminateWhenStdoutIncludes: options.terminateWhenStdoutIncludes,
   });
 }
 
