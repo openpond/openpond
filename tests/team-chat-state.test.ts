@@ -9,6 +9,7 @@ import type {
 import {
   applyCanonicalMessage,
   applyOptimisticMessage,
+  applySelectedTeamChatAiThread,
   applyTeamChatEvent,
   clearCanonicalPendingMessages,
   createOptimisticMessage,
@@ -23,6 +24,31 @@ import {
 } from "../apps/web/src/hooks/team-chat-state";
 
 describe("team chat optimistic state", () => {
+  test("keeps background AI conversation updates out of the selected panel", () => {
+    const current = {
+      ...state(),
+      aiThread: { conversationId: "conversation_selected" },
+    } as TeamChatState;
+    const background = {
+      conversationId: "conversation_background",
+    } as NonNullable<TeamChatState["aiThread"]>;
+
+    expect(
+      applySelectedTeamChatAiThread(
+        current,
+        background,
+        "conversation_selected",
+      ),
+    ).toBe(current);
+    expect(
+      applySelectedTeamChatAiThread(
+        current,
+        background,
+        "conversation_background",
+      ).aiThread,
+    ).toBe(background);
+  });
+
   test("validates hosted image inputs before optimistic insertion", () => {
     const image = imageInput();
     expect(teamChatImageInputs([image])).toEqual([image]);
@@ -59,6 +85,39 @@ describe("team chat optimistic state", () => {
     expect(reconciled.detail?.messages.map((item) => item.id)).toEqual(["message_1", "message_2"]);
     expect(reconciled.detail?.thread.lastMessageId).toBe("message_2");
     expect(reconciled.threads[0]?.lastMessageId).toBe("message_2");
+  });
+
+  test("includes reply context in the optimistic message and preserves it on failure", () => {
+    const target = message({ authorUserId: "user_2", body: "Original message" });
+    const optimistic = createOptimisticMessage({
+      clientRequestId: "request_reply",
+      threadId: "thread_1",
+      teamId: "team_1",
+      userId: "user_1",
+      body: "Reply body",
+      mentionUserIds: [],
+      attachments: [],
+      replyToMessage: target,
+      sequence: 2,
+    });
+
+    expect(optimistic.refs).toEqual([
+      expect.objectContaining({
+        refType: "message_reply",
+        refId: target.id,
+        preview: expect.objectContaining({
+          authorUserId: "user_2",
+          body: "Original message",
+        }),
+      }),
+    ]);
+    expect(
+      updateOptimisticDeliveryStatus(
+        applyOptimisticMessage(state(), optimistic),
+        optimistic.clientRequestId!,
+        "failed",
+      ).detail?.messages.at(-1)?.refs,
+    ).toEqual(optimistic.refs);
   });
 
   test("removing a failed row restores both detail and sidebar thread summaries", () => {

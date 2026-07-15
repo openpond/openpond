@@ -2,10 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import type { Approval, RuntimeEvent, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../api";
 import {
-  cachedCodexHistoryThreadPayload,
-  loadCodexHistoryThreadPayload,
-} from "../lib/codex-history-thread-cache";
-import {
   activeGoalRuntimeFromSessionMetadata,
   latestGoalRuntimeFromEvents,
   latestKnownActiveGoalRuntimeFromEvents,
@@ -19,6 +15,10 @@ import { latestTurnCompletionState } from "../lib/turn-completion-state";
 import { buildRuntimeIndexes } from "../lib/runtime-indexes";
 import { useRunningSessionState } from "./useRunningSessionState";
 import type { useSidebarData } from "./useSidebarData";
+import {
+  codexHistoryPayloadWithLiveStatus,
+  subscribeCodexHistoryLiveRefresh,
+} from "../lib/codex-history-live-refresh";
 
 export function useSidebarRuntimeState(input: {
   codexHistoryEvents: RuntimeEvent[];
@@ -26,6 +26,7 @@ export function useSidebarRuntimeState(input: {
   connection: ClientConnection | null;
   expandedProjectIds: ReadonlySet<string>;
   goalRuntime: ReturnType<typeof latestGoalRuntimeFromEvents>;
+  locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
   pendingApproval: Approval | null;
   pinnedSessions: ReturnType<typeof useSidebarData>["pinnedSessions"];
   projectSessionRowsByProjectId: ReturnType<typeof useSidebarData>["projectSessionRowsByProjectId"];
@@ -44,9 +45,11 @@ export function useSidebarRuntimeState(input: {
 }) {
   const {
     codexHistoryEvents,
+    codexHistorySessions,
     connection,
     expandedProjectIds,
     goalRuntime,
+    locallyActiveCodexHistorySessionIds,
     pendingApproval,
     pinnedSessions,
     projectSessionRowsByProjectId,
@@ -86,6 +89,13 @@ export function useSidebarRuntimeState(input: {
       ids.push(session.id);
     };
 
+    for (const session of codexHistorySessions) {
+      if (session.status === "active" || locallyActiveCodexHistorySessionIds.has(session.id)) {
+        addSession(session);
+      }
+    }
+    const activeCount = ids.length;
+
     for (const item of visibleProjectRows) {
       for (const session of (projectSessionRowsByProjectId[item.id] ?? []).slice(0, 2)) {
         addSession(session);
@@ -104,9 +114,11 @@ export function useSidebarRuntimeState(input: {
     for (const session of pinnedSessions) addSession(session);
     for (const session of visibleChatRows) addSession(session);
 
-    return ids.slice(0, 8).join("\n");
+    return [...ids.slice(0, activeCount), ...ids.slice(activeCount, activeCount + 8)].join("\n");
   }, [
+    codexHistorySessions,
     expandedProjectIds,
+    locallyActiveCodexHistorySessionIds,
     pinnedSessions,
     projectSessionRowsByProjectId,
     selectedSessionId,
@@ -126,6 +138,21 @@ export function useSidebarRuntimeState(input: {
     },
     [setCodexHistorySessions],
   );
+  const codexHistoryPrefetchActiveSessionKey = useMemo(() => {
+    if (!codexHistoryPrefetchSessionKey) return "";
+    const prefetchedIds = new Set(codexHistoryPrefetchSessionKey.split("\n").filter(Boolean));
+    return sidebarSessions
+      .filter((session) => prefetchedIds.has(session.id) && session.status === "active")
+      .map((session) => session.id)
+      .join("\n");
+  }, [codexHistoryPrefetchSessionKey, sidebarSessions]);
+  const codexHistoryPrefetchLocallyActiveSessionKey = useMemo(() => {
+    if (!codexHistoryPrefetchSessionKey) return "";
+    return codexHistoryPrefetchSessionKey
+      .split("\n")
+      .filter((sessionId) => locallyActiveCodexHistorySessionIds.has(sessionId))
+      .join("\n");
+  }, [codexHistoryPrefetchSessionKey, locallyActiveCodexHistorySessionIds]);
   useEffect(() => {
     if (
       !selectedSession ||
@@ -142,38 +169,39 @@ export function useSidebarRuntimeState(input: {
   }, [applySidebarCodexHistoryPayload, codexHistoryEvents, selectedSession, selectedSessionId]);
   useEffect(() => {
     if (!connection || !codexHistoryPrefetchSessionKey) return undefined;
-    let cancelled = false;
-    const timers: number[] = [];
     const prefetchConnection = connection;
     const sessionIds = codexHistoryPrefetchSessionKey.split("\n").filter(Boolean);
+    const reportedActiveSessionIds = new Set(
+      codexHistoryPrefetchActiveSessionKey.split("\n").filter(Boolean),
+    );
+    const locallyActiveSessionIds = new Set(
+      codexHistoryPrefetchLocallyActiveSessionKey.split("\n").filter(Boolean),
+    );
 
-    const loadSidebarThread = (sessionId: string) => {
-      void loadCodexHistoryThreadPayload(prefetchConnection, sessionId)
-        .then((payload) => {
-          if (cancelled) return;
-          applySidebarCodexHistoryPayload(payload);
-        })
-        .catch(() => undefined);
-    };
-
-    sessionIds.forEach((sessionId, index) => {
-      const prefetch = () => {
-        const cachedPayload = cachedCodexHistoryThreadPayload(prefetchConnection, sessionId);
-        if (cachedPayload) applySidebarCodexHistoryPayload(cachedPayload);
-        if (!cachedPayload) loadSidebarThread(sessionId);
-      };
-      if (index === 0) {
-        prefetch();
-      } else {
-        timers.push(window.setTimeout(prefetch, Math.min(index * 250, 1000)));
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      for (const timer of timers) window.clearTimeout(timer);
-    };
-  }, [applySidebarCodexHistoryPayload, codexHistoryPrefetchSessionKey, connection]);
+    const unsubscribers = sessionIds.map((sessionId) =>
+      subscribeCodexHistoryLiveRefresh({
+        connection: prefetchConnection,
+        locallyActive: locallyActiveSessionIds.has(sessionId),
+        onPayload: (payload) =>
+          applySidebarCodexHistoryPayload(
+            codexHistoryPayloadWithLiveStatus(
+              payload,
+              locallyActiveSessionIds.has(sessionId),
+            ),
+          ),
+        reportedActive: reportedActiveSessionIds.has(sessionId),
+        sessionId,
+        surface: "sidebar",
+      }),
+    );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [
+    applySidebarCodexHistoryPayload,
+    codexHistoryPrefetchActiveSessionKey,
+    codexHistoryPrefetchLocallyActiveSessionKey,
+    codexHistoryPrefetchSessionKey,
+    connection,
+  ]);
   const sidebarSessionById = useMemo(
     () => new Map(sidebarSessions.map((session) => [session.id, session])),
     [sidebarSessions],

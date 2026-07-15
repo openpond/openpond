@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   bundledServerLaunchPort,
+  canReuseDesktopServer,
   isCompatibleDesktopServer,
   localServerPort,
   parseListeningProcessIds,
@@ -24,6 +25,32 @@ describe("desktop server compatibility", () => {
     ).toBe(false);
     expect(isCompatibleDesktopServer({ ok: true, version: "0.0.21" }, "0.0.21")).toBe(false);
     expect(isCompatibleDesktopServer(null, "0.0.21")).toBe(false);
+  });
+
+  test("does not trust an implicitly discovered server as the packaged renderer", () => {
+    const compatible = {
+      health: { ok: true, server: "openpond-app-server", version: "0.0.21" },
+      desktopVersion: "0.0.21",
+      token: "desktop-token",
+      rendererAvailable: true,
+      reuseRequested: true,
+    };
+
+    expect(canReuseDesktopServer({
+      ...compatible,
+      packaged: true,
+      explicitServerUrl: false,
+    })).toBe(false);
+    expect(canReuseDesktopServer({
+      ...compatible,
+      packaged: true,
+      explicitServerUrl: true,
+    })).toBe(true);
+    expect(canReuseDesktopServer({
+      ...compatible,
+      packaged: false,
+      explicitServerUrl: false,
+    })).toBe(true);
   });
 
   test("only considers explicit loopback ports eligible for stale-server retirement", () => {

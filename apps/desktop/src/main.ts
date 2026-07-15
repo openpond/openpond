@@ -2,7 +2,6 @@ import { app, BrowserWindow, Menu, dialog, ipcMain, shell, systemPreferences, ty
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   appDisplayName,
   appHomePath,
@@ -36,6 +35,7 @@ import { minimizeWindow } from "./desktop-window-controls.js";
 import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
 import {
   bundledServerLaunchPort,
+  canReuseDesktopServer,
   isCompatibleDesktopServer,
   stopStaleLocalDesktopServer,
   type DesktopServerHealth,
@@ -210,7 +210,9 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
 async function ensureServer(): Promise<ServerConnection> {
   const desktopVersion = app.getVersion();
   if (connection) {
-    if (isCompatibleDesktopServer(await health(connection.serverUrl), desktopVersion)) {
+    const connectionCompatible = isCompatibleDesktopServer(await health(connection.serverUrl), desktopVersion);
+    const packagedRendererAvailable = !app.isPackaged || await urlAvailable(connection.serverUrl);
+    if (connectionCompatible && packagedRendererAvailable) {
       return connection;
     }
     await backendManager.stopServer();
@@ -221,14 +223,21 @@ async function ensureServer(): Promise<ServerConnection> {
   }
   const serverPort = defaultServerPort();
   const existingUrl = process.env.OPENPOND_SERVER_URL || `http://127.0.0.1:${serverPort}`;
-  const existingToken = await readToken();
-  const existingHealth = await health(existingUrl);
   const explicitServerUrl = Boolean(process.env.OPENPOND_SERVER_URL);
-  const shouldReuseExistingServer =
-    existingToken &&
-    isCompatibleDesktopServer(existingHealth, desktopVersion) &&
-    (explicitServerUrl || app.isPackaged || process.env.OPENPOND_REUSE_SERVER === "1");
-  if (shouldReuseExistingServer) {
+  const existingToken = await readToken();
+  const existingHealth = app.isPackaged && !explicitServerUrl ? null : await health(existingUrl);
+  const existingServerCompatible = isCompatibleDesktopServer(existingHealth, desktopVersion);
+  const existingRendererAvailable = !app.isPackaged || (existingServerCompatible && await urlAvailable(existingUrl));
+  const shouldReuseExistingServer = canReuseDesktopServer({
+    health: existingHealth,
+    desktopVersion,
+    token: existingToken,
+    packaged: app.isPackaged,
+    explicitServerUrl,
+    reuseRequested: process.env.OPENPOND_REUSE_SERVER === "1",
+    rendererAvailable: existingRendererAvailable,
+  });
+  if (shouldReuseExistingServer && existingToken) {
     desktopLogger().info("reusing existing server", { serverUrl: existingUrl });
     serverProcessSampler.stop();
     backendManager.useReusedServer();
@@ -237,21 +246,33 @@ async function ensureServer(): Promise<ServerConnection> {
   }
 
   if (explicitServerUrl && existingHealth?.ok) {
-    throw new Error(
-      `Configured OpenPond server version ${existingHealth.version ?? "unknown"} does not match Desktop ${desktopVersion}.`,
-    );
+    if (!existingServerCompatible) {
+      throw new Error(
+        `Configured OpenPond server version ${existingHealth.version ?? "unknown"} does not match Desktop ${desktopVersion}.`,
+      );
+    }
+    if (app.isPackaged && existingServerCompatible && !existingRendererAvailable) {
+      throw new Error(`Configured OpenPond server ${existingUrl} does not serve the packaged renderer.`);
+    }
+    throw new Error(`Configured OpenPond server ${existingUrl} does not have a capability token.`);
   }
 
-  let launchPort = serverPort;
+  let launchPort = app.isPackaged ? 0 : serverPort;
   if (existingHealth?.ok) {
-    desktopLogger().warn("incompatible existing server", {
+    const rendererMissing = app.isPackaged && existingServerCompatible && !existingRendererAvailable;
+    const warning = rendererMissing
+      ? "existing server does not serve packaged renderer"
+      : "incompatible existing server";
+    desktopLogger().warn(warning, {
       serverUrl: existingUrl,
       desktopVersion,
       serverVersion: existingHealth.version ?? null,
       serverName: existingHealth.server ?? null,
     });
     const retirement =
-      existingToken && existingHealth.server === "openpond-app-server"
+      !rendererMissing &&
+      existingToken &&
+      existingHealth.server === "openpond-app-server"
         ? await stopStaleLocalDesktopServer(existingUrl)
         : { stopped: false, processIds: [] };
     desktopLogger()[retirement.stopped ? "info" : "warn"]("stale server retirement", {
@@ -403,9 +424,8 @@ async function loadMainWindow(window: BrowserWindow): Promise<void> {
       trustedRendererUrl = await ensureRenderer();
       await window.loadURL(trustedRendererUrl);
     } else {
-      const rendererPath = path.join(process.resourcesPath, "web", "index.html");
-      trustedRendererUrl = pathToFileURL(rendererPath).toString();
-      await window.loadFile(rendererPath);
+      trustedRendererUrl = rendererUrlForDesktop(server.serverUrl);
+      await window.loadURL(trustedRendererUrl);
     }
     desktopLogger().info("main window loaded", { packaged: app.isPackaged });
     ensureBrowserControlWorker(server);
@@ -521,7 +541,6 @@ function assertTrustedDesktopIpcEvent(event: Electron.IpcMainInvokeEvent): void 
   if (!isTrustedDesktopIpcFrameUrl({
     frameUrl,
     packaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
     trustedRendererUrl,
   })) {
     throw new Error("Untrusted IPC origin.");

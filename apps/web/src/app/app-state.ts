@@ -22,12 +22,23 @@ export type AppToast = {
   actionLabel?: string;
   onAction?: () => void;
   persistent?: boolean;
+  dismissible?: boolean;
+  durationMs?: number;
+  placement?: "bottom-right" | "top-right";
 };
 
 export type ShowAppToast = (
   message: string,
   tone?: AppToast["tone"],
-  options?: Pick<AppToast, "actionLabel" | "onAction" | "persistent">,
+  options?: Pick<
+    AppToast,
+    | "actionLabel"
+    | "onAction"
+    | "persistent"
+    | "dismissible"
+    | "durationMs"
+    | "placement"
+  >,
 ) => number;
 
 export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";

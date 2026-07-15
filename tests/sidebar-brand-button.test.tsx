@@ -8,7 +8,7 @@ describe("Sidebar brand button", () => {
     const markup = renderToStaticMarkup(<SidebarBrandButton onOpenHome={() => undefined} />);
 
     expect(markup).toContain('<button type="button" class="sidebar-wordmark-button" aria-label="OpenPond home">');
-    expect(markup).toContain('src="/openpond-wordlogo-white.png" alt=""');
+    expect(markup).toContain('src="./openpond-wordlogo-white.png" alt=""');
   });
 
   test("opens home when activated", () => {

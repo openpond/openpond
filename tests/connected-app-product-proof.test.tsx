@@ -80,10 +80,10 @@ describe("connected app product proof", () => {
 
     expect(options.map((option) => option.provider)).toEqual(["google", "github", "x"]);
     expect(markup).toContain("Google");
-    expect(markup).toContain("/connected-apps/google.svg");
+    expect(markup).toContain("./connected-apps/google.svg");
     expect(markup).toContain("Read Drive files");
     expect(markup).toContain("X");
-    expect(markup).toContain("/connected-apps/x.svg");
+    expect(markup).toContain("./connected-apps/x.svg");
     expect(markup).toContain("Read profile");
     expect(markup).not.toContain("Microsoft Teams");
     expect(markup).not.toContain("conn_google");

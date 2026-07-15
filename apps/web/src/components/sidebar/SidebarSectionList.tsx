@@ -101,9 +101,12 @@ export function SidebarSectionList({
   teamChatEnabled,
   teamChatOrganization,
   teamChatLoading = false,
+  teamNotificationMode,
   currentUserId,
   teamMembers = [],
   teamThreads = [],
+  setTeamNotificationMode,
+  setTeamThreadMuted,
   selectedProjectId,
   selectedSessionId,
   sidebarProjectIdBySessionId,
@@ -420,6 +423,9 @@ export function SidebarSectionList({
         members={teamMembers}
         openTeamDm={openTeamDm}
         organization={teamChatOrganization}
+        notificationMode={teamNotificationMode}
+        onNotificationModeChange={setTeamNotificationMode}
+        onThreadMuteChange={setTeamThreadMuted}
         selectedTeamThreadId={selectedTeamThreadId}
         selectTeamThread={selectTeamThread}
         threads={teamThreads}

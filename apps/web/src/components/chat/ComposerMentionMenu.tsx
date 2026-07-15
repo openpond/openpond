@@ -7,6 +7,7 @@ import {
   actionMentionLabel,
 } from "../../lib/action-mentions";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
+import { connectedAppIconUrl } from "../../lib/public-assets";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 
 export type ComposerMentionMenuItem =
@@ -60,12 +61,7 @@ function mentionMenuIcon(item: ComposerMentionMenuItem) {
 }
 
 function connectedAppProviderIconSrc(provider: ConnectedAppMentionOption["provider"]): string {
-  if (provider === "slack") return "/connected-apps/slack.svg";
-  if (provider === "microsoft_teams") return "/connected-apps/microsoft.svg";
-  if (provider === "github") return "/connected-apps/github.svg";
-  if (provider === "google") return "/connected-apps/google.svg";
-  if (provider === "x") return "/connected-apps/x.svg";
-  return "/connected-apps/openpond-mcp.svg";
+  return connectedAppIconUrl(provider);
 }
 
 export function ComposerMentionMenu({

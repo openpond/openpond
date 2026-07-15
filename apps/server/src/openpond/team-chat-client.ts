@@ -10,6 +10,7 @@ import {
   TeamChatMessageSchema,
   TeamChatRealtimeSessionSchema,
   TeamChatThreadDetailSchema,
+  TeamChatThreadMuteResultSchema,
   TeamChatThreadSchema,
   type TeamChatAiTurn,
   type TeamChatAgentCatalogEntry,
@@ -25,6 +26,7 @@ import {
   type TeamChatRealtimeSession,
   type TeamChatThread,
   type TeamChatThreadDetail,
+  type TeamChatThreadMuteResult,
 } from "@openpond/contracts";
 import { loadOpenPondAccountContext, type RuntimeAccountContext } from "@openpond/runtime";
 import { z } from "zod";
@@ -55,10 +57,12 @@ export type TeamChatRequestAction =
       clientRequestId: string;
       mentionUserIds?: string[];
       attachmentIds?: string[];
+      replyToMessageId?: string | null;
     }
   | { type: "message_edit"; teamId: string; threadId: string; messageId: string; body: string }
   | { type: "message_delete"; teamId: string; threadId: string; messageId: string }
   | { type: "read"; teamId: string; threadId: string; sequence: number }
+  | { type: "thread_mute"; teamId: string; threadId: string; muted: boolean }
   | {
       type: "agent_run_create";
       teamId: string;
@@ -108,6 +112,7 @@ export type TeamChatRequestResult =
   | { agents: TeamChatAgentCatalogEntry[] }
   | { threads: TeamChatThread[] }
   | TeamChatThreadDetail
+  | TeamChatThreadMuteResult
   | TeamChatMessage
   | TeamChatHostedAiThread
   | TeamChatAiTurn
@@ -269,6 +274,7 @@ function requestForAction(action: TeamChatRequestAction): {
         clientRequestId: action.clientRequestId,
         mentionUserIds: action.mentionUserIds ?? [],
         attachmentIds: action.attachmentIds ?? [],
+        replyToMessageId: action.replyToMessageId ?? null,
       });
     case "message_edit":
       return jsonRequest(
@@ -286,6 +292,11 @@ function requestForAction(action: TeamChatRequestAction): {
       return post(`/v1/team-chat/threads/${encodeURIComponent(action.threadId)}/read`, {
         teamId: action.teamId,
         sequence: action.sequence,
+      });
+    case "thread_mute":
+      return post(`/v1/team-chat/threads/${encodeURIComponent(action.threadId)}/mute`, {
+        teamId: action.teamId,
+        muted: action.muted,
       });
     case "agent_run_create":
       return post(`/v1/team-chat/threads/${encodeURIComponent(action.threadId)}/agent-runs`, {
@@ -375,6 +386,8 @@ function schemaForAction(action: TeamChatRequestAction): z.ZodType {
       return TeamChatMessageSchema;
     case "read":
       return ReadResponseSchema;
+    case "thread_mute":
+      return TeamChatThreadMuteResultSchema;
     case "agent_run_create":
       return AgentRunResponseSchema;
     case "agent_run":

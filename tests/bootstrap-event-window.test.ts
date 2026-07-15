@@ -58,6 +58,18 @@ describe("bootstrap event window", () => {
         hasMoreBefore: true,
       });
 
+      const stream = await readReadyEventStream(
+        server.url,
+        server.token,
+        bootstrap.eventWindow.latestSequence,
+      );
+      expect(stream.contentType).toBe("text/event-stream; charset=utf-8");
+      expect(stream.cacheControl).toBe("no-cache, no-transform");
+      expect(stream.buffering).toBe("no");
+      expect(stream.body).toContain("retry: 1500\n\n");
+      expect(stream.body).toContain("event: ready");
+      expect(stream.body).not.toContain("event: runtime");
+
       const firstPage = await api<RuntimeEventPagePayload>(
         server.url,
         server.token,
@@ -146,6 +158,49 @@ describe("bootstrap event window", () => {
     }
   }, 10_000);
 });
+
+async function readReadyEventStream(
+  serverUrl: string,
+  token: string,
+  afterSequence: number,
+): Promise<{
+  body: string;
+  buffering: string | null;
+  cacheControl: string | null;
+  contentType: string | null;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2_000);
+  try {
+    const response = await fetch(`${serverUrl}/v1/events?afterSequence=${afterSequence}`, {
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok || !response.body) {
+      throw new Error(`event stream failed: ${response.status}`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let body = "";
+    while (!body.includes("event: ready")) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      body += decoder.decode(value, { stream: true });
+    }
+    return {
+      body,
+      buffering: response.headers.get("x-accel-buffering"),
+      cacheControl: response.headers.get("cache-control"),
+      contentType: response.headers.get("content-type"),
+    };
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
+  }
+}
 
 function sessionFixture(id: string, overrides: Partial<Session> = {}): Session {
   return {

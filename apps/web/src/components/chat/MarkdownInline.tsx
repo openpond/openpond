@@ -5,6 +5,7 @@ import type { LocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
 import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { WorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { matchChatFilePathAt, normalizeChatFilePath } from "../../lib/chat-file-links";
+import { publicAssetUrl } from "../../lib/public-assets";
 import { isWorkspaceImagePath, workspaceFileName } from "../../lib/workspace-images";
 
 export type ImageLinkPreview = {
@@ -622,7 +623,7 @@ function publicAssetImageUrlFromPath(value: string, workspaceRootPath: string | 
   if (!workspacePath?.startsWith(publicPrefix)) return null;
   const publicPath = workspacePath.slice(publicPrefix.length);
   if (!publicPath || !isPublicImagePath(publicPath)) return null;
-  return `/${publicPath.split("/").map(encodeURIComponent).join("/")}`;
+  return publicAssetUrl(publicPath.split("/").map(encodeURIComponent).join("/"));
 }
 
 function isPublicImagePath(path: string): boolean {

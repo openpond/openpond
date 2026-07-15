@@ -127,6 +127,7 @@ type UseChatActionsInput = {
   setMentionedAppId: Dispatch<SetStateAction<string | null>>;
   setCodexHistoryEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
+  onCodexHistoryTurnActivityChange?: (sessionId: string, active: boolean) => void;
   onCodexHistoryTurnPayload?: (payload: CodexHistoryTurnPayload) => void;
   onPendingUserMessage?: (message: PendingChatUserMessage) => void;
   onClearPendingUserMessage?: (sessionId: string, messageId: string) => void;
@@ -304,6 +305,7 @@ export function useChatActions({
   setMentionedAppId,
   setCodexHistoryEvents,
   setCodexHistorySessions,
+  onCodexHistoryTurnActivityChange,
   onCodexHistoryTurnPayload,
   onPendingUserMessage,
   onClearPendingUserMessage,
@@ -780,6 +782,7 @@ export function useChatActions({
         clearPromptForTurn();
         turnSessionId = session.id;
         activeTurnSessionIdsRef.current.add(turnSessionId);
+        onCodexHistoryTurnActivityChange?.(turnSessionId, true);
         const optimisticStartedEvent = optimisticCodexHistoryTurnStartedEvent(session.id, value);
         const applyOptimisticEvent = (event: RuntimeEvent) => {
           if (!explicitTurnContext || selectedSession?.id === session!.id) {
@@ -992,6 +995,9 @@ export function useChatActions({
       return false;
     } finally {
       if (turnSessionId) activeTurnSessionIdsRef.current.delete(turnSessionId);
+      if (turnSessionId && isCodexHistorySessionId(turnSessionId)) {
+        onCodexHistoryTurnActivityChange?.(turnSessionId, false);
+      }
       if (turnSessionId) {
         if (isCodexHistorySessionId(turnSessionId)) {
           setCodexHistorySessions((current) =>

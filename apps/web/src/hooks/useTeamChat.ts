@@ -11,6 +11,7 @@ import { openTeamChatRealtime } from "../api/team-chat-realtime";
 import {
   applyCanonicalMessage,
   applyOptimisticMessage,
+  applySelectedTeamChatAiThread,
   applyTeamChatEvent,
   clearCanonicalPendingMessages,
   createOptimisticMessage,
@@ -30,6 +31,14 @@ import {
   type TeamChatState,
 } from "./team-chat-state";
 import { teamChatErrorMessage } from "../lib/team-chat-error";
+import {
+  readTeamChatNotificationMode,
+  shouldNotifyForTeamChatMessage,
+  teamChatIncomingNotification,
+  writeTeamChatNotificationMode,
+  type TeamChatIncomingNotification,
+  type TeamChatNotificationMode,
+} from "../lib/team-chat-notifications";
 
 const INITIAL_STATE: TeamChatState = {
   members: [],
@@ -124,16 +133,38 @@ export function useTeamChat(input: {
   refreshToken?: string | null;
 }) {
   const [state, setState] = useState<TeamChatState>(INITIAL_STATE);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const [notificationMode, setNotificationModeState] =
+    useState<TeamChatNotificationMode>(readTeamChatNotificationMode);
+  const [incomingNotification, setIncomingNotification] =
+    useState<TeamChatIncomingNotification | null>(null);
   const selectedThreadIdRef = useRef<string | null>(null);
   const aiConversationIdRef = useRef<string | null>(null);
+  const aiSelectionVersionRef = useRef(0);
+  const aiRefreshVersionsRef = useRef(new Map<string, number>());
+  const threadRefreshVersionsRef = useRef(new Map<string, number>());
+  const threadSelectionVersionRef = useRef(0);
   const agentRunIdRef = useRef<string | null>(null);
   const eventCursorRef = useRef(0);
   const seenEventIdsRef = useRef(new Set<number>());
+  const latestNotifiedEventIdRef = useRef(0);
   const catchupRunningRef = useRef(false);
   const pendingMessagesRef = useRef(new Map<string, TeamChatMessage>());
   const pendingAttachmentsRef = useRef(new Map<string, PendingAttachmentState>());
   const [realtimeSession, setRealtimeSession] = useState<TeamChatRealtimeSession | null>(null);
   const [realtimeBootstrapTeamId, setRealtimeBootstrapTeamId] = useState<string | null>(null);
+
+  const setNotificationMode = useCallback((mode: TeamChatNotificationMode) => {
+    setNotificationModeState(mode);
+    writeTeamChatNotificationMode(mode);
+  }, []);
+
+  const dismissIncomingNotification = useCallback((eventId: number) => {
+    setIncomingNotification((current) =>
+      current?.eventId === eventId ? null : current,
+    );
+  }, []);
 
   const refreshThreads = useCallback(async () => {
     if (!input.connection || !input.teamId) return [];
@@ -163,6 +194,8 @@ export function useTeamChat(input: {
     async (threadId?: string | null) => {
       const id = threadId ?? selectedThreadIdRef.current;
       if (!input.connection || !input.teamId || !id) return null;
+      const refreshVersion = (threadRefreshVersionsRef.current.get(id) ?? 0) + 1;
+      threadRefreshVersionsRef.current.set(id, refreshVersion);
       const hostedDetail = await api.teamChatThread(input.connection, input.teamId, id);
       clearCanonicalPendingMessages(
         hostedDetail.messages,
@@ -170,6 +203,7 @@ export function useTeamChat(input: {
         pendingAttachmentsRef.current,
       );
       const detail = mergePendingThreadDetail(hostedDetail, pendingMessagesRef.current);
+      if (threadRefreshVersionsRef.current.get(id) !== refreshVersion) return detail;
       setState((current) =>
         current.selectedThreadId === id
           ? {
@@ -179,7 +213,10 @@ export function useTeamChat(input: {
             }
           : current,
       );
-      if (detail.thread.lastMessageSequence > 0) {
+      if (
+        selectedThreadIdRef.current === id &&
+        detail.thread.lastMessageSequence > 0
+      ) {
         await api
           .markTeamChatRead(input.connection, id, input.teamId, detail.thread.lastMessageSequence)
           .catch(() => undefined);
@@ -193,10 +230,21 @@ export function useTeamChat(input: {
     async (conversationId?: string | null) => {
       const id = conversationId ?? aiConversationIdRef.current;
       if (!input.connection || !input.teamId || !id) return null;
+      const refreshVersion = (aiRefreshVersionsRef.current.get(id) ?? 0) + 1;
+      aiRefreshVersionsRef.current.set(id, refreshVersion);
       const thread = await api.teamChatAiThread(input.connection, input.teamId, id);
-      setState((current) =>
-        current.aiThread?.conversationId === id ? { ...current, aiThread: thread } : current,
-      );
+      if (
+        aiRefreshVersionsRef.current.get(id) === refreshVersion &&
+        aiConversationIdRef.current === id
+      ) {
+        setState((current) =>
+          applySelectedTeamChatAiThread(
+            current,
+            thread,
+            aiConversationIdRef.current,
+          ),
+        );
+      }
       return thread;
     },
     [input.connection, input.teamId],
@@ -226,10 +274,6 @@ export function useTeamChat(input: {
   }, [state.selectedThreadId]);
 
   useEffect(() => {
-    aiConversationIdRef.current = state.aiThread?.conversationId ?? null;
-  }, [state.aiThread?.conversationId]);
-
-  useEffect(() => {
     agentRunIdRef.current = state.agentConversation?.run.id ?? null;
   }, [state.agentConversation?.run.id]);
 
@@ -251,17 +295,25 @@ export function useTeamChat(input: {
       setRealtimeBootstrapTeamId(null);
       pendingAttachmentsRef.current.clear();
       pendingMessagesRef.current.clear();
+      threadRefreshVersionsRef.current.clear();
+      aiRefreshVersionsRef.current.clear();
+      threadSelectionVersionRef.current += 1;
+      setIncomingNotification(null);
       seenEventIdsRef.current.clear();
+      latestNotifiedEventIdRef.current = 0;
       eventCursorRef.current = 0;
       return;
     }
     let cancelled = false;
     aiConversationIdRef.current = null;
+    aiSelectionVersionRef.current += 1;
+    threadSelectionVersionRef.current += 1;
     setRealtimeSession(null);
     setRealtimeBootstrapTeamId(null);
     pendingAttachmentsRef.current.clear();
     pendingMessagesRef.current.clear();
     seenEventIdsRef.current.clear();
+    latestNotifiedEventIdRef.current = 0;
     setState((current) => ({
       ...current,
       aiThread: null,
@@ -334,6 +386,44 @@ export function useTeamChat(input: {
         if (typeof oldest === "number") seenEventIdsRef.current.delete(oldest);
       }
       const message = messageFromEvent(event);
+      if (message && event.type === "message.created") {
+        const snapshot = stateRef.current;
+        const thread = snapshot.threads.find(
+          (candidate) => candidate.id === message.threadId,
+        ) ?? (snapshot.detail?.thread.id === message.threadId
+          ? snapshot.detail.thread
+          : null);
+        const notify = (sourceThread: NonNullable<typeof thread>) => {
+          if (event.id <= latestNotifiedEventIdRef.current) return;
+          if (!shouldNotifyForTeamChatMessage({
+            mode: notificationMode,
+            currentUserId: input.currentUserId,
+            message,
+            thread: sourceThread,
+          })) return;
+          latestNotifiedEventIdRef.current = event.id;
+          setIncomingNotification(teamChatIncomingNotification({
+            eventId: event.id,
+            message,
+            thread: sourceThread,
+            members: snapshot.members,
+          }));
+        };
+        if (thread) {
+          notify(thread);
+        } else {
+          // A DM's first message can arrive immediately after thread.created,
+          // before the asynchronous directory refresh has added the thread.
+          void refreshThreads()
+            .then((threads) => {
+              const createdThread = threads.find(
+                (candidate) => candidate.id === message.threadId,
+              );
+              if (createdThread) notify(createdThread);
+            })
+            .catch(() => undefined);
+        }
+      }
       if (message?.clientRequestId && !message.id.startsWith("pending:")) {
         pendingMessagesRef.current.delete(message.clientRequestId);
         pendingAttachmentsRef.current.delete(message.clientRequestId);
@@ -371,6 +461,7 @@ export function useTeamChat(input: {
       input.connection,
       input.currentUserId,
       input.teamId,
+      notificationMode,
       refreshAiThread,
       refreshThread,
       refreshThreads,
@@ -467,9 +558,14 @@ export function useTeamChat(input: {
   const selectThread = useCallback(
     async (threadId: string) => {
       if (!input.connection || !input.teamId) return;
+      const selectionVersion = threadSelectionVersionRef.current + 1;
+      threadSelectionVersionRef.current = selectionVersion;
       const threadChanged = selectedThreadIdRef.current !== threadId;
       selectedThreadIdRef.current = threadId;
-      if (threadChanged) aiConversationIdRef.current = null;
+      if (threadChanged) {
+        aiSelectionVersionRef.current += 1;
+        aiConversationIdRef.current = null;
+      }
       setState((current) => ({
         ...current,
         threads: clearTeamChatThreadUnreadCount(current.threads, threadId),
@@ -485,6 +581,12 @@ export function useTeamChat(input: {
       }));
       try {
         const hostedDetail = await api.teamChatThread(input.connection, input.teamId, threadId);
+        if (
+          threadSelectionVersionRef.current !== selectionVersion ||
+          selectedThreadIdRef.current !== threadId
+        ) {
+          return;
+        }
         clearCanonicalPendingMessages(
           hostedDetail.messages,
           pendingMessagesRef.current,
@@ -506,6 +608,7 @@ export function useTeamChat(input: {
           )
           .catch(() => undefined);
       } catch (error) {
+        if (threadSelectionVersionRef.current !== selectionVersion) return;
         setState((current) => ({ ...current, loading: false, error: errorMessage(error) }));
       }
     },
@@ -515,9 +618,12 @@ export function useTeamChat(input: {
   const openDm = useCallback(
     async (otherUserId: string) => {
       if (!input.connection || !input.teamId) return null;
+      const selectionVersion = threadSelectionVersionRef.current + 1;
+      threadSelectionVersionRef.current = selectionVersion;
       setState((current) => ({ ...current, busy: true, error: null }));
       try {
         const hostedDetail = await api.teamChatDm(input.connection, input.teamId, otherUserId);
+        if (threadSelectionVersionRef.current !== selectionVersion) return null;
         clearCanonicalPendingMessages(
           hostedDetail.messages,
           pendingMessagesRef.current,
@@ -526,7 +632,10 @@ export function useTeamChat(input: {
         const detail = mergePendingThreadDetail(hostedDetail, pendingMessagesRef.current);
         const threadChanged = selectedThreadIdRef.current !== detail.thread.id;
         selectedThreadIdRef.current = detail.thread.id;
-        if (threadChanged) aiConversationIdRef.current = null;
+        if (threadChanged) {
+          aiSelectionVersionRef.current += 1;
+          aiConversationIdRef.current = null;
+        }
         setState((current) => ({
           ...current,
           selectedThreadId: detail.thread.id,
@@ -544,6 +653,7 @@ export function useTeamChat(input: {
         await refreshThreads();
         return detail;
       } catch (error) {
+        if (threadSelectionVersionRef.current !== selectionVersion) return null;
         setState((current) => ({ ...current, busy: false, error: errorMessage(error) }));
         return null;
       }
@@ -597,6 +707,7 @@ export function useTeamChat(input: {
       modelId: string;
       mentionUserIds?: string[];
       attachments?: ChatAttachment[];
+      replyToMessage?: TeamChatMessage | null;
       selectedActionKey?: string | null;
       approvalId?: string | null;
     }): Promise<boolean> => {
@@ -617,6 +728,19 @@ export function useTeamChat(input: {
       ) {
         return false;
       }
+      if (
+        params.replyToMessage &&
+        (params.replyToMessage.threadId !== threadId ||
+          params.replyToMessage.teamId !== input.teamId ||
+          params.replyToMessage.id.startsWith("pending:") ||
+          Boolean(params.replyToMessage.deletedAt))
+      ) {
+        setState((current) => ({
+          ...current,
+          error: "That message is no longer available to reply to.",
+        }));
+        return false;
+      }
       if (params.useModel) {
         if (attachments.length > 0) {
           setState((current) => ({
@@ -625,6 +749,7 @@ export function useTeamChat(input: {
           }));
           return false;
         }
+        const selectionVersion = aiSelectionVersionRef.current;
         setState((current) => ({ ...current, busy: true, error: null }));
         try {
           const aiThread = await api.createTeamChatAiThread(input.connection, threadId, {
@@ -634,8 +759,17 @@ export function useTeamChat(input: {
             providerId: params.providerId,
             modelId: params.modelId,
           });
-          aiConversationIdRef.current = aiThread.conversationId;
-          setState((current) => ({ ...current, aiThread }));
+          const selectCreatedConversation =
+            aiSelectionVersionRef.current === selectionVersion &&
+            selectedThreadIdRef.current === threadId;
+          if (selectCreatedConversation) {
+            aiSelectionVersionRef.current += 1;
+            aiConversationIdRef.current = aiThread.conversationId;
+          }
+          setState((current) => ({
+            ...current,
+            aiThread: selectCreatedConversation ? aiThread : current.aiThread,
+          }));
           if (aiThread.activeTurn) {
             await api.executeTeamChatAiTurn(input.connection, aiThread.activeTurn.id, input.teamId);
           }
@@ -694,6 +828,7 @@ export function useTeamChat(input: {
         body: params.body.trim(),
         mentionUserIds: params.mentionUserIds ?? [],
         attachments,
+        replyToMessage: params.replyToMessage,
         sequence: (state.detail?.thread.lastMessageSequence ?? 0) + 1,
       });
       pendingMessagesRef.current.set(clientRequestId, optimistic);
@@ -728,6 +863,7 @@ export function useTeamChat(input: {
           clientRequestId,
           mentionUserIds: params.mentionUserIds,
           attachmentIds: uploaded.map((attachment) => attachment.id),
+          replyToMessageId: params.replyToMessage?.id ?? null,
         });
         pendingAttachmentsRef.current.delete(clientRequestId);
         pendingMessagesRef.current.delete(clientRequestId);
@@ -739,7 +875,7 @@ export function useTeamChat(input: {
           ...markOptimisticMessageFailed(current, clientRequestId),
           error: errorMessage(error),
         }));
-        return true;
+        return false;
       }
     },
     [
@@ -755,12 +891,23 @@ export function useTeamChat(input: {
   const openAiThread = useCallback(
     async (conversationId: string) => {
       if (!input.connection || !input.teamId) return;
+      aiSelectionVersionRef.current += 1;
       aiConversationIdRef.current = conversationId;
-      setState((current) => ({ ...current, busy: true, error: null }));
+      setState((current) => ({
+        ...current,
+        aiThread:
+          current.aiThread?.conversationId === conversationId
+            ? current.aiThread
+            : null,
+        busy: true,
+        error: null,
+      }));
       try {
         const aiThread = await api.teamChatAiThread(input.connection, input.teamId, conversationId);
+        if (aiConversationIdRef.current !== conversationId) return;
         setState((current) => ({ ...current, aiThread, busy: false }));
       } catch (error) {
+        if (aiConversationIdRef.current !== conversationId) return;
         setState((current) => ({ ...current, busy: false, error: errorMessage(error) }));
       }
     },
@@ -862,6 +1009,7 @@ export function useTeamChat(input: {
   );
 
   const closeAiThread = useCallback(() => {
+    aiSelectionVersionRef.current += 1;
     aiConversationIdRef.current = null;
     setState((current) => ({ ...current, aiThread: null }));
   }, []);
@@ -880,7 +1028,14 @@ export function useTeamChat(input: {
           providerId: params.providerId,
           modelId: params.modelId,
         });
-        setState((current) => ({ ...current, aiThread, busy: false }));
+        setState((current) => ({
+          ...applySelectedTeamChatAiThread(
+            current,
+            aiThread,
+            aiConversationIdRef.current,
+          ),
+          busy: false,
+        }));
         if (aiThread.activeTurn) {
           await api.executeTeamChatAiTurn(input.connection, aiThread.activeTurn.id, input.teamId);
         }
@@ -954,6 +1109,7 @@ export function useTeamChat(input: {
           )
         : [];
       const pendingAttachments = pendingAttachmentsRef.current.get(message.clientRequestId);
+      const replyRef = message.refs.find((ref) => ref.refType === "message_reply");
       updatePendingMessageDelivery(pendingMessagesRef.current, message.clientRequestId, "sending");
       setState((current) =>
         updateOptimisticDeliveryStatus(current, message.clientRequestId!, "sending"),
@@ -990,6 +1146,7 @@ export function useTeamChat(input: {
           clientRequestId: message.clientRequestId,
           mentionUserIds,
           attachmentIds: uploaded.map((attachment) => attachment.id),
+          replyToMessageId: replyRef?.refId ?? null,
         });
         pendingAttachmentsRef.current.delete(message.clientRequestId);
         pendingMessagesRef.current.delete(message.clientRequestId);
@@ -1014,9 +1171,51 @@ export function useTeamChat(input: {
     setState((current) => removeOptimisticMessage(current, message.id));
   }, []);
 
+  const setThreadMuted = useCallback(
+    async (threadId: string, muted: boolean): Promise<boolean> => {
+      if (!input.connection || !input.teamId) return false;
+      try {
+        const result = await api.setTeamChatThreadMuted(
+          input.connection,
+          threadId,
+          input.teamId,
+          muted,
+        );
+        const applyMute = <Thread extends { id: string; mutedAt: string | null }>(
+          thread: Thread,
+        ): Thread =>
+          thread.id === result.threadId
+            ? { ...thread, mutedAt: result.mutedAt }
+            : thread;
+        setState((current) => ({
+          ...current,
+          threads: current.threads.map(applyMute),
+          detail:
+            current.detail?.thread.id === result.threadId
+              ? {
+                  ...current.detail,
+                  thread: applyMute(current.detail.thread),
+                }
+              : current.detail,
+          error: null,
+        }));
+        return true;
+      } catch (error) {
+        setState((current) => ({ ...current, error: errorMessage(error) }));
+        return false;
+      }
+    },
+    [input.connection, input.teamId],
+  );
+
   return {
     ...state,
     currentUserId: input.currentUserId,
+    notificationMode,
+    incomingNotification,
+    setNotificationMode,
+    dismissIncomingNotification,
+    setThreadMuted,
     selectThread,
     openDm,
     loadMoreMessages,

@@ -895,8 +895,8 @@ describe("chat message projection", () => {
     expect(html).toContain("There are 13 image files");
     expect(html).toContain("markdown-file-image-reference");
     expect(html).toContain("markdown-file-image-preview ready");
-    expect(html).toContain('src="/openpond-icon.png"');
-    expect(html).toContain('src="/connected-apps/github.svg"');
+    expect(html).toContain('src="./openpond-icon.png"');
+    expect(html).toContain('src="./connected-apps/github.svg"');
   });
 
   test("projects create pipeline turn metadata into a review message", () => {

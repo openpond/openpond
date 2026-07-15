@@ -1,23 +1,26 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../api";
-import {
-  cachedCodexHistoryThreadPayload,
-  loadCodexHistoryThreadPayload,
-  type CodexHistoryThreadPayload,
-} from "../lib/codex-history-thread-cache";
-import { latestGoalRuntimeFromEvents } from "../lib/goal-runtime";
+import type { CodexHistoryThreadPayload } from "../lib/codex-history-thread-cache";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
+import {
+  codexHistoryPayloadWithLiveStatus,
+  subscribeCodexHistoryLiveRefresh,
+} from "../lib/codex-history-live-refresh";
 
 export function useCodexHistoryEvents({
   connection,
   selectedSessionId,
+  selectedSessionLocallyActive,
+  selectedSessionStatus,
   setCodexHistorySessions,
   setError,
 }: {
   connection: ClientConnection | null;
   selectedSessionId: string | null;
+  selectedSessionLocallyActive: boolean;
+  selectedSessionStatus: Session["status"] | null | undefined;
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
 }) {
@@ -32,48 +35,36 @@ export function useCodexHistoryEvents({
     const historySessionId = selectedSessionId;
     if (!historySessionId) return undefined;
     setError((current) => (current === "Session not found" ? null : current));
-    let cancelled = false;
-    let refreshTimer: number | null = null;
-    let loadedThread = false;
+    const locallyActive = selectedSessionLocallyActive;
 
     const applyPayload = (payload: CodexHistoryThreadPayload) => {
-      setCodexHistoryEvents(payload.events);
+      const livePayload = codexHistoryPayloadWithLiveStatus(payload, locallyActive);
+      setCodexHistoryEvents(livePayload.events);
       setError((current) => (current === "Session not found" ? null : current));
       setCodexHistorySessions((current) =>
-        upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
+        upsertSessionPreservingLocalSidebarStateAndRecency(current, livePayload.session),
       );
     };
 
-    const cachedPayload = cachedCodexHistoryThreadPayload(connection, historySessionId);
-    if (cachedPayload) {
-      loadedThread = true;
-      applyPayload(cachedPayload);
-    } else {
-      setCodexHistoryEvents([]);
-    }
-
-    const loadThread = async () => {
-      try {
-        const payload = await loadCodexHistoryThreadPayload(connection, historySessionId, {
-          force: loadedThread,
-        });
-        if (cancelled) return;
-        loadedThread = true;
-        applyPayload(payload);
-        if (payload.session.status === "active" || latestGoalRuntimeFromEvents(payload.events)?.tone === "active") {
-          refreshTimer = window.setTimeout(loadThread, 2500);
-        }
-      } catch (historyError) {
-        if (!cancelled) setError(historyError instanceof Error ? historyError.message : String(historyError));
-      }
-    };
-
-    void loadThread();
-    return () => {
-      cancelled = true;
-      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
-    };
-  }, [connection, selectedSessionId, setCodexHistorySessions, setError]);
+    setCodexHistoryEvents([]);
+    return subscribeCodexHistoryLiveRefresh({
+      connection,
+      locallyActive,
+      onError: (historyError) =>
+        setError(historyError instanceof Error ? historyError.message : String(historyError)),
+      onPayload: applyPayload,
+      reportedActive: selectedSessionStatus === "active",
+      sessionId: historySessionId,
+      surface: "thread",
+    });
+  }, [
+    connection,
+    selectedSessionId,
+    selectedSessionLocallyActive,
+    selectedSessionStatus,
+    setCodexHistorySessions,
+    setError,
+  ]);
 
   return {
     codexHistoryEvents,

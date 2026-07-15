@@ -22,6 +22,7 @@ import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { OpenPondOrganization } from "../../lib/organization-types";
+import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
 
 export type SidebarProps = {
   view: AppView;
@@ -36,6 +37,7 @@ export type SidebarProps = {
   currentUserId: string | null;
   teamMembers: TeamChatMember[];
   teamThreads: TeamChatThread[];
+  teamNotificationMode: TeamChatNotificationMode;
   account: AccountState | null;
   profile: BootstrapPayload["profile"] | null | undefined;
   pinnedCollapsed: boolean;
@@ -93,6 +95,8 @@ export type SidebarProps = {
   selectCloudWorkItem: (workItem: CloudWorkItem) => void;
   selectTeamThread: (threadId: string) => void;
   openTeamDm: (userId: string) => void;
+  setTeamNotificationMode: (mode: TeamChatNotificationMode) => void;
+  setTeamThreadMuted: (threadId: string, muted: boolean) => Promise<boolean>;
   addProjectFolder: () => void;
   startExistingProjectFromPath: () => void;
   startProjectFromScratch: () => void;

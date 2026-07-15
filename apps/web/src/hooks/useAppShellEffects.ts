@@ -87,7 +87,7 @@ export function useAppShellEffects({
       () => {
         appDispatch({ type: "clearToast", toastId: toast.id });
       },
-      toast.tone === "error" ? 7000 : 3500,
+      toast.durationMs ?? (toast.tone === "error" ? 7000 : 3500),
     );
     return () => window.clearTimeout(timeout);
   }, [appDispatch, toast]);

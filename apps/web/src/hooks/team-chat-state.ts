@@ -12,6 +12,7 @@ import {
   type TeamChatThread,
   type TeamChatThreadDetail,
 } from "@openpond/contracts";
+import { teamChatReplyPreview } from "../lib/team-chat-reply";
 
 export type TeamChatState = {
   members: TeamChatMember[];
@@ -36,6 +37,16 @@ export type PendingAttachmentState = {
   inputs: TeamChatImageInput[];
   uploaded: TeamChatAttachment[] | null;
 };
+
+export function applySelectedTeamChatAiThread(
+  current: TeamChatState,
+  incoming: TeamChatHostedAiThread,
+  selectedConversationId: string | null,
+): TeamChatState {
+  return selectedConversationId === incoming.conversationId
+    ? { ...current, aiThread: incoming }
+    : current;
+}
 
 export function mergeThreadDetail(
   current: TeamChatThreadDetail | null,
@@ -277,11 +288,13 @@ export function createOptimisticMessage(input: {
   body: string;
   mentionUserIds: string[];
   attachments: TeamChatImageInput[];
+  replyToMessage?: TeamChatMessage | null;
   sequence: number;
 }): TeamChatMessage {
   const createdAt = new Date().toISOString();
+  const messageId = `pending:${input.clientRequestId}`;
   return {
-    id: `pending:${input.clientRequestId}`,
+    id: messageId,
     threadId: input.threadId,
     teamId: input.teamId,
     clientRequestId: input.clientRequestId,
@@ -302,7 +315,18 @@ export function createOptimisticMessage(input: {
     editedAt: null,
     deletedAt: null,
     createdAt,
-    refs: [],
+    refs: input.replyToMessage
+      ? [
+          {
+            id: `pending-reply:${input.clientRequestId}`,
+            messageId,
+            refType: "message_reply",
+            refId: input.replyToMessage.id,
+            preview: teamChatReplyPreview(input.replyToMessage),
+            createdAt,
+          },
+        ]
+      : [],
     attachments: input.attachments.map((attachment) => ({
       id: attachment.id,
       messageId: null,
