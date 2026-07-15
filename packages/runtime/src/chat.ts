@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  HostedChatMessage,
   HostedChatStreamDelta,
   HostedChatTool,
   HostedChatToolCall,
@@ -257,16 +258,35 @@ export async function* streamOpChatChatCompletion(
   if (!response.ok || !response.body) {
     throw new Error(`OpenPond OpChat stream failed: ${response.status} ${await readOpChatError(response)}`);
   }
+  let reasoningText = "";
+  let hasToolCalls = false;
+  let pendingFinish: HostedChatStreamDelta | null = null;
+  let latestRaw: unknown = null;
   for await (const raw of parseOpChatSse(response.body, options.signal)) {
+    latestRaw = raw;
     if (raw && typeof raw === "object" && "error" in raw) {
       throw new Error(`OpenPond OpChat stream failed: ${errorMessageFromPayload(raw)}`);
     }
     const usage = parseUsage(raw);
     if (usage) yield { type: "usage", usage, raw };
     for (const delta of streamDeltasFromChunk(raw)) {
-      yield delta;
+      if (delta.type === "reasoning_delta") reasoningText += delta.text;
+      if (delta.type === "tool_call_delta") hasToolCalls = true;
+      if (delta.type === "finish") pendingFinish = delta;
+      else yield delta;
     }
   }
+  if (hasToolCalls && reasoningText) {
+    yield {
+      type: "continuation",
+      continuation: {
+        kind: "chat_completions_reasoning",
+        reasoningContent: reasoningText,
+      },
+      raw: latestRaw,
+    };
+  }
+  if (pendingFinish) yield pendingFinish;
 }
 
 function buildOpChatBody(options: {
@@ -277,7 +297,7 @@ function buildOpChatBody(options: {
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: options.model,
-    messages: options.messages,
+    messages: options.messages.map(opChatMessage),
     stream: true,
   };
   if (options.tools) {
@@ -287,6 +307,20 @@ function buildOpChatBody(options: {
     body.tool_choice = options.toolChoice;
   }
   return body;
+}
+
+function opChatMessage(message: HostedChatMessage): Record<string, unknown> {
+  const { continuation, ...projected } = message;
+  if (
+    message.role === "assistant" &&
+    continuation?.kind === "chat_completions_reasoning"
+  ) {
+    return {
+      ...projected,
+      reasoning_content: continuation.reasoningContent,
+    };
+  }
+  return projected;
 }
 
 function opChatEndpointUrl(

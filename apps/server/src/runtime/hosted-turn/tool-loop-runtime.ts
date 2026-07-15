@@ -321,11 +321,7 @@ export function createHostedToolLoopRuntime(deps: {
         upsert: safeUpsertModelUsageRecord,
       });
       try {
-        const toolChoice = hostedToolChoiceForLoop({
-          connectedApps: params.connectedApps,
-          nativeToolDefinitions: nativeToolDefinitionByName,
-          roundIndex: index,
-        });
+        const toolChoice: HostedChatToolChoice = "auto";
         for await (const delta of params.stream(
           messages,
           nativeTools.length > 0 ? { tools: nativeTools, toolChoice } : undefined,
@@ -751,21 +747,6 @@ export function createHostedToolLoopRuntime(deps: {
     const toolPolicy = typeof subagent?.toolPolicy === "string" ? subagent.toolPolicy : null;
     if (toolPolicy === "read_only" || toolPolicy === "workspace_write" || toolPolicy === "full_tools") return toolPolicy;
     return "read_only";
-  }
-
-  function hostedToolChoiceForLoop(input: {
-    connectedApps: ResolvedConnectedAppContext[];
-    nativeToolDefinitions: Map<string, ModelToolDefinition>;
-    roundIndex: number;
-  }): HostedChatToolChoice {
-    if (
-      input.roundIndex === 0 &&
-      input.connectedApps.length > 0 &&
-      input.nativeToolDefinitions.has("connected_app_skill_read")
-    ) {
-      return { type: "function", function: { name: "connected_app_skill_read" } };
-    }
-    return "auto";
   }
 
   function workspaceToolCorrectionMessage(

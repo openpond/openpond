@@ -152,7 +152,7 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(deltas[3]).toMatchObject({ type: "finish", finishReason: "stop" });
   });
 
-  test("sends native tools to OpChat and streams tool call deltas", async () => {
+  test("sends native tools to OpChat and preserves reasoning for tool follow-ups", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
       requests.push({
@@ -160,6 +160,7 @@ describe("OpenPond runtime OpChat routing", () => {
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
       return streamResponse([
+        'data: {"choices":[{"delta":{"reasoning_content":"I should inspect the workspace."},"finish_reason":null}]}\n\n',
         'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"resource_search","arguments":"{\\"query\\":\\"README\\"}"}}]},"finish_reason":null}]}\n\n',
         'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
         "data: [DONE]\n\n",
@@ -206,8 +207,13 @@ describe("OpenPond runtime OpChat routing", () => {
         },
       },
     ]);
-    expect(deltas).toHaveLength(2);
-    expect(deltas[0]).toMatchObject({
+    expect(deltas.map((delta) => delta.type)).toEqual([
+      "reasoning_delta",
+      "tool_call_delta",
+      "continuation",
+      "finish",
+    ]);
+    expect(deltas[1]).toMatchObject({
       type: "tool_call_delta",
       toolCalls: [
         {
@@ -220,7 +226,78 @@ describe("OpenPond runtime OpChat routing", () => {
         },
       ],
     });
-    expect(deltas[1]).toMatchObject({ type: "finish", finishReason: "tool_calls" });
+    expect(deltas[2]).toMatchObject({
+      type: "continuation",
+      continuation: {
+        kind: "chat_completions_reasoning",
+        reasoningContent: "I should inspect the workspace.",
+      },
+    });
+    expect(deltas[3]).toMatchObject({ type: "finish", finishReason: "tool_calls" });
+  });
+
+  test("projects hosted reasoning continuations into OpenAI-compatible messages", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return streamResponse([
+        'data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    };
+
+    for await (const _delta of streamOpChatChatCompletion({
+      apiBaseUrl: "https://api.example.test/opchat/v1",
+      token: "opk_test",
+      model: "openpond-chat",
+      messages: [
+        { role: "user", content: "find README" },
+        {
+          role: "assistant",
+          content: "",
+          continuation: {
+            kind: "chat_completions_reasoning",
+            reasoningContent: "I should inspect the workspace.",
+          },
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "resource_search",
+                arguments: '{"query":"README"}',
+              },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: '{"ok":true}' },
+      ],
+    })) {
+      // Drain the stream so the request body and response lifecycle are both exercised.
+    }
+
+    expect(requests[0]).toMatchObject({
+      messages: [
+        { role: "user", content: "find README" },
+        {
+          role: "assistant",
+          content: "",
+          reasoning_content: "I should inspect the workspace.",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "resource_search",
+                arguments: '{"query":"README"}',
+              },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: '{"ok":true}' },
+      ],
+    });
+    expect(JSON.stringify(requests[0])).not.toContain("continuation");
   });
 
   test("shows OpenAI-style provider errors from OpChat failures", async () => {
