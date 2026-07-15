@@ -97,8 +97,8 @@ describe("markdown checkbox rendering", () => {
     expect(markup).toContain("markdown-file-image-preview ready");
     expect(markup).toContain(">apps/web/public/openpond-icon.png</a>");
     expect(markup).not.toContain("<code>apps/web/public/openpond-icon.png</code>");
-    expect(markup).toContain('src="/openpond-icon.png"');
-    expect(markup).toContain('src="/connected-apps/github.svg"');
+    expect(markup).toContain('src="./openpond-icon.png"');
+    expect(markup).toContain('src="./connected-apps/github.svg"');
   });
 
   test("renders explicit public svg markdown images without showing the alt label", () => {
@@ -107,7 +107,7 @@ describe("markdown checkbox rendering", () => {
     });
 
     expect(markup).toContain("markdown-inline-image ready");
-    expect(markup).toContain('src="/connected-apps/github.svg"');
+    expect(markup).toContain('src="./connected-apps/github.svg"');
     expect(markup).not.toContain("!github");
     expect(markup).not.toContain("markdown-file-image-reference");
   });
@@ -143,7 +143,7 @@ describe("markdown checkbox rendering", () => {
 
     expect(markup).toContain("markdown-file-image-reference");
     expect(markup).toContain("markdown-file-image-preview ready");
-    expect(markup).toContain('src="/openpond-icon.png"');
+    expect(markup).toContain('src="./openpond-icon.png"');
   });
 
   test("keeps normal image-url markdown links as links", () => {

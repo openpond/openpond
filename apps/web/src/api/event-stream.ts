@@ -18,12 +18,17 @@ export type RuntimeEventStreamHandle = {
 export function runtimeEventStreamRequest(
   connection: RuntimeEventStreamConnection,
   signal?: AbortSignal,
+  afterSequence?: number,
 ): RuntimeEventStreamRequest {
   const headers = new Headers();
   headers.set("Accept", "text/event-stream");
   headers.set("Authorization", `Bearer ${connection.token}`);
+  const url = new URL(`${connection.serverUrl.replace(/\/$/, "")}/v1/events`);
+  if (afterSequence !== undefined && Number.isSafeInteger(afterSequence) && afterSequence > 0) {
+    url.searchParams.set("afterSequence", String(afterSequence));
+  }
   return {
-    url: `${connection.serverUrl.replace(/\/$/, "")}/v1/events`,
+    url: url.toString(),
     init: { headers, signal },
   };
 }
@@ -77,6 +82,7 @@ export function openEventStream(
   onError: (error: unknown) => void,
   onOpen?: () => void,
   input: {
+    afterSequence?: number;
     fetchImpl?: typeof fetch;
     reconnectDelayMs?: (attempt: number) => number;
   } = {},
@@ -84,19 +90,33 @@ export function openEventStream(
   const controller = new AbortController();
   const fetchImpl = input.fetchImpl ?? fetch;
   const reconnectDelayMs = input.reconnectDelayMs ?? runtimeEventReconnectDelayMs;
+  let lastAppliedSequence = normalizeRuntimeEventSequence(input.afterSequence);
   let open = false;
 
   void (async () => {
     let attempt = 0;
     while (!controller.signal.aborted) {
       try {
-        const request = runtimeEventStreamRequest(connection, controller.signal);
+        const request = runtimeEventStreamRequest(
+          connection,
+          controller.signal,
+          lastAppliedSequence,
+        );
         const response = await fetchImpl(request.url, request.init);
         validateRuntimeEventResponse(response);
         open = true;
         attempt = 0;
-        onOpen?.();
-        await readRuntimeEventStream(response, onEvent, onOpen, controller.signal);
+        await readRuntimeEventStream(
+          response,
+          (event) => {
+            const sequence = normalizeRuntimeEventSequence(event.sequence);
+            if (sequence > 0 && sequence <= lastAppliedSequence) return;
+            if (sequence > 0) lastAppliedSequence = sequence;
+            onEvent(event);
+          },
+          onOpen,
+          controller.signal,
+        );
         open = false;
         if (controller.signal.aborted) break;
         throw new Error("event stream ended");
@@ -118,6 +138,10 @@ export function openEventStream(
       return open;
     },
   };
+}
+
+function normalizeRuntimeEventSequence(value: number | undefined): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0;
 }
 
 function handleRuntimeEventFrame(

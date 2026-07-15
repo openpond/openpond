@@ -10,7 +10,7 @@ export function AppToast({ toast, onDismiss }: AppToastProps) {
   if (!toast) return null;
 
   return (
-    <div className={`app-toast ${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"} aria-live="polite">
+    <div className={`app-toast ${toast.tone} ${toast.placement ?? "bottom-right"}`} role={toast.tone === "error" ? "alert" : "status"} aria-live="polite">
       <span>{toast.message}</span>
       {toast.actionLabel && toast.onAction && (
         <button
@@ -23,7 +23,7 @@ export function AppToast({ toast, onDismiss }: AppToastProps) {
           {toast.actionLabel}
         </button>
       )}
-      {toast.persistent && (
+      {(toast.persistent || toast.dismissible) && (
         <button type="button" className="app-toast-close" aria-label="Dismiss notification" onClick={onDismiss}>
           <X size={14} />
         </button>

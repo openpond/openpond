@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import type { AppStartupState } from "../../startup/app-startup";
 
 const WORDMARK = "OpenPond".split("");
@@ -37,7 +38,7 @@ export function AppSplash({ startup }: { startup: AppStartupState }) {
     <main className="app-splash" aria-busy="true" aria-label={startup.label} role="status">
       <div className="app-splash-lockup" data-stage={startup.stage}>
         <div className="app-splash-mark">
-          <img alt="OpenPond" className="app-splash-logo" decoding="async" src="/openpond-icon.png" />
+          <img alt="OpenPond" className="app-splash-logo" decoding="async" src={OPENPOND_ICON_URL} />
         </div>
         <span
           aria-hidden="true"

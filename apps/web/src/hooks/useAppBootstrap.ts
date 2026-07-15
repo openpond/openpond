@@ -44,7 +44,11 @@ import {
   shouldPreserveMissingBootstrapSession,
   type SessionSidebarStateChangeTimes,
 } from "../lib/session-state";
-import { limitRuntimeEventList, mergeBootstrapRuntimeEvents } from "../lib/runtime-event-lists";
+import {
+  latestRuntimeEventSequence,
+  limitRuntimeEventList,
+  mergeBootstrapRuntimeEvents,
+} from "../lib/runtime-event-lists";
 import {
   appStartupState,
   type AppStartupStageId,
@@ -82,6 +86,10 @@ export function useAppBootstrap(params: {
   const [connection, setConnection] = useState<ClientConnection | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const [runtimeEventStreamStart, setRuntimeEventStreamStart] = useState<{
+    afterSequence: number;
+    serverId: string;
+  } | null>(null);
   const [sessions, setSessionsState] = useState<Session[]>([]);
   const [codexHistorySessions, setCodexHistorySessionsState] = useState<Session[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -163,6 +171,17 @@ export function useAppBootstrap(params: {
       const previousServerId = bootstrapServerIdRef.current;
       const sameServer = !previousServerId || previousServerId === payload.server.id;
       bootstrapServerIdRef.current = payload.server.id;
+      setRuntimeEventStreamStart((current) =>
+        current?.serverId === payload.server.id
+          ? current
+          : {
+              afterSequence:
+                payload.eventWindow?.latestSequence
+                ?? latestRuntimeEventSequence(payload.events)
+                ?? 0,
+              serverId: payload.server.id,
+            },
+      );
       latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
       setEvents((current) => sameServer
@@ -492,6 +511,7 @@ export function useAppBootstrap(params: {
 
   const load = useCallback(async () => {
     setBlockingStartupStage("connecting");
+    setRuntimeEventStreamStart(null);
     const nextConnection = await resolveConnection();
     setConnection((current) => (isSameConnection(current, nextConnection) ? current : nextConnection));
     setBlockingStartupStage("account");
@@ -526,6 +546,7 @@ export function useAppBootstrap(params: {
   }, [load]);
 
   useRuntimeEvents({
+    afterSequence: runtimeEventStreamStart?.afterSequence ?? null,
     connection,
     setEvents,
     setApprovals,

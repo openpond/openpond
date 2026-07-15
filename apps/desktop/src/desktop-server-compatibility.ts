@@ -21,6 +21,23 @@ export function isCompatibleDesktopServer(
   );
 }
 
+export function canReuseDesktopServer(input: {
+  health: DesktopServerHealth | null;
+  desktopVersion: string;
+  token: string | null;
+  packaged: boolean;
+  explicitServerUrl: boolean;
+  reuseRequested: boolean;
+  rendererAvailable: boolean;
+}): boolean {
+  return (
+    Boolean(input.token) &&
+    isCompatibleDesktopServer(input.health, input.desktopVersion) &&
+    input.rendererAvailable &&
+    (input.explicitServerUrl || (!input.packaged && input.reuseRequested))
+  );
+}
+
 export function localServerPort(url: string): number | null {
   try {
     const parsed = new URL(url);

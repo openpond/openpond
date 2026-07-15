@@ -17,6 +17,7 @@ import {
   type ProjectAgentSdk,
   type ProjectAgentSdkDependencyType,
   type RuntimeEvent,
+  type Session,
   type UsageRequestAttribution,
   type WorkspaceState,
 } from "@openpond/contracts";
@@ -62,9 +63,14 @@ export type ActiveCodexHistoryTurn = {
   interrupted: boolean;
   ready: Promise<void>;
   resolveReady: () => void;
+  settled: boolean;
   threadId: string;
   turnId: string | null;
 };
+
+export function codexHistorySessionWithLiveStatus(session: Session, live: boolean): Session {
+  return live && session.status !== "active" ? { ...session, status: "active" } : session;
+}
 
 export type CodexHistoryTurnInterruptResponse =
   | { interrupted: true }

@@ -6,14 +6,28 @@ import {
   TeamAgentConversationPanel,
   TeamAiThreadPanel,
   TeamChatView,
+  restoreFailedTeamChatPrompt,
   type TeamChatViewProps,
 } from "../apps/web/src/components/team-chat/TeamChatView";
+import {
+  TeamChatComposerReply,
+  teamChatReplyMenuPosition,
+} from "../apps/web/src/components/team-chat/TeamChatReply";
+import { teamChatReplyTargetFromMessage } from "../apps/web/src/lib/team-chat-reply";
 
 const noop = () => undefined;
 const noopAsync = async () => undefined;
 const noopBoolean = async () => true;
 
 describe("team chat view", () => {
+  test("restores a failed optimistic submission without discarding a newer draft", () => {
+    expect(restoreFailedTeamChatPrompt("", "First message")).toBe("First message");
+    expect(restoreFailedTeamChatPrompt("Second message", "First message")).toBe(
+      "First message\n\nSecond message",
+    );
+    expect(restoreFailedTeamChatPrompt("First message", "First message")).toBe("First message");
+  });
+
   test("renders accessible loading and failure states with a reload action", () => {
     const loading = render({ loading: true });
     expect(loading).toContain('role="log"');
@@ -33,6 +47,84 @@ describe("team chat view", () => {
     expect(markup).toContain('aria-label="Add photos and files"');
     expect(markup).toContain('aria-label="# general"');
     expect(markup).not.toContain("team-chat-header");
+  });
+
+  test("renders persisted reply context and exposes a reply action on messages", () => {
+    const detail = emptyDetail();
+    const original = teamMessage({
+      id: "message_original",
+      authorUserId: "user_2",
+      body: "Original message",
+      sequence: 1,
+    });
+    const reply = teamMessage({
+      id: "message_reply",
+      body: "Reply body",
+      sequence: 2,
+      refs: [
+        {
+          id: "ref_reply",
+          messageId: "message_reply",
+          refType: "message_reply",
+          refId: "message_original",
+          preview: {
+            authorType: "user",
+            authorUserId: "user_2",
+            authorAgentId: null,
+            body: "Original message",
+          },
+          createdAt: "2026-07-14T12:01:00.000Z",
+        },
+      ],
+    });
+    detail.messages = [original, reply];
+    detail.thread.lastMessage = reply;
+    detail.thread.lastMessageId = reply.id;
+    detail.thread.lastMessageSequence = reply.sequence;
+
+    const markup = render({
+      detail,
+      members: [
+        {
+          userId: "user_2",
+          role: "member",
+          name: "Adam Elmhammamy",
+          handle: "adam",
+          image: null,
+        },
+      ],
+    });
+
+    expect(markup).toContain("Original message");
+    expect(markup).toContain("Adam Elmhammamy");
+    expect(markup).toContain('aria-label="Reply to message"');
+    expect(markup).toContain('aria-label="Jump to replied message from Adam Elmhammamy"');
+  });
+
+  test("renders the selected reply above the composer and clamps context menus onscreen", () => {
+    const original = teamMessage({ body: "Original message" });
+    const markup = renderToStaticMarkup(
+      createElement(TeamChatComposerReply, {
+        authorLabel: "Adam Elmhammamy",
+        target: teamChatReplyTargetFromMessage(original),
+        onCancel: noop,
+        onJump: noop,
+      }),
+    );
+
+    expect(markup).toContain("Replying to Adam Elmhammamy");
+    expect(markup).toContain("Original message");
+    expect(markup).toContain('aria-label="Cancel reply"');
+    expect(
+      teamChatReplyMenuPosition({
+        clientX: 999,
+        clientY: 999,
+        fallbackX: 0,
+        fallbackY: 0,
+        viewportWidth: 800,
+        viewportHeight: 600,
+      }),
+    ).toEqual({ x: 642, y: 550 });
   });
 
   test("renders interrupted AI state and an accessible close control", () => {
@@ -245,5 +337,29 @@ function emptyDetail(): NonNullable<TeamChatViewProps["detail"]> {
     },
     messages: [],
     hasMoreBefore: false,
+  };
+}
+
+function teamMessage(
+  overrides: Partial<NonNullable<TeamChatViewProps["detail"]>["messages"][number]> = {},
+): NonNullable<TeamChatViewProps["detail"]>["messages"][number] {
+  return {
+    id: "message_1",
+    threadId: "thread_1",
+    teamId: "team_1",
+    clientRequestId: "request_1",
+    authorType: "user",
+    authorUserId: "user_1",
+    authorAgentId: null,
+    sequence: 1,
+    kind: "text",
+    body: "Message",
+    metadata: {},
+    editedAt: null,
+    deletedAt: null,
+    createdAt: "2026-07-14T12:00:00.000Z",
+    refs: [],
+    attachments: [],
+    ...overrides,
   };
 }

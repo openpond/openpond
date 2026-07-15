@@ -2,6 +2,9 @@ import type { TeamChatMember, TeamChatThread } from "@openpond/contracts";
 import "../../styles/sidebar/team-sidebar.css";
 import type { AppView } from "../../lib/app-models";
 import type { OpenPondOrganization } from "../../lib/organization-types";
+import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
+import { BellOff } from "../icons";
+import { TeamChatNotificationMenu } from "../team-chat/TeamChatNotificationMenu";
 import { SidebarSection } from "./SidebarRows";
 
 type SidebarTeamSectionProps = {
@@ -9,7 +12,10 @@ type SidebarTeamSectionProps = {
   enabled: boolean;
   loading: boolean;
   members: TeamChatMember[];
+  notificationMode: TeamChatNotificationMode;
   openTeamDm: (userId: string) => void;
+  onNotificationModeChange: (mode: TeamChatNotificationMode) => void;
+  onThreadMuteChange: (threadId: string, muted: boolean) => Promise<boolean>;
   organization: OpenPondOrganization | null;
   selectedTeamThreadId: string | null;
   selectTeamThread: (threadId: string) => void;
@@ -22,7 +28,10 @@ export function SidebarTeamSection({
   enabled,
   loading,
   members,
+  notificationMode,
   openTeamDm,
+  onNotificationModeChange,
+  onThreadMuteChange,
   organization,
   selectedTeamThreadId,
   selectTeamThread,
@@ -39,10 +48,26 @@ export function SidebarTeamSection({
     if (other) dmThreadByUserId.set(other.userId, thread);
   }
   const accessState = organization?.effectiveAccessState;
+  const currentThread =
+    threads.find((thread) => thread.id === selectedTeamThreadId) ?? null;
 
   return (
     <div className="team-sidebar-section">
-      <SidebarSection label={organization?.displayName ?? "Team"}>
+      <SidebarSection
+        label={organization?.displayName ?? "Team"}
+        actions={
+          <TeamChatNotificationMenu
+            mode={notificationMode}
+            currentThread={currentThread}
+            currentThreadLabel={teamThreadNotificationLabel(
+              currentThread,
+              currentUserId,
+            )}
+            onModeChange={onNotificationModeChange}
+            onThreadMuteChange={onThreadMuteChange}
+          />
+        }
+      >
         {accessState && accessState !== "active" ? (
           <div className="team-sidebar-workspace-meta">
             <span>{teamAccessLabel(accessState)}</span>
@@ -52,6 +77,7 @@ export function SidebarTeamSection({
           <TeamSidebarRow
             label="general"
             selected={view === "team" && selectedTeamThreadId === generalThread.id}
+            muted={Boolean(generalThread.mutedAt)}
             unreadCount={generalThread.unreadCount}
             onSelect={() => selectTeamThread(generalThread.id)}
           />
@@ -66,6 +92,7 @@ export function SidebarTeamSection({
                 member={member}
                 label={member.name}
                 selected={view === "team" && selectedTeamThreadId === thread?.id}
+                muted={Boolean(thread?.mutedAt)}
                 unreadCount={thread?.unreadCount ?? 0}
                 onSelect={() => openTeamDm(member.userId)}
               />
@@ -83,12 +110,14 @@ function TeamSidebarRow({
   label,
   member,
   selected,
+  muted,
   unreadCount,
   onSelect,
 }: {
   label: string;
   member?: TeamChatMember;
   selected: boolean;
+  muted: boolean;
   unreadCount: number;
   onSelect: () => void;
 }) {
@@ -96,11 +125,14 @@ function TeamSidebarRow({
     <button type="button" className={`team-sidebar-row${selected ? " selected" : ""}`} onClick={onSelect}>
       {member ? <TeamSidebarAvatar member={member} /> : <span className="team-sidebar-channel">#</span>}
       <span className="team-sidebar-label">{label}</span>
-      {unreadCount > 0 ? (
-        <span className="team-sidebar-unread" aria-label={`${unreadCount} unread`}>
-          {unreadCount > 99 ? "99+" : unreadCount}
-        </span>
-      ) : null}
+      <span className="team-sidebar-row-meta">
+        {muted ? <BellOff size={11} aria-label="Muted" /> : null}
+        {unreadCount > 0 ? (
+          <span className="team-sidebar-unread" aria-label={`${unreadCount} unread`}>
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }
@@ -118,4 +150,22 @@ function TeamSidebarAvatar({ member }: { member: TeamChatMember }) {
 function teamAccessLabel(state: NonNullable<OpenPondOrganization["effectiveAccessState"]>): string {
   if (state === "checkout_pending") return "Checkout pending";
   return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+function teamThreadNotificationLabel(
+  thread: TeamChatThread | null,
+  currentUserId: string | null,
+): string | null {
+  if (!thread) return null;
+  if (thread.kind === "general" || thread.kind === "channel") {
+    return `#${thread.title?.trim() || "general"}`;
+  }
+  if (thread.kind === "dm") {
+    return (
+      thread.participants.find(
+        (participant) => participant.userId !== currentUserId,
+      )?.name ?? "direct message"
+    );
+  }
+  return thread.title?.trim() || "conversation";
 }

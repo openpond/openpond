@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { connectedAppIconUrl, OPENPOND_ICON_URL } from "../../lib/public-assets";
 import type { GetStartedAccent, GetStartedVisualKind } from "./get-started-content";
 
 type GetStartedVisualProps = {
@@ -652,21 +653,7 @@ function AppIconTile({ app }: { app: AppIconTileModel }) {
 }
 
 function iconSrcForApp(appId: AppIconId): string {
-  switch (appId) {
-    case "github":
-      return "/connected-apps/github.svg";
-    case "google":
-      return "/connected-apps/google.svg";
-    case "slack":
-      return "/connected-apps/slack.svg";
-    case "microsoft_teams":
-      return "/connected-apps/microsoft.svg";
-    case "web":
-      return "/openpond-icon.png";
-    case "mcp":
-    default:
-      return "/connected-apps/openpond-mcp.svg";
-  }
+  return appId === "web" ? OPENPOND_ICON_URL : connectedAppIconUrl(appId);
 }
 
 type DiagramNodeProps = {

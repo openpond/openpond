@@ -79,6 +79,7 @@ export const TeamChatMessageRefSchema = z.object({
     "openpond_session",
     "project",
     "agent_run",
+    "message_reply",
   ]),
   refId: z.string(),
   preview: MetadataSchema,
@@ -152,6 +153,11 @@ export const TeamChatThreadDetailSchema = z.object({
   thread: TeamChatThreadSchema,
   messages: z.array(TeamChatMessageSchema),
   hasMoreBefore: z.boolean(),
+});
+
+export const TeamChatThreadMuteResultSchema = z.object({
+  threadId: z.string(),
+  mutedAt: z.string().nullable(),
 });
 
 export const TeamChatAiTurnStatusSchema = z.enum([
@@ -255,6 +261,7 @@ export type TeamChatAttachmentDownload = z.infer<typeof TeamChatAttachmentDownlo
 export type TeamChatMessage = z.infer<typeof TeamChatMessageSchema>;
 export type TeamChatThread = z.infer<typeof TeamChatThreadSchema>;
 export type TeamChatThreadDetail = z.infer<typeof TeamChatThreadDetailSchema>;
+export type TeamChatThreadMuteResult = z.infer<typeof TeamChatThreadMuteResultSchema>;
 export type TeamChatAiTurnStatus = z.infer<typeof TeamChatAiTurnStatusSchema>;
 export type TeamChatAiTurn = z.infer<typeof TeamChatAiTurnSchema>;
 export type TeamChatAiMessage = z.infer<typeof TeamChatAiMessageSchema>;

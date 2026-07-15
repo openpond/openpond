@@ -38,6 +38,19 @@ describe("web runtime event stream helpers", () => {
     expect(headers.get("Accept")).toBe("text/event-stream");
   });
 
+  test("starts after the bootstrap event window instead of replaying all history", () => {
+    const request = runtimeEventStreamRequest(
+      {
+        serverUrl: "http://127.0.0.1:17876/",
+        token: "local-token",
+      },
+      undefined,
+      95_874,
+    );
+
+    expect(request.url).toBe("http://127.0.0.1:17876/v1/events?afterSequence=95874");
+  });
+
   test("validates event stream response status and body", () => {
     expect(() => validateRuntimeEventResponse(new Response(null, { status: 401 }))).toThrow(
       /event stream failed: 401/,
@@ -116,5 +129,64 @@ describe("web runtime event stream helpers", () => {
     expect(opened).toEqual([]);
     expect(handle?.isOpen()).toBe(false);
     expect(errors[0]).toContain("event stream failed: 401");
+  });
+
+  test("resumes reconnects after the last event already applied", async () => {
+    const urls: string[] = [];
+    const sequences: number[] = [];
+    const responses = [
+      eventStreamResponse(
+        [
+          "event: ready",
+          'data: {"ok":true}',
+          "",
+          "event: runtime",
+          'data: {"id":"event-41","name":"assistant.delta","sequence":41}',
+          "",
+        ].join("\n"),
+      ),
+      eventStreamResponse(
+        [
+          "event: ready",
+          'data: {"ok":true}',
+          "",
+          "event: runtime",
+          'data: {"id":"event-42","name":"tool.started","sequence":42}',
+          "",
+        ].join("\n"),
+      ),
+    ];
+    let handle: ReturnType<typeof openEventStream> | null = null;
+
+    await new Promise<void>((resolve) => {
+      handle = openEventStream(
+        { serverUrl: "http://127.0.0.1:17876", token: "local-token" },
+        (event) => {
+          sequences.push(event.sequence ?? 0);
+          if (event.sequence === 42) {
+            handle?.close();
+            resolve();
+          }
+        },
+        () => undefined,
+        undefined,
+        {
+          afterSequence: 40,
+          fetchImpl: async (input) => {
+            urls.push(String(input));
+            const response = responses.shift();
+            if (!response) throw new Error("unexpected reconnect");
+            return response;
+          },
+          reconnectDelayMs: () => 0,
+        },
+      );
+    });
+
+    expect(sequences).toEqual([41, 42]);
+    expect(urls).toEqual([
+      "http://127.0.0.1:17876/v1/events?afterSequence=40",
+      "http://127.0.0.1:17876/v1/events?afterSequence=41",
+    ]);
   });
 });

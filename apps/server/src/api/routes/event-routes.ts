@@ -17,12 +17,15 @@ export async function handleEventRoutes({ deps, request, requestUrl, response }:
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/events") {
+    response.socket?.setNoDelay(true);
     response.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     });
-    response.write("retry: 1500\n");
+    response.flushHeaders();
+    response.write("retry: 1500\n\n");
     const afterSequence = eventStreamCursor(request, requestUrl);
     const sessionId = normalizedSearchString(requestUrl.searchParams.get("sessionId"));
     const closeSubscriber = await openEventSubscriber({ response, afterSequence, sessionId });

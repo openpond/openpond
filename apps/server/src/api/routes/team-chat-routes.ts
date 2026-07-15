@@ -8,6 +8,7 @@ const ATTACHMENT_UPLOAD_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/attachments\
 const ATTACHMENT_DOWNLOAD_PATH = /^\/v1\/team-chat\/attachments\/([^/]+)\/download$/;
 const MESSAGE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/messages\/([^/]+)$/;
 const READ_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/read$/;
+const MUTE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/mute$/;
 const AGENT_RUN_CREATE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/agent-runs$/;
 const AGENT_RUN_PATH = /^\/v1\/team-chat\/agent-runs\/([^/]+)$/;
 const AI_THREAD_CREATE_PATH = /^\/v1\/team-chat\/threads\/([^/]+)\/ai-threads$/;
@@ -163,6 +164,7 @@ export async function handleTeamChatRoutes({
         clientRequestId: requiredString(body.clientRequestId),
         mentionUserIds: stringArray(body.mentionUserIds),
         attachmentIds: stringArray(body.attachmentIds),
+        replyToMessageId: optionalString(body.replyToMessageId),
       }),
     );
     return true;
@@ -197,6 +199,21 @@ export async function handleTeamChatRoutes({
         teamId: requiredString(body.teamId),
         threadId: decode(readMatch[1]),
         sequence: requiredInt(body.sequence),
+      }),
+    );
+    return true;
+  }
+  const muteMatch = MUTE_PATH.exec(requestUrl.pathname);
+  if (request.method === "POST" && muteMatch) {
+    const body = asRecord(await readJson(request));
+    sendJson(
+      response,
+      200,
+      await deps.teamChatPayload({
+        type: "thread_mute",
+        teamId: requiredString(body.teamId),
+        threadId: decode(muteMatch[1]),
+        muted: requiredBoolean(body.muted),
       }),
     );
     return true;
@@ -368,6 +385,11 @@ function stringValue(value: unknown): string {
 
 function rawString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function requiredBoolean(value: unknown): boolean {
+  if (typeof value !== "boolean") throw new Error("team_chat_invalid_request");
+  return value;
 }
 
 function optionalString(value: unknown): string | null {

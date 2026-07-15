@@ -48,6 +48,7 @@ export function useCommandShortcuts({
 }
 
 type RuntimeEventsInput = {
+  afterSequence: number | null;
   connection: ClientConnection | null;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setApprovals: Dispatch<SetStateAction<Approval[]>>;
@@ -57,6 +58,7 @@ type RuntimeEventsInput = {
 };
 
 export function useRuntimeEvents({
+  afterSequence,
   connection,
   setEvents,
   setApprovals,
@@ -65,7 +67,7 @@ export function useRuntimeEvents({
   onDisconnected,
 }: RuntimeEventsInput) {
   useEffect(() => {
-    if (!connection?.token) return;
+    if (!connection?.token || afterSequence === null) return;
     let disconnectTimer: number | null = null;
     let pendingRuntimeEvents: RuntimeEvent[] = [];
     let flushFrame: number | null = null;
@@ -133,14 +135,15 @@ export function useRuntimeEvents({
       () => {
         clearDisconnectTimer();
         clearEventStreamError();
-      }
+      },
+      { afterSequence },
     );
     return () => {
       clearDisconnectTimer();
       if (flushFrame !== null) window.cancelAnimationFrame(flushFrame);
       source.close();
     };
-  }, [connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
+  }, [afterSequence, connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
 }
 
 export function subagentChildSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {

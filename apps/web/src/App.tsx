@@ -95,6 +95,7 @@ import { useSidebarMutations } from "./hooks/useSidebarMutations";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useTeamChat } from "./hooks/useTeamChat";
+import { useTeamChatIncomingToast } from "./hooks/useTeamChatIncomingToast";
 import { useOpenPondOrganizations } from "./hooks/useOpenPondOrganizations";
 import { useConnectedAppStatusRows } from "./hooks/useConnectedAppStatusRows";
 import { teamChatThreadTitle } from "./lib/team-chat-thread";
@@ -117,6 +118,17 @@ export function App() {
   const [rightChatHistoryEvents, setRightChatHistoryEvents] = useState<
     Record<string, RuntimeEvent[]>
   >({});
+  const [locallyActiveCodexHistorySessionIds, setLocallyActiveCodexHistorySessionIds] =
+    useState<ReadonlySet<string>>(() => new Set());
+  const setCodexHistoryTurnLocallyActive = useCallback((sessionId: string, active: boolean) => {
+    setLocallyActiveCodexHistorySessionIds((current) => {
+      if (current.has(sessionId) === active) return current;
+      const next = new Set(current);
+      if (active) next.add(sessionId);
+      else next.delete(sessionId);
+      return next;
+    });
+  }, []);
   const [mainComposerFocusRequestId, setMainComposerFocusRequestId] = useState(0);
   const [draftSubagentDelegationMode, setDraftSubagentDelegationMode] =
     useState<SubagentDelegationMode | null>(null);
@@ -318,6 +330,10 @@ export function App() {
   const { codexHistoryEvents, setCodexHistoryEvents } = useCodexHistoryEvents({
     connection,
     selectedSessionId,
+    selectedSessionLocallyActive: Boolean(
+      selectedSessionId && locallyActiveCodexHistorySessionIds.has(selectedSessionId)
+    ),
+    selectedSessionStatus: selectedSession?.status,
     setCodexHistorySessions,
     setError,
   });
@@ -368,6 +384,13 @@ export function App() {
     teamId: teamChatTeamId,
     currentUserId: account?.profile?.id ?? null,
     refreshToken: bootstrap?.accountMeta.asOf ?? null,
+  });
+  useTeamChatIncomingToast({
+    notification: teamChat.incomingNotification,
+    dismiss: teamChat.dismissIncomingNotification,
+    selectThread: teamChat.selectThread,
+    setView,
+    showToast,
   });
   const teamAiThreadId = teamChat.aiThread?.conversationId ?? null;
   const teamAiSidebarOpen =
@@ -621,6 +644,7 @@ export function App() {
     connection,
     expandedProjectIds,
     goalRuntime,
+    locallyActiveCodexHistorySessionIds,
     pendingApproval,
     pinnedSessions,
     projectSessionRowsByProjectId,
@@ -1066,6 +1090,7 @@ export function App() {
     setMentionedAppId,
     setCodexHistoryEvents,
     setCodexHistorySessions,
+    onCodexHistoryTurnActivityChange: setCodexHistoryTurnLocallyActive,
     onCodexHistoryTurnPayload: applyRightCodexHistoryPayload,
     onPendingUserMessage: recordPendingChatUserMessage,
     onClearPendingUserMessage: clearPendingChatUserMessage,
@@ -1387,6 +1412,7 @@ export function App() {
     connection,
     contextCompaction: appDefaults.contextCompaction,
     insights,
+    locallyActiveCodexHistorySessionIds,
     openPondCommandAccessMode,
     pendingChatUserMessages,
     providerSettings: bootstrap?.providers ?? null,
@@ -1536,6 +1562,7 @@ export function App() {
         currentUserId: teamChat.currentUserId,
         teamMembers: teamChat.members,
         teamThreads: teamChat.threads,
+        teamNotificationMode: teamChat.notificationMode,
         account,
         profile: bootstrap?.profile,
         pinnedCollapsed,
@@ -1599,6 +1626,8 @@ export function App() {
           setView("team");
           void teamChat.openDm(userId);
         },
+        setTeamNotificationMode: teamChat.setNotificationMode,
+        setTeamThreadMuted: teamChat.setThreadMuted,
         addProjectFolder: () => void addProjectFolder(),
         startExistingProjectFromPath: openExistingProjectPathDialog,
         startProjectFromScratch: () => {

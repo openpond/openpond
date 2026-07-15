@@ -68,6 +68,79 @@ describe("team chat API base URL", () => {
       "https://api.test/v1/team-chat/agent-runs/run_1?teamId=team_1",
     ]);
   });
+
+  test("forwards reply targets when sending a team message", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const fetchMock = mockFetch(async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return jsonResponse({
+        ...agentRunPayload().message,
+        body: "Reply body",
+        refs: [
+          {
+            id: "ref_reply",
+            messageId: "message_1",
+            refType: "message_reply",
+            refId: "message_original",
+            preview: { body: "Original message", authorUserId: "user_2" },
+            createdAt: "2026-07-11T12:00:00.000Z",
+          },
+        ],
+      });
+    });
+
+    const result = await teamChatRequestPayload(
+      {
+        type: "message_send",
+        teamId: "team_1",
+        threadId: "thread_1",
+        body: "Reply body",
+        clientRequestId: "request_reply",
+        replyToMessageId: "message_original",
+      },
+      { loadAccountContext: testAccountContext, fetchImpl: fetchMock },
+    );
+
+    expect(requestBody).toMatchObject({ replyToMessageId: "message_original" });
+    expect(result).toMatchObject({
+      refs: [{ refType: "message_reply", refId: "message_original" }],
+    });
+  });
+
+  test("forwards persistent per-thread mute state", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchMock = mockFetch(async (url, init) => {
+      requests.push({
+        url,
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return jsonResponse({
+        threadId: "thread_1",
+        mutedAt: "2026-07-14T12:00:00.000Z",
+      });
+    });
+
+    const result = await teamChatRequestPayload(
+      {
+        type: "thread_mute",
+        teamId: "team_1",
+        threadId: "thread_1",
+        muted: true,
+      },
+      { loadAccountContext: testAccountContext, fetchImpl: fetchMock },
+    );
+
+    expect(requests).toEqual([
+      {
+        url: "https://api.test/v1/team-chat/threads/thread_1/mute",
+        body: { teamId: "team_1", muted: true },
+      },
+    ]);
+    expect(result).toEqual({
+      threadId: "thread_1",
+      mutedAt: "2026-07-14T12:00:00.000Z",
+    });
+  });
 });
 
 describe("team chat attachment upload", () => {

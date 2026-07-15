@@ -20,7 +20,15 @@ export function useAppErrorReporter({
     (
       message: string,
       tone: "success" | "error" | "info" = "info",
-      options: Pick<AppToast, "actionLabel" | "onAction" | "persistent"> = {},
+      options: Pick<
+        AppToast,
+        | "actionLabel"
+        | "onAction"
+        | "persistent"
+        | "dismissible"
+        | "durationMs"
+        | "placement"
+      > = {},
     ) => {
       const id = Date.now() + ++toastSequenceRef.current;
       appDispatch({ type: "showToast", toast: { id, message, tone, ...options } });

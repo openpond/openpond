@@ -87,6 +87,7 @@ import type {
   TeamChatRealtimeSession,
   TeamChatThread,
   TeamChatThreadDetail,
+  TeamChatThreadMuteResult,
 } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
@@ -255,6 +256,7 @@ export const api = {
       clientRequestId: string;
       mentionUserIds?: string[];
       attachmentIds?: string[];
+      replyToMessageId?: string | null;
     },
   ) =>
     apiFetch<TeamChatMessage>(
@@ -322,6 +324,17 @@ export const api = {
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/read`,
       { method: "POST", body: JSON.stringify({ teamId, sequence }) },
+    ),
+  setTeamChatThreadMuted: (
+    connection: ClientConnection,
+    threadId: string,
+    teamId: string,
+    muted: boolean,
+  ) =>
+    apiFetch<TeamChatThreadMuteResult>(
+      connection,
+      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/mute`,
+      { method: "POST", body: JSON.stringify({ teamId, muted }) },
     ),
   createTeamChatAiThread: (
     connection: ClientConnection,

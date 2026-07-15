@@ -2,6 +2,7 @@ import type { BootstrapPayload } from "@openpond/contracts";
 import { Copy, CreditCard } from "../icons";
 import { AccountStateBadge } from "../account/AccountBadges";
 import { copyToClipboard } from "../../lib/clipboard";
+import { TOKEN_ICON_URLS } from "../../lib/public-assets";
 
 export function WalletView({
   payload,
@@ -167,9 +168,9 @@ function WalletAssetRow({ asset }: { asset: WalletAsset }) {
 function tokenIconSrc(asset: string): string | null {
   switch (asset.trim().toUpperCase()) {
     case "ETH":
-      return "/tokens/eth.svg";
+      return TOKEN_ICON_URLS.ETH;
     case "USDC":
-      return "/tokens/usdc.svg";
+      return TOKEN_ICON_URLS.USDC;
     default:
       return null;
   }

@@ -45,6 +45,15 @@ type BrowserInputProof = {
   cursorOverlay: boolean;
 };
 
+type EventStreamHandshakeProof = {
+  status: number;
+  contentType: string | null;
+  cacheControl: string | null;
+  buffering: string | null;
+  firstFrameReceived: boolean;
+  durationMs: number;
+};
+
 type CdpResponse = {
   id?: number;
   result?: unknown;
@@ -127,12 +136,18 @@ async function main(): Promise<void> {
       }))`,
     );
     if (!connection.hasToken) throw new Error("Packaged renderer connection did not include a capability token.");
+    if (new URL(renderer.href).origin !== new URL(connection.serverUrl).origin) {
+      throw new Error(
+        `Packaged renderer must share the bundled server origin (renderer=${renderer.href}, server=${connection.serverUrl}).`,
+      );
+    }
     const healthStartedAt = Date.now();
     const health = await fetchJson<{ ok?: boolean; server?: string }>(`${connection.serverUrl}/health`);
     const healthMs = Date.now() - healthStartedAt;
     if (health.ok !== true || health.server !== "openpond-app-server") {
       throw new Error(`Packaged server health failed: ${JSON.stringify(health)}`);
     }
+    const eventStream = await measureEventStreamHandshake(cdp, connection, 5_000);
     const firstChatInput = await measureFirstChatInputLatency(cdp);
 
     const conversationId = `packaged-smoke-${Date.now()}`;
@@ -200,6 +215,7 @@ async function main(): Promise<void> {
       server: {
         url: redactLoopbackUrl(connection.serverUrl),
         health: health.server,
+        eventStream,
       },
       browser: {
         activeTabId: browserState.activeTabId,
@@ -565,6 +581,61 @@ async function waitForRendererBridge(cdp: CdpClient, timeoutMs: number): Promise
       typeof window.openpond.getConnection === "function" &&
       typeof window.openpond.browser?.open === "function"`,
   ), timeoutMs, "Timed out waiting for packaged renderer preload bridge.");
+}
+
+async function measureEventStreamHandshake(
+  cdp: CdpClient,
+  connection: { serverUrl: string; hasToken: boolean },
+  timeoutMs: number,
+): Promise<EventStreamHandshakeProof> {
+  const proof = await evaluateValue<EventStreamHandshakeProof>(
+    cdp,
+    `(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ${timeoutMs});
+      const startedAt = performance.now();
+      try {
+        const url = new URL("/v1/events", ${JSON.stringify(connection.serverUrl)});
+        url.searchParams.set("afterSequence", String(Number.MAX_SAFE_INTEGER));
+        const response = await fetch(url, {
+          headers: {
+            Accept: "text/event-stream",
+            Authorization: "Bearer " + (await window.openpond.getConnection()).token
+          },
+          signal: controller.signal
+        });
+        if (!response.ok || !response.body) {
+          throw new Error("Event stream handshake failed with HTTP " + response.status);
+        }
+        const first = await response.body.getReader().read();
+        const firstFrame = first.value ? new TextDecoder().decode(first.value) : "";
+        return {
+          status: response.status,
+          contentType: response.headers.get("content-type"),
+          cacheControl: response.headers.get("cache-control"),
+          buffering: response.headers.get("x-accel-buffering"),
+          firstFrameReceived: firstFrame.includes("retry: 1500"),
+          durationMs: Math.round(performance.now() - startedAt)
+        };
+      } finally {
+        clearTimeout(timeout);
+        controller.abort();
+      }
+    })()`,
+  );
+  if (!proof.contentType?.startsWith("text/event-stream")) {
+    throw new Error(`Packaged event stream returned the wrong content type: ${proof.contentType ?? "missing"}.`);
+  }
+  if (!proof.cacheControl?.includes("no-transform")) {
+    throw new Error(`Packaged event stream permits response transformation: ${proof.cacheControl ?? "missing"}.`);
+  }
+  if (proof.buffering !== "no") {
+    throw new Error(`Packaged event stream did not disable proxy buffering: ${proof.buffering ?? "missing"}.`);
+  }
+  if (!proof.firstFrameReceived) {
+    throw new Error("Packaged event stream did not deliver its first SSE frame immediately.");
+  }
+  return proof;
 }
 
 async function waitForBrowserState(

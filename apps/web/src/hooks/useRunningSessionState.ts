@@ -7,14 +7,49 @@ import { latestTurnCompletionState } from "../lib/turn-completion-state";
 
 function hasPendingTurn(session: Session, runtimeIndexes: RuntimeIndexes): boolean {
   if (session.systemKind || session.status !== "active") return false;
-  return latestTurnCompletionState(runtimeEventsForSession(runtimeIndexes, session.id)) === "pending";
+  const events = runtimeEventsForSession(runtimeIndexes, session.id);
+  if (events.length === 0) return false;
+  const completion = latestTurnCompletionState(events);
+  return completion === "pending" || (completion === "none" && !latestTurnEvidenceIsTerminal(events));
 }
 
 function shouldShowActiveSessionStatus(session: Session, runtimeIndexes: RuntimeIndexes): boolean {
   if (session.systemKind || session.status !== "active") return false;
   const events = runtimeEventsForSession(runtimeIndexes, session.id);
   if (events.length === 0) return true;
-  return latestTurnCompletionState(events) === "pending";
+  const completion = latestTurnCompletionState(events);
+  return completion === "pending" || (completion === "none" && !latestTurnEvidenceIsTerminal(events));
+}
+
+function latestTurnEvidenceIsTerminal(events: ReturnType<typeof runtimeEventsForSession>): boolean {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event) continue;
+    if (
+      event.name === "turn.completed" ||
+      event.name === "turn.failed" ||
+      event.name === "turn.interrupted"
+    ) {
+      return true;
+    }
+    if (
+      event.name === "assistant.delta" ||
+      event.name === "assistant.reasoning.delta" ||
+      event.name === "tool.started" ||
+      event.name === "tool.completed" ||
+      event.name === "skill.selected" ||
+      event.name === "skill.loaded" ||
+      event.name === "skill.load_failed" ||
+      event.name === "approval.requested" ||
+      event.name === "approval.resolved" ||
+      event.name === "command.output" ||
+      event.name === "workspace_action" ||
+      event.name === "workspace_action_result"
+    ) {
+      return false;
+    }
+  }
+  return false;
 }
 
 export function useRunningSessionState({

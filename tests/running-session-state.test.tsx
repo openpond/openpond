@@ -104,6 +104,53 @@ describe("running session state", () => {
     expect(html).toContain("selected=true");
     expect(html).toContain("running=chat_session");
   });
+
+  test("keeps active chats running when the bounded event window starts after turn.started", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const indexes = buildRuntimeIndexes([assistantDeltaEvent(chatSession.id)], []);
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes);
+
+    expect(html).toContain("selected=true");
+    expect(html).toContain("running=chat_session");
+  });
+
+  test("does not revive active status when the bounded event window contains a terminal turn", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const indexes = buildRuntimeIndexes([turnCompletedEvent(chatSession.id)], []);
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes);
+
+    expect(html).toContain("selected=false");
+    expect(html).toContain("running=");
+    expect(html).not.toContain("running=chat_session");
+  });
+
+  test("uses newer deltas as evidence of a current turn after an older terminal event", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const indexes = buildRuntimeIndexes(
+      [turnCompletedEvent(chatSession.id), assistantDeltaEvent(chatSession.id, "current")],
+      [],
+    );
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes);
+
+    expect(html).toContain("selected=true");
+    expect(html).toContain("running=chat_session");
+  });
+
+  test("uses a newer terminal event over earlier truncated-window activity", () => {
+    const chatSession = session({ id: "chat_session", status: "active" });
+    const indexes = buildRuntimeIndexes(
+      [assistantDeltaEvent(chatSession.id, "previous"), turnCompletedEvent(chatSession.id)],
+      [],
+    );
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes);
+
+    expect(html).toContain("selected=false");
+    expect(html).not.toContain("running=chat_session");
+  });
 });
 
 function renderRunningProbe(
@@ -189,6 +236,17 @@ function turnCompletedEvent(sessionId: string): RuntimeEvent {
     timestamp: NOW,
     source: "server",
     status: "completed",
+  };
+}
+
+function assistantDeltaEvent(sessionId: string, suffix = "delta"): RuntimeEvent {
+  return {
+    id: `${sessionId}_${suffix}`,
+    sessionId,
+    name: "assistant.delta",
+    timestamp: NOW,
+    source: "provider",
+    output: "Working",
   };
 }
 

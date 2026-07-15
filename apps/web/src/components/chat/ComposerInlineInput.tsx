@@ -11,6 +11,7 @@ import {
   type ConnectedAppMentionRange,
 } from "../../lib/connected-app-mentions";
 import { detectComposerRepoLinks, type ComposerRepoLink } from "../../lib/composer-repo-links";
+import { connectedAppIconUrl, OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { resizeComposerTextarea } from "./ComposerLayout";
 
 const INLINE_TOKEN_SELECTOR = "[data-inline-token='true']";
@@ -273,7 +274,7 @@ function createTokenElement(token: ComposerInlineToken): HTMLElement {
 }
 
 function repoLinkIconSrc(link: ComposerRepoLink): string {
-  return link.provider === "github" ? "/connected-apps/github.svg" : "/openpond-icon.png";
+  return link.provider === "github" ? connectedAppIconUrl("github") : OPENPOND_ICON_URL;
 }
 
 function createRepoLinkElement(link: ComposerRepoLink): HTMLElement {
@@ -304,12 +305,7 @@ function createRepoLinkElement(link: ComposerRepoLink): HTMLElement {
 }
 
 function connectedAppIconSrc(provider: ConnectedAppMentionRange["provider"]): string {
-  if (provider === "slack") return "/connected-apps/slack.svg";
-  if (provider === "microsoft_teams") return "/connected-apps/microsoft.svg";
-  if (provider === "github") return "/connected-apps/github.svg";
-  if (provider === "google") return "/connected-apps/google.svg";
-  if (provider === "x") return "/connected-apps/x.svg";
-  return "/connected-apps/openpond-mcp.svg";
+  return connectedAppIconUrl(provider);
 }
 
 function createConnectedAppMentionElement(mention: ConnectedAppMentionRange): HTMLElement {

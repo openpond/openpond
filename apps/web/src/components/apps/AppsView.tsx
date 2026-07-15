@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import "../../styles/apps/apps.css";
 import { api, type ClientConnection } from "../../api";
+import { connectedAppIconUrl, OPENPOND_ICON_URL } from "../../lib/public-assets";
 import {
   CheckCircle2,
   ChevronRight,
@@ -242,7 +243,7 @@ function ConnectedAppInstallDialog({
         </button>
         <div className="connected-app-dialog-identity">
           <span className="openpond-mark">
-            <img alt="" src="/openpond-icon.png" />
+            <img alt="" src={OPENPOND_ICON_URL} />
           </span>
           <span className="connection-dots" aria-hidden="true">
             <span />
@@ -323,12 +324,7 @@ function appMatchesSearch(app: ConnectedAppCatalogEntry, search: string): boolea
 }
 
 function iconSrcForApp(appId: ConnectedAppId): string {
-  if (appId === "slack") return "/connected-apps/slack.svg";
-  if (appId === "microsoft_teams") return "/connected-apps/microsoft.svg";
-  if (appId === "github") return "/connected-apps/github.svg";
-  if (appId === "google") return "/connected-apps/google.svg";
-  if (appId === "x") return "/connected-apps/x.svg";
-  return "/connected-apps/openpond-mcp.svg";
+  return connectedAppIconUrl(appId);
 }
 
 async function openExternalUrl(url: string): Promise<void> {

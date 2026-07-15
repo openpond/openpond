@@ -17,10 +17,7 @@ import type { AppView } from "../lib/app-models";
 import { normalizeChatModel } from "../lib/app-models";
 import { appendPendingUserChatMessage, type PendingChatUserMessage } from "../lib/pending-chat-messages";
 import { appendSubagentRightChatPanels, createRightChatPanel, newlyObservedSubagentSessions } from "../lib/right-chat-panels";
-import {
-  cachedCodexHistoryThreadPayload,
-  loadCodexHistoryThreadPayload,
-} from "../lib/codex-history-thread-cache";
+import { loadCodexHistoryThreadPayload } from "../lib/codex-history-thread-cache";
 import {
   buildRuntimeIndexes,
   latestContextUsageForSession,
@@ -30,7 +27,10 @@ import {
 } from "../lib/runtime-indexes";
 import { buildCachedChatMessages } from "../lib/chat-messages";
 import { contextWindowStatusFromUsage } from "../lib/context-window";
-import { latestGoalRuntimeFromEvents } from "../lib/goal-runtime";
+import {
+  codexHistoryPayloadWithLiveStatus,
+  subscribeCodexHistoryLiveRefresh,
+} from "../lib/codex-history-live-refresh";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { latestTurnCompletionState } from "../lib/turn-completion-state";
 import { hasGitHubIssueSubmitConnection, buildSubmitIssueSlashPrompt } from "../lib/submit-issue-command";
@@ -68,6 +68,7 @@ export function useRightChatPanels(input: {
   connection: ClientConnection | null;
   contextCompaction: AppPreferences["contextCompaction"];
   insights: RightChatInsights;
+  locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   pendingChatUserMessages: Record<string, PendingChatUserMessage>;
   providerSettings: ProviderSettings | null;
@@ -102,6 +103,7 @@ export function useRightChatPanels(input: {
     connection,
     contextCompaction,
     insights,
+    locallyActiveCodexHistorySessionIds,
     openPondCommandAccessMode,
     pendingChatUserMessages,
     providerSettings,
@@ -285,51 +287,61 @@ export function useRightChatPanels(input: {
     }
     return sessionIds.join("\n");
   }, [rightChatPanels]);
+  const rightCodexHistoryActiveSessionKey = useMemo(() => {
+    if (!rightCodexHistorySessionKey) return "";
+    const panelSessionIds = new Set(rightCodexHistorySessionKey.split("\n").filter(Boolean));
+    return sidebarSessions
+      .filter((session) => panelSessionIds.has(session.id) && session.status === "active")
+      .map((session) => session.id)
+      .join("\n");
+  }, [rightCodexHistorySessionKey, sidebarSessions]);
+  const rightCodexHistoryLocallyActiveSessionKey = useMemo(() => {
+    if (!rightCodexHistorySessionKey) return "";
+    return rightCodexHistorySessionKey
+      .split("\n")
+      .filter((sessionId) => locallyActiveCodexHistorySessionIds.has(sessionId))
+      .join("\n");
+  }, [locallyActiveCodexHistorySessionIds, rightCodexHistorySessionKey]);
 
   useEffect(() => {
     if (!connection || !rightCodexHistorySessionKey) return undefined;
 
     const historyConnection = connection;
-    let cancelled = false;
-    const refreshTimers: number[] = [];
     const sessionIds = rightCodexHistorySessionKey.split("\n").filter(Boolean);
+    const reportedActiveSessionIds = new Set(
+      rightCodexHistoryActiveSessionKey.split("\n").filter(Boolean),
+    );
+    const locallyActiveSessionIds = new Set(
+      rightCodexHistoryLocallyActiveSessionKey.split("\n").filter(Boolean),
+    );
 
-    function scheduleRefresh(sessionId: string) {
-      const timer = window.setTimeout(() => {
-        loadThread(sessionId, true);
-      }, 2500);
-      refreshTimers.push(timer);
-    }
-
-    function loadThread(sessionId: string, force: boolean) {
-      void loadCodexHistoryThreadPayload(historyConnection, sessionId, { force })
-        .then((payload) => {
-          if (cancelled) return;
-          applyRightCodexHistoryPayload(payload);
-          if (
-            payload.session.status === "active" ||
-            latestGoalRuntimeFromEvents(payload.events)?.tone === "active"
-          ) {
-            scheduleRefresh(sessionId);
-          }
-        })
-        .catch((historyError) => {
-          if (!cancelled)
-            setError(historyError instanceof Error ? historyError.message : String(historyError));
-        });
-    }
-
-    for (const sessionId of sessionIds) {
-      const cachedPayload = cachedCodexHistoryThreadPayload(historyConnection, sessionId);
-      if (cachedPayload) applyRightCodexHistoryPayload(cachedPayload);
-      loadThread(sessionId, Boolean(cachedPayload));
-    }
-
-    return () => {
-      cancelled = true;
-      for (const timer of refreshTimers) window.clearTimeout(timer);
-    };
-  }, [applyRightCodexHistoryPayload, connection, rightCodexHistorySessionKey, setError]);
+    const unsubscribers = sessionIds.map((sessionId) =>
+      subscribeCodexHistoryLiveRefresh({
+        connection: historyConnection,
+        locallyActive: locallyActiveSessionIds.has(sessionId),
+        onError: (historyError) =>
+          setError(historyError instanceof Error ? historyError.message : String(historyError)),
+        onPayload: (payload) =>
+          applyRightCodexHistoryPayload(
+            codexHistoryPayloadWithLiveStatus(
+              payload,
+              locallyActiveSessionIds.has(sessionId),
+            ),
+          ),
+        reportedActive: reportedActiveSessionIds.has(sessionId),
+        sessionId,
+        surface: "thread",
+      }),
+    );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [
+    applyRightCodexHistoryPayload,
+    connection,
+    rightCodexHistoryActiveSessionKey,
+    rightCodexHistoryLocallyActiveSessionKey,
+    rightCodexHistorySessionKey,
+    setError,
+  ]);
 
   const rightChatPanelViews = useMemo(() => {
     const sessionById = new Map(sidebarSessions.map((session) => [session.id, session]));

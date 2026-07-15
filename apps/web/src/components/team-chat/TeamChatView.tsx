@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -20,18 +21,30 @@ import type {
   TeamChatMessage,
   TeamChatThreadDetail,
 } from "@openpond/contracts";
-import { api, type ClientConnection } from "../../api";
+import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { WorkspaceTargetState } from "../../lib/workspace-location";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import { mentionedTeamMemberIds } from "../../lib/team-chat-mentions";
+import {
+  teamChatReplyAuthorLabel,
+  teamChatReplyTargetFromMessage,
+} from "../../lib/team-chat-reply";
 import { teamChatThreadTitle } from "../../lib/team-chat-thread";
 import { Composer } from "../chat/Composer";
 import type { ComposerProjectTargetState } from "../chat/ComposerControls";
 import { MarkdownText } from "../chat/MarkdownText";
 import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
-import { Bot, MessageSquare, RefreshCw, SquarePen, Trash2, X } from "../icons";
+import { Bot, MessageSquare, RefreshCw, X } from "../icons";
+import { TeamChatMessageRow } from "./TeamChatMessageRow";
+import {
+  TeamChatComposerReply,
+  TeamChatReplyContextMenu,
+  teamChatMessageDomId,
+  teamChatReplyMenuPosition,
+  type TeamChatReplyMenuState,
+} from "./TeamChatReply";
 
 const NO_PROJECT_TARGET: ComposerProjectTargetState = {
   value: "none",
@@ -69,6 +82,15 @@ const TEAM_CHAT_PROVIDER_IDS = new Set<ChatProvider>([
   "custom-openai-compatible",
 ]);
 
+export function restoreFailedTeamChatPrompt(
+  currentPrompt: string,
+  submittedPrompt: string,
+): string {
+  if (!submittedPrompt || currentPrompt === submittedPrompt) return currentPrompt;
+  if (!currentPrompt) return submittedPrompt;
+  return `${submittedPrompt}\n\n${currentPrompt}`;
+}
+
 export type TeamChatViewProps = {
   currentUserId: string | null;
   members: TeamChatMember[];
@@ -101,6 +123,7 @@ export type TeamChatViewProps = {
     modelId: string;
     mentionUserIds?: string[];
     attachments?: ChatAttachment[];
+    replyToMessage?: TeamChatMessage | null;
     selectedActionKey?: string | null;
     approvalId?: string | null;
   }) => Promise<boolean>;
@@ -125,13 +148,35 @@ export type TeamChatViewProps = {
 export function TeamChatView(props: TeamChatViewProps) {
   const [prompt, setPrompt] = useState("");
   const [useModel, setUseModel] = useState(false);
+  const [replySelection, setReplySelection] = useState<{
+    threadId: string;
+    message: TeamChatMessage;
+  } | null>(null);
+  const [replyMenu, setReplyMenu] = useState<TeamChatReplyMenuState | null>(null);
+  const [composerFocusRequestId, setComposerFocusRequestId] = useState(0);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToLatestRef = useRef(true);
+  const activeThreadIdRef = useRef(props.detail?.thread.id ?? null);
+  activeThreadIdRef.current = props.detail?.thread.id ?? null;
   const { confirmAction, confirmDialog, resolveConfirmDialog } = useConfirmDialog();
   const membersById = useMemo(
     () => new Map(props.members.map((member) => [member.userId, member])),
     [props.members],
   );
+  const messagesById = useMemo(
+    () => new Map((props.detail?.messages ?? []).map((message) => [message.id, message])),
+    [props.detail?.messages],
+  );
+  const currentThreadId = props.detail?.thread.id ?? null;
+  const selectedReplyMessage =
+    replySelection?.threadId === currentThreadId
+      ? (messagesById.get(replySelection.message.id) ?? replySelection.message)
+      : null;
+  const replyMessage = selectedReplyMessage?.deletedAt ? null : selectedReplyMessage;
+  const replyTarget = replyMessage ? teamChatReplyTargetFromMessage(replyMessage) : null;
+  const replyAuthorLabel = replyTarget
+    ? teamChatReplyAuthorLabel(replyTarget, membersById)
+    : null;
   const title = props.detail
     ? teamChatThreadTitle(props.detail.thread, props.currentUserId)
     : "Team";
@@ -143,6 +188,49 @@ export function TeamChatView(props: TeamChatViewProps) {
     const element = messagesRef.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [lastMessageSequence, props.detail?.thread.id]);
+
+  const beginReply = useCallback((message: TeamChatMessage) => {
+    if (
+      message.deletedAt ||
+      message.id.startsWith("pending:") ||
+      typeof message.metadata.deliveryStatus === "string"
+    ) {
+      return;
+    }
+    setReplySelection({ threadId: message.threadId, message });
+    setUseModel(false);
+    setReplyMenu(null);
+    setComposerFocusRequestId((current) => current + 1);
+  }, []);
+
+  const closeReplyMenu = useCallback(() => setReplyMenu(null), []);
+
+  const openReplyMenu = useCallback(
+    (
+      message: TeamChatMessage,
+      input: {
+        clientX: number;
+        clientY: number;
+        fallbackX: number;
+        fallbackY: number;
+      },
+    ) => {
+      const position = teamChatReplyMenuPosition({
+        ...input,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      });
+      setReplyMenu({ message, ...position });
+    },
+    [],
+  );
+
+  const jumpToMessage = useCallback((messageId: string) => {
+    const element = document.getElementById(teamChatMessageDomId(messageId));
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.focus({ preventScroll: true });
+  }, []);
 
   async function submitTeamMessage(
     attachments: ChatAttachment[] = [],
@@ -156,6 +244,10 @@ export function TeamChatView(props: TeamChatViewProps) {
       )
     ) {
       props.showToast("Team chat supports PNG, JPEG, WebP, and GIF images.", "error");
+      return false;
+    }
+    if (replyMessage && action) {
+      props.showToast("Remove the agent action before replying to a message.", "error");
       return false;
     }
     const approvalRisk = action?.approvalPolicy?.risk;
@@ -173,18 +265,45 @@ export function TeamChatView(props: TeamChatViewProps) {
       if (!approved) return false;
       approvalId = crypto.randomUUID();
     }
-    const sent = await props.onSendMessage({
-      body: prompt,
-      useModel,
-      providerId: teamProvider,
-      modelId: teamModel,
-      mentionUserIds: mentionedTeamMemberIds(prompt, props.members),
-      attachments,
-      selectedActionKey: action?.id ?? null,
-      approvalId,
-    });
-    if (sent) setPrompt("");
-    return sent;
+    const submittedPrompt = prompt;
+    const submittedThreadId = props.detail?.thread.id ?? null;
+    const submittedReply = replyMessage;
+    const restorePrompt = () => {
+      if (activeThreadIdRef.current !== submittedThreadId) return;
+      setPrompt((current) => restoreFailedTeamChatPrompt(current, submittedPrompt));
+      if (submittedReply) {
+        setReplySelection((current) =>
+          current ?? {
+            threadId: submittedReply.threadId,
+            message: submittedReply,
+          },
+        );
+      }
+    };
+    setPrompt("");
+    if (submittedReply) setReplySelection(null);
+    try {
+      const sent = await props.onSendMessage({
+        body: submittedPrompt,
+        useModel,
+        providerId: teamProvider,
+        modelId: teamModel,
+        mentionUserIds: mentionedTeamMemberIds(submittedPrompt, props.members),
+        attachments,
+        replyToMessage: submittedReply,
+        selectedActionKey: action?.id ?? null,
+        approvalId,
+      });
+      if (!sent) {
+        restorePrompt();
+      } else if (useModel) {
+        setUseModel(false);
+      }
+      return sent;
+    } catch (error) {
+      restorePrompt();
+      throw error;
+    }
   }
 
   return (
@@ -241,6 +360,11 @@ export function TeamChatView(props: TeamChatViewProps) {
                 onDelete={props.onDeleteMessage}
                 onRetry={props.onRetryMessage}
                 onDismissFailed={props.onDismissFailedMessage}
+                membersById={membersById}
+                messagesById={messagesById}
+                onReply={beginReply}
+                onOpenReplyMenu={openReplyMenu}
+                onJumpToMessage={jumpToMessage}
                 connection={props.connection}
               />
             ))
@@ -249,10 +373,19 @@ export function TeamChatView(props: TeamChatViewProps) {
           )}
         </div>
         <div className="team-chat-composer-shell">
+          {replyTarget && replyAuthorLabel ? (
+            <TeamChatComposerReply
+              authorLabel={replyAuthorLabel}
+              target={replyTarget}
+              onCancel={() => setReplySelection(null)}
+              onJump={() => jumpToMessage(replyTarget.id)}
+            />
+          ) : null}
           <Composer
             mode="dock"
             surface="team"
             teamUseModel={useModel}
+            teamUseModelLocked={Boolean(replyTarget)}
             teamMentionMembers={props.members.filter(
               (member) => member.userId !== props.currentUserId,
             )}
@@ -262,6 +395,7 @@ export function TeamChatView(props: TeamChatViewProps) {
             contextWindowStatus={props.contextWindowStatus}
             busy={props.busy}
             running={false}
+            focusRequestId={composerFocusRequestId}
             submissionScopeKey={`team:${props.detail?.thread.id ?? "none"}`}
             showProjectFooter={false}
             connection={props.connection}
@@ -290,6 +424,11 @@ export function TeamChatView(props: TeamChatViewProps) {
           />
         </div>
       </div>
+      <TeamChatReplyContextMenu
+        menu={replyMenu}
+        onClose={closeReplyMenu}
+        onReply={beginReply}
+      />
       <ConfirmDialog state={confirmDialog} onResolve={resolveConfirmDialog} />
     </section>
   );
@@ -596,295 +735,4 @@ export function TeamAiThreadPanel(
       </div>
     </aside>
   );
-}
-
-function TeamChatMessageRow(props: {
-  message: TeamChatMessage;
-  author: TeamChatMember | null;
-  own: boolean;
-  onOpenAiThread: (conversationId: string) => Promise<void>;
-  onOpenAgentConversation: (agentRunId: string) => Promise<void>;
-  onEdit: (message: TeamChatMessage, body: string) => Promise<boolean>;
-  onDelete: (message: TeamChatMessage) => Promise<boolean>;
-  onRetry: (message: TeamChatMessage) => Promise<boolean>;
-  onDismissFailed: (message: TeamChatMessage) => void;
-  connection: ClientConnection | null;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(props.message.body);
-  const aiRef = props.message.refs.find((ref) => ref.refType === "hosted_ai_thread");
-  const agentRef = props.message.refs.find((ref) => ref.refType === "agent_run");
-  const aiStatus = typeof aiRef?.preview.status === "string" ? aiRef.preview.status : null;
-  const deliveryStatus =
-    typeof props.message.metadata.deliveryStatus === "string"
-      ? props.message.metadata.deliveryStatus
-      : null;
-  const uploadProgress =
-    typeof props.message.metadata.uploadProgress === "string"
-      ? props.message.metadata.uploadProgress
-      : null;
-  return (
-    <article className={`team-chat-message${props.own ? " own" : ""}`}>
-      <TeamAvatar member={props.author} />
-      <div className="team-chat-message-content">
-        <header>
-          <strong>{props.author?.name ?? "Team member"}</strong>
-          <time>{messageTime(props.message.createdAt)}</time>
-          {props.message.editedAt ? <span>edited</span> : null}
-          {deliveryStatus === "sending" ? <span>sending</span> : null}
-          {deliveryStatus === "sending" && uploadProgress ? (
-            <span>uploaded {uploadProgress}</span>
-          ) : null}
-          {deliveryStatus === "failed" ? <span className="failed">not sent</span> : null}
-          {deliveryStatus === "failed" ? (
-            <div className="team-chat-message-actions visible">
-              <button
-                type="button"
-                data-tooltip="Retry message"
-                aria-label="Retry message"
-                onClick={() => void props.onRetry(props.message)}
-              >
-                <RefreshCw size={13} />
-              </button>
-              <button
-                type="button"
-                data-tooltip="Remove failed message"
-                aria-label="Remove failed message"
-                onClick={() => props.onDismissFailed(props.message)}
-              >
-                <X size={13} />
-              </button>
-            </div>
-          ) : props.own && !props.message.deletedAt && !deliveryStatus ? (
-            <div className="team-chat-message-actions">
-              {!aiRef ? (
-                <button
-                  type="button"
-                  data-tooltip="Edit message"
-                  aria-label="Edit message"
-                  onClick={() => setEditing(true)}
-                >
-                  <SquarePen size={13} />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                data-tooltip="Delete message"
-                aria-label="Delete message"
-                onClick={() => void props.onDelete(props.message)}
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ) : null}
-        </header>
-        {editing ? (
-          <form
-            className="team-chat-message-edit"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void props.onEdit(props.message, draft).then((saved) => {
-                if (saved) setEditing(false);
-              });
-            }}
-          >
-            <textarea
-              autoFocus
-              value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape") return;
-                event.preventDefault();
-                setEditing(false);
-                setDraft(props.message.body);
-              }}
-            />
-            <div>
-              <button type="button" onClick={() => setEditing(false)}>
-                Cancel
-              </button>
-              <button type="submit" disabled={!draft.trim()}>
-                Save
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className={props.message.deletedAt ? "deleted" : ""}>
-            {props.message.deletedAt ? "Message deleted" : props.message.body}
-          </div>
-        )}
-        {!props.message.deletedAt && props.message.attachments.length > 0 ? (
-          <TeamChatMessageImages message={props.message} connection={props.connection} />
-        ) : null}
-        {aiRef ? (
-          <button
-            type="button"
-            className="team-chat-thread-link"
-            onClick={() => void props.onOpenAiThread(aiRef.refId)}
-          >
-            <MessageSquare size={14} />
-            <span>Thread</span>
-            {aiStatus && aiStatus !== "completed" ? (
-              <small>{threadStatusLabel(aiStatus)}</small>
-            ) : null}
-            <span aria-hidden="true">›</span>
-          </button>
-        ) : null}
-        {agentRef ? (
-          <button
-            type="button"
-            className="team-chat-thread-link"
-            onClick={() => void props.onOpenAgentConversation(agentRef.refId)}
-          >
-            <Bot size={14} />
-            <span>Agent run</span>
-            <small>{threadStatusLabel(String(agentRef.preview.status ?? "queued"))}</small>
-            <span aria-hidden="true">›</span>
-          </button>
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
-function TeamChatMessageImages(props: {
-  message: TeamChatMessage;
-  connection: ClientConnection | null;
-}) {
-  const localPreviews = new Map(
-    Array.isArray(props.message.metadata.localAttachmentPreviews)
-      ? props.message.metadata.localAttachmentPreviews.flatMap((value) => {
-          if (!value || typeof value !== "object") return [];
-          const candidate = value as { id?: unknown; url?: unknown };
-          return typeof candidate.id === "string" && typeof candidate.url === "string"
-            ? [[candidate.id, candidate.url] as const]
-            : [];
-        })
-      : [],
-  );
-  return (
-    <div className="team-chat-message-images">
-      {props.message.attachments.map((attachment) => (
-        <TeamChatMessageImage
-          key={attachment.id}
-          attachmentId={attachment.id}
-          alt={attachment.name}
-          teamId={props.message.teamId}
-          connection={props.connection}
-          localUrl={localPreviews.get(attachment.clientAttachmentId) ?? null}
-        />
-      ))}
-    </div>
-  );
-}
-
-function TeamChatMessageImage(props: {
-  attachmentId: string;
-  alt: string;
-  teamId: string;
-  connection: ClientConnection | null;
-  localUrl: string | null;
-}) {
-  const [url, setUrl] = useState<string | null>(props.localUrl);
-  const [failed, setFailed] = useState(false);
-  const refreshCountRef = useRef(0);
-
-  async function refreshUrl(): Promise<void> {
-    if (!props.connection || props.localUrl) {
-      if (!props.localUrl) setFailed(true);
-      return;
-    }
-    setFailed(false);
-    try {
-      const result = await api.teamChatAttachmentDownload(
-        props.connection,
-        props.teamId,
-        props.attachmentId,
-      );
-      setUrl(result.url);
-    } catch {
-      setUrl(null);
-      setFailed(true);
-    }
-  }
-
-  useEffect(() => {
-    setUrl(props.localUrl);
-    setFailed(false);
-    refreshCountRef.current = 0;
-    if (!props.localUrl) void refreshUrl();
-    // The identifiers define the signed URL request; refreshUrl intentionally stays local.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.attachmentId, props.connection, props.localUrl, props.teamId]);
-
-  return url ? (
-    <a href={url} target="_blank" rel="noreferrer" aria-label={`Open ${props.alt}`}>
-      <img
-        src={url}
-        alt={props.alt}
-        loading="lazy"
-        onError={() => {
-          if (!props.localUrl && refreshCountRef.current < 1) {
-            refreshCountRef.current += 1;
-            void refreshUrl();
-            return;
-          }
-          setUrl(null);
-          setFailed(true);
-        }}
-      />
-    </a>
-  ) : failed ? (
-    <button
-      type="button"
-      className="team-chat-message-image-retry"
-      aria-label={`Retry ${props.alt}`}
-      data-tooltip="Retry image"
-      onClick={() => {
-        refreshCountRef.current = 0;
-        if (props.localUrl) {
-          setFailed(false);
-          setUrl(props.localUrl);
-        } else {
-          void refreshUrl();
-        }
-      }}
-    >
-      <RefreshCw size={18} />
-    </button>
-  ) : (
-    <div
-      className="team-chat-message-image-loading"
-      role="status"
-      aria-label={`Loading ${props.alt}`}
-    />
-  );
-}
-
-function threadStatusLabel(status: string): string {
-  if (status === "pending") return "Starting";
-  if (status === "running") return "Responding";
-  if (status === "failed") return "Failed";
-  if (status === "interrupted") return "Interrupted";
-  if (status === "cancelled") return "Cancelled";
-  return status;
-}
-
-function TeamAvatar({ member }: { member: TeamChatMember | null }) {
-  if (member?.image) {
-    return <img className="team-chat-avatar" src={member.image} alt="" />;
-  }
-  const initials = (member?.name ?? "T")
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-  return <span className="team-chat-avatar fallback">{initials}</span>;
-}
-
-function messageTime(value: string): string {
-  const date = new Date(value);
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : "";
 }

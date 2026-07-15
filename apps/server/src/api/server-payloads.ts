@@ -11,14 +11,12 @@ import {
   ListCloudWorkItemsRequestSchema,
   OpenCloudWorkItemRequestSchema,
   PatchSidebarAppPreferenceRequestSchema,
-  PatchSessionRequestSchema,
   RecordClientDiagnosticRequestSchema,
   RecordPreflightTurnFailureRequestSchema,
   PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
   SaveOpenPondAccountRequestSchema,
   SendCloudWorkItemMessageRequestSchema,
-  SendTurnRequestSchema,
   SessionSchema,
   SwitchOpenPondAccountRequestSchema,
   UpdateOpenPondAccountConfigRequestSchema,
@@ -48,7 +46,6 @@ import {
   type SidebarAppPreferences,
   type WorkspaceState,
 } from "@openpond/contracts";
-import { CodexAppServerClient, defaultServerRequestResult } from "@openpond/codex-provider";
 import {
   loadOpenPondAccountContext,
   loadOpenPondApps,
@@ -58,11 +55,6 @@ import {
 } from "@openpond/runtime";
 import { emptyProfileState, initLocalProfileRepo, loadOpenPondProfileState } from "@openpond/cloud";
 import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
-import {
-  chatAttachmentContext,
-  formatPromptWithAttachmentContext,
-  materializeChatAttachments,
-} from "../chat-attachments.js";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
 import {
   assertCreatePipelineSnapshotLinked,
@@ -109,12 +101,10 @@ import { providerSecretsConfigPath, providerSecretsKeyPath } from "../paths.js";
 import type { SqliteStore } from "../store/store.js";
 import type { ProvidersFile } from "../types.js";
 import { event, now } from "../utils.js";
-import { loadCodexHistorySessions, readCodexHistoryThreadPayload } from "../codex-history.js";
+import { loadCodexHistorySessions } from "../codex-history.js";
 import {
-  applyCodexHistorySidebarPreference,
   applyCodexHistorySidebarPreferences,
   loadCodexHistorySidebarPreferences,
-  patchCodexHistorySidebarPreference,
 } from "../codex-history-sidebar-preferences.js";
 import { createOpenPondCache } from "../openpond/server-openpond-cache.js";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
@@ -157,15 +147,11 @@ import {
   normalizeRequiredCloudWorkItemMessage,
   normalizeCloudWorkItemActivity,
   normalizeCloudWorkItemRuntimeSession,
-  codexHistoryThreadReadOptions,
-  nextCodexHistoryTurnId,
-  codexHistorySessionConfig,
-  type ActiveCodexHistoryTurn,
-  type CodexHistoryTurnInterruptResponse,
   assertApplyableLocalWorkspace,
   countPatchFiles,
   latestRuntimeSessionSandboxId,
 } from "./server-payload-helpers.js";
+import { createCodexHistoryPayloads } from "./codex-history-payloads.js";
 export { assertCreatePipelineBackgroundApproved } from "./server-payload-helpers.js";
 import { createProfilePayloads } from "./profile-payloads.js";
 import {
@@ -246,8 +232,14 @@ export function createServerPayloads(deps: {
     },
   });
   const providerDiagnostics = new ProviderDiagnosticsTracker();
-  const activeCodexHistoryTurns = new Map<string, ActiveCodexHistoryTurn>();
   let appPreferencesUpdateQueue: Promise<void> = Promise.resolve();
+  const {
+    codexHistorySessionsWithLiveStatus,
+    codexHistoryThreadPayload,
+    interruptCodexHistoryTurnPayload,
+    patchCodexHistorySessionPayload,
+    sendCodexHistoryTurnPayload,
+  } = createCodexHistoryPayloads({ attachmentRootDir, store, version });
 
   async function loadAppPreferences(): Promise<AppPreferences> {
     const entry = await store.getCacheEntry<unknown>(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY);
@@ -803,7 +795,9 @@ export function createServerPayloads(deps: {
       cloudProjects,
       profile,
       codexHistorySessions: validBootstrapSessions(
-        applyCodexHistorySidebarPreferences(codexHistorySessions, codexHistorySidebarPreferences),
+        codexHistorySessionsWithLiveStatus(
+          applyCodexHistorySidebarPreferences(codexHistorySessions, codexHistorySidebarPreferences),
+        ),
       ),
       sidebarAppPreferences,
       appsError: openPond.appsError,
@@ -823,101 +817,6 @@ export function createServerPayloads(deps: {
       diagnostics,
     };
     return BootstrapPayloadSchema.parse(payload);
-  }
-
-  async function codexHistoryThreadPayload(sessionId: string, requestUrl?: URL): Promise<unknown> {
-    const [payload, preferences] = await Promise.all([
-      readCodexHistoryThreadPayload(sessionId, {
-        ...codexHistoryThreadReadOptions(requestUrl),
-        attachmentRootDir,
-      }),
-      loadCodexHistorySidebarPreferences(store),
-    ]);
-    return {
-      ...payload,
-      session: applyCodexHistorySidebarPreference(payload.session, preferences),
-    };
-  }
-
-  async function patchCodexHistorySessionPayload(sessionId: string, payload: unknown): Promise<unknown> {
-    PatchSessionRequestSchema.parse(payload);
-    const current = await readCodexHistoryThreadPayload(sessionId, { attachmentRootDir });
-    await patchCodexHistorySidebarPreference(store, sessionId, payload);
-    return applyCodexHistorySidebarPreference(current.session, await loadCodexHistorySidebarPreferences(store));
-  }
-
-  async function sendCodexHistoryTurnPayload(sessionId: string, payload: unknown): Promise<unknown> {
-    const input = SendTurnRequestSchema.parse(payload);
-    if (activeCodexHistoryTurns.has(sessionId)) {
-      throw new Error("A Codex history turn is already running for this chat.");
-    }
-    const current = await readCodexHistoryThreadPayload(sessionId, { attachmentRootDir });
-    const threadId = current.session.codexThreadId;
-    if (!threadId) throw new Error("Codex history session is missing its Codex thread id");
-    const cwd = input.cwd ?? current.session.cwd;
-    const turnId = nextCodexHistoryTurnId(current.events, current.session.id);
-    const attachmentContexts = await materializeChatAttachments({
-      attachmentRootDir,
-      sessionId: current.session.id,
-      turnId,
-      attachments: input.attachments,
-    });
-    const providerPrompt = formatPromptWithAttachmentContext(input.prompt, chatAttachmentContext(attachmentContexts));
-    const client = new CodexAppServerClient({
-      binaryPath: process.env.CODEX_BINARY || "codex",
-      clientName: "openpond-app",
-      clientTitle: "OpenPond App",
-      clientVersion: version,
-      onNotification: () => undefined,
-      onServerRequest: async (request) => defaultServerRequestResult(request),
-    });
-    let resolveReady: () => void = () => undefined;
-    const ready = new Promise<void>((resolve) => {
-      resolveReady = resolve;
-    });
-    const activeTurn: ActiveCodexHistoryTurn = {
-      client,
-      completion: null,
-      interrupted: false,
-      ready,
-      resolveReady,
-      threadId,
-      turnId: null,
-    };
-    activeCodexHistoryTurns.set(sessionId, activeTurn);
-    try {
-      await client.resumeThread({
-        threadId,
-        cwd,
-        approvalPolicy: input.approvalPolicy,
-        sandbox: input.sandbox,
-        config: codexHistorySessionConfig(input.codexPermissionMode),
-      });
-      const turn = await client.startTurn({
-        threadId,
-        prompt: providerPrompt,
-        cwd,
-        model: input.model,
-        approvalPolicy: input.approvalPolicy,
-        sandbox: input.sandbox,
-      });
-      const completion = client.waitForTurn(turn.turnId);
-      activeTurn.completion = completion;
-      activeTurn.turnId = turn.turnId;
-      activeTurn.resolveReady();
-      try {
-        await completion;
-      } catch (error) {
-        if (!activeTurn.interrupted) throw error;
-      }
-      return codexHistoryThreadPayload(sessionId);
-    } finally {
-      activeTurn.resolveReady();
-      if (activeTurn && activeCodexHistoryTurns.get(sessionId) === activeTurn) {
-        activeCodexHistoryTurns.delete(sessionId);
-      }
-      await client.stop().catch(() => undefined);
-    }
   }
 
   async function recordPreflightTurnFailure(
@@ -966,23 +865,6 @@ export function createServerPayloads(deps: {
       }),
     );
     return bootstrapPayload({ forceOpenPond: false });
-  }
-
-  async function interruptCodexHistoryTurnPayload(sessionId: string): Promise<CodexHistoryTurnInterruptResponse> {
-    const activeTurn = activeCodexHistoryTurns.get(sessionId);
-    if (!activeTurn) return { interrupted: false, reason: "no_active_openpond_turn" };
-    activeTurn.interrupted = true;
-    await activeTurn.ready;
-    if (!activeTurn.turnId || !activeTurn.completion) {
-      await activeTurn.client.stop().catch(() => undefined);
-      return { interrupted: false, reason: "turn_not_ready" };
-    }
-    await activeTurn.client.interruptTurn({
-      threadId: activeTurn.threadId,
-      turnId: activeTurn.turnId,
-    });
-    await activeTurn.completion.catch(() => undefined);
-    return { interrupted: true };
   }
 
   function validBootstrapSessions(sessions: Session[]): Session[] {

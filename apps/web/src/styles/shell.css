@@ -378,6 +378,11 @@
   border-color: rgba(99, 217, 138, 0.24);
 }
 
+.app-toast.top-right {
+  top: 22px;
+  bottom: auto;
+}
+
 .app-toast.error span {
   color: #ff706a;
 }

@@ -138,11 +138,11 @@ describe("GetStartedView", () => {
     expect(appsSlide?.detail).toBeUndefined();
     expect(channelSlide?.body).toBeUndefined();
     expect(channelSlide?.detail).toBeUndefined();
-    expect(appsVisualHtml).toContain("/connected-apps/github.svg");
-    expect(appsVisualHtml).toContain("/connected-apps/slack.svg");
-    expect(appsVisualHtml).toContain("/connected-apps/microsoft.svg");
-    expect(appsVisualHtml).toContain("/connected-apps/openpond-mcp.svg");
-    expect(channelVisualHtml).toContain("/openpond-icon.png");
+    expect(appsVisualHtml).toContain("./connected-apps/github.svg");
+    expect(appsVisualHtml).toContain("./connected-apps/slack.svg");
+    expect(appsVisualHtml).toContain("./connected-apps/microsoft.svg");
+    expect(appsVisualHtml).toContain("./connected-apps/openpond-mcp.svg");
+    expect(channelVisualHtml).toContain("./openpond-icon.png");
     expect(channelVisualHtml).toContain("Microsoft Teams");
   });
 });
