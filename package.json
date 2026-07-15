@@ -1,7 +1,8 @@
 {
   "name": "openpond",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "private": true,
+  "openpondReleaseVersioned": true,
   "type": "module",
   "engines": {
     "node": ">=20.19 <21 || >=22.12"
@@ -87,6 +88,7 @@
     "release:patch": "bun scripts/release-stable.ts patch",
     "release:minor": "bun scripts/release-stable.ts minor",
     "release:major": "bun scripts/release-stable.ts major",
+    "release:version:check": "bun scripts/check-release-version.ts",
     "release:source-artifacts:stage": "bun scripts/stage-release-source-artifacts.ts",
     "release:inventory": "bun scripts/generate-release-inventory.ts",
     "release:sbom": "bun x @cyclonedx/cdxgen@12.2.0 -t js -o release-assets/openpond-sbom.cdx.json .",

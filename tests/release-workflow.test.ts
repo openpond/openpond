@@ -50,6 +50,14 @@ describe("release workflow", () => {
 
     expect(workflow).toContain("name: Require green CI");
     expect(workflow).toContain("name: Build release source artifacts once");
+    expect(workflow).toContain("name: Verify stable source version");
+    expect(workflow).toContain("run: bun run release:version:check -- --version");
+    expect(workflow.indexOf("name: Verify stable source version")).toBeLessThan(
+      workflow.indexOf("name: Require green CI"),
+    );
+    expect(workflow.indexOf("name: Verify stable source version")).toBeLessThan(
+      workflow.indexOf("name: Build release source artifacts once"),
+    );
     expect(workflow).toContain("name: Wait for the required CI check on this commit");
     expect(workflow).toContain('select(.name == "Checks" and .app.slug == "github-actions")');
     expect(workflow.match(/bun run test/g) ?? []).toHaveLength(0);
@@ -145,6 +153,15 @@ describe("release workflow", () => {
     };
     expect(packageJson.scripts?.build).toContain("bun run build:artifacts");
     expect(packageJson.scripts?.["build:artifacts"]).toContain("bun run build:desktop");
+  });
+
+  test("keeps the stable release guard available as a package script", () => {
+    const packageJson = JSON.parse(readFileSync(ROOT_PACKAGE_PATH, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.["release:version:check"]).toBe(
+      "bun scripts/check-release-version.ts",
+    );
   });
 
   test("builds server workspace dependencies before bundling release artifacts", () => {

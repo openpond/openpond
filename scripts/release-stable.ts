@@ -1,26 +1,13 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { assertReleaseVersion, writeReleaseVersion } from "./release-version";
+
 type Bump = "patch" | "minor" | "major";
 
-type PackageJson = {
-  version?: string;
-  [key: string]: unknown;
-};
-
-const versionedPackageFiles = [
-  "package.json",
-  "apps/cli/package.json",
-  "apps/desktop/package.json",
-  "apps/server/package.json",
-  "apps/terminal/package.json",
-  "apps/web/package.json",
-  "packages/codex-provider/package.json",
-  "packages/contracts/package.json",
-  "packages/runtime/package.json",
-];
+type PackageJson = { version?: string };
 
 function fail(message: string): never {
   console.error(message);
@@ -76,30 +63,6 @@ async function readPackage(root: string, file: string): Promise<PackageJson> {
   return JSON.parse(await readFile(path.join(root, file), "utf8")) as PackageJson;
 }
 
-async function writePackage(root: string, file: string, version: string, dryRun: boolean): Promise<void> {
-  const packagePath = path.join(root, file);
-  const packageJson = JSON.parse(await readFile(packagePath, "utf8")) as PackageJson;
-  packageJson.version = version;
-  if (dryRun) {
-    console.log(`[dry-run] update ${file} -> ${version}`);
-    return;
-  }
-  await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-}
-
-async function writeServerVersion(root: string, version: string, dryRun: boolean): Promise<void> {
-  const serverFile = "apps/server/src/constants.ts";
-  const serverPath = path.join(root, serverFile);
-  const source = await readFile(serverPath, "utf8");
-  const updated = source.replace(/const VERSION = "[^"]+";/, `const VERSION = "${version}";`);
-  if (source === updated) fail(`Could not update ${serverFile} VERSION constant.`);
-  if (dryRun) {
-    console.log(`[dry-run] update ${serverFile} VERSION -> ${version}`);
-    return;
-  }
-  await writeFile(serverPath, updated);
-}
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const dryRun = process.argv.includes("--dry-run");
@@ -144,21 +107,21 @@ if (exists("git", ["ls-remote", "--exit-code", "--tags", "origin", `refs/tags/${
 }
 
 if (version !== currentVersion) {
-  for (const file of versionedPackageFiles) {
-    await writePackage(root, file, version, dryRun);
-  }
-  await writeServerVersion(root, version, dryRun);
+  const versionedFiles = await writeReleaseVersion(root, version, { dryRun });
   run("bun", ["install", "--lockfile-only", "--save-text-lockfile"], dryRun);
   if (!skipChecks) {
     run("bun", ["run", "typecheck"], dryRun);
     run("bun", ["run", "test"], dryRun);
   }
-  run("git", ["add", ...versionedPackageFiles, "apps/server/src/constants.ts", "bun.lock"], dryRun);
+  run("git", ["add", ...versionedFiles], dryRun);
   run("git", ["commit", "-m", `chore: release ${tag}`], dryRun);
   run("git", ["push", "origin", branch], dryRun);
-} else if (!skipChecks) {
-  run("bun", ["run", "typecheck"], dryRun);
-  run("bun", ["run", "test"], dryRun);
+} else {
+  await assertReleaseVersion(root, version);
+  if (!skipChecks) {
+    run("bun", ["run", "typecheck"], dryRun);
+    run("bun", ["run", "test"], dryRun);
+  }
 }
 
 run("git", ["tag", "-a", tag, "-m", `OpenPond App ${tag}`], dryRun);
