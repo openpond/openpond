@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writeReleaseVersion } from "./release-version";
+
 type ReleaseChannel = "stable" | "nightly";
 
 type ElectronBuilderConfig = {
@@ -48,6 +50,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const channel = readChannel(readArg("channel"));
 const version = readVersion(readArg("version"));
+
+await writeReleaseVersion(root, version);
 
 const productName = channel === "nightly" ? "openpond nightly" : "openpond";
 const appPackageName = channel === "nightly" ? "openpond-app-nightly" : "openpond-app";
