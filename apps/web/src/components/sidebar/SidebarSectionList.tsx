@@ -19,6 +19,7 @@ import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
 import { SidebarTeamSection } from "./SidebarTeamSection";
+import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import {
   SidebarCloudWorkItemRow,
   SidebarProjectRow,
@@ -101,12 +102,18 @@ export function SidebarSectionList({
   teamChatEnabled,
   teamChatOrganization,
   teamChatLoading = false,
-  teamNotificationMode,
   currentUserId,
   teamMembers = [],
   teamThreads = [],
-  setTeamNotificationMode,
-  setTeamThreadMuted,
+  communityItems = [],
+  communityChannels = [],
+  communityLoading = false,
+  communityError,
+  selectedCommunityId,
+  selectedCommunityChannelId,
+  discoverCommunities,
+  selectCommunity,
+  selectCommunityChannel,
   selectedProjectId,
   selectedSessionId,
   sidebarProjectIdBySessionId,
@@ -416,6 +423,18 @@ export function SidebarSectionList({
 
   return (
     <div className="sidebar-scroll">
+      <SidebarCommunitySection
+        communities={communityItems}
+        channels={communityChannels}
+        loading={communityLoading}
+        error={communityError}
+        selectedCommunityId={selectedCommunityId}
+        selectedChannelId={selectedCommunityChannelId}
+        view={view}
+        onDiscover={discoverCommunities}
+        onSelectCommunity={selectCommunity}
+        onSelectChannel={selectCommunityChannel}
+      />
       <SidebarTeamSection
         currentUserId={currentUserId}
         enabled={teamChatEnabled}
@@ -423,9 +442,6 @@ export function SidebarSectionList({
         members={teamMembers}
         openTeamDm={openTeamDm}
         organization={teamChatOrganization}
-        notificationMode={teamNotificationMode}
-        onNotificationModeChange={setTeamNotificationMode}
-        onThreadMuteChange={setTeamThreadMuted}
         selectedTeamThreadId={selectedTeamThreadId}
         selectTeamThread={selectTeamThread}
         threads={teamThreads}

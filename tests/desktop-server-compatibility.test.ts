@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   bundledServerLaunchPort,
+  canLaunchBundledDesktopServer,
   canReuseDesktopServer,
   isCompatibleDesktopServer,
   localServerPort,
@@ -51,6 +52,11 @@ describe("desktop server compatibility", () => {
       packaged: false,
       explicitServerUrl: false,
     })).toBe(true);
+  });
+
+  test("never launches a bundled server when the dev runner owns an explicit server URL", () => {
+    expect(canLaunchBundledDesktopServer(true)).toBe(false);
+    expect(canLaunchBundledDesktopServer(false)).toBe(true);
   });
 
   test("only considers explicit loopback ports eligible for stale-server retirement", () => {

@@ -104,6 +104,7 @@ export const PatchTaskCandidateRequestSchema = z.object({
 export const RunTaskMinerRequestSchema = z.object({
   profileId: IdSchema,
   sourceIds: z.array(IdSchema).max(100_000).default([]),
+  sessionIds: z.array(IdSchema).max(100_000).default([]),
   config: TaskMinerConfigSchema.optional(),
 });
 
@@ -114,11 +115,13 @@ export const TaskMinerRunSchema = z.object({
   status: z.enum(["queued", "running", "cancelling", "cancelled", "succeeded", "failed"]),
   config: TaskMinerConfigSchema,
   sourceIds: z.array(IdSchema).max(100_000),
+  sessionIds: z.array(IdSchema).max(100_000).default([]),
   progress: z.object({
-    stage: z.enum(["queued", "preparing", "clustering", "persisting", "complete"]),
+    stage: z.enum(["queued", "ingesting", "preparing", "clustering", "persisting", "complete"]),
     processedSources: z.number().int().nonnegative(),
     totalSources: z.number().int().nonnegative(),
     candidatesFound: z.number().int().nonnegative(),
+    skippedSources: z.number().int().nonnegative().default(0),
   }),
   candidateIds: z.array(IdSchema).max(100_000),
   cancelRequested: z.boolean(),

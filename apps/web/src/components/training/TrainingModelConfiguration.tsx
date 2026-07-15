@@ -38,10 +38,13 @@ export function TrainingModelConfiguration({
     lineage?.chatConfiguration ?? DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION,
   );
   const [saving, setSaving] = useState(false);
+  const savedConfigurationVersion = lineage
+    ? `${lineage.id}:${lineage.chatConfiguration.updatedAt ?? "initial"}`
+    : "none";
 
   useEffect(() => {
     setDraft(lineage?.chatConfiguration ?? DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION);
-  }, [lineage?.chatConfiguration, lineage?.id]);
+  }, [savedConfigurationVersion]);
 
   if (!lineage) {
     return <div className="training-run-placeholder">Chat configuration is available after an adapter is imported.</div>;

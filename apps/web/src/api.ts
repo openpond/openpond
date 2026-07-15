@@ -93,6 +93,7 @@ import { apiFetch, type ClientConnection } from "./api/api-client";
 import { organizationApi } from "./api/organization-api";
 import { sessionApi } from "./api/session-api";
 import { sandboxApi } from "./api/sandbox";
+import { communityApi } from "./api/community-api";
 import type {
   CloudWorkItemCancelTaskResponse,
   CloudWorkItemApplyLocalPatchResponse,
@@ -169,6 +170,7 @@ export type {
 } from "./api/types";
 
 export const api = {
+  ...communityApi,
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
   teamChatMembers: (connection: ClientConnection, teamId: string) =>

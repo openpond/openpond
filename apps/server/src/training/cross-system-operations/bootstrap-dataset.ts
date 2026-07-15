@@ -1,4 +1,5 @@
 import {
+  CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT,
   CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   CrossSystemBootstrapRecordSchema,
@@ -39,7 +40,7 @@ export function buildCrossSystemBootstrapDataset(input: {
 
 function trajectoryMessages(task: CrossSystemTask, trajectory: CrossSystemTrajectory): CrossSystemBootstrapMessage[] {
   const messages: CrossSystemBootstrapMessage[] = [
-    { role: "system", content: `Use only the four registered synthetic Cross-System Operations tools. Contract ${CROSS_SYSTEM_TOOL_CONTRACT_HASH}. Finish with ANSWER: JSON.` },
+    { role: "system", content: CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT },
     { role: "user", content: task.prompt },
   ];
   for (const step of trajectory.steps) {

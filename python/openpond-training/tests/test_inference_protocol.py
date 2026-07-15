@@ -1,8 +1,14 @@
 import pytest
+import torch
 
 from openpond_training.contracts import ContractError
 from openpond_training.fixture_model import render_record
-from openpond_training.inference import fixture_protocol_completion, normalized_messages
+from openpond_training.inference import (
+    fixture_protocol_completion,
+    left_truncate_encoded_input,
+    normalized_messages,
+    request_context_window_tokens,
+)
 
 
 def test_normalized_messages_keeps_supported_chat_history() -> None:
@@ -16,8 +22,8 @@ def test_normalized_messages_keeps_supported_chat_history() -> None:
         {"role": "system", "content": "Be concise."},
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi"},
-        {"role": "assistant", "content": '{"arguments": {"query": "Atlas"}, "id": "call_1", "name": "search_crm", "type": "tool_call"}'},
-        {"role": "user", "content": '{"content": "{\\"items\\":[]}", "tool_call_id": "call_1", "type": "tool_result"}'},
+        {"role": "assistant", "content": '{"type":"tool_call","name":"search_crm","arguments":{"query":"Atlas"}}'},
+        {"role": "user", "content": '{"type":"tool_result","name":"search_crm","ok":true,"result":{"items":[]},"error":null}'},
     ]
 
 
@@ -34,7 +40,7 @@ def test_fixture_protocol_runs_one_native_tool_turn_then_returns_text() -> None:
     assert '"name":"search_crm"' in fixture_protocol_completion(initial)
     after_tool = [
         *initial,
-        {"role": "user", "content": '{"type":"tool_result","tool_call_id":"fixture_search_crm_1","content":"{}"}'},
+        {"role": "user", "content": '{"type":"tool_result","name":"search_crm","ok":true,"result":{},"error":null}'},
     ]
     assert fixture_protocol_completion(after_tool) == "ANSWER: {}"
 
@@ -51,5 +57,24 @@ def test_fixture_vocabulary_includes_structured_tool_trajectory_messages() -> No
             {"role": "assistant", "content": "ANSWER: {}"},
         ]},
     })
-    assert '"type": "tool_call"' in rendered
-    assert '"type": "tool_result"' in rendered
+    assert '"type":"tool_call"' in rendered
+    assert '"type":"tool_result"' in rendered
+
+
+def test_inference_context_window_is_required_and_bounded() -> None:
+    assert request_context_window_tokens({"contextWindowTokens": 1024}) == 1024
+    for value in [None, True, 127, 32_769, 1024.0]:
+        with pytest.raises(ContractError, match="contextWindowTokens"):
+            request_context_window_tokens({"contextWindowTokens": value})
+
+
+def test_inference_left_truncates_every_token_aligned_tensor() -> None:
+    encoded = {
+        "input_ids": torch.arange(12).reshape(1, 12),
+        "attention_mask": torch.ones((1, 12), dtype=torch.long),
+        "unrelated": torch.ones((1, 3), dtype=torch.long),
+    }
+    assert left_truncate_encoded_input(encoded, 5) == (12, 7)
+    assert encoded["input_ids"].tolist() == [[7, 8, 9, 10, 11]]
+    assert encoded["attention_mask"].shape[-1] == 5
+    assert encoded["unrelated"].shape[-1] == 3

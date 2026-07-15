@@ -105,6 +105,7 @@ import {
 } from "./openpond/scripted-chat-provider.js";
 import { createTeamChatAiExecutionService } from "./openpond/team-chat-executor.js";
 import { teamChatRequestPayload } from "./openpond/team-chat-client.js";
+import { communityRequestPayload } from "./openpond/community-client.js";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { createTaskCreatorService } from "./training/task-creator.js";
 import { authorTaskDesignWithModel } from "./training/task-authoring-model.js";
@@ -119,8 +120,8 @@ import { createComputeService } from "./compute/compute-service.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import {
   createCrossSystemChatToolRuntime,
+  createCrossSystemFrontierBaselineService,
   createFrontierBaselineChatSource,
-  recordFrontierBaselineSources,
   type CrossSystemFrontierModelStream,
 } from "./training/cross-system-operations/index.js";
 import {
@@ -418,9 +419,14 @@ export async function createOpenPondServer(
       },
     }),
   });
-  const taskMinerService = createTaskMinerService({ store });
+  await taskCreatorService.reconcileInterruptedCreations();
+  const taskMinerService = createTaskMinerService({
+    store,
+    addSessionSource: (input) => taskCreatorService.addSessionSource(input),
+  });
   const taskEvaluationService = createTaskEvaluationService({
     store,
+    storeDir,
     runAttempt: async (input) => runTrainingBaselineAttempt(input),
     modelJudge: async ({ grader, task, attempt }) => {
       const raw = await trainingModelText({
@@ -471,7 +477,10 @@ export async function createOpenPondServer(
     projectDir: path.resolve(process.cwd(), "python", "openpond-training"),
     resolveModelPath: computeService.modelPath,
   });
-  const crossSystemChatToolRuntime = createCrossSystemChatToolRuntime({ store });
+  const crossSystemChatToolRuntime = createCrossSystemChatToolRuntime({
+    store,
+    gradeAttempt: taskEvaluationService.grade,
+  });
   const trainingChatSearchService = createTrainingChatSearchService({ store });
   const crossSystemFrontierModelStream: CrossSystemFrontierModelStream = async function* (input) {
     if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
@@ -528,6 +537,22 @@ export async function createOpenPondServer(
       if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls };
     }
   };
+  const crossSystemFrontierBaselineService = createCrossSystemFrontierBaselineService({
+    store,
+    stream: crossSystemFrontierModelStream,
+    findLocalProject: findLocalWorkspace,
+    createEvidenceSource: ({ profileId, model, localProject, task, trajectory }) => createFrontierBaselineChatSource({
+      store,
+      profileId,
+      model,
+      localProject,
+      task,
+      trajectory,
+      createSession,
+      appendRuntimeEvent,
+      addSessionSource: taskCreatorService.addSessionSource,
+    }),
+  });
   const trainingApi = createTrainingApi({
     store,
     taskCreator: taskCreatorService,
@@ -535,22 +560,7 @@ export async function createOpenPondServer(
     evaluation: taskEvaluationService,
     training: trainingService,
     chatSearch: trainingChatSearchService,
-    runCrossSystemFrontierBaseline: (input) => recordFrontierBaselineSources({
-      ...input,
-      store,
-      stream: crossSystemFrontierModelStream,
-      approvedBy: "local_user_visible_baseline_action",
-      createEvidenceSource: ({ profileId, task, trajectory }) => createFrontierBaselineChatSource({
-        store,
-        profileId,
-        model: input.model,
-        task,
-        trajectory,
-        createSession,
-        appendRuntimeEvent,
-        addSessionSource: taskCreatorService.addSessionSource,
-      }),
-    }),
+    frontierBaseline: crossSystemFrontierBaselineService,
   });
 
   async function runTrainingBaselineAttempt(input: { tasksetId: string; task: TaskDataRecord; model: ChatModelRef; seed: number; attempt: number }) {
@@ -646,6 +656,7 @@ export async function createOpenPondServer(
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
     executeCrossSystemTool: crossSystemChatToolRuntime.execute,
+    finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
     readOpenPondProfileSkill: readProfileSkill,
     executeProfileSkillCommand: ({ prompt }) => runProfileSkillCommandFromPrompt(prompt),
@@ -1361,6 +1372,7 @@ export async function createOpenPondServer(
       organizationPayload: organizationRequestPayload,
       sandboxPayload: sandboxRequestPayload,
       teamChatPayload: teamChatRequestPayload,
+      communityPayload: communityRequestPayload,
       executeTeamChatAiTurn: teamChatAiExecutions.execute,
       cancelTeamChatAiTurnExecution: teamChatAiExecutions.cancel,
       gitAvailabilityPayload,
@@ -1423,7 +1435,7 @@ export async function createOpenPondServer(
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,
-    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close, localAdapterChatRuntime.close, crossSystemChatToolRuntime.close, trainingService.close, computeService.close,
+    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close, localAdapterChatRuntime.close, crossSystemChatToolRuntime.close, crossSystemFrontierBaselineService.close, taskMinerService.close, trainingService.close, computeService.close,
       closeCloudWorkspaceReadiness, closeWorkspaceLsp, voiceTranscription.close],
   });
 

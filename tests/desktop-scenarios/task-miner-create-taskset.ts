@@ -21,9 +21,9 @@ export default desktopScenario({
     harness.recordAssertion("sameCreatorPipeline", ready.request.surface === "task_candidate");
     harness.recordAssertion("tasksetMaterialized", state.tasksets.some((item) => item.id === ready.materializedTasksetId));
     await openTrainingPage(harness);
-    await harness.renderer.assertText("Suggested experiments", { label: "Automated suggestions content", timeoutMs: 30_000 }).catch(async () => {
+    await harness.renderer.assertText("AI suggestions", { label: "Automated suggestions content", timeoutMs: 30_000 }).catch(async () => {
       await harness.renderer.evaluate(`(() => { const tab = [...document.querySelectorAll('[role=tab]')].find((item) => item.textContent?.includes('Models')); if (tab instanceof HTMLElement) tab.click(); return true; })()`);
-      await harness.renderer.assertText("Suggested experiments");
+      await harness.renderer.assertText("AI suggestions");
     });
     await harness.screenshot("task-miner-create-taskset");
   },

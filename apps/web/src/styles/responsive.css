@@ -115,11 +115,6 @@
     grid-template-columns: 38px minmax(0, 1fr);
   }
 
-  .profile-summary-head,
-  .profile-metric-grid {
-    grid-template-columns: 1fr;
-  }
-
   .profile-control-toolbar {
     align-items: flex-start;
     flex-direction: column;

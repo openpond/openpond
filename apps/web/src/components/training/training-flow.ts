@@ -1,7 +1,19 @@
-import type { AppPreferences, ChatModelRef, CodexReasoningEffort, TaskCreationRequest, TaskCreationSnapshot, TrainingStateResponse } from "@openpond/contracts";
+import type { AppPreferences, ChatModelRef, CodexReasoningEffort, TaskCreationRequest, TaskCreationSnapshot, TaskMinerRun, TrainingStateResponse } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
 
 type TrainingController = ReturnType<typeof useTraining>;
+
+export type NewModelStep =
+  | "start"
+  | "automatic_scope"
+  | "automatic_candidates"
+  | "manual_goal"
+  | "evidence"
+  | "recommendation";
+
+export function shouldRevealMinerCandidates(step: NewModelStep, run: TaskMinerRun | null): run is TaskMinerRun {
+  return step === "automatic_scope" && run?.status === "succeeded";
+}
 
 export function trainingAuthoringModel(
   preferences: AppPreferences["training"],

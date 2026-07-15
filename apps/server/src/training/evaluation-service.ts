@@ -15,6 +15,7 @@ import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 
 export function createTaskEvaluationService(deps: {
   store: SqliteStore;
+  storeDir?: string;
   runAttempt?: BaselineAttemptRunner | null;
   modelJudge?: ModelJudgeRunner | null;
   loadProfileState?: typeof loadOpenPondProfileState;
@@ -146,8 +147,26 @@ export function createTaskEvaluationService(deps: {
 
   async function requireTaskset(id: string) { const taskset = await deps.store.getTaskset(id); if (!taskset) throw new Error("Taskset not found."); return taskset; }
   async function customVerifierFor(tasksetId: string) {
-    const profile = await (deps.loadProfileState ?? loadOpenPondProfileState)();
-    const tasksetRoot = profile.sourcePath ? path.join(profile.sourcePath, "tasksets", tasksetId) : null;
+    const taskset = await requireTaskset(tasksetId);
+    const profile = deps.storeDir
+      ? null
+      : await (deps.loadProfileState ?? loadOpenPondProfileState)();
+    const tasksetRoot = deps.storeDir
+      ? path.join(deps.storeDir, "training", "tasksets", tasksetId)
+      : profile?.sourcePath
+        ? path.join(profile.sourcePath, "tasksets", tasksetId)
+        : null;
+    const creationSnapshotId = typeof taskset.metadata.creationSnapshotId === "string"
+      ? taskset.metadata.creationSnapshotId
+      : null;
+    const proposal = creationSnapshotId
+      ? await deps.store.getTaskDesignProposal(creationSnapshotId)
+      : null;
+    if (tasksetRoot) {
+      await buildTaskset(taskset, tasksetRoot, {
+        generatedFiles: proposal?.generatedFiles ?? [],
+      });
+    }
     return tasksetRoot
       ? ({ grader, task, attempt }: Parameters<NonNullable<Parameters<typeof gradeAttempt>[0]["customVerifier"]>>[0]) => runSandboxedVerifier({ grader, task, attempt, allowedRoot: tasksetRoot })
       : undefined;

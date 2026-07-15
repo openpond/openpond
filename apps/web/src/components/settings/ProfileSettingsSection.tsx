@@ -1,23 +1,19 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { Approval, BootstrapPayload, LocalAgentSchedule } from "@openpond/contracts";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import type { BootstrapPayload } from "@openpond/contracts";
 import {
-  Bot,
   FileText,
+  CloudUpload,
   FolderGit2,
   GitCommit,
-  Pause,
-  Play,
   Plus,
   RefreshCw,
-  RotateCcw,
   UploadCloud,
   X,
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
-import { useLocalAgentSchedules } from "../agents/LocalAgentSchedulesPanel";
+import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
 
 type ProfileState = NonNullable<BootstrapPayload["profile"]>;
-type ProfileAgent = ProfileState["agents"][number];
 type ProfileSkill = ProfileState["skills"][number];
 type ProfileSyncDifference = {
   label: string;
@@ -25,44 +21,38 @@ type ProfileSyncDifference = {
   count: number;
   tone?: "warning";
 };
-type ProfileAgentRowStatus = {
-  check: ProfileStatusCell;
-  sync: ProfileStatusCell;
-};
 type ProfileStatusCell = {
   state: "ready" | "warning" | "loading" | "disabled";
   label: string;
 };
 
 type ProfileSettingsSectionProps = {
+  section?: "all" | "profile" | "agents";
   payload: BootstrapPayload | null;
   connection: ClientConnection | null;
   onPayload: (payload: BootstrapPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onSkillCommand?: (command: string) => void;
+  overviewContent?: ReactNode;
 };
 
 export function ProfileSettingsSection({
+  section = "all",
   payload,
   connection,
   onPayload,
   onError,
   onToast,
   onSkillCommand,
+  overviewContent,
 }: ProfileSettingsSectionProps) {
   const [profilePath, setProfilePath] = useState("");
   const [profileName, setProfileName] = useState("default");
   const [profileCommitMessage, setProfileCommitMessage] = useState("");
   const [profileBusy, setProfileBusy] = useState<string | null>(null);
-  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
   const profile = payload?.profile ?? null;
-  const localScheduleState = useLocalAgentSchedules(connection);
   const selectedDefaultTeamId = payload?.preferences.defaultTeamId?.trim() || "";
-  const pendingCreatePlanReviews = useMemo(
-    () => profileCreatePlanReviews(payload?.approvals ?? []),
-    [payload?.approvals],
-  );
 
   useEffect(() => {
     if (!profile) return;
@@ -140,95 +130,57 @@ export function ProfileSettingsSection({
     <section className="account-settings">
       {profile?.mode === "local" ? (
         <>
-          <ProfileSummaryMetrics
-            className="profile-summary-overview"
-            profile={profile}
-            pendingCreatePlanReviews={pendingCreatePlanReviews}
-            selectedDefaultTeamId={selectedDefaultTeamId}
-          />
+          {section !== "agents" ? (
+            <>
+              <ProfileControls
+                connection={connection}
+                profile={profile}
+                profileBusy={profileBusy}
+                profileCommitMessage={profileCommitMessage}
+                profileName={profileName}
+                profilePath={profilePath}
+                selectedDefaultTeamId={selectedDefaultTeamId}
+                syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
+                setProfileCommitMessage={setProfileCommitMessage}
+                setProfileName={setProfileName}
+                setProfilePath={setProfilePath}
+                submitProfileCommit={submitProfileCommit}
+                submitProfileInit={submitProfileInit}
+                submitProfileLoad={submitProfileLoad}
+                submitProfilePush={submitProfilePush}
+              />
 
-          <ProfileControls
-            connection={connection}
-            profile={profile}
-            profileBusy={profileBusy}
-            profileCommitMessage={profileCommitMessage}
-            profileName={profileName}
-            profilePath={profilePath}
-            selectedDefaultTeamId={selectedDefaultTeamId}
-            syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
-            setProfileCommitMessage={setProfileCommitMessage}
-            setProfileName={setProfileName}
-            setProfilePath={setProfilePath}
-            submitProfileCommit={submitProfileCommit}
-            submitProfileInit={submitProfileInit}
-            submitProfileLoad={submitProfileLoad}
-            submitProfilePush={submitProfilePush}
-            onOpenSummary={() => setSummaryDialogOpen(true)}
-          />
+              {overviewContent}
+            </>
+          ) : null}
 
-          <div className="account-list profile-agent-list">
-            <div className="account-list-heading profile-agent-list-heading">
-              <span>Agents</span>
-              <div className="profile-skill-heading-actions">
-                <small>{localScheduleHeadingLabel(localScheduleState.schedules.length, localScheduleState.loading)}</small>
-              </div>
-            </div>
-            {profile.agents.length || localScheduleState.schedules.length ? (
-              <>
-                <div className="profile-agent-table-head" aria-hidden="true">
-                  <span>Agent</span>
-                  <span>Action</span>
-                  <span>Check</span>
-                  <span>Sync</span>
-                </div>
-                {profile.agents.map((agent) => (
-                  <ProfileAgentRow
-                    agent={agent}
-                    defaultAction={profile.summary.defaultAction}
-                    key={agent.id}
-                    profile={profile}
-                    selectedDefaultTeamId={selectedDefaultTeamId}
-                  />
-                ))}
-                {localScheduleState.schedules.map((schedule) => (
-                  <ProfileScheduleAgentRow
-                    key={schedule.id}
-                    pending={localScheduleState.pendingScheduleIds.has(schedule.id)}
-                    schedule={schedule}
-                    refreshing={localScheduleState.loading}
-                    onRefresh={() => void localScheduleState.refresh()}
-                    onRun={() => void localScheduleState.run(schedule)}
-                    onToggle={() => void localScheduleState.toggle(schedule)}
-                  />
-                ))}
-              </>
-            ) : (
-              <div className="empty-account-list">
-                <strong>No profile agents found</strong>
-                <span>Run profile checks after creating agents.</span>
-              </div>
-            )}
-            {localScheduleState.error ? (
-              <div className="profile-footline warning profile-agent-list-note">
-                Local schedules: {localScheduleState.error}
-              </div>
-            ) : null}
-          </div>
-
-          <ProfileSkillsSection
-            onSkillCommand={onSkillCommand}
-            profile={profile}
-          />
-
-          {summaryDialogOpen ? (
-            <ProfileSummaryDialog
+          {section !== "profile" ? (
+            <ProfileAgentsSection
+              connection={connection}
               profile={profile}
-              pendingCreatePlanReviews={pendingCreatePlanReviews}
               selectedDefaultTeamId={selectedDefaultTeamId}
-              onClose={() => setSummaryDialogOpen(false)}
             />
           ) : null}
+
+          {section !== "agents" ? (
+            <ProfileSkillsSection
+              onSkillCommand={onSkillCommand}
+              profile={profile}
+            />
+          ) : null}
+
         </>
+      ) : section === "agents" ? (
+        <div className="account-list">
+          <div className="account-list-heading">
+            <span>Agents</span>
+            <small>Profile required</small>
+          </div>
+          <div className="empty-account-list">
+            <strong>No local Profile loaded</strong>
+            <span>Open the Profile tab to create or load a Profile before managing agents.</span>
+          </div>
+        </div>
       ) : (
         <div className="account-list">
           <div className="account-list-heading">
@@ -263,197 +215,6 @@ export function ProfileSettingsSection({
   );
 }
 
-function ProfileSummaryDialog({
-  profile,
-  pendingCreatePlanReviews,
-  selectedDefaultTeamId,
-  onClose,
-}: {
-  profile: ProfileState;
-  pendingCreatePlanReviews: Approval[];
-  selectedDefaultTeamId: string;
-  onClose: () => void;
-}) {
-  return (
-    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="git-dialog profile-summary-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="profile-summary-dialog-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <button className="git-dialog-close" type="button" title="Close" aria-label="Close" onClick={onClose}>
-          <X size={14} />
-        </button>
-        <div className="git-dialog-icon">
-          <FileText size={18} />
-        </div>
-        <h2 id="profile-summary-dialog-title">Profile summary</h2>
-        <ProfileSummaryCard
-          profile={profile}
-          pendingCreatePlanReviews={pendingCreatePlanReviews}
-          selectedDefaultTeamId={selectedDefaultTeamId}
-        />
-        <div className="git-dialog-footer">
-          <button className="git-dialog-secondary" type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ProfileSummaryCard({
-  profile,
-  pendingCreatePlanReviews,
-  selectedDefaultTeamId,
-}: {
-  profile: ProfileState;
-  pendingCreatePlanReviews: Approval[];
-  selectedDefaultTeamId: string;
-}) {
-  return (
-    <div className="account-list profile-summary-card">
-      <div className="account-list-heading">
-        <span>Summary</span>
-        <small>{profile.summary.state}</small>
-      </div>
-      <div className="profile-summary-panel">
-        <div className="profile-summary-head">
-          <div className="account-details">
-            <strong>{profile.activeProfile ?? "default"}</strong>
-            <span>{profile.sourcePath ? "Local source configured" : "Source missing"}</span>
-          </div>
-          <div className="profile-summary-message">
-            {profile.summary?.message ?? profileSyncMessage(profile)}
-          </div>
-        </div>
-        <ProfileSummaryMetrics
-          profile={profile}
-          pendingCreatePlanReviews={pendingCreatePlanReviews}
-          selectedDefaultTeamId={selectedDefaultTeamId}
-        />
-        {pendingCreatePlanReviews.length ? (
-          <div className="profile-plan-review-list" aria-label="Pending profile plan reviews">
-            {pendingCreatePlanReviews.map((approval) => (
-              <div className="profile-plan-review-item" key={approval.id}>
-                <FileText size={14} />
-                <span>
-                  <strong>{approval.title}</strong>
-                  <small>
-                    {approval.detail} - session: {approval.sessionId}
-                    {approval.turnId ? ` - turn: ${approval.turnId}` : ""}
-                  </small>
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {profileHasChanges(profile) ? (
-          <div className="profile-change-list">
-            {profileChangeLines(profile).map((line) => (
-              <span key={line}>{line}</span>
-            ))}
-          </div>
-        ) : null}
-        {profile.lastCheck ? (
-          <div className="profile-footline">
-            Last check: {profile.lastCheck.command} {profile.lastCheck.status}
-          </div>
-        ) : null}
-        {profile.summary.checkStaleReason ? (
-          <div className="profile-footline">{profile.summary.checkStaleReason}</div>
-        ) : null}
-        {profile.setupGate.blockingRequirements.length ? (
-          <div className="profile-footline warning">
-            Blocking setup:{" "}
-            {profile.setupGate.blockingRequirements
-              .slice(0, 5)
-              .map((requirement) => requirement.label)
-              .join(", ")}
-            {profile.setupGate.blockingRequirements.length > 5
-              ? ` and ${profile.setupGate.blockingRequirements.length - 5} more`
-              : ""}
-          </div>
-        ) : null}
-        {profile.hosted?.hostedSourceMaterialization ? (
-          <div className={profile.hosted.hostedSourceMaterialization.status === "failed" ? "profile-footline warning" : "profile-footline"}>
-            Hosted materialized: {profile.hosted.hostedSourceMaterialization.status}
-            {profile.hosted.hostedSourceMaterialization.agentId
-              ? ` - ${profile.hosted.hostedSourceMaterialization.agentId}`
-              : ""}
-            {profile.hosted.hostedSourceMaterialization.sourceCommitSha
-              ? ` - ${profile.hosted.hostedSourceMaterialization.sourceCommitSha.slice(0, 10)}`
-              : ""}
-          </div>
-        ) : null}
-        {profile.hosted?.hostedSourceCheck ? (
-          <div className={profile.hosted.hostedSourceCheck.status === "failed" ? "profile-footline warning" : "profile-footline"}>
-            Hosted checks: {profile.hosted.hostedSourceCheck.status}
-            {profile.hosted.hostedSourceCheck.workItemId
-              ? ` - ${profile.hosted.hostedSourceCheck.workItemId}`
-              : ""}
-            {profile.hosted.hostedSourceCheck.sandboxId
-              ? ` - sandbox ${profile.hosted.hostedSourceCheck.sandboxId}`
-              : ""}
-          </div>
-        ) : null}
-        {profile.hosted?.hostedPublish ? (
-          <div className={profile.hosted.hostedPublish.status === "failed" ? "profile-footline warning" : "profile-footline"}>
-            Hosted publish: {profile.hosted.hostedPublish.status}
-            {profile.hosted.hostedPublish.snapshotId
-              ? ` - ${profile.hosted.hostedPublish.snapshotId}`
-              : ""}
-            {profile.hosted.hostedPublish.manifestHash
-              ? ` - ${profile.hosted.hostedPublish.manifestHash.slice(0, 10)}`
-              : ""}
-          </div>
-        ) : null}
-        {profile.hosted?.hostedRun ? (
-          <div className={profile.hosted.hostedRun.status === "failed" ? "profile-footline warning" : "profile-footline"}>
-            Hosted run: {profile.hosted.hostedRun.status}
-            {profile.hosted.hostedRun.runId ? ` - ${profile.hosted.hostedRun.runId}` : ""}
-            {profile.hosted.hostedRun.runtimeId
-              ? ` - runtime ${profile.hosted.hostedRun.runtimeId}`
-              : ""}
-          </div>
-        ) : null}
-        {profile.error ? <div className="profile-footline warning">{profile.error}</div> : null}
-      </div>
-    </div>
-  );
-}
-
-function ProfileSummaryMetrics({
-  className,
-  profile,
-  pendingCreatePlanReviews,
-  selectedDefaultTeamId,
-}: {
-  className?: string;
-  profile: ProfileState;
-  pendingCreatePlanReviews: Approval[];
-  selectedDefaultTeamId: string;
-}) {
-  return (
-    <div
-      aria-label="Profile summary"
-      className={`profile-metric-grid${className ? ` ${className}` : ""}`}
-    >
-      <ProfileMetric label="Git" value={profileGitValue(profile)} />
-      <ProfileMetric label="Hosted" value={profileHostedValue(profile, selectedDefaultTeamId)} />
-      <ProfileMetric label="Catalog" value={profileCatalogValue(profile)} />
-      <ProfileMetric label="Setup gate" value={profileSetupGateValue(profile)} />
-      <ProfileMetric label="Default action" value={profile.summary.defaultAction ?? "None"} />
-      <ProfileMetric label="Agents" value={`${profile.agents.length} tracked`} />
-      <ProfileMetric label="Hosted invocation" value={profileHostedRunValue(profile, selectedDefaultTeamId)} />
-      <ProfileMetric label="Plan review" value={profilePlanReviewValue(pendingCreatePlanReviews)} />
-    </div>
-  );
-}
-
 type ProfileControlsProps = {
   connection: ClientConnection | null;
   profile: ProfileState | null;
@@ -464,7 +225,6 @@ type ProfileControlsProps = {
   selectedDefaultTeamId: string;
   syncDisabledReason: string | null;
   inline?: boolean;
-  onOpenSummary?: () => void;
   setProfileCommitMessage: (value: string) => void;
   setProfileName: (value: string) => void;
   setProfilePath: (value: string) => void;
@@ -484,7 +244,6 @@ function ProfileControls({
   profilePath,
   selectedDefaultTeamId,
   syncDisabledReason,
-  onOpenSummary,
   setProfileCommitMessage,
   setProfileName,
   setProfilePath,
@@ -504,16 +263,6 @@ function ProfileControls({
         <div className="profile-control-actions">
           {!inline ? (
             <>
-              {onOpenSummary ? (
-                <button
-                  className="settings-secondary"
-                  type="button"
-                  onClick={onOpenSummary}
-                >
-                  <FileText size={14} />
-                  <span>Details</span>
-                </button>
-              ) : null}
               <button
                 className="settings-secondary"
                 disabled={disabled}
@@ -543,6 +292,16 @@ function ProfileControls({
             <FolderGit2 size={14} />
             <span>Repo</span>
           </button>
+          {!inline && profile ? (
+            <span
+              className="profile-hosted-status"
+              title={`Hosted profile status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
+            >
+              <CloudUpload size={14} />
+              <span>Hosted</span>
+              <strong>{profileHostedValue(profile, selectedDefaultTeamId)}</strong>
+            </span>
+          ) : null}
         </div>
       </div>
       {pathDialogOpen ? (
@@ -817,107 +576,6 @@ function ProfilePathDialog({
   );
 }
 
-function ProfileAgentRow({
-  agent,
-  defaultAction,
-  profile,
-  selectedDefaultTeamId,
-}: {
-  agent: ProfileAgent;
-  defaultAction: string | null;
-  profile: ProfileState;
-  selectedDefaultTeamId: string;
-}) {
-  const rowStatus = profileAgentRowStatus(profile, agent, selectedDefaultTeamId);
-  return (
-    <div className="product-row profile-agent-row">
-      <div className="profile-agent-identity">
-        <Bot size={18} />
-        <div>
-          <strong>{agent.name}</strong>
-          <span title={agent.path}>{agent.path}</span>
-        </div>
-      </div>
-      <div className="profile-agent-action">
-        <span>{defaultAction ?? "None"}</span>
-      </div>
-      <ProfileStatusText status={rowStatus.check} />
-      <ProfileStatusText status={rowStatus.sync} />
-    </div>
-  );
-}
-
-function ProfileScheduleAgentRow({
-  pending,
-  refreshing,
-  schedule,
-  onRefresh,
-  onRun,
-  onToggle,
-}: {
-  pending: boolean;
-  refreshing: boolean;
-  schedule: LocalAgentSchedule;
-  onRefresh: () => void;
-  onRun: () => void;
-  onToggle: () => void;
-}) {
-  const status = localScheduleStatus(schedule);
-  const toggleLabel = schedule.enabled ? "Pause schedule" : "Resume schedule";
-  return (
-    <div className="product-row profile-agent-row profile-schedule-agent-row">
-      <div className="profile-agent-identity">
-        <Bot size={18} />
-        <div>
-          <strong>{schedule.localProjectName}</strong>
-          <span title={schedule.scheduleName}>schedule: {schedule.scheduleName}</span>
-        </div>
-      </div>
-      <div className="profile-agent-action">
-        <span title={schedule.targetAction}>{schedule.targetAction}</span>
-      </div>
-      <ProfileStatusText status={status} />
-      <div className="profile-schedule-actions">
-        <span className="profile-schedule-expression" title={localScheduleTitle(schedule)}>
-          {schedule.enabled ? schedule.scheduleExpression : "Paused"}
-        </span>
-        <div className="profile-schedule-controls" aria-label={`${schedule.scheduleName} schedule controls`}>
-          <button
-            className="settings-icon-button profile-schedule-button"
-            disabled={refreshing}
-            type="button"
-            title="Refresh local schedules"
-            aria-label="Refresh local schedules"
-            onClick={onRefresh}
-          >
-            <RefreshCw size={14} className={refreshing ? "settings-spin" : undefined} />
-          </button>
-          <button
-            className="settings-icon-button profile-schedule-button"
-            disabled={pending}
-            type="button"
-            title="Run now"
-            aria-label={`Run ${schedule.scheduleName} now`}
-            onClick={onRun}
-          >
-            <RotateCcw size={14} />
-          </button>
-          <button
-            className="settings-icon-button profile-schedule-button"
-            disabled={pending}
-            type="button"
-            title={toggleLabel}
-            aria-label={`${toggleLabel}: ${schedule.scheduleName}`}
-            onClick={onToggle}
-          >
-            {schedule.enabled ? <Pause size={14} /> : <Play size={14} />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ProfileSkillsSection({
   onSkillCommand,
   profile,
@@ -1035,61 +693,8 @@ function ProfileStatusText({ status }: { status: ProfileStatusCell }) {
   return <span className={`profile-status-text ${status.state}`}>{status.label}</span>;
 }
 
-function ProfileMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="profile-metric">
-      <span>{label}</span>
-      <strong title={value}>{value}</strong>
-    </div>
-  );
-}
-
-function localScheduleHeadingLabel(count: number, loading: boolean): string {
-  if (loading && count === 0) return "Loading schedules";
-  if (loading) return `${count} scheduled, refreshing`;
-  if (count === 1) return "1 scheduled";
-  if (count > 1) return `${count} scheduled`;
-  return "No schedules";
-}
-
-function localScheduleStatus(schedule: LocalAgentSchedule): ProfileStatusCell {
-  if (!schedule.enabled) return { state: "disabled", label: "Paused" };
-  if (schedule.lastError || schedule.lastRunStatus === "failed") return { state: "warning", label: "Failed" };
-  if (schedule.lastRunStatus === "running") return { state: "loading", label: "Running" };
-  if (schedule.lastRunStatus === "queued") return { state: "loading", label: "Queued" };
-  if (schedule.lastRunStatus === "skipped") return { state: "warning", label: "Skipped" };
-  if (schedule.lastRunStatus === "succeeded") return { state: "ready", label: "Succeeded" };
-  return { state: "loading", label: "Scheduled" };
-}
-
-function localScheduleTitle(schedule: LocalAgentSchedule): string {
-  const parts = [`${schedule.scheduleType}: ${schedule.scheduleExpression}`];
-  if (schedule.nextRunAt) parts.push(`next ${formatScheduleDate(schedule.nextRunAt)}`);
-  if (schedule.lastRunAt) parts.push(`last ${formatScheduleDate(schedule.lastRunAt)}`);
-  return parts.join(" - ");
-}
-
-function formatScheduleDate(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function shortSha(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : "None";
-}
-
-function profileGitValue(profile: NonNullable<BootstrapPayload["profile"]>): string {
-  const git = profile.git;
-  if (!git) return "Not initialized";
-  const branch = git.branch ?? "detached";
-  const head = shortSha(git.head);
-  return git.dirty ? `${branch} ${head} dirty` : `${branch} ${head}`;
 }
 
 function profileHostedValue(
@@ -1100,45 +705,6 @@ function profileHostedValue(
   if (!profile.hosted?.sourceCommitSha) return "Not pushed";
   const promotion = profile.hosted.promotionStatus ?? "uploaded";
   return `${promotion} ${shortSha(profile.hosted.sourceCommitSha)}`;
-}
-
-function profileHostedRunValue(
-  profile: NonNullable<BootstrapPayload["profile"]>,
-  selectedDefaultTeamId: string,
-): string {
-  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) return "Sync this account";
-  if (!profile.hosted?.sourceCommitSha) return "Not pushed";
-  const status = profile.hosted.hostedRun?.status ?? profile.hosted.hostedRunStatus ?? "not_started";
-  const runId = profile.hosted.hostedRun?.runId ?? profile.hosted.hostedRunId;
-  return runId
-    ? `${status} ${runId.slice(0, 8)}`
-    : status;
-}
-
-function profileCreatePlanReviews(approvals: Approval[]): Approval[] {
-  return approvals
-    .filter((approval) => approval.kind === "create_plan" && approval.status === "pending")
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-}
-
-function profilePlanReviewValue(approvals: Approval[]): string {
-  if (approvals.length === 0) return "None pending";
-  return `${approvals.length} pending`;
-}
-
-function profileCatalogValue(profile: NonNullable<BootstrapPayload["profile"]>): string {
-  const catalog = profile.catalog;
-  if (!catalog) return `${profile.actionCatalog?.length ?? 0} actions`;
-  const stale = catalog.stale ? " stale" : "";
-  return `${catalog.actionCount} actions${stale}`;
-}
-
-function profileSetupGateValue(profile: NonNullable<BootstrapPayload["profile"]>): string {
-  const gate = profile.setupGate;
-  if (!gate || gate.requirementCount === 0) return "Ready";
-  if (gate.blockingCount > 0) return `${gate.status} (${gate.blockingCount} blocking)`;
-  if (gate.optionalMissingCount > 0) return `ready (${gate.optionalMissingCount} optional missing)`;
-  return "Ready";
 }
 
 function profileSyncDisabledReason(profile: ProfileState, selectedDefaultTeamId: string): string | null {
@@ -1251,148 +817,7 @@ function profileDiffSummary(profile: ProfileState): string {
   return parts.join(", ") || "Profile source has local changes.";
 }
 
-function profileSyncMessage(profile: NonNullable<BootstrapPayload["profile"]>): string {
-  if (profile.mode !== "local") return "No local profile loaded";
-  if (profile.git?.dirty) return "Local profile source has uncommitted changes.";
-  if (profile.hosted?.sourceCommitSha && profile.git?.head === profile.hosted.sourceCommitSha) {
-    return "Local profile matches hosted source.";
-  }
-  return "Local profile source is ready.";
-}
-
-function profileAgentRowStatus(
-  profile: ProfileState,
-  agent: ProfileAgent,
-  selectedDefaultTeamId: string,
-): ProfileAgentRowStatus {
-  if (!agent.enabled) {
-    return {
-      check: { state: "disabled", label: "Disabled" },
-      sync: { state: "disabled", label: "Disabled" },
-    };
-  }
-  if (profile.error) {
-    return {
-      check: { state: "warning", label: "Error" },
-      sync: { state: "warning", label: "Blocked" },
-    };
-  }
-  if (profile.setupGate.blockingCount > 0) {
-    return {
-      check: { state: "warning", label: "Setup" },
-      sync: { state: "warning", label: "Blocked" },
-    };
-  }
-
-  const changeCount = profileAgentChangeCount(profile, agent);
-  if (profile.git?.dirty || changeCount > 0) {
-    return {
-      check: { state: "loading", label: "Pending" },
-      sync: { state: "warning", label: "Changed" },
-    };
-  }
-  if (profile.catalog.stale) {
-    return {
-      check: { state: "loading", label: "Stale" },
-      sync: { state: "loading", label: "Waiting" },
-    };
-  }
-  if (!profile.lastCheck) {
-    return {
-      check: { state: "loading", label: "Unchecked" },
-      sync: { state: "loading", label: "Waiting" },
-    };
-  }
-  if (profile.lastCheck.status === "failed") {
-    return {
-      check: { state: "warning", label: "Failed" },
-      sync: { state: "warning", label: "Blocked" },
-    };
-  }
-  if (!profile.summary.checkFresh) {
-    return {
-      check: { state: "loading", label: "Stale" },
-      sync: { state: "loading", label: "Waiting" },
-    };
-  }
-  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) {
-    return {
-      check: { state: "ready", label: "Passed" },
-      sync: { state: "warning", label: "Sync acct" },
-    };
-  }
-
-  const localHead = profile.summary.localHead ?? profile.git?.head ?? null;
-  const pushedLocalHead = profile.hosted?.lastPushedLocalHead ?? null;
-  const hostedUploadHead = profile.summary.hostedHead ?? profile.hosted?.sourceCommitSha ?? null;
-  if (!hostedUploadHead && !pushedLocalHead) {
-    return {
-      check: { state: "ready", label: "Passed" },
-      sync: { state: "loading", label: "Not synced" },
-    };
-  }
-  if (localHead && pushedLocalHead && localHead !== pushedLocalHead) {
-    return {
-      check: { state: "ready", label: "Passed" },
-      sync: { state: "loading", label: "Needed" },
-    };
-  }
-  return {
-    check: { state: "ready", label: "Passed" },
-    sync: { state: "ready", label: "Synced" },
-  };
-}
-
 function profileHostedTeamMismatch(profile: ProfileState, selectedDefaultTeamId: string): boolean {
   const hostedTeamId = profile.hosted?.teamId?.trim() ?? "";
   return Boolean(hostedTeamId && selectedDefaultTeamId && hostedTeamId !== selectedDefaultTeamId);
-}
-
-function profileAgentChangeCount(profile: ProfileState, agent: ProfileAgent): number {
-  let count = 0;
-  if (profile.diff.changedAgents.includes(agent.id)) count += 1;
-  if (profile.diff.newAgents.includes(agent.id)) count += 1;
-  if (profile.diff.deletedAgents.includes(agent.id)) count += 1;
-  const normalizedAgentPath = agent.path.replace(/^profiles\/[^/]+\//, "");
-  for (const file of profile.diff.files) {
-    const normalizedFilePath = file.path.replace(/^profiles\/[^/]+\//, "");
-    if (
-      normalizedFilePath === normalizedAgentPath ||
-      normalizedFilePath.startsWith(`${normalizedAgentPath}/`) ||
-      normalizedFilePath.startsWith(`agents/${agent.id}/`)
-    ) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function profileChangeLines(profile: NonNullable<BootstrapPayload["profile"]>): string[] {
-  const diff = profile.diff;
-  if (!profileHasChanges(profile)) return [];
-  const lines: string[] = [];
-  for (const agent of diff.newAgents.slice(0, 3)) lines.push(`new agent: ${agent}`);
-  for (const agent of diff.changedAgents.slice(0, 3)) lines.push(`agent changed: ${agent}`);
-  for (const agent of diff.deletedAgents.slice(0, 3)) lines.push(`agent removed: ${agent}`);
-  for (const skill of diff.changedSkills.slice(0, 3)) lines.push(`skill: ${skill}`);
-  for (const action of diff.changedActions.slice(0, 3)) lines.push(`action: ${action}`);
-  for (const extension of diff.changedExtensions.slice(0, 3)) lines.push(`extension: ${extension}`);
-  for (const setup of diff.setupChanges.slice(0, 2)) lines.push(`setup: ${setup}`);
-  for (const env of diff.envRequirementChanges.slice(0, 2)) lines.push(`env: ${env}`);
-  return lines.slice(0, 8);
-}
-
-function profileHasChanges(profile: NonNullable<BootstrapPayload["profile"]>): boolean {
-  const diff = profile.diff;
-  return (
-    diff.files.length > 0 ||
-    diff.changedAgents.length > 0 ||
-    diff.newAgents.length > 0 ||
-    diff.deletedAgents.length > 0 ||
-    diff.changedSkills.length > 0 ||
-    diff.changedActions.length > 0 ||
-    diff.changedExtensions.length > 0 ||
-    diff.setupChanges.length > 0 ||
-    diff.envRequirementChanges.length > 0
-  );
 }

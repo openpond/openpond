@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Session, TaskCreationSnapshot, Taskset, TrainingSourceRef, TrainingStateResponse } from "@openpond/contracts";
+import type { LocalProject, Session, TaskCreationSnapshot, Taskset, TrainingSourceRef, TrainingStateResponse } from "@openpond/contracts";
 import type { DesktopHarness } from "../../scripts/desktop-harness/types";
 import { registerScriptedOpenPondModel, reloadRenderer, waitForAssistantOutput, waitForCompletedTurn, waitForRendererCondition } from "./helpers";
 
@@ -9,8 +9,25 @@ export async function initializeTrainingProfile(harness: DesktopHarness) {
   return harness.api.fetchJson("/v1/profile/init", { method: "POST", body: { repoPath: path.join(harness.artifactsDir, "profile-repo"), profile: "default", template: "blank-agent", force: true } });
 }
 
-export async function createTrainingChat(harness: DesktopHarness, modelRef: ReturnType<typeof scriptedTrainingModel>, title: string, prompt: string) {
-  const session = await harness.api.createSession<Session>({ provider: "openpond", modelRef, title, cwd: harness.repoRoot });
+export async function createTrainingChat(
+  harness: DesktopHarness,
+  modelRef: ReturnType<typeof scriptedTrainingModel>,
+  title: string,
+  prompt: string,
+  project?: LocalProject,
+) {
+  const session = await harness.api.createSession<Session>({
+    provider: "openpond",
+    modelRef,
+    title,
+    cwd: project?.workspacePath ?? harness.repoRoot,
+    ...(project ? {
+      workspaceKind: "local_project",
+      workspaceId: project.id,
+      workspaceName: project.name,
+      localProjectId: project.id,
+    } : {}),
+  });
   await harness.api.createTurn(session.id, { prompt, modelRef });
   const output = `scripted turn 1 response for: ${prompt.slice(0, 80)}`;
   const delta = await waitForAssistantOutput(harness, session.id, output, `${title} assistant output`);

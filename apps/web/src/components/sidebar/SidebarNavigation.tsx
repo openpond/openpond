@@ -1,25 +1,25 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { OpenPondApp } from "@openpond/contracts";
-import { BookOpenText, Bot, ChartColumnStacked, Lightbulb, Plug, SquarePen } from "../icons";
+import { BookOpenText, Duck, Plug, SquarePen } from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
-import type { AppView } from "../../lib/app-models";
+import type { AppView, LabsTab } from "../../lib/app-models";
 
 export function SidebarNavigation({
   beginNewChat,
-  profileHasUncommittedChanges,
   setSectionMenuOpen,
   setSelectedAppId,
   setSelectedProjectId,
   setSelectedSessionId,
+  setLabsTab,
   setView,
   view,
 }: {
   beginNewChat: (app?: OpenPondApp | null) => void;
-  profileHasUncommittedChanges: boolean;
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
+  setLabsTab: Dispatch<SetStateAction<LabsTab>>;
   setView: Dispatch<SetStateAction<AppView>>;
   view: AppView;
 }) {
@@ -48,46 +48,16 @@ export function SidebarNavigation({
         <span>Get started</span>
       </button>
       <button
-        className={`nav-command nav-profile-command ${view === "profile" ? "active" : ""}`}
-        aria-label="Agents"
+        className={`nav-command nav-profile-command ${view === "labs" ? "active" : ""}`}
+        aria-label="Lab"
         onClick={() => {
           clearWorkspaceSelection();
-          setView("profile");
+          setLabsTab("profile");
+          setView("labs");
         }}
       >
-        <Bot size={16} />
-        <span className="nav-profile-label">
-          <span>Agents</span>
-          {profileHasUncommittedChanges ? (
-            <span
-              className="sidebar-profile-change-dot"
-              data-tooltip="Local profile changes are not committed"
-              aria-hidden="true"
-            />
-          ) : null}
-        </span>
-      </button>
-      <button
-        className={`nav-command ${view === "training" ? "active" : ""}`}
-        onClick={() => {
-          clearWorkspaceSelection();
-          setView("training");
-        }}
-        type="button"
-      >
-        <ChartColumnStacked size={15} />
-        <span>Training</span>
-      </button>
-      <button
-        className={`nav-command ${view === "insights" ? "active" : ""}`}
-        onClick={() => {
-          clearWorkspaceSelection();
-          setView("insights");
-        }}
-        type="button"
-      >
-        <Lightbulb size={16} />
-        <span>Insights</span>
+        <Duck size={16} />
+        <span>Lab</span>
       </button>
       <button
         className={`nav-command ${view === "apps" ? "active" : ""}`}

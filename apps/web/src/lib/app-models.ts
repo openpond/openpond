@@ -37,15 +37,16 @@ import {
 export type AppView =
   | "chat"
   | "team"
+  | "community"
   | "apps"
   | "cloud"
   | "get-started"
-  | "insights"
-  | "training"
-  | "profile"
+  | "labs"
   | "settings";
+export type LabsTab = "profile" | "agents" | "extensions" | "models" | "evals" | "signals";
 export type SettingsSection =
   | "account"
+  | "notifications"
   | "profile"
   | "wallet"
   | "defaults"
@@ -223,7 +224,7 @@ export type DropdownOption = {
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   defaultChatProvider: DEFAULT_CHAT_PROVIDER,
   defaultChatModel: DEFAULT_CHAT_MODEL,
-  insightsEnabled: true,
+  insightsEnabled: false,
   insightsModelRef: null,
   insightsEvidenceSources: {
     createEdit: true,

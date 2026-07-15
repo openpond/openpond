@@ -1,0 +1,107 @@
+.notification-settings-card {
+  overflow: hidden;
+}
+
+.notification-mode-list {
+  display: grid;
+}
+
+.notification-mode-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  min-height: 66px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  cursor: pointer;
+}
+
+.notification-mode-option:last-child {
+  border-bottom: 0;
+}
+
+.notification-mode-option:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.notification-mode-option.selected {
+  background: rgba(58, 163, 255, 0.075);
+}
+
+.notification-mode-option input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: #3aa3ff;
+}
+
+.notification-mode-option > span,
+.notification-thread-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.notification-mode-option strong,
+.notification-thread-copy strong {
+  color: #f4f4f4;
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.notification-mode-option small,
+.notification-thread-copy small {
+  color: #9b9b9b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.notification-thread-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.notification-thread-row:last-of-type {
+  border-bottom: 0;
+}
+
+.notification-thread-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(58, 163, 255, 0.11);
+  color: #8fc8ff;
+}
+
+.notification-thread-icon.muted {
+  background: rgba(255, 255, 255, 0.06);
+  color: #929292;
+}
+
+.notification-settings-error {
+  padding: 11px 16px;
+  border-top: 1px solid rgba(255, 98, 98, 0.2);
+  background: rgba(255, 98, 98, 0.07);
+  color: #ffb0b0;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .notification-thread-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .notification-thread-row > .settings-secondary {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

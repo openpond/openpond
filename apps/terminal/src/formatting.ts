@@ -202,6 +202,15 @@ export function modelLabel(
   return modelOptionsForProvider(settings, options.provider).find((option) => option.id === id)?.label ?? (id || "No model");
 }
 
+export function terminalSessionHeading(
+  settings: ProviderSettings | null | undefined,
+  options: TerminalModelSelection & { cwd: string }
+): string {
+  const provider = providerLabel(settings, options.provider);
+  const productAndProvider = options.provider === "openpond" ? "OpenPond" : `OpenPond ${provider}`;
+  return `${productAndProvider} / ${modelLabel(settings, options)} ${options.cwd}`;
+}
+
 export function formatProviderOptions(
   settings: ProviderSettings | null | undefined,
   activeProvider: ChatProvider

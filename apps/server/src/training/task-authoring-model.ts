@@ -14,7 +14,7 @@ const ModelProposalEnvelopeSchema = z.object({
   proposal: TaskDesignProposalSchema,
 });
 
-const DEFAULT_TASK_AUTHORING_TIMEOUT_MS = 180_000;
+const DEFAULT_TASK_AUTHORING_TIMEOUT_MS = 10 * 60_000;
 
 export type TaskAuthoringEvidence = {
   source: TrainingSourceRef;
@@ -46,8 +46,9 @@ export async function authorTaskDesignWithModel(input: {
     const messages = taskAuthoringMessages(input);
     const first = await collect(input.stream({ model: input.model, reasoningEffort: input.reasoningEffort, messages, signal: timeout.signal }));
     const parsed = parseEnvelope(first);
-    const firstIssue = parsed ? proposalCompatibilityIssue(parsed.proposal, input.evidence) : null;
-    if (parsed && !firstIssue) return { proposal: parsed.proposal, repairHistory: [] };
+    const normalized = parsed ? normalizePolicyBoundary(parsed.proposal) : null;
+    const firstIssue = normalized ? proposalCompatibilityIssue(normalized, input.evidence) : null;
+    if (normalized && !firstIssue) return { proposal: normalized, repairHistory: [] };
     const repairReason = parsed
       ? `The prior proposal is incompatible with the current Taskset materializer: ${firstIssue} Redesign it without changing the selected evidence.`
       : `The prior response was invalid. Return only valid JSON matching openpond.taskAuthoringDecision.v1. Invalid response:\n${first.slice(0, 20_000)}`;
@@ -59,9 +60,10 @@ export async function authorTaskDesignWithModel(input: {
     }));
     const repairedParsed = parseEnvelope(repaired);
     if (!repairedParsed) throw new Error("Task authoring model returned invalid structured output after one repair attempt.");
-    const repairedIssue = proposalCompatibilityIssue(repairedParsed.proposal, input.evidence);
+    const repairedProposal = normalizePolicyBoundary(repairedParsed.proposal);
+    const repairedIssue = proposalCompatibilityIssue(repairedProposal, input.evidence);
     if (repairedIssue) throw new Error(`Task authoring model returned an incompatible proposal after one repair attempt: ${repairedIssue}`);
-    return { proposal: repairedParsed.proposal, repairHistory: [{ attempt: 1, summary: "Repaired invalid or method-incompatible TaskDesignProposal output.", createdAt: new Date().toISOString() }] };
+    return { proposal: repairedProposal, repairHistory: [{ attempt: 1, summary: "Repaired invalid or method-incompatible TaskDesignProposal output.", createdAt: new Date().toISOString() }] };
   } catch (error) {
     if (timeout.signal.aborted && !input.signal.aborted) {
       throw new Error(`Task authoring timed out after ${timeout.timeoutMs}ms.`);
@@ -140,6 +142,18 @@ function proposalCompatibilityIssue(proposal: TaskDesignProposal, evidence: Task
     if (!generatedPaths.has(module)) return `custom verifier ${grader.id} module ${module} must have a matching generated file.`;
   }
   return null;
+}
+
+function normalizePolicyBoundary(proposal: TaskDesignProposal): TaskDesignProposal {
+  if (!proposal.diagnosis.trainingEligible) return proposal;
+  return TaskDesignProposalSchema.parse({
+    ...proposal,
+    policy: {
+      ...proposal.policy,
+      policyVisibleFields: [...new Set([...proposal.policy.policyVisibleFields, "input.prompt"])],
+      privilegedFields: [...new Set([...proposal.policy.privilegedFields, "expectedOutput.text"])],
+    },
+  });
 }
 
 function authoringTimeoutSignal(parent: AbortSignal, timeoutMs: number): {

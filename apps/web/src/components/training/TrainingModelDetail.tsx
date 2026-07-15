@@ -8,7 +8,7 @@ import { TrainingModelConfiguration } from "./TrainingModelConfiguration";
 import { TrainingRunEvaluation } from "./TrainingRunEvaluation";
 import { TrainingRunMetrics } from "./TrainingRunMetrics";
 import { TrainingStartDialog } from "./TrainingStartDialog";
-import { artifactsForJob, destinationLabel, formatDateTime, formatDuration, jobsForTaskset, modelName, planForJob, statusLabel, tasksetMethod } from "./training-model-data";
+import { artifactsForJob, destinationLabel, formatDateTime, formatDuration, jobsForTaskset, modelName, planForJob, statusLabel, tasksetMethod, trainingRunMethodLabel } from "./training-model-data";
 import { useTrainingRunDetail } from "./useTrainingRunDetail";
 
 type TrainingController = ReturnType<typeof useTraining>;
@@ -51,6 +51,7 @@ export function TrainingModelDetail({
   const evaluationExamples = taskset.tasks.filter((task) => task.split === "frozen_eval").length;
   const canStart = !selectedJob || ["succeeded", "failed", "cancelled"].includes(selectedJob.status);
   const trainingPath = taskset.readiness?.trainingPath ?? null;
+  const selectedRunLabel = trainingRunMethodLabel(taskset, plan);
 
   useEffect(() => { onSelectedJobIdChange(selectedJob?.id ?? null); }, [onSelectedJobIdChange, selectedJob?.id]);
   useEffect(() => () => onSelectedJobIdChange(null), [onSelectedJobIdChange]);
@@ -74,7 +75,7 @@ export function TrainingModelDetail({
       {tab === "summary" ? (
         <div className="training-detail-sections">
           <DetailSection title="Taskset" actions={<><button className="training-button secondary" type="button" onClick={onOpenTasksetFiles}>Open files</button>{!taskset.readiness?.ready ? <button className="training-text-button" type="button" onClick={onOpenTaskset}>Review Taskset</button> : null}</>}>
-            <div className="training-taskset-facts"><span><strong>{approvedTrainingExamples}</strong> training examples</span><span><strong>{evaluationExamples}</strong> test examples</span><span><strong>{taskset.sourceRefs.length}</strong> chats</span><span><strong>{method.toUpperCase()}</strong> method</span></div>
+            <div className="training-taskset-facts"><span><strong>{approvedTrainingExamples}</strong> training examples</span><span><strong>{evaluationExamples}</strong> test examples</span><span><strong>{taskset.sourceRefs.length}</strong> chats</span><span><strong>{method.toUpperCase()}</strong> primary recommendation</span>{selectedJob ? <span><strong>{selectedRunLabel}</strong> selected run</span> : null}</div>
           </DetailSection>
 
           {trainingPath ? <DetailSection title="Training path">
@@ -85,9 +86,9 @@ export function TrainingModelDetail({
           </DetailSection> : null}
 
           <DetailSection title="Training runs" actions={canStart ? <button className="training-button" type="button" disabled={!taskset.readiness?.ready || Boolean(training.busyAction)} onClick={() => setStartOpen(true)}>Start training</button> : null}>
-            {jobs.length ? <div className="training-table-wrap"><table className="training-data-table training-runs-table"><thead><tr><th>Run</th><th>Compute</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody>{jobs.map((job) => {
+            {jobs.length ? <div className="training-table-wrap"><table className="training-data-table training-runs-table"><thead><tr><th>Run</th><th>Method</th><th>Compute</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody>{jobs.map((job) => {
               const jobPlan = planForJob(state, job);
-              return <tr key={job.id} className={job.id === selectedJob?.id ? "selected" : ""} onClick={() => setSelectedJobId(job.id)}><td><button type="button" onClick={() => setSelectedJobId(job.id)}>{shortId(job.id)}</button></td><td>{jobPlan ? destinationLabel(jobPlan.destinationId) : job.destinationId}</td><td>{formatDateTime(job.startedAt ?? job.createdAt)}</td><td>{formatDuration(job.startedAt, job.completedAt)}</td><td><span className={`training-run-status ${job.status}`}>{statusLabel(job.status)}</span></td></tr>;
+              return <tr key={job.id} className={job.id === selectedJob?.id ? "selected" : ""} onClick={() => setSelectedJobId(job.id)}><td><button type="button" onClick={() => setSelectedJobId(job.id)}>{shortId(job.id)}</button></td><td>{trainingRunMethodLabel(taskset, jobPlan)}</td><td>{jobPlan ? destinationLabel(jobPlan.destinationId) : job.destinationId}</td><td>{formatDateTime(job.startedAt ?? job.createdAt)}</td><td>{formatDuration(job.startedAt, job.completedAt)}</td><td><span className={`training-run-status ${job.status}`}>{statusLabel(job.status)}</span></td></tr>;
             })}</tbody></table></div> : <div className="training-run-placeholder">No training runs yet.</div>}
           </DetailSection>
 
@@ -95,7 +96,7 @@ export function TrainingModelDetail({
             <DetailSection title="Training metrics"><TrainingRunMetrics detail={detail.detail} loading={detail.loading} error={detail.error}/></DetailSection>
             <DetailSection title="Evaluation"><TrainingRunEvaluation detail={detail.detail} loading={detail.loading}/></DetailSection>
             <DetailSection title="Result" actions={lineage && adapter ? <button className="training-button secondary" type="button" onClick={() => void training.actions.downloadArtifact(adapter.id)}><Download size={14}/>Download adapter</button> : null}>
-              <div className="training-result-summary"><strong>{lineage ? "Adapter ready" : selectedJob.status === "succeeded" ? "Collecting adapter" : "No adapter created"}</strong>{adapter ? <span>{adapter.baseModelId} with LoRA</span> : null}{lineage ? <span>Frozen evaluation {lineage.frozenEvaluationArtifactId ? "completed" : "not recorded"}</span> : null}</div>
+              <div className="training-result-summary"><strong>{lineage ? `${selectedRunLabel} adapter ready` : selectedJob.status === "succeeded" ? "Collecting adapter" : "No adapter created"}</strong>{adapter ? <span>{adapter.baseModelId} with LoRA</span> : null}{plan?.recipe.method === "sft" && method !== "sft" ? <span>Supervised bootstrap only; verifier reward was not optimized.</span> : null}{lineage ? <span>Frozen evaluation {lineage.frozenEvaluationArtifactId ? "completed" : "not recorded"}</span> : null}</div>
             </DetailSection>
           </> : null}
         </div>

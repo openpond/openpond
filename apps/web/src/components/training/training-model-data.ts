@@ -3,7 +3,8 @@ import type { ModelArtifactLineage, Taskset, TrainingArtifact, TrainingJob, Trai
 export type TrainingModelRow = {
   taskset: Taskset;
   name: string;
-  method: string;
+  primaryMethod: string;
+  latestRunLabel: string;
   latestPlan: TrainingPlan | null;
   latestJob: TrainingJob | null;
   localModel: ModelArtifactLineage | null;
@@ -24,11 +25,14 @@ export function trainingModelRows(state: TrainingStateResponse | null): Training
       .filter((model) => model.tasksetId === taskset.id && model.status === "imported")
       .sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0] ?? null;
     const latestPlan = latestJob ? planById.get(latestJob.planId) ?? null : plans.sort(newestFirst)[0] ?? null;
-    const method = tasksetMethod(taskset);
+    const primaryMethod = tasksetMethod(taskset);
     return {
       taskset,
-      name: modelName(taskset.name, method),
-      method,
+      name: modelName(taskset.name, primaryMethod),
+      primaryMethod,
+      latestRunLabel: latestPlan
+        ? trainingRunMethodLabel(taskset, latestPlan)
+        : localModel ? "Imported adapter" : "Not started",
       latestPlan,
       latestJob,
       localModel,
@@ -58,6 +62,20 @@ export function tasksetMethod(taskset: Taskset): string {
   if (typeof authoredMethod === "string" && authoredMethod !== "none") return authoredMethod;
   if (taskset.readiness?.recommendedMethod && taskset.readiness.recommendedMethod !== "none") return taskset.readiness.recommendedMethod;
   return taskset.capabilities.compatibleMethods.find((method) => !["none", "retrieval"].includes(method)) ?? "sft";
+}
+
+export function trainingRunMethodLabel(taskset: Taskset, plan: TrainingPlan | null): string {
+  if (!plan) return "Not started";
+  const method = plan.recipe.method;
+  const trainingPath = taskset.readiness?.trainingPath;
+  if (
+    method === "sft" &&
+    trainingPath?.primaryMethod !== "sft" &&
+    trainingPath?.bootstrap?.method === "sft"
+  ) {
+    return "SFT bootstrap";
+  }
+  return method.toUpperCase();
 }
 
 export function modelName(value: string, _method: string): string {

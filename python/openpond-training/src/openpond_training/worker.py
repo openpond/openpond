@@ -27,7 +27,8 @@ from .events import EventWriter
 from .fixture_model import (
     lora_config,
 )
-from .model_runtime import load_base_model, reload_adapter, render_evaluation_prompt, render_training_record
+from .model_runtime import load_base_model, reload_adapter, render_evaluation_prompt
+from .training_projection import build_training_projection
 
 
 class Cancelled(RuntimeError):
@@ -119,9 +120,20 @@ def run(args: argparse.Namespace) -> int:
         expected_hash = recipe["baseModel"]["chatTemplateHash"]
         if expected_hash not in {template_hash, "fixture00000000"}:
             raise ContractError(f"Chat template hash mismatch: expected {expected_hash}, constructed {template_hash}.")
-        text_records = [{"text": render_training_record(record, tokenizer)} for record in records]
-        dataset = Dataset.from_list(text_records)
-        sample = tokenizer(text_records[0]["text"], return_tensors="pt", truncation=True, max_length=int(recipe["dataset"]["maxSequenceLength"]))
+        max_sequence_length = int(recipe["dataset"]["maxSequenceLength"])
+        completion_only = bool(recipe["dataset"]["completionOnly"])
+        projection = build_training_projection(
+            records,
+            tokenizer,
+            completion_only=completion_only,
+            max_length=max_sequence_length,
+        )
+        dataset = Dataset.from_list(projection.rows)
+        if projection.sample_input_ids is not None:
+            sample_input_ids = torch.tensor([projection.sample_input_ids], dtype=torch.long)
+            sample = {"input_ids": sample_input_ids, "attention_mask": torch.ones_like(sample_input_ids)}
+        else:
+            sample = tokenizer(projection.rows[0]["text"], return_tensors="pt", truncation=True, max_length=max_sequence_length)
         with torch.no_grad():
             before_logits = model(**sample).logits.detach().clone()
         if args.taskset:
@@ -144,7 +156,8 @@ def run(args: argparse.Namespace) -> int:
             use_cpu=True,
             seed=seed,
             dataset_text_field="text",
-            max_length=int(recipe["dataset"]["maxSequenceLength"]),
+            max_length=max_sequence_length,
+            completion_only_loss=completion_only,
         )
         trainer = SFTTrainer(
             model=model,
@@ -164,7 +177,11 @@ def run(args: argparse.Namespace) -> int:
         trainer.model.save_pretrained(adapter_directory, safe_serialization=True)
         tokenizer.save_pretrained(output_directory / "tokenizer")
         reloaded, reloaded_tokenizer, reloaded_template_hash = reload_adapter(adapter_directory, recipe, records, seed, model_path)
-        reload_sample = reloaded_tokenizer(text_records[0]["text"], return_tensors="pt", truncation=True, max_length=int(recipe["dataset"]["maxSequenceLength"]))
+        if projection.sample_input_ids is not None:
+            reload_input_ids = torch.tensor([projection.sample_input_ids], dtype=torch.long)
+            reload_sample = {"input_ids": reload_input_ids, "attention_mask": torch.ones_like(reload_input_ids)}
+        else:
+            reload_sample = reloaded_tokenizer(projection.rows[0]["text"], return_tensors="pt", truncation=True, max_length=max_sequence_length)
         with torch.no_grad():
             after_logits = reloaded(**reload_sample).logits.detach()
         logit_delta = float(torch.max(torch.abs(before_logits - after_logits)).item())
@@ -172,7 +189,17 @@ def run(args: argparse.Namespace) -> int:
         adapter_nonzero = any(bool(torch.any(parameter != 0).item()) for parameter in adapter_parameters)
         if not adapter_parameters or not adapter_nonzero or logit_delta <= 0:
             raise RuntimeError("LoRA smoke failed: adapter parameters or logits did not change.")
-        metrics = {"trainLoss": float(result.training_loss), "steps": int(result.global_step), "logitDelta": logit_delta, "adapterParameterCount": sum(parameter.numel() for parameter in adapter_parameters)}
+        metrics = {
+            "trainLoss": float(result.training_loss),
+            "steps": int(result.global_step),
+            "logitDelta": logit_delta,
+            "adapterParameterCount": sum(parameter.numel() for parameter in adapter_parameters),
+            "trainingExampleCount": len(projection.rows),
+            "completionOnly": projection.completion_only,
+            "assistantTargetCount": projection.assistant_target_count,
+            "contextTruncatedExampleCount": projection.context_truncated_example_count,
+            "contextTokensDropped": projection.context_tokens_dropped,
+        }
         (output_directory / "metrics.json").write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         writer.emit("metric", {"metricKind": "run_summary", **metrics})
         if args.taskset:

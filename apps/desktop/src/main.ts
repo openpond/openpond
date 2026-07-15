@@ -35,6 +35,7 @@ import { minimizeWindow } from "./desktop-window-controls.js";
 import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
 import {
   bundledServerLaunchPort,
+  canLaunchBundledDesktopServer,
   canReuseDesktopServer,
   isCompatibleDesktopServer,
   stopStaleLocalDesktopServer,
@@ -225,7 +226,10 @@ async function ensureServer(): Promise<ServerConnection> {
   const existingUrl = process.env.OPENPOND_SERVER_URL || `http://127.0.0.1:${serverPort}`;
   const explicitServerUrl = Boolean(process.env.OPENPOND_SERVER_URL);
   const existingToken = await readToken();
-  const existingHealth = app.isPackaged && !explicitServerUrl ? null : await health(existingUrl);
+  let existingHealth = app.isPackaged && !explicitServerUrl ? null : await health(existingUrl);
+  if (explicitServerUrl && process.env.OPENPOND_REUSE_SERVER === "1" && !existingHealth?.ok) {
+    existingHealth = await waitForServerHealth(existingUrl);
+  }
   const existingServerCompatible = isCompatibleDesktopServer(existingHealth, desktopVersion);
   const existingRendererAvailable = !app.isPackaged || (existingServerCompatible && await urlAvailable(existingUrl));
   const shouldReuseExistingServer = canReuseDesktopServer({
@@ -255,6 +259,9 @@ async function ensureServer(): Promise<ServerConnection> {
       throw new Error(`Configured OpenPond server ${existingUrl} does not serve the packaged renderer.`);
     }
     throw new Error(`Configured OpenPond server ${existingUrl} does not have a capability token.`);
+  }
+  if (!canLaunchBundledDesktopServer(explicitServerUrl)) {
+    throw new Error(`Configured OpenPond server is unavailable: ${existingUrl}`);
   }
 
   let launchPort = app.isPackaged ? 0 : serverPort;
@@ -369,6 +376,16 @@ async function waitForUrl(url: string, timeoutMs = 20000): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   throw new Error(`Renderer did not become available at ${url}`);
+}
+
+async function waitForServerHealth(url: string, timeoutMs = 15_000): Promise<DesktopServerHealth | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const current = await health(url);
+    if (current?.ok) return current;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return null;
 }
 
 function rendererUrlForDesktop(url: string): string {

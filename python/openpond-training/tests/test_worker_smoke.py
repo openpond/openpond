@@ -61,6 +61,9 @@ def test_cpu_lora_worker_saves_reloads_and_evaluates(tmp_path: Path, monkeypatch
     metrics = json.loads((output / "metrics.json").read_text())
     assert metrics["logitDelta"] > 0
     assert metrics["adapterParameterCount"] > 0
+    assert metrics["completionOnly"] is True
+    assert metrics["assistantTargetCount"] == 1
+    assert metrics["trainingExampleCount"] == 1
     events = [json.loads(line) for line in stream.getvalue().splitlines() if line.startswith("{")]
     event_types = [event["type"] for event in events]
     step_metrics = [event for event in events if event["type"] == "metric" and event["payload"].get("metricKind") == "sft_step"]

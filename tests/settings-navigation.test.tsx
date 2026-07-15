@@ -5,6 +5,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsNavigation } from "../apps/web/src/components/settings/SettingsNavigation";
 
 describe("SettingsNavigation", () => {
+  test("places Notifications near the top without shouting the label", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SettingsNavigation, {
+        section: "notifications",
+        onBack: () => undefined,
+        onSectionChange: () => undefined,
+      }),
+    );
+
+    expect(markup.indexOf("Account")).toBeLessThan(markup.indexOf("Notifications"));
+    expect(markup.indexOf("Notifications")).toBeLessThan(markup.indexOf("Profile"));
+    expect(markup).toContain('class="settings-nav-item active"');
+    expect(markup).not.toContain("NOTIFICATIONS");
+  });
+
   test("shows usage in the top settings group", () => {
     const markup = renderToStaticMarkup(
       createElement(SettingsNavigation, {

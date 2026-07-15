@@ -7,6 +7,7 @@ import {
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
   type ChatModelRef,
+  type CrossSystemWorldSpec,
   type TaskCreationRequest,
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
@@ -17,7 +18,7 @@ import type { createTrainingService } from "./training-service.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
 import { trainingRunDetail } from "./run-detail.js";
 import { scriptedOpenPondModelsEnabled } from "../openpond/scripted-chat-provider.js";
-import { recordFixtureBaselineSources, type CrossSystemWorldSpec } from "./cross-system-operations/index.js";
+import { recordFixtureBaselineSources } from "./cross-system-operations/index.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -32,12 +33,16 @@ export function createTrainingApi(deps: {
   evaluation: Evaluation;
   training: Training;
   chatSearch: TrainingChatSearch;
-  runCrossSystemFrontierBaseline: (input: {
-    profileId: string;
-    worldSpecs: CrossSystemWorldSpec[];
-    model: ChatModelRef;
-    reasoningEffort: ReturnType<typeof CodexReasoningEffortSchema.parse> | null;
-  }) => Promise<unknown>;
+  frontierBaseline: {
+    startRun: (input: {
+      profileId: string;
+      localProjectId: string;
+      worldSpecs: CrossSystemWorldSpec[];
+      model: ChatModelRef;
+      reasoningEffort: ReturnType<typeof CodexReasoningEffortSchema.parse> | null;
+    }) => Promise<unknown>;
+    cancelRun: (id: string) => Promise<unknown>;
+  };
 }) {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
@@ -54,13 +59,15 @@ export function createTrainingApi(deps: {
     if (action === "estimate_sources") return deps.taskCreator.estimateSessionSources(requiredStringArray(input.sessionIds, "sessionIds"));
     if (action === "search_sources") return deps.chatSearch.search(TrainingChatSearchRequestSchema.parse(input));
     if (action === "run_cross_system_frontier_baseline") {
-      return deps.runCrossSystemFrontierBaseline({
+      return deps.frontierBaseline.startRun({
         profileId: requiredString(input.profileId, "profileId"),
+        localProjectId: requiredString(input.localProjectId, "localProjectId"),
         worldSpecs: crossSystemWorldSpecs(input.worldSpecs),
         model: ChatModelRefSchema.parse(input.model),
         reasoningEffort: input.reasoningEffort ? CodexReasoningEffortSchema.parse(input.reasoningEffort) : null,
       });
     }
+    if (action === "cancel_cross_system_frontier_baseline") return deps.frontierBaseline.cancelRun(requiredString(input.runId, "runId"));
     if (action === "record_cross_system_fixture_baseline") {
       if (!scriptedOpenPondModelsEnabled()) throw new Error("The deterministic fixture baseline is available only in desktop harness mode.");
       return recordFixtureBaselineSources({
@@ -119,18 +126,19 @@ export function createTrainingApi(deps: {
   }
 
   async function state(profileId: string) {
-    const [sources, creations, tasksets, candidates, minerConfig, minerRuns, execution] = await Promise.all([
+    const [sources, creations, tasksets, candidates, minerConfig, minerRuns, frontierBaselineRuns, execution] = await Promise.all([
       deps.store.listTrainingSources(profileId),
       deps.store.listTaskCreationSnapshots(profileId),
       deps.store.listTasksets(profileId),
       deps.store.listTaskCandidates(profileId, "all"),
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
+      deps.store.listCrossSystemFrontierBaselineRuns(profileId),
       deps.training.state(),
     ]);
     const baselineReports = (await Promise.all(tasksets.map((taskset) => deps.store.listBaselineReports(taskset.id)))).flat();
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
-    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, baselineReports, graderAuditReports, candidates, minerConfig, minerRuns, ...execution, generatedAt: new Date().toISOString() };
+    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, baselineReports, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, ...execution, generatedAt: new Date().toISOString() };
   }
   return { request, state };
 }

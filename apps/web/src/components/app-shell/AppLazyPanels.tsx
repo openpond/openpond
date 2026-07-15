@@ -32,6 +32,12 @@ export function AppSettingsRoute({
   onToast,
   onBack,
   onOpenSourceSession,
+  teamChatCurrentUserId,
+  teamChatEnabled,
+  teamChatNotificationMode,
+  teamChatThreads,
+  onTeamChatNotificationModeChange,
+  onTeamChatThreadMuteChange,
 }: Parameters<typeof SettingsView>[0]) {
   return (
     <Suspense fallback={null}>
@@ -45,6 +51,12 @@ export function AppSettingsRoute({
         onToast={onToast}
         onBack={onBack}
         onOpenSourceSession={onOpenSourceSession}
+        teamChatCurrentUserId={teamChatCurrentUserId}
+        teamChatEnabled={teamChatEnabled}
+        teamChatNotificationMode={teamChatNotificationMode}
+        teamChatThreads={teamChatThreads}
+        onTeamChatNotificationModeChange={onTeamChatNotificationModeChange}
+        onTeamChatThreadMuteChange={onTeamChatThreadMuteChange}
       />
     </Suspense>
   );

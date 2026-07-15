@@ -7,7 +7,6 @@ import {
   type CSSProperties,
 } from "react";
 import type {
-  ChatAttachment,
   RuntimeEvent,
   Session,
   SubagentDelegationMode,
@@ -21,7 +20,7 @@ import { useProjectConfirmDialog } from "./components/app-shell/ProjectConfirmDi
 import { isDesktopShell, isMacPlatform } from "./components/app-shell/WindowControls";
 import { AppSplash } from "./components/splash/AppSplash";
 import type { CloudSetupDialogState } from "./components/workspace/CloudSetupDialog";
-import { modelRefForTurn, type SidebarProjectItem } from "./lib/app-models";
+import { modelRefForTurn, projectSelectionKey, type SidebarProjectItem } from "./lib/app-models";
 import { openPondOrganizationCacheKey } from "./lib/openpond-organization-memory";
 import { mergeLiveRuntimeEventLists } from "./lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "./lib/sidebar-session-projects";
@@ -34,8 +33,6 @@ import {
 import type { TerminalQueuedCommand, TerminalTab } from "./components/terminal/terminal-overlay-types";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "./lib/session-state";
 import { runtimeEventsForSession } from "./lib/runtime-indexes";
-import type { ComposerSubmitOptions } from "./components/chat/Composer";
-import type { SandboxActionCatalogEntry } from "./lib/sandbox-types";
 import {
   defaultWorkspaceDiffPanelViewState,
   type WorkspaceDiffPanelViewState,
@@ -47,7 +44,6 @@ import {
   isHybridWorkspaceSession,
   type WorkspaceTargetValue,
 } from "./lib/workspace-location";
-import { queuedCloudWorkSubmission } from "./lib/queued-cloud-work";
 import { openPondAccountScopeKey } from "./lib/account-scope";
 import { resolveTeamChatOpenPondOrganization } from "./lib/cloud-project-utils";
 import { confirmedLinkedCloudProject } from "./lib/cloud-link-trust";
@@ -81,8 +77,10 @@ import { useAppErrorReporter } from "./hooks/useAppErrorReporter";
 import { useAppState } from "./hooks/useAppState";
 import { useGitSetupNotifications } from "./hooks/useGitSetupNotifications";
 import { useLayoutPreferences } from "./hooks/useLayoutPreferences";
+import { useMainComposerSubmit } from "./hooks/useMainComposerSubmit";
 import { useInsights } from "./hooks/useInsights";
 import { useTraining } from "./hooks/useTraining";
+import { useTrainingModelChatHandoff } from "./hooks/useTrainingModelChatHandoff";
 import { useOpenSandboxWorkspace } from "./hooks/useOpenSandboxWorkspace";
 import { useProjectActions } from "./hooks/useProjectActions";
 import { useProjectTargetActions } from "./hooks/useProjectTargetActions";
@@ -96,6 +94,7 @@ import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useTeamChat } from "./hooks/useTeamChat";
 import { useTeamChatIncomingToast } from "./hooks/useTeamChatIncomingToast";
+import { useCommunityController } from "./hooks/useCommunityController";
 import { useOpenPondOrganizations } from "./hooks/useOpenPondOrganizations";
 import { useConnectedAppStatusRows } from "./hooks/useConnectedAppStatusRows";
 import { teamChatThreadTitle } from "./lib/team-chat-thread";
@@ -148,6 +147,7 @@ export function App() {
     chatRowsVisibleCount,
     sidebarOpen,
     view,
+    labsTab,
     selectedAppId,
     selectedProjectId,
     selectedSessionId,
@@ -188,6 +188,7 @@ export function App() {
     setChatRowsVisibleCount,
     setSidebarOpen,
     setView,
+    setLabsTab,
     setSelectedAppId,
     setSelectedProjectId,
     setSelectedSessionId,
@@ -389,8 +390,12 @@ export function App() {
     notification: teamChat.incomingNotification,
     dismiss: teamChat.dismissIncomingNotification,
     selectThread: teamChat.selectThread,
-    setView,
-    showToast,
+    setView, showToast,
+  });
+  const { communities, sidebar: communitySidebar, view: communityView } = useCommunityController({
+    connection, currentUserId: account?.profile?.id ?? null,
+    refreshToken: bootstrap?.accountMeta.asOf ?? null,
+    setView, showToast,
   });
   const teamAiThreadId = teamChat.aiThread?.conversationId ?? null;
   const teamAiSidebarOpen =
@@ -422,7 +427,7 @@ export function App() {
       ? openPondCommandAccessMode
       : (selectedSession?.openPondCommandAccessMode ?? openPondCommandAccessMode);
   const profileWorkspaceId =
-    (view === "profile" || view === "training") && bootstrap?.profile?.mode === "local" && bootstrap.profile.repoPath
+    view === "labs" && bootstrap?.profile?.mode === "local" && bootstrap.profile.repoPath
       ? localPathWorkspaceId(bootstrap.profile.repoPath)
       : null;
   const profileWorkspaceName = profileWorkspaceId
@@ -530,6 +535,35 @@ export function App() {
     requestComposerFocus: requestMainComposerFocus,
     onBeginNewChat: () => setDraftSubagentDelegationMode(null),
     setMentionedAppId,
+  });
+  const selectLocalProjectForTrainingChat = useCallback((projectId: string) => {
+    const projectKey = projectSelectionKey("local", projectId);
+    appDispatch({ type: "selectProject", projectId: projectKey });
+    expandProject(projectKey);
+  }, [appDispatch, expandProject]);
+  const {
+    advanceAfterTurn: advanceTrainingModelChatAfterTurn,
+    begin: beginNewChatWithTrainingModel,
+    bindSession: bindTrainingModelChatSession,
+    dismiss: dismissTrainingChatHandoff,
+    handoff: trainingChatHandoff,
+    prepareTurn: prepareTrainingModelChatTurn,
+    selectTask: selectTrainingChatTaskForComposer,
+  } = useTrainingModelChatHandoff({
+    activeModel,
+    activeProvider,
+    applyBootstrapPayload,
+    beginNewChat,
+    composerDraftStore,
+    connection,
+    requestComposerFocus: requestMainComposerFocus,
+    selectedLocalProjectId: selectedProject?.id ?? null,
+    selectedSessionId,
+    selectLocalProject: selectLocalProjectForTrainingChat,
+    setDraftModel,
+    setDraftProvider,
+    setError,
+    view,
   });
 
   useGitSetupNotifications({ connection, events, showToast });
@@ -693,7 +727,7 @@ export function App() {
   const rightPanelDiffBacked = rightPanelMode === "changes" || rightPanelMode === "goal";
   const shouldLoadWorkspaceDiff = Boolean(
     viewWorkspaceAppId &&
-    (view === "chat" || view === "profile" || view === "training") &&
+    (view === "chat" || view === "labs") &&
     (commitDialogOpen || (diffPanelOpen && rightPanelDiffBacked)),
   );
 
@@ -777,17 +811,15 @@ export function App() {
   const title =
     view === "apps"
       ? "Apps"
-      : view === "insights"
-        ? "Insights"
-        : view === "training"
-          ? "Training"
+      : view === "labs"
+        ? "Lab"
         : view === "team"
           ? teamChat.detail
             ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
             : "Team"
-          : view === "profile"
-            ? "Agents"
-            : view === "cloud"
+          : view === "community"
+            ? communities.preview?.displayName ?? "Communities"
+          : view === "cloud"
               ? (selectedCloudWorkItem?.title ?? "Cloud")
               : (selectedSession?.title ?? "New task");
   const {
@@ -1279,78 +1311,30 @@ export function App() {
     selectedSessionId,
     view,
   ]);
-  const sendPromptFromMainComposer = useCallback(
-    async (
-      attachments: ChatAttachment[] = [],
-      action: SandboxActionCatalogEntry | null = null,
-      promptOverride?: string,
-      options: ComposerSubmitOptions = {},
-    ) => {
-      const promptForSubmission = promptOverride ?? composerDraftStore.getSnapshot();
-      const queuedSubmission = queuedCloudWorkSubmission({
-        pendingWorkspaceTarget,
-        actionSelected: Boolean(action),
-        promptOverrideProvided: promptOverride !== undefined,
-        attachmentCount: attachments.length,
-        selectedCloudProjectId: selectedCloudProject?.id ?? null,
-        selectedProjectCloudProjectId: selectedProjectConfirmedCloudProject?.id ?? null,
-        selectedLocalProjectId: selectedProject?.id ?? null,
-        selectedLocalProjectName: selectedProject?.name ?? null,
-        selectedLocalWorkspacePath: selectedProject?.workspacePath ?? selectedProject?.path ?? null,
-        selectedProjectCloudSourceRef:
-          selectedProject?.linkedSandboxProject?.defaultBranch ??
-          visibleWorkspaceState?.currentBranch ??
-          null,
-        selectedProjectCloudBaseSha:
-          selectedProject?.linkedSandboxProject?.lastUploadedCommit ?? null,
-        prompt: promptForSubmission,
-      });
-      if (queuedSubmission.kind !== "not_queued") {
-        if (queuedSubmission.kind === "attachments_unsupported") {
-          showToast(queuedSubmission.message, "error");
-          return false;
-        }
-        if (queuedSubmission.kind === "missing_cloud_project") {
-          showToast(queuedSubmission.message, "error");
-          setPendingWorkspaceTarget(null);
-          return false;
-        }
-        if (queuedSubmission.kind === "empty_prompt") return false;
-        const created = await createCloudWork(queuedSubmission.request);
-        if (created) {
-          if (!options.preservePrompt) {
-            setPrompt("");
-            setMentionedAppId(null);
-          }
-          setPendingWorkspaceTarget(null);
-        }
-        return created;
-      }
-      return sendPrompt(attachments, action, promptOverride, {
-        clearPrompt: options.preservePrompt ? () => undefined : undefined,
-        displayPrompt: options.displayPrompt,
-        onSessionCreated: () => setDraftSubagentDelegationMode(null),
-      });
-    },
-    [
-      createCloudWork,
-      pendingWorkspaceTarget,
-      composerDraftStore,
-      selectedCloudProject?.id,
-      selectedProjectConfirmedCloudProject?.id,
-      selectedProject?.linkedSandboxProject?.defaultBranch,
-      selectedProject?.linkedSandboxProject?.lastUploadedCommit,
-      selectedProject?.id,
-      selectedProject?.name,
-      selectedProject?.path,
-      selectedProject?.workspacePath,
-      sendPrompt,
-      setMentionedAppId,
-      setPrompt,
-      showToast,
-      visibleWorkspaceState?.currentBranch,
-    ],
-  );
+  const sendPromptFromMainComposer = useMainComposerSubmit({
+    advanceTrainingTurn: advanceTrainingModelChatAfterTurn,
+    bindTrainingSession: bindTrainingModelChatSession,
+    composerDraftStore,
+    createCloudWork,
+    onSessionCreated: () => setDraftSubagentDelegationMode(null),
+    pendingWorkspaceTarget,
+    prepareTrainingTurn: prepareTrainingModelChatTurn,
+    selectedCloudProjectId: selectedCloudProject?.id ?? null,
+    selectedLocalProjectId: selectedProject?.id ?? null,
+    selectedLocalProjectName: selectedProject?.name ?? null,
+    selectedLocalWorkspacePath: selectedProject?.workspacePath ?? selectedProject?.path ?? null,
+    selectedProjectCloudBaseSha: selectedProject?.linkedSandboxProject?.lastUploadedCommit ?? null,
+    selectedProjectCloudProjectId: selectedProjectConfirmedCloudProject?.id ?? null,
+    selectedProjectCloudSourceRef:
+      selectedProject?.linkedSandboxProject?.defaultBranch ??
+      visibleWorkspaceState?.currentBranch ??
+      null,
+    sendPrompt,
+    setMentionedAppId,
+    setPendingWorkspaceTarget,
+    setPrompt,
+    showToast,
+  });
 
   const openSandboxWorkspace = useOpenSandboxWorkspace({
     appDispatch,
@@ -1432,6 +1416,7 @@ export function App() {
     setRightChatPanels,
     setRightPanelMode,
     setRightPanelTabRequest,
+    setLabsTab,
     setView,
     showChangesPanel,
     showToast,
@@ -1440,9 +1425,10 @@ export function App() {
   });
   const openProfileSettings = useCallback(() => {
     setSectionMenuOpen(null);
-    setView("profile");
+    setLabsTab("agents");
+    setView("labs");
     setSidebarOpen(true);
-  }, [setSectionMenuOpen, setSidebarOpen, setView]);
+  }, [setLabsTab, setSectionMenuOpen, setSidebarOpen, setView]);
   const diagnosticEvents = useMemo(
     () =>
       mergeLiveRuntimeEventLists(
@@ -1456,7 +1442,7 @@ export function App() {
       setDiffPanelOpen(false);
       return;
     }
-    if (view === "training") {
+    if (view === "labs") {
       setRightPanelMode("changes");
       setRightPanelTabRequest({ id: Date.now(), tab: "summary" });
       setDiffPanelOpen(true);
@@ -1482,6 +1468,12 @@ export function App() {
           onError: setError,
           onToast: showToast,
           onOpenSourceSession: openSessionInChat,
+          teamChatCurrentUserId: teamChat.currentUserId,
+          teamChatEnabled: teamChatTeamId !== null,
+          teamChatNotificationMode: teamChat.notificationMode,
+          teamChatThreads: teamChat.threads,
+          onTeamChatNotificationModeChange: teamChat.setNotificationMode,
+          onTeamChatThreadMuteChange: teamChat.setThreadMuted,
           onBack: () => {
             setView("chat");
             setSidebarOpen(true);
@@ -1511,8 +1503,7 @@ export function App() {
   const rightSidebarAvailableForView =
     view === "chat" ||
     view === "cloud" ||
-    view === "profile" ||
-    view === "training" ||
+    view === "labs" ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -1562,7 +1553,7 @@ export function App() {
         currentUserId: teamChat.currentUserId,
         teamMembers: teamChat.members,
         teamThreads: teamChat.threads,
-        teamNotificationMode: teamChat.notificationMode,
+        ...communitySidebar,
         account,
         profile: bootstrap?.profile,
         pinnedCollapsed,
@@ -1598,6 +1589,8 @@ export function App() {
         arch: connection?.arch ?? null,
         onSidebarResizeStart: startSidebarResize,
         setSidebarOpen,
+        labsTab,
+        setLabsTab,
         setView,
         setSelectedAppId,
         setSelectedProjectId,
@@ -1626,8 +1619,6 @@ export function App() {
           setView("team");
           void teamChat.openDm(userId);
         },
-        setTeamNotificationMode: teamChat.setNotificationMode,
-        setTeamThreadMuted: teamChat.setThreadMuted,
         addProjectFolder: () => void addProjectFolder(),
         startExistingProjectFromPath: openExistingProjectPathDialog,
         startProjectFromScratch: () => {
@@ -1650,7 +1641,8 @@ export function App() {
         addSessionToTraining: (session) => {
           void training.actions.addSource(session.id).then((source) => {
             if (!source) return;
-            setView("training");
+            setLabsTab("models");
+            setView("labs");
             showToast("Added chat to training sources.", "info");
           });
         },
@@ -1665,7 +1657,7 @@ export function App() {
       topBar={{
         sidebarOpen,
         title,
-        backAction: view === "training" && trainingDetailTasksetId
+        backAction: view === "labs" && labsTab === "models" && trainingDetailTasksetId
           ? { label: "Back to models", onSelect: () => setTrainingDetailTasksetId(null) }
           : null,
         conversationId: view === "chat" ? selectedSessionId : null,
@@ -1680,7 +1672,7 @@ export function App() {
         managedWorkspace,
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat" || view === "cloud" || view === "profile",
+        showDiffControls: view === "chat" || view === "cloud" || (view === "labs" && (labsTab === "profile" || labsTab === "agents")),
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
@@ -1694,7 +1686,8 @@ export function App() {
         onToggleTerminal: () => setTerminalOpen((open) => !open),
         onOpenInsights: () => {
           setSectionMenuOpen(null);
-          setView("insights");
+          setLabsTab("signals");
+          setView("labs");
         },
         onRunTerminalCommand: (command) => {
           setPendingTerminalCommand({ id: Date.now(), scope: viewTerminalScope, command });
@@ -1709,13 +1702,15 @@ export function App() {
         onOpenSandboxWorkspace: openSandboxWorkspace,
         onShowSidebar: () => setSidebarOpen(true),
         platform,
-        showWorkspaceControls: view !== "team" && view !== "training",
+        showWorkspaceControls: view !== "team" && view !== "community" && (view !== "labs" || labsTab === "profile" || labsTab === "agents"),
         insightsItems: insights.items,
         insightsSummary: insights.summary,
         insightsScanning: insights.scanRunning,
       }}
       mainPane={{
         view,
+        labsTab,
+        setLabsTab,
         teamChat: {
           currentUserId: teamChat.currentUserId,
           members: teamChat.members,
@@ -1770,6 +1765,7 @@ export function App() {
           onLoadMoreMessages: teamChat.loadMoreMessages,
           onRetryLoad: teamChat.refresh,
         },
+        community: communityView,
         bootstrap,
         runtimeEvents: sessionEvents,
         chatMessages: visibleChatMessages,
@@ -1832,8 +1828,11 @@ export function App() {
         insightsError: insights.error,
         training,
         trainingSessions: sidebarSessions,
+        trainingChatHandoff,
         trainingDetailTasksetId,
         onTrainingDetailTasksetIdChange: setTrainingDetailTasksetId,
+        onTrainingChatTaskSelect: selectTrainingChatTaskForComposer,
+        onTrainingChatHandoffDismiss: dismissTrainingChatHandoff,
         onRunInsightsScan: insights.runScan,
         onAskInsightsQuestion: insights.askQuestion,
         onPatchInsightStatus: insights.patchStatus,
@@ -1893,11 +1892,7 @@ export function App() {
         changeWorkspaceTarget,
         setDraftProvider,
         setDraftModel,
-        onBeginNewChatWithModel: (model) => {
-          setDraftProvider(model.providerId);
-          setDraftModel(model.modelId);
-          beginNewChat(null);
-        },
+        onBeginNewChatWithModel: beginNewChatWithTrainingModel,
         changeCodexPermissionMode,
         changeCodexReasoningEffort,
         changeOpenPondCommandAccessMode,

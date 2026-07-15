@@ -1,0 +1,59 @@
+.community-sidebar-section {
+  margin-bottom: 2px;
+}
+
+.community-sidebar-group {
+  display: grid;
+}
+
+.community-sidebar-community,
+.community-sidebar-channel-row {
+  font: inherit;
+  font-size: 13px;
+}
+
+.community-sidebar-discover {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--cyan);
+  padding: 0;
+}
+
+.community-sidebar-discover:hover,
+.community-sidebar-discover:focus-visible,
+.community-sidebar-discover.selected {
+  outline: 0;
+  color: #cffafe;
+}
+
+.community-sidebar-avatar {
+  background: #29433b;
+  color: #d1fae5;
+}
+
+.community-sidebar-community small {
+  overflow: hidden;
+  color: #67d4c0;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-sidebar-group-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.community-sidebar-channels {
+  display: grid;
+  gap: 2px;
+}
+
+.community-sidebar-channel-row {
+  padding-left: 12px;
+}

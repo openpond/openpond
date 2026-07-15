@@ -8,6 +8,7 @@ import type {
   RuntimeEvent,
   SendTurnRequest,
   Session,
+  Turn,
   WorkspaceDiffSummary,
   WorkspaceToolResult,
 } from "@openpond/contracts";
@@ -50,6 +51,7 @@ export type ModelToolExecutionContext = {
   workspaceDiffBaseline: WorkspaceDiffSummary | null;
   mentionedApps: OpenPondApp[];
   userPrompt: string;
+  turnMetadata: Turn["metadata"];
 };
 
 export type ModelToolDefinition = {
@@ -979,11 +981,13 @@ export function createOpenPondActionModelToolDefinitions(deps: {
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
   executeCrossSystemTool?: (input: {
     modelId: string;
+    localProjectId: string | null;
     turnId: string;
     callId: string;
     name: string;
     args: Record<string, unknown>;
     userPrompt: string;
+    taskId?: string;
     signal: AbortSignal;
   }) => Promise<NativeModelToolResult>;
 }): ModelToolDefinition[] {
@@ -1002,11 +1006,15 @@ export function createOpenPondActionModelToolDefinitions(deps: {
         enabled,
         execute: (context) => deps.executeCrossSystemTool!({
           modelId: context.model,
+          localProjectId: context.session.localProjectId ?? (
+            context.session.workspaceKind === "local_project" ? (context.session.workspaceId ?? null) : null
+          ),
           turnId: context.turnId,
           callId: context.callId,
           name: definition.name,
           args: context.args,
           userPrompt: context.userPrompt,
+          taskId: crossSystemTaskIdFromTurnMetadata(context.turnMetadata),
           signal: context.signal,
         }),
       }))
@@ -1183,6 +1191,11 @@ export function createOpenPondActionModelToolDefinitions(deps: {
       },
     },
   ];
+}
+
+function crossSystemTaskIdFromTurnMetadata(metadata: Turn["metadata"]): string | undefined {
+  const value = metadata?.crossSystemTaskId;
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, 240) : undefined;
 }
 
 function workspaceToolResultToModelToolResult(

@@ -5,11 +5,18 @@ import "../../styles/settings/settings-lists.css";
 import "../../styles/settings/remote-access.css";
 import "../../styles/settings/usage-settings.css";
 import "../../styles/settings/compute-settings.css";
+import "../../styles/settings/notifications-settings.css";
 import "../../styles/wallet/wallet.css";
-import type { BootstrapPayload, ProviderSettings, RuntimeEvent } from "@openpond/contracts";
+import type {
+  BootstrapPayload,
+  ProviderSettings,
+  RuntimeEvent,
+  TeamChatThread,
+} from "@openpond/contracts";
 import type { ClientConnection, PreferencesPayload } from "../../api";
 import { EMPTY_PERSONALIZATION, normalizePreferences } from "../../lib/app-models";
 import type { SettingsSection } from "../../lib/app-models";
+import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
 import { AccountSettingsSection } from "./AccountSettingsSection";
 import { DefaultsSettingsSection } from "./DefaultsSettingsSection";
 import { DiagnosticsSettingsSection } from "./DiagnosticsSettingsSection";
@@ -20,6 +27,7 @@ import {
   InsightsSettingsSection,
   SubagentsSettingsSection,
 } from "./HarnessSettingsSections";
+import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { PersonalizationSettingsSection } from "./PersonalizationSettingsSection";
 import { ProfileSettingsSection } from "./ProfileSettingsSection";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
@@ -48,6 +56,12 @@ export function SettingsView({
   onToast,
   onBack,
   onOpenSourceSession,
+  teamChatCurrentUserId,
+  teamChatEnabled,
+  teamChatNotificationMode,
+  teamChatThreads,
+  onTeamChatNotificationModeChange,
+  onTeamChatThreadMuteChange,
   initialSection = "account",
 }: {
   payload: BootstrapPayload | null;
@@ -58,6 +72,12 @@ export function SettingsView({
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onBack: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  teamChatCurrentUserId: string | null;
+  teamChatEnabled: boolean;
+  teamChatNotificationMode: TeamChatNotificationMode;
+  teamChatThreads: TeamChatThread[];
+  onTeamChatNotificationModeChange: (mode: TeamChatNotificationMode) => void;
+  onTeamChatThreadMuteChange: (threadId: string, muted: boolean) => Promise<boolean>;
   initialSection?: SettingsSection;
 }) {
   const [section, setSection] = useState<SettingsSection>(initialSection);
@@ -159,6 +179,15 @@ export function SettingsView({
             onError={onError}
             onToast={onToast}
             {...accountSettings}
+          />
+        ) : section === "notifications" ? (
+          <NotificationsSettingsSection
+            currentUserId={teamChatCurrentUserId}
+            enabled={teamChatEnabled}
+            mode={teamChatNotificationMode}
+            threads={teamChatThreads}
+            onModeChange={onTeamChatNotificationModeChange}
+            onThreadMuteChange={onTeamChatThreadMuteChange}
           />
         ) : section === "wallet" ? (
           <WalletView payload={payload} />

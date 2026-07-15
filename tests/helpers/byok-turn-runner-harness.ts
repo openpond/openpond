@@ -198,7 +198,7 @@ export function createNativeProfileSkillGoalHarness(input: {
 }
 
 export function createNativeGoalControlHarness(input: {
-  providerId?: "openpond" | "openrouter" | "zai";
+  providerId?: "local-adapter" | "openpond" | "openrouter" | "zai";
   modelId?: string;
   toolArgs?: Record<string, unknown> | null;
   reasoningTextOnToolCall?: string;
@@ -209,9 +209,11 @@ export function createNativeGoalControlHarness(input: {
   usage?: unknown;
   usageByPass?: Record<number, unknown>;
   failOnPass?: number;
+  failure?: Error;
   preferences?: AppPreferences;
   providerSettings?: ProviderSettings;
   enableGoalContinuations?: boolean;
+  finalizeCrossSystemTurn?: NonNullable<Parameters<typeof createTurnRunner>[0]["finalizeCrossSystemTurn"]>;
 }) {
   const providerId = input.providerId ?? "openrouter";
   const modelId = input.modelId ?? (providerId === "openpond" ? "openpond-chat" : "test/model");
@@ -318,6 +320,7 @@ export function createNativeGoalControlHarness(input: {
     executeWorkspaceTool: async () => {
       throw new Error("workspace tool execution should not be needed");
     },
+    finalizeCrossSystemTurn: input.finalizeCrossSystemTurn,
     loadPersonalizationSoul: async () => "",
     loadAppPreferences: async () => input.preferences ?? AppPreferencesSchema.parse({}),
     loadProviderSettings: input.providerSettings ? async () => input.providerSettings! : undefined,
@@ -384,7 +387,7 @@ export function createNativeGoalControlHarness(input: {
   async function* harnessStreamDeltas() {
     streamPass += 1;
     const pass = streamPass;
-    if (input.failOnPass === pass) throw new Error(`stream failed on pass ${pass}`);
+    if (input.failOnPass === pass) throw input.failure ?? new Error(`stream failed on pass ${pass}`);
     if (pass === 1 && input.toolArgs) {
       if (input.reasoningTextOnToolCall) {
         yield { reasoningText: input.reasoningTextOnToolCall, raw: { pass, reasoning: true } };

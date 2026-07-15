@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Bell,
   BookOpenText,
   Bot,
   ChartColumnStacked,
@@ -33,6 +34,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     items: [
       { section: "account", label: "Account", Icon: UserCircle },
+      { section: "notifications", label: "Notifications", Icon: Bell },
       { section: "profile", label: "Profile", Icon: Bot },
       { section: "providers", label: "Providers", Icon: MessageSquare },
       { section: "compute", label: "Compute", Icon: Monitor },

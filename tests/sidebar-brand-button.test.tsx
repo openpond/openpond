@@ -23,4 +23,16 @@ describe("Sidebar brand button", () => {
 
     expect(activationCount).toBe(1);
   });
+
+  test("places the wordmark in the sidebar toggle toolbar", async () => {
+    const source = await Bun.file("apps/web/src/components/sidebar/Sidebar.tsx").text();
+    const toolbarStart = source.indexOf('<div className="sidebar-toolbar">');
+    const navigationStart = source.indexOf("<SidebarNavigation");
+    const brand = source.indexOf("<SidebarBrandButton", toolbarStart);
+
+    expect(toolbarStart).toBeGreaterThan(-1);
+    expect(brand).toBeGreaterThan(toolbarStart);
+    expect(brand).toBeLessThan(navigationStart);
+    expect(source).not.toContain("sidebar-wordmark-row");
+  });
 });

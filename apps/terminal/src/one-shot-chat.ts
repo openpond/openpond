@@ -11,7 +11,7 @@ import {
 import type { TerminalOptions } from "./args.js";
 import { apiFetch, ensureServer, stopManagedServer } from "./connection.js";
 import { openTerminalEvents, type TerminalEventStreamController } from "./events.js";
-import { activeModelId, activeModelRef, modelLabel, providerLabel } from "./formatting.js";
+import { activeModelId, activeModelRef, providerLabel, terminalSessionHeading } from "./formatting.js";
 import { ensureTerminalChatSession, ensureTerminalSessionWorkspaceReady } from "./session-state.js";
 
 export type OneShotChatStatus = "completed" | "failed" | "interrupted" | "timeout";
@@ -124,7 +124,7 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
 
     if (!options.json) {
       for (const line of startupWarnings) output.write(`${line}\n`);
-      output.write(`OpenPond ${providerLabel(payload.providers, options.provider)} / ${modelLabel(payload.providers, options)} ${options.cwd}\n`);
+      output.write(`${terminalSessionHeading(payload.providers, options)}\n`);
     }
 
     const activeAccumulator = createOneShotAccumulator({ maxOutputBytes: options.maxOutputBytes });

@@ -103,7 +103,6 @@
 .section-icon[data-tooltip],
 .sidebar-icon[data-tooltip],
 .sidebar-row-action[data-tooltip],
-.sidebar-profile-change-dot[data-tooltip],
 .sidebar-running-dot[data-tooltip] {
   position: relative;
 }
@@ -123,7 +122,6 @@
 .section-icon[data-tooltip]::after,
 .sidebar-icon[data-tooltip]::after,
 .sidebar-row-action[data-tooltip]::after,
-.sidebar-profile-change-dot[data-tooltip]::after,
 .sidebar-running-dot[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -164,7 +162,6 @@
 .section-icon[data-tooltip]::before,
 .sidebar-icon[data-tooltip]::before,
 .sidebar-row-action[data-tooltip]::before,
-.sidebar-profile-change-dot[data-tooltip]::before,
 .sidebar-running-dot[data-tooltip]::before {
   content: "";
   position: absolute;
@@ -243,10 +240,6 @@
 .sidebar-row-action[data-tooltip]:hover::before,
 .sidebar-row-action[data-tooltip]:focus-visible::after,
 .sidebar-row-action[data-tooltip]:focus-visible::before,
-.sidebar-profile-change-dot[data-tooltip]:hover::after,
-.sidebar-profile-change-dot[data-tooltip]:hover::before,
-.sidebar-profile-change-dot[data-tooltip]:focus-visible::after,
-.sidebar-profile-change-dot[data-tooltip]:focus-visible::before,
 .sidebar-running-dot[data-tooltip]:hover::after,
 .sidebar-running-dot[data-tooltip]:hover::before,
 .sidebar-running-dot[data-tooltip]:focus-visible::after,
@@ -286,8 +279,6 @@
 .sidebar-icon[data-tooltip]:focus-visible::before,
 .sidebar-row-action[data-tooltip]:hover::before,
 .sidebar-row-action[data-tooltip]:focus-visible::before,
-.sidebar-profile-change-dot[data-tooltip]:hover::before,
-.sidebar-profile-change-dot[data-tooltip]:focus-visible::before,
 .sidebar-running-dot[data-tooltip]:hover::before,
 .sidebar-running-dot[data-tooltip]:focus-visible::before {
   transform: translate(-50%, 0) rotate(45deg);
@@ -298,16 +289,6 @@
   opacity: 1;
   transform: translate(50%, 0);
   visibility: visible;
-}
-
-.sidebar-profile-change-dot[data-tooltip]::after {
-  max-width: min(232px, calc(var(--sidebar-width) - 32px), calc(100vw - 32px));
-  transform: translate(calc(-50% + 48px), 3px);
-}
-
-.sidebar-profile-change-dot[data-tooltip]:hover::after,
-.sidebar-profile-change-dot[data-tooltip]:focus-visible::after {
-  transform: translate(calc(-50% + 48px), 0);
 }
 
 .sidebar-icon[data-tooltip]::after,

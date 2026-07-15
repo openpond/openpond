@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, test } from "bun:test";
 
 import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
+import { CommunityApiError } from "../apps/server/src/openpond/community-client";
 
 type RecordedCall = {
   name: string;
@@ -38,6 +39,20 @@ describe("server HTTP route table", () => {
       ).resolves.toMatchObject({
         name: "teamChatPayload",
         args: [{ type: "agents", teamId: "team-1" }],
+      });
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/communities?cursor=community-cursor", 200),
+      ).resolves.toMatchObject({
+        name: "communityPayload",
+        args: [{ type: "discover", cursor: "community-cursor" }],
+      });
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/communities/community-1/join", 201, {
+          acceptedRulesVersionId: "rules-1",
+        }),
+      ).resolves.toMatchObject({
+        name: "communityPayload",
+        args: [{ type: "join", communityId: "community-1", acceptedRulesVersionId: "rules-1" }],
       });
       await expect(expectJsonRequest(origin, "POST", "/v1/projects", 201, { name: "Local repo" })).resolves.toMatchObject({
         name: "createLocalProjectPayload",
@@ -127,6 +142,8 @@ describe("server HTTP route table", () => {
         "organizationPayload",
         "sandboxPayload",
         "teamChatPayload",
+        "communityPayload",
+        "communityPayload",
         "createLocalProjectPayload",
         "listProviderModelsPayload",
         "recordClientDiagnosticPayload",
@@ -142,6 +159,37 @@ describe("server HTTP route table", () => {
         "ensureCloudWorkspaceReady",
         "interruptCodexHistoryTurnPayload",
       ]);
+    } finally {
+      server.close();
+      await once(server, "close");
+    }
+  });
+
+  test("preserves hosted community status, code, and recovery details", async () => {
+    const deps = routeTableDeps([]);
+    deps.communityPayload = async () => {
+      throw new CommunityApiError("community_rules_version_stale", 409, {
+        currentRulesVersionId: "rules-2",
+      });
+    };
+    const server = createServer(createHttpRequestHandler(deps));
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address() as AddressInfo;
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/v1/communities/community-1/join`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer route-table-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ acceptedRulesVersionId: "rules-1" }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({
+        error: "community_rules_version_stale",
+        details: { currentRulesVersionId: "rules-2" },
+      });
     } finally {
       server.close();
       await once(server, "close");

@@ -30,6 +30,27 @@ async function api<T>(
 }
 
 describe("app preferences", () => {
+  test("defaults fresh users to OpenPond Chat and preserves explicit model selections", () => {
+    expect(normalizeAppPreferences(null)).toMatchObject({
+      defaultChatProvider: "openpond",
+      defaultChatModel: "openpond-chat",
+    });
+    expect(normalizeAppPreferences({
+      defaultChatProvider: "openpond",
+      defaultChatModel: "openpond-chat",
+    })).toMatchObject({
+      defaultChatProvider: "openpond",
+      defaultChatModel: "openpond-chat",
+    });
+    expect(normalizeAppPreferences({
+      defaultChatProvider: "openai",
+      defaultChatModel: "gpt-5.6-sol",
+    })).toMatchObject({
+      defaultChatProvider: "openai",
+      defaultChatModel: "gpt-5.6-sol",
+    });
+  });
+
   test("parses preference patches without applying defaults for omitted fields", () => {
     const patch = UpdateAppPreferencesRequestSchema.parse({
       openPondCommandAccessMode: "full-access",
@@ -39,6 +60,7 @@ describe("app preferences", () => {
 
   test("defaults subagent role settings to direct shared-workspace workers", () => {
     const preferences = AppPreferencesSchema.parse({});
+    expect(preferences.insightsEnabled).toBe(false);
     const coding = preferences.subagents.roles.find((role) => role.id === "coding");
     const research = preferences.subagents.roles.find((role) => role.id === "research");
     expect(preferences.subagents.enabled).toBe(true);

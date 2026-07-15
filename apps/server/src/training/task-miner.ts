@@ -25,13 +25,21 @@ export const DEFAULT_TASK_MINER_CONFIG: TaskMinerConfig = TaskMinerConfigSchema.
   consentRequired: true,
 });
 
-export function createTaskMinerService(deps: { store: SqliteStore }) {
-  const activeRuns = new Map<string, AbortController>();
+export function createTaskMinerService(deps: {
+  store: SqliteStore;
+  addSessionSource?: (input: { profileId: string; sessionId: string; consentScope: "full_session" }) => Promise<TrainingSourceRef>;
+}) {
+  const activeRuns = new Map<string, { controller: AbortController; execution: Promise<void> }>();
+  let closing = false;
+  const ready = reconcileInterruptedRuns();
+
   async function config(profileId: string): Promise<TaskMinerConfig> {
+    await ready;
     return (await deps.store.getTaskMinerConfig(profileId)) ?? DEFAULT_TASK_MINER_CONFIG;
   }
 
   async function updateConfig(profileId: string, value: unknown): Promise<TaskMinerConfig> {
+    await ready;
     return deps.store.saveTaskMinerConfig(profileId, TaskMinerConfigSchema.parse(value));
   }
 
@@ -42,10 +50,11 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     signal?: AbortSignal;
     onProgress?: (progress: TaskMinerRun["progress"]) => Promise<void> | void;
   }): Promise<TaskCandidate[]> {
+    await ready;
     const activeConfig = TaskMinerConfigSchema.parse(input.config ?? await config(input.profileId));
     if (input.config) await deps.store.saveTaskMinerConfig(input.profileId, activeConfig);
     throwIfAborted(input.signal);
-    await input.onProgress?.({ stage: "preparing", processedSources: 0, totalSources: 0, candidatesFound: 0 });
+    await input.onProgress?.({ stage: "preparing", processedSources: 0, totalSources: 0, candidatesFound: 0, skippedSources: 0 });
     const allSources = await deps.store.listTrainingSources(input.profileId);
     const sourceFilter = input.sourceIds?.length ? new Set(input.sourceIds) : null;
     const cutoff = Date.now() - activeConfig.observationWindowDays * 24 * 60 * 60 * 1_000;
@@ -53,12 +62,12 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     const groups = clusterSources(sources);
     const candidates: TaskCandidate[] = [];
     let processedSources = 0;
-    await input.onProgress?.({ stage: "clustering", processedSources, totalSources: sources.length, candidatesFound: 0 });
+    await input.onProgress?.({ stage: "clustering", processedSources, totalSources: sources.length, candidatesFound: 0, skippedSources: 0 });
     for (const [signature, group] of groups) {
       throwIfAborted(input.signal);
       processedSources += group.length;
       if (group.length < activeConfig.minimumRecurrence) {
-        await input.onProgress?.({ stage: "clustering", processedSources, totalSources: sources.length, candidatesFound: candidates.length });
+        await input.onProgress?.({ stage: "clustering", processedSources, totalSources: sources.length, candidatesFound: candidates.length, skippedSources: 0 });
         continue;
       }
       const evidence = group.map((source) => evidenceFromSource(source, signature));
@@ -95,14 +104,18 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
       });
       await deps.store.upsertTaskCandidate(candidate);
       candidates.push(candidate);
-      await input.onProgress?.({ stage: "persisting", processedSources, totalSources: sources.length, candidatesFound: candidates.length });
+      await input.onProgress?.({ stage: "persisting", processedSources, totalSources: sources.length, candidatesFound: candidates.length, skippedSources: 0 });
     }
-    await input.onProgress?.({ stage: "complete", processedSources: sources.length, totalSources: sources.length, candidatesFound: candidates.length });
+    await input.onProgress?.({ stage: "complete", processedSources: sources.length, totalSources: sources.length, candidatesFound: candidates.length, skippedSources: 0 });
     return candidates;
   }
 
-  async function startRun(input: { profileId: string; sourceIds?: string[]; config?: TaskMinerConfig }): Promise<TaskMinerRun> {
+  async function startRun(input: { profileId: string; sourceIds?: string[]; sessionIds?: string[]; config?: TaskMinerConfig }): Promise<TaskMinerRun> {
+    await ready;
+    if (closing) throw new Error("The Task Miner service is closing.");
     const activeConfig = TaskMinerConfigSchema.parse(input.config ?? await config(input.profileId));
+    if (input.config) await deps.store.saveTaskMinerConfig(input.profileId, activeConfig);
+    const sessionIds = [...new Set(input.sessionIds ?? [])];
     const timestamp = now();
     const runRecord = TaskMinerRunSchema.parse({
       schemaVersion: "openpond.taskMinerRun.v1",
@@ -111,7 +124,8 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
       status: "queued",
       config: activeConfig,
       sourceIds: input.sourceIds ?? [],
-      progress: { stage: "queued", processedSources: 0, totalSources: input.sourceIds?.length ?? 0, candidatesFound: 0 },
+      sessionIds,
+      progress: { stage: "queued", processedSources: 0, totalSources: sessionIds.length || input.sourceIds?.length || 0, candidatesFound: 0, skippedSources: 0 },
       candidateIds: [],
       cancelRequested: false,
       error: null,
@@ -122,8 +136,10 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     });
     await deps.store.saveTaskMinerRun(runRecord);
     const controller = new AbortController();
-    activeRuns.set(runRecord.id, controller);
-    queueMicrotask(() => void executeRun(runRecord, controller));
+    const execution = Promise.resolve()
+      .then(() => executeRun(runRecord, controller))
+      .finally(() => activeRuns.delete(runRecord.id));
+    activeRuns.set(runRecord.id, { controller, execution });
     return runRecord;
   }
 
@@ -131,6 +147,7 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     const startedAt = now();
     let current = await deps.store.saveTaskMinerRun({ ...initial, status: "running", startedAt, updatedAt: startedAt });
     try {
+      current = await ingestSessionSources(current, controller);
       const candidates = await run({
         profileId: current.profileId,
         sourceIds: current.sourceIds,
@@ -140,7 +157,16 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
           const persisted = await deps.store.getTaskMinerRun(current.id);
           if (persisted?.cancelRequested) controller.abort();
           throwIfAborted(controller.signal);
-          current = await deps.store.saveTaskMinerRun({ ...current, status: "running", progress, updatedAt: now() });
+          if (!persisted) throw new Error("Task Miner run disappeared while it was executing.");
+          current = await deps.store.saveTaskMinerRun({
+            ...persisted,
+            status: "running",
+            progress: {
+              ...progress,
+              skippedSources: Math.max(progress.skippedSources, persisted.progress.skippedSources),
+            },
+            updatedAt: now(),
+          });
         },
       });
       throwIfAborted(controller.signal);
@@ -149,19 +175,95 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     } catch (error) {
       const completedAt = now();
       const cancelled = controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
-      current = await deps.store.saveTaskMinerRun({ ...current, status: cancelled ? "cancelled" : "failed", cancelRequested: cancelled || current.cancelRequested, error: cancelled ? null : error instanceof Error ? error.message : String(error), completedAt, updatedAt: completedAt });
-    } finally {
-      activeRuns.delete(initial.id);
+      const persisted = await deps.store.getTaskMinerRun(initial.id) ?? current;
+      current = await deps.store.saveTaskMinerRun({ ...persisted, status: cancelled ? "cancelled" : "failed", cancelRequested: cancelled || persisted.cancelRequested, error: cancelled ? null : error instanceof Error ? error.message : String(error), completedAt, updatedAt: completedAt });
     }
   }
 
+  async function ingestSessionSources(current: TaskMinerRun, controller: AbortController): Promise<TaskMinerRun> {
+    if (!current.sessionIds.length) return current;
+    if (!deps.addSessionSource) throw new Error("Task Miner session ingestion is unavailable.");
+    current = await deps.store.saveTaskMinerRun({
+      ...current,
+      progress: {
+        stage: "ingesting",
+        processedSources: 0,
+        totalSources: current.sessionIds.length,
+        candidatesFound: 0,
+        skippedSources: 0,
+      },
+      updatedAt: now(),
+    });
+    const sourceIds = new Set(current.sourceIds);
+    let processedSources = 0;
+    let skippedSources = 0;
+    for (let offset = 0; offset < current.sessionIds.length; offset += 16) {
+      throwIfAborted(controller.signal);
+      const persisted = await deps.store.getTaskMinerRun(current.id);
+      if (!persisted) throw new Error("Task Miner run disappeared while it was ingesting sources.");
+      if (persisted.cancelRequested) controller.abort();
+      throwIfAborted(controller.signal);
+      const batch = current.sessionIds.slice(offset, offset + 16);
+      const records = await Promise.all(batch.map(async (sessionId) => {
+        throwIfAborted(controller.signal);
+        try {
+          return { source: await deps.addSessionSource!({ profileId: current.profileId, sessionId, consentScope: "full_session" }), skipped: false };
+        } catch (error) {
+          if (isUnavailableSessionEvidence(error)) return { source: null, skipped: true };
+          throw error;
+        }
+      }));
+      for (const record of records) if (record.source) sourceIds.add(record.source.id);
+      processedSources += batch.length;
+      skippedSources += records.filter((record) => record.skipped).length;
+      current = await deps.store.saveTaskMinerRun({
+        ...persisted,
+        status: "running",
+        sourceIds: [...sourceIds],
+        progress: {
+          stage: "ingesting",
+          processedSources,
+          totalSources: current.sessionIds.length,
+          candidatesFound: 0,
+          skippedSources,
+        },
+        updatedAt: now(),
+      });
+    }
+    return current;
+  }
+
   async function cancelRun(id: string): Promise<TaskMinerRun> {
+    await ready;
     const runRecord = await deps.store.getTaskMinerRun(id);
     if (!runRecord) throw new Error("Task Miner run not found.");
     if (["cancelled", "succeeded", "failed"].includes(runRecord.status)) return runRecord;
     const updated = await deps.store.saveTaskMinerRun({ ...runRecord, status: "cancelling", cancelRequested: true, updatedAt: now() });
-    activeRuns.get(id)?.abort();
+    activeRuns.get(id)?.controller.abort();
     return updated;
+  }
+
+  async function reconcileInterruptedRuns(): Promise<void> {
+    for (const runRecord of await deps.store.listTaskMinerRuns()) {
+      if (!["queued", "running", "cancelling"].includes(runRecord.status)) continue;
+      const completedAt = now();
+      const cancelled = runRecord.status === "cancelling" || runRecord.cancelRequested;
+      await deps.store.saveTaskMinerRun({
+        ...runRecord,
+        status: cancelled ? "cancelled" : "failed",
+        cancelRequested: cancelled,
+        error: cancelled ? null : "OpenPond restarted before this Task Miner scan completed. Start a new scan; ingested sources were preserved.",
+        completedAt,
+        updatedAt: completedAt,
+      });
+    }
+  }
+
+  async function close(): Promise<void> {
+    closing = true;
+    await ready;
+    for (const active of activeRuns.values()) active.controller.abort();
+    await Promise.allSettled([...activeRuns.values()].map((active) => active.execution));
   }
 
   async function patch(id: string, input: { status?: TaskCandidate["status"]; mergeIntoId?: string | null }): Promise<TaskCandidate> {
@@ -174,7 +276,7 @@ export function createTaskMinerService(deps: { store: SqliteStore }) {
     return deps.store.upsertTaskCandidate(TaskCandidateSchema.parse({ ...candidate, status: input.mergeIntoId ? "retired" : input.status ?? candidate.status, mergedIntoId: input.mergeIntoId ?? candidate.mergedIntoId, updatedAt: now() }));
   }
 
-  return { config, updateConfig, run, startRun, cancelRun, patch };
+  return { config, updateConfig, run, startRun, cancelRun, patch, close };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -182,6 +284,10 @@ function throwIfAborted(signal?: AbortSignal): void {
   const error = new Error("Task Miner scan was cancelled.");
   error.name = "AbortError";
   throw error;
+}
+
+function isUnavailableSessionEvidence(error: unknown): boolean {
+  return error instanceof Error && ["No completed turns were selected.", "Session not found."].includes(error.message);
 }
 
 function clusterSources(sources: TrainingSourceRef[]): Map<string, TrainingSourceRef[]> {

@@ -1,6 +1,7 @@
 import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   type ChatModelRef,
+  type CrossSystemWorldSpec,
   type TrainingSourceRef,
 } from "@openpond/contracts";
 import type { SqliteStore } from "../../store/store.js";
@@ -9,14 +10,8 @@ import {
   crossSystemTrainingSourceMetadata,
   runScriptedCrossSystemBaseline,
 } from "./baseline.js";
-import type { CrossSystemDifficulty, CrossSystemSplit } from "./types.js";
+import type { CrossSystemSplit } from "./types.js";
 import { generateCrossSystemTasks, generateCrossSystemWorld } from "./world-generator.js";
-
-export type CrossSystemWorldSpec = {
-  seed: number;
-  split: CrossSystemSplit;
-  difficulty: CrossSystemDifficulty;
-};
 
 /**
  * Records the deterministic, networkless baseline used by the desktop proof.

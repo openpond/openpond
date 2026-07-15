@@ -170,7 +170,7 @@ function profilePayload(): BootstrapPayload {
 }
 
 describe("ProfileSettingsSection", () => {
-  test("renders summary metrics above the profile controls without the full summary card", () => {
+  test("renders compact profile controls and a bordered agent table without duplicate metrics", () => {
     const html = renderToStaticMarkup(
       createElement(ProfileSettingsSection, {
         payload: profilePayload(),
@@ -180,10 +180,10 @@ describe("ProfileSettingsSection", () => {
       }),
     );
 
-    expect(html).toContain("Plan review");
-    expect(html).toContain("1 pending");
-    expect(html).toContain('aria-label="Profile summary"');
-    expect(html).toContain("profile-summary-overview");
+    expect(html).toContain('class="profile-hosted-status"');
+    expect(html).toContain("uploaded f33a352dfb");
+    expect(html).toContain('<table class="profile-agent-table" aria-label="Profile agents table">');
+    expect(html).toContain('<th scope="col">Agent</th>');
     expect(html).toContain("Action");
     expect(html).toContain("Check");
     expect(html).toContain("Synced");
@@ -191,6 +191,13 @@ describe("ProfileSettingsSection", () => {
     expect(html).toContain("Commit");
     expect(html).toContain("Sync");
     expect(html).toContain("Repo");
+    expect(html).not.toContain("Plan review");
+    expect(html).not.toContain('aria-label="Profile summary"');
+    expect(html).not.toContain("profile-summary-overview");
+    expect(html).not.toContain(">Details<");
+    expect(html).not.toContain("Default action");
+    expect(html).not.toContain("Setup gate");
+    expect(html).not.toContain("Hosted invocation");
     expect(html).not.toContain("<h1>Profile</h1>");
     expect(html).not.toContain('aria-label="Refresh profile"');
     expect(html).not.toContain(">Load<");
@@ -205,26 +212,46 @@ describe("ProfileSettingsSection", () => {
     expect(html).not.toContain("<span>Summary</span>");
     expect(html).not.toContain("Review release notes agent plan");
 
-    const summaryIndex = html.indexOf('aria-label="Profile summary"');
-    const detailsIndex = html.indexOf(">Details<");
     const commitIndex = html.indexOf(">Commit<");
     const syncIndex = html.indexOf(">Sync<");
     const repoIndex = html.indexOf(">Repo<");
+    const hostedIndex = html.indexOf('class="profile-hosted-status"');
     const agentsIndex = html.indexOf(
       'class="account-list-heading profile-agent-list-heading"><span>Agents</span>',
     );
 
-    expect(summaryIndex).toBeGreaterThan(-1);
-    expect(detailsIndex).toBeGreaterThan(-1);
     expect(commitIndex).toBeGreaterThan(-1);
     expect(syncIndex).toBeGreaterThan(-1);
     expect(repoIndex).toBeGreaterThan(-1);
+    expect(hostedIndex).toBeGreaterThan(-1);
     expect(agentsIndex).toBeGreaterThan(-1);
-    expect(summaryIndex).toBeLessThan(detailsIndex);
     expect(commitIndex).toBeLessThan(agentsIndex);
     expect(syncIndex).toBeLessThan(agentsIndex);
     expect(repoIndex).toBeLessThan(agentsIndex);
-    expect(detailsIndex).toBeLessThan(agentsIndex);
+    expect(hostedIndex).toBeLessThan(agentsIndex);
+  });
+
+  test("keeps an empty Agents section above Skills", () => {
+    const payload = profilePayload();
+    payload.profile.agents = [];
+
+    const html = renderToStaticMarkup(
+      createElement(ProfileSettingsSection, {
+        payload,
+        connection: null,
+        onPayload: noop,
+        onError: noop,
+      }),
+    );
+
+    const agentsIndex = html.indexOf(
+      'class="account-list-heading profile-agent-list-heading"><span>Agents</span>',
+    );
+    const emptyAgentsIndex = html.indexOf("No profile agents found");
+    const skillsIndex = html.indexOf("<span>Skills</span>");
+    expect(agentsIndex).toBeGreaterThan(-1);
+    expect(emptyAgentsIndex).toBeGreaterThan(agentsIndex);
+    expect(skillsIndex).toBeGreaterThan(emptyAgentsIndex);
   });
 
   test("renders profile skills beside profile agents", () => {

@@ -15,7 +15,6 @@ import { ArrowDown, ArrowLeft, ArrowRight, DownloadCloud } from "../icons";
 import type {
   BootstrapPayload,
   ChatAttachment,
-  ChatModelRef,
   ChatProvider,
   CloudProject,
   CloudWorkItem,
@@ -40,8 +39,8 @@ import type {
   WorkspaceState,
   TerminalScope,
 } from "@openpond/contracts";
-import type { ClientConnection } from "../../api";
-import { normalizePreferences, type AppView, type ChatMessage } from "../../lib/app-models";
+import { api, type ClientConnection } from "../../api";
+import { normalizePreferences, type AppView, type ChatMessage, type LabsTab } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
@@ -50,6 +49,7 @@ import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/works
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import { type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
 import { DraftBoundComposer } from "../chat/DraftBoundComposer";
+import { TrainingModelChatHandoffBar } from "../chat/TrainingModelChatHandoffBar";
 import type { ComposerCreatePipelineRuntime } from "../chat/ComposerCreatePipelineStrip";
 import type { CreatePipelineReviewActionInput } from "../chat/create-pipeline-types";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
@@ -83,6 +83,7 @@ import { TrainingCreationPanel, TrainingStatusReceipt } from "../training/Traini
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/TrainingView";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
+import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
 import type {
   WorkspaceDiffPanelViewState,
@@ -90,6 +91,7 @@ import type {
   WorkspaceFileSourceSwitcher,
 } from "../workspace-diff/workspace-diff-panel-model";
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
+import type { CommunityViewProps } from "../community/CommunityView";
 import type { useTraining } from "../../hooks/useTraining";
 import {
   CHAT_HISTORY_TOP_THRESHOLD_PX,
@@ -118,18 +120,20 @@ import {
   BrowserSidebar,
   CloudWorkView,
   GetStartedView,
-  InsightsView,
-  TrainingView,
-  ProfileView,
+  LabsRoute,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
   TeamChatView,
+  CommunityView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
 
 type MainPaneProps = {
   view: AppView;
+  labsTab: LabsTab;
+  setLabsTab: (tab: LabsTab) => void;
   teamChat: TeamChatViewProps;
+  community: CommunityViewProps;
   bootstrap: BootstrapPayload | null;
   runtimeEvents: RuntimeEvent[];
   chatMessages: ChatMessage[];
@@ -192,8 +196,11 @@ type MainPaneProps = {
   insightsError: string | null;
   training: ReturnType<typeof useTraining>;
   trainingSessions: Session[];
+  trainingChatHandoff: TrainingModelChatHandoff | null;
   trainingDetailTasksetId: string | null;
   onTrainingDetailTasksetIdChange: (tasksetId: string | null) => void;
+  onTrainingChatTaskSelect: (index: number) => void;
+  onTrainingChatHandoffDismiss: () => void;
   onRunInsightsScan: (input?: { trigger?: InsightRunTrigger }) => Promise<unknown>;
   onAskInsightsQuestion: (question: string) => Promise<unknown>;
   onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
@@ -221,7 +228,7 @@ type MainPaneProps = {
   changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
   setDraftProvider: (provider: ChatProvider) => void;
   setDraftModel: (model: string) => void;
-  onBeginNewChatWithModel: (model: ChatModelRef) => void;
+  onBeginNewChatWithModel: (handoff: TrainingModelChatHandoff) => void;
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
   changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
@@ -288,7 +295,10 @@ type MainPaneProps = {
 
 export function MainPane({
   view,
+  labsTab,
+  setLabsTab,
   teamChat,
+  community,
   bootstrap,
   runtimeEvents,
   chatMessages,
@@ -351,8 +361,11 @@ export function MainPane({
   insightsError,
   training,
   trainingSessions,
+  trainingChatHandoff,
   trainingDetailTasksetId,
   onTrainingDetailTasksetIdChange,
+  onTrainingChatTaskSelect,
+  onTrainingChatHandoffDismiss,
   onRunInsightsScan,
   onAskInsightsQuestion,
   onPatchInsightStatus,
@@ -444,22 +457,37 @@ export function MainPane({
   const [trainingLaunchRequest, setTrainingLaunchRequest] = useState<TrainingLaunchRequest | null>(null);
   const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<string | null>(null);
   const [selectedTrainingJobId, setSelectedTrainingJobId] = useState<string | null>(null);
+  const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
   const appPreferences = useMemo(
     () => normalizePreferences(bootstrap?.preferences),
     [bootstrap?.preferences],
   );
   const trainingPreferences = appPreferences.training;
+  const updateInsightsEnabled = useCallback(async (enabled: boolean) => {
+    if (!connection || !bootstrap || insightsPreferenceSaving) return;
+    setInsightsPreferenceSaving(true);
+    onError(null);
+    try {
+      const payload = await api.savePreferences(connection, { insightsEnabled: enabled });
+      onPayload({ ...bootstrap, preferences: payload.preferences });
+      showToast(enabled ? "Observation scanning enabled" : "Observation scanning disabled", "success");
+    } catch (preferenceError) {
+      onError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
+    } finally {
+      setInsightsPreferenceSaving(false);
+    }
+  }, [bootstrap, connection, insightsPreferenceSaving, onError, onPayload, showToast]);
   const activeTrainingTasksetId = useMemo(() => {
     const tasksets = training.payload?.tasksets ?? [];
     return tasksets.some((taskset) => taskset.id === selectedTrainingTasksetId)
       ? selectedTrainingTasksetId
       : tasksets[0]?.id ?? null;
   }, [selectedTrainingTasksetId, training.payload?.tasksets]);
-  const trainingTasksetRootPath = view === "training" && activeTrainingTasksetId
+  const trainingTasksetRootPath = view === "labs" && (labsTab === "models" || labsTab === "evals") && activeTrainingTasksetId
     ? `profiles/${bootstrap?.profile.activeProfile ?? "default"}/tasksets/${activeTrainingTasksetId}`
     : null;
   const trainingSidebarSummary = useMemo<TrainingSidebarSummary | null>(() => {
-    if (view !== "training" || !activeTrainingTasksetId || !training.payload) return null;
+    if (view !== "labs" || labsTab !== "models" || !activeTrainingTasksetId || !training.payload) return null;
     const taskset = training.payload.tasksets.find((item) => item.id === activeTrainingTasksetId);
     if (!taskset) return null;
     const plans = training.payload.plans.filter((plan) => plan.tasksetId === taskset.id);
@@ -470,7 +498,7 @@ export function MainPane({
     const lineage = job ? training.payload.models.find((item) => item.jobId === job.id) ?? null : null;
     const artifacts = job ? training.payload.artifacts.filter((item) => item.jobId === job.id) : [];
     return { taskset, plan, job, lineage, artifacts };
-  }, [activeTrainingTasksetId, selectedTrainingJobId, training.payload, view]);
+  }, [activeTrainingTasksetId, labsTab, selectedTrainingJobId, training.payload, view]);
   const selectedTrainingCreation = useMemo(
     () => trainingCreationForSession(training.payload, selectedSessionId),
     [selectedSessionId, training.payload],
@@ -486,7 +514,7 @@ export function MainPane({
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails)) &&
     Boolean(selectedCloudWorkItem);
-  const showLocalDiffPanel = (view === "chat" || view === "profile" || view === "training") && Boolean(activeWorkspaceAppId);
+  const showLocalDiffPanel = (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId);
   const showEmptyRightChatFallbackPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
   const chatSandboxId = isCloudWorkspaceKind(activeWorkspaceKind)
@@ -549,7 +577,7 @@ export function MainPane({
     rightPanelMode === "chat" &&
     Boolean(teamChat.agentConversation);
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
-    supportedView: view === "chat" || view === "cloud" || view === "profile" || view === "training",
+    supportedView: view === "chat" || view === "cloud" || view === "labs",
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
@@ -580,6 +608,18 @@ export function MainPane({
   const composerSubmissionScopeKey =
     selectedSessionId ??
     `draft:${view}:${activeWorkspaceKind ?? "none"}:${activeWorkspaceId ?? activeWorkspaceAppId ?? "none"}`;
+  const trainingChatHandoffBar =
+    trainingChatHandoff?.model.providerId === activeProvider &&
+    trainingChatHandoff.model.modelId === activeModel
+      ? (
+          <TrainingModelChatHandoffBar
+            busy={turnRunning}
+            handoff={trainingChatHandoff}
+            onDismiss={onTrainingChatHandoffDismiss}
+            onSelectTask={onTrainingChatTaskSelect}
+          />
+        )
+      : null;
   const createPipelineRuntime = useMemo<ComposerCreatePipelineRuntime | null>(() => {
     return latestCreateRuntime
       ? {
@@ -600,7 +640,9 @@ export function MainPane({
   const viewClass =
     view === "team"
       ? "team-active"
-      : view === "apps" || view === "get-started" || view === "insights" || view === "training" || view === "profile"
+      : view === "community"
+        ? "community-active"
+      : view === "apps" || view === "get-started" || view === "labs"
       ? "page-active"
       : view === "cloud"
         ? "cloud-active"
@@ -641,11 +683,13 @@ export function MainPane({
               if (sessionId) {
                 onOpenInsightsSession(sessionId);
               } else {
-                setView("insights");
+                setLabsTab("signals");
+                setView("labs");
               }
               return true;
             }
-            setView("insights");
+            setLabsTab("signals");
+            setView("labs");
             const payload = await onRunInsightsScan({ trigger: "slash_command" });
             if (payload && typeof payload === "object" && "summary" in payload) {
               const summary = payload.summary as { activeCount?: number; highestActiveSeverity?: string | null };
@@ -657,18 +701,20 @@ export function MainPane({
           }
           if (command.command === "train") {
             if (attachments.length > 0) {
-              showToast("/train uses the selected chat; add other chats from the Training page.", "error");
+              showToast("/train uses the selected chat; add other chats from Lab.", "error");
               return false;
             }
             if (!selectedSessionId) {
               clearMainPrompt();
               setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [] });
-              setView("training");
+              setLabsTab("models");
+              setView("labs");
               return true;
             }
             clearMainPrompt();
             setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [selectedSessionId] });
-            setView("training");
+            setLabsTab("models");
+            setView("labs");
             return true;
           }
           if (!command.args && command.command !== "skill" && command.command !== "sync-cloud") {
@@ -741,6 +787,7 @@ export function MainPane({
       composerDraftStore,
       sendPrompt,
       selectedSessionId,
+      setLabsTab,
       setMentionedAppId,
       setView,
       showToast,
@@ -751,11 +798,27 @@ export function MainPane({
   );
   const changeMainComposerModel = useCallback(
     (model: string) => {
+      if (trainingChatHandoff && model !== trainingChatHandoff.model.modelId) {
+        onTrainingChatHandoffDismiss();
+      }
       setDraftProvider(activeProvider);
       setDraftModel(model);
     },
-    [activeProvider, setDraftModel, setDraftProvider],
+    [
+      activeProvider,
+      onTrainingChatHandoffDismiss,
+      setDraftModel,
+      setDraftProvider,
+      trainingChatHandoff,
+    ],
   );
+  const changeMainComposerProvider = useCallback(
+    (provider: ChatProvider) => {
+      if (trainingChatHandoff && provider !== trainingChatHandoff.model.providerId) {
+        onTrainingChatHandoffDismiss();
+      }
+      changeDraftProvider(provider);
+    }, [changeDraftProvider, onTrainingChatHandoffDismiss, trainingChatHandoff]);
   const chatTimelineRows = useMemo(
     () => buildChatTimelineRows(chatMessages, { showThinkingIndicator }),
     [chatMessages, showThinkingIndicator],
@@ -1292,7 +1355,7 @@ export function MainPane({
       training={training}
       sessionId={selectedSessionId}
       expanded={diffPanelExpanded}
-      onOpenTraining={() => setView("training")}
+      onOpenTraining={() => { setLabsTab("models"); setView("labs"); }}
       onResizeStart={onDiffPanelResizeStart}
       onToggleExpanded={onToggleDiffPanelExpanded}
     />
@@ -1365,6 +1428,10 @@ export function MainPane({
           <TeamChatView {...teamChat} />
           {showRightPanel ? rightPanel : null}
         </Suspense>
+      ) : view === "community" ? (
+        <Suspense fallback={null}>
+          <CommunityView {...community} />
+        </Suspense>
       ) : view === "get-started" ? (
         <Suspense fallback={null}>
           <GetStartedView
@@ -1376,79 +1443,77 @@ export function MainPane({
             onOpenApps={() => setView("apps")}
             onOpenChat={() => setView("chat")}
             onOpenCloud={() => setView("cloud")}
-            onOpenProfile={() => setView("profile")}
+            onOpenProfile={() => { setLabsTab("profile"); setView("labs"); }}
           />
         </Suspense>
-      ) : view === "profile" ? (
+      ) : view === "labs" ? (
         rightPanelExpanded ? (
           <Suspense fallback={null}>{rightPanel}</Suspense>
         ) : (
           <>
             <Suspense fallback={null}>
-              <ProfileView
-                payload={bootstrap}
-                connection={connection}
-                onPayload={onPayload}
-                onError={onError}
-                onToast={showToast}
-                onSkillCommand={(command) => {
-                  composerDraftStore.set(command);
-                  setMentionedAppId(null);
-                  setView("chat");
+              <LabsRoute
+                activeTab={labsTab}
+                onNewModel={() => {
+                  setLabsTab("models");
+                  setTrainingLaunchRequest({ id: Date.now(), objective: null, initialSessionIds: [] });
+                }}
+                onTabChange={setLabsTab}
+                profileView={{
+                  payload: bootstrap,
+                  connection,
+                  onPayload,
+                  onError,
+                  onToast: showToast,
+                  onSkillCommand: (command) => {
+                    composerDraftStore.set(command);
+                    setMentionedAppId(null);
+                    setView("chat");
+                  },
+                }}
+                insights={{
+                  enabled: appPreferences.insightsEnabled,
+                  items: insightsItems,
+                  runs: insightsRuns,
+                  nextScanAt: insightsNextScanAt,
+                  scanRunning: insightsScanRunning,
+                  scanStartedAt: insightsScanStartedAt,
+                  scanning: insightsScanning,
+                  savingEnabled: insightsPreferenceSaving,
+                  error: insightsError,
+                  onEnabledChange: updateInsightsEnabled,
+                  onPatchStatus: onPatchInsightStatus,
+                  onOpenSession: onOpenInsightsSession,
+                }}
+                training={{
+                  training,
+                  sessions: trainingSessions,
+                  localProjects: bootstrap?.localProjects ?? [],
+                  connection,
+                  defaultModel: { providerId: activeProvider, modelId: activeModel },
+                  onError,
+                  onToast: showToast,
+                  onSettingsPreferences: (payload) => {
+                    if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
+                  },
+                  onOpenChat: onOpenInsightsSession,
+                  onChatWithModel: onBeginNewChatWithModel,
+                  onOpenTasksetFiles: onShowFilesPanel,
+                  launchRequest: trainingLaunchRequest,
+                  onLaunchHandled: (id) => setTrainingLaunchRequest((current) => current?.id === id ? null : current),
+                  preferences: trainingPreferences,
+                  settingsPreferences: appPreferences,
+                  providerSettings: bootstrap?.providers ?? null,
+                  reasoningEffort: codexReasoningEffort,
+                  selectedTasksetId: activeTrainingTasksetId,
+                  onSelectedTasksetIdChange: setSelectedTrainingTasksetId,
+                  onSelectedTrainingJobIdChange: setSelectedTrainingJobId,
+                  detailTasksetId: trainingDetailTasksetId,
+                  onDetailTasksetIdChange: onTrainingDetailTasksetIdChange,
                 }}
               />
             </Suspense>
             {terminalPanel}
-            {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
-          </>
-        )
-      ) : view === "insights" ? (
-        <Suspense fallback={null}>
-          <InsightsView
-            items={insightsItems}
-            runs={insightsRuns}
-            nextScanAt={insightsNextScanAt}
-            scanRunning={insightsScanRunning}
-            scanStartedAt={insightsScanStartedAt}
-            scanning={insightsScanning}
-            error={insightsError}
-            onRunScan={onRunInsightsScan}
-            onPatchStatus={onPatchInsightStatus}
-            onOpenSession={onOpenInsightsSession}
-          />
-        </Suspense>
-      ) : view === "training" ? (
-        rightPanelExpanded ? (
-          <Suspense fallback={null}>{rightPanel}</Suspense>
-        ) : (
-          <>
-            <Suspense fallback={null}>
-              <TrainingView
-            training={training}
-            sessions={trainingSessions}
-            connection={connection}
-            defaultModel={{ providerId: activeProvider, modelId: activeModel }}
-            onError={onError}
-            onToast={showToast}
-            onSettingsPreferences={(payload) => {
-              if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
-            }}
-            onOpenChat={onOpenInsightsSession}
-            onChatWithModel={(modelId) => onBeginNewChatWithModel({ providerId: "local-adapter", modelId })}
-            onOpenTasksetFiles={onShowFilesPanel}
-            launchRequest={trainingLaunchRequest}
-            onLaunchHandled={(id) => setTrainingLaunchRequest((current) => current?.id === id ? null : current)}
-            preferences={trainingPreferences}
-            settingsPreferences={appPreferences}
-            providerSettings={bootstrap?.providers ?? null}
-            reasoningEffort={codexReasoningEffort}
-            selectedTasksetId={activeTrainingTasksetId}
-            onSelectedTasksetIdChange={setSelectedTrainingTasksetId}
-            onSelectedTrainingJobIdChange={setSelectedTrainingJobId}
-            detailTasksetId={trainingDetailTasksetId}
-            onDetailTasksetIdChange={onTrainingDetailTasksetIdChange}
-              />
-            </Suspense>
             {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
           </>
         )
@@ -1500,9 +1565,10 @@ export function MainPane({
                   compact
                   creation={selectedTrainingCreation}
                   training={training}
-                  onOpenTraining={() => setView("training")}
+                  onOpenTraining={() => { setLabsTab("models"); setView("labs"); }}
                 />
               ) : null}
+              {trainingChatHandoffBar}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               {showScrollToBottomButton && !chatThreadPreparingInitialScroll ? (
                 <div className="chat-scroll-controls" aria-label="Message navigation">
@@ -1571,7 +1637,7 @@ export function MainPane({
                 openPondCommandAccessMode={openPondCommandAccessMode}
                 subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
                 subagentDelegationMode={subagentDelegationMode}
-                onProviderChange={changeDraftProvider}
+                onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
@@ -1606,6 +1672,7 @@ export function MainPane({
               </button>
             )}
             <div className="composer-stack start">
+              {trainingChatHandoffBar}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               <DraftBoundComposer
                 draftStore={composerDraftStore}
@@ -1637,7 +1704,7 @@ export function MainPane({
                 openPondCommandAccessMode={openPondCommandAccessMode}
                 subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
                 subagentDelegationMode={subagentDelegationMode}
-                onProviderChange={changeDraftProvider}
+                onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}

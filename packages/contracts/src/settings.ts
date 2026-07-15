@@ -8,12 +8,12 @@ import {
 import { SubagentPreferencesSchema } from "./subagents.js";
 
 export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.6-sol" as const;
-export const DEFAULT_CHAT_PROVIDER = "openai" as const;
-export const DEFAULT_CHAT_MODEL = DEFAULT_CODEX_CHAT_MODEL;
+export const DEFAULT_OPENPOND_CHAT_MODEL = "openpond-chat" as const;
+export const DEFAULT_CHAT_PROVIDER = "openpond" as const;
+export const DEFAULT_CHAT_MODEL = DEFAULT_OPENPOND_CHAT_MODEL;
 export const DEFAULT_CODEX_PERMISSION_MODE = "default" as const;
 export const DEFAULT_CODEX_REASONING_EFFORT = "high" as const;
 export const DEFAULT_OPENPOND_COMMAND_ACCESS_MODE = "ask" as const;
-export const DEFAULT_OPENPOND_CHAT_MODEL = "openpond-chat" as const;
 
 export const ChatProviderSchema = ProviderIdSchema;
 
@@ -192,7 +192,7 @@ export const AppPreferencesSchema = z.object({
   defaultChatProvider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   defaultChatModel: z.string().min(1).default(DEFAULT_CHAT_MODEL),
   defaultChatModelRef: ChatModelRefSchema.nullable().optional(),
-  insightsEnabled: z.boolean().default(true),
+  insightsEnabled: z.boolean().default(false),
   insightsModelRef: ChatModelRefSchema.nullable().optional().default(null),
   insightsEvidenceSources: InsightsEvidenceSourceSettingsSchema.optional().default(() =>
     InsightsEvidenceSourceSettingsSchema.parse({}),

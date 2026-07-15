@@ -109,6 +109,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeOpenPondCommand,
     executeProfileAction,
     executeCrossSystemTool,
+    finalizeCrossSystemTurn,
     loadOpenPondProfileState,
     readOpenPondProfileSkill,
     executeProfileSkillCommand,
@@ -625,6 +626,59 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     const controller = new AbortController();
     const activeTurn: ActiveTurn = { session, turn, controller, ...createActiveTurnSettlement() };
     turnRunnerLifecycle.registerActiveTurn(sessionId, activeTurn);
+    const persistGeneratedCrossSystemAttempt = async (input: {
+      completedAt: string;
+      terminalFailure?: {
+        message: string;
+        failureClass: "policy_failure" | "infrastructure_failure";
+      } | null;
+    }) => {
+      const generatedTaskId = typeof turn.metadata.crossSystemTaskId === "string"
+        ? turn.metadata.crossSystemTaskId.trim()
+        : "";
+      const modelId = turnModelRef?.modelId ?? activeModelId;
+      if (activeProvider !== "local-adapter" || !modelId || !generatedTaskId || !finalizeCrossSystemTurn) return;
+      try {
+        const persisted = await finalizeCrossSystemTurn({
+          modelId,
+          localProjectId: session.localProjectId ?? (
+            session.workspaceKind === "local_project" ? (session.workspaceId ?? null) : null
+          ),
+          sessionId,
+          turnId: turn.id,
+          userPrompt: turn.prompt,
+          taskId: generatedTaskId,
+          startedAt,
+          completedAt: input.completedAt,
+          terminalFailure: input.terminalFailure ?? null,
+        });
+        if (persisted) {
+          await appendRuntimeEvent(event({
+            sessionId,
+            turnId: turn.id,
+            name: "diagnostic",
+            source: "server",
+            appId: session.appId,
+            status: "completed",
+            output: input.terminalFailure
+              ? "Persisted and graded the failed generated Cross-System Operations chat attempt."
+              : "Persisted and graded the generated Cross-System Operations chat attempt.",
+            data: persisted,
+          }));
+        }
+      } catch (error) {
+        await appendRuntimeEvent(event({
+          sessionId,
+          turnId: turn.id,
+          name: "diagnostic",
+          source: "server",
+          appId: session.appId,
+          status: "failed",
+          output: error instanceof Error ? error.message : String(error),
+          data: { generatedTaskId },
+        }));
+      }
+    };
     try {
       await markSubagentContinuationRunning({
         context: subagentContinuation,
@@ -917,6 +971,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             },
           })
         );
+        await persistGeneratedCrossSystemAttempt({ completedAt: now() });
         return completeTurn(sessionId, turn.id, providerTurnId);
       }
 
@@ -972,7 +1027,17 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           message,
         }).catch(() => undefined);
       }
-      return failTurn(session, turn.id, message);
+      const failed = await failTurn(session, turn.id, message);
+      await persistGeneratedCrossSystemAttempt({
+        completedAt: failed.completedAt ?? now(),
+        terminalFailure: {
+          message,
+          failureClass: error instanceof Error && error.name === "LocalAdapterToolProtocolError"
+            ? "policy_failure"
+            : "infrastructure_failure",
+        },
+      });
+      return failed;
     } finally {
       await finalizeSubagentContinuationTurn({
         context: subagentContinuation,

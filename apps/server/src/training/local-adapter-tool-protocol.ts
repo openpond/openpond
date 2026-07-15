@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import {
+  CROSS_SYSTEM_LOCAL_TOOL_MAX_TURNS,
   CROSS_SYSTEM_TOOL_DEFINITIONS,
   CROSS_SYSTEM_TOOL_NAMES,
+  crossSystemLocalToolSystemPrompt,
 } from "@openpond/contracts";
 import type { HostedChatMessage, HostedChatTool, HostedChatToolCall, HostedChatToolChoice } from "@openpond/cloud";
 
-export const LOCAL_ADAPTER_MAX_TOOL_TURNS = 15;
+export const LOCAL_ADAPTER_MAX_TOOL_TURNS = CROSS_SYSTEM_LOCAL_TOOL_MAX_TURNS;
 const MAX_GENERATED_ENVELOPE_BYTES = 100_000;
 
 export class LocalAdapterToolProtocolError extends Error {
@@ -41,29 +43,32 @@ export function serializeLocalAdapterMessages(input: {
 }): Array<{ role: "system" | "user" | "assistant"; content: string }> {
   assertLocalAdapterToolBudget(input.messages);
   const output: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
+  const callNames = new Map<string, string>();
   for (const message of input.messages) {
     if (message.role === "tool") {
+      const callId = message.tool_call_id?.trim();
+      const name = callId ? callNames.get(callId) : null;
+      if (!name) {
+        throw new LocalAdapterToolProtocolError("malformed_envelope", "Local adapter history contains a tool result without a matching registered tool call.");
+      }
       output.push({
         role: "user",
-        content: JSON.stringify({
-          type: "tool_result",
-          tool_call_id: message.tool_call_id ?? null,
-          content: message.content ?? "",
-        }),
+        content: JSON.stringify(canonicalToolResult(name, message.content)),
       });
       continue;
     }
     if (message.role === "assistant" && message.tool_calls?.length) {
       for (const call of message.tool_calls) {
+        const name = call.function?.name?.trim() ?? "";
         output.push({
           role: "assistant",
           content: JSON.stringify({
             type: "tool_call",
-            id: call.id ?? null,
-            name: call.function?.name ?? null,
+            name: name || null,
             arguments: parseArgumentsForHistory(call.function?.arguments),
           }),
         });
+        if (call.id?.trim() && name) callNames.set(call.id.trim(), name);
       }
       if (message.content?.trim()) output.push({ role: "assistant", content: message.content });
       continue;
@@ -85,14 +90,19 @@ export function parseLocalAdapterOutput(output: string, tools: HostedChatTool[])
   try {
     value = JSON.parse(normalized);
   } catch {
+    if (/^ANSWER\s*:/.test(normalized)) {
+      return { type: "final", content: constrainedAnswerContent(normalized) };
+    }
     if (/^\s*\{/.test(normalized) || /"type"\s*:\s*"tool_call"/.test(normalized)) {
       throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model emitted malformed tool-call JSON.");
     }
-    return { type: "final", content: output };
+    throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model final output must use ANSWER: followed by one JSON object.");
   }
   if (!isRecord(value) || value.type !== "tool_call") {
-    if (isRecord(value) && value.type === "final" && typeof value.content === "string") return { type: "final", content: value.content };
-    return { type: "final", content: output };
+    if (isRecord(value) && value.type === "final" && typeof value.content === "string") {
+      return { type: "final", content: constrainedAnswerContent(value.content) };
+    }
+    throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model final output must use ANSWER: followed by one JSON object.");
   }
   if (typeof value.name !== "string" || !value.name.trim()) throw new LocalAdapterToolProtocolError("malformed_envelope", "Tool-call envelope requires a name.");
   const tool = tools.find((candidate) => candidate.function?.name === value.name);
@@ -119,15 +129,11 @@ export function assertLocalAdapterToolBudget(messages: HostedChatMessage[]): voi
 }
 
 function localAdapterToolInstruction(tools: HostedChatTool[], toolChoice?: HostedChatToolChoice): string {
-  return [
-    "LOCAL TOOL PROTOCOL (strict):",
-    "Use only the registered functions below. Never invent, rename, or call any other tool.",
-    "For one tool call, output exactly one JSON object and no prose:",
-    '{"type":"tool_call","id":"call_optional","name":"registered_name","arguments":{}}',
-    "After tool results, either call one tool again or answer normally. A JSON final may use {\"type\":\"final\",\"content\":\"...\"}.",
-    `Tool choice: ${JSON.stringify(toolChoice ?? "auto")}. Maximum tool turns: ${LOCAL_ADAPTER_MAX_TOOL_TURNS}.`,
-    `Registered tools: ${JSON.stringify(tools.map((tool) => tool.function), null, 2)}`,
-  ].join("\n");
+  const names = tools.map((tool) => tool.function?.name);
+  if (names.length !== CROSS_SYSTEM_TOOL_NAMES.length || names.some((name, index) => name !== CROSS_SYSTEM_TOOL_NAMES[index])) {
+    throw new LocalAdapterToolProtocolError("unknown_tool", "Local adapter tool serialization requires the exact Cross-System Operations tool contract.");
+  }
+  return crossSystemLocalToolSystemPrompt(toolChoice ?? "auto");
 }
 
 function validateJsonSchema(value: unknown, schema: Record<string, unknown>, path: string): string | null {
@@ -179,6 +185,77 @@ function validateJsonSchema(value: unknown, schema: Record<string, unknown>, pat
 function parseArgumentsForHistory(value: unknown): unknown {
   if (typeof value !== "string") return {};
   try { return JSON.parse(value); } catch { return { malformed_arguments: value }; }
+}
+
+function canonicalToolResult(name: string, content: unknown): {
+  type: "tool_result";
+  name: string;
+  ok: boolean;
+  result: unknown;
+  error: unknown;
+} {
+  const parsed = parseToolResultContent(content);
+  if (!isRecord(parsed)) {
+    return { type: "tool_result", name, ok: true, result: parsed, error: null };
+  }
+  const ok = typeof parsed.ok === "boolean" ? parsed.ok : true;
+  const result = Object.hasOwn(parsed, "result")
+    ? parsed.result
+    : Object.hasOwn(parsed, "data")
+      ? parsed.data
+      : ok
+        ? parsed
+        : null;
+  const error = Object.hasOwn(parsed, "error")
+    ? parsed.error
+    : ok
+      ? null
+      : typeof parsed.output === "string"
+        ? parsed.output
+        : "Tool execution failed.";
+  return { type: "tool_result", name, ok, result, error };
+}
+
+function parseToolResultContent(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? "";
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function constrainedAnswerContent(content: string): string {
+  const match = /^ANSWER\s*:\s*/.exec(content.trim());
+  if (!match) throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model final output must use ANSWER: followed by one JSON object.");
+  const json = firstJsonObject(content.trim().slice(match[0].length));
+  if (!json) throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model emitted malformed ANSWER JSON.");
+  let value: unknown;
+  try { value = JSON.parse(json); } catch {
+    throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model emitted malformed ANSWER JSON.");
+  }
+  if (!isRecord(value)) throw new LocalAdapterToolProtocolError("malformed_envelope", "Local model ANSWER JSON must be one object.");
+  return `ANSWER: ${JSON.stringify(value)}`;
+}
+
+function firstJsonObject(value: string): string | null {
+  if (!value.startsWith("{")) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === "{") depth += 1;
+    else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return value.slice(0, index + 1);
+      if (depth < 0) return null;
+    }
+  }
+  return null;
 }
 
 function stripFence(value: string): string { return value.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim(); }
