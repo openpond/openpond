@@ -18,6 +18,18 @@ export type ReleasePlan = PrepareReleasePlan | PublishReleasePlan;
 
 export const RELEASE_BRANCH_PREFIX = "feat/release-v";
 
+export function parseGitStatusPaths(status: string): string[] {
+  return status
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      if (line.length < 4 || line[2] !== " ") {
+        throw new Error(`Unexpected git status --porcelain line: ${line}`);
+      }
+      return line.slice(3);
+    });
+}
+
 export function stableVersion(input: string): string {
   const version = input.startsWith("v") ? input.slice(1) : input;
   if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) {

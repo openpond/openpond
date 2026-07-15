@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   parseReleaseArg,
+  parseGitStatusPaths,
   releasePullRequestBody,
   releasePullRequestTitle,
   resolveReleasePlan,
@@ -16,7 +17,7 @@ import { assertReleaseVersion, writeReleaseVersion } from "./release-version";
 type PackageJson = { version?: string };
 
 function output(command: string, args: string[]): string {
-  return execFileSync(command, args, { encoding: "utf8" }).trim();
+  return execFileSync(command, args, { encoding: "utf8" }).trimEnd();
 }
 
 function run(command: string, args: string[], dryRun: boolean): void {
@@ -101,10 +102,9 @@ function assertReleaseBranchAvailable(branch: string): void {
 
 function assertOnlyExpectedFilesChanged(expectedFiles: readonly string[]): void {
   const expected = new Set(expectedFiles);
-  const changed = output("git", ["status", "--porcelain", "--untracked-files=all"])
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.slice(3));
+  const changed = parseGitStatusPaths(
+    output("git", ["status", "--porcelain", "--untracked-files=all"]),
+  );
   const unexpected = changed.filter((file) => !expected.has(file));
   if (unexpected.length > 0) {
     const details = unexpected.map((file) => `  - ${file}`).join("\n");

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   bumpVersion,
+  parseGitStatusPaths,
   parseReleaseArg,
   releasePullRequestBody,
   releasePullRequestTitle,
@@ -9,6 +10,18 @@ import {
 } from "../scripts/release-plan";
 
 describe("stable release planning", () => {
+  test("preserves the first porcelain status path's leading character", () => {
+    expect(
+      parseGitStatusPaths(
+        " M apps/cli/package.json\n M apps/desktop/package.json\n?? release-notes.md\n",
+      ),
+    ).toEqual([
+      "apps/cli/package.json",
+      "apps/desktop/package.json",
+      "release-notes.md",
+    ]);
+  });
+
   test("plans protected release branches for every semantic bump", () => {
     expect(bumpVersion("0.0.27", "patch")).toBe("0.0.28");
     expect(bumpVersion("0.0.27", "minor")).toBe("0.1.0");
