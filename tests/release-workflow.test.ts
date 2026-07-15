@@ -15,6 +15,7 @@ const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
 const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const CLI_INSTALLER_PATH = "apps/cli/install.sh";
 const ROOT_PACKAGE_PATH = "package.json";
+const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
 
 describe("release workflow", () => {
   test("CLI installer verifies the published archive checksum before extraction", () => {
@@ -110,14 +111,23 @@ describe("release workflow", () => {
     expect(workflow).not.toContain("runs-on: ubuntu-latest\n    runs-on: ubuntu-latest");
   });
 
-  test("keeps validation and publishing triggers separated", () => {
+  test("publishes stable releases only after a version change reaches protected master", () => {
     const releaseWorkflow = readFileSync(WORKFLOW_PATH, "utf8");
     const ciWorkflow = readFileSync(CI_WORKFLOW_PATH, "utf8");
 
     expect(ciWorkflow).toMatch(/push:\n\s+branches:\n\s+- master/);
     expect(ciWorkflow).not.toContain("branches-ignore");
-    expect(releaseWorkflow).not.toMatch(/push:\n\s+branches:/);
-    expect(releaseWorkflow).toContain('- "!v*-nightly.*"');
+    expect(releaseWorkflow).not.toMatch(/push:\n\s+tags:/);
+    expect(releaseWorkflow).toMatch(
+      /push:\n\s+branches:\n\s+- master\n\s+paths:\n\s+- "apps\/desktop\/package\.json"/,
+    );
+    expect(releaseWorkflow).toContain('"${GITHUB_EVENT_NAME}" == "push"');
+    expect(releaseWorkflow).toContain('git cat-file -e "${GITHUB_SHA}^:apps/desktop/package.json"');
+    expect(releaseWorkflow).toContain('git show "${GITHUB_SHA}^:apps/desktop/package.json"');
+    expect(releaseWorkflow).toContain('"${raw_version}" == "${previous_version}"');
+    expect(releaseWorkflow).toContain('steps.release.outputs.should_release == \'true\'');
+    expect(releaseWorkflow).toContain("Stable tag v${version} already exists");
+    expect(releaseWorkflow).toContain("must be newer than ${latest_stable_version}");
     expect(releaseWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'schedule' }}");
     expect(releaseWorkflow).toContain("checks: read");
     expect(ciWorkflow).toContain("name: Checks");
@@ -130,6 +140,16 @@ describe("release workflow", () => {
       /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: apps/,
     );
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_CI_LONG_CLI_TESTS");
+  });
+
+  test("keeps protected master writes out of the local release command", () => {
+    const releaseCommand = readFileSync(RELEASE_COMMAND_PATH, "utf8");
+
+    expect(releaseCommand).not.toContain('["push", "origin", "master"]');
+    expect(releaseCommand).not.toContain('["tag", "-a"');
+    expect(releaseCommand).toContain('"pr",\n      "create"');
+    expect(releaseCommand).toContain('"workflow",\n      "run"');
+    expect(releaseCommand).toContain('"push", "--set-upstream", "origin", plan.branch');
   });
 
   test("scopes release credentials to the publishing job and uses current action runtimes", () => {
