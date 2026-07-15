@@ -151,7 +151,7 @@ describe("turn runner subagent workspace and execution tools", () => {
     );
   });
 
-  test("prioritizes connected app instruction tools for prompt-only @x mentions", async () => {
+  test("exposes connected app instruction tools without forcing prompt-only @x mentions", async () => {
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
       toolArgs: {
@@ -181,10 +181,7 @@ describe("turn runner subagent workspace and execution tools", () => {
 
     expect(turn.status).toBe("completed");
     const firstStream = harness.streamInputs[0];
-    expect(firstStream.toolChoice).toEqual({
-      type: "function",
-      function: { name: "connected_app_skill_read" },
-    });
+    expect(firstStream.toolChoice).toBe("auto");
     const toolNames = (firstStream.tools ?? []).map((tool: any) => tool.function?.name);
     expect(toolNames).toEqual(
       expect.arrayContaining(["connected_app_skill_read", "connected_app_search", "connected_app_read"]),
