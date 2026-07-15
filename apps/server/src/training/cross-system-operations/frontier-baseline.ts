@@ -5,6 +5,7 @@ import {
   CROSS_SYSTEM_TOOL_DEFINITIONS,
   CROSS_SYSTEM_TOOL_NAMES,
   CrossSystemTrajectorySchema,
+  type CrossSystemBaselineReport,
   type ChatModelRef,
   type CodexReasoningEffort,
   type CrossSystemToolName,
@@ -28,7 +29,7 @@ import {
   unknownNativeToolResult,
 } from "../../openpond/native-tool-calls.js";
 import { crossSystemToolsFromRequest } from "../local-adapter-tool-protocol.js";
-import { buildCrossSystemBaselineReport, type CrossSystemBaselineReport } from "./baseline.js";
+import { buildCrossSystemBaselineReport } from "./baseline.js";
 import { CrossSystemEnvironment, CrossSystemToolError } from "./environment.js";
 import type { CrossSystemTask, CrossSystemWorld } from "./types.js";
 import { verifyCrossSystemTrajectory } from "./verifier.js";
@@ -56,6 +57,14 @@ export async function runFrontierCrossSystemBaseline(input: {
   reasoningEffort: CodexReasoningEffort | null;
   stream: CrossSystemFrontierModelStream;
   signal?: AbortSignal;
+  onTaskStarted?: (input: { index: number; total: number; task: CrossSystemTask }) => void | Promise<void>;
+  onTaskCompleted?: (input: {
+    index: number;
+    total: number;
+    task: CrossSystemTask;
+    trajectory: CrossSystemTrajectory;
+    result: CrossSystemVerifierResult;
+  }) => void | Promise<void>;
 }): Promise<{
   report: CrossSystemBaselineReport;
   tasks: CrossSystemTask[];
@@ -67,13 +76,18 @@ export async function runFrontierCrossSystemBaseline(input: {
   const signal = input.signal ?? new AbortController().signal;
   const trajectories: CrossSystemTrajectory[] = [];
   const results: CrossSystemVerifierResult[] = [];
-  for (const task of selectedTasks) {
+  for (let index = 0; index < selectedTasks.length; index += 1) {
+    const task = selectedTasks[index]!;
+    throwIfAborted(signal);
+    await input.onTaskStarted?.({ index, total: selectedTasks.length, task });
     throwIfAborted(signal);
     const world = worldById.get(task.worldId);
     if (!world) throw new Error(`Missing world ${task.worldId}.`);
     const trajectory = await runFrontierTask({ ...input, world, task, signal });
+    const result = verifyCrossSystemTrajectory({ task, trajectory });
     trajectories.push(trajectory);
-    results.push(verifyCrossSystemTrajectory({ task, trajectory }));
+    results.push(result);
+    await input.onTaskCompleted?.({ index, total: selectedTasks.length, task, trajectory, result });
   }
   return {
     report: buildCrossSystemBaselineReport({

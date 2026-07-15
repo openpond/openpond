@@ -3,6 +3,7 @@ import type { BootstrapPayload } from "@openpond/contracts";
 import type { OrganizationRequestAction } from "../openpond/organizations.js";
 import type { SandboxRequestAction } from "../openpond/sandboxes.js";
 import type { TeamChatRequestAction } from "../openpond/team-chat-client.js";
+import type { CommunityRequestAction } from "../openpond/community-client.js";
 
 export type HttpRouteLogger = {
   info(message: string, metadata?: Record<string, unknown>): void;
@@ -115,6 +116,7 @@ export type HttpRouteDeps = {
   organizationPayload: (action: OrganizationRequestAction) => Promise<unknown>;
   sandboxPayload: (action: SandboxRequestAction) => Promise<unknown>;
   teamChatPayload: (action: TeamChatRequestAction) => Promise<unknown>;
+  communityPayload: (action: CommunityRequestAction) => Promise<unknown>;
   executeTeamChatAiTurn: (turnId: string, teamId: string) => { accepted: true };
   cancelTeamChatAiTurnExecution: (turnId: string, teamId?: string) => Promise<{ cancelled: boolean }>;
   gitAvailabilityPayload: () => Promise<unknown>;

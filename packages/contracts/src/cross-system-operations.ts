@@ -142,6 +142,61 @@ export const CROSS_SYSTEM_TOOL_CONTRACT_HASH = contractHash({
   tools: CROSS_SYSTEM_TOOL_DEFINITIONS,
 });
 
+export const CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT = `Use only the four registered synthetic Cross-System Operations tools. Contract ${CROSS_SYSTEM_TOOL_CONTRACT_HASH}. Finish with ANSWER: JSON.`;
+export const CROSS_SYSTEM_LOCAL_TOOL_MAX_TURNS = 15;
+
+export function crossSystemLocalToolSystemPrompt(toolChoice: unknown = "auto"): string {
+  return [
+    CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT,
+    "LOCAL TOOL PROTOCOL (strict):",
+    "Use only the registered functions below. Never invent, rename, or call any other tool.",
+    "For one tool call, output exactly one JSON object and no prose:",
+    '{"type":"tool_call","name":"registered_name","arguments":{}}',
+    "Tool results arrive as exactly one JSON object:",
+    '{"type":"tool_result","name":"registered_name","ok":true,"result":{},"error":null}',
+    'After one tool result, either call one registered tool again or answer normally. A JSON final may use {"type":"final","content":"..."}.',
+    `Tool choice: ${JSON.stringify(toolChoice)}. Maximum tool turns: ${CROSS_SYSTEM_LOCAL_TOOL_MAX_TURNS}.`,
+    `Registered tool signatures: ${CROSS_SYSTEM_TOOL_DEFINITIONS.map(compactToolSignature).join("; ")}`,
+  ].join("\n");
+}
+
+export const CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT = crossSystemLocalToolSystemPrompt();
+
+function compactToolSignature(tool: (typeof CROSS_SYSTEM_TOOL_DEFINITIONS)[number]): string {
+  const parameters = recordValue(tool.parameters);
+  const properties = recordValue(parameters.properties);
+  const required = stringValues(parameters.required);
+  const shape = Object.fromEntries(required.map((name) => [name, compactSchema(properties[name])]));
+  return `${tool.name}(${JSON.stringify(shape)})`;
+}
+
+function compactSchema(value: unknown): unknown {
+  const schema = recordValue(value);
+  const anyOf = arrayValue(schema.anyOf);
+  if (anyOf.length) return anyOf.map(compactSchema).join("|");
+  const enumValues = arrayValue(schema.enum);
+  if (enumValues.length) return enumValues.join("|");
+  if (schema.type === "array") return [compactSchema(schema.items)];
+  if (schema.type === "object") {
+    const properties = recordValue(schema.properties);
+    const required = stringValues(schema.required);
+    return Object.fromEntries(required.map((name) => [name, compactSchema(properties[name])]));
+  }
+  return typeof schema.type === "string" ? schema.type : "unknown";
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function stringValues(value: unknown): string[] {
+  return arrayValue(value).filter((item): item is string => typeof item === "string");
+}
+
 const CrossSystemToolNameSchema = z.enum(CROSS_SYSTEM_TOOL_NAMES);
 
 export const CrossSystemTrajectoryStepSchema = z.discriminatedUnion("kind", [

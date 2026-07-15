@@ -5,7 +5,6 @@ import { SidebarSectionList } from "./SidebarSectionList";
 import { SidebarBrandButton } from "./SidebarBrandButton";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
-import { profileHasUncommittedLocalChanges } from "../../lib/profile-status";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
 
 export function Sidebar(props: SidebarProps) {
@@ -21,6 +20,7 @@ export function Sidebar(props: SidebarProps) {
     setSelectedSessionId,
     setSidebarOpen,
     setSettingsSection,
+    setLabsTab,
     setView,
     view,
   } = props;
@@ -38,6 +38,7 @@ export function Sidebar(props: SidebarProps) {
         <button className="sidebar-icon" data-tooltip="Hide sidebar" aria-label="Hide sidebar" onClick={() => setSidebarOpen(false)}>
           <PanelLeft size={16} />
         </button>
+        <SidebarBrandButton onOpenHome={() => beginNewChat(null)} />
         {availableUpdate && (
           <button
             type="button"
@@ -52,18 +53,14 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
-      <div className="sidebar-wordmark-row">
-        <SidebarBrandButton onOpenHome={() => beginNewChat(null)} />
-      </div>
-
       <SidebarNavigation
         beginNewChat={beginNewChat}
         setSectionMenuOpen={setSectionMenuOpen}
         setSelectedAppId={setSelectedAppId}
         setSelectedProjectId={setSelectedProjectId}
         setSelectedSessionId={setSelectedSessionId}
+        setLabsTab={setLabsTab}
         setView={setView}
-        profileHasUncommittedChanges={profileHasUncommittedLocalChanges(props.profile)}
         view={view}
       />
 

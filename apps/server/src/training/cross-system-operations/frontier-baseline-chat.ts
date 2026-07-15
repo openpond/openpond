@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   ChatModelRef,
+  LocalProject,
   RuntimeEvent,
   Session,
   TrainingSourceRef,
@@ -17,6 +18,7 @@ export async function createFrontierBaselineChatSource(input: {
   model: ChatModelRef;
   task: CrossSystemTask;
   trajectory: CrossSystemTrajectory;
+  localProject: Pick<LocalProject, "id" | "name" | "workspacePath">;
   createSession: (payload: unknown) => Promise<Session>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   addSessionSource: (input: { profileId: string; sessionId: string; turnIds?: string[]; consentScope?: "selected_turns" | "full_session" }) => Promise<TrainingSourceRef>;
@@ -25,8 +27,14 @@ export async function createFrontierBaselineChatSource(input: {
     provider: input.model.providerId,
     modelRef: input.model,
     title: `Cross-System baseline · ${label(input.task.family)} · ${input.task.worldId}`,
+    workspaceKind: "local_project",
+    workspaceId: input.localProject.id,
+    workspaceName: input.localProject.name,
+    localProjectId: input.localProject.id,
+    cwd: input.localProject.workspacePath,
     metadata: {
       crossSystemFrontierBaseline: true,
+      localProjectId: input.localProject.id,
       worldId: input.task.worldId,
       taskId: input.task.id,
     },

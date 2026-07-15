@@ -5,6 +5,7 @@ export * from "./fixture-baseline-sources.js";
 export * from "./frontier-baseline.js";
 export * from "./frontier-baseline-chat.js";
 export * from "./frontier-baseline-sources.js";
+export * from "./frontier-baseline-service.js";
 export * from "./environment.js";
 export * from "./python-sandbox.js";
 export * from "./taskset-files.js";

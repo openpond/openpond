@@ -2,26 +2,15 @@ import {
   CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   CrossSystemTrajectorySchema,
+  type ChatModelRef,
+  type CrossSystemBaselineReport,
   type CrossSystemTrajectory,
   type CrossSystemTrajectoryStep,
   type CrossSystemVerifierResult,
 } from "@openpond/contracts";
 import { CrossSystemEnvironment } from "./environment.js";
-import type { CrossSystemTask, CrossSystemTaskFamily, CrossSystemWorld } from "./types.js";
+import type { CrossSystemTask, CrossSystemWorld } from "./types.js";
 import { verifyCrossSystemTrajectory } from "./verifier.js";
-
-export type CrossSystemBaselineReport = {
-  schemaVersion: "openpond.crossSystemOperations.v1";
-  id: string;
-  toolContractHash: string;
-  model: { providerId: string; modelId: string };
-  trajectoryIds: string[];
-  exactMatchAccuracy: number;
-  successByFamily: Record<CrossSystemTaskFamily, { attempts: number; correct: number }>;
-  successByDifficulty: Record<"easy" | "medium" | "hard", { attempts: number; correct: number }>;
-  metrics: { toolCalls: number; rowsRead: number; bytesRead: number; wallTimeMs: number; parseFailures: number; budgetExhaustion: number };
-  reward: { count: number; mean: number; min: number; max: number; variance: number };
-};
 
 export function crossSystemTrainingSourceMetadata(input: {
   trajectory: CrossSystemTrajectory;
@@ -57,7 +46,7 @@ export function crossSystemTrainingSourceMetadata(input: {
 export async function runScriptedCrossSystemBaseline(input: {
   worlds: CrossSystemWorld[];
   tasks: CrossSystemTask[];
-  model?: { providerId: string; modelId: string };
+  model?: ChatModelRef;
 }): Promise<{ report: CrossSystemBaselineReport; trajectories: CrossSystemTrajectory[]; results: CrossSystemVerifierResult[] }> {
   const model = input.model ?? { providerId: "openpond", modelId: "scripted-frontier-baseline" };
   const worldById = new Map(input.worlds.map((world) => [world.id, world]));
@@ -86,7 +75,7 @@ export async function runScriptedCrossSystemBaseline(input: {
 
 export function buildCrossSystemBaselineReport(input: {
   id: string;
-  model: { providerId: string; modelId: string };
+  model: ChatModelRef;
   tasks: CrossSystemTask[];
   trajectories: CrossSystemTrajectory[];
   results: CrossSystemVerifierResult[];
@@ -126,7 +115,7 @@ export function buildCrossSystemBaselineReport(input: {
 async function scriptedTrajectory(input: {
   world: CrossSystemWorld;
   task: CrossSystemTask;
-  model: { providerId: string; modelId: string };
+  model: ChatModelRef;
   variant: "correct" | "incorrect" | "inefficient";
   ordinal: number;
 }): Promise<CrossSystemTrajectory> {

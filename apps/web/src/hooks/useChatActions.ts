@@ -157,6 +157,7 @@ type SendPromptOptions = {
   displayPrompt?: string;
   usageAttribution?: UsageRequestAttribution;
   openPondCommandAccessMode?: OpenPondCommandAccessMode;
+  turnMetadata?: Record<string, unknown>;
 };
 
 export function sendTurnModelSelectionPayload({
@@ -966,6 +967,7 @@ export function useChatActions({
             };
       await api.sendTurn(connection, session.id, {
         prompt: value,
+        metadata: options.turnMetadata,
         attachments: attachments.length > 0 ? attachments : undefined,
         mentionedAppIds: mentionedSandboxApp ? [mentionedSandboxApp.id] : undefined,
         mentionedConnectedApps: mentionedConnectedApps.length > 0 ? mentionedConnectedApps : undefined,

@@ -247,13 +247,29 @@ export type TurnRunnerDependencies = {
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
   executeCrossSystemTool?: (input: {
     modelId: string;
+    localProjectId: string | null;
     turnId: string;
     callId: string;
     name: string;
     args: Record<string, unknown>;
     userPrompt: string;
+    taskId?: string;
     signal: AbortSignal;
   }) => Promise<NativeModelToolResult>;
+  finalizeCrossSystemTurn?: (input: {
+    modelId: string;
+    localProjectId: string | null;
+    sessionId: string;
+    turnId: string;
+    userPrompt: string;
+    taskId: string;
+    startedAt: string;
+    completedAt: string;
+    terminalFailure?: {
+      message: string;
+      failureClass: "policy_failure" | "infrastructure_failure";
+    } | null;
+  }) => Promise<{ attemptId: string; gradeId: string; generatedTaskId: string } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
   readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
   executeProfileSkillCommand?: (input: { prompt: string }) => Promise<ProfileSkillCommandResult | null>;

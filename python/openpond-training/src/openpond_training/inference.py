@@ -76,17 +76,23 @@ def normalized_messages(value: Any) -> list[dict[str, str]]:
     if not isinstance(value, list):
         raise ContractError("Inference messages must be an array.")
     messages: list[dict[str, str]] = []
+    call_names: dict[str, str] = {}
+
     for item in value:
         if not isinstance(item, dict):
             continue
         role = item.get("role")
         content = item.get("content")
         if role == "tool":
-            messages.append({"role": "user", "content": json.dumps({
-                "type": "tool_result",
-                "tool_call_id": item.get("tool_call_id"),
-                "content": content if isinstance(content, str) else "",
-            }, ensure_ascii=False, sort_keys=True)})
+            raw_call_id = item.get("tool_call_id")
+            name = call_names.get(raw_call_id) if isinstance(raw_call_id, str) else None
+            if not name:
+                raise ContractError("Training data contains a tool result without a matching registered tool call.")
+            messages.append({"role": "user", "content": json.dumps(
+                canonical_tool_result(name, content),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )})
             continue
         tool_calls = item.get("tool_calls")
         if role == "assistant" and isinstance(tool_calls, list) and tool_calls:
@@ -101,10 +107,13 @@ def normalized_messages(value: Any) -> list[dict[str, str]]:
                     arguments = {"malformed_arguments": raw_arguments}
                 messages.append({"role": "assistant", "content": json.dumps({
                     "type": "tool_call",
-                    "id": call.get("id"),
                     "name": function.get("name"),
                     "arguments": arguments,
-                }, ensure_ascii=False, sort_keys=True)})
+                }, ensure_ascii=False, separators=(",", ":"))})
+                raw_call_id = call.get("id")
+                name = function.get("name")
+                if isinstance(raw_call_id, str) and raw_call_id and isinstance(name, str) and name:
+                    call_names[raw_call_id] = name
             if isinstance(content, str) and content:
                 messages.append({"role": "assistant", "content": content})
             continue
@@ -116,6 +125,54 @@ def normalized_messages(value: Any) -> list[dict[str, str]]:
     return messages
 
 
+def canonical_tool_result(name: str, content: Any) -> dict[str, Any]:
+    parsed: Any = content if content is not None else ""
+    if isinstance(content, str):
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            parsed = content
+    if not isinstance(parsed, dict):
+        return {"type": "tool_result", "name": name, "ok": True, "result": parsed, "error": None}
+    ok = parsed.get("ok") if isinstance(parsed.get("ok"), bool) else True
+    if "result" in parsed:
+        result = parsed["result"]
+    elif "data" in parsed:
+        result = parsed["data"]
+    else:
+        result = parsed if ok else None
+    if "error" in parsed:
+        error = parsed["error"]
+    elif ok:
+        error = None
+    else:
+        error = parsed.get("output") if isinstance(parsed.get("output"), str) else "Tool execution failed."
+    return {"type": "tool_result", "name": name, "ok": ok, "result": result, "error": error}
+
+
+def request_context_window_tokens(request: dict[str, Any]) -> int:
+    value = request.get("contextWindowTokens")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 128 or value > 32_768:
+        raise ContractError("Inference contextWindowTokens must be an integer between 128 and 32768.")
+    return value
+
+
+def left_truncate_encoded_input(encoded: Any, context_window_tokens: int) -> tuple[int, int]:
+    input_ids = encoded.get("input_ids")
+    if not isinstance(input_ids, torch.Tensor) or input_ids.ndim < 2:
+        raise ContractError("Inference tokenizer did not return batched input_ids.")
+    input_tokens_before = int(input_ids.shape[-1])
+    tokens_dropped = max(0, input_tokens_before - context_window_tokens)
+    if not tokens_dropped:
+        return input_tokens_before, 0
+    for key, value in list(encoded.items()):
+        if isinstance(value, torch.Tensor) and value.ndim >= 2 and int(value.shape[-1]) == input_tokens_before:
+            encoded[key] = value[..., -context_window_tokens:]
+    if int(encoded["input_ids"].shape[-1]) != context_window_tokens:
+        raise ContractError("Inference context truncation did not preserve the configured token window.")
+    return input_tokens_before, tokens_dropped
+
+
 def generate(request: dict[str, Any], model, tokenizer, fixture_mode: bool = False) -> None:  # type: ignore[no-untyped-def]
     request_id = str(request.get("id") or "")
     if not request_id:
@@ -123,6 +180,8 @@ def generate(request: dict[str, Any], model, tokenizer, fixture_mode: bool = Fal
     messages = normalized_messages(request.get("messages"))
     rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     encoded = tokenizer(rendered, return_tensors="pt")
+    context_window_tokens = request_context_window_tokens(request)
+    input_tokens_before, input_tokens_dropped = left_truncate_encoded_input(encoded, context_window_tokens)
     max_new_tokens = max(1, min(512, int(request.get("maxNewTokens") or 128)))
     temperature = float(request.get("temperature") or 0.0)
     repetition_penalty = max(0.5, min(2.0, float(request.get("repetitionPenalty") or 1.0)))
@@ -138,6 +197,9 @@ def generate(request: dict[str, Any], model, tokenizer, fixture_mode: bool = Fal
                 "prompt_tokens": int(encoded["input_ids"].shape[-1]),
                 "completion_tokens": completion_tokens,
                 "total_tokens": int(encoded["input_ids"].shape[-1]) + completion_tokens,
+                "input_tokens_before": input_tokens_before,
+                "input_tokens_dropped": input_tokens_dropped,
+                "context_window_tokens": context_window_tokens,
             },
         })
         return
@@ -187,6 +249,9 @@ def generate(request: dict[str, Any], model, tokenizer, fixture_mode: bool = Fal
             "prompt_tokens": int(encoded["input_ids"].shape[-1]),
             "completion_tokens": completion_tokens,
             "total_tokens": int(encoded["input_ids"].shape[-1]) + completion_tokens,
+            "input_tokens_before": input_tokens_before,
+            "input_tokens_dropped": input_tokens_dropped,
+            "context_window_tokens": context_window_tokens,
         },
     })
 

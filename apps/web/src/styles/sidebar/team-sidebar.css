@@ -14,6 +14,27 @@
   font-size: 13px;
 }
 
+.team-sidebar-group,
+.team-sidebar-conversations {
+  display: grid;
+  gap: 2px;
+}
+
+.team-sidebar-group-toggle {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.team-sidebar-group-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.team-sidebar-conversations > .team-sidebar-row {
+  padding-left: 12px;
+}
+
 .team-sidebar-workspace-meta {
   display: flex;
   min-height: 22px;
@@ -93,89 +114,4 @@
   justify-content: flex-end;
   gap: 4px;
   color: var(--muted);
-}
-
-.team-notification-menu {
-  position: relative;
-}
-
-.team-notification-popover {
-  position: absolute;
-  top: 25px;
-  right: 0;
-  z-index: 90;
-  display: grid;
-  width: 260px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #202020;
-  padding: 6px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
-}
-
-.team-notification-popover > strong {
-  padding: 5px 8px 7px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.team-notification-popover > button {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: start;
-  gap: 5px;
-  width: 100%;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  padding: 7px 6px;
-  text-align: left;
-}
-
-.team-notification-popover > button:hover,
-.team-notification-popover > button:focus-visible {
-  outline: none;
-  background: rgba(255, 255, 255, 0.075);
-}
-
-.team-notification-popover > button:disabled {
-  opacity: 0.55;
-}
-
-.team-notification-popover > button > span:last-child {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.team-notification-popover button strong {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-notification-popover button small {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.team-notification-check {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  color: #67d4c0;
-}
-
-.team-notification-divider {
-  height: 1px;
-  margin: 5px 4px;
-  background: var(--border);
 }

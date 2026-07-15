@@ -142,12 +142,12 @@ function terminalBootstrapFixture() {
 }
 
 describe("terminal argument parser", () => {
-  test("defaults to chat with OpenAI and the supplied working directory", () => {
+  test("defaults to OpenPond Chat and the supplied working directory", () => {
     expect(parseTerminalArgs([], "/repo")).toEqual({
       command: "chat",
       options: {
         server: "http://127.0.0.1:17874",
-        provider: "openai",
+        provider: "openpond",
         model: null,
         cwd: "/repo",
         project: null,
@@ -770,7 +770,7 @@ describe("terminal one-shot chat runner", () => {
 
       const printed = output.text();
       expect(result.status).toBe("completed");
-      expect(printed).toContain("OpenPond OpenAI / GPT-4.1 /bench/task");
+      expect(printed).toContain("OpenPond / OpenPond Chat /bench/task");
       expect(printed).toContain("Human task complete.");
       expect(printed).toContain("[command] bun test");
       expect(printed).toContain("[openpond] updated file");

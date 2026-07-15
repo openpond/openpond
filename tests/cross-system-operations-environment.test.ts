@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   CROSS_SYSTEM_TOOL_NAMES,
   CrossSystemTrajectorySchema,
@@ -19,7 +20,7 @@ import {
   verifyCrossSystemTrajectory,
 } from "../apps/server/src/training/cross-system-operations";
 import { createTaskMinerService } from "../apps/server/src/training/task-miner";
-import { enrichCrossSystemProposal } from "../apps/server/src/training/task-creator";
+import { crossSystemStructuredExample, enrichCrossSystemProposal } from "../apps/server/src/training/task-creator";
 import { sourceFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("Cross-System Operations environment", () => {
@@ -100,6 +101,7 @@ describe("Cross-System Operations environment", () => {
     const approved = baseline.trajectories.filter((trajectory) => trajectory.metadata.approved === true).map((trajectory) => trajectory.id);
     const records = buildCrossSystemBootstrapDataset({ tasks: suite.tasks, trajectories: baseline.trajectories, results: baseline.results, approvedTrajectoryIds: approved, approvedBy: "local_user", approvedAt: "2026-07-13T00:00:00.000Z" });
     expect(records.length).toBe(baseline.results.filter((result) => result.outcome === "correct").length);
+    expect(records.every((record) => record.messages[0]?.role === "system" && record.messages[0].content === CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT)).toBe(true);
     expect(records.every((record) => record.messages.some((message) => message.role === "tool") && record.messages.some((message) => message.tool_calls?.length))).toBe(true);
     expect(records.every((record) => record.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH)).toBe(true);
   });
@@ -160,6 +162,20 @@ describe("Cross-System Operations environment", () => {
       ...sourceFixture(`creator_cso_${index}`, `creator_cluster_${index}`),
       metadata: crossSystemTrainingSourceMetadata({ trajectory, result: baseline.results[index]!, report: baseline.report, approved: baseline.results[index]?.outcome === "correct" }),
     }));
+    const approvedSource = sources.find((source) => (source.metadata.crossSystemOperations as { approved?: boolean }).approved === true)!;
+    const staleSource = structuredClone(approvedSource);
+    const staleMetadata = staleSource.metadata.crossSystemOperations as { bootstrapMessages: Array<{ role: string; content?: string | null }> };
+    const approvedTrajectoryIds = baseline.trajectories.filter((_, index) => baseline.results[index]?.outcome === "correct").map((trajectory) => trajectory.id);
+    staleMetadata.bootstrapMessages = structuredClone(buildCrossSystemBootstrapDataset({
+      tasks: suite.tasks,
+      trajectories: baseline.trajectories,
+      results: baseline.results,
+      approvedTrajectoryIds,
+      approvedBy: "local_user",
+      approvedAt: "2026-07-13T00:00:00.000Z",
+    }).find((record) => record.trajectoryId === (staleMetadata as { trajectoryId?: string }).trajectoryId)?.messages ?? []);
+    staleMetadata.bootstrapMessages[0] = { role: "system", content: "stale source-side protocol prompt" };
+    expect(crossSystemStructuredExample(staleSource)?.inputMessages[0]?.content).toBe(CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT);
     const examples = sources.map((source, index) => {
       const trajectory = baseline.trajectories[index]!;
       const task = taskById.get(trajectory.taskId)!;
@@ -191,7 +207,11 @@ describe("Cross-System Operations environment", () => {
       proposedExamples: examples,
       proposedMethod: "sft",
       policy: { policyVisibleFields: ["input.prompt"], privilegedFields: ["expectedOutput.text"], hiddenGraderRefs: [], connectedAppScopes: [] },
-      warnings: [],
+      warnings: [
+        "The evidence explicitly exposes only three tool names, so the exact fourth tool schema is missing.",
+        "The executable generator and verifier were not included as file contents; generatedFiles is therefore empty and materialization must import and hash-check those existing artifacts.",
+        "Keep this independent-world warning.",
+      ],
       createdAt: "2026-07-13T00:00:00.000Z",
     });
     const enriched = enrichCrossSystemProposal(proposal, sources);
@@ -199,5 +219,7 @@ describe("Cross-System Operations environment", () => {
     expect(enriched.proposedExamples).toHaveLength(baseline.results.filter((result) => result.outcome === "correct").length);
     expect(enriched.generatedFiles.map((file) => file.path)).toEqual(expect.arrayContaining(["environment/taskset.ts", "environment/tool-contract.json", "environment/worlds.json", "environment/tasks.json", "graders/cross-system-verifier.ts", "fixtures/adversarial.json"]));
     expect(enriched.generatedFiles.every((file) => file.content.includes(CROSS_SYSTEM_TOOL_CONTRACT_HASH) || ["environment/worlds.json", "environment/tasks.json"].includes(file.path))).toBe(true);
+    expect(enriched.warnings).toContain("Keep this independent-world warning.");
+    expect(enriched.warnings.some((warning) => warning.includes("fourth tool") || warning.includes("generatedFiles is therefore empty"))).toBe(false);
   });
 });

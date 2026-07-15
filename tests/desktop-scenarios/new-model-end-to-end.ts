@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
-  CROSS_SYSTEM_TOOL_DEFINITIONS,
   TasksetSchema,
   type LocalProject,
   type Session,
@@ -23,8 +22,10 @@ import {
   type CrossSystemWorldSpec,
 } from "../../apps/server/src/training/cross-system-operations";
 import {
+  reloadRenderer,
   waitForAssistantOutput,
   waitForCompletedTurn,
+  waitForRendererCondition,
 } from "./helpers";
 import {
   addTrainingSource,
@@ -65,6 +66,7 @@ export default desktopScenario({
         baselineModel,
         `Cross-System Operations ${task.family} ${index + 1}`,
         task.prompt,
+        project,
       ));
     }
     const sources = await Promise.all(sessions.map((session) => addTrainingSource(harness, session.id)));
@@ -168,10 +170,22 @@ export default desktopScenario({
     assert(model.tasksetHash === taskset.contentHash && model.planHash === plan.contentHash && model.bundleHash === built.manifest.contentHash, "Registered model lineage does not match Taskset/plan/bundle hashes.");
     assert(model.frozenEvaluationArtifactId === evaluation.id, "Registered model did not retain the frozen-evaluation receipt.");
 
-    const chatTask = taskset.tasks.find((task) => task.split === "frozen_eval") ?? taskset.tasks[0]!;
-    const firstChat = await runConstrainedModelChat(harness, { project, modelId: model.id, prompt: String(chatTask.input.prompt), title: "Cross-System trained model chat" });
+    const chatTask = taskset.tasks[0]!;
+    const secondChatTask = taskset.tasks[1]!;
+    const firstChat = await runConstrainedModelChatThroughUi(harness, {
+      project,
+      modelId: model.id,
+      prompt: String(chatTask.input.prompt),
+      secondPrompt: String(secondChatTask.input.prompt),
+      tasksetName: taskset.name,
+      title: "Cross-System trained model chat",
+    });
     harness.recordAssertion("constrainedToolCallBeforeRestart", firstChat.toolEvent.action === "search_crm");
     harness.recordAssertion("normalChatFinalBeforeRestart", firstChat.output.includes("ANSWER: {}"));
+    harness.recordAssertion("secondGeneratedToolCallBeforeRestart", firstChat.secondToolEvent?.action === "search_crm");
+    harness.recordAssertion("secondGeneratedFinalBeforeRestart", firstChat.secondOutput.includes("ANSWER: {}"));
+    harness.recordAssertion("normalComposerHandoffVisible", firstChat.handoffVisible);
+    harness.recordAssertion("normalComposerSourceProjectBound", firstChat.localProjectId === project.id);
 
     await harness.screenshot("new-model-end-to-end-before-restart");
 
@@ -183,7 +197,13 @@ export default desktopScenario({
     const bootstrap = await harness.api.bootstrap<{ localProjects?: LocalProject[] }>();
     assert(reloadedModel?.jobId === launched.id, "Registered model did not reconcile after restart.");
     assert(bootstrap.localProjects?.some((item) => item.id === project.id && item.agentSdk?.detected), "Synthetic Agent SDK project did not reconcile after restart.");
-    const secondChat = await runConstrainedModelChat(harness, { project, modelId: model.id, prompt: String(chatTask.input.prompt), title: "Cross-System trained model chat after restart" });
+    const secondChat = await runConstrainedModelChatThroughUi(harness, {
+      project,
+      modelId: model.id,
+      prompt: String(chatTask.input.prompt),
+      tasksetName: taskset.name,
+      title: "Cross-System trained model chat after restart",
+    });
     harness.recordAssertion("constrainedToolCallAfterRestart", secondChat.toolEvent.action === "search_crm");
     harness.recordAssertion("normalChatFinalAfterRestart", secondChat.output.includes("ANSWER: {}"));
     harness.recordAssertion("noActiveTrainingWorker", state.jobs.every((job) => !["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)));
@@ -216,6 +236,7 @@ export default desktopScenario({
       evaluationArtifactId: evaluation.id,
       modelId: model.id,
       chatSessionIds: [firstChat.sessionId, secondChat.sessionId],
+      chatTaskIds: [chatTask.metadata.taskId, secondChatTask.metadata.taskId],
     });
   },
 });
@@ -243,37 +264,57 @@ async function waitForTrainingJob(harness: DesktopHarness, jobId: string) {
   throw new Error("Timed out waiting for the local SFT bootstrap.");
 }
 
-async function runConstrainedModelChat(harness: DesktopHarness, input: {
+async function runConstrainedModelChatThroughUi(harness: DesktopHarness, input: {
   project: LocalProject;
   modelId: string;
   prompt: string;
+  secondPrompt?: string;
+  tasksetName: string;
   title: string;
 }) {
-  const modelRef = { providerId: "local-adapter" as const, modelId: input.modelId };
-  const session = await harness.api.createSession<Session>({
-    provider: "local-adapter",
-    modelRef,
-    title: input.title,
-    cwd: input.project.workspacePath,
-    workspaceKind: "local_project",
-    workspaceId: input.project.id,
-    workspaceName: input.project.name,
-  });
-  await harness.api.createTurn(session.id, {
-    prompt: input.prompt,
-    modelRef,
-    openPondActionCatalog: CROSS_SYSTEM_TOOL_DEFINITIONS.map((definition) => ({
-      id: definition.name,
-      sourcePath: input.project.path,
-      sourceActionId: definition.name,
-      name: definition.name,
-      label: definition.name,
-      description: definition.description,
-      visibility: "end_user",
-      inputSchema: definition.parameters,
-      implementation: { type: "tool", projectId: input.project.id },
-      invokesModel: false,
-    })),
+  const before = await harness.api.bootstrap<{ sessions?: Session[] }>();
+  const previousSessionIds = new Set((before.sessions ?? []).map((session) => session.id));
+  await reloadRenderer(harness);
+  await waitForRendererCondition(
+    harness,
+    `(() => {
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Training');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+    "Training navigation",
+  );
+  await waitForRendererCondition(
+    harness,
+    `(() => {
+      const button = [...document.querySelectorAll('[role="tab"]')].find((item) => item.textContent?.trim().startsWith('Models'));
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+    "Models tab",
+  );
+  await waitForRendererCondition(
+    harness,
+    `(() => {
+      const row = [...document.querySelectorAll('.training-models-table tbody tr')]
+        .find((item) => item.textContent?.includes(${JSON.stringify(input.tasksetName)}));
+      const button = row?.querySelector('.training-table-chat');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+    `Chat handoff for ${input.tasksetName}`,
+  );
+  await harness.renderer.assertText("Generated Taskset question", { label: "generated Taskset chat handoff" });
+  await harness.renderer.assertText(input.tasksetName, { label: "generated Taskset name in chat handoff" });
+  await harness.renderer.submitComposer(input.prompt);
+
+  const session = await waitForNewModelChatSession(harness, {
+    previousSessionIds,
+    modelId: input.modelId,
+    projectId: input.project.id,
   });
   let toolEvent;
   try {
@@ -285,7 +326,74 @@ async function runConstrainedModelChat(harness: DesktopHarness, input: {
   }
   const delta = await waitForAssistantOutput(harness, session.id, "ANSWER: {}", `${input.title} final answer`);
   await waitForCompletedTurn(harness, session.id, delta, `${input.title} completion`);
-  return { sessionId: session.id, toolEvent, output: delta.output ?? "" };
+  let secondToolEvent = null;
+  let secondOutput = "";
+  if (input.secondPrompt) {
+    await waitForRendererCondition(
+      harness,
+      `document.querySelector('.training-chat-handoff small')?.textContent?.includes('2 of') === true`,
+      "second generated Taskset question",
+    );
+    await harness.renderer.submitComposer(input.secondPrompt);
+    secondToolEvent = await harness.events.waitFor(
+      (event) =>
+        event.sessionId === session.id &&
+        event.turnId !== delta.turnId &&
+        event.name === "tool.completed" &&
+        event.action === "search_crm" &&
+        (event.status === undefined || event.status === "completed"),
+      `second generated search_crm completion in ${session.id}`,
+      { timeoutMs: 45_000, sessionId: session.id },
+    );
+    const secondDelta = await harness.events.waitFor(
+      (event) =>
+        event.sessionId === session.id &&
+        event.turnId === secondToolEvent?.turnId &&
+        event.name === "assistant.delta" &&
+        typeof event.output === "string" &&
+        event.output.includes("ANSWER: {}"),
+      `${input.title} second generated final answer`,
+      { sessionId: session.id },
+    );
+    await harness.events.waitFor(
+      (event) =>
+        event.sessionId === session.id &&
+        event.turnId === secondToolEvent?.turnId &&
+        event.name === "turn.completed" &&
+        event.status === "completed",
+      `${input.title} second generated completion`,
+      { sessionId: session.id },
+    );
+    secondOutput = secondDelta.output ?? "";
+  }
+  return {
+    sessionId: session.id,
+    toolEvent,
+    output: delta.output ?? "",
+    secondToolEvent,
+    secondOutput,
+    handoffVisible: true,
+    localProjectId: session.localProjectId ?? session.workspaceId ?? null,
+  };
+}
+
+async function waitForNewModelChatSession(harness: DesktopHarness, input: {
+  previousSessionIds: ReadonlySet<string>;
+  modelId: string;
+  projectId: string;
+}): Promise<Session> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const bootstrap = await harness.api.bootstrap<{ sessions?: Session[] }>();
+    const session = (bootstrap.sessions ?? []).find((candidate) =>
+      !input.previousSessionIds.has(candidate.id) &&
+      candidate.modelRef?.providerId === "local-adapter" &&
+      candidate.modelRef.modelId === input.modelId &&
+      (candidate.localProjectId === input.projectId || candidate.workspaceId === input.projectId));
+    if (session) return session;
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for the normal composer to create a ${input.modelId} chat in project ${input.projectId}.`);
 }
 
 function assert<T>(value: T, message: string): asserts value is NonNullable<T> {

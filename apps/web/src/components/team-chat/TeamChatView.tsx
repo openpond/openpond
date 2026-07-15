@@ -308,7 +308,7 @@ export function TeamChatView(props: TeamChatViewProps) {
 
   return (
     <section className="team-chat-view">
-      <div className="team-chat-main">
+      <div className="team-chat-main conversation-surface-main">
         {props.error ? (
           <div className="team-chat-error" role="alert">
             <span>{props.error}</span>
@@ -319,7 +319,7 @@ export function TeamChatView(props: TeamChatViewProps) {
           </div>
         ) : null}
         <div
-          className="team-chat-messages"
+          className="team-chat-messages conversation-message-scroll"
           role="log"
           aria-live="polite"
           aria-relevant="additions text"
@@ -372,7 +372,7 @@ export function TeamChatView(props: TeamChatViewProps) {
             <div className="team-chat-empty">No messages yet</div>
           )}
         </div>
-        <div className="team-chat-composer-shell">
+        <div className="team-chat-composer-shell conversation-composer-shell">
           {replyTarget && replyAuthorLabel ? (
             <TeamChatComposerReply
               authorLabel={replyAuthorLabel}

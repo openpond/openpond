@@ -38,6 +38,10 @@ export function canReuseDesktopServer(input: {
   );
 }
 
+export function canLaunchBundledDesktopServer(explicitServerUrl: boolean): boolean {
+  return !explicitServerUrl;
+}
+
 export function localServerPort(url: string): number | null {
   try {
     const parsed = new URL(url);

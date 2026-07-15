@@ -4,6 +4,8 @@ import type {
   ChatModelRef,
   ChatProvider,
   CodexReasoningEffort,
+  CrossSystemFrontierBaselineRun,
+  LocalProject,
   ProviderSettings,
   Session,
   TaskCandidate,
@@ -14,10 +16,9 @@ import type {
   TrainingSourceRef,
 } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
-import type { CrossSystemFrontierBaselineResult } from "../../hooks/useTraining";
 import { normalizeChatModel } from "../../lib/app-models";
 import { ArrowLeft, Loader2, X } from "../icons";
-import { trainingAuthoringModel } from "./training-flow";
+import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "./training-flow";
 import { TrainingAutomaticCandidatesStep } from "./TrainingAutomaticCandidatesStep";
 import { TrainingAutomaticScopeStep } from "./TrainingAutomaticScopeStep";
 import { TrainingManualGoalStep } from "./TrainingManualGoalStep";
@@ -27,14 +28,6 @@ import { TrainingStartModeStep } from "./TrainingStartModeStep";
 
 type TrainingController = ReturnType<typeof useTraining>;
 type NewModelMode = "automated" | "manual";
-type NewModelStep =
-  | "start"
-  | "automatic_scope"
-  | "automatic_candidates"
-  | "manual_goal"
-  | "evidence"
-  | "recommendation";
-
 const CHAT_SEARCH_PAGE_SIZE = 20;
 
 export function TrainingRunDialog({
@@ -46,6 +39,7 @@ export function TrainingRunDialog({
   preferences,
   providerSettings,
   reasoningEffort,
+  localProjects = [],
   sessions,
   sources,
   training,
@@ -58,6 +52,7 @@ export function TrainingRunDialog({
   preferences: AppPreferences["training"];
   providerSettings: ProviderSettings | null;
   reasoningEffort: CodexReasoningEffort;
+  localProjects?: LocalProject[];
   sessions: Session[];
   sources: TrainingSourceRef[];
   training: TrainingController;
@@ -87,8 +82,7 @@ export function TrainingRunDialog({
   const [evidenceChanged, setEvidenceChanged] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [preparingScan, setPreparingScan] = useState(false);
-  const [frontierBaseline, setFrontierBaseline] = useState<CrossSystemFrontierBaselineResult | null>(null);
-  const [frontierBaselineRunning, setFrontierBaselineRunning] = useState(false);
+  const [frontierBaselineRunId, setFrontierBaselineRunId] = useState<string | null>(null);
   const [activeMinerRunId, setActiveMinerRunId] = useState<string | null>(null);
   const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
   const [minerConfig, setMinerConfig] = useState<TaskMinerConfig>(() => training.payload?.minerConfig ?? defaultMinerConfig());
@@ -114,8 +108,20 @@ export function TrainingRunDialog({
     [estimatesBySessionId, searchEntries, selectedEntries],
   );
   const activeMinerRun = useMemo(() => training.payload?.minerRuns.find((run) => run.id === activeMinerRunId) ?? null, [activeMinerRunId, training.payload?.minerRuns]);
+  const crossSystemProject = useMemo(
+    () => localProjects.find((project) => isCrossSystemProject(project) && project.agentSdk?.detected) ?? null,
+    [localProjects],
+  );
+  const frontierBaselineRun = useMemo<CrossSystemFrontierBaselineRun | null>(() => {
+    const runs = training.payload?.frontierBaselineRuns ?? [];
+    return runs.find((run) => run.id === frontierBaselineRunId)
+      ?? runs.find((run) => ["queued", "running", "cancelling"].includes(run.status))
+      ?? runs[0]
+      ?? null;
+  }, [frontierBaselineRunId, training.payload?.frontierBaselineRuns]);
+  const frontierBaselineRunning = Boolean(frontierBaselineRun && ["queued", "running", "cancelling"].includes(frontierBaselineRun.status));
   const scanning = preparingScan || Boolean(activeMinerRun && ["queued", "running", "cancelling"].includes(activeMinerRun.status));
-  const busy = analyzing || preparingScan || frontierBaselineRunning || Boolean(training.busyAction);
+  const busy = analyzing || preparingScan || Boolean(training.busyAction);
 
   useEffect(() => setObjective(initialObjective ?? ""), [initialObjective]);
 
@@ -126,11 +132,11 @@ export function TrainingRunDialog({
   }, [activeMinerRunId, step, training.payload?.minerRuns]);
 
   useEffect(() => {
-    if (!activeMinerRun || activeMinerRun.status !== "succeeded") return;
+    if (!shouldRevealMinerCandidates(step, activeMinerRun)) return;
     const candidateIds = new Set(activeMinerRun.candidateIds);
     setScanCandidates(training.payload?.candidates.filter((candidate) => candidateIds.has(candidate.id)) ?? []);
     setStep("automatic_candidates");
-  }, [activeMinerRun, training.payload?.candidates]);
+  }, [activeMinerRun, step, training.payload?.candidates]);
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -318,11 +324,12 @@ export function TrainingRunDialog({
   async function scanForCandidates() {
     setPreparingScan(true);
     try {
-      const scopedSources = await training.actions.addSources(eligibleSessions.map((session) => session.id)) ?? [];
-      const sourceIds = [...new Set([...sources, ...scopedSources].map((source) => source.id))];
       const nextConfig = { ...minerConfig, enabled: true };
-      await training.actions.configureMiner(nextConfig);
-      const runRecord: TaskMinerRun | null = await training.actions.runMiner(sourceIds);
+      const runRecord: TaskMinerRun | null = await training.actions.runMiner(
+        [],
+        eligibleSessions.map((session) => session.id),
+        nextConfig,
+      );
       if (runRecord) setActiveMinerRunId(runRecord.id);
     } finally {
       setPreparingScan(false);
@@ -330,16 +337,18 @@ export function TrainingRunDialog({
   }
 
   async function runFrontierBaseline() {
-    setFrontierBaselineRunning(true);
-    try {
-      const result = await training.actions.runCrossSystemFrontierBaseline(
-        { providerId: authoringProvider, modelId: authoringModel },
-        authoringReasoningEffort,
-      );
-      if (result) setFrontierBaseline(result);
-    } finally {
-      setFrontierBaselineRunning(false);
-    }
+    if (!crossSystemProject) return;
+    const run = await training.actions.runCrossSystemFrontierBaseline(
+      crossSystemProject.id,
+      { providerId: authoringProvider, modelId: authoringModel },
+      authoringReasoningEffort,
+    );
+    if (run) setFrontierBaselineRunId(run.id);
+  }
+
+  async function cancelFrontierBaseline() {
+    if (!frontierBaselineRun || !frontierBaselineRunning) return;
+    await training.actions.cancelCrossSystemFrontierBaseline(frontierBaselineRun.id);
   }
 
   async function cancelScan() {
@@ -455,18 +464,20 @@ export function TrainingRunDialog({
             chatCount={eligibleSessions.length}
             config={minerConfig}
             estimate={scanEstimate}
-            frontierBaseline={frontierBaseline}
+            frontierBaselineRun={frontierBaselineRun}
             frontierBaselineModel={`${authoringProvider} · ${authoringModel}`}
             frontierBaselineRunning={frontierBaselineRunning}
+            frontierBaselineProject={crossSystemProject?.name ?? null}
             onCancel={() => void cancelScan()}
             onConfigChange={setMinerConfig}
             onRunFrontierBaseline={() => void runFrontierBaseline()}
+            onCancelFrontierBaseline={() => void cancelFrontierBaseline()}
             onScan={() => void scanForCandidates()}
             run={activeMinerRun}
             scanning={scanning}
           />
         ) : step === "automatic_candidates" ? (
-          <TrainingAutomaticCandidatesStep candidates={scanCandidates} onRescan={() => setStep("automatic_scope")} onSelect={selectCandidate} />
+          <TrainingAutomaticCandidatesStep candidates={scanCandidates} onRescan={() => { setActiveMinerRunId(null); setStep("automatic_scope"); }} onSelect={selectCandidate} />
         ) : step === "manual_goal" ? (
           <TrainingManualGoalStep objective={objective} onChange={changeObjective} onContinue={() => setStep("evidence")} />
         ) : step === "evidence" && mode ? (
@@ -563,4 +574,9 @@ function defaultMinerConfig(): TaskMinerConfig {
     clustering: "hybrid_deterministic_first",
     consentRequired: true,
   };
+}
+
+function isCrossSystemProject(project: Pick<LocalProject, "name" | "workspacePath">): boolean {
+  return [project.name, project.workspacePath.split(/[\\/]/).at(-1) ?? ""]
+    .some((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "") === "crosssystemoperations");
 }

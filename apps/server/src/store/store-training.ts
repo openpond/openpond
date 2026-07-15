@@ -1,5 +1,6 @@
 import type {
   BaselineReport,
+  CrossSystemFrontierBaselineRun,
   GradeResult,
   GraderAuditReport,
   ModelArtifactLineage,
@@ -26,6 +27,7 @@ import type {
 } from "@openpond/contracts";
 import {
   BaselineReportSchema,
+  CrossSystemFrontierBaselineRunSchema,
   GradeResultSchema,
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
@@ -283,6 +285,28 @@ export class SqliteTrainingStore extends SqliteStoreCore {
     return row ? TrainingSourceRefSchema.parse(JSON.parse(row.payload)) : null;
   }
 
+  async getTrainingSourceForSession(input: {
+    profileId: string;
+    sessionId: string;
+    sourceHash: string;
+  }): Promise<TrainingSourceRef | null> {
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<PayloadRow>(
+      `SELECT payload FROM training_sources
+       WHERE profile_id = ? AND session_id = ?
+         AND json_extract(payload, '$.sourceHash') = ?
+         AND json_extract(payload, '$.consent.status') = 'granted'
+       ORDER BY CASE
+         WHEN json_type(payload, '$.metadata.crossSystemOperations') IS NOT NULL THEN 0
+         ELSE 1
+       END, updated_at DESC
+       LIMIT 1`,
+      [input.profileId, input.sessionId, input.sourceHash],
+    );
+    return row ? TrainingSourceRefSchema.parse(JSON.parse(row.payload)) : null;
+  }
+
   async upsertTrainingSource(sourceInput: TrainingSourceRef): Promise<TrainingSourceRef> {
     const source = TrainingSourceRefSchema.parse(sourceInput);
     await this.ready;
@@ -527,8 +551,34 @@ export class SqliteTrainingStore extends SqliteStoreCore {
     return this.getParsedPayload("SELECT payload FROM task_miner_runs WHERE id = ?", [id], TaskMinerRunSchema.parse);
   }
 
-  async listTaskMinerRuns(profileId: string): Promise<TaskMinerRun[]> {
-    return this.listParsedPayloads("SELECT payload FROM task_miner_runs WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TaskMinerRunSchema.parse);
+  async listTaskMinerRuns(profileId?: string): Promise<TaskMinerRun[]> {
+    return profileId
+      ? this.listParsedPayloads("SELECT payload FROM task_miner_runs WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TaskMinerRunSchema.parse)
+      : this.listParsedPayloads("SELECT payload FROM task_miner_runs ORDER BY updated_at DESC", [], TaskMinerRunSchema.parse);
+  }
+
+  async saveCrossSystemFrontierBaselineRun(runInput: CrossSystemFrontierBaselineRun): Promise<CrossSystemFrontierBaselineRun> {
+    const run = CrossSystemFrontierBaselineRunSchema.parse(runInput);
+    await this.upsertPayload(
+      `INSERT INTO cross_system_frontier_baseline_runs (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [run.id, run.profileId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
+    );
+    return run;
+  }
+
+  async getCrossSystemFrontierBaselineRun(id: string): Promise<CrossSystemFrontierBaselineRun | null> {
+    return this.getParsedPayload("SELECT payload FROM cross_system_frontier_baseline_runs WHERE id = ?", [id], CrossSystemFrontierBaselineRunSchema.parse);
+  }
+
+  async listCrossSystemFrontierBaselineRuns(profileId?: string): Promise<CrossSystemFrontierBaselineRun[]> {
+    return this.listParsedPayloads(
+      profileId
+        ? "SELECT payload FROM cross_system_frontier_baseline_runs WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM cross_system_frontier_baseline_runs ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
+      CrossSystemFrontierBaselineRunSchema.parse,
+    );
   }
 
   async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {

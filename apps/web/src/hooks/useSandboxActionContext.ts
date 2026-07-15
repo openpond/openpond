@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CloudProject, LocalProject, OpenPondActionCatalogEntry } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { actionCatalogForProject } from "../lib/sandbox-action-catalog";
+import { actionCatalogForLocalAgentSdkProject } from "../lib/local-agent-sdk-action-catalog";
 import { openPondActionProjectTarget } from "../lib/openpond-action-project";
 import {
   buildOpenPondAgentSlashCommand,
@@ -140,10 +141,16 @@ export function useSandboxActionContext({
     };
   }, [accountScopeKey, connection, selectedActionProjectTarget?.id, selectedActionProjectTarget?.teamId]);
 
-  const selectedProjectActionCatalog = useMemo(
-    () => actionCatalogForProject(selectedSandboxProject),
-    [selectedSandboxProject],
+  const selectedLocalProjectActionCatalog = useMemo(
+    () => actionCatalogForLocalAgentSdkProject(selectedProject),
+    [selectedProject],
   );
+  const selectedProjectActionCatalog = useMemo(() => {
+    const byId = new Map<string, OpenPondActionCatalogEntry>();
+    for (const action of actionCatalogForProject(selectedSandboxProject)) byId.set(action.id, action);
+    for (const action of selectedLocalProjectActionCatalog) byId.set(action.id, action);
+    return [...byId.values()];
+  }, [selectedLocalProjectActionCatalog, selectedSandboxProject]);
   const profileActionCatalog = useMemo(
     () => (profileActionCatalogEntries ?? []).map((action) => buildOpenPondProfileActionCommand(action)),
     [profileActionCatalogEntries],

@@ -1,4 +1,5 @@
 export type { LucideIcon } from "lucide-react";
+export { Duck } from "./icons/Duck";
 export { default as Activity } from "lucide-react/dist/esm/icons/activity.js";
 export { default as AlignLeft } from "lucide-react/dist/esm/icons/text-align-start.js";
 export { default as Archive } from "lucide-react/dist/esm/icons/archive.js";

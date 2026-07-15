@@ -163,6 +163,7 @@ export function createHostedToolLoopRuntime(deps: {
     workspaceDiffBaseline: WorkspaceDiffSummary | null;
     mentionedApps: OpenPondApp[];
     userPrompt: string;
+    turnMetadata: Turn["metadata"];
     toolDefinitions: Map<string, ModelToolDefinition>;
     invalidRequestCounts: Map<string, number>;
     toolCalls: import("../../openpond/native-tool-calls.js").NativeModelToolCall[];
@@ -376,6 +377,7 @@ export function createHostedToolLoopRuntime(deps: {
           workspaceDiffBaseline: params.workspaceDiffBaseline,
           mentionedApps: params.mentionedApps,
           userPrompt: params.userPrompt,
+          turnMetadata: params.turn.metadata,
           toolDefinitions: nativeToolDefinitionByName,
           invalidRequestCounts,
           toolCalls: nativeToolCalls,

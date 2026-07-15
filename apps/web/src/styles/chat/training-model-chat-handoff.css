@@ -1,0 +1,90 @@
+.training-chat-handoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(760px, calc(100vw - 48px));
+  margin: 0 auto 8px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 36%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--cyan) 7%, var(--panel));
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 16%, transparent);
+}
+
+.training-chat-handoff-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.training-chat-handoff-copy strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.training-chat-handoff-copy span,
+.training-chat-handoff-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.training-chat-handoff-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.training-chat-handoff-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 29px;
+  height: 29px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.training-chat-handoff-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyan) 55%, var(--border));
+  background: var(--panel-soft);
+}
+
+.training-chat-handoff-actions button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cyan) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.training-chat-handoff-actions button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.training-chat-handoff-actions .training-chat-handoff-load {
+  min-width: max-content;
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+@media (max-width: 680px) {
+  .training-chat-handoff {
+    align-items: flex-start;
+    width: calc(100vw - 24px);
+    flex-direction: column;
+  }
+  .training-chat-handoff-actions {
+    width: 100%;
+  }
+  .training-chat-handoff-actions .training-chat-handoff-load {
+    flex: 1;
+  }
+}

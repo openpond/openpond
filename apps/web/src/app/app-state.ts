@@ -13,7 +13,7 @@ import {
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
-import { SIDEBAR_SECTION_LIMIT, type AppView, type SettingsSection } from "../lib/app-models";
+import { SIDEBAR_SECTION_LIMIT, type AppView, type LabsTab, type SettingsSection } from "../lib/app-models";
 
 export type AppToast = {
   id: number;
@@ -63,6 +63,7 @@ export type AppState = {
   chatRowsVisibleCount: number;
   sidebarOpen: boolean;
   view: AppView;
+  labsTab: LabsTab;
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
@@ -107,6 +108,7 @@ export const initialAppState: AppState = {
   chatRowsVisibleCount: SIDEBAR_SECTION_LIMIT,
   sidebarOpen: true,
   view: "chat",
+  labsTab: "profile",
   selectedAppId: null,
   selectedProjectId: null,
   selectedSessionId: null,
@@ -315,6 +317,7 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setChatRowsVisibleCount: fieldSetter(dispatch, "chatRowsVisibleCount"),
     setSidebarOpen: fieldSetter(dispatch, "sidebarOpen"),
     setView: fieldSetter(dispatch, "view"),
+    setLabsTab: fieldSetter(dispatch, "labsTab"),
     setSelectedAppId: fieldSetter(dispatch, "selectedAppId"),
     setSelectedProjectId: fieldSetter(dispatch, "selectedProjectId"),
     setSelectedSessionId: fieldSetter(dispatch, "selectedSessionId"),

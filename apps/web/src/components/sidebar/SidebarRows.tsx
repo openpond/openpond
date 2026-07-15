@@ -42,6 +42,7 @@ function syncedRunningPulseStyle(): CSSProperties {
 export function SidebarSection({
   label,
   actions,
+  titleAccessory,
   children,
   collapsed = false,
   titleActive = false,
@@ -50,6 +51,7 @@ export function SidebarSection({
 }: {
   label: string;
   actions?: ReactNode;
+  titleAccessory?: ReactNode;
   children: ReactNode;
   collapsed?: boolean;
   titleActive?: boolean;
@@ -59,40 +61,44 @@ export function SidebarSection({
   return (
     <section className="sidebar-section">
       <div className="section-header">
-        {onTitleClick ? (
-          <div className="section-title-combo">
-            <button
-              type="button"
-              className={`section-title-link${titleActive ? " active" : ""}`}
-              onClick={onTitleClick}
-            >
-              <span>{label}</span>
-            </button>
-            {onToggleCollapsed && (
+        <div className="section-title-row">
+          {onTitleClick ? (
+            <div className="section-title-combo">
               <button
                 type="button"
-                className="section-chevron-button"
-                aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
-                aria-expanded={!collapsed}
-                onClick={onToggleCollapsed}
+                className={`section-title-link${titleActive ? " active" : ""}`}
+                onClick={onTitleClick}
               >
-                {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                <span>{label}</span>
               </button>
-            )}
-          </div>
-        ) : onToggleCollapsed ? (
-          <button
-            type="button"
-            className="section-title-button"
-            aria-expanded={!collapsed}
-            onClick={onToggleCollapsed}
-          >
+              {onToggleCollapsed && (
+                <button
+                  type="button"
+                  className="section-chevron-button"
+                  aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+                  aria-expanded={!collapsed}
+                  onClick={onToggleCollapsed}
+                >
+                  {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                </button>
+              )}
+            </div>
+          ) : onToggleCollapsed ? (
+            <button
+              type="button"
+              className="section-title-button"
+              aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+              aria-expanded={!collapsed}
+              onClick={onToggleCollapsed}
+            >
+              <span>{label}</span>
+              {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            </button>
+          ) : (
             <span>{label}</span>
-            {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-          </button>
-        ) : (
-          <span>{label}</span>
-        )}
+          )}
+          {titleAccessory}
+        </div>
         {actions && <div className="section-actions">{actions}</div>}
       </div>
       {!collapsed && <div className="sidebar-section-body">{children}</div>}

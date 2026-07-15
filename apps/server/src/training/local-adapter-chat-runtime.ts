@@ -92,6 +92,7 @@ export function createLocalAdapterChatRuntime(deps: {
       messages: workerMessages,
       signal: input.signal,
       maxNewTokens: input.maxNewTokens ?? target.configuration.maxOutputTokens,
+      contextWindowTokens: target.configuration.contextWindowTokens,
       temperature: input.temperature ?? target.configuration.temperature,
       repetitionPenalty: target.configuration.repetitionPenalty,
       noRepeatNgramSize: target.configuration.noRepeatNgramSize,
@@ -240,6 +241,7 @@ class LocalAdapterWorker {
     messages: HostedChatMessage[];
     signal: AbortSignal;
     maxNewTokens: number;
+    contextWindowTokens: number;
     temperature: number;
     repetitionPenalty: number;
     noRepeatNgramSize: number;
@@ -256,16 +258,7 @@ class LocalAdapterWorker {
       void this.close();
     };
     input.signal.addEventListener("abort", abort, { once: true });
-    this.child.stdin.write(`${JSON.stringify({
-      id,
-      messages: input.messages
-        .filter((message) => ["system", "user", "assistant"].includes(message.role) && message.content)
-        .map((message) => ({ role: message.role, content: message.content })),
-      maxNewTokens: input.maxNewTokens,
-      temperature: input.temperature,
-      repetitionPenalty: input.repetitionPenalty,
-      noRepeatNgramSize: input.noRepeatNgramSize,
-    })}\n`);
+    this.child.stdin.write(`${JSON.stringify(localAdapterInferenceRequest({ ...input, id }))}\n`);
     try {
       for await (const event of channel.events()) yield event;
     } finally {
@@ -342,6 +335,28 @@ class LocalAdapterWorker {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
   }
+}
+
+export function localAdapterInferenceRequest(input: {
+  id: string;
+  messages: HostedChatMessage[];
+  maxNewTokens: number;
+  contextWindowTokens: number;
+  temperature: number;
+  repetitionPenalty: number;
+  noRepeatNgramSize: number;
+}) {
+  return {
+    id: input.id,
+    messages: input.messages
+      .filter((message) => ["system", "user", "assistant"].includes(message.role) && message.content)
+      .map((message) => ({ role: message.role, content: message.content })),
+    maxNewTokens: input.maxNewTokens,
+    contextWindowTokens: input.contextWindowTokens,
+    temperature: input.temperature,
+    repetitionPenalty: input.repetitionPenalty,
+    noRepeatNgramSize: input.noRepeatNgramSize,
+  };
 }
 
 class AsyncEventChannel {

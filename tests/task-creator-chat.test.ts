@@ -39,6 +39,30 @@ describe("frontier-model Task Creator chat", () => {
     })).rejects.toThrow("Task authoring timed out after 10ms");
   });
 
+  test("enforces the policy-visible and privileged fields without a model repair round trip", async () => {
+    const calls: Array<Array<{ role: "system" | "user"; content: string }>> = [];
+    const proposal = {
+      ...proposalFixture(["source_train"]),
+      policy: { policyVisibleFields: [], privilegedFields: [], hiddenGraderRefs: [], connectedAppScopes: [] },
+    };
+    const result = await authorTaskDesignWithModel({
+      id: "proposal_policy_boundary",
+      model: { providerId: "openai", modelId: "frontier" },
+      evidence: [{ source: sourceFixture(), excerpts: [{ role: "user", text: "Create the task", turnId: "turn" }] }],
+      skillText: "# Skill",
+      stream: async function* (input) {
+        calls.push(input.messages);
+        yield { text: JSON.stringify({ schemaVersion: "openpond.taskAuthoringDecision.v1", proposal }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(result.repairHistory).toHaveLength(0);
+    expect(result.proposal.policy.policyVisibleFields).toContain("input.prompt");
+    expect(result.proposal.policy.privilegedFields).toContain("expectedOutput.text");
+  });
+
   test("Customize revises the typed proposal through the persisted authoring chat", async () => withTrainingStore(async ({ store }) => {
     await seedConversation(store);
     let calls = 0;

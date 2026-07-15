@@ -574,6 +574,21 @@ export class SqliteStoreCore {
     `);
   }
 
+  async createCrossSystemFrontierBaselineRunTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS cross_system_frontier_baseline_runs (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_profile_updated_idx ON cross_system_frontier_baseline_runs(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_status_updated_idx ON cross_system_frontier_baseline_runs(status, updated_at DESC);
+    `);
+  }
+
   protected async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
     const rows = await this.all<TableInfoRow>(`PRAGMA table_info(${table})`);
     if (rows.some((row) => row.name === column)) return;
@@ -943,5 +958,9 @@ const SQLITE_MIGRATIONS: Migration[] = [
   {
     version: 17,
     run: (store) => store.createTaskMinerRunTables(),
+  },
+  {
+    version: 18,
+    run: (store) => store.createCrossSystemFrontierBaselineRunTables(),
   },
 ];

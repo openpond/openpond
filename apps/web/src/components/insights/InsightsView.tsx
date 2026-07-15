@@ -11,28 +11,32 @@ import { useEffect, useMemo, useState } from "react";
 import "../../styles/insights/insights.css";
 import { CheckCircle2, RefreshCw, X } from "../icons";
 
-type InsightsViewProps = {
+export type InsightsViewProps = {
+  enabled: boolean;
   items: InsightItem[];
   runs: InsightRun[];
   nextScanAt: string | null;
   scanRunning: boolean;
   scanStartedAt: string | null;
   scanning: boolean;
+  savingEnabled: boolean;
   error: string | null;
-  onRunScan: () => Promise<unknown>;
+  onEnabledChange: (enabled: boolean) => Promise<void>;
   onPatchStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
   onOpenSession: (sessionId: string) => void;
 };
 
 export function InsightsView({
+  enabled,
   items,
   runs,
   nextScanAt,
   scanRunning,
   scanStartedAt,
   scanning,
+  savingEnabled,
   error,
-  onRunScan,
+  onEnabledChange,
   onPatchStatus,
   onOpenSession,
 }: InsightsViewProps) {
@@ -66,58 +70,76 @@ export function InsightsView({
       }),
     [runStatusFilter, runTriggerFilter, runs, sourceFilter],
   );
-  const activeItems = filteredItems.filter((item) => item.status === "active");
-  const inactiveItems = filteredItems.filter((item) => item.status !== "active");
+  const activeItems = useMemo(
+    () => filteredItems.filter((item) => item.status === "active"),
+    [filteredItems],
+  );
+  const inactiveItems = useMemo(
+    () => filteredItems.filter((item) => item.status !== "active"),
+    [filteredItems],
+  );
   const showActiveSection = statusFilter === "all" || statusFilter === "active";
   const showRecentSection = statusFilter === "all" || statusFilter !== "active";
   const isScanRunning = scanning || scanRunning;
+  const observationPaginationKey = `${statusFilter}:${severityFilter}:${sourceFilter}`;
+  const runPaginationKey = `${runStatusFilter}:${runTriggerFilter}:${sourceFilter}`;
   return (
     <section className="insights-view" aria-label="Insights">
+      <section className="insights-scan-preference" aria-label="Observation scanning">
+        <div>
+          <strong>Observation scanning</strong>
+          <span>
+            Periodically review selected work, failures, and corrections for signals. It stays off until you turn it on.
+          </span>
+        </div>
+        <div className="insights-scan-controls">
+          <span className={`insights-scan-countdown ${isScanRunning ? "running" : ""}`}>
+            <span className="insights-scan-dot" aria-hidden="true" />
+            {enabled ? formatNextScanCountdown(nextScanAt, nowMs, isScanRunning) : "Scanning is off"}
+          </span>
+          <button
+            aria-pressed={enabled}
+            className={enabled ? "active" : undefined}
+            disabled={savingEnabled || isScanRunning}
+            type="button"
+            onClick={() => void onEnabledChange(!enabled)}
+          >
+            {savingEnabled ? "Saving" : enabled ? "On" : "Turn on"}
+          </button>
+        </div>
+      </section>
+
       <div className="insights-filters" aria-label="Insight filters">
-        <SegmentedFilter
-          label="Status"
-          hideLabel
+        <FilterSelect
+          label="Observation status"
           options={STATUS_FILTER_OPTIONS}
           value={statusFilter}
           onChange={setStatusFilter}
         />
-        <SegmentedFilter
+        <FilterSelect
           label="Severity"
           options={SEVERITY_FILTER_OPTIONS}
           value={severityFilter}
           onChange={setSeverityFilter}
         />
-        <SegmentedFilter
+        <FilterSelect
           label="Source"
           options={SOURCE_FILTER_OPTIONS}
           value={sourceFilter}
           onChange={setSourceFilter}
         />
-        <SegmentedFilter
+        <FilterSelect
           label="Run status"
           options={RUN_STATUS_FILTER_OPTIONS}
           value={runStatusFilter}
           onChange={setRunStatusFilter}
         />
-        <SegmentedFilter
+        <FilterSelect
           label="Run trigger"
           options={RUN_TRIGGER_FILTER_OPTIONS}
           value={runTriggerFilter}
           onChange={setRunTriggerFilter}
         />
-        <button
-          type="button"
-          className="insights-scan-button"
-          aria-busy={isScanRunning}
-          disabled={isScanRunning}
-          onClick={() => void onRunScan()}
-        >
-          <span>Scan</span>
-        </button>
-        <span className={`insights-scan-countdown ${isScanRunning ? "running" : ""}`}>
-          <span className="insights-scan-dot" aria-hidden="true" />
-          {formatNextScanCountdown(nextScanAt, nowMs, isScanRunning)}
-        </span>
       </div>
 
       {isScanRunning ? (
@@ -132,13 +154,18 @@ export function InsightsView({
 
       {error ? <div className="insights-error">{error}</div> : null}
 
-      <InsightRuns runs={filteredRuns} onOpenSession={onOpenSession} />
+      <InsightRuns
+        runs={filteredRuns}
+        paginationKey={runPaginationKey}
+        onOpenSession={onOpenSession}
+      />
 
       {showActiveSection ? (
         <InsightRows
           title="Active"
           emptyText="No active create/edit insights match the filters."
           items={activeItems}
+          paginationKey={observationPaginationKey}
           onPatchStatus={onPatchStatus}
           onOpenSession={onOpenSession}
         />
@@ -148,6 +175,7 @@ export function InsightsView({
           title="Recent"
           emptyText="No resolved or dismissed insights match the filters."
           items={inactiveItems}
+          paginationKey={observationPaginationKey}
           onPatchStatus={onPatchStatus}
           onOpenSession={onOpenSession}
         />
@@ -197,36 +225,26 @@ const RUN_TRIGGER_FILTER_OPTIONS: Array<{ value: InsightRunTrigger | "all"; labe
   { value: "slash_command", label: "Slash" },
 ];
 
-function SegmentedFilter<T extends string>({
+function FilterSelect<T extends string>({
   label,
-  hideLabel = false,
   options,
   value,
   onChange,
 }: {
   label: string;
-  hideLabel?: boolean;
   options: Array<{ value: T; label: string }>;
   value: T;
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="insights-filter-group">
-      {hideLabel ? null : <span>{label}</span>}
-      <div className="insights-segmented" role="group" aria-label={label}>
+    <label className="insights-filter-group">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value as T)}>
         {options.map((option) => (
-          <button
-            type="button"
-            key={option.value}
-            className={option.value === value ? "active" : ""}
-            aria-pressed={option.value === value}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
+          <option key={option.value} value={option.value}>{option.label}</option>
         ))}
-      </div>
-    </div>
+      </select>
+    </label>
   );
 }
 
@@ -234,98 +252,110 @@ function InsightRows({
   title,
   emptyText,
   items,
+  paginationKey,
   onPatchStatus,
   onOpenSession,
 }: {
   title: string;
   emptyText: string;
   items: InsightItem[];
+  paginationKey: string;
   onPatchStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
   onOpenSession: (sessionId: string) => void;
 }) {
+  const pagination = useTablePagination(items, paginationKey);
   return (
     <section className="insights-section">
       <h2>{title}</h2>
       {items.length === 0 ? (
         <p className="insights-empty">{emptyText}</p>
       ) : (
-        <div className="insights-table" role="table">
-          <div className="insights-row insights-run-row insights-row-header" role="row">
-            <span role="columnheader">Severity</span>
-            <span role="columnheader">Status</span>
-            <span role="columnheader">Insight</span>
-            <span role="columnheader">Updated</span>
-            <span role="columnheader">Actions</span>
+        <div className="insights-table-frame">
+          <div className="insights-table-scroll">
+            <table className="insights-table insights-observations-table">
+              <thead>
+                <tr>
+                  <th scope="col">Severity</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Observation</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagination.pageItems.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <span className={`insights-severity ${item.severity}`}>
+                        {severityLabel(item.severity)}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="insights-status-stack">
+                        <span>{item.status}</span>
+                        <small>{evidenceSourceLabel(itemEvidenceSource(item))}</small>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="insights-copy">
+                        <strong>{item.title}</strong>
+                        <span>{item.summary}</span>
+                      </div>
+                    </td>
+                    <td className="insights-time">{formatTimestamp(item.updatedAt)}</td>
+                    <td>
+                      <div className="insights-actions">
+                        {payloadString(item.payload.sessionId) ? (
+                          <button
+                            type="button"
+                            className="insights-text-action"
+                            onClick={() => onOpenSession(payloadString(item.payload.sessionId)!)}
+                          >
+                            Source
+                          </button>
+                        ) : null}
+                        {item.lastRunSessionId ? (
+                          <button type="button" className="insights-text-action" onClick={() => onOpenSession(item.lastRunSessionId!)}>
+                            Run
+                          </button>
+                        ) : null}
+                        {item.status === "active" ? (
+                          <>
+                            <button
+                              type="button"
+                              title="Resolve observation"
+                              aria-label="Resolve observation"
+                              onClick={() => void onPatchStatus(item.id, "resolved")}
+                            >
+                              <CheckCircle2 size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Dismiss observation"
+                              aria-label="Dismiss observation"
+                              onClick={() => void onPatchStatus(item.id, "dismissed")}
+                            >
+                              <X size={15} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            title="Reopen observation"
+                            aria-label="Reopen observation"
+                            onClick={() => void onPatchStatus(item.id, "active")}
+                          >
+                            <RefreshCw size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          {items.map((item) => (
-            <div className="insights-row" role="row" key={item.id}>
-              <span role="cell">
-                <span className={`insights-severity ${item.severity}`}>
-                  {severityLabel(item.severity)}
-                </span>
-              </span>
-              <span role="cell" className="insights-status">
-                {item.status}
-              </span>
-              <span role="cell" className="insights-copy">
-                <strong>{item.title}</strong>
-                <span>{item.summary}</span>
-                <small>{sourceLabel(item)}</small>
-              </span>
-              <span role="cell" className="insights-time">
-                {formatTimestamp(item.updatedAt)}
-              </span>
-              <span role="cell" className="insights-actions">
-                {payloadString(item.payload.sessionId) ? (
-                  <button
-                    type="button"
-                    className="insights-text-action"
-                    onClick={() => onOpenSession(payloadString(item.payload.sessionId)!)}
-                  >
-                    Source
-                  </button>
-                ) : null}
-                {item.lastRunSessionId ? (
-                  <button
-                    type="button"
-                    className="insights-text-action"
-                    onClick={() => onOpenSession(item.lastRunSessionId!)}
-                  >
-                    Run
-                  </button>
-                ) : null}
-                {item.status === "active" ? (
-                  <>
-                    <button
-                      type="button"
-                      title="Resolve insight"
-                      aria-label="Resolve insight"
-                      onClick={() => void onPatchStatus(item.id, "resolved")}
-                    >
-                      <CheckCircle2 size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Dismiss insight"
-                      aria-label="Dismiss insight"
-                      onClick={() => void onPatchStatus(item.id, "dismissed")}
-                    >
-                      <X size={15} />
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    title="Reopen insight"
-                    aria-label="Reopen insight"
-                    onClick={() => void onPatchStatus(item.id, "active")}
-                  >
-                    <RefreshCw size={15} />
-                  </button>
-                )}
-              </span>
-            </div>
-          ))}
+          <TablePagination label={title} {...pagination} />
         </div>
       )}
     </section>
@@ -334,50 +364,124 @@ function InsightRows({
 
 function InsightRuns({
   runs,
+  paginationKey,
   onOpenSession,
 }: {
   runs: InsightRun[];
+  paginationKey: string;
   onOpenSession: (sessionId: string) => void;
 }) {
+  const pagination = useTablePagination(runs, paginationKey);
   return (
     <section className="insights-section">
       <h2>Runs</h2>
       {runs.length === 0 ? (
         <p className="insights-empty">No Insights runs yet.</p>
       ) : (
-        <div className="insights-table insights-runs-table" role="table">
-          <div className="insights-row insights-row-header" role="row">
-            <span role="columnheader">Trigger</span>
-            <span role="columnheader">Status</span>
-            <span role="columnheader">Model</span>
-            <span role="columnheader">Summary</span>
-            <span role="columnheader">Completed</span>
-            <span role="columnheader">Actions</span>
+        <div className="insights-table-frame">
+          <div className="insights-table-scroll">
+            <table className="insights-table insights-runs-table">
+              <thead>
+                <tr>
+                  <th scope="col">Trigger</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Model</th>
+                  <th scope="col">Summary</th>
+                  <th scope="col">Completed</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagination.pageItems.map((run) => (
+                  <tr key={run.turnId}>
+                    <td>{triggerLabel(run.trigger)}</td>
+                    <td className="insights-status">{run.status}</td>
+                    <td className="insights-status">{runModelLabel(run)}</td>
+                    <td>
+                      <div className="insights-copy">
+                        <strong>{run.summary ?? `${run.findingCount} finding${run.findingCount === 1 ? "" : "s"}`}</strong>
+                        <span>
+                          {run.createdCount} new / {run.updatedCount} updated / {run.resolvedCount} resolved
+                        </span>
+                      </div>
+                    </td>
+                    <td className="insights-time">{formatTimestamp(run.completedAt ?? run.startedAt)}</td>
+                    <td>
+                      <div className="insights-actions">
+                        <button type="button" className="insights-text-action" onClick={() => onOpenSession(run.sessionId)}>
+                          Open run
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          {runs.map((run) => (
-            <div className="insights-row insights-run-row" role="row" key={run.turnId}>
-              <span role="cell">{triggerLabel(run.trigger)}</span>
-              <span role="cell" className="insights-status">{run.status}</span>
-              <span role="cell" className="insights-status">{runModelLabel(run)}</span>
-              <span role="cell" className="insights-copy">
-                <strong>{run.summary ?? `${run.findingCount} finding${run.findingCount === 1 ? "" : "s"}`}</strong>
-                <span>
-                  {run.createdCount} new / {run.updatedCount} updated / {run.resolvedCount} resolved
-                </span>
-              </span>
-              <span role="cell" className="insights-time">
-                {formatTimestamp(run.completedAt ?? run.startedAt)}
-              </span>
-              <span role="cell" className="insights-actions">
-                <button type="button" className="insights-text-action" onClick={() => onOpenSession(run.sessionId)}>
-                  Open run
-                </button>
-              </span>
-            </div>
-          ))}
+          <TablePagination label="Runs" {...pagination} />
         </div>
       )}
     </section>
+  );
+}
+
+const TABLE_PAGE_SIZE = 10;
+
+function useTablePagination<T>(items: T[], resetKey: string) {
+  const [requestedPageIndex, setRequestedPageIndex] = useState(0);
+  useEffect(() => setRequestedPageIndex(0), [resetKey]);
+  const pageCount = Math.max(1, Math.ceil(items.length / TABLE_PAGE_SIZE));
+  const pageIndex = Math.min(requestedPageIndex, pageCount - 1);
+  const pageStart = pageIndex * TABLE_PAGE_SIZE;
+  return {
+    pageItems: items.slice(pageStart, pageStart + TABLE_PAGE_SIZE),
+    pageIndex,
+    pageCount,
+    pageStart,
+    pageSize: TABLE_PAGE_SIZE,
+    totalItems: items.length,
+    onPageChange: setRequestedPageIndex,
+  };
+}
+
+function TablePagination({
+  label,
+  pageIndex,
+  pageCount,
+  pageStart,
+  pageSize,
+  totalItems,
+  onPageChange,
+}: {
+  label: string;
+  pageIndex: number;
+  pageCount: number;
+  pageStart: number;
+  pageSize: number;
+  totalItems: number;
+  onPageChange: (pageIndex: number) => void;
+}) {
+  return (
+    <nav className="insights-pagination" aria-label={`${label} pagination`}>
+      <span>{pageStart + 1}–{Math.min(pageStart + pageSize, totalItems)} of {totalItems}</span>
+      <div>
+        <button
+          type="button"
+          disabled={pageIndex === 0}
+          onClick={() => onPageChange(pageIndex - 1)}
+        >
+          Previous
+        </button>
+        <span>Page {pageIndex + 1} of {pageCount}</span>
+        <button
+          type="button"
+          disabled={pageIndex >= pageCount - 1}
+          onClick={() => onPageChange(pageIndex + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -408,16 +512,6 @@ function triggerLabel(trigger: InsightRunTrigger): string {
 function runModelLabel(run: InsightRun): string {
   if (!run.modelRef) return "Default";
   return `${run.modelRef.providerId} / ${run.modelRef.modelId}`;
-}
-
-function sourceLabel(item: InsightItem): string {
-  const parts = [
-    evidenceSourceLabel(itemEvidenceSource(item)),
-    typeof item.payload.createPipelineOperation === "string" ? item.payload.createPipelineOperation : null,
-    typeof item.payload.createPipelineState === "string" ? item.payload.createPipelineState : null,
-    typeof item.payload.sessionId === "string" ? item.payload.sessionId : null,
-  ].filter(Boolean);
-  return parts.join(" / ");
 }
 
 function itemEvidenceSource(item: InsightItem): InsightEvidenceSource {

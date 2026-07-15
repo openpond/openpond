@@ -29,6 +29,87 @@ import {
 } from "./helpers/byok-turn-runner-harness";
 
 describe("BYOK turn runner dispatch", () => {
+  test("finalizes generated local-adapter turns through the persisted chat-attempt boundary", async () => {
+    const finalized: Array<Record<string, unknown>> = [];
+    const harness = createNativeGoalControlHarness({
+      providerId: "local-adapter",
+      modelId: "lineage_cso",
+      toolArgs: null,
+      finalText: "ANSWER: {}",
+      sessionOverrides: {
+        workspaceKind: "local_project",
+        workspaceId: "project_cso",
+        localProjectId: "project_cso",
+      },
+      finalizeCrossSystemTurn: async (input) => {
+        finalized.push(input);
+        return { attemptId: `attempt_chat_${input.turnId}`, gradeId: "grade_chat", generatedTaskId: input.taskId };
+      },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "Generated question",
+      metadata: { crossSystemTaskId: "cso_generated_1" },
+      modelRef: { providerId: "local-adapter", modelId: "lineage_cso" },
+    });
+
+    expect(turn.status).toBe("completed");
+    expect(finalized).toHaveLength(1);
+    expect(finalized[0]).toMatchObject({
+      modelId: "lineage_cso",
+      localProjectId: "project_cso",
+      sessionId: "session_1",
+      turnId: turn.id,
+      userPrompt: "Generated question",
+      taskId: "cso_generated_1",
+    });
+    expect(harness.events.some((item) => (
+      item.name === "diagnostic" && item.output === "Persisted and graded the generated Cross-System Operations chat attempt."
+    ))).toBe(true);
+  });
+
+  test("finalizes failed generated local-adapter turns and classifies model protocol failures as policy evidence", async () => {
+    const finalized: Array<Record<string, unknown>> = [];
+    const failure = new Error("Local model emitted malformed tool-call JSON.");
+    failure.name = "LocalAdapterToolProtocolError";
+    const harness = createNativeGoalControlHarness({
+      providerId: "local-adapter",
+      modelId: "lineage_cso",
+      toolArgs: null,
+      failOnPass: 1,
+      failure,
+      sessionOverrides: {
+        workspaceKind: "local_project",
+        workspaceId: "project_cso",
+        localProjectId: "project_cso",
+      },
+      finalizeCrossSystemTurn: async (input) => {
+        finalized.push(input);
+        return { attemptId: `attempt_chat_${input.turnId}`, gradeId: "grade_failed_chat", generatedTaskId: input.taskId };
+      },
+    });
+
+    const turn = await harness.runner.sendTurn("session_1", {
+      prompt: "Generated question",
+      metadata: { crossSystemTaskId: "cso_generated_1" },
+      modelRef: { providerId: "local-adapter", modelId: "lineage_cso" },
+    });
+
+    expect(turn.status).toBe("failed");
+    expect(finalized).toHaveLength(1);
+    expect(finalized[0]).toMatchObject({
+      modelId: "lineage_cso",
+      turnId: turn.id,
+      terminalFailure: {
+        message: "Local model emitted malformed tool-call JSON.",
+        failureClass: "policy_failure",
+      },
+    });
+    expect(harness.events.some((item) => (
+      item.name === "diagnostic" && item.output === "Persisted and graded the failed generated Cross-System Operations chat attempt."
+    ))).toBe(true);
+  });
+
   test("omits workflow delegation tools for terminal one-shot turns", async () => {
     const harness = createNativeGoalControlHarness({
       toolArgs: null,

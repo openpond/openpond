@@ -56,6 +56,7 @@ export function createNativeToolRuntime(deps: {
     workspaceDiffBaseline: WorkspaceDiffSummary | null;
     mentionedApps: OpenPondApp[];
     userPrompt: string;
+    turnMetadata: Turn["metadata"];
     toolDefinitions: Map<string, ModelToolDefinition>;
     invalidRequestCounts: Map<string, number>;
     toolCalls: NativeModelToolCall[];
@@ -139,6 +140,7 @@ export function createNativeToolRuntime(deps: {
           workspaceDiffBaseline: params.workspaceDiffBaseline,
           mentionedApps: params.mentionedApps,
           userPrompt: params.userPrompt,
+          turnMetadata: params.turnMetadata,
         });
         await appendNativeToolCompleted(params.session, params.turnId, result);
         if (profileSkillName) {

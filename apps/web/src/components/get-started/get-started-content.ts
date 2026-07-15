@@ -147,7 +147,7 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
         id: "insights-action",
         eyebrow: "Action",
         title: "Insights stay actionable",
-        body: "Background scans run on startup and interval, `/insights` can force a scan, and the UI lets users filter, resolve, or dismiss rows.",
+        body: "Observation scanning is off by default. Turn it on in Lab → Signals, then review, resolve, or dismiss the resulting observations there.",
         detail: "Rows persist in `insight_items` and resolve when the pipeline moves forward or the user marks them handled.",
         visual: "insights-list",
         accent: cyan,

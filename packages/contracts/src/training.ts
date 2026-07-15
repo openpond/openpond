@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BaselineReportSchema, GraderAuditReportSchema, TaskCreationSnapshotSchema, TasksetSchema, TrainingSourceRefSchema } from "./tasksets.js";
 import { TaskCandidateSchema, TaskMinerConfigSchema, TaskMinerRunSchema } from "./task-mining.js";
+import { CrossSystemFrontierBaselineRunSchema } from "./cross-system-frontier-baseline.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -315,6 +316,7 @@ export const TrainingStateResponseSchema = z.object({
   candidates: z.array(TaskCandidateSchema),
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),
+  frontierBaselineRuns: z.array(CrossSystemFrontierBaselineRunSchema).default([]),
   plans: z.array(TrainingPlanSchema),
   bundles: z.array(TrainingBundleManifestSchema),
   jobs: z.array(TrainingJobSchema),

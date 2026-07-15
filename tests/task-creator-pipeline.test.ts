@@ -6,6 +6,36 @@ import { contentHash } from "../packages/taskset-sdk/src";
 import { seedConversation, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("Task Creator pipeline", () => {
+  test("reconciles an interrupted authoring snapshot after restart without losing reviewed evidence", async () => withTrainingStore(async ({ store, directory }) => {
+    await seedConversation(store, { sessionId: "session_interrupted_authoring", turnId: "turn_interrupted_authoring", title: "Interrupted authoring evidence" });
+    const initial = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill") });
+    const source = await initial.addSessionSource({ profileId: "default", sessionId: "session_interrupted_authoring" });
+    const creation = await initial.start({
+      profileId: "default",
+      sourceIds: [source.id],
+      surface: "training_page",
+      mode: "customize",
+      objective: "Preserve this reviewed workflow.",
+      analysisModel: { providerId: "openai", modelId: "gpt-5.6-sol" },
+    });
+    expect(creation.state).toBe("awaiting_disclosure_approval");
+    await store.upsertTaskCreationSnapshot({ ...creation, state: "planning", updatedAt: "2026-07-15T00:00:00.000Z" });
+
+    const restarted = createTaskCreatorService({
+      store,
+      authoringSkillHash: contentHash("skill"),
+      loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: directory } as any),
+    });
+    await restarted.reconcileInterruptedCreations();
+    const reconciled = await store.getTaskCreationSnapshot(creation.id);
+    expect(reconciled).toMatchObject({
+      state: "failed",
+      request: { sourceIds: [source.id] },
+      blockedReason: expect.stringContaining("OpenPond restarted during Taskset authoring"),
+    });
+    expect(reconciled?.transcript.at(-1)?.text).toContain("reviewed evidence");
+  }));
+
   test("estimates and imports Codex history chats that are not in the OpenPond session store", async () => withTrainingStore(async ({ store }) => {
     const sessionId = "codex_history_thread_fixture";
     const session = {
@@ -65,6 +95,42 @@ describe("Task Creator pipeline", () => {
     expect(source.licensingStatus).toBe("review");
     await service.start({ profileId: "default", sourceIds: [source.id], surface: "training_page", mode: "defaults", objective: "Review this workflow." });
     expect((await store.getTrainingSource(source.id))?.licensingStatus).toBe("review");
+  }));
+
+  test("reuses matching specialized evidence without expanding its consent scope", async () => withTrainingStore(async ({ store }) => {
+    const { session, turn } = await seedConversation(store, {
+      sessionId: "session_specialized",
+      turnId: "turn_specialized",
+      title: "Cross-System baseline evidence",
+      assistant: "ANSWER: {\"invoice_ids\":[\"inv_1\"]}",
+    });
+    const service = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill") });
+    const selected = await service.addSessionSource({
+      profileId: "default",
+      sessionId: session.id,
+      turnIds: [turn.id],
+      consentScope: "selected_turns",
+    });
+    const specialized = await store.upsertTrainingSource({
+      ...selected,
+      metadata: {
+        ...selected.metadata,
+        workflowSignature: "cross-system-operations",
+        crossSystemOperations: { trajectoryId: "trajectory_specialized", approved: true },
+      },
+    });
+    const reused = await service.addSessionSource({
+      profileId: "default",
+      sessionId: session.id,
+      consentScope: "full_session",
+    });
+    expect(reused.id).toBe(specialized.id);
+    expect(reused.consent.scope).toBe("selected_turns");
+    expect(reused.metadata).toMatchObject({
+      workflowSignature: "cross-system-operations",
+      crossSystemOperations: { trajectoryId: "trajectory_specialized", approved: true },
+    });
+    expect(await store.listTrainingSources("default")).toHaveLength(1);
   }));
 
   test("turns selected chats into an approved source-owned Taskset", async () => withTrainingStore(async ({ store, directory }) => {

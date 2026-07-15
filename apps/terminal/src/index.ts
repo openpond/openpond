@@ -64,6 +64,7 @@ import {
   installAppQuery,
   modelLabel,
   providerLabel,
+  terminalSessionHeading,
 } from "./formatting.js";
 import { runOneShotChat } from "./one-shot-chat.js";
 
@@ -634,7 +635,7 @@ async function lineModeChat(options: Options): Promise<void> {
   });
   await eventStream.ready;
   const rl = createInterface({ input, output });
-  output.write(`OpenPond ${providerLabel(payload.providers, options.provider)} / ${modelLabel(payload.providers, options)} ${options.cwd}\n`);
+  output.write(`${terminalSessionHeading(payload.providers, options)}\n`);
   try {
     for await (const rawLine of rl) {
       const line = rawLine.trim();

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { loadOpenPondProfileState } from "@openpond/cloud";
 import {
+  CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT,
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   CROSS_SYSTEM_TOOL_NAMES,
@@ -60,6 +61,41 @@ export function createTaskCreatorService(deps: {
   loadProfileState?: typeof loadOpenPondProfileState;
   loadCodexHistoryThread?: ((sessionId: string) => Promise<{ session: Session; events: RuntimeEvent[] }>) | null;
 }) {
+  async function reconcileInterruptedCreations(): Promise<void> {
+    const profile = await (deps.loadProfileState ?? loadOpenPondProfileState)();
+    const profileId = profile.activeProfile ?? "default";
+    const snapshots = await deps.store.listTaskCreationSnapshots(profileId);
+    for (const snapshot of snapshots) {
+      if (!(["planning", "materializing", "validating"] as const).includes(snapshot.state as "planning" | "materializing" | "validating")) continue;
+      if ((snapshot.state === "materializing" || snapshot.state === "validating") && snapshot.proposal) {
+        const tasksetId = safeTasksetId(snapshot.proposal.name, snapshot.id);
+        if (await deps.store.getTaskset(tasksetId)) {
+          await persist({
+            ...snapshot,
+            state: "ready",
+            materializedTasksetId: tasksetId,
+            blockedReason: null,
+            updatedAt: now(),
+          });
+          continue;
+        }
+      }
+      const timestamp = now();
+      await persist({
+        ...snapshot,
+        state: "failed",
+        blockedReason: "OpenPond restarted during Taskset authoring. The reviewed evidence and proposal were preserved; start authoring again to continue.",
+        transcript: [...snapshot.transcript, {
+          id: `task_message_${randomUUID()}`,
+          role: "assistant",
+          text: "Taskset authoring stopped when OpenPond restarted. The reviewed evidence and any completed proposal were preserved.",
+          createdAt: timestamp,
+        }],
+        updatedAt: timestamp,
+      });
+    }
+  }
+
   async function addSessionSource(input: {
     profileId: string;
     sessionId: string;
@@ -99,12 +135,11 @@ export function createTaskCreatorService(deps: {
         licensingBasis: session.appId ? "connected_app_review_required" : "local_user_selected_chat",
       },
     });
-    const existing = (await deps.store.listTrainingSources(input.profileId)).find((candidate) =>
-      candidate.sessionId === source.sessionId
-      && candidate.sourceHash === source.sourceHash
-      && candidate.consent.status === "granted"
-      && candidate.consent.scope === source.consent.scope,
-    );
+    const existing = await deps.store.getTrainingSourceForSession({
+      profileId: input.profileId,
+      sessionId: source.sessionId,
+      sourceHash: source.sourceHash,
+    });
     if (existing) return existing;
     return deps.store.upsertTrainingSource(source);
   }
@@ -226,11 +261,13 @@ export function createTaskCreatorService(deps: {
     const snapshot = await requireSnapshot(id);
     if (snapshot.state !== "awaiting_materialization_approval" || !snapshot.proposal) throw new Error("Task creation is not ready for materialization approval.");
     if (!approved) return persist({ ...snapshot, state: "cancelled", blockedReason: "Taskset materialization was declined.", updatedAt: now() });
-    const applying = await persist({ ...snapshot, state: "materializing", blockedReason: null, updatedAt: now() });
+    let applying = await persist({ ...snapshot, state: "materializing", blockedReason: null, updatedAt: now() });
     try {
       const sources = await requireSources(snapshot.request.profileId, snapshot.request.sourceIds);
-      assertProposalMaterializable(snapshot.proposal, sources);
-      const taskset = await materializeTaskset(applying, snapshot.proposal, sources);
+      const proposal = enrichCrossSystemProposal(snapshot.proposal, sources);
+      assertProposalMaterializable(proposal, sources);
+      applying = await persist({ ...applying, proposal, updatedAt: now() });
+      const taskset = await materializeTaskset(applying, proposal, sources);
       return persist({ ...applying, state: "ready", materializedTasksetId: taskset.id, blockedReason: null, updatedAt: now(), transcript: [...applying.transcript, { id: `task_message_${randomUUID()}`, role: "assistant", text: `Materialized ${taskset.name} with ${taskset.tasks.length} tasks and ${taskset.graders.length} graders.`, createdAt: now() }] });
     } catch (error) {
       return persist({ ...applying, state: "failed", blockedReason: error instanceof Error ? error.message : String(error), updatedAt: now() });
@@ -375,7 +412,7 @@ export function createTaskCreatorService(deps: {
     }));
   }
 
-  return { addSessionSource, estimateSessionSources, start, approveDisclosure, answerQuestions, approveMaterialization, chat, rename, cancel };
+  return { reconcileInterruptedCreations, addSessionSource, estimateSessionSources, start, approveDisclosure, answerQuestions, approveMaterialization, chat, rename, cancel };
 }
 
 function assertSourcesEligible(sources: TrainingSourceRef[]): void {
@@ -566,7 +603,7 @@ function taskRecords(proposal: TaskDesignProposal, sources: TrainingSourceRef[])
   });
 }
 
-function crossSystemStructuredExample(source: TrainingSourceRef): {
+export function crossSystemStructuredExample(source: TrainingSourceRef): {
   prompt: string;
   finalAnswer: string;
   inputMessages: Array<{ role: string; content: string | null; tool_call_id?: string; tool_calls?: unknown[] }>;
@@ -583,7 +620,11 @@ function crossSystemStructuredExample(source: TrainingSourceRef): {
   if (parsed.length < 3) return null;
   const firstAssistantIndex = parsed.findIndex((message) => message.role === "assistant");
   if (firstAssistantIndex < 2) return null;
-  const inputMessages = parsed.slice(0, firstAssistantIndex);
+  const sourceInputMessages = parsed.slice(0, firstAssistantIndex);
+  const inputMessages = [
+    { role: "system" as const, content: CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT },
+    ...sourceInputMessages.filter((message) => message.role !== "system"),
+  ];
   const outputMessages = parsed.slice(firstAssistantIndex);
   const prompt = [...inputMessages].reverse().find((message) => message.role === "user")?.content;
   const finalAnswer = [...outputMessages].reverse().find((message) => message.role === "assistant" && typeof message.content === "string")?.content;
@@ -729,11 +770,20 @@ export function enrichCrossSystemProposal(proposal: TaskDesignProposal, sources:
       connectedAppScopes: [],
     },
     warnings: [...new Set([
-      ...proposal.warnings,
+      ...proposal.warnings.filter((warning) => !supersededCrossSystemWarning(warning)),
       "The primary recommendation is GRPO and requires a later credentialed GPU path; local SFT is only an approved trajectory bootstrap.",
       "Synthetic tools have no production credentials or network access.",
     ])],
   });
+}
+
+function supersededCrossSystemWarning(warning: string): boolean {
+  const normalized = warning.toLowerCase();
+  return normalized.includes("explicitly exposes only three tool names")
+    || normalized.includes("exact fourth tool schema")
+    || normalized.includes("generatedfiles is therefore empty")
+    || (normalized.includes("not included as file contents") && /(generator|registry|verifier)/.test(normalized))
+    || normalized.includes("must import and hash-check those existing artifacts");
 }
 
 function crossSystemLineage(sources: TrainingSourceRef[]): {

@@ -7,11 +7,14 @@ import type {
   Session,
   TeamChatMember,
   TeamChatThread,
+  CommunityChannel,
+  CommunitySummary,
   WorkspaceState,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
   AppView,
+  LabsTab,
   PinnedSidebarItem,
   SettingsSection,
   SidebarDragItem,
@@ -22,10 +25,10 @@ import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { OpenPondOrganization } from "../../lib/organization-types";
-import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
 
 export type SidebarProps = {
   view: AppView;
+  labsTab: LabsTab;
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
@@ -37,7 +40,12 @@ export type SidebarProps = {
   currentUserId: string | null;
   teamMembers: TeamChatMember[];
   teamThreads: TeamChatThread[];
-  teamNotificationMode: TeamChatNotificationMode;
+  communityItems: CommunitySummary[];
+  communityChannels: CommunityChannel[];
+  communityLoading: boolean;
+  communityError: string | null;
+  selectedCommunityId: string | null;
+  selectedCommunityChannelId: string | null;
   account: AccountState | null;
   profile: BootstrapPayload["profile"] | null | undefined;
   pinnedCollapsed: boolean;
@@ -74,6 +82,7 @@ export type SidebarProps = {
   onSidebarResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
   setSidebarOpen: Dispatch<SetStateAction<boolean>>;
   setView: Dispatch<SetStateAction<AppView>>;
+  setLabsTab: Dispatch<SetStateAction<LabsTab>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
@@ -95,8 +104,9 @@ export type SidebarProps = {
   selectCloudWorkItem: (workItem: CloudWorkItem) => void;
   selectTeamThread: (threadId: string) => void;
   openTeamDm: (userId: string) => void;
-  setTeamNotificationMode: (mode: TeamChatNotificationMode) => void;
-  setTeamThreadMuted: (threadId: string, muted: boolean) => Promise<boolean>;
+  discoverCommunities: () => void;
+  selectCommunity: (communityId: string) => void;
+  selectCommunityChannel: (channelId: string) => void;
   addProjectFolder: () => void;
   startExistingProjectFromPath: () => void;
   startProjectFromScratch: () => void;

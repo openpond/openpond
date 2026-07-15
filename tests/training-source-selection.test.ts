@@ -3,20 +3,26 @@ import { readFile } from "node:fs/promises";
 
 describe("Training source selection UI", () => {
   test("supports intent-first flow followed by compact shared evidence selection", async () => {
-    const [rows, view, dialog, startStep, manualStep, sourceStep, hook] = await Promise.all([
+    const [rows, view, labs, pane, dialog, flow, startStep, manualStep, sourceStep, hook] = await Promise.all([
       readFile("apps/web/src/components/sidebar/SidebarRows.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingView.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/LabsView.tsx", "utf8"),
+      readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingRunDialog.tsx", "utf8"),
+      readFile("apps/web/src/components/training/training-flow.ts", "utf8"),
       readFile("apps/web/src/components/training/TrainingStartModeStep.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingManualGoalStep.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingSourceStep.tsx", "utf8"),
       readFile("apps/web/src/hooks/useTraining.ts", "utf8"),
     ]);
     expect(rows).toContain('label="Add to training"');
-    expect(view).toContain("New model");
+    expect(view).not.toContain("New model");
+    expect(labs).toContain("New model");
+    expect(pane).toContain('setLabsTab("models")');
+    expect(pane).toContain("setTrainingLaunchRequest");
     expect(dialog).toContain('type NewModelMode = "automated" | "manual"');
-    expect(dialog).toContain('type NewModelStep =');
-    for (const step of ["start", "automatic_scope", "automatic_candidates", "manual_goal", "evidence", "recommendation"]) expect(dialog).toContain(`| "${step}"`);
+    expect(flow).toContain('type NewModelStep =');
+    for (const step of ["start", "automatic_scope", "automatic_candidates", "manual_goal", "evidence", "recommendation"]) expect(flow).toContain(`| "${step}"`);
     expect(dialog).toContain("selectedSessionIds");
     expect(dialog).toContain("addSources(missingSessionIds)");
     expect(startStep).toContain("How do you want to start?");

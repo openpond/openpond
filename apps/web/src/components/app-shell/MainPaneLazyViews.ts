@@ -9,8 +9,8 @@ export const AppsView = lazy(() =>
 export const GetStartedView = lazy(() =>
   import("../get-started/GetStartedView").then((module) => ({ default: module.GetStartedView })),
 );
-export const ProfileView = lazy(() =>
-  import("../profile/ProfileView").then((module) => ({ default: module.ProfileView })),
+export const LabsRoute = lazy(() =>
+  import("../labs/LabsRoute").then((module) => ({ default: module.LabsRoute })),
 );
 export const BrowserSidebar = lazy(() =>
   import("../browser/BrowserSidebar").then((module) => ({ default: module.BrowserSidebar })),
@@ -18,14 +18,11 @@ export const BrowserSidebar = lazy(() =>
 export const CloudWorkView = lazy(() =>
   import("../cloud/CloudWorkView").then((module) => ({ default: module.CloudWorkView })),
 );
-export const InsightsView = lazy(() =>
-  import("../insights/InsightsView").then((module) => ({ default: module.InsightsView })),
-);
-export const TrainingView = lazy(() =>
-  import("../training/TrainingView").then((module) => ({ default: module.TrainingView })),
-);
 export const TeamChatView = lazy(() =>
   import("../team-chat/TeamChatView").then((module) => ({ default: module.TeamChatView })),
+);
+export const CommunityView = lazy(() =>
+  import("../community/CommunityView").then((module) => ({ default: module.CommunityView })),
 );
 export const TeamAiThreadPanel = lazy(() =>
   import("../team-chat/TeamChatView").then((module) => ({ default: module.TeamAiThreadPanel })),

@@ -113,7 +113,7 @@ describe("GetStartedView", () => {
     expect(detectorSlide?.body).toContain("specific implementation on top of goals");
     expect(detectorSlide?.body).toContain("create_pipeline.updated");
     expect(detectorSlide?.detail).toContain("Awaiting questions");
-    expect(actionSlide?.body).toContain("/insights");
+    expect(actionSlide?.body).toContain("Lab → Signals");
     expect(actionSlide?.detail).toContain("insight_items");
   });
 

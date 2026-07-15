@@ -22,8 +22,8 @@ describe("training contracts", () => {
   test("persists provider-neutral Task Creator defaults", () => {
     const defaults = AppPreferencesSchema.parse({});
     expect(defaults).toMatchObject({
-      defaultChatProvider: "openai",
-      defaultChatModel: "gpt-5.6-sol",
+      defaultChatProvider: "openpond",
+      defaultChatModel: "openpond-chat",
       codexReasoningEffort: "high",
     });
     expect(defaults.training).toEqual({
