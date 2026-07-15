@@ -113,6 +113,11 @@ describe("release source versions", () => {
 
   test("keeps the checked-in release cohort aligned", async () => {
     const root = path.resolve(import.meta.dir, "..");
-    await expect(assertReleaseVersion(root, "0.0.24")).resolves.toBeUndefined();
+    const rootPackage = JSON.parse(
+      await readFile(path.join(root, "package.json"), "utf8"),
+    ) as { version?: string };
+
+    expect(rootPackage.version).toMatch(/^\d+\.\d+\.\d+$/);
+    await expect(assertReleaseVersion(root, rootPackage.version!)).resolves.toBeUndefined();
   });
 });
