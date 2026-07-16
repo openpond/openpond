@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -7,7 +7,11 @@ import {
   unpackedPackageCandidates,
 } from "../scripts/check-desktop-package-budgets";
 import { runtimeInventoryVerification } from "../scripts/desktop-runtime-inventory";
-import { assertStandaloneDesktopBundle, nodePtyPrebuildFiles } from "../scripts/stage-desktop-runtime";
+import {
+  assertStandaloneDesktopBundle,
+  nodePtyPrebuildFiles,
+  stageDesktopRuntime,
+} from "../scripts/stage-desktop-runtime";
 
 describe("desktop runtime staging", () => {
   test("selects only runtime node-pty files for each target", () => {
@@ -21,6 +25,40 @@ describe("desktop runtime staging", () => {
       "winpty.dll",
     ]);
     expect(nodePtyPrebuildFiles("win32").some((file) => file.endsWith(".pdb"))).toBe(false);
+  });
+
+  test("stages node-pty from the server workspace without root hoisting", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "openpond-desktop-pnpm-stage-"));
+    try {
+      await Promise.all([
+        writeFixture(root, "package.json", '{"version":"0.0.30-bootstrap.0"}\n'),
+        writeFixture(root, "apps/desktop/dist/main.js", 'import { app } from "electron"; void app;\n'),
+        writeFixture(root, "apps/desktop/dist/preload.js", 'console.log("preload");\n'),
+        writeFixture(root, "apps/server/dist/index.js", 'console.log("server");\n'),
+        writeFixture(root, "apps/web/dist/index.html", "<main>OpenPond</main>\n"),
+        writeFixture(root, "apps/cli/skills/openpond-taskset-authoring/SKILL.md", "# Tasksets\n"),
+        writeFixture(
+          root,
+          "apps/server/node_modules/node-pty/package.json",
+          '{"name":"node-pty","version":"1.1.0","main":"./lib/index.js"}\n',
+        ),
+        writeFixture(root, "apps/server/node_modules/node-pty/LICENSE", "MIT\n"),
+        writeFixture(root, "apps/server/node_modules/node-pty/lib/index.js", "module.exports = {};\n"),
+        writeFixture(root, "apps/server/node_modules/node-pty/prebuilds/linux-x64/pty.node", "native"),
+      ]);
+
+      const result = await stageDesktopRuntime({ root, platform: "linux", arch: "x64" });
+      const stagedPaths = result.files.map((entry) => entry.path);
+
+      expect(stagedPaths).toContain("server/node_modules/node-pty/package.json");
+      expect(stagedPaths).toContain("server/node_modules/node-pty/prebuilds/linux-x64/pty.node");
+      expect(stagedPaths.some((entry) => entry.includes("/bindings/"))).toBe(false);
+      expect(stagedPaths.some((entry) => entry.includes("file-uri-to-path"))).toBe(false);
+      await expect(readFile(path.join(root, "node_modules", "node-pty", "package.json"), "utf8"))
+        .rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("electron-builder consumes only the staged app and runtime", async () => {
@@ -76,3 +114,9 @@ describe("desktop runtime staging", () => {
     }
   });
 });
+
+async function writeFixture(root: string, relativePath: string, contents: string): Promise<void> {
+  const filePath = path.join(root, relativePath);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, contents);
+}
