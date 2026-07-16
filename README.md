@@ -4,20 +4,40 @@
 
 OpenPond Harness is an open-source, mutable agent harness designed to improve alongside your work.
 
-### Run without Installation
+## Installation
+
+### Run without Installalltion
 
 ```bash
-npx openpond@latest
+npx openpond@latest # Start local Node server and web UI
+
+npx openpond tui         # Terminal UI
+npx openpond serve       # Headless API server
+npx openpond ui --no-open # Web server without opening a browser
 ```
-Requires Node.js 24.18 or newer. Use `npx openpond@latest --no-open` to print the local access URL instead, or `npx openpond@latest tui` to launch the terminal interface.
+Requires Node.js 24.18 or newer.
 
 ### Desktop app
 
 Install the latest version from [Github Releases](https://github.com/openpond/openpond/releases)
 
-### Notes
+> [!NOTE]
+> Pending uploads to package managers
 
 Conversations and settings persist under `~/.openpond/openpond-app`
+
+### Install via git
+
+```bash
+git clone https://github.com/openpond/openpond.git
+cd openpond
+
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+`pnpm dev` launches the Desktop app. To run the browser development UI instead, use `pnpm run dev:web` and open the URL printed in the terminal.
 
 ## What is this
 
@@ -41,10 +61,6 @@ flowchart LR
     V --> P["Promote or reject"]
     P --> S
 ```
-
-### Why
-
-If your suffering from **what do I build now** syndrome, the answers are in this repository - plus invite your non dev team members and ship them agents.
 
 ### Your Profile [docs](docs/public/agents-and-skills.md)
 
