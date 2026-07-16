@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createReadyLineParser } from "@openpond/runtime";
 import { DesktopBackendManager } from "../apps/desktop/src/desktop-backend-manager";
 

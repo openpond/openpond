@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import { defaultNewProjectDirectory, normalizeProjectDirectory } from "../apps/server/src/workspace/project-directories";
 
 const previousDocumentsDir = process.env.OPENPOND_APP_DOCUMENTS_DIR;

@@ -87,10 +87,8 @@ export function tokenFilePath(): string {
   return path.join(appHomePath(), "token");
 }
 
-export function bunBinary(): string {
-  if (process.env.BUN_BINARY) return process.env.BUN_BINARY;
-  if (process.env.npm_execpath?.endsWith("bun")) return process.env.npm_execpath;
-  return "bun";
+export function pnpmBinary(): string {
+  return process.env.PNPM_BINARY || "pnpm";
 }
 
 export function nodeBinary(): string {

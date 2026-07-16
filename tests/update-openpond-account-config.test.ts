@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { runTestProcess } from "./helpers/run-process";
 
 let tempHome: string | null = null;
 
@@ -56,17 +57,10 @@ describe("updateOpenPondAccountConfig", () => {
         apiKey: context.account?.apiKey ?? null,
       }));
     `;
-    const child = Bun.spawn([process.execPath, "-e", script], {
-      cwd: path.resolve(import.meta.dir, ".."),
+    const { exitCode, stdout, stderr } = await runTestProcess(process.execPath, ["--import", "tsx", "-e", script], {
+      cwd: path.resolve(import.meta.dirname, ".."),
       env: { ...process.env, HOME: tempHome! },
-      stdout: "pipe",
-      stderr: "pipe",
     });
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const context = JSON.parse(stdout);

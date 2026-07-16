@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import { runHostedContextCompaction } from "../apps/server/src/openpond/context-compaction/index";
 import {
@@ -51,7 +51,7 @@ describe("context compaction", () => {
         sessionId: "session_parent",
         turnId: "turn_fixture",
         name: "tool.completed",
-        action: "bun test",
+        action: "pnpm test",
         status: "failed",
         error: "tests/context-compaction.test.ts failed: expected failure label",
       }),
@@ -101,8 +101,8 @@ describe("context compaction", () => {
       "### Workspace Activity (turn=turn_fixture action=read_file status=completed)",
       "Read apps/server/src/openpond/context-compaction/index.ts\nread_file",
       "",
-      "### Tool Activity (turn=turn_fixture action=bun test status=failed)",
-      "tests/context-compaction.test.ts failed: expected failure label\nbun test",
+      "### Tool Activity (turn=turn_fixture action=pnpm test status=failed)",
+      "tests/context-compaction.test.ts failed: expected failure label\npnpm test",
       "",
       "### Goal Context (turn=turn_fixture)",
       "ref: goal-context:goal_fixture\nActive compaction goal.\n{\"kind\":\"thread_goal\",\"objective\":\"Finish compaction phases.\"}",
@@ -308,7 +308,7 @@ describe("context compaction", () => {
           sessionId: "session_parent",
           turnId: "turn_failed",
           name: "command.output",
-          action: "bun test tests/context-compaction.test.ts",
+          action: "pnpm test tests/context-compaction.test.ts",
           status: "failed",
           output: `FAIL tests/context-compaction.test.ts: expected failure label\n${"failure context ".repeat(2500)}`,
         }),
@@ -418,7 +418,7 @@ function subagentRunFixture() {
       artifacts: [{ kind: "file", id: "/repo/docs/agents.md", label: "docs/agents.md" }],
       patchRef: null,
       diffRef: null,
-      testsRun: ["bun test tests/context-compaction.test.ts"],
+      testsRun: ["pnpm test tests/context-compaction.test.ts"],
       blockers: ["Waiting on approval"],
       confidence: "high",
       followUpNeeded: false,

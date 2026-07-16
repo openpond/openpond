@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 
 import { runGoalShellCommand } from "./shell";
@@ -25,7 +26,7 @@ export function resolveProjectLocalAgentCommand(cwd: string): {
     "dist",
     "cli.js"
   );
-  if (existsSync(packageDistCli)) return { command: "bun", args: [packageDistCli] };
+  if (existsSync(packageDistCli)) return { command: process.execPath, args: [packageDistCli] };
 
   const localBin = join(cwd, "node_modules", ".bin", "openpond-agent");
   if (existsSync(localBin)) return { command: localBin, args: [] };
@@ -37,7 +38,11 @@ export function resolveProjectLocalAgentCommand(cwd: string): {
     "src",
     "cli.ts"
   );
-  if (existsSync(packageCli)) return { command: "bun", args: [packageCli] };
+  if (existsSync(packageCli)) {
+    const packageJson = join(cwd, "node_modules", "openpond-agent-sdk", "package.json");
+    const tsxCli = createRequire(packageJson).resolve("tsx/cli");
+    return { command: process.execPath, args: [tsxCli, packageCli] };
+  }
 
   return null;
 }
@@ -183,7 +188,7 @@ function dependencyInstallCommand(cwd: string): string | null {
   if (existsSync(join(cwd, "pnpm-lock.yaml"))) return "pnpm install";
   if (existsSync(join(cwd, "yarn.lock"))) return "yarn install";
   if (existsSync(join(cwd, "package-lock.json"))) return "npm install";
-  return "bun install";
+  return "npm install";
 }
 
 function shellEscape(value: string): string {

@@ -1,7 +1,7 @@
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   CLI_INTEGRATION_TESTS,
@@ -9,7 +9,7 @@ import {
   ROOT_INTEGRATION_TESTS,
 } from "../scripts/test-suite-config";
 
-const root = path.resolve(import.meta.dir, "..");
+const root = path.resolve(import.meta.dirname, "..");
 
 describe("test suite boundaries", () => {
   test("keeps explicit integration and release tests present and disjoint", async () => {
@@ -38,10 +38,13 @@ describe("test suite boundaries", () => {
     const testRunner = await readFile(path.join(root, "scripts", "run-tests.ts"), "utf8");
 
     expect(packageJson.scripts["verify:quick"]).toContain("run-tests.ts unit");
-    expect(packageJson.scripts["verify:push"]).toBe("bun scripts/verify-push.ts");
-    expect(packageJson.scripts.prepare).toBe("bun run hooks:install");
-    expect(prePushHook).toContain("bun run verify:quick");
-    expect(prePushHook).not.toContain("bun run verify:push");
+    expect(packageJson.scripts["verify:push"]).toBe("tsx scripts/verify-push.ts");
+    expect(packageJson.scripts.prepare).toBe("tsx scripts/install-git-hooks.ts");
+    expect(packageJson.scripts["cli:build"]).toBe(
+      "pnpm run build:web && pnpm --dir apps/cli run build",
+    );
+    expect(prePushHook).toContain("pnpm run verify:quick");
+    expect(prePushHook).not.toContain("pnpm run verify:push");
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_");
     expect(testRunner).toMatch(
       /async function runUnitTests[\s\S]*?await ensureServerWorkspaceBuild\(env\)/,

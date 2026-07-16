@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import type { BootstrapPayload, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../apps/web/src/api";
 import { ensureCloudWorkspaceRunning } from "../apps/web/src/lib/cloud-workspace-lifecycle";

@@ -15,10 +15,10 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let serverWorkspaceBuildReady = false;
-const bunBinary =
-  process.env.BUN_BINARY ||
-  (((process.versions as Record<string, string | undefined>).bun ? process.execPath : null) ?? "bun");
 const nodeBinary = process.env.NODE_BINARY || "node";
+const pnpmBinary = process.env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
+const tscBinary = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "tsc.cmd" : "tsc");
+const vitestBinary = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "vitest.cmd" : "vitest");
 const nonDeterministicEnvKeys = [
   "OPENPOND_ACCOUNT",
   "OPENPOND_API_KEY",
@@ -110,7 +110,7 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
 async function runUnitTests(env: NodeJS.ProcessEnv): Promise<void> {
   await ensureServerWorkspaceBuild(env);
   const rootFiles = await discoverRootUnitTests();
-  if (rootFiles.length > 0) await runCommand(bunBinary, ["test", ...rootFiles], { env });
+  if (rootFiles.length > 0) await runVitest(rootFiles, env);
   await runCliTests(await discoverCliUnitTests(), env);
 }
 
@@ -119,7 +119,7 @@ async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {
   await assertFilesExist(ROOT_INTEGRATION_TESTS);
   await assertFilesExist(CLI_INTEGRATION_TESTS.map((entry) => path.join("apps/cli", entry)));
   for (const file of ROOT_INTEGRATION_TESTS) {
-    await runCommand(bunBinary, ["test", file], { env });
+    await runVitest([file], env);
   }
   for (const file of CLI_INTEGRATION_TESTS) {
     await runCliTests([file], env);
@@ -135,8 +135,8 @@ async function runContractTests(env: NodeJS.ProcessEnv): Promise<void> {
 
 async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
   if (env.OPENPOND_TEST_REUSE_BUILD !== "1") {
-    await runCommand(bunBinary, ["run", "build:web"], { env });
-    await runCommand(bunBinary, ["run", "cli:build"], { env });
+    await runCommand(pnpmBinary, ["run", "build:web"], { env });
+    await runCommand(pnpmBinary, ["run", "cli:build"], { env });
   }
   await assertFilesExist([
     "apps/cli/dist/cli.js",
@@ -148,7 +148,7 @@ async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
 
 async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void> {
   if (env.OPENPOND_TEST_REUSE_BUILD === "1" || serverWorkspaceBuildReady) return;
-  await runCommand(bunBinary, ["x", "tsc", "-b", "apps/server"], { env });
+  await runCommand(tscBinary, ["-b", "apps/server"], { env });
   serverWorkspaceBuildReady = true;
 }
 
@@ -160,12 +160,12 @@ async function runCliCompatibilitySuite(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 async function runAgentSdkTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await runCommand(bunBinary, ["run", "--cwd", "packages/agent-sdk", "build"], { env });
-  await runCommand(bunBinary, ["test", "--cwd", "packages/agent-sdk"], { env });
+  await runCommand(pnpmBinary, ["--dir", "packages/agent-sdk", "run", "build"], { env });
+  await runCommand(vitestBinary, ["run", "--project", "agent-sdk"], { env });
 }
 
 async function runLiveTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await runCommand(bunBinary, ["x", "tsc", "-b", "apps/server"], { env });
+  await runCommand(tscBinary, ["-b", "apps/server"], { env });
   const liveFiles = await discoverLiveTests();
   if (liveFiles.length === 0) {
     console.log("No live tests found.");
@@ -177,21 +177,21 @@ async function runLiveTests(env: NodeJS.ProcessEnv): Promise<void> {
 async function discoverRootUnitTests(): Promise<string[]> {
   const entries = await readdir(path.join(root, "tests"));
   const integration = new Set<string>(ROOT_INTEGRATION_TESTS);
-  const bun = entries
+  const files = entries
     .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
     .map((entry) => path.join("tests", entry))
     .filter((entry) => !integration.has(entry))
     .sort();
   for (const testRoot of ["apps/server/src", "packages/cloud/src"]) {
     const colocated = await readdir(path.join(root, testRoot), { recursive: true });
-    bun.push(
+    files.push(
       ...colocated
         .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
         .map((entry) => path.join(testRoot, entry)),
     );
   }
-  bun.sort();
-  return bun;
+  files.sort();
+  return files;
 }
 
 async function discoverNodeContractTests(): Promise<string[]> {
@@ -240,7 +240,12 @@ async function runCommand(
 
 async function runCliTests(files: string[], env: NodeJS.ProcessEnv): Promise<void> {
   if (files.length === 0) return;
-  await runCommand(bunBinary, ["test", "--cwd", "apps/cli", ...files], { env });
+  await runVitest(files.map((file) => path.join("apps", "cli", file)), env);
+}
+
+async function runVitest(files: string[], env: NodeJS.ProcessEnv): Promise<void> {
+  if (files.length === 0) return;
+  await runCommand(vitestBinary, ["run", ...files], { env });
 }
 
 async function assertFilesExist(files: readonly string[]): Promise<void> {

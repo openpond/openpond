@@ -1,6 +1,7 @@
 import path from "node:path";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
+import { createRequire } from "node:module";
 import { runProcessCommand } from "../process-runner";
 import { CliUsageError, optionString, parseBooleanOption } from "./common";
 
@@ -51,8 +52,9 @@ export async function buildDesktopHarnessInvocation(input: {
   const startCwd = optionString(options, "cwd") || input.cwd || process.cwd();
   const repoRoot = await resolveDesktopHarnessRepoRoot(startCwd);
   const env = input.env ?? process.env;
-  const command = env.BUN_BINARY?.trim() || "bun";
-  const args = [DESKTOP_HARNESS_SCRIPT, "run", ...scenarios];
+  const command = env.OPENPOND_NODE_BINARY?.trim() || process.execPath;
+  const tsxCli = createRequire(import.meta.url).resolve("tsx/cli");
+  const args = [tsxCli, DESKTOP_HARNESS_SCRIPT, "run", ...scenarios];
 
   const launchMode = resolveLaunchMode(options, action);
   if (launchMode) args.push(`--${launchMode}`);

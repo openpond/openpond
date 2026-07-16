@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { DesktopHarnessRunReport } from "../scripts/desktop-harness/types";
 import {
   desktopHarnessReleaseMarkdown,

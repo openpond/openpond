@@ -440,7 +440,7 @@ export function createResourceModelToolDefinitions(deps: {
     {
       name: "sandbox_exec",
       description:
-        "Run a bounded shell command inside the active sandbox workspace. Use this for Hybrid validation commands such as bun run typecheck; do not run workspace commands in the local checkout while Working in Hybrid.",
+        "Run a bounded shell command inside the active sandbox workspace. Use this for Hybrid validation commands such as pnpm typecheck; do not run workspace commands in the local checkout while Working in Hybrid.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -448,7 +448,7 @@ export function createResourceModelToolDefinitions(deps: {
           command: {
             type: "string",
             minLength: 1,
-            description: "Shell command to run in the sandbox workspace, for example bun run typecheck.",
+            description: "Shell command to run in the sandbox workspace, for example pnpm typecheck.",
           },
           timeoutSeconds: {
             type: "integer",
@@ -559,7 +559,7 @@ export function createCommandModelToolDefinition(deps: {
         command: {
           type: "string",
           minLength: 1,
-          description: "Shell command to run in the selected local project, for example ls or bun run typecheck.",
+          description: "Shell command to run in the selected local project, for example ls or pnpm typecheck.",
         },
         cwd: {
           type: "string",

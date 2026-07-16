@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { tasksetFixture, planFixture } from "./helpers/training-fixtures";
 

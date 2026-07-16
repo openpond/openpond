@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, vi, test } from "vitest";
 
 import { createTeamChatPartialPublisher } from "./team-chat-executor.js";
 import type { teamChatRequestPayload } from "./team-chat-client.js";
@@ -6,7 +6,7 @@ import type { teamChatRequestPayload } from "./team-chat-client.js";
 describe("team chat AI partial publisher", () => {
   test("coalesces token deltas into bounded hosted snapshots", async () => {
     let now = 1_000;
-    const requestMock = mock(async (_action: Parameters<typeof teamChatRequestPayload>[0]) => ({
+    const requestMock = vi.fn(async (_action: Parameters<typeof teamChatRequestPayload>[0]) => ({
       sequence: 0,
     }));
     const request = requestMock as unknown as typeof teamChatRequestPayload;

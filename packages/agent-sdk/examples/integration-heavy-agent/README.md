@@ -26,10 +26,10 @@ The example intentionally stores setup requirements in source and stores no conn
 ## Local Commands
 
 ```bash
-bun run agent:inspect
-bun run agent:build
-bun run agent:validate
-bun run agent:eval
+pnpm agent:inspect
+pnpm agent:build
+pnpm agent:validate
+pnpm agent:eval
 openpond-agent run chat --input '{"prompt":"Project is blocked on review","channel":"openpond_chat"}'
 ```
 

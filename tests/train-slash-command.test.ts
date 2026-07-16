@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { COMPOSER_SLASH_COMMANDS, parseComposerSlashCommandPrompt } from "../apps/web/src/lib/composer-slash-commands";

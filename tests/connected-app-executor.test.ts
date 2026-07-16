@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   createCloudConnectedAppToolExecutor,
   DEFAULT_CONNECTED_APP_TOOL_PATH,

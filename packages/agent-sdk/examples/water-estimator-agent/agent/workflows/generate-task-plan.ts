@@ -12,20 +12,20 @@ export const generateTaskPlanWorkflow = defineWorkflow({
   description: "Render drawings, extract sheet/task data, consolidate tasks, and export CSV/XLSX.",
   async run(ctx, input) {
     ctx.trace.event("task_plan.render_drawings.started", { fileCount: files(input).length });
-    await ctx.runCommand("bun run render-drawings", { input });
+    await ctx.runCommand("pnpm render-drawings", { input });
     ctx.trace.artifact("artifacts/drawing-render-manifest.json");
     ctx.trace.artifact("artifacts/drawing-rendered-pages.csv");
 
-    await ctx.runCommand("bun run extract-sheet-index", { input });
+    await ctx.runCommand("pnpm extract-sheet-index", { input });
     ctx.trace.artifact("artifacts/sheet-index.json");
 
-    await ctx.runCommand("bun run extract-page-tasks", { input });
+    await ctx.runCommand("pnpm extract-page-tasks", { input });
     ctx.trace.artifact("artifacts/page-extractions.json");
 
-    await ctx.runCommand("bun run consolidate-task-plan", { input });
+    await ctx.runCommand("pnpm consolidate-task-plan", { input });
     ctx.trace.artifact("artifacts/consolidated-task-plan.json");
 
-    await ctx.runCommand("bun run export-task-plan", { input });
+    await ctx.runCommand("pnpm export-task-plan", { input });
     ctx.trace.artifact("artifacts/task-plan.xlsx");
 
     return {

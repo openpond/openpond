@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createComposerDraftStore } from "../apps/web/src/lib/composer-draft-store";
 
 describe("composer draft store", () => {

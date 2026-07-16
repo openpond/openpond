@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "@openpond/contracts": "workspace:*"

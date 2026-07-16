@@ -130,7 +130,7 @@ export async function runOpenPondServerCli(createOpenPondServer: CreateServer): 
 
   const webRoot = args.mode === "web" ? resolveWebRoot(args.webRoot) : null;
   if (args.mode === "web" && !webRoot) {
-    throw new Error("Could not find a built OpenPond web UI. Run `bun run build:web` or pass --web-root.");
+    throw new Error("Could not find a built OpenPond web UI. Run `pnpm build:web` or pass --web-root.");
   }
 
   const instance = await createOpenPondServer({ host: args.host, port: args.port, webRoot });

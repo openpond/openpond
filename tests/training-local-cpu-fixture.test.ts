@@ -1,13 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { TrainingApprovalSchema, TrainingJobSchema } from "../packages/contracts/src";
 import { buildTaskset } from "../packages/taskset-sdk/src";
 import { buildTrainingBundle } from "../packages/training-sdk/src";
 import { LocalCpuTrainingDestination } from "../apps/server/src/training/local-cpu-destination";
 import { planFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
 
-describe.serial("local CPU training fixture", () => {
+describe.sequential("local CPU training fixture", () => {
   test("runs LoRA SFT, imports verified artifacts, reloads, evaluates, and records immutable lineage", async () => withTrainingStore(async ({ store, directory }) => {
     const setup = await setupFixture(store, directory);
     const destination = setup.destination;
@@ -93,7 +94,7 @@ async function waitForTerminal(destination: LocalCpuTrainingDestination, jobId: 
   while (Date.now() < deadline) {
     const job = await destination.status(jobId);
     if (["succeeded", "failed", "cancelled"].includes(job.status)) return job;
-    await Bun.sleep(100);
+    await delay(100);
   }
   throw new Error(`Timed out waiting for ${jobId}.`);
 }

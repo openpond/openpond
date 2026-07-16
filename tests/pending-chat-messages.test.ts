@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import {
   appendPendingUserChatMessage,

@@ -6,11 +6,11 @@ import {
   appDisplayName,
   appHomePath,
   appIconPath,
-  bunBinary,
   defaultServerPort,
   desktopDirname,
   desktopLogger,
   nodeBinary,
+  pnpmBinary,
   releaseChannel,
   repoRoot,
   serverWorkingDirectory,
@@ -404,7 +404,7 @@ async function ensureRenderer(): Promise<string> {
 
   if (!webProcess) {
     desktopLogger().info("spawning renderer dev server", { rendererUrl });
-    webProcess = spawn(bunBinary(), ["run", "--cwd", "apps/web", "dev"], {
+    webProcess = spawn(pnpmBinary(), ["--dir", "apps/web", "run", "dev"], {
       cwd: repoRoot(),
       env: {
         ...process.env,

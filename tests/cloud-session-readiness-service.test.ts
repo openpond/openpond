@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { Session, WorkspaceToolResult } from "@openpond/contracts";
 import { createCloudSessionReadinessService } from "../apps/server/src/workspace/cloud-session-readiness";
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT,
   CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT,
@@ -225,7 +225,7 @@ describe("local adapter constrained tool protocol", () => {
       expect(result.ok).toBe(true);
       expect(result.contentText).toContain(CROSS_SYSTEM_TOOL_CONTRACT_HASH);
       expect((result.data as any).evidence.rows).toBe(2);
-      expect((result.data as any).result.items[0].account_id).toStartWith("validation_102_");
+      expect((result.data as any).result.items[0].account_id.startsWith("validation_102_")).toBe(true);
       await expect(runtime.execute({ modelId: "lineage_cso", localProjectId: "project_other", turnId: "turn_wrong_project", callId: "call_wrong_project", name: "search_crm", args: { query: "*", fields: ["account_id"], cursor: null, limit: 2 }, userPrompt: generatedTask.prompt, taskId: generatedTask.id, signal: new AbortController().signal })).rejects.toThrow("not attached to this model Taskset's source");
       await expect(runtime.execute({ modelId: "lineage_cso", localProjectId: "project_cso", turnId: "turn_ambiguous", callId: "call_ambiguous", name: "search_crm", args: { query: "*", fields: ["account_id"], cursor: null, limit: 2 }, userPrompt: generatedTask.prompt, signal: new AbortController().signal })).rejects.toThrow("multiple synthetic worlds");
       const finalized = await runtime.finalize({

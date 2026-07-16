@@ -1,12 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import sqlite3 from "sqlite3";
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import type { Logger } from "@openpond/logging";
 import type { PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store-schema.js";
 import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
+import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
+import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
   isTerminalOpenPondGoalStatus,
   openPondThreadGoalMutationFromEvent,
@@ -36,7 +37,7 @@ export class SqliteStoreCore {
   readonly storePath: string;
   protected data: StoreData = { sessions: [], turns: [], events: [], approvals: [] };
   protected ready: Promise<void>;
-  protected db: sqlite3.Database | null = null;
+  protected db: OpenPondSqliteConnection | null = null;
   protected writeQueue: Promise<void> = Promise.resolve();
   protected readonly logger?: Logger;
 
@@ -846,45 +847,30 @@ export class SqliteStoreCore {
     const db = this.db;
     this.db = null;
     if (!db) return;
-    await new Promise<void>((resolve, reject) => {
-      db.close((error) => (error ? reject(error) : resolve()));
-    });
+    db.close();
   }
 
-  protected openDatabase(filename: string): Promise<sqlite3.Database> {
-    return new Promise((resolve, reject) => {
-      const db = new sqlite3.Database(filename, (error) => {
-        if (error) reject(error);
-        else resolve(db);
-      });
-    });
+  protected async openDatabase(filename: string): Promise<OpenPondSqliteConnection> {
+    return openNodeSqliteConnection(filename);
   }
 
-  protected exec(sql: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.database.exec(sql, (error) => (error ? reject(error) : resolve()));
-    });
+  protected async exec(sql: string): Promise<void> {
+    this.database.exec(sql);
   }
 
-  protected run(sql: string, params: unknown[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.database.run(sql, params, (error) => (error ? reject(error) : resolve()));
-    });
+  protected async run(sql: string, params: unknown[]): Promise<void> {
+    this.database.run(sql, params);
   }
 
-  protected all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.database.all(sql, params, (error, rows: T[]) => (error ? reject(error) : resolve(rows)));
-    });
+  protected async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    return this.database.all<T>(sql, params);
   }
 
-  protected get<T>(sql: string, params: unknown[]): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.database.get(sql, params, (error, row: T | undefined) => (error ? reject(error) : resolve(row ?? null)));
-    });
+  protected async get<T>(sql: string, params: unknown[]): Promise<T | null> {
+    return this.database.get<T>(sql, params);
   }
 
-  protected get database(): sqlite3.Database {
+  protected get database(): OpenPondSqliteConnection {
     if (!this.db) throw new Error("SQLite store is not ready");
     return this.db;
   }

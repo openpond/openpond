@@ -1,8 +1,9 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(import.meta.dir, "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const maxLines = 1_000;
 const requiredReadmePhrases = [
   "openpond-agent init",
@@ -31,7 +32,7 @@ const requiredDocs = {
   "docs/platform-boundary.md": ["Platform Boundary", "Integration lease selection", "draft source refs"],
   "docs/cli-machine-output.md": ["CLI Machine Output", "Exit-Code Policy", "openpond-agent eval --json"],
   "docs/negative-validation-examples.md": ["Negative Validation Examples", "examples/validation-failures", "Failed eval gate"],
-  "docs/package-audit.md": ["Package Audit", "bun run check", "packed-install check", "Current Verdict"],
+  "docs/package-audit.md": ["Package Audit", "pnpm check", "packed-install check", "Current Verdict"],
 };
 const requiredTestSuites = [
   "test/primitive-contract.test.ts",

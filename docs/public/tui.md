@@ -1,6 +1,6 @@
 # OpenPond Terminal UI
 
-The TUI connects to the same local server and durable runtime as Desktop. Launch it with `openpond tui`, `openpond interactive`, or `bun run terminal` from a source checkout.
+The TUI connects to the same local server and durable runtime as Desktop. Launch it with `openpond tui`, `openpond interactive`, or `pnpm terminal` from a source checkout.
 
 ## Modes
 

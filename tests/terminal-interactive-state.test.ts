@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { openTerminalEvents } from "../apps/terminal/src/events";
 import { createTerminalInteractiveState } from "../apps/terminal/src/interactive-state";
 

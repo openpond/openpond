@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { contextWindowStatusFromUsage } from "../apps/web/src/lib/context-window";
 
 describe("context window status", () => {

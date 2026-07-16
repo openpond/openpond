@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CloudProject, LocalProject, OpenPondApp } from "@openpond/contracts";

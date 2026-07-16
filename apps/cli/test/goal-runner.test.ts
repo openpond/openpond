@@ -1,8 +1,9 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runTestProcess } from "../../../tests/helpers/run-process";
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 
 import { createGoalState, normalizeGoalState } from "../src/goal/config";
 import { runGoalCommand } from "../src/goal/cli";
@@ -122,20 +123,11 @@ class FakeHostedGoalClient {
 
 describe("goal runner hosted tool loop", () => {
   test("CLI goal help exits successfully for hosted rootfs smoke", async () => {
-    const proc = Bun.spawn(
-      [process.execPath, "src/cli/main.ts", "goal", "--help"],
-      {
-        cwd: join(import.meta.dir, ".."),
-        stdout: "pipe",
-        stderr: "pipe",
-      }
+    const { stdout, stderr, exitCode } = await runTestProcess(
+      process.execPath,
+      ["--import", "tsx", "src/cli/main.ts", "goal", "--help"],
+      { cwd: join(import.meta.dirname, "..") },
     );
-
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
 
     expect(exitCode).toBe(0);
     expect(stderr).toBe("");
@@ -969,12 +961,12 @@ describe("goal runner hosted tool loop", () => {
       );
       await chmod(join(workspace, "fixtures", "openpond-agent"), 0o755);
       await writeFile(
-        join(workspace, ".fake-bin", "bun"),
+        join(workspace, ".fake-bin", "npm"),
         [
           "#!/bin/sh",
           "set -eu",
           "if [ \"${1:-}\" != \"install\" ]; then",
-          "  echo \"unexpected fake bun command: $*\" >&2",
+          "  echo \"unexpected fake npm command: $*\" >&2",
           "  exit 2",
           "fi",
           "mkdir -p \"$PWD/node_modules/.bin\"",
@@ -984,7 +976,7 @@ describe("goal runner hosted tool loop", () => {
           "",
         ].join("\n")
       );
-      await chmod(join(workspace, ".fake-bin", "bun"), 0o755);
+      await chmod(join(workspace, ".fake-bin", "npm"), 0o755);
       process.env.PATH = `${join(workspace, ".fake-bin")}:${originalPath ?? ""}`;
 
       const goal = normalizeGoalState(
@@ -1032,7 +1024,7 @@ describe("goal runner hosted tool loop", () => {
           expect.objectContaining({
             kind: "command.completed",
             payload: expect.objectContaining({
-              command: "bun install",
+              command: "npm install",
               code: 0,
             }),
           }),
@@ -1895,17 +1887,10 @@ function restoreEnv(name: keyof typeof originalEnv, value: string | undefined) {
 }
 
 async function runGit(cwd: string, args: string[]): Promise<string> {
-  const proc = Bun.spawn(["git", ...args], {
+  const { exitCode, stdout, stderr } = await runTestProcess("git", args, {
     cwd,
-    stderr: "pipe",
-    stdout: "pipe",
   });
-  const [code, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  if (code !== 0) {
+  if (exitCode !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${stderr || stdout}`);
   }
   return stdout;

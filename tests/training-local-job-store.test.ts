@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ModelArtifactLineageSchema, TrainingArtifactSchema, TrainingJobEventSchema, TrainingJobSchema } from "../packages/contracts/src";
 import { contentHash } from "../packages/taskset-sdk/src";
 import { tasksetFixture, planFixture, withTrainingStore } from "./helpers/training-fixtures";

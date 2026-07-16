@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { CodexNotification } from "@openpond/codex-provider";
 import {
   SubagentRunSchema,
@@ -157,7 +157,7 @@ describe("codex bridge usage ledger", () => {
       method: "item/commandExecution/requestApproval",
       params: {
         turnId: "turn_child",
-        command: "bun test tests/turn-runner-subagents.test.ts",
+        command: "pnpm test tests/turn-runner-subagents.test.ts",
         reason: "Validate child subagent changes.",
       },
     } as any);
@@ -165,7 +165,7 @@ describe("codex bridge usage ledger", () => {
 
     expect(runs[0]).toMatchObject({
       status: "blocked",
-      error: "Waiting for approval: bun test tests/turn-runner-subagents.test.ts",
+      error: "Waiting for approval: pnpm test tests/turn-runner-subagents.test.ts",
       metadata: {
         pendingApproval: {
           sessionId: "session_child",
@@ -175,7 +175,7 @@ describe("codex bridge usage ledger", () => {
     });
     expect(events.find((event) => event.name === "subagent.blocked" && event.sessionId === "session_parent")).toMatchObject({
       status: "pending",
-      output: "Subagent research is waiting for approval: bun test tests/turn-runner-subagents.test.ts",
+      output: "Subagent research is waiting for approval: pnpm test tests/turn-runner-subagents.test.ts",
       data: {
         childSessionId: "session_child",
         parentGoalId: "goal_parent",

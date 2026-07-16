@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 
 const ci = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
@@ -6,8 +6,8 @@ const ci = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url
 describe("CI workflow contracts", () => {
   test("integration runs both application and Python suites", () => {
     const integration = job("integration", "contract");
-    expect(integration).toContain("bun run test:integration");
-    expect(integration).toContain("bun run test:python");
+    expect(integration).toContain("pnpm run test:integration");
+    expect(integration).toContain("pnpm run test:python");
   });
 
   test("the aggregate Checks job requires every protected lane", () => {
@@ -27,7 +27,7 @@ describe("CI workflow contracts", () => {
       "hygiene:check",
       "workflows:check",
     ]) {
-      expect(quality).toContain(`bun run ${command}`);
+      expect(quality).toContain(`pnpm run ${command}`);
     }
   });
 });

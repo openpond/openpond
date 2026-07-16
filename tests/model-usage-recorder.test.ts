@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { ModelUsageRecord, Session, Turn } from "@openpond/contracts";
 import { startProviderRequestUsageRecorder } from "../apps/server/src/runtime/model-usage-recorder";
 

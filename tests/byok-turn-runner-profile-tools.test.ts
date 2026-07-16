@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import { withTurnRunnerTestStore } from "./helpers/turn-runner-test-harness";

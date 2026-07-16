@@ -73,10 +73,11 @@ export async function runSandboxSmoke(
       command: [
         `printf '${expectedExec}\\n'`,
         "test -f README && printf 'repo-clone-ok\\n'",
-        "cat > server.js <<'EOF'",
-        `Bun.serve({ port: ${previewPort}, fetch() { return new Response('${expectedPreview}'); } });`,
+        "cat > server.cjs <<'EOF'",
+        "const { createServer } = require('node:http');",
+        `createServer((_request, response) => response.end('${expectedPreview}')).listen(${previewPort}, '0.0.0.0');`,
         "EOF",
-        "nohup bun server.js > server.log 2>&1 & sleep 1",
+        "nohup node server.cjs > server.log 2>&1 & sleep 1",
       ].join("\n"),
       timeoutSeconds: 120,
     });

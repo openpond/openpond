@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import { ProviderConfigSchema } from "../packages/contracts/src/providers";
 import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
 import {
@@ -729,7 +729,7 @@ describe("OpenAI-compatible provider adapter", () => {
         429,
       );
 
-    await expect(async () => {
+    await expect((async () => {
       for await (const _delta of streamOpenAiCompatibleChatCompletion({
         ...providerState("https://api.z.ai/api/paas/v4", "zai"),
         providerId: "zai",
@@ -738,7 +738,7 @@ describe("OpenAI-compatible provider adapter", () => {
       })) {
         // Drain.
       }
-    }).toThrow(/Coding Plan subscriptions use https:\/\/api\.z\.ai\/api\/coding\/paas\/v4/);
+    })()).rejects.toThrow(/Coding Plan subscriptions use https:\/\/api\.z\.ai\/api\/coding\/paas\/v4/);
   });
 });
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { Approval, RuntimeEvent, SubagentRun } from "@openpond/contracts";
 import {
   approvalsWithStatus,
@@ -289,7 +289,7 @@ describe("runtime indexes", () => {
                 summary: "Reviewed the patch.",
                 artifacts: [{ kind: "file", id: "/repo/src/app.ts", label: "src/app.ts" }],
                 diffRef: { kind: "diff", id: "diff_review", label: "Review diff" },
-                testsRun: ["bun test tests/runtime-indexes.test.ts"],
+                testsRun: ["pnpm test tests/runtime-indexes.test.ts"],
               },
               metadata: {
                 usage: {
@@ -420,7 +420,7 @@ describe("runtime indexes", () => {
           expect.objectContaining({ kind: "file", id: "/repo/src/app.ts" }),
           expect.objectContaining({ kind: "diff", id: "diff_review" }),
         ],
-        testsRun: ["bun test tests/runtime-indexes.test.ts"],
+        testsRun: ["pnpm test tests/runtime-indexes.test.ts"],
         blockers: ["Validation evidence needs reviewer attention."],
         packetQualityStatus: "weak",
         packetQualityEvidence: expect.objectContaining({
@@ -778,7 +778,7 @@ function approval(input: {
     providerRequestId: input.id,
     kind: "command",
     title: "Run command",
-    detail: "bun test",
+    detail: "pnpm test",
     status: input.status,
     createdAt: input.createdAt,
   };

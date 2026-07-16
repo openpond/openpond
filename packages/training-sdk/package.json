@@ -14,9 +14,9 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "bundle": "bun src/cli.ts",
+    "bundle": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "@openpond/contracts": "workspace:*",

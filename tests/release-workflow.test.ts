@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   launchTargetForPath,
@@ -13,22 +13,10 @@ import { validatePackagedSmokeReports } from "../scripts/validate-packaged-smoke
 
 const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
 const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
-const CLI_INSTALLER_PATH = "apps/cli/install.sh";
 const ROOT_PACKAGE_PATH = "package.json";
 const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
 
 describe("release workflow", () => {
-  test("CLI installer verifies the published archive checksum before extraction", () => {
-    const installer = readFileSync(CLI_INSTALLER_PATH, "utf8");
-    expect(installer).toContain('CHECKSUMS_URL="${BASE_URL}/SHA256SUMS.txt"');
-    expect(installer).toContain('actual_checksum="$(sha256sum');
-    expect(installer).toContain('actual_checksum="$(shasum -a 256');
-    expect(installer.indexOf('checksum verification failed')).toBeLessThan(
-      installer.indexOf('tar -xzf'),
-    );
-    expect(installer).toContain('ln -sfn openpond "$INSTALL_DIR/op"');
-  });
-
   test("keeps packaged desktop smoke wired for Linux and macOS release builds while Windows is disabled", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
@@ -52,7 +40,7 @@ describe("release workflow", () => {
     expect(workflow).toContain("name: Require green CI");
     expect(workflow).toContain("name: Build release source artifacts once");
     expect(workflow).toContain("name: Verify stable source version");
-    expect(workflow).toContain("run: bun run release:version:check -- --version");
+    expect(workflow).toContain("run: pnpm run release:version:check -- --version");
     expect(workflow.indexOf("name: Verify stable source version")).toBeLessThan(
       workflow.indexOf("name: Require green CI"),
     );
@@ -61,15 +49,15 @@ describe("release workflow", () => {
     );
     expect(workflow).toContain("name: Wait for the required CI check on this commit");
     expect(workflow).toContain('select(.name == "Checks" and .app.slug == "github-actions")');
-    expect(workflow.match(/bun run test/g) ?? []).toHaveLength(0);
+    expect(workflow.match(/pnpm run test/g) ?? []).toHaveLength(0);
     expect(workflow).not.toContain("name: Run tests on Windows");
-    expect(workflow).not.toContain("bun test tests/*.test.ts");
-    expect(workflow.match(/bun run build:artifacts/g)).toHaveLength(1);
-    expect(workflow.match(/bun run cli:build/g)).toHaveLength(1);
-    expect(workflow).not.toContain("- run: bun run build\n");
+    expect(workflow).not.toContain("vitest run tests/*.test.ts");
+    expect(workflow.match(/pnpm run build:artifacts/g)).toHaveLength(1);
+    expect(workflow.match(/pnpm run cli:build/g)).toHaveLength(1);
+    expect(workflow).not.toContain("- run: pnpm run build\n");
     expect(workflow).toContain("name: release-source-artifacts");
     expect(workflow).toContain("name: Stage release source artifacts");
-    expect(workflow).toContain("run: bun run release:source-artifacts:stage");
+    expect(workflow).toContain("run: pnpm run release:source-artifacts:stage");
     expect(workflow).toMatch(
       /name: release-source-artifacts\n\s+path: release-source-artifacts\n\s+if-no-files-found: error/,
     );
@@ -78,7 +66,7 @@ describe("release workflow", () => {
       workflow.match(
         /actions\/download-artifact@[0-9a-f]{40} # v8\n\s+with:\n\s+name: release-source-artifacts\n\s+path: \./g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(workflow).not.toMatch(
       /name: release-source-artifacts\n\s+path: apps/,
     );
@@ -88,24 +76,27 @@ describe("release workflow", () => {
     expect(workflow).toContain("dev-render-commits.json");
     expect(workflow).toContain("mkdir -p release-smoke");
     expect(workflow).toContain('report_path="release-smoke/smoke-${{ matrix.name }}.json"');
-    expect(workflow).toContain('xvfb-run -a bun run smoke:desktop:packaged -- --json "${report_path}"');
-    expect(workflow).toContain('bun run smoke:desktop:packaged -- --json "${report_path}"');
+    expect(workflow).toContain('xvfb-run -a pnpm run smoke:desktop:packaged -- --json "${report_path}"');
+    expect(workflow).toContain('pnpm run smoke:desktop:packaged -- --json "${report_path}"');
     expect(workflow).toContain("name: packaged-smoke-${{ matrix.name }}");
     expect(workflow).toContain("if: always()");
     expect(workflow).toContain("path: release-smoke/**");
     expect(workflow).toContain("pattern: packaged-smoke-*");
     expect(workflow).toContain("path: release-smoke-artifacts");
     expect(workflow).toContain("name: Validate packaged smoke reports");
-    expect(workflow).toContain("bun run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts");
-    expect(workflow).toContain("name: Build and verify native CLI archive");
-    expect(workflow).toContain("bun run cli:release:build");
-    expect(workflow).toContain("bun scripts/check-cli-distribution.ts --archive \"${cli_archive}\" --skip-npm");
-    expect(workflow).toContain("id: npm_publish_auth");
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
-    expect(workflow).toContain("steps.npm_publish_auth.outputs.enabled == 'true'");
+    expect(workflow).toContain("pnpm run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts");
+    expect(workflow).not.toContain("name: Build and verify native CLI archive");
+    expect(workflow).not.toContain("cli:release:build");
+    expect(workflow).not.toContain("--archive");
+    expect(workflow).not.toContain("npm_publish_auth");
+    expect(workflow).not.toContain("NPM_TOKEN");
+    expect(workflow).not.toContain("NODE_AUTH_TOKEN");
+    expect(workflow).toContain("environment: npm-production");
     expect(workflow).toContain("name: Publish stable CLI package to npm");
-    expect(workflow).toContain("npm install --global npm@11.5.1\n          npm publish ./apps/cli --access public --provenance --ignore-scripts");
-    expect(workflow).toContain("release/*.tar.gz");
+    expect(workflow).toContain("npm install --global npm@11.18.0\n          npm publish ./apps/cli --access public --ignore-scripts");
+    expect(workflow).not.toContain("release/*.tar.gz");
+    expect(workflow).not.toContain("setup-bun");
+    expect(workflow).not.toMatch(/\bbun (?:install|run|x|test)\b/);
     expect(workflow).toContain('basename "${files[$index]}"');
     expect(workflow).toContain("builder-debug.yml");
     expect(workflow).not.toContain("runs-on: ubuntu-latest\n    runs-on: ubuntu-latest");
@@ -132,10 +123,12 @@ describe("release workflow", () => {
     expect(releaseWorkflow).toContain("checks: read");
     expect(ciWorkflow).toContain("name: Checks");
     expect(ciWorkflow).toContain("needs: [quality, unit, integration, contract, release_smoke]");
-    expect(ciWorkflow).toContain("bun run test:unit");
-    expect(ciWorkflow).toContain("bun run test:integration");
-    expect(ciWorkflow).toContain("bun run test:contract");
-    expect(ciWorkflow).toContain("bun run test:release");
+    expect(ciWorkflow).toContain("pnpm run test:unit");
+    expect(ciWorkflow).toContain("pnpm run test:integration");
+    expect(ciWorkflow).toContain("pnpm run test:contract");
+    expect(ciWorkflow).toContain("pnpm run test:release");
+    expect(ciWorkflow).not.toContain("setup-bun");
+    expect(ciWorkflow).not.toMatch(/\bbun (?:install|run|x|test)\b/);
     expect(ciWorkflow).toMatch(
       /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: apps/,
     );
@@ -156,11 +149,13 @@ describe("release workflow", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
     expect(workflow).toMatch(/permissions:\n\s+contents: read/);
-    expect(workflow).toMatch(/release:\n[\s\S]*?permissions:\n\s+contents: write\n\s+id-token: write/);
+    expect(workflow).toMatch(/npm_publish:\n[\s\S]*?environment: npm-production[\s\S]*?permissions:\n\s+contents: read\n\s+id-token: write/);
+    expect(workflow).toMatch(/release:\n[\s\S]*?permissions:\n\s+contents: write/);
     expect(workflow.match(/contents: write/g)).toHaveLength(1);
     expect(workflow.match(/id-token: write/g)).toHaveLength(1);
     expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/);
-    expect(workflow).toMatch(/actions\/setup-node@[0-9a-f]{40} # v6/);
+    expect(workflow).toMatch(/actions\/setup-node@[0-9a-f]{40} # v6\.4\.0/);
+    expect(workflow).toMatch(/pnpm\/action-setup@[0-9a-f]{40} # v6\.0\.8/);
     expect(workflow).toMatch(/actions\/upload-artifact@[0-9a-f]{40} # v7/);
     expect(workflow).toMatch(/actions\/download-artifact@[0-9a-f]{40} # v8/);
     expect(workflow).toMatch(/softprops\/action-gh-release@[0-9a-f]{40} # v3/);
@@ -171,8 +166,8 @@ describe("release workflow", () => {
     const packageJson = JSON.parse(readFileSync(ROOT_PACKAGE_PATH, "utf8")) as {
       scripts?: Record<string, string>;
     };
-    expect(packageJson.scripts?.build).toContain("bun run build:artifacts");
-    expect(packageJson.scripts?.["build:artifacts"]).toContain("bun run build:desktop");
+    expect(packageJson.scripts?.build).toContain("pnpm run build:artifacts");
+    expect(packageJson.scripts?.["build:artifacts"]).toContain("pnpm run build:desktop");
   });
 
   test("keeps the stable release guard available as a package script", () => {
@@ -180,7 +175,7 @@ describe("release workflow", () => {
       scripts?: Record<string, string>;
     };
     expect(packageJson.scripts?.["release:version:check"]).toBe(
-      "bun scripts/check-release-version.ts",
+      "tsx scripts/check-release-version.ts",
     );
   });
 
@@ -190,7 +185,7 @@ describe("release workflow", () => {
     };
 
     expect(packageJson.scripts?.["bundle:server"]).toMatch(
-      /^tsc -b apps\/server && bun build apps\/server\/src\/index\.ts /,
+      /^tsc -b apps\/server && tsx scripts\/build\/bundle-server\.ts$/,
     );
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { SessionSchema, type RuntimeEvent } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -1867,7 +1867,7 @@ describe("chat message projection", () => {
         args: { prompt: "Patch and test" },
       }),
       commandStarted("edit_1", "turn_1", "apply_patch"),
-      commandStarted("check_1", "turn_1", "bun test tests/chat-messages.test.ts"),
+      commandStarted("check_1", "turn_1", "pnpm test tests/chat-messages.test.ts"),
     ]);
 
     const activities = messages[1]?.activities ?? [];

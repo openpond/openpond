@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   SubagentRunSchema,
   type RuntimeEvent,
@@ -28,7 +28,7 @@ describe("subagent progress projection", () => {
         }),
         runtimeEvent(3, "tool.started", {
           data: { toolCallId: "validation_1" },
-          args: { command: "bun test tests/progress.test.ts" },
+          args: { command: "pnpm test tests/progress.test.ts" },
         }),
       ],
       phase: null,
@@ -70,7 +70,7 @@ describe("subagent progress projection", () => {
     expect(second.progress.repeatedSearches).toEqual(["resource_search:progress cursor"]);
     expect(second.progress.validationAttempts).toEqual([
       expect.objectContaining({
-        command: "bun test tests/progress.test.ts",
+        command: "pnpm test tests/progress.test.ts",
         status: "passed",
         exitCode: 0,
       }),
@@ -154,7 +154,7 @@ function subagentRunFixture(): SubagentRun {
     roleId: "test",
     objective: "Prove incremental progress projection",
     workerBrief: {
-      validationCommands: ["bun test tests/progress.test.ts"],
+      validationCommands: ["pnpm test tests/progress.test.ts"],
     },
     progress: {},
     review: {},

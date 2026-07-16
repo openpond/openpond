@@ -160,14 +160,26 @@ jobs:
             echo "should_release=${should_release}"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         if: steps.release.outputs.channel == 'stable' && steps.release.outputs.should_release == 'true'
         with:
-          bun-version: "1.3.13"
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: steps.release.outputs.channel == 'stable' && steps.release.outputs.should_release == 'true'
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+
+      - name: Install release metadata dependencies
+        if: steps.release.outputs.channel == 'stable' && steps.release.outputs.should_release == 'true'
+        run: pnpm install --frozen-lockfile
 
       - name: Verify stable source version
         if: steps.release.outputs.channel == 'stable' && steps.release.outputs.should_release == 'true'
-        run: bun run release:version:check -- --version "${{ steps.release.outputs.version }}"
+        run: pnpm run release:version:check -- --version "${{ steps.release.outputs.version }}"
 
   ci_gate:
     name: Require green CI
@@ -212,20 +224,27 @@ jobs:
         with:
           ref: ${{ needs.meta.outputs.ref }}
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
-          bun-version: "1.3.13"
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
 
-      - run: bun install --frozen-lockfile
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile
 
       - name: Prepare release build config
-        run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+        run: pnpm exec tsx scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
-      - run: bun run build:artifacts
-      - run: bun run cli:build
+      - run: pnpm run build:artifacts
+      - run: pnpm run cli:build
 
       - name: Stage release source artifacts
-        run: bun run release:source-artifacts:stage
+        run: pnpm run release:source-artifacts:stage
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -264,16 +283,18 @@ jobs:
         with:
           ref: ${{ needs.meta.outputs.ref }}
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
-          bun-version: "1.3.13"
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
+          node-version: "24.18.0"
+          package-manager-cache: false
 
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -281,22 +302,12 @@ jobs:
           path: .
 
       - name: Prepare release build config
-        run: bun scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+        run: pnpm exec tsx scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
-      - run: bun run ${{ matrix.package_script }}
+      - run: pnpm run ${{ matrix.package_script }}
 
       - name: Enforce desktop package budgets
-        run: bun run budgets:desktop-package
-
-      - name: Build and verify native CLI archive
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bun run cli:release:build
-          cli_archive="$(find release -maxdepth 1 -type f -name 'openpond-cli-*.tar.gz' -print -quit)"
-          test -n "${cli_archive}"
-          bun scripts/check-cli-distribution.ts --archive "${cli_archive}" --skip-npm
+        run: pnpm run budgets:desktop-package
 
       - name: Install Linux packaged-smoke display dependency
         if: runner.os == 'Linux'
@@ -309,7 +320,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-smoke
-          xvfb-run -a bun run smoke:desktop:dev -- --skip-chat --json release-smoke/dev-render-commits.json
+          xvfb-run -a pnpm run smoke:desktop:dev -- --skip-chat --json release-smoke/dev-render-commits.json
 
       - name: Smoke packaged desktop
         shell: bash
@@ -318,9 +329,9 @@ jobs:
           mkdir -p release-smoke
           report_path="release-smoke/smoke-${{ matrix.name }}.json"
           if [[ "${RUNNER_OS}" == "Linux" ]]; then
-            xvfb-run -a bun run smoke:desktop:packaged -- --json "${report_path}"
+            xvfb-run -a pnpm run smoke:desktop:packaged -- --json "${report_path}"
           else
-            bun run smoke:desktop:packaged -- --json "${report_path}"
+            pnpm run smoke:desktop:packaged -- --json "${report_path}"
           fi
 
       - name: Upload packaged smoke diagnostics
@@ -337,7 +348,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-publish
           shopt -s nullglob
-          files=(release/*.AppImage release/*.zip release/*.exe release/*.blockmap release/*.yml release/*.tar.gz)
+          files=(release/*.AppImage release/*.zip release/*.exe release/*.blockmap release/*.yml)
           for index in "${!files[@]}"; do
             if [[ "$(basename "${files[$index]}")" == "builder-debug.yml" ]]; then
               unset 'files[$index]'
@@ -355,14 +366,49 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
 
+  npm_publish:
+    name: Publish stable CLI package to npm
+    needs: [meta, build]
+    if: needs.meta.outputs.should_release == 'true' && needs.meta.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    environment: npm-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-source-artifacts
+          path: .
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Publish exact stable npm package through OIDC
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
+          npm install --global npm@11.18.0
+          npm publish ./apps/cli --access public --ignore-scripts
+
   release:
     name: Publish GitHub Release
-    needs: [meta, build]
-    if: needs.meta.outputs.should_release == 'true'
+    needs: [meta, build, npm_publish]
+    if: >-
+      always()
+      && needs.meta.outputs.should_release == 'true'
+      && needs.build.result == 'success'
+      && (needs.meta.outputs.channel != 'stable' || needs.npm_publish.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -389,49 +435,26 @@ jobs:
           name: release-source-artifacts
           path: .
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
-          bun-version: "1.3.13"
+          version: "11.13.0"
+          cache: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
+          node-version: "24.18.0"
+          package-manager-cache: false
 
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
       - name: Validate packaged smoke reports
-        run: bun run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts
-
-      - id: npm_publish_auth
-        name: Resolve npm publishing availability
-        if: needs.meta.outputs.channel == 'stable'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Skipping npm publish because the NPM_TOKEN repository secret is not configured."
-          fi
-
-      - name: Publish stable CLI package to npm
-        if: needs.meta.outputs.channel == 'stable' && steps.npm_publish_auth.outputs.enabled == 'true'
-        env:
-          NPM_CONFIG_PROVENANCE: "true"
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          test "$(node -p "require('./apps/cli/package.json').version")" = "${{ needs.meta.outputs.version }}"
-          npm install --global npm@11.5.1
-          npm publish ./apps/cli --access public --provenance --ignore-scripts
+        run: pnpm run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts
 
       - name: Generate SBOM
-        run: bun run release:sbom
+        run: pnpm run release:sbom
 
       - name: Generate release inventory
-        run: bun run release:inventory -- --release-assets release-assets --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+        run: pnpm run release:inventory -- --release-assets release-assets --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
       - name: Generate checksums
         run: |

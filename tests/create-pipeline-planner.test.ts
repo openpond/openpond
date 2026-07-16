@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   CreatePipelineRequestSchema,
   emptyOpenPondProfileState,
@@ -52,10 +52,10 @@ describe("model-backed create pipeline planner", () => {
               ],
               requirements: [],
               checks: [
-                { name: "inspect", command: "bun run agent:inspect", required: true },
-                { name: "build", command: "bun run build", required: true },
-                { name: "validate", command: "bun run agent:validate", required: true },
-                { name: "eval", command: "bun run agent:eval", required: true },
+                { name: "inspect", command: "pnpm agent:inspect", required: true },
+                { name: "build", command: "pnpm build", required: true },
+                { name: "validate", command: "pnpm agent:validate", required: true },
+                { name: "eval", command: "pnpm agent:eval", required: true },
               ],
             },
           }),
@@ -165,10 +165,10 @@ describe("model-backed create pipeline planner", () => {
               ],
               requirements: [],
               checks: [
-                { name: "inspect", command: "bun run agent:inspect", required: true },
-                { name: "build", command: "bun run build", required: true },
-                { name: "validate", command: "bun run agent:validate", required: true },
-                { name: "eval", command: "bun run agent:eval", required: true },
+                { name: "inspect", command: "pnpm agent:inspect", required: true },
+                { name: "build", command: "pnpm build", required: true },
+                { name: "validate", command: "pnpm agent:validate", required: true },
+                { name: "eval", command: "pnpm agent:eval", required: true },
               ],
             },
           }),
@@ -232,10 +232,10 @@ describe("model-backed create pipeline planner", () => {
                     ]
                   : [],
               checks: [
-                { name: "inspect", command: "bun run agent:inspect", required: true },
-                { name: "build", command: "bun run build", required: true },
-                { name: "validate", command: "bun run agent:validate", required: true },
-                { name: "eval", command: "bun run agent:eval", required: true },
+                { name: "inspect", command: "pnpm agent:inspect", required: true },
+                { name: "build", command: "pnpm build", required: true },
+                { name: "validate", command: "pnpm agent:validate", required: true },
+                { name: "eval", command: "pnpm agent:eval", required: true },
               ],
             },
           }),

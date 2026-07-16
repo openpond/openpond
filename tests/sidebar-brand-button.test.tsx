@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { SidebarBrandButton } from "../apps/web/src/components/sidebar/SidebarBrandButton";
@@ -25,7 +26,7 @@ describe("Sidebar brand button", () => {
   });
 
   test("places the wordmark in the sidebar toggle toolbar", async () => {
-    const source = await Bun.file("apps/web/src/components/sidebar/Sidebar.tsx").text();
+    const source = await readFile("apps/web/src/components/sidebar/Sidebar.tsx", "utf8");
     const toolbarStart = source.indexOf('<div className="sidebar-toolbar">');
     const navigationStart = source.indexOf("<SidebarNavigation");
     const brand = source.indexOf("<SidebarBrandButton", toolbarStart);

@@ -2,9 +2,10 @@ import { Buffer } from "node:buffer";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { runTestProcess } from "../../../tests/helpers/run-process";
 
-const packageRoot = path.resolve(import.meta.dir, "..");
+const packageRoot = path.resolve(import.meta.dirname, "..");
 const fixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "source-loader-contract");
 
 describe("source loader contract", () => {
@@ -243,12 +244,12 @@ validation:
     - openpond-agent validate
 actions:
   - name: chat
-    command: bun run chat
+    command: pnpm chat
     timeoutSeconds: 120
     artifactPaths:
       - artifacts/chat.json
   - name: export
-    command: bun run export
+    command: pnpm export
 volumes:
   - name: agent-state
     mountPath: /workspace/volumes/agent-state
@@ -303,18 +304,10 @@ async function runSdkAllowFailure(args: string[]) {
 }
 
 async function runSdk(args: string[], env?: Record<string, string>) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
+  return runTestProcess(process.execPath, ["./dist/cli.js", ...args], {
     cwd: packageRoot,
     env: env ? { ...process.env, ...env } : process.env,
-    stdout: "pipe",
-    stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
 }
 
 function formatFailure(

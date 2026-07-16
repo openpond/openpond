@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -329,7 +329,7 @@ describe("turn runner subagent workspace and execution tools", () => {
         objective: "Inspect thread-scoped context without a goal",
         required: true,
         workerBrief: {
-          validationCommands: ["bun test tests/focused.test.ts"],
+          validationCommands: ["pnpm test tests/focused.test.ts"],
         },
       },
       preferences: preferences(),
@@ -401,7 +401,7 @@ describe("turn runner subagent workspace and execution tools", () => {
           plan: ["Inspect the notification flow", "Report whether unchanged insights notify"],
           targetFiles: ["apps/server/src/insights"],
           acceptanceCriteria: ["Parent receives a review packet before acceptance"],
-          validationCommands: ["bun test tests/turn-runner-subagents.test.ts"],
+          validationCommands: ["pnpm test tests/turn-runner-subagents.test.ts"],
           stopConditions: ["Stop if the relevant code path cannot be located"],
         },
       },
@@ -709,7 +709,7 @@ describe("turn runner subagent workspace and execution tools", () => {
             name: "copy-on-write-dependency-fixture",
             private: true,
             type: "module",
-            scripts: { "test:fixture": "bun test fixture.test.ts" },
+            scripts: { "test:fixture": "pnpm test fixture.test.ts" },
             dependencies: { "fixture-dep": "1.0.0" },
           },
           null,
@@ -720,7 +720,7 @@ describe("turn runner subagent workspace and execution tools", () => {
       await writeFile(
         path.join(repoPath, "fixture.test.ts"),
         [
-          'import { expect, test } from "bun:test";',
+          'import { expect, test } from "vitest";',
           'import value from "fixture-dep";',
           'test("dependency resolves", () => {',
           '  expect(value).toBe("dependency-ready");',
@@ -751,7 +751,7 @@ describe("turn runner subagent workspace and execution tools", () => {
           objective: "Validate isolated dependencies",
           required: true,
           workerBrief: {
-            validationCommands: ["bun test fixture.test.ts"],
+            validationCommands: ["pnpm test fixture.test.ts"],
           },
         },
         preferences: preferencesWithSubagentRole("coding", { isolationMode: "copy_on_write" }),
@@ -771,7 +771,7 @@ describe("turn runner subagent workspace and execution tools", () => {
           return {
             name: "exec_command",
             args: {
-              command: "bun test fixture.test.ts",
+              command: "pnpm test fixture.test.ts",
               cwd: context.requestSession.cwd,
               timeoutSeconds: 30,
             },
@@ -831,7 +831,7 @@ describe("turn runner subagent workspace and execution tools", () => {
       );
       expect(run?.progress.validationAttempts).toEqual([
         expect.objectContaining({
-          command: "bun test fixture.test.ts",
+          command: "pnpm test fixture.test.ts",
           status: "passed",
           exitCode: 0,
         }),
@@ -843,7 +843,7 @@ describe("turn runner subagent workspace and execution tools", () => {
   });
 
   test("derives subagent progress from child tool events and records piped validation failures", async () => {
-    const validationCommand = "bun test tests/insights.test.ts | tail -40";
+    const validationCommand = "pnpm test tests/insights.test.ts | tail -40";
     const harness = createSubagentHarness({
       toolName: "openpond_subagent_start",
       toolArgs: {
@@ -1670,7 +1670,7 @@ describe("turn runner subagent workspace and execution tools", () => {
       git(repoPath, ["add", "README.md"]);
       git(repoPath, ["commit", "-m", "Initial commit"]);
 
-      const validationCommand = "bun test failing.test.ts";
+      const validationCommand = "pnpm test failing.test.ts";
       const harness = createSubagentHarness({
         toolName: "openpond_subagent_start",
         toolArgs: {

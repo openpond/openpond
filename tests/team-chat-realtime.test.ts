@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, vi, test } from "vitest";
 
 import type { ManagedEventWebSocket } from "../apps/web/src/api/managed-event-websocket";
 import { openTeamChatRealtime } from "../apps/web/src/api/team-chat-realtime";
@@ -54,8 +54,8 @@ const session = {
 describe("team chat managed realtime client", () => {
   test("uses one native socket for the user and unique thread subscriptions", () => {
     const sockets: FakeWebSocket[] = [];
-    const onEvent = mock(() => undefined);
-    const onReady = mock(() => undefined);
+    const onEvent = vi.fn(() => undefined);
+    const onReady = vi.fn(() => undefined);
     const handle = openTeamChatRealtime(
       {
         session,

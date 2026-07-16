@@ -1,8 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = import.meta.dir.replace(/\/scripts$/, "");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const examples = [
   {
@@ -118,16 +120,10 @@ function assertSnapshotsEqual(exampleName: string, first: ArtifactSnapshot, seco
 }
 
 async function runSdk(args: string[]) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await runProcess(
+    process.execPath,
+    ["./dist/cli.js", ...args],
+  );
   if (exitCode === 0) return;
   throw new Error(
     [
@@ -138,4 +134,26 @@ async function runSdk(args: string[]) {
       .filter(Boolean)
       .join("\n"),
   );
+}
+
+function runProcess(
+  command: string,
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      resolve({ stdout, stderr, exitCode: code ?? (signal ? 1 : 0) });
+    });
+  });
 }

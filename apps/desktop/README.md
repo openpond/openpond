@@ -3,11 +3,11 @@
 Run the app from the repository root:
 
 ```bash
-bun install
-bun run dev
+pnpm install
+pnpm dev
 ```
 
-The root dev supervisor is the supported entrypoint. It builds Desktop, runs the server through Bun watch mode, starts Vite, waits for both readiness contracts, and then starts Electron with the explicit reusable server URL and capability token. It owns all three process groups and drains them in `finally` on startup failure, child exit, SIGINT, or SIGTERM. `scripts/dev-web.ts` is intentionally retired.
+The root dev supervisor is the supported entrypoint. It builds Desktop, runs the server through Node/tsx watch mode, starts Vite, waits for both readiness contracts, and then starts Electron with the explicit reusable server URL and capability token. It owns all three process groups and drains them in `finally` on startup failure, child exit, SIGINT, or SIGTERM. `scripts/dev-web.ts` is intentionally retired.
 
 ## Ports and environment
 
@@ -18,21 +18,21 @@ Desktop reuses a server only when an explicit server URL or reuse policy is pres
 ## Build and package
 
 ```bash
-bun run build:desktop
-bun run stage:desktop
-bun run package:linux
-bun run package:mac
+pnpm build:desktop
+pnpm stage:desktop
+pnpm package:linux
+pnpm package:mac
 ```
 
-`build:desktop` writes the bundled ESM main process and sandbox-compatible CommonJS preload directly to `apps/desktop/dist`. Staging creates a dependency-free app bundle plus a hashed target-specific runtime. Only the server bundle, web build, sqlite3, node-pty, bindings, file-uri-to-path, and required icons enter the package.
+`build:desktop` writes the bundled ESM main process and sandbox-compatible CommonJS preload directly to `apps/desktop/dist`. Staging creates a dependency-free app bundle plus a hashed target-specific runtime. The server uses Electron's built-in `node:sqlite`; only the server bundle, web build, node-pty, bindings, file-uri-to-path, and required icons enter the package.
 
-`bun run budgets:desktop-package` rejects oversized artifacts/resources, nonminimal `app.asar` contents, unexpected staged files, hash mismatches, foreign native binaries, maps, tests, sources, debug symbols, and static libraries.
+`pnpm budgets:desktop-package` rejects oversized artifacts/resources, nonminimal `app.asar` contents, unexpected staged files, hash mismatches, foreign native binaries, maps, tests, sources, debug symbols, and static libraries.
 
 ## Smoke and diagnostics
 
 ```bash
-bun run smoke:desktop:dev -- --skip-chat
-bun run smoke:desktop:packaged
+pnpm smoke:desktop:dev -- --skip-chat
+pnpm smoke:desktop:packaged
 ```
 
 The dev smoke proves preload/renderer/server health and a browser-level render boundary: character-by-character composer typing must not commit the sidebar. The packaged smoke proves SQLite startup, browser snapshot/screenshot/input, detached-view cleanup, and app shutdown.

@@ -16,7 +16,7 @@
     },
     "strict": true,
     "target": "ES2022",
-    "types": ["bun-types"]
+    "types": ["node", "vitest"]
   },
   "include": ["src/**/*.ts", "examples/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"]
 }

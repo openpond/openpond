@@ -2,6 +2,7 @@
   "name": "local-schedule-writer-agent",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.13.0",
   "type": "module",
   "dependencies": {
     "openpond-agent-sdk": "file:../.."

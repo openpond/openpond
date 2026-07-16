@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 
 describe("background worker queue", () => {

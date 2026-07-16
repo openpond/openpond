@@ -17,7 +17,7 @@ validation:
     - test -f deepseek-chat-stream.ts
     - test -f wait-for-user-harness.ts
 start:
-  command: bun wait-for-user-harness.ts
+  command: node wait-for-user-harness.ts
   timeoutSeconds: 180
   ports: []
   artifactPaths:
@@ -27,7 +27,7 @@ start:
     - artifacts/workflow-events.jsonl
 actions:
   - name: stream-chat
-    command: bun deepseek-chat-stream.ts
+    command: node deepseek-chat-stream.ts
     timeoutSeconds: 180
     ports: []
     artifactPaths:
@@ -35,7 +35,7 @@ actions:
       - artifacts/stream-events.jsonl
       - artifacts/workflow-events.jsonl
   - name: wait-for-user
-    command: bun wait-for-user-harness.ts
+    command: node wait-for-user-harness.ts
     timeoutSeconds: 180
     ports: []
     artifactPaths:

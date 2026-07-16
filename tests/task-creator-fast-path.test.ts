@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createTaskCreatorService } from "../apps/server/src/training/task-creator";
 import { contentHash } from "../packages/taskset-sdk/src";
 import { seedConversation, withTrainingStore } from "./helpers/training-fixtures";

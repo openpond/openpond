@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { ModelUsageRecord, Session } from "@openpond/contracts";
 import { usageRecordsPayload, usageSummaryPayload } from "../apps/server/src/api/usage-payloads";
 

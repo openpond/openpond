@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
 import { TaskMinerRunSchema } from "@openpond/contracts";
 import { createTaskMinerService } from "../apps/server/src/training/task-miner";
 import { createTaskMinerBackgroundLoop } from "../apps/server/src/training/task-miner-background-loop";
@@ -94,7 +95,7 @@ describe("task mining evidence detectors", () => {
     const service = createTaskMinerService({
       store,
       addSessionSource: async ({ sessionId }) => {
-        await Bun.sleep(100);
+        await delay(100);
         const source = sourceFixture(`cancel_ingest_${sessionId}`, "cancel-ingest", sessionId);
         await store.upsertTrainingSource(source);
         return source;
@@ -207,7 +208,7 @@ async function waitForMinerRun(store: any, id: string) {
   while (Date.now() < deadline) {
     const run = await store.getTaskMinerRun(id);
     if (run && ["succeeded", "failed", "cancelled"].includes(run.status)) return run;
-    await Bun.sleep(10);
+    await delay(10);
   }
   throw new Error(`Timed out waiting for Task Miner run ${id}.`);
 }
@@ -217,7 +218,7 @@ async function waitForMinerStage(store: any, id: string, stage: string) {
   while (Date.now() < deadline) {
     const run = await store.getTaskMinerRun(id);
     if (run?.progress.stage === stage) return run;
-    await Bun.sleep(10);
+    await delay(10);
   }
   throw new Error(`Timed out waiting for Task Miner run ${id} to reach ${stage}.`);
 }

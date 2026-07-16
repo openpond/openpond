@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createElement, type FormEvent, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";

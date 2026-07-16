@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   AppPreferencesSchema,
   SubagentRunSchema,
@@ -749,7 +749,7 @@ describe("subagent lifecycle watcher", () => {
         plan: ["Inspect notification code", "Add regression coverage"],
         targetFiles: ["apps/server/src/insights.ts"],
         acceptanceCriteria: ["No notification when insights are unchanged"],
-        validationCommands: ["bun test tests/turn-runner-subagents.test.ts"],
+        validationCommands: ["pnpm test tests/turn-runner-subagents.test.ts"],
         stopConditions: ["Stop if validation cannot run"],
       },
       report: {
@@ -758,7 +758,7 @@ describe("subagent lifecycle watcher", () => {
         artifacts: [{ kind: "file", id: "/tmp/openpond-test-attachments/subagents/run_submitted/handoff.patch", label: "Isolated child patch" }],
         patchRef: { kind: "file", id: "/tmp/openpond-test-attachments/subagents/run_submitted/handoff.patch", label: "Isolated child patch" },
         diffRef: { kind: "diff", id: "subagent-run:run_submitted:diff", label: "Isolated child diff" },
-        testsRun: ["bun test tests/turn-runner-subagents.test.ts"],
+        testsRun: ["pnpm test tests/turn-runner-subagents.test.ts"],
         blockers: [],
         confidence: "medium",
         followUpNeeded: true,
@@ -773,7 +773,7 @@ describe("subagent lifecycle watcher", () => {
         changedFiles: ["apps/server/src/runtime/turn-runner.ts"],
         patchRefs: [{ kind: "diff", id: "subagent-run:run_submitted:diff", label: "Isolated child diff" }],
         validationAttempts: [{
-          command: "bun test tests/turn-runner-subagents.test.ts",
+          command: "pnpm test tests/turn-runner-subagents.test.ts",
           status: "passed",
           exitCode: 0,
           outputSummary: "36 pass",
@@ -899,7 +899,7 @@ describe("subagent lifecycle watcher", () => {
     expect(prompt).toContain("Reasons: broad_edit_surface; high_risk_files");
     expect(prompt).toContain("Evidence: packetQuality=reviewable; confidence=medium; changedFiles=8; highRiskFiles=1; validationAttempts=1; failedValidation=0");
     expect(prompt).toContain("Runtime evidence:");
-    expect(prompt).toContain("Validation attempts: bun test tests/turn-runner-subagents.test.ts; status=passed; exit=0; output=36 pass");
+    expect(prompt).toContain("Validation attempts: pnpm test tests/turn-runner-subagents.test.ts; status=passed; exit=0; output=36 pass");
     expect(prompt).toContain("Available decisions:");
     expect(prompt).toContain("openpond_subagent_review with decision=\"accept\"");
     expect(prompt).toContain("openpond_subagent_review with decision=\"needs_revision\"");

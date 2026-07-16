@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { GradeResultSchema, GraderSpecSchema, TaskAttemptResultSchema } from "../packages/contracts/src";
 import { attemptFixture } from "./helpers/training-fixtures";
 

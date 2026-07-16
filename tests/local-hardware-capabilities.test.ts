@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ComputeInventorySchema, type ComputeDevice, type ComputeInventory, type ComputeRuntime } from "@openpond/contracts";
 import { capabilityReason } from "../apps/server/src/training/hardware-gated-destination";
 

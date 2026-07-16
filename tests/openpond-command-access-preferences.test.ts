@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { DEFAULT_APP_PREFERENCES } from "../apps/web/src/lib/app-models";
 import {
   OPENPOND_COMMAND_ACCESS_MODE_STORAGE_KEY,

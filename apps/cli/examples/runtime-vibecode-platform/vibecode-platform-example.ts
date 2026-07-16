@@ -21,7 +21,7 @@ const teamId = optionalEnv("OPENPOND_TEAM_ID");
 const baseBranch = optionalEnv("OPENPOND_BASE_BRANCH") ?? "main";
 const userPrompt =
   process.argv.slice(2).join(" ").trim() ||
-  "Create a tiny Bun HTTP server with a status endpoint.";
+  "Create a tiny Node HTTP server with a status endpoint.";
 const runId = `vibecode-${Date.now()}`;
 
 const client = createOpenPondSandboxClient({
@@ -83,7 +83,7 @@ async function main() {
       {
         type: "module",
         scripts: {
-          start: "bun run src/server.ts",
+          start: "node src/server.mjs",
         },
         dependencies: {},
       },
@@ -93,39 +93,41 @@ async function main() {
   );
 
   await runtime.files.write(
-    "src/server.ts",
+    "src/server.mjs",
     [
-      "const server = Bun.serve({",
-      "  port: Number(process.env.PORT ?? 3000),",
-      "  fetch(request) {",
-      "    const url = new URL(request.url);",
-      "    if (url.pathname === '/status') {",
-      "      return Response.json({ ok: true, prompt: process.env.USER_PROMPT ?? null });",
-      "    }",
-      "    return new Response('OpenPond vibecode example');",
-      "  },",
+      "import { createServer } from 'node:http';",
+      "",
+      "const port = Number(process.env.PORT ?? 3000);",
+      "const server = createServer((request, response) => {",
+      "  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);",
+      "  if (url.pathname === '/status') {",
+      "    response.setHeader('content-type', 'application/json');",
+      "    response.end(JSON.stringify({ ok: true, prompt: process.env.USER_PROMPT ?? null }));",
+      "    return;",
+      "  }",
+      "  response.end('OpenPond vibecode example');",
       "});",
       "",
-      "console.log(`listening on ${server.url}`);",
+      "server.listen(port, '0.0.0.0', () => console.log(`listening on http://0.0.0.0:${port}`));",
       "",
     ].join("\n"),
   );
 
   await runtime.files.write(
     "README.generated.md",
-    `# Generated app\n\nPrompt: ${userPrompt}\n\nRun with:\n\n\`\`\`bash\nbun run start\n\`\`\`\n`,
+    `# Generated app\n\nPrompt: ${userPrompt}\n\nRun with:\n\n\`\`\`bash\nnpm run start\n\`\`\`\n`,
   );
 
-  const readBack = await runtime.files.read("src/server.ts");
+  const readBack = await runtime.files.read("src/server.mjs");
   const command = await runtime.commands.run({
     command:
-      "printf 'runtime files:\\n' && find . -maxdepth 2 -type f | sort && printf '\\nserver preview:\\n' && sed -n '1,80p' src/server.ts",
+      "printf 'runtime files:\\n' && find . -maxdepth 2 -type f | sort && printf '\\nserver preview:\\n' && sed -n '1,80p' src/server.mjs",
     timeoutSeconds: 20,
   });
 
   await runtime.checkpointHint({
     reason: "vibecode_platform_example_generated_files",
-    artifactRefs: ["package.json", "src/server.ts", "README.generated.md"],
+    artifactRefs: ["package.json", "src/server.mjs", "README.generated.md"],
     metadata: {
       userPrompt,
       runId,

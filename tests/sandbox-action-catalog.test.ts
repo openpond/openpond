@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { LocalProject } from "@openpond/contracts";
 
 import { actionCatalogForLocalAgentSdkProject } from "../apps/web/src/lib/local-agent-sdk-action-catalog";

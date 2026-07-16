@@ -153,8 +153,8 @@ Examples live in `examples`.
 ## Run
 
 ```bash
-bun install
-bun run dev
+pnpm install
+pnpm dev
 ```
 
 Cache:

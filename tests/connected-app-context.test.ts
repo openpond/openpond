@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { MentionedConnectedAppRef, Session } from "@openpond/contracts";
 import { resolveConnectedAppContextsForTurn } from "../apps/server/src/runtime/turn-runner";
 import { createHostedTurnHelpers } from "../apps/server/src/openpond/hosted-turn-helpers";

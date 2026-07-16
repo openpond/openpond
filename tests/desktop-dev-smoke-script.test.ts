@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const workspaceRequire = createRequire(path.join(root, "package.json"));
 
 describe("dev desktop smoke script", () => {
   test("is wired as a first-class package script", () => {
@@ -12,17 +14,21 @@ describe("dev desktop smoke script", () => {
       scripts?: Record<string, string>;
     };
 
-    expect(pkg.scripts?.["smoke:desktop:dev"]).toBe("bun scripts/smoke-dev-desktop.ts");
+    expect(pkg.scripts?.["smoke:desktop:dev"]).toBe("tsx scripts/smoke-dev-desktop.ts");
   });
 
   test("prints usage without launching Electron", () => {
-    const result = spawnSync(process.execPath, ["scripts/smoke-dev-desktop.ts", "--help"], {
+    const result = spawnSync(process.execPath, [
+      workspaceRequire.resolve("tsx/cli"),
+      "scripts/smoke-dev-desktop.ts",
+      "--help",
+    ], {
       cwd: root,
       encoding: "utf8",
     });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("usage: bun scripts/smoke-dev-desktop.ts");
+    expect(result.stdout).toContain("usage: pnpm run smoke:desktop:dev --");
   });
 });

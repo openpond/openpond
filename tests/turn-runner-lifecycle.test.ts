@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createTurnRunnerTestHarness } from "./helpers/turn-runner-test-harness";
 
 function blockingHostedStream(onStarted: () => void) {

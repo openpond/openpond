@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ProviderSettingsSchema } from "@openpond/contracts";
 
 import { sendTurnModelSelectionPayload } from "../apps/web/src/hooks/useChatActions";

@@ -5,7 +5,7 @@ export const taskPlanRevisionWorkflow = defineWorkflow({
   description: "Approve, reject, export, rename, or edit a generated task plan.",
   async run(ctx, input) {
     ctx.trace.event("task_plan_revision.started");
-    await ctx.runCommand("bun run revise-task-plan", { input });
+    await ctx.runCommand("pnpm revise-task-plan", { input });
     ctx.trace.artifact("artifacts/task-plan-revision.json");
     return {
       text: "OpenPond applied the task-plan revision and exported the updated version.",

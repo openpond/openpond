@@ -5,7 +5,7 @@ This example shows how a platform developer can use OpenPond sandboxes as the ru
 Run it with an API key:
 
 ```bash
-OPENPOND_API_KEY=opk_... bun run examples/runtime-vibecode-platform/vibecode-platform-example.ts "build a tiny status endpoint"
+OPENPOND_API_KEY=opk_... pnpm exec tsx examples/runtime-vibecode-platform/vibecode-platform-example.ts "build a tiny status endpoint"
 ```
 
 Useful environment variables:
@@ -18,4 +18,3 @@ OPENPOND_BASE_BRANCH=main
 ```
 
 If `OPENPOND_APP_ID` is set, the example starts an app-backed `feature` runtime. If it is omitted, the example creates a generic `attempt` runtime and materializes a sandbox directly. In both cases the platform code uses the same runtime handle after startup.
-

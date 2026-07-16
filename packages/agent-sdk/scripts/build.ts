@@ -1,9 +1,13 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(import.meta.dir, "..");
+import { build } from "esbuild";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
 
 const publicEntries = [
@@ -30,20 +34,25 @@ const publicEntries = [
 await rm(dist, { force: true, recursive: true });
 await mkdir(dist, { recursive: true });
 
-for (const [entrypoint, outfile] of publicEntries) {
-  await mkdir(path.dirname(path.join(root, outfile)), { recursive: true });
-  await run([
-    "bun",
-    "build",
-    path.join(root, entrypoint),
-    "--outfile",
-    path.join(root, outfile),
-    "--target",
-    "bun",
-    "--format",
-    "esm",
-  ]);
-}
+await build({
+  entryPoints: Object.fromEntries(
+    publicEntries.map(([entrypoint, outfile]) => [
+      outfile.replace(/^dist\//, "").replace(/\.js$/, ""),
+      path.join(root, entrypoint),
+    ]),
+  ),
+  outdir: dist,
+  bundle: true,
+  external: ["tsx"],
+  platform: "node",
+  target: "node24.18",
+  format: "esm",
+  legalComments: "none",
+  logLevel: "info",
+  banner: {
+    js: 'import { createRequire as __openpondCreateRequire } from "node:module"; var require = __openpondCreateRequire(import.meta.url);',
+  },
+});
 
 await run([resolveTscBin(), "--project", "tsconfig.build.json"]);
 await ensureExecutableCli();
@@ -59,24 +68,15 @@ function resolveTscBin(): string {
 async function ensureExecutableCli() {
   const cliPath = path.join(dist, "cli.js");
   const cli = await readFile(cliPath, "utf8");
-  const withShebang = cli.startsWith("#!/usr/bin/env bun")
+  const withShebang = cli.startsWith("#!/usr/bin/env node")
     ? cli
-    : `#!/usr/bin/env bun\n${cli}`;
+    : `#!/usr/bin/env node\n${cli}`;
   if (withShebang !== cli) await writeFile(cliPath, withShebang, "utf8");
   await chmod(cliPath, 0o755);
 }
 
 async function run(command: string[]) {
-  const proc = Bun.spawn(command, {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await runProcess(command, root);
   if (exitCode === 0) return;
   throw new Error(
     [
@@ -85,4 +85,26 @@ async function run(command: string[]) {
       stderr.trim(),
     ].filter(Boolean).join("\n"),
   );
+}
+
+function runProcess(
+  command: string[],
+  cwd: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command[0]!, command.slice(1), {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      resolve({ stdout, stderr, exitCode: code ?? (signal ? 1 : 0) });
+    });
+  });
 }

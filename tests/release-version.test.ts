@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   assertReleaseVersion,
@@ -47,21 +47,8 @@ async function createReleaseFixture(): Promise<string> {
     'export const VERSION = "0.0.23";\n',
   );
   await writeFile(
-    path.join(root, "bun.lock"),
-    `${JSON.stringify(
-      {
-        lockfileVersion: 1,
-        workspaces: {
-          "": { name: "root" },
-          "apps/desktop": { name: "desktop", version: "0.0.23" },
-          "apps/server": { name: "server", version: "0.0.23" },
-          "packages/independent": { name: "independent", version: "4.2.0" },
-          "packages/logging": { name: "logging", version: "0.0.23" },
-        },
-      },
-      null,
-      2,
-    )}\n`,
+    path.join(root, "pnpm-lock.yaml"),
+    "lockfileVersion: '9.0'\nimporters: {}\n",
   );
   return root;
 }
@@ -112,7 +99,7 @@ describe("release source versions", () => {
   });
 
   test("keeps the checked-in release cohort aligned", async () => {
-    const root = path.resolve(import.meta.dir, "..");
+    const root = path.resolve(import.meta.dirname, "..");
     const rootPackage = JSON.parse(
       await readFile(path.join(root, "package.json"), "utf8"),
     ) as { version?: string };

@@ -1,8 +1,9 @@
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-const repoRoot = path.resolve(import.meta.dir, "..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const roots = [
   path.join(repoRoot, "apps/server/src/runtime"),
   path.join(repoRoot, "apps/server/src/openpond"),
@@ -41,7 +42,7 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 async function localDependencies(file: string): Promise<string[]> {
-  const source = await Bun.file(file).text();
+  const source = await readFile(file, "utf8");
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
   const dependencies = new Set<string>();
   for (const statement of sourceFile.statements) {

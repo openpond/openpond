@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 export function resolveLocalAgentSdkCommand(cwd: string): {
@@ -12,7 +13,7 @@ export function resolveLocalAgentSdkCommand(cwd: string): {
     "dist",
     "cli.js"
   );
-  if (existsSync(packageDistCli)) return { command: "bun", args: [packageDistCli] };
+  if (existsSync(packageDistCli)) return { command: process.execPath, args: [packageDistCli] };
   const localBin = path.join(cwd, "node_modules", ".bin", "openpond-agent");
   if (existsSync(localBin)) return { command: localBin, args: [] };
   const packageCli = path.join(
@@ -22,7 +23,9 @@ export function resolveLocalAgentSdkCommand(cwd: string): {
     "src",
     "cli.ts"
   );
-  if (existsSync(packageCli)) return { command: "bun", args: [packageCli] };
+  if (existsSync(packageCli)) {
+    return nodeTypescriptCommand(path.dirname(path.dirname(packageCli)), packageCli);
+  }
   const packageDependencyCli = resolveAgentSdkDependencyCli(cwd);
   if (packageDependencyCli) return packageDependencyCli;
   return { command: "openpond-agent", args: [] };
@@ -47,11 +50,19 @@ function resolveAgentSdkDependencyCli(cwd: string): {
     if (!versionSpec?.startsWith("file:")) return null;
     const packageRoot = path.resolve(cwd, versionSpec.slice("file:".length));
     const sourceCli = path.join(packageRoot, "src", "cli.ts");
-    if (existsSync(sourceCli)) return { command: "bun", args: [sourceCli] };
+    if (existsSync(sourceCli)) return nodeTypescriptCommand(packageRoot, sourceCli);
     const distCli = path.join(packageRoot, "dist", "cli.js");
-    if (existsSync(distCli)) return { command: "bun", args: [distCli] };
+    if (existsSync(distCli)) return { command: process.execPath, args: [distCli] };
   } catch {
     return null;
   }
   return null;
+}
+
+function nodeTypescriptCommand(packageRoot: string, sourceCli: string): {
+  command: string;
+  args: string[];
+} {
+  const tsxCli = createRequire(path.join(packageRoot, "package.json")).resolve("tsx/cli");
+  return { command: process.execPath, args: [tsxCli, sourceCli] };
 }

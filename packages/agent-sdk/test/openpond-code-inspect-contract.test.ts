@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { runTestProcess } from "../../../tests/helpers/run-process";
 
-const packageRoot = path.resolve(import.meta.dir, "..");
+const packageRoot = path.resolve(import.meta.dirname, "..");
 const shapePath = path.join(packageRoot, "test", "fixtures", "openpond-code", "inspect-shape.json");
 
 type ShapeRequirement = {
@@ -48,17 +49,9 @@ async function runSdkJson(args: string[]) {
 }
 
 async function runSdk(args: string[]) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
+  return runTestProcess(process.execPath, ["./dist/cli.js", ...args], {
     cwd: packageRoot,
-    stdout: "pipe",
-    stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
 }
 
 function getPath(value: unknown, dottedPath: string): unknown {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ProviderSettingsSchema } from "../packages/contracts/src";
 import { trustedProviderContextLimit } from "../apps/server/src/openpond/context-usage";
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
 import { createElement, type ComponentProps, type Dispatch, type SetStateAction } from "react";

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   CONNECTED_APP_TOOL_CALL_ENDPOINT,
   ConnectedAppToolCallRequestSchema,

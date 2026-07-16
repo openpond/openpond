@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { normalizeModelUsageTokens } from "../apps/server/src/runtime/model-usage-normalization";
 
 describe("model usage normalization", () => {

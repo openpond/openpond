@@ -1,12 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import path from "node:path";
 import { access } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { buildTaskset } from "../packages/taskset-sdk/src";
 import { createTrainingService } from "../apps/server/src/training/training-service";
 import { trainingRunDetail } from "../apps/server/src/training/run-detail";
 import { sftRecipeFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
 
-describe.serial("training start orchestration", () => {
+describe.sequential("training start orchestration", () => {
   test("rejects unsupported methods before creating a training plan", async () => withTrainingStore(async ({ store, directory }) => {
     const taskset = tasksetFixture({ ready: true });
     await store.upsertTaskset(taskset);
@@ -58,7 +59,7 @@ describe.serial("training start orchestration", () => {
       await artifactStoreEntered;
       let closeFinished = false;
       const closing = service.close().then(() => { closeFinished = true; });
-      await Bun.sleep(25);
+      await delay(25);
       const closedBeforeArtifactImportFinished = closeFinished;
       releaseArtifactStore();
       await closing;
@@ -88,7 +89,7 @@ async function waitForTerminal(store: any, jobId: string) {
   while (Date.now() < deadline) {
     const job = await store.getTrainingJob(jobId);
     if (job && ["succeeded", "failed", "cancelled"].includes(job.status)) return job;
-    await Bun.sleep(100);
+    await delay(100);
   }
   throw new Error(`Timed out waiting for ${jobId}.`);
 }

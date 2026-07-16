@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -573,7 +573,7 @@ describe("OpenPond resource read/search", () => {
           checks: [
             {
               ok: false,
-              command: "bun test",
+              command: "pnpm test",
               code: 1,
               stdout: "failing assertion",
               stderr: "expected true",
@@ -586,7 +586,7 @@ describe("OpenPond resource read/search", () => {
     const search = searchSessionResources({
       events: [...events],
       sessionId: "session_1",
-      request: { scope: "artifacts", query: "bun test" },
+      request: { scope: "artifacts", query: "pnpm test" },
     });
     const read = readSessionResource({
       events: [...events],
@@ -596,7 +596,7 @@ describe("OpenPond resource read/search", () => {
 
     expect(search.items.map((item) => item.ref)).toEqual(["event:check-result:checks_event:0"]);
     expect(read.kind).toBe("event.check-result");
-    expect(read.contentText).toContain("$ bun test");
+    expect(read.contentText).toContain("$ pnpm test");
     expect(read.contentText).toContain("expected true");
   });
 
@@ -613,7 +613,7 @@ describe("OpenPond resource read/search", () => {
           checks: [
             {
               ok: true,
-              command: "bun test",
+              command: "pnpm test",
               code: 0,
               stdout: largeStdout,
               stderr: "",

@@ -17,9 +17,9 @@ openpond-agent init integration-heavy-agent --cwd ./ops-agent
 From this monorepo, run SDK commands through the package workspace:
 
 ```bash
-bun run --cwd packages/agent-sdk build
-bun run --cwd packages/agent-sdk validate -- --cwd examples/blank-agent
-bun run --cwd packages/agent-sdk eval -- --cwd examples/blank-agent
+pnpm --dir packages/agent-sdk build
+pnpm --dir packages/agent-sdk validate -- --cwd examples/blank-agent
+pnpm --dir packages/agent-sdk eval -- --cwd examples/blank-agent
 ```
 
 ## Source Layout

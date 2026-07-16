@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   hasTerminalWebSocketAuth,

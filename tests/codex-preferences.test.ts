@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   CODEX_PERMISSION_MODE_STORAGE_KEY,
   CODEX_REASONING_EFFORT_STORAGE_KEY,

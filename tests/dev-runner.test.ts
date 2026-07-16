@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   buildDevRunnerPlan,
   parseDevRunnerArgs,
@@ -30,7 +30,7 @@ describe("dev runner", () => {
       "desktop",
     ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "--watch",
+      "watch",
       "apps/server/src/index.ts",
       "--port",
       "17874",
@@ -55,7 +55,7 @@ describe("dev runner", () => {
     expect(plan.setupCommands).toEqual([]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server", "renderer"]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "--watch",
+      "watch",
       "apps/server/src/index.ts",
       "--port",
       "19074",

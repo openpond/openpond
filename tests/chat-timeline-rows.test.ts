@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import {
   buildChatTimelineRows,
@@ -67,7 +67,7 @@ describe("chat timeline rows", () => {
             {
               id: "tool-1",
               label: "Running",
-              content: "bun test",
+              content: "pnpm test",
               timestamp: "2026-07-01T10:00:00.000Z",
               state: "running",
             },
@@ -85,7 +85,7 @@ describe("chat timeline rows", () => {
             {
               id: "tool-1",
               label: "Completed",
-              content: "bun test",
+              content: "pnpm test",
               timestamp: "2026-07-01T10:00:00.000Z",
               state: "completed",
             },

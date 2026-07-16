@@ -6,15 +6,15 @@ import type { SandboxScheduleSelection } from "../app-shell/SandboxCreateDialog"
 export function starterManifestPreview(projectName: string, preset: string): string {
   const safeName = projectName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "agent";
   if (preset === "cron") {
-    return `name: ${safeName}\nversion: 0.1.0\nuseCase: scheduled_report\nstart:\n  command: bun run report\nschedules:\n  - name: daily-report\n    command: bun run report\n    cron: \"0 9 * * *\"`;
+    return `name: ${safeName}\nversion: 0.1.0\nuseCase: scheduled_report\nstart:\n  command: pnpm report\nschedules:\n  - name: daily-report\n    command: pnpm report\n    cron: \"0 9 * * *\"`;
   }
   if (preset === "background") {
-    return `name: ${safeName}\nversion: 0.1.0\nuseCase: background_worker\nstart:\n  command: bun run worker\nservices:\n  - name: worker\n    command: bun run worker`;
+    return `name: ${safeName}\nversion: 0.1.0\nuseCase: background_worker\nstart:\n  command: pnpm worker\nservices:\n  - name: worker\n    command: pnpm worker`;
   }
   if (preset === "resources") {
-    return `name: ${safeName}\nversion: 0.1.0\nuseCase: resource_profile\nresources:\n  cpu: 1\n  memoryGb: 2\n  diskGb: 16\nstart:\n  command: bun start`;
+    return `name: ${safeName}\nversion: 0.1.0\nuseCase: resource_profile\nresources:\n  cpu: 1\n  memoryGb: 2\n  diskGb: 16\nstart:\n  command: pnpm start`;
   }
-  return `name: ${safeName}\nversion: 0.1.0\nuseCase: action\nstart:\n  command: bun start\nactions:\n  - name: hello\n    command: bun run hello`;
+  return `name: ${safeName}\nversion: 0.1.0\nuseCase: action\nstart:\n  command: pnpm start\nactions:\n  - name: hello\n    command: pnpm hello`;
 }
 
 export function agentSetupStatusLabel(state: string, reason: string | null): string {

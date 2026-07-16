@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +25,7 @@ describe("desktop runtime staging", () => {
 
   test("electron-builder consumes only the staged app and runtime", async () => {
     const config = JSON.parse(
-      await readFile(path.join(import.meta.dir, "..", "apps", "desktop", "electron-builder.json"), "utf8"),
+      await readFile(path.join(import.meta.dirname, "..", "apps", "desktop", "electron-builder.json"), "utf8"),
     ) as {
       directories?: { app?: string };
       files?: string[];
@@ -70,7 +70,7 @@ describe("desktop runtime staging", () => {
       await writeFile(bundled, 'import { app } from "electron"; console.log(app.name);\n');
       await writeFile(unbundled, 'import { helper } from "./helper.js"; console.log(helper);\n');
       await expect(assertStandaloneDesktopBundle(bundled)).resolves.toBeUndefined();
-      await expect(assertStandaloneDesktopBundle(unbundled)).rejects.toThrow("Run bun run build:desktop");
+      await expect(assertStandaloneDesktopBundle(unbundled)).rejects.toThrow("Run pnpm run build:desktop");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

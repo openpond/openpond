@@ -1,13 +1,14 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 
-import { beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "vitest";
 
 import { listCliCommandDefinitions } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
 
-const cliRoot = join(import.meta.dir, "..");
+const cliRoot = join(import.meta.dirname, "..");
 
 type CliPackageJson = {
   version: string;
@@ -30,7 +31,7 @@ describe("CLI installed-package smoke", () => {
   test("runs from a source checkout TypeScript entrypoint", async () => {
     const result = await runProcessCommand(
       process.execPath,
-      ["run", "src/cli/main.ts", "--version"],
+      [createRequire(import.meta.url).resolve("tsx/cli"), "src/cli/main.ts", "--version"],
       { cwd: cliRoot }
     );
 

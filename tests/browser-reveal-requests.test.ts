@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { browserRevealDecision } from "../apps/web/src/hooks/useBrowserRevealRequests";
 
 describe("browser reveal requests", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, vi, test } from "vitest";
 import type { ManagedEventWebSocket } from "../apps/web/src/api/managed-event-websocket";
 import { openCommunityRealtime } from "../apps/web/src/api/community-realtime";
 
@@ -18,7 +18,7 @@ class FakeWebSocket implements ManagedEventWebSocket {
 describe("community realtime", () => {
   test("subscribes only to the authorized per-user community channel", () => {
     let socket: FakeWebSocket | null = null;
-    const onEvent = mock(() => undefined);
+    const onEvent = vi.fn(() => undefined);
     const handle = openCommunityRealtime({
       session: {
         httpUrl: "https://example.appsync-api.us-east-2.amazonaws.com/event",

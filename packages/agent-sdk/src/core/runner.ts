@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import path from "node:path";
 
 import type {
@@ -251,17 +252,10 @@ function createAgentContext(project: AgentProjectDefinition, state: RunState): A
           )
         : {};
       try {
-        const process = Bun.spawn(["bash", "-lc", command], {
-          cwd,
-          env: { ...globalThis.process.env, ...optionEnv },
-          stdout: "pipe",
-          stderr: "pipe",
+        const { exitCode, stdout, stderr } = await runShellCommand(command, cwd, {
+          ...process.env,
+          ...optionEnv,
         });
-        const [exitCode, stdout, stderr] = await Promise.all([
-          process.exited,
-          new Response(process.stdout).text(),
-          new Response(process.stderr).text(),
-        ]);
         const status = exitCode === 0 ? "succeeded" : "failed";
         state.events.push(traceEvent("command.completed", {
           command,
@@ -289,6 +283,38 @@ function createAgentContext(project: AgentProjectDefinition, state: RunState): A
     },
   };
   return ctx;
+}
+
+function runShellCommand(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("bash", ["-lc", command], {
+      cwd,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      resolve({
+        exitCode: code ?? (signal ? 1 : 0),
+        stdout,
+        stderr,
+      });
+    });
+  });
 }
 
 async function executeActionTarget(

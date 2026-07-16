@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { insertVoiceTranscript } from "../apps/web/src/lib/voice-text";
 
 describe("voice transcript insertion", () => {

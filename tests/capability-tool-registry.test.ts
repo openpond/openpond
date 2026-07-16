@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createOpenPondCapabilityModelToolDefinitions } from "../apps/server/src/openpond/capability-tool-registry";
 import type {
   ModelToolExecutionContext,
@@ -76,7 +76,7 @@ describe("OpenPond capability tool registry", () => {
         plan: ["Inspect failing tests", "Patch the implementation"],
         targetFiles: ["tests/failing.test.ts"],
         acceptanceCriteria: ["Focused tests pass"],
-        validationCommands: ["bun test tests/failing.test.ts"],
+        validationCommands: ["pnpm test tests/failing.test.ts"],
         stopConditions: ["Report a blocker if dependencies are missing"],
       },
       required: false,
@@ -112,7 +112,7 @@ describe("OpenPond capability tool registry", () => {
             plan: ["Inspect failing tests", "Patch the implementation"],
             targetFiles: ["tests/failing.test.ts"],
             acceptanceCriteria: ["Focused tests pass"],
-            validationCommands: ["bun test tests/failing.test.ts"],
+            validationCommands: ["pnpm test tests/failing.test.ts"],
             stopConditions: ["Report a blocker if dependencies are missing"],
           },
           required: false,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readCodexHistorySearchText, type CodexHistoryThread } from "../apps/server/src/codex-history";

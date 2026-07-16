@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TrainingRunDetailSchema } from "../packages/contracts/src";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";

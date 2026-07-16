@@ -455,10 +455,10 @@ function defaultSourcePlan(input: {
 
 function defaultChecks() {
   return [
-    { name: "inspect", command: "bun run agent:inspect", required: true },
-    { name: "build", command: "bun run build", required: true },
-    { name: "validate", command: "bun run agent:validate", required: true },
-    { name: "eval", command: "bun run agent:eval", required: true },
+    { name: "inspect", command: "pnpm agent:inspect", required: true },
+    { name: "build", command: "pnpm build", required: true },
+    { name: "validate", command: "pnpm agent:validate", required: true },
+    { name: "eval", command: "pnpm agent:eval", required: true },
   ];
 }
 
@@ -712,7 +712,7 @@ const CREATE_PIPELINE_PLANNER_SYSTEM_PROMPT = [
   '{"schemaVersion":"openpond.createPipeline.plannerDecision.v1","decision":"questions","questions":[{"title":"Data source","prompt":"Where should this agent read from?","kind":"single_choice","required":true,"options":[{"label":"Committed local fixtures","value":"fixtures"},{"label":"Existing local file","value":"local_file"}]}]}',
   "",
   "If the request is actionable, return:",
-  '{"schemaVersion":"openpond.createPipeline.plannerDecision.v1","decision":"plan","plan":{"agentId":"short-agent-id","agentName":"Short Agent Name","summary":"What will be created.","capturedContextSummary":"What context will be used.","actionShape":{"mode":"chat","label":"Chat only","detail":"Expose through default chat.","defaultActionKey":"chat","directActionHint":null,"artifactPolicy":"Persist trace and run summary."},"defaultChatAction":{"key":"chat","label":"Chat","required":true},"sourcePlan":[{"path":"agents/short-agent-id","operation":"create","reason":"Implement the approved agent."}],"requirements":[],"checks":[{"name":"inspect","command":"bun run agent:inspect","required":true},{"name":"build","command":"bun run build","required":true},{"name":"validate","command":"bun run agent:validate","required":true},{"name":"eval","command":"bun run agent:eval","required":true}]}}',
+  '{"schemaVersion":"openpond.createPipeline.plannerDecision.v1","decision":"plan","plan":{"agentId":"short-agent-id","agentName":"Short Agent Name","summary":"What will be created.","capturedContextSummary":"What context will be used.","actionShape":{"mode":"chat","label":"Chat only","detail":"Expose through default chat.","defaultActionKey":"chat","directActionHint":null,"artifactPolicy":"Persist trace and run summary."},"defaultChatAction":{"key":"chat","label":"Chat","required":true},"sourcePlan":[{"path":"agents/short-agent-id","operation":"create","reason":"Implement the approved agent."}],"requirements":[],"checks":[{"name":"inspect","command":"pnpm agent:inspect","required":true},{"name":"build","command":"pnpm build","required":true},{"name":"validate","command":"pnpm agent:validate","required":true},{"name":"eval","command":"pnpm agent:eval","required":true}]}}',
   "",
   "plan.requirements is only for setup/dependency rows, never feature requirements, acceptance criteria, user goals, or task bullets.",
   "For self-contained demos, committed fixtures, mock CSV files, and normal chat behavior, use requirements: [] unless actual setup is needed.",

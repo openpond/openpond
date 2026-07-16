@@ -4,17 +4,17 @@
 
 OpenPond requires:
 
-- Bun
-- Node.js `>=20.19 <21` or `>=22.12`
+- Node.js 24.18.0
+- pnpm 11.13.0
 
 Install dependencies from the repository root and start the local app:
 
 ```bash
-bun install
-bun run dev
+pnpm install
+pnpm dev
 ```
 
-`bun run dev` starts the watched app server, Vite renderer, and Electron desktop app. If the app is already running, keep using the existing process instead of starting another one.
+`pnpm dev` starts the watched app server, Vite renderer, and Electron desktop app. If the app is already running, keep using the existing process instead of starting another one.
 
 ## Repository Layout
 

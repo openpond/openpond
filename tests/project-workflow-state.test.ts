@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { CloudProject, LocalProject, WorkspaceState } from "@openpond/contracts";
 import {
   cloudWorkspaceStateNote,

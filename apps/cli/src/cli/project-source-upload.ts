@@ -33,6 +33,7 @@ export const PROJECT_SOURCE_UPLOAD_TRANSPORT = {
   mode: "single_json_payload" as const,
   chunkingSupported: false as const,
 };
+const OPENPOND_PNPM_PACKAGE_MANAGER = "pnpm@11.13.0";
 const AGENT_SDK_SOURCE_UPLOAD_METADATA_PATH =
   ".openpond/source-upload-metadata.json";
 const AGENT_SDK_VENDOR_TARBALL_PATH =
@@ -306,6 +307,14 @@ export async function collectAgentSdkProjectSourceUploadEntries(
         "package.json",
         `${JSON.stringify(materializedDependency.rewrittenPackageJson, null, 2)}\n`
       )
+    );
+  }
+  if (materializedDependency?.pnpmWorkspaceSource) {
+    entries.push(
+      projectSourceUploadTextEntry(
+        "pnpm-workspace.yaml",
+        materializedDependency.pnpmWorkspaceSource,
+      ),
     );
   }
   for (const tarball of materializedDependency?.tarballs ?? []) {
@@ -596,7 +605,8 @@ function buildAgentSdkCommandHint(
   if (packageManager === "pnpm") return `pnpm run ${scriptName}`;
   if (packageManager === "yarn") return `yarn ${scriptName}`;
   if (packageManager === "npm") return `npm run ${scriptName}`;
-  return `bun run ${scriptName}`;
+  if (packageManager === "bun") return `bun run ${scriptName}`;
+  return `pnpm run ${scriptName}`;
 }
 
 function readOpenPondAgentSdkVersionSpec(
@@ -618,6 +628,7 @@ async function buildAgentSdkMaterializedDependency(
   packageJson: Record<string, unknown>
 ): Promise<{
   rewrittenPackageJson: Record<string, unknown>;
+  pnpmWorkspaceSource: string | null;
   tarballs: AgentSdkMaterializedTarball[];
   dependencySetup: Record<string, unknown>;
 } | null> {
@@ -638,11 +649,16 @@ async function buildAgentSdkMaterializedDependency(
       dependencyBaseDir: sdkSource.dependencyBaseDir,
       tempDir,
     });
+    const packageManager = detectAgentSdkPackageManager(projectPath, packageJson);
     const rewrittenPackageJson = rewriteAgentSdkPackageJsonForMaterialization(
       packageJson,
-      sdkDependencyTarballs
+      sdkDependencyTarballs,
+      packageManager,
     );
-    const packageManager = detectAgentSdkPackageManager(projectPath, packageJson);
+    const pnpmWorkspaceSource =
+      packageManager === "pnpm" || packageManager === "unknown"
+        ? buildAgentSdkPnpmWorkspaceSource(projectPath, sdkDependencyTarballs)
+        : null;
     const installCommand = agentSdkDependencyInstallCommand(packageManager);
     const sdkPackage: Omit<AgentSdkMaterializedTarball, "contents"> = {
       packageName: "openpond-agent-sdk",
@@ -653,6 +669,7 @@ async function buildAgentSdkMaterializedDependency(
     };
     return {
       rewrittenPackageJson,
+      pnpmWorkspaceSource,
       tarballs: [
         {
           ...sdkPackage,
@@ -724,10 +741,15 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
   tempDir: string;
 }): Promise<AgentSdkMaterializedTarball[]> {
   const dependencies = recordStringMap(params.sdkPackageJson.dependencies);
+  const pending = Object.entries(dependencies)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([packageName, versionSpec]) => ({ packageName, versionSpec }));
+  const seen = new Set<string>();
   const tarballs: AgentSdkMaterializedTarball[] = [];
-  for (const [packageName, versionSpec] of Object.entries(dependencies).sort(
-    ([left], [right]) => left.localeCompare(right)
-  )) {
+  while (pending.length > 0) {
+    const { packageName, versionSpec } = pending.shift()!;
+    if (seen.has(packageName)) continue;
+    seen.add(packageName);
     const packTarget = npmPackTargetForDependency({
       packageName,
       versionSpec,
@@ -753,6 +775,7 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
       );
     }
     const contents = await fs.readFile(path.join(params.tempDir, tarballName));
+    const packedPackageJson = readPackageJsonFromNpmTarball(contents);
     tarballs.push({
       packageName,
       source: "npm_dependency_tarball",
@@ -764,8 +787,27 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
       sha256: sha256Hex(contents),
       sizeBytes: contents.byteLength,
     });
+    for (const [dependencyName, dependencySpec] of Object.entries(
+      recordStringMap(packedPackageJson.dependencies),
+    )) {
+      pending.push({ packageName: dependencyName, versionSpec: dependencySpec });
+    }
+    for (const [dependencyName, dependencySpec] of Object.entries(
+      recordStringMap(packedPackageJson.optionalDependencies),
+    )) {
+      if (!isSupportedSandboxOptionalDependency(dependencyName)) continue;
+      pending.push({ packageName: dependencyName, versionSpec: dependencySpec });
+    }
   }
-  return tarballs;
+  return tarballs.sort((left, right) => left.packageName.localeCompare(right.packageName));
+}
+
+function isSupportedSandboxOptionalDependency(packageName: string): boolean {
+  if (packageName === "fsevents") return false;
+  if (packageName.startsWith("@esbuild/")) {
+    return packageName === "@esbuild/linux-x64" || packageName === "@esbuild/linux-arm64";
+  }
+  return true;
 }
 
 function npmPackTargetForDependency(params: {
@@ -932,7 +974,8 @@ function readTarString(
 
 function rewriteAgentSdkPackageJsonForMaterialization(
   packageJson: Record<string, unknown>,
-  dependencyTarballs: AgentSdkMaterializedTarball[]
+  dependencyTarballs: AgentSdkMaterializedTarball[],
+  packageManager: "bun" | "npm" | "pnpm" | "yarn" | "unknown",
 ): Record<string, unknown> {
   const rewritten: Record<string, unknown> = { ...packageJson };
   const dependencies = recordCopy(rewritten.dependencies);
@@ -947,6 +990,9 @@ function rewriteAgentSdkPackageJsonForMaterialization(
   if (Object.keys(overrides).length > 0) {
     rewritten.overrides = overrides;
   }
+  if (packageManager === "unknown") {
+    rewritten.packageManager = OPENPOND_PNPM_PACKAGE_MANAGER;
+  }
 
   for (const key of ["devDependencies", "peerDependencies"]) {
     const entries = recordCopy(rewritten[key]);
@@ -959,6 +1005,41 @@ function rewriteAgentSdkPackageJsonForMaterialization(
   }
 
   return rewritten;
+}
+
+function buildAgentSdkPnpmWorkspaceSource(
+  projectPath: string,
+  dependencyTarballs: AgentSdkMaterializedTarball[],
+): string {
+  const workspacePath = path.join(projectPath, "pnpm-workspace.yaml");
+  let workspace: Record<string, unknown> = {};
+  if (existsSync(workspacePath)) {
+    const parsed = yaml.load(readFileSyncUtf8(workspacePath));
+    workspace = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? { ...(parsed as Record<string, unknown>) }
+      : {};
+  }
+  if (!Array.isArray(workspace.packages)) workspace.packages = [];
+  const overrides = recordCopy(workspace.overrides);
+  for (const tarball of dependencyTarballs) {
+    overrides[tarball.packageName] = `file:${tarball.path}`;
+  }
+  workspace.overrides = overrides;
+  const allowBuilds = recordCopy(workspace.allowBuilds);
+  allowBuilds.esbuild = true;
+  const vendoredEsbuild = dependencyTarballs.find(
+    (tarball) => tarball.packageName === "esbuild",
+  );
+  if (vendoredEsbuild) {
+    allowBuilds[`esbuild@file:${vendoredEsbuild.path}`] = true;
+  }
+  workspace.allowBuilds = allowBuilds;
+  workspace.supportedArchitectures = {
+    os: ["linux"],
+    cpu: ["x64", "arm64"],
+    libc: ["glibc", "musl"],
+  };
+  return yaml.dump(workspace, { lineWidth: 120, noRefs: true });
 }
 
 function recordStringMap(value: unknown): Record<string, string> {
@@ -996,7 +1077,8 @@ function agentSdkDependencyInstallCommand(
   if (packageManager === "npm") return "npm install --offline";
   if (packageManager === "pnpm") return "pnpm install --offline";
   if (packageManager === "yarn") return "yarn install --offline";
-  return "bun install --offline";
+  if (packageManager === "bun") return "bun install --offline";
+  return "pnpm install --offline";
 }
 
 function sha256Hex(contents: Buffer): string {
@@ -1190,7 +1272,13 @@ export function mergeProjectSourceUploadEntries(
   extraEntries: Array<{ path: string; type: "file"; contentsBase64: string }>
 ) {
   const byPath = new Map<string, { path: string; type: "file"; contentsBase64: string }>();
-  for (const entry of collected.entries) byPath.set(entry.path, entry);
+  const regeneratesPnpmLock = extraEntries.some(
+    (entry) => entry.path === "pnpm-workspace.yaml",
+  );
+  for (const entry of collected.entries) {
+    if (regeneratesPnpmLock && entry.path === "pnpm-lock.yaml") continue;
+    byPath.set(entry.path, entry);
+  }
   for (const entry of extraEntries) byPath.set(entry.path, entry);
   const entries = Array.from(byPath.values()).sort((left, right) =>
     left.path.localeCompare(right.path)

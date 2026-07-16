@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { SubagentMessage, SubagentRun } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store";
 
@@ -28,7 +28,7 @@ describe("subagent store", () => {
           artifacts: [],
           patchRef: null,
           diffRef: { kind: "diff", id: "diff-1", label: "Coding diff" },
-          testsRun: ["bun test tests/subagent-store.test.ts"],
+          testsRun: ["pnpm test tests/subagent-store.test.ts"],
           blockers: [],
           confidence: "high",
           followUpNeeded: false,

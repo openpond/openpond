@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { TaskDataRecordSchema, TasksetEnvironmentContractSchema } from "../packages/contracts/src";
 import { computeTasksetHash, validatePortability, validateTaskset } from "../packages/taskset-sdk/src";
 import { tasksetFixture } from "./helpers/training-fixtures";

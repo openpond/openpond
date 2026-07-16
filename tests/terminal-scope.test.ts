@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -138,7 +138,7 @@ describe("terminal scope state", () => {
     const queuedCommand = {
       id: 1,
       scope: sessionAScope,
-      command: "bun test",
+      command: "pnpm test",
     };
 
     expect(terminalQueuedCommandAppliesToScope(queuedCommand, sessionAScope)).toBe(true);
@@ -149,7 +149,7 @@ describe("terminal scope state", () => {
 
 describe("terminal shell integration parser", () => {
   test("strips shell markers and emits command lifecycle events", () => {
-    const command = Buffer.from("bun test").toString("base64url");
+    const command = Buffer.from("pnpm test").toString("base64url");
     const parsed = parseTerminalIntegrationOutput(
       `before\x1b]1337;OpenPond;command_start;sequence=1;command=${command}\x07middle` +
         `\x1b]1337;OpenPond;command_end;sequence=2;exitCode=0\x07after` +
@@ -159,7 +159,7 @@ describe("terminal shell integration parser", () => {
     expect(parsed.output).toBe("beforemiddleafter");
     expect(parsed.pending).toBe("");
     expect(parsed.events).toEqual([
-      { type: "command_start", sequence: 1, command: "bun test" },
+      { type: "command_start", sequence: 1, command: "pnpm test" },
       { type: "command_end", sequence: 2, exitCode: 0 },
       { type: "prompt_ready", sequence: 3 },
     ]);

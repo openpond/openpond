@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { access, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createTaskCreatorService } from "../apps/server/src/training/task-creator";

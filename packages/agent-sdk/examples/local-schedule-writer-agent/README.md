@@ -5,5 +5,5 @@ This example validates the local in-process scheduler. The scheduled action appe
 Run it manually with:
 
 ```bash
-bun ../../dist/cli.js run write-tick --json --cwd .
+node ../../dist/cli.js run write-tick --json --cwd .
 ```

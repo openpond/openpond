@@ -27,6 +27,7 @@ export class RawInput {
     if (this.dataHandler) this.input.off("data", this.dataHandler);
     this.dataHandler = null;
     this.input.setRawMode(this.previousRawMode);
+    this.input.pause();
   }
 }
 

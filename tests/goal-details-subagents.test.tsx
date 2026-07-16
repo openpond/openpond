@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SubagentRuntimeStatus } from "../apps/web/src/lib/subagent-runtime";
@@ -94,8 +94,8 @@ describe("GoalDetailsView subagents", () => {
               findings: ["No notification is sent when the insights payload is unchanged."],
               changedFiles: ["apps/server/src/insights/insights-system.ts"],
               refs: [{ kind: "diff", id: "subagent-run:run_done:diff", label: "Insights diff" }],
-              testsRun: ["bun test tests/insights-system.test.ts"],
-              validationAttempts: ["bun test tests/insights-system.test.ts - passed exit 0"],
+              testsRun: ["pnpm test tests/insights-system.test.ts"],
+              validationAttempts: ["pnpm test tests/insights-system.test.ts - passed exit 0"],
               blockers: [],
               confidence: "high",
               packetQualityStatus: "weak",
@@ -156,7 +156,7 @@ describe("GoalDetailsView subagents", () => {
     expect(html).toContain("Child Results");
     expect(html).toContain("Suppressed unchanged insight notifications.");
     expect(html).toContain("apps/server/src/insights/insights-system.ts");
-    expect(html).toContain("bun test tests/insights-system.test.ts");
+    expect(html).toContain("pnpm test tests/insights-system.test.ts");
     expect(html).toContain("diff: Insights diff");
     expect(html).toContain("Weak packet");
     expect(html).toContain("Packet evidence:");

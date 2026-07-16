@@ -92,31 +92,34 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "tsx": "4.23.1",
     "yaml": "^2.9.0",
     "zod": "^4.1.11"
   },
   "devDependencies": {
     "@openpond/connected-apps": "workspace:*",
-    "bun-types": "^1.3.13",
+    "@types/node": "24.13.3",
+    "esbuild": "0.28.1",
+    "vitest": "4.1.10",
     "typescript": "^5.9.3"
   },
   "openpondBundledSourceDependencies": [
     "@openpond/connected-apps"
   ],
   "scripts": {
-    "build": "bun ./scripts/build.ts",
+    "build": "tsx ./scripts/build.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun run build && bun test",
-    "inspect": "bun ./dist/cli.js inspect --json",
-    "agent:build": "bun ./dist/cli.js build",
-    "validate": "bun ./dist/cli.js validate",
-    "eval": "bun ./dist/cli.js eval",
-    "run": "bun ./dist/cli.js run",
-    "traces": "bun ./dist/cli.js traces",
-    "check:examples": "bun ./scripts/check-examples.ts",
-    "check:package-install": "bun ./scripts/check-package-install.ts",
-    "check:hygiene": "bun ./scripts/check-hygiene.ts",
+    "test": "pnpm run build && vitest run --root ../.. --config vitest.config.ts --project agent-sdk",
+    "inspect": "node ./dist/cli.js inspect --json",
+    "agent:build": "node ./dist/cli.js build",
+    "validate": "node ./dist/cli.js validate",
+    "eval": "node ./dist/cli.js eval",
+    "run": "node ./dist/cli.js run",
+    "traces": "node ./dist/cli.js traces",
+    "check:examples": "tsx ./scripts/check-examples.ts",
+    "check:package-install": "tsx ./scripts/check-package-install.ts",
+    "check:hygiene": "tsx ./scripts/check-hygiene.ts",
     "pack:dry-run": "npm pack --dry-run",
-    "check": "bun run build && bun run typecheck && bun test && bun run check:examples && bun run check:package-install && bun run check:hygiene && bun run pack:dry-run"
+    "check": "pnpm run build && pnpm run typecheck && vitest run --root ../.. --config vitest.config.ts --project agent-sdk && pnpm run check:examples && pnpm run check:package-install && pnpm run check:hygiene && pnpm run pack:dry-run"
   }
 }
