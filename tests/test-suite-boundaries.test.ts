@@ -29,7 +29,7 @@ describe("test suite boundaries", () => {
     expect(implicitUnit.length + explicit.size).toBe(entries.length);
   });
 
-  test("exposes one complete local push verifier and no CI skip switches", async () => {
+  test("keeps local verification opt-in and GitHub CI mandatory", async () => {
     const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as {
       scripts: Record<string, string>;
     };
@@ -43,7 +43,8 @@ describe("test suite boundaries", () => {
     expect(packageJson.scripts["cli:build"]).toBe(
       "pnpm run build:web && pnpm --dir apps/cli run build",
     );
-    expect(prePushHook).toContain("pnpm run verify:quick");
+    expect(prePushHook).toContain("Local verification is");
+    expect(prePushHook).not.toContain("pnpm run verify:quick\n");
     expect(prePushHook).not.toContain("pnpm run verify:push");
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_");
     expect(testRunner).toMatch(
