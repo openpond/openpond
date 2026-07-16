@@ -9,6 +9,11 @@ import { normalizeSessionPayload, persistStoreData, readStoreData } from "./stor
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
+  isConfirmedSqliteCorruption,
+  retrySqliteHealthCheck,
+  SqliteIntegrityError,
+} from "./sqlite/sqlite-health.js";
+import {
   isTerminalOpenPondGoalStatus,
   openPondThreadGoalMutationFromEvent,
   threadDetailProjectionFromRow,
@@ -19,57 +24,18 @@ import {
   type ThreadDetailProjection,
   type ThreadDetailProjectionRow,
 } from "./store-codecs.js";
+import { SQLITE_MIGRATIONS } from "./store-migrations.js";
+import {
+  resetLegacySubagentRuntimeEvents as resetLegacySubagentRuntimeEventsMigration,
+  resetLegacySubagentTransportState as resetLegacySubagentTransportStateMigration,
+} from "./store-subagent-migrations.js";
 
 type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
 type TableInfoRow = { name: string };
 
-const SQLITE_HEALTH_RETRY_DELAYS_MS = [50, 100, 200, 400, 800] as const;
-
-class SqliteIntegrityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SqliteIntegrityError";
-  }
-}
-
-function sqliteErrorCode(error: unknown): string | null {
-  if (!error || typeof error !== "object" || !("code" in error)) return null;
-  return typeof error.code === "string" ? error.code.toUpperCase() : null;
-}
-
-function sqliteErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-}
-
-function isConfirmedSqliteCorruption(error: unknown): boolean {
-  if (error instanceof SqliteIntegrityError) return true;
-  const code = sqliteErrorCode(error);
-  if (code === "SQLITE_CORRUPT" || code === "SQLITE_NOTADB") return true;
-  const message = sqliteErrorMessage(error);
-  return message.includes("database disk image is malformed") ||
-    message.includes("file is not a database") ||
-    message.includes("file is encrypted or is not a database");
-}
-
-function isTransientSqliteAvailabilityError(error: unknown): boolean {
-  const code = sqliteErrorCode(error);
-  if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") return true;
-  const message = sqliteErrorMessage(error);
-  return message.includes("database is locked") || message.includes("database is busy");
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export type SqliteStoreCoreOptions = {
   logger?: Logger;
-};
-
-type Migration = {
-  version: number;
-  run: (store: SqliteStoreCore) => Promise<void>;
 };
 
 export class SqliteStoreCore {
@@ -124,22 +90,17 @@ export class SqliteStoreCore {
   }
 
   protected async assertHealthyDatabaseWithRetry(): Promise<void> {
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        await this.assertHealthyDatabase();
-        return;
-      } catch (error) {
-        const retryDelay = SQLITE_HEALTH_RETRY_DELAYS_MS[attempt];
-        if (!isTransientSqliteAvailabilityError(error) || retryDelay === undefined) throw error;
+    await retrySqliteHealthCheck({
+      check: () => this.assertHealthyDatabase(),
+      onRetry: ({ attempt, retryDelayMs, error }) => {
         this.logger?.warn("sqlite health check temporarily unavailable; retrying", {
           storePath: this.storePath,
-          attempt: attempt + 1,
-          retryDelayMs: retryDelay,
+          attempt,
+          retryDelayMs,
           error,
         });
-        await delay(retryDelay);
-      }
-    }
+      },
+    });
   }
 
   protected async runMigrations(storeDir: string, hadDatabase: boolean): Promise<void> {
@@ -499,19 +460,14 @@ export class SqliteStoreCore {
   }
 
   async resetLegacySubagentTransportState(): Promise<void> {
-    // The v18 subagent runtime deliberately replaces the previous semantic
-    // review/watcher state machine. Its stored payloads are not meaningful to
-    // the new generic child-conversation transport, so begin with a clean
-    // transport ledger instead of carrying legacy behavior forward.
-    await this.exec(`
-      DELETE FROM subagent_messages;
-      DELETE FROM subagent_runs;
-    `);
+    await resetLegacySubagentTransportStateMigration((sql) => this.exec(sql));
   }
 
   async resetLegacySubagentRuntimeEvents(): Promise<void> {
-    await this.run("DELETE FROM events WHERE name LIKE 'subagent.%'", []);
-    await this.rebuildReadModels();
+    await resetLegacySubagentRuntimeEventsMigration(
+      (sql, params) => this.run(sql, params),
+      () => this.rebuildReadModels(),
+    );
   }
 
   async createOpenPondThreadGoalTable(): Promise<void> {
@@ -969,86 +925,3 @@ export class SqliteStoreCore {
     return this.db;
   }
 }
-
-const SQLITE_MIGRATIONS: Migration[] = [
-  {
-    version: 1,
-    run: (store) => store.createSchema(),
-  },
-  {
-    version: 2,
-    run: (store) => store.createHotQueryIndexes(),
-  },
-  {
-    version: 3,
-    run: (store) => store.createReadModelTables(),
-  },
-  {
-    version: 4,
-    run: (store) => store.createInsightTables(),
-  },
-  {
-    version: 5,
-    run: (store) => store.createInsightRunLinkColumns(),
-  },
-  {
-    version: 6,
-    run: (store) => store.createInsightRunLinkColumns(),
-  },
-  {
-    version: 7,
-    run: (store) => store.createModelUsageTables(),
-  },
-  {
-    version: 8,
-    run: (store) => store.createLocalAgentScheduleTables(),
-  },
-  {
-    version: 9,
-    run: (store) => store.createSubagentTables(),
-  },
-  {
-    version: 10,
-    run: (store) => store.createOpenPondThreadGoalTable(),
-  },
-  {
-    version: 11,
-    run: (store) => store.createTrainingTables(),
-  },
-  {
-    version: 12,
-    run: (store) => store.createTaskCreationProjectionTables(),
-  },
-  {
-    version: 13,
-    run: (store) => store.createGraderAuditTables(),
-  },
-  {
-    version: 14,
-    run: (store) => store.createTaskAttemptArtifactTables(),
-  },
-  {
-    version: 15,
-    run: (store) => store.createTrainingChatSearchTables(),
-  },
-  {
-    version: 16,
-    run: (store) => store.resetTrainingChatSearchForProgressiveIndexing(),
-  },
-  {
-    version: 17,
-    run: (store) => store.createTaskMinerRunTables(),
-  },
-  {
-    version: 18,
-    run: (store) => store.createCrossSystemFrontierBaselineRunTables(),
-  },
-  {
-    version: 19,
-    run: (store) => store.resetLegacySubagentTransportState(),
-  },
-  {
-    version: 20,
-    run: (store) => store.resetLegacySubagentRuntimeEvents(),
-  },
-];
