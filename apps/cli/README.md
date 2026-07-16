@@ -4,13 +4,27 @@ OpenPond CLI
 
 The generated [command reference](./docs/command-reference.md) is the authoritative command and option inventory.
 
-Install:
+Launch the complete local web app without installing it globally:
 
 ```bash
-npm i -g openpond
-# or
-npx --package openpond openpond tool list handle/repo
-# or (curl installer)
+npx openpond@latest
+```
+
+The command starts a local OpenPond server, passes its authenticated URL directly to your system browser, and stays attached until you press `Ctrl+C`. Application state persists under `~/.openpond/openpond-app`; the directory where you invoke the command is not modified. npm maintains its own package cache separately.
+
+Node.js 24.18 or newer in the Node 24 release line is required. Other installation and launch forms remain available:
+
+```bash
+npm install --global openpond
+openpond
+
+# Print the authenticated local URL instead of opening a browser.
+openpond ui --no-open
+
+# Launch the terminal UI explicitly.
+openpond tui
+
+# GitHub release installer for a compiled CLI.
 curl -fsSL https://openpond.ai/install.sh | bash
 ```
 

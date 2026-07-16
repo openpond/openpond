@@ -25,6 +25,9 @@ export async function runOpenPondServerCommand(
 ): Promise<void> {
   const server = resolveAppEntrypoint("server");
   const args = [...server.args, mode, ...forwardedOptions(options), ...rest];
+  if (mode === "web") {
+    args.push(options.noOpen === true || options.noOpen === "true" ? "--print-access-url" : "--open-browser");
+  }
   const webRoot = mode === "web" && typeof options.webRoot !== "string" ? packagedWebRoot() : null;
   if (webRoot) args.push("--web-root", webRoot);
   await runChild(server.runner, args, server.cwd);
@@ -110,7 +113,7 @@ function isCompiledExecutable(): boolean {
 }
 
 function forwardedOptions(options: CliOptions): string[] {
-  const ignored = new Set(["account", "handle", "baseUrl", "tui"]);
+  const ignored = new Set(["account", "handle", "baseUrl", "noOpen", "tui"]);
   const args: string[] = [];
   for (const [key, value] of Object.entries(options)) {
     if (ignored.has(key)) continue;

@@ -1,4 +1,4 @@
-import { getBundledRuntimeVersion } from "@openpond/runtime";
+import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,15 @@ type ParsedCliArgs = {
   host: string;
   port: number;
   webRoot: string | null;
+  openBrowser: boolean;
+  printAccessUrl: boolean;
   help: boolean;
+};
+type BrowserHandoff = typeof openUrlWithSystemBrowser;
+
+export type WebLaunchMessages = {
+  stdout: string[];
+  stderr: string[];
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,20 +43,26 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let host = DEFAULT_HOST;
   let port = DEFAULT_PORT;
   let webRoot: string | null = null;
+  let openBrowser = false;
+  let printAccessUrl = false;
   let index = 0;
 
   const command = args[0];
   if (command && !command.startsWith("-")) {
     if (command === "serve" || command === "server") mode = "serve";
     else if (command === "web") mode = "web";
-    else if (command === "help") return { mode, host, port, webRoot, help: true };
+    else if (command === "help") {
+      return { mode, host, port, webRoot, openBrowser, printAccessUrl, help: true };
+    }
     else throw new Error(`Unknown command: ${command}`);
     index = 1;
   }
 
   for (let i = index; i < args.length; i += 1) {
     const arg = args[i]!;
-    if (arg === "--help" || arg === "-h") return { mode, host, port, webRoot, help: true };
+    if (arg === "--help" || arg === "-h") {
+      return { mode, host, port, webRoot, openBrowser, printAccessUrl, help: true };
+    }
     if (arg === "--listen") {
       const listen = parseListen(requireValue(args, i, arg));
       host = listen.host;
@@ -63,12 +77,22 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
     } else if (arg === "--web-root") {
       webRoot = path.resolve(requireValue(args, i, arg));
       i += 1;
+    } else if (arg === "--open-browser") {
+      openBrowser = true;
+    } else if (arg === "--print-access-url") {
+      printAccessUrl = true;
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
   }
 
-  return { mode, host, port, webRoot, help: false };
+  if (openBrowser && printAccessUrl) {
+    throw new Error("--open-browser and --print-access-url cannot be used together.");
+  }
+  if (mode !== "web" && (openBrowser || printAccessUrl)) {
+    throw new Error("Browser options are only available in web mode.");
+  }
+  return { mode, host, port, webRoot, openBrowser, printAccessUrl, help: false };
 }
 
 function defaultWebRootCandidates(): string[] {
@@ -108,6 +132,33 @@ function tokenizedWebUrl(baseUrl: string, token: string): string {
   return url.toString();
 }
 
+export async function resolveWebLaunchMessages(
+  input: {
+    baseUrl: string;
+    openBrowser: boolean;
+    printAccessUrl: boolean;
+    token: string;
+  },
+  handOffToBrowser: BrowserHandoff = openUrlWithSystemBrowser,
+): Promise<WebLaunchMessages> {
+  const accessUrl = tokenizedWebUrl(input.baseUrl, input.token);
+  if (input.printAccessUrl) {
+    return { stdout: [`OpenPond access URL: ${accessUrl}`], stderr: [] };
+  }
+  if (!input.openBrowser) {
+    return { stdout: [`OpenPond web UI: ${input.baseUrl}`], stderr: [] };
+  }
+
+  const handoff = await handOffToBrowser(accessUrl);
+  if (handoff.opened) {
+    return { stdout: [`Opened OpenPond in your browser: ${input.baseUrl}`], stderr: [] };
+  }
+  return {
+    stdout: [`OpenPond access URL: ${accessUrl}`],
+    stderr: [`Could not open the system browser: ${handoff.error}`],
+  };
+}
+
 function printHelp(): void {
   console.log(`Usage:
   openpond-app-server serve [--hostname HOST] [--port PORT]
@@ -118,6 +169,8 @@ Options:
   --hostname HOST        Bind host (default ${DEFAULT_HOST})
   --port PORT            Bind port, or 0 for any free port (default ${DEFAULT_PORT})
   --web-root DIR         Directory containing the built web UI for web mode
+  --open-browser         Open the authenticated web URL in the system browser
+  --print-access-url     Print the authenticated URL instead of opening it
 `);
 }
 
@@ -134,25 +187,34 @@ export async function runOpenPondServerCli(createOpenPondServer: CreateServer): 
   }
 
   const instance = await createOpenPondServer({ host: args.host, port: args.port, webRoot });
-  const webUrl = args.mode === "web" ? tokenizedWebUrl(browserBaseUrl(instance), instance.token) : null;
+  const webBaseUrl = args.mode === "web" ? browserBaseUrl(instance) : null;
   console.log(
     `OPENPOND_APP_SERVER_READY ${JSON.stringify({
       mode: args.mode,
       url: instance.url,
-      webUrl,
+      webUrl: null,
       webRoot,
       tokenFile: instance.tokenFile,
       storePath: instance.storePath,
       runtime: getBundledRuntimeVersion(),
     })}`
   );
-  if (webUrl) {
-    console.log(`OpenPond web UI: ${webUrl}`);
-    console.log(`Tailscale Serve URL token: #openpondToken=${encodeURIComponent(instance.token)}`);
+  if (webBaseUrl) {
+    const messages = await resolveWebLaunchMessages({
+      baseUrl: webBaseUrl,
+      openBrowser: args.openBrowser,
+      printAccessUrl: args.printAccessUrl,
+      token: instance.token,
+    });
+    for (const message of messages.stderr) console.error(message);
+    for (const message of messages.stdout) console.log(message);
   } else {
     console.log(`OpenPond API server: ${instance.url}`);
   }
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     await instance.close();
     process.exit(0);
   };

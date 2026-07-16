@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -173,7 +173,7 @@ async function checkInstalledEntrypoints(input: {
 async function checkEphemeralEntrypoints(
   tarballPath: string,
   version: string,
-): Promise<{ npx: "passed"; pnpmDlx: "passed" }> {
+): Promise<{ npx: "passed"; npxWebLaunch: "passed" | "skipped-windows"; pnpmDlx: "passed" }> {
   const cwd = await tempDir("openpond-cli-ephemeral-cwd-");
   const npx = await command("npx", [
     "--yes",
@@ -185,7 +185,121 @@ async function checkEphemeralEntrypoints(
 
   const pnpmDlx = await command("pnpm", ["dlx", tarballPath, "--version"], { cwd });
   assertVersion(pnpmDlx.stdout, version, "pnpm dlx");
-  return { npx: "passed", pnpmDlx: "passed" };
+  const npxWebLaunch = await checkDefaultNpxWebLaunch(tarballPath);
+  return { npx: "passed", npxWebLaunch, pnpmDlx: "passed" };
+}
+
+async function checkDefaultNpxWebLaunch(
+  tarballPath: string,
+): Promise<"passed" | "skipped-windows"> {
+  if (process.platform === "win32") return "skipped-windows";
+
+  const cwd = await tempDir("openpond-cli-npx-web-cwd-");
+  const userHome = await tempDir("openpond-cli-npx-web-user-home-");
+  const appHome = path.join(userHome, ".openpond", "openpond-app");
+  await mkdir(appHome, { recursive: true });
+  const browserBin = await tempDir("openpond-cli-browser-bin-");
+  const browserCapture = path.join(browserBin, "browser-url.txt");
+  const browserCommand = path.join(browserBin, process.platform === "darwin" ? "open" : "xdg-open");
+  await writeFile(browserCommand, [
+    "#!/bin/sh",
+    "set -eu",
+    "printf '%s' \"$1\" > \"$OPENPOND_BROWSER_CAPTURE_FILE\"",
+    "",
+  ].join("\n"), "utf8");
+  await chmod(browserCommand, 0o755);
+
+  const beforeCwd = await readdir(cwd);
+  const child = spawn("npx", [
+    "--yes",
+    `--package=${tarballPath}`,
+    "openpond",
+    "--port",
+    "0",
+  ], {
+    cwd,
+    env: {
+      ...process.env,
+      HOME: userHome,
+      OPENPOND_APP_HOME: appHome,
+      OPENPOND_BROWSER_CAPTURE_FILE: browserCapture,
+      OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
+      PATH: `${browserBin}${path.delimiter}${process.env.PATH ?? ""}`,
+      USERPROFILE: userHome,
+    },
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout = boundedAppend(stdout, chunk); });
+  child.stderr.on("data", (chunk) => { stderr = boundedAppend(stderr, chunk); });
+
+  let serverUrl = "";
+  try {
+    const payload = await waitForReady(() => stdout, () => stderr, child, 30_000);
+    if (payload.mode !== "web") {
+      throw new Error(`bare npx launch selected ${payload.mode} instead of web mode`);
+    }
+    if (payload.webUrl !== null) {
+      throw new Error("bare npx launch leaked its authenticated URL in the readiness payload");
+    }
+    if (!(await waitForPath(browserCapture, 5_000))) {
+      throw new Error(`bare npx launch did not hand a URL to the system browser: ${stderr || stdout}`);
+    }
+
+    const browserUrlText = await readFile(browserCapture, "utf8");
+    const browserUrl = new URL(browserUrlText);
+    const fragment = new URLSearchParams(browserUrl.hash.slice(1));
+    serverUrl = fragment.get("openpondServerUrl") ?? "";
+    const token = fragment.get("openpondToken") ?? "";
+    if (!serverUrl || !token) {
+      throw new Error("browser handoff URL did not contain the server URL and capability token");
+    }
+    if (new URL(serverUrl).origin !== browserUrl.origin || new URL(payload.url).origin !== browserUrl.origin) {
+      throw new Error(`browser handoff origin did not match server readiness: ${browserUrl.origin} vs ${payload.url}`);
+    }
+    if (`${stdout}\n${stderr}`.includes(token) || stdout.includes("openpondToken")) {
+      throw new Error("bare npx launch exposed its capability token in normal command output");
+    }
+
+    const renderer = await fetch(serverUrl);
+    const html = await renderer.text();
+    if (!renderer.ok || !html.includes("<!doctype html>")) {
+      throw new Error(`bare npx launch returned ${renderer.status} without the built renderer`);
+    }
+    const bootstrap = await fetch(`${serverUrl}/v1/bootstrap?ensureProfile=0`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!bootstrap.ok) {
+      throw new Error(`browser capability token failed bootstrap authentication: ${bootstrap.status}`);
+    }
+    if (!(await waitForPath(payload.storePath, 2_000))) {
+      throw new Error(`bare npx launch did not create its SQLite store at ${payload.storePath}`);
+    }
+    const relativeStorePath = path.relative(appHome, payload.storePath);
+    if (relativeStorePath.startsWith("..") || path.isAbsolute(relativeStorePath)) {
+      throw new Error(`bare npx launch wrote its SQLite store outside app home: ${payload.storePath}`);
+    }
+    if ((await readdir(appHome)).length === 0) {
+      throw new Error("bare npx launch did not persist its app state");
+    }
+    if (JSON.stringify(await readdir(cwd)) !== JSON.stringify(beforeCwd)) {
+      throw new Error("bare npx launch modified the invocation working directory");
+    }
+  } finally {
+    await stopProcess(child);
+  }
+
+  if (serverUrl && await canFetch(serverUrl)) {
+    throw new Error("bare npx launch left its local server running after shutdown");
+  }
+  if (JSON.stringify(await readdir(cwd)) !== JSON.stringify(beforeCwd)) {
+    throw new Error("bare npx launch modified the invocation working directory during shutdown");
+  }
+  return "passed";
 }
 
 function installedBinPath(binRoot: string, binName: string): string {
@@ -228,7 +342,7 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
   }
   const server = await liveServer(commandName, [...prefixArgs, "serve", "--port", "0"], cwd, env);
   writePersistenceMarker(server.storePath);
-  const ui = await liveServer(commandName, [...prefixArgs, "ui", "--port", "0"], cwd, env);
+  const ui = await liveServer(commandName, [...prefixArgs, "ui", "--no-open", "--port", "0"], cwd, env);
   if (ui.storePath !== server.storePath) {
     throw new Error(`npm CLI restart changed store path: ${server.storePath} -> ${ui.storePath}`);
   }
@@ -268,8 +382,7 @@ async function liveServer(
       throw new Error(`${payload.mode} did not create its SQLite store at ${payload.storePath}`);
     }
     if (payload.mode === "web") {
-      if (!payload.webUrl) throw new Error("web mode did not return a web URL");
-      const response = await fetch(payload.webUrl.split("#")[0]!);
+      const response = await fetch(payload.url);
       const html = await response.text();
       if (!response.ok || !html.includes("<!doctype html>")) {
         throw new Error(`web mode returned ${response.status} without the built renderer`);
@@ -338,6 +451,15 @@ async function waitForPath(filePath: string, timeoutMs: number): Promise<boolean
     await delay(25);
   }
   return existsSync(filePath);
+}
+
+async function canFetch(url: string): Promise<boolean> {
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(1_000) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function stopProcess(child: ReturnType<typeof spawn>): Promise<void> {

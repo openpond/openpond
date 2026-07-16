@@ -13,6 +13,7 @@ export function formatCliHelp(): string {
     "OpenPond CLI",
     "",
     "Usage:",
+    "  openpond [--no-open] [--hostname HOST] [--port PORT]",
     "  openpond <command> [options] [-- passthrough...]",
     "  openpond --version",
     "",

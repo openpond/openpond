@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 
 import { parseArgs } from "./common/args";
-import { parseBooleanOption } from "./common/options";
 import { resolveAccountOption, resolveBaseUrlOption } from "./common/urls";
 import { getInstalledCliVersion } from "./common/version";
 import { runCliCommand } from "./command-registry";
+import { resolveCliTopLevelAction } from "./top-level-action";
 
 export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void> {
   if (await runEmbeddedCompanion(argv)) return;
   const { command, options, rest } = parseArgs(argv);
-  if (options.version !== undefined && !command) {
+  const action = resolveCliTopLevelAction({ command, options });
+  if (action === "version") {
     console.log(getInstalledCliVersion());
     return;
   }
-  if (options.checkUpdate !== undefined) {
+  if (action === "check-update") {
     await (await import("./core-commands")).runCheckUpdate();
+    return;
+  }
+  if (action === "help") {
+    (await import("./help")).printHelp();
     return;
   }
   const selectedAccount = resolveAccountOption(options);
@@ -26,18 +31,13 @@ export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void
     process.env.OPENPOND_BASE_URL = selectedBaseUrl;
   }
 
-  if (parseBooleanOption(options.tui)) {
+  if (action === "tui") {
     await (await import("./app-layer")).runOpenPondTerminalCommand(options, rest);
     return;
   }
 
-  if (!command && process.stdin.isTTY && process.stdout.isTTY) {
-    await (await import("./app-layer")).runOpenPondTerminalCommand(options, rest);
-    return;
-  }
-
-  if (!command) {
-    (await import("./help")).printHelp();
+  if (action === "ui") {
+    await (await import("./app-layer")).runOpenPondServerCommand("web", options, rest);
     return;
   }
 
