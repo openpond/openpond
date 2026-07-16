@@ -38,8 +38,6 @@ export async function stageDesktopRuntime(
   );
   await copyTree(path.join(options.root, "apps", "web", "dist"), path.join(runtimeRoot, "web"));
   await stageNodePtyRuntime(options.root, runtimeRoot, platform, arch);
-  await stageSmallDependency(options.root, runtimeRoot, "bindings", ["bindings.js"]);
-  await stageSmallDependency(options.root, runtimeRoot, "file-uri-to-path", ["index.js"]);
 
   const files = await inventoryFiles(runtimeRoot, runtimeRoot, platform);
   const forbidden = files.filter((entry) =>
@@ -112,7 +110,7 @@ async function stageNodePtyRuntime(
   platform: NodeJS.Platform,
   arch: string,
 ): Promise<void> {
-  const source = path.join(root, "node_modules", "node-pty");
+  const source = path.join(root, "apps", "server", "node_modules", "node-pty");
   const target = packageTarget(stageRoot, "node-pty");
   await copyPackageMetadata(source, target);
   await copyTree(path.join(source, "lib"), path.join(target, "lib"), (file) =>
@@ -154,20 +152,6 @@ export function nodePtyPrebuildFiles(platform: NodeJS.Platform): string[] {
 
 function nodePtyBuildFiles(platform: NodeJS.Platform): string[] {
   return nodePtyPrebuildFiles(platform);
-}
-
-async function stageSmallDependency(
-  root: string,
-  stageRoot: string,
-  packageName: string,
-  runtimeFiles: string[],
-): Promise<void> {
-  const source = path.join(root, "node_modules", packageName);
-  const target = packageTarget(stageRoot, packageName);
-  await copyPackageMetadata(source, target);
-  for (const runtimeFile of runtimeFiles) {
-    await copyRequired(path.join(source, runtimeFile), path.join(target, runtimeFile));
-  }
 }
 
 async function copyPackageMetadata(source: string, target: string): Promise<void> {
