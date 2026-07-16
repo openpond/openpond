@@ -12,6 +12,8 @@
       "@openpond/contracts/*": ["../../packages/contracts/src/*"],
       "@openpond/local-server": ["../server/src/index.ts"],
       "@openpond/local-server/*": ["../server/src/*"],
+      "@openpond/runtime": ["../../packages/runtime/src/index.ts"],
+      "@openpond/runtime/*": ["../../packages/runtime/src/*"],
       "@openpond/terminal": ["../terminal/src/index.ts"],
       "openpond-agent-sdk": ["../../packages/agent-sdk/src/index.ts"],
       "openpond-agent-sdk/*": ["../../packages/agent-sdk/src/*"]

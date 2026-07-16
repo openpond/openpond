@@ -220,12 +220,13 @@ Options:
 
 ```text
 Usage:
-  openpond ui [args]
+  openpond ui [--no-open] [--hostname HOST] [--port PORT]
 
 Options:
   --host <string>
   --hostname <string>
   --listen <string>
+  --no-open
   --port <integer>
   --web-root <string>
 ```

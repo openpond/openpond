@@ -46,3 +46,10 @@ export {
 } from "./actions.js";
 export { getBundledRuntimeVersion } from "./version.js";
 export { createReadyLineParser, type ReadyLineParser } from "./ready-line-parser.js";
+export {
+  openUrlWithSystemBrowser,
+  resolveSystemBrowserCommand,
+  type SystemBrowserCommand,
+  type SystemBrowserOpenOptions,
+  type SystemBrowserOpenResult,
+} from "./system-browser.js";

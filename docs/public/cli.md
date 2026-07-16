@@ -6,12 +6,15 @@ The package's [generated command reference](../../apps/cli/docs/command-referenc
 
 ## Install
 
-Install from npm:
+Run the complete local web app directly from npm:
 
 ```bash
-npm install --global openpond
-openpond --version
+npx openpond@latest
 ```
+
+This starts the local server, passes its authenticated URL directly to the system browser, and remains attached to the terminal. Press `Ctrl+C` to stop it. Conversations, settings, attachments, and other application state persist under `~/.openpond/openpond-app`; the directory where the command was invoked is not modified. npm's downloaded package cache is separate from OpenPond application data.
+
+The npm path requires Node.js 24.18 or newer in the Node 24 release line. For repeated use, `npm install --global openpond` installs the same package and `openpond` has the same web-first default behavior.
 
 GitHub releases also provide compiled tarballs for Linux and macOS on x64 and arm64. The curl installer downloads the matching tarball and `SHA256SUMS.txt`, verifies SHA-256, and installs `openpond` plus the `op` symlink under `~/.openpond/bin` by default.
 
@@ -22,8 +25,10 @@ The npm package and compiled archive both contain the local server, terminal com
 Local app commands:
 
 ```bash
+openpond
 openpond serve --port 0
 openpond ui --port 0
+openpond ui --no-open
 openpond tui
 openpond chat --message "Summarize this project" --non-interactive --yes
 ```
@@ -36,7 +41,7 @@ Cloud and account commands include `login`, `profiles`, `account`, `health`, `pr
 
 `openpond login` stores account credentials in `~/.openpond/config.json`. Use `--account` or `OPENPOND_ACCOUNT` to select a saved account, and `--base-url` when the same handle exists at more than one endpoint. Configuration and caches are private, atomic, and locked across concurrent CLI processes.
 
-Local `serve` and `ui` use an app-home capability token rather than a cloud API key. The token is not printed in ordinary command output.
+Local `serve` and `ui` use an app-home capability token rather than a cloud API key. A normal web launch hands the authenticated URL directly to the browser without printing the token. `openpond ui --no-open` intentionally prints that URL for headless or remote workflows, so treat it as a secret.
 
 ## Machine output and exit codes
 

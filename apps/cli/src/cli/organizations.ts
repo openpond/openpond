@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { openUrlWithSystemBrowser as handOffUrlToSystemBrowser } from "@openpond/runtime";
 
 import type {
   OpenPondOrganization,
@@ -341,16 +341,7 @@ export async function startMcpOAuthCallbackListener(input: {
 }
 
 export function openUrlWithSystemBrowser(url: string): void {
-  const platform = process.platform;
-  const command =
-    platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
-  const args = platform === "win32" ? ["/c", "start", "", url] : [url];
-  // Detached OS handoff; there is no captured command output to bound.
-  const child = spawn(command, args, {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+  void handOffUrlToSystemBrowser(url);
 }
 
 export function buildMcpOAuthAuthorizeUrl(input: {

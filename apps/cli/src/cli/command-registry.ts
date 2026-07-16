@@ -179,11 +179,12 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "ui",
-    usage: "openpond ui [args]",
+    usage: "openpond ui [--no-open] [--hostname HOST] [--port PORT]",
     optionSchema: {
       host: "string",
       hostname: "string",
       listen: "string",
+      noOpen: "boolean",
       port: "integer",
       webRoot: "string",
     },
@@ -383,7 +384,7 @@ export function getCliCommandDefinition(command: Command): CliCommandDefinition 
 }
 
 export function getCliOptionKind(command: Command, key: string): CliCommandOptionKind | undefined {
-  const definition = command ? getCliCommandDefinition(command) : null;
+  const definition = command ? getCliCommandDefinition(command) : getCliCommandDefinition("ui");
   return definition?.optionSchema[key] ?? CLI_GLOBAL_OPTION_SCHEMA[key as keyof typeof CLI_GLOBAL_OPTION_SCHEMA];
 }
 

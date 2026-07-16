@@ -99,6 +99,9 @@ importers:
       '@openpond/local-server':
         specifier: workspace:*
         version: link:../server
+      '@openpond/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@openpond/terminal':
         specifier: workspace:*
         version: link:../terminal

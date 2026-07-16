@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ReadStream, WriteStream } from "node:tty";
 import { pathToFileURL } from "node:url";
+import { openUrlWithSystemBrowser } from "@openpond/runtime";
 import {
   type Approval,
   type BootstrapPayload,
@@ -75,19 +75,8 @@ async function interruptTurn(server: string, token: string, sessionId: string): 
   await apiFetch(server, token, `/v1/sessions/${sessionId}/turns/interrupt`, { method: "POST" });
 }
 
-function openUrlCommand(url: string): { command: string; args: string[] } {
-  if (process.platform === "darwin") return { command: "open", args: [url] };
-  if (process.platform === "win32") return { command: "cmd", args: ["/c", "start", "", url] };
-  return { command: "xdg-open", args: [url] };
-}
-
 function openUrlDetached(url: string): void {
-  const { command, args } = openUrlCommand(url);
-  const child = spawn(command, args, {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+  void openUrlWithSystemBrowser(url);
 }
 
 async function chat(options: Options): Promise<void> {
