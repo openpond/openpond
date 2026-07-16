@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,23 +7,17 @@ import {
   getWorkspaceGitDiff,
   getWorkspaceGitStatus,
 } from "../apps/server/src/workspace-tools/workspace-tool-git";
+import { runTestProcess } from "./helpers/run-process";
 
 async function tempWorkspace(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "openpond-git-tools-"));
 }
 
 async function git(cwd: string, args: string[]): Promise<void> {
-  const proc = Bun.spawn(["git", ...args], {
+  const { exitCode, stdout, stderr } = await runTestProcess("git", args, {
     cwd,
-    stdout: "pipe",
-    stderr: "pipe",
   });
-  const [code, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  if (code !== 0) {
+  if (exitCode !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${stderr || stdout}`);
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { AccountState } from "@openpond/contracts";
 import { accountWelcomeIdentity } from "../apps/web/src/hooks/useActiveWorkspaceViewState";
 

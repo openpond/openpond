@@ -30,7 +30,7 @@ export function buildGoalLlmMessages(goal: GoalState): GoalLlmMessage[] {
         "- Use files_write for source edits instead of describing edits.",
         "- Use questions_ask for required user input.",
         "- Use checks_run or configured verification commands before claiming completion.",
-        "- Hosted coding sandboxes include bun, node, npm, and common POSIX utilities; prefer bun for install/test commands when the repo supports it, use command -v for PATH checks, and do not block on standalone toolchain probes once a needed package manager command works.",
+        "- Hosted coding sandboxes include node, npm, pnpm, and common POSIX utilities; follow the target repository's lockfile when choosing install/test commands, use command -v for PATH checks, and do not block on standalone toolchain probes once a needed package manager command works.",
         "- For OpenPond agent goals, run SDK actions through openpond_agent_* tools. Do not invoke openpond-agent through shell, npx, pnpm dlx, or yarn dlx.",
         "- For OpenPond agent goals, after source edits use openpond_agent_default_checks unless a narrower SDK command is clearly enough; do not spend the remaining rounds on broad inspection.",
         "- After required edits and checks are complete, return a concise final response with no tool calls.",

@@ -4,9 +4,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import os from "node:os";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect } from "bun:test";
+import { expect } from "vitest";
 import {
   largeRawPayload,
   largeArtifactRecord,
@@ -502,7 +503,7 @@ export async function withSandboxApi(
                 setup: {
                   status: "completed",
                   passed: true,
-                  commands: ["bun install --offline"],
+                  commands: ["pnpm install --offline"],
                   expectedBinaryPath: "node_modules/.bin/openpond-agent",
                 },
                 policyDiscovery: {
@@ -554,7 +555,7 @@ export async function withSandboxApi(
             setup: {
               status: "completed",
               passed: true,
-              commands: ["bun install --offline"],
+              commands: ["pnpm install --offline"],
               expectedBinaryPath: "node_modules/.bin/openpond-agent",
             },
             policyDiscovery: {
@@ -628,9 +629,9 @@ export async function withSandboxApi(
                 setup: {
                   status: "failed",
                   message: "yaml@^2.9.0 failed to resolve",
-                  command: "bun install --offline",
+                  command: "pnpm install --offline",
                   exitCode: 1,
-                  commands: ["bun install --offline"],
+                  commands: ["pnpm install --offline"],
                   expectedBinaryPath: "node_modules/.bin/openpond-agent",
                   dependencyPackages: [
                     {
@@ -1284,7 +1285,11 @@ export function runCli(
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [path.join(CLI_PACKAGE_ROOT, "src/cli/main.ts"), ...args],
+      [
+        createRequire(import.meta.url).resolve("tsx/cli"),
+        path.join(CLI_PACKAGE_ROOT, "src/cli/main.ts"),
+        ...args,
+      ],
       {
         cwd: options.cwd ?? CLI_PACKAGE_ROOT,
         env: {
@@ -1433,25 +1438,22 @@ export async function runDependencySetupFromUploadMetadata(
   }
   const setupArgs = [...args];
   let setupEnv: Record<string, string | undefined> | undefined;
-  const bunCacheDir = await mkdtemp(
-    path.join(os.tmpdir(), "openpond-agent-sdk-empty-bun-cache-")
+  const pnpmStoreDir = await mkdtemp(
+    path.join(os.tmpdir(), "openpond-agent-sdk-empty-pnpm-store-")
   );
   try {
-    if (commandName === "bun" && setupArgs[0] === "install") {
+    if (commandName === "pnpm" && setupArgs[0] === "install") {
       setupArgs.push(
-        "--cache-dir",
-        bunCacheDir,
-        "--no-cache",
-        "--registry",
-        "http://127.0.0.1:9"
+        "--store-dir",
+        pnpmStoreDir
       );
-      setupEnv = { HOME: bunCacheDir };
+      setupEnv = { HOME: pnpmStoreDir };
     }
     await runTestCommand(commandName, setupArgs, materializedDir, {
       env: setupEnv,
     });
   } finally {
-    await rm(bunCacheDir, { recursive: true, force: true });
+    await rm(pnpmStoreDir, { recursive: true, force: true });
   }
 }
 
@@ -1598,7 +1600,7 @@ export function agentSdkUploadFixtureBin(): string {
     "const artifactDir = path.join(cwd, '.openpond');",
     "mkdirSync(artifactDir, { recursive: true });",
     "if (command === 'inspect') {",
-    "  const inspect = { name: 'sdk-upload-fixture', editable: { enabled: true, requiredChecks: [{ name: 'validate', command: 'bun run agent:validate' }] } };",
+    "  const inspect = { name: 'sdk-upload-fixture', editable: { enabled: true, requiredChecks: [{ name: 'validate', command: 'pnpm run agent:validate' }] } };",
     "  writeFileSync(path.join(artifactDir, 'agent-inspect.json'), JSON.stringify(inspect, null, 2));",
     "  console.log(JSON.stringify(inspect));",
     "  process.exit(0);",

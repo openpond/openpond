@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "generate:training-schemas": "bun scripts/generate-training-schemas.ts"
+    "generate:training-schemas": "tsx scripts/generate-training-schemas.ts"
   },
   "dependencies": {
     "@openpond/cloud": "workspace:*",

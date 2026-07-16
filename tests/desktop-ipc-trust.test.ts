@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { isTrustedDesktopIpcFrameUrl } from "../apps/desktop/src/desktop-ipc-trust";
 
 describe("desktop IPC origin trust", () => {

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { parseArgs } from "../src/cli/common";
 import {
@@ -40,12 +40,12 @@ describe("CLI desktop harness command", () => {
     );
   });
 
-  test("builds a bun desktop harness invocation from parsed CLI options", async () => {
+  test("builds a Node desktop harness invocation from parsed CLI options", async () => {
     const root = await makeHarnessRoot();
     try {
       const invocation = await buildDesktopHarnessInvocation({
         cwd: path.join(root, "scripts"),
-        env: { BUN_BINARY: "/custom/bun" },
+        env: { OPENPOND_NODE_BINARY: "/custom/node" },
         rest: [
           "desktop",
           "run",
@@ -62,10 +62,10 @@ describe("CLI desktop harness command", () => {
         },
       });
 
-      expect(invocation).toEqual({
-        command: "/custom/bun",
-        cwd: root,
-        args: [
+      expect(invocation.command).toBe("/custom/node");
+      expect(invocation.cwd).toBe(root);
+      expect(invocation.args[0]).toContain("tsx");
+      expect(invocation.args.slice(1)).toEqual([
           "scripts/desktop-harness.ts",
           "run",
           "tests/desktop-scenarios/chat-two-turns.ts",
@@ -80,8 +80,7 @@ describe("CLI desktop harness command", () => {
           "--timeout-ms",
           "150000",
           "--keep-home",
-        ],
-      });
+        ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -101,7 +100,8 @@ describe("CLI desktop harness command", () => {
         },
       });
 
-      expect(invocation.args).toEqual([
+      expect(invocation.args[0]).toContain("tsx");
+      expect(invocation.args.slice(1)).toEqual([
         "scripts/desktop-harness.ts",
         "run",
         "scenario.ts",
@@ -132,7 +132,8 @@ describe("CLI desktop harness command", () => {
         },
       });
 
-      expect(invocation.args).toEqual([
+      expect(invocation.args[0]).toContain("tsx");
+      expect(invocation.args.slice(1)).toEqual([
         "scripts/desktop-harness.ts",
         "run",
         "tests/desktop-scenarios/chat-two-turns.ts",

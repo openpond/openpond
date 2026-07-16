@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -276,7 +276,7 @@ function parseArgs(args: string[]): SmokeOptions {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--help" || arg === "-h") {
-      console.log("usage: bun scripts/smoke-packaged-desktop.ts [--app <path>] [--timeout-ms <ms>] [--json <path>]");
+      console.log("usage: pnpm run smoke:desktop:packaged -- [--app <path>] [--timeout-ms <ms>] [--json <path>]");
       process.exit(0);
     }
     if (arg === "--app") {
@@ -442,7 +442,7 @@ function commandExists(command: string): boolean {
     extensions.some((extension) => {
       try {
         const candidate = path.join(dir, `${command}${extension}`);
-        return Bun.file(candidate).size > 0;
+        return statSync(candidate).size > 0;
       } catch {
         return false;
       }

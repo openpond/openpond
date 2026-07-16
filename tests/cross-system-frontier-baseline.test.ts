@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
 import type { CrossSystemFrontierBaselineRun, Session } from "../packages/contracts/src";
 import type { CrossSystemFrontierModelStream } from "../apps/server/src/training/cross-system-operations";
 import {
@@ -232,7 +233,7 @@ async function waitForRun(
   while (Date.now() < deadline) {
     const run = await store.getCrossSystemFrontierBaselineRun(id);
     if (run && predicate(run)) return run;
-    await Bun.sleep(10);
+    await delay(10);
   }
   throw new Error(`Timed out waiting for frontier baseline ${id}.`);
 }

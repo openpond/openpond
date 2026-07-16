@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CommunityRulesDialog } from "../apps/web/src/components/community/CommunityRulesDialog";
@@ -86,11 +87,11 @@ describe("community UI", () => {
 
   test("keeps community chat in a full-height Team-style conversation shell", async () => {
     const [mainPane, communityView, communityCss, sidebarCss, conversationCss] = await Promise.all([
-      Bun.file("apps/web/src/components/app-shell/MainPane.tsx").text(),
-      Bun.file("apps/web/src/components/community/CommunityView.tsx").text(),
-      Bun.file("apps/web/src/styles/community/community.css").text(),
-      Bun.file("apps/web/src/styles/sidebar/community-sidebar.css").text(),
-      Bun.file("apps/web/src/styles/chat/conversation-surface.css").text(),
+      readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
+      readFile("apps/web/src/components/community/CommunityView.tsx", "utf8"),
+      readFile("apps/web/src/styles/community/community.css", "utf8"),
+      readFile("apps/web/src/styles/sidebar/community-sidebar.css", "utf8"),
+      readFile("apps/web/src/styles/chat/conversation-surface.css", "utf8"),
     ]);
     expect(mainPane).toContain('view === "community"\n        ? "community-active"');
     expect(communityView).toContain('community-chat-main conversation-surface-main');

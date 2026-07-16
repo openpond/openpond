@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { parseBrowserHarnessRequest } from "../apps/desktop/src/desktop-browser-harness-validation";
 
 describe("desktop browser harness validation", () => {

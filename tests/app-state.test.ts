@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { appReducer, initialAppState, type AppState } from "../apps/web/src/app/app-state";
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { gradeAttempt } from "../packages/taskset-sdk/src";
 import { runSandboxedVerifier } from "../apps/server/src/training/sandboxed-verifier";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";

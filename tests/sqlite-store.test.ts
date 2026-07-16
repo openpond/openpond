@@ -1,46 +1,19 @@
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import sqlite3 from "sqlite3";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { Approval, InsightItem, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SqliteStore } from "../apps/server/src/store/store";
-
-function openDatabase(filePath: string): Promise<sqlite3.Database> {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(filePath, (error) => {
-      if (error) reject(error);
-      else resolve(db);
-    });
-  });
-}
-
-function run(db: sqlite3.Database, sql: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, (error) => (error ? reject(error) : resolve()));
-  });
-}
-
-function get<T>(db: sqlite3.Database, sql: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    db.get(sql, (error, row: T) => (error ? reject(error) : resolve(row)));
-  });
-}
-
-function all<T>(db: sqlite3.Database, sql: string): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    db.all(sql, (error, rows: T[]) => (error ? reject(error) : resolve(rows)));
-  });
-}
-
-function close(db: sqlite3.Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.close((error) => (error ? reject(error) : resolve()));
-  });
-}
+import {
+  allTestSql as all,
+  closeTestDatabase as close,
+  getTestSql as get,
+  openTestDatabase,
+  runTestSql as run,
+} from "./helpers/sqlite-database";
 
 async function userVersion(filePath: string): Promise<number> {
-  const db = await openDatabase(filePath);
+  const db = openTestDatabase(filePath);
   try {
     const row = await get<{ user_version: number }>(db, "PRAGMA user_version");
     return row.user_version;
@@ -126,7 +99,7 @@ describe("SqliteStore hardening", () => {
       ]);
       await store.close();
 
-      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
       try {
         const rows = await all<OpenPondThreadGoalTestRow>(db, "SELECT * FROM openpond_thread_goals");
         expect(rows).toEqual([]);
@@ -143,7 +116,7 @@ describe("SqliteStore hardening", () => {
       await initialStore.appendRuntimeEvent(threadGoalEvent("event-existing-goal", "goal_existing", "running"));
       await initialStore.close();
 
-      const db = await openDatabase(storePath);
+      const db = openTestDatabase(storePath);
       await run(db, "DROP TABLE openpond_thread_goals");
       await run(db, "PRAGMA user_version = 9");
       await close(db);
@@ -166,7 +139,7 @@ describe("SqliteStore hardening", () => {
   test("backs up an existing unversioned database before migrating", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");
-      const db = await openDatabase(storePath);
+      const db = openTestDatabase(storePath);
       await run(db, "CREATE TABLE legacy_marker (id INTEGER PRIMARY KEY)");
       await close(db);
 
@@ -266,7 +239,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
       try {
         const rows = await all<{ name: string }>(
           db,
@@ -401,7 +374,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
       try {
         const counts = await get<{ sessions: number; turns: number; approvals: number }>(
           db,
@@ -457,7 +430,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
       try {
         const row = await get<{ payload: string; sequence: number }>(
           db,
@@ -499,7 +472,7 @@ describe("SqliteStore hardening", () => {
 
       await store.close();
 
-      const db = await openDatabase(path.join(storeDir, "state.sqlite"));
+      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
       try {
         const row = await get<{ count: number }>(
           db,

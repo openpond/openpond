@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
 
 async function source(relativePath: string): Promise<string> {
-  return Bun.file(new URL(relativePath, root)).text();
+  return readFile(new URL(relativePath, root), "utf8");
 }
 
 describe("shared surface stylesheet ownership", () => {

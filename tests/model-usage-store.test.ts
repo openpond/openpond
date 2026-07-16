@@ -1,10 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import sqlite3 from "sqlite3";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { ModelUsageRecord } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store";
+import { allTestSql, closeTestDatabase, openTestDatabase } from "./helpers/sqlite-database";
 
 describe("model usage store", () => {
   test("persists and updates normalized model usage rows by request id", async () => {
@@ -154,21 +154,8 @@ const blockedUsageKeys = [
 ].sort();
 
 function sqliteAll<T>(filename: string, sql: string): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(filename, (openError) => {
-      if (openError) {
-        reject(openError);
-        return;
-      }
-      db.all(sql, [], (queryError, rows: T[]) => {
-        db.close((closeError) => {
-          if (queryError) reject(queryError);
-          else if (closeError) reject(closeError);
-          else resolve(rows);
-        });
-      });
-    });
-  });
+  const db = openTestDatabase(filename);
+  return allTestSql<T>(db, sql).finally(() => closeTestDatabase(db));
 }
 
 function usageRecord(patch: Partial<ModelUsageRecord> = {}): ModelUsageRecord {

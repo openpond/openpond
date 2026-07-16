@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ServerLifecycleRegistry } from "../apps/server/src/runtime/server-lifecycle-registry";
 
 describe("server lifecycle registry", () => {

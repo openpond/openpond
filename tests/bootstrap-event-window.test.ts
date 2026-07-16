@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { BootstrapPayload, RuntimeEvent, Session } from "@openpond/contracts";
 
 import type { RuntimeEventPagePayload } from "../apps/server/src/api/event-page";

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   emptyOpenPondProfileState,
   ProviderSettingsSchema,
@@ -82,7 +82,7 @@ import {
 } from "../apps/terminal/src/ui/commands";
 import { runProcessCommand } from "../apps/cli/src/process-runner";
 
-const REPO_ROOT = path.resolve(import.meta.dir, "..");
+const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 
 function eventStreamResponse(frames: string): Response {
   const encoder = new TextEncoder();
@@ -905,7 +905,7 @@ describe("terminal slash command handler", () => {
         runTerminalDirectCommand(
           { server: "http://127.0.0.1:17874", token: "local-token" },
           session,
-          "bun run typecheck",
+          "pnpm typecheck",
         ),
       ).resolves.toMatchObject({ result: { ok: true } });
     } finally {
@@ -916,7 +916,7 @@ describe("terminal slash command handler", () => {
       {
         url: "http://127.0.0.1:17874/v1/sessions/session-sandbox/commands",
         body: {
-          command: "bun run typecheck",
+          command: "pnpm typecheck",
           cwd: null,
         },
       },
@@ -1427,7 +1427,7 @@ describe("terminal transcript stable event ids", () => {
         name: "tool.started",
         action: "exec_command",
         status: "started",
-        output: "bun test",
+        output: "pnpm test",
         data: { callId: "call-1" },
       }),
     );

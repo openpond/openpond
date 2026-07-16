@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { LocalProject, Session } from "@openpond/contracts";
 import { resolveWorkspaceCapabilities, workspaceToolBlockedMessage } from "../apps/server/src/workspace/workspace-capabilities";
 import { resolveWorkspaceExecutionTarget } from "../apps/server/src/workspace/workspace-execution-target";

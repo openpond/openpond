@@ -15,7 +15,6 @@
     "cron-parser": "^5.6.1",
     "node-pty": "^1.1.0",
     "shell-quote": "^1.9.0",
-    "sqlite3": "^5.1.7",
     "ws": "^8.20.1",
     "zod": "^4.1.13"
   },
@@ -35,9 +34,9 @@
   "private": true,
   "scripts": {
     "build": "tsc -b",
-    "dev": "bun run --cwd ../.. build:server && node dist/index.js",
-    "serve": "bun run --cwd ../.. build:server && node dist/index.js serve",
-    "web": "bun run --cwd ../.. build:web && bun run --cwd ../.. build:server && node dist/index.js web"
+    "dev": "pnpm --dir ../.. run build:server && node dist/index.js",
+    "serve": "pnpm --dir ../.. run build:server && node dist/index.js serve",
+    "web": "pnpm --dir ../.. run build:web && pnpm --dir ../.. run build:server && node dist/index.js web"
   },
   "type": "module",
   "types": "./dist/index.d.ts",

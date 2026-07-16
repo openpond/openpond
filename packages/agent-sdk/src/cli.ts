@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { buildCommand } from "./commands/build";
 import { evalCommand } from "./commands/eval";
 import { inspectCommand } from "./commands/inspect";

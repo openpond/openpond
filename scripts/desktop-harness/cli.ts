@@ -7,7 +7,7 @@ export function parseDesktopHarnessArgs(argv: string[], env: NodeJS.ProcessEnv =
   }
   const command = argv[0];
   if (command !== "run") {
-    throw new Error(`usage: bun scripts/desktop-harness.ts run <scenario...> [--isolated|--attach|--packaged|--none] [--json <path>]`);
+    throw new Error(`usage: pnpm exec tsx scripts/desktop-harness.ts run <scenario...> [--isolated|--attach|--packaged|--none] [--json <path>]`);
   }
 
   const scenarioPaths: string[] = [];
@@ -140,7 +140,7 @@ export function parseDesktopHarnessArgs(argv: string[], env: NodeJS.ProcessEnv =
 
 export function desktopHarnessUsage(): string {
   return [
-    "usage: bun scripts/desktop-harness.ts run <scenario...> [options]",
+    "usage: pnpm exec tsx scripts/desktop-harness.ts run <scenario...> [options]",
     "",
     "Options:",
     "  --isolated              Launch a fresh dev desktop with temporary app/user-data homes. Default.",

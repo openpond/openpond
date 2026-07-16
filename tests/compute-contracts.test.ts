@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ComputeInventorySchema, ComputeSettingsSchema, ModelAssetSchema } from "@openpond/contracts";
 
 describe("compute contracts", () => {

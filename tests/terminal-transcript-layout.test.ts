@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 import { buildFrame } from "../apps/terminal/src/ui/layout";
 import { TranscriptLayoutCache } from "../apps/terminal/src/ui/transcript-layout-cache";

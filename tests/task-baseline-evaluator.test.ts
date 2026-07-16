@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { computeTasksetHash, runBaseline } from "../packages/taskset-sdk/src";
 import { TasksetSchema } from "../packages/contracts/src";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import type { BootstrapPayload } from "@openpond/contracts";
 import { api, type ClientConnection } from "../apps/web/src/api";
 import { useProjectActions } from "../apps/web/src/hooks/useProjectActions";

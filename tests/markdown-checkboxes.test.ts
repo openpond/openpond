@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { MarkdownText } from "../apps/web/src/components/chat/MarkdownText";
 
 function renderMarkdown(content: string, props: Partial<ComponentProps<typeof MarkdownText>> = {}): string {

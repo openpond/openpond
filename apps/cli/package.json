@@ -13,20 +13,20 @@
     "op": "dist/cli.js"
   },
   "scripts": {
-    "dev": "bun run src/cli/main.ts --tui",
-    "cli": "bun run src/cli/main.ts",
-    "cli:package": "bun run src/cli/main.ts",
+    "dev": "tsx src/cli/main.ts --tui",
+    "cli": "tsx src/cli/main.ts",
+    "cli:package": "tsx src/cli/main.ts",
     "clean": "node scripts/clean-dist.mjs",
-    "build:cli": "bun build ./src/cli/main.ts --outdir=dist --target=node --splitting --external sqlite3 --external node-pty --define __OPENPOND_COMPILED_CLI__=false --entry-naming=cli.js --chunk-naming=chunks/[name]-[hash].js --banner:js='#!/usr/bin/env node'",
-    "build:package": "bun build src/index.ts src/sandbox-template/manifest.ts --outdir dist --target node",
+    "build:cli": "tsx ../../scripts/build/bundle-cli.ts cli",
+    "build:package": "tsx ../../scripts/build/bundle-cli.ts package",
     "build:local-assets": "node scripts/stage-local-assets.mjs",
     "build:types": "tsc --project tsconfig.package.json && node scripts/flatten-types.mjs",
-    "docs:commands": "bun scripts/generate-command-reference.mjs",
-    "lint": "npm run typecheck",
+    "docs:commands": "tsx scripts/generate-command-reference.mjs",
+    "lint": "pnpm run typecheck",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "bun test",
-    "build": "npm run clean && npm run docs:commands && npm run build:cli && npm run build:package && npm run build:local-assets && npm run build:types",
-    "prepublishOnly": "npm run build"
+    "test": "vitest run test",
+    "build": "pnpm run clean && pnpm run docs:commands && pnpm run build:cli && pnpm run build:package && pnpm run build:local-assets && pnpm run build:types",
+    "prepublishOnly": "pnpm run build"
   },
   "files": [
     "dist/**/*",
@@ -48,7 +48,7 @@
     "url": "https://github.com/openpond/openpond/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.18.0 <25"
   },
   "exports": {
     ".": {
@@ -63,7 +63,6 @@
   "dependencies": {
     "js-yaml": "^4.1.1",
     "node-pty": "^1.1.0",
-    "sqlite3": "^5.1.7",
     "typescript": "^5.6.3",
     "typescript-language-server": "^4.3.3",
     "zod": "^4.1.13"
@@ -74,7 +73,7 @@
     "@openpond/local-server": "workspace:*",
     "@openpond/terminal": "workspace:*",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.19.24"
+    "@types/node": "24.13.3"
   },
   "openpondBundledSourceDependencies": [
     "@openpond/cloud",

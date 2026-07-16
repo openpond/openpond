@@ -19,11 +19,7 @@ export type WriteReleaseVersionOptions = {
 
 const SERVER_VERSION_FILE = "apps/server/src/constants.ts";
 const SERVER_VERSION_PATTERN = /export const VERSION = "([^"]+)";/;
-const BUN_LOCK_FILE = "bun.lock";
-
-type BunLock = {
-  workspaces?: Record<string, { version?: string }>;
-};
+const PNPM_LOCK_FILE = "pnpm-lock.yaml";
 
 async function readPackageJson(file: string): Promise<PackageJson> {
   return JSON.parse(await readFile(file, "utf8")) as PackageJson;
@@ -76,16 +72,12 @@ export async function releaseVersionMismatches(
     if (actual !== expected) mismatches.push({ actual, expected, file });
   }
 
-  const lockSource = await readFile(path.join(root, BUN_LOCK_FILE), "utf8");
-  const lock = Bun.JSONC.parse(lockSource) as BunLock;
-  for (const file of await releaseVersionedPackageFiles(root)) {
-    if (file === "package.json") continue;
-    const workspace = path.dirname(file);
-    const actual = lock.workspaces?.[workspace]?.version ?? "<missing>";
-    if (actual !== expected) {
-      mismatches.push({ actual, expected, file: `${BUN_LOCK_FILE}#${workspace}` });
-    }
-  }
+  // pnpm's lockfile records importer dependency graphs, not each workspace's own
+  // package version. Package manifests are therefore authoritative for release
+  // version parity; the release flow regenerates and stages this lockfile.
+  await readFile(path.join(root, PNPM_LOCK_FILE), "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+  });
 
   const serverSource = await readFile(path.join(root, SERVER_VERSION_FILE), "utf8");
   const serverVersion = serverSource.match(SERVER_VERSION_PATTERN)?.[1] ?? "<missing>";
@@ -128,34 +120,6 @@ export async function writeReleaseVersion(
     await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
   }
 
-  const lockPath = path.join(root, BUN_LOCK_FILE);
-  let lockSource = await readFile(lockPath, "utf8");
-  for (const file of files) {
-    if (file === "package.json") continue;
-    const workspace = path.dirname(file);
-    const escapedWorkspace = workspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const workspacePattern = new RegExp(
-      `(^    "${escapedWorkspace}": \\{\\n)([\\s\\S]*?)(^    \\},?\\n)`,
-      "m",
-    );
-    const match = lockSource.match(workspacePattern);
-    if (!match) throw new Error(`Could not find ${workspace} in ${BUN_LOCK_FILE}.`);
-    const block = match[2]!;
-    if (!/^      "version": "[^"]+",?$/m.test(block)) {
-      throw new Error(`Could not find ${workspace}'s version in ${BUN_LOCK_FILE}.`);
-    }
-    const updatedBlock = block.replace(
-      /^(      "version": ")[^"]+("[,]?)$/m,
-      `$1${version}$2`,
-    );
-    lockSource = lockSource.replace(workspacePattern, `$1${updatedBlock}$3`);
-  }
-  if (options.dryRun) {
-    console.log(`[dry-run] update ${BUN_LOCK_FILE} workspace versions -> ${version}`);
-  } else {
-    await writeFile(lockPath, lockSource);
-  }
-
   const serverPath = path.join(root, SERVER_VERSION_FILE);
   const serverSource = await readFile(serverPath, "utf8");
   const currentServerVersion = serverSource.match(SERVER_VERSION_PATTERN)?.[1];
@@ -173,5 +137,5 @@ export async function writeReleaseVersion(
     }
   }
 
-  return [...files, SERVER_VERSION_FILE, BUN_LOCK_FILE];
+  return [...files, SERVER_VERSION_FILE, PNPM_LOCK_FILE];
 }

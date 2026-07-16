@@ -2,7 +2,7 @@ import os from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   goalStateDisplayPath,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type {
   RuntimeEvent,
   Session,
@@ -139,7 +139,7 @@ describe("OpenPond direct command routing", () => {
       },
       {
         session: currentSession,
-        command: "bun run typecheck",
+        command: "pnpm typecheck",
         timeoutSeconds: 30,
       },
     );
@@ -150,7 +150,7 @@ describe("OpenPond direct command routing", () => {
         payload: {
           action: "sandbox_exec",
           args: {
-            command: "bun run typecheck",
+            command: "pnpm typecheck",
             timeoutSeconds: 30,
           },
           source: "chat_action",

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 type PackageJson = {
   name?: string;
   version?: string;
+  packageManager?: string;
   workspaces?: string[];
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -95,7 +96,7 @@ const artifacts = await Promise.all(
   })
 );
 
-const bunLockPath = path.join(root, "bun.lock");
+const pnpmLockPath = path.join(root, "pnpm-lock.yaml");
 const inventory = {
   generatedAt: new Date().toISOString(),
   app: {
@@ -111,7 +112,7 @@ const inventory = {
     arch: process.arch,
     osRelease: os.release(),
     node: process.version,
-    bun: typeof Bun === "undefined" ? null : Bun.version,
+    pnpm: rootPackage.packageManager ?? null,
     electron: rootPackage.devDependencies?.electron ?? null,
   },
   rootPackage: {
@@ -120,8 +121,8 @@ const inventory = {
   },
   workspaces: workspacePackages,
   lockfile: {
-    path: "bun.lock",
-    sha256: await hashFile(bunLockPath),
+    path: "pnpm-lock.yaml",
+    sha256: await hashFile(pnpmLockPath),
   },
   artifacts,
 };

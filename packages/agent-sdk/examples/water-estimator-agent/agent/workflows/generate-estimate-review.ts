@@ -12,7 +12,7 @@ export const generateEstimateReviewWorkflow = defineWorkflow({
   description: "Import historical estimate files, review a proposal, and export an estimate package.",
   async run(ctx, input) {
     ctx.trace.event("estimate_review.started");
-    await ctx.runCommand("bun run generate-estimate", { input });
+    await ctx.runCommand("pnpm generate-estimate", { input });
     ctx.trace.artifact("artifacts/example-estimate.json");
     ctx.trace.artifact("artifacts/example-estimate.xlsx");
     ctx.trace.artifact("artifacts/proposal-review.json");

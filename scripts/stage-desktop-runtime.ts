@@ -37,7 +37,6 @@ export async function stageDesktopRuntime(
     path.join(runtimeRoot, "server", "skills", "openpond-taskset-authoring"),
   );
   await copyTree(path.join(options.root, "apps", "web", "dist"), path.join(runtimeRoot, "web"));
-  await stageSqliteRuntime(options.root, runtimeRoot);
   await stageNodePtyRuntime(options.root, runtimeRoot, platform, arch);
   await stageSmallDependency(options.root, runtimeRoot, "bindings", ["bindings.js"]);
   await stageSmallDependency(options.root, runtimeRoot, "file-uri-to-path", ["index.js"]);
@@ -95,29 +94,16 @@ async function stageDesktopApp(root: string, appRoot: string): Promise<void> {
 export async function assertStandaloneDesktopBundle(filePath: string): Promise<void> {
   const source = await fs.readFile(filePath, "utf8").catch(() => null);
   if (source === null) {
-    throw new Error(`Required desktop bundle is missing: ${filePath}. Run bun run build:desktop.`);
+    throw new Error(`Required desktop bundle is missing: ${filePath}. Run pnpm run build:desktop.`);
   }
   const localImport = source.match(/\bfrom\s*["'](\.{1,2}\/[^"']+)/)
     ?? source.match(/\bimport\s*["'](\.{1,2}\/[^"']+)/)
     ?? source.match(/\b(?:import|require)\s*\(\s*["'](\.{1,2}\/[^"']+)/);
   if (localImport) {
     throw new Error(
-      `Desktop entrypoint is not a standalone bundle (${localImport[1]}): ${filePath}. Run bun run build:desktop.`,
+      `Desktop entrypoint is not a standalone bundle (${localImport[1]}): ${filePath}. Run pnpm run build:desktop.`,
     );
   }
-}
-
-async function stageSqliteRuntime(root: string, stageRoot: string): Promise<void> {
-  const source = path.join(root, "node_modules", "sqlite3");
-  const target = packageTarget(stageRoot, "sqlite3");
-  await copyPackageMetadata(source, target);
-  await copyTree(path.join(source, "lib"), path.join(target, "lib"), (file) =>
-    file.endsWith(".js") || file.endsWith(".json"),
-  );
-  await copyRequired(
-    path.join(source, "build", "Release", "node_sqlite3.node"),
-    path.join(target, "build", "Release", "node_sqlite3.node"),
-  );
 }
 
 async function stageNodePtyRuntime(

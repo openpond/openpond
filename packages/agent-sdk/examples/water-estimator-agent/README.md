@@ -140,10 +140,10 @@ The generated preview at `generated/openpond-manifest.preview.yaml` shows the ru
 ## Local Commands And Generated Outputs
 
 ```bash
-bun run agent:inspect
-bun run agent:build
-bun run agent:validate
-bun run agent:eval
+pnpm agent:inspect
+pnpm agent:build
+pnpm agent:validate
+pnpm agent:eval
 openpond-agent run chat --input '{"prompt":"Can you help with this project?","channel":"openpond_chat"}'
 ```
 

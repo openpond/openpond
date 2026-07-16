@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { AppPreferencesSchema, SubagentRunSchema, type SubagentRun } from "../packages/contracts/src";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
 import { createSubagentLifecycleWatcher } from "../apps/server/src/runtime/subagent-lifecycle-watcher";

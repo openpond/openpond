@@ -1,7 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { runTestProcess } from "../../../tests/helpers/run-process";
 import { parseSkillMarkdown } from "openpond-agent-sdk/skills";
 import {
   connectedIntegration,
@@ -9,7 +10,7 @@ import {
   isConnectedIntegrationProvider,
 } from "openpond-agent-sdk/integrations";
 
-const packageRoot = path.resolve(import.meta.dir, "..");
+const packageRoot = path.resolve(import.meta.dirname, "..");
 const fixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "primitive-contract");
 const invalidFixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "primitive-contract-invalid");
 
@@ -524,16 +525,11 @@ async function readArtifacts(artifactDir: string, names: string[]) {
 }
 
 async function runSdkJson(args: string[]) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
-    cwd: packageRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await runTestProcess(
+    process.execPath,
+    ["./dist/cli.js", ...args],
+    { cwd: packageRoot },
+  );
   if (exitCode !== 0) {
     throw new Error(
       [
@@ -549,16 +545,11 @@ async function runSdkJson(args: string[]) {
 }
 
 async function runSdkJsonAllowFailure(args: string[]) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
-    cwd: packageRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await runTestProcess(
+    process.execPath,
+    ["./dist/cli.js", ...args],
+    { cwd: packageRoot },
+  );
   if (!stdout.trim()) {
     throw new Error(
       [

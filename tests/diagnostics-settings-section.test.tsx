@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RuntimeEvent } from "@openpond/contracts";

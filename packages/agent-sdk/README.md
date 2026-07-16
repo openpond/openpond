@@ -100,24 +100,24 @@ agent-inspect.json = source inspection contract after source materialization
 Run these from this package root:
 
 ```bash
-bun install
-bun run inspect -- --cwd examples/blank-agent
-bun run build -- --cwd examples/blank-agent
-bun run validate -- --cwd examples/blank-agent
-bun run eval -- --cwd examples/blank-agent
-bun run check
+pnpm install
+pnpm inspect -- --cwd examples/blank-agent
+pnpm build -- --cwd examples/blank-agent
+pnpm validate -- --cwd examples/blank-agent
+pnpm eval -- --cwd examples/blank-agent
+pnpm check
 ```
 
-Root scripts are package-first and do not name a specific example. Use `--cwd` to point the CLI at any SDK agent project and `--out-dir` when generated artifacts should go somewhere other than `.openpond`. `bun run check` runs typecheck, package tests, and the example matrix in `scripts/check-examples.ts`.
+Root scripts are package-first and do not name a specific example. Use `--cwd` to point the CLI at any SDK agent project and `--out-dir` when generated artifacts should go somewhere other than `.openpond`. `pnpm check` runs typecheck, package tests, and the example matrix in `scripts/check-examples.ts`.
 
 Each example also has local agent scripts:
 
 ```bash
 cd examples/customer-reply-agent
-bun run agent:inspect
-bun run agent:build
-bun run agent:validate
-bun run agent:eval
+pnpm agent:inspect
+pnpm agent:build
+pnpm agent:validate
+pnpm agent:eval
 ```
 
 The commands load the selected example's `agent/agent.ts`, generate `.openpond/*` artifacts, validate the source contract, run one local action, and run the SDK evals through a local stub runtime that records trace JSONL. Platform-only responsibilities such as hosted execution, integration leases, volume mounting, source promotion, and publish transactions stay outside this package.

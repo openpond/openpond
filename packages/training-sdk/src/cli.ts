@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import { buildTrainingBundle, inspectTrainingBundle, validateTrainingBundle } from "./bundle.js";
 import { createTrainingBundleExport, unpackTrainingBundleExport, writeTrainingBundleExport } from "./bundle-export.js";

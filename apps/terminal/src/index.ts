@@ -57,6 +57,7 @@ import {
   type TerminalPermissionChoice,
 } from "./permissions.js";
 import { createLatestWinsTaskScheduler, createSerialTaskScheduler } from "./task-scheduler.js";
+import { createTerminalExitLatch } from "./exit-latch.js";
 import {
   activeModelId,
   activeModelRef,
@@ -113,12 +114,11 @@ async function chat(options: Options): Promise<void> {
   let activeAgentId: string | null = null;
   let payload: BootstrapPayload | null = null;
   let eventStream: TerminalEventStreamController | null = null;
-  let exitResolve: (() => void) | null = null;
+  const exitLatch = createTerminalExitLatch();
   let connection: { server: string; token: string } | null = null;
   let pendingCommandApproval: Approval | null = null;
   let permissionQuestion: { approval: Approval } | null = null;
   let permissionQuestionSelectedIndex = 0;
-  let exitRequested = false;
   let notice: string | null = null;
   let eventStreamNotice: string | null = null;
   const commandScheduler = createSerialTaskScheduler();
@@ -527,10 +527,9 @@ async function chat(options: Options): Promise<void> {
   }
 
   function requestExit(): void {
-    if (exitRequested) return;
-    exitRequested = true;
+    if (exitLatch.requested) return;
     interaction.beginStopping();
-    exitResolve?.();
+    exitLatch.request();
   }
 
   const rawInput = new RawInput(input as ReadStream, (key) => {
@@ -588,9 +587,7 @@ async function chat(options: Options): Promise<void> {
     await eventStream.ready;
     interaction.completeStartup(activeSessionId);
     render();
-    await new Promise<void>((resolve) => {
-      exitResolve = resolve;
-    });
+    await exitLatch.wait();
   } finally {
     eventStream?.abort();
     eventRenderScheduler.cancel();

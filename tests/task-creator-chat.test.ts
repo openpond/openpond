@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { authorTaskDesignWithModel } from "../apps/server/src/training/task-authoring-model";

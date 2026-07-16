@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { OpenPondApp } from "@openpond/contracts";
 import { createElement, type Dispatch, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

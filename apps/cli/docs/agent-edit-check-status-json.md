@@ -62,10 +62,10 @@ Future source-check execution fields should be added under `sourceCheckStatus` o
     "sourceUploadMetadata": {
       "sourceTreeMode": "typescript_agent_sdk",
       "commands": {
-        "inspect": "bun run agent:inspect",
-        "build": "bun run agent:build",
-        "validate": "bun run agent:validate",
-        "eval": "bun run agent:eval"
+        "inspect": "pnpm run agent:inspect",
+        "build": "pnpm run agent:build",
+        "validate": "pnpm run agent:validate",
+        "eval": "pnpm run agent:eval"
       },
       "generatedManifestPath": ".openpond/openpond-manifest.preview.yaml",
       "synthesizedOpenPondYaml": true,
@@ -73,7 +73,7 @@ Future source-check execution fields should be added under `sourceCheckStatus` o
       "uploadMetadataPath": ".openpond/source-upload-metadata.json",
       "dependencySetup": {
         "required": true,
-        "installCommand": "bun install --offline",
+        "installCommand": "pnpm install --offline",
         "expectedBinaryPath": "node_modules/.bin/openpond-agent",
         "sdkPackage": {
           "path": ".openpond/vendor/openpond-agent-sdk.tgz"
@@ -83,7 +83,7 @@ Future source-check execution fields should be added under `sourceCheckStatus` o
     "setup": {
       "status": "completed",
       "passed": true,
-      "commands": ["bun install --offline"],
+      "commands": ["pnpm install --offline"],
       "expectedBinaryPath": "node_modules/.bin/openpond-agent"
     },
     "policyDiscovery": {

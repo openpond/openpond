@@ -5,7 +5,7 @@ export const taskPlanHistoryWorkflow = defineWorkflow({
   description: "Answer questions about saved task-plan runs and prior versions.",
   async run(ctx, input) {
     ctx.trace.event("task_plan_history.lookup.started");
-    await ctx.runCommand("bun src/task-plan-history.ts", { input });
+    await ctx.runCommand("node src/task-plan-history.ts", { input });
     ctx.trace.artifact("artifacts/task-plan-history-answer.json");
     ctx.trace.artifact("artifacts/task-plan-history-candidates.json");
     return {

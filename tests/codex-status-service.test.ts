@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { createCodexStatusService } from "../apps/server/src/codex-status-service";
 

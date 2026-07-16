@@ -1,20 +1,21 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 import { runProcessCommand } from "../src/process-runner";
+import { startFetchTestServer } from "../../../tests/helpers/fetch-test-server";
 
-const REPO_ROOT = path.resolve(import.meta.dir, "../../..");
+const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 const CLI_ROOT = path.join(REPO_ROOT, "apps", "cli");
-
-setDefaultTimeout(15_000);
+const pnpmBinary = process.env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
+const tsxBinary = path.join(REPO_ROOT, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 
 describe("CLI headless chat", () => {
   beforeAll(async () => {
     if (process.env.OPENPOND_TEST_REUSE_BUILD === "1") return;
-    const build = await runProcessCommand(process.execPath, ["run", "build:cli"], {
-      cwd: CLI_ROOT,
+    const build = await runProcessCommand(pnpmBinary, ["run", "cli:build"], {
+      cwd: REPO_ROOT,
       timeoutMs: 30_000,
     });
     if (build.code !== 0) {
@@ -47,7 +48,7 @@ describe("CLI headless chat", () => {
   });
 
   test("benchmark-style invocation forwards cwd, instruction file, provider model, and trust controls", async () => {
-    const fake = startCliHeadlessChatFakeServer([
+    const fake = await startCliHeadlessChatFakeServer([
       runtimeEvent({
         id: "event-assistant",
         name: "assistant.delta",
@@ -74,7 +75,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -103,7 +104,6 @@ describe("CLI headless chat", () => {
           cwd: tempRoot,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 10_000,
         },
@@ -164,7 +164,7 @@ describe("CLI headless chat", () => {
   });
 
   test("explicit approval and sandbox flags are forwarded to the terminal turn", async () => {
-    const fake = startCliHeadlessChatFakeServer([
+    const fake = await startCliHeadlessChatFakeServer([
       runtimeEvent({
         id: "event-completed",
         name: "turn.completed",
@@ -183,7 +183,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -203,7 +203,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -226,7 +225,7 @@ describe("CLI headless chat", () => {
   });
 
   test("max-output-bytes caps final JSON output through the CLI wrapper", async () => {
-    const fake = startCliHeadlessChatFakeServer([
+    const fake = await startCliHeadlessChatFakeServer([
       runtimeEvent({
         id: "event-assistant",
         name: "assistant.delta",
@@ -251,7 +250,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -269,7 +268,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -295,7 +293,7 @@ describe("CLI headless chat", () => {
   });
 
   test("event counters, turn id, and usage metadata reach CLI JSON output", async () => {
-    const fake = startCliHeadlessChatFakeServer([
+    const fake = await startCliHeadlessChatFakeServer([
       runtimeEvent({
         id: "event-assistant",
         name: "assistant.delta",
@@ -308,7 +306,7 @@ describe("CLI headless chat", () => {
         name: "command.output",
         sessionId: "session-cli-headless",
         turnId: "turn-cli-headless",
-        output: "bun test",
+        output: "pnpm test",
       }),
       runtimeEvent({
         id: "event-workspace",
@@ -350,7 +348,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -366,7 +364,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -414,7 +411,7 @@ describe("CLI headless chat", () => {
   });
 
   test("one-shot timeout propagates exit 124 through the CLI wrapper", async () => {
-    const fake = startCliHeadlessChatFakeServer([]);
+    const fake = await startCliHeadlessChatFakeServer([]);
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-timeout-"));
     const homeDir = path.join(tempRoot, "home");
     const taskDir = path.join(tempRoot, "task");
@@ -424,7 +421,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -442,7 +439,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -490,7 +486,7 @@ describe("CLI headless chat", () => {
   });
 
   test("missing provider model exits 1 before posting a terminal turn", async () => {
-    const fake = startCliHeadlessChatFakeServer([], {
+    const fake = await startCliHeadlessChatFakeServer([], {
       bootstrapBody: bootstrapFixture(false),
     });
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-no-model-"));
@@ -502,7 +498,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -520,7 +516,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -549,7 +544,7 @@ describe("CLI headless chat", () => {
   });
 
   test("server bootstrap errors exit 1 before posting a terminal turn", async () => {
-    const fake = startCliHeadlessChatFakeServer([], {
+    const fake = await startCliHeadlessChatFakeServer([], {
       bootstrapStatus: 500,
       bootstrapBody: { error: "bootstrap unavailable" },
     });
@@ -562,7 +557,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -578,7 +573,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -607,7 +601,7 @@ describe("CLI headless chat", () => {
   });
 
   test("turn submission errors exit 1 after the failed request", async () => {
-    const fake = startCliHeadlessChatFakeServer([], {
+    const fake = await startCliHeadlessChatFakeServer([], {
       turnStatus: 500,
       turnBody: { error: "turn submission unavailable" },
     });
@@ -620,7 +614,7 @@ describe("CLI headless chat", () => {
 
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -636,7 +630,6 @@ describe("CLI headless chat", () => {
           cwd: taskDir,
           env: {
             HOME: homeDir,
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -668,7 +661,7 @@ describe("CLI headless chat", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-usage-"));
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -680,7 +673,6 @@ describe("CLI headless chat", () => {
           cwd: tempRoot,
           env: {
             HOME: path.join(tempRoot, "home"),
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -699,7 +691,7 @@ describe("CLI headless chat", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-bad-option-"));
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -715,7 +707,6 @@ describe("CLI headless chat", () => {
           cwd: tempRoot,
           env: {
             HOME: path.join(tempRoot, "home"),
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -749,7 +740,7 @@ describe("CLI headless chat", () => {
       const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-bad-trust-"));
       try {
         const result = await runProcessCommand(
-          process.execPath,
+          tsxBinary,
           [
             path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
             "chat",
@@ -765,7 +756,6 @@ describe("CLI headless chat", () => {
             cwd: tempRoot,
             env: {
               HOME: path.join(tempRoot, "home"),
-              BUN_BINARY: process.execPath,
             },
             timeoutMs: 5_000,
           },
@@ -786,7 +776,7 @@ describe("CLI headless chat", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-ambiguous-input-"));
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -801,7 +791,6 @@ describe("CLI headless chat", () => {
           cwd: tempRoot,
           env: {
             HOME: path.join(tempRoot, "home"),
-            BUN_BINARY: process.execPath,
           },
           stdin: "Run this from stdin\n",
           timeoutMs: 5_000,
@@ -823,7 +812,7 @@ describe("CLI headless chat", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-headless-missing-file-"));
     try {
       const result = await runProcessCommand(
-        process.execPath,
+        tsxBinary,
         [
           path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
           "chat",
@@ -837,7 +826,6 @@ describe("CLI headless chat", () => {
           cwd: tempRoot,
           env: {
             HOME: path.join(tempRoot, "home"),
-            BUN_BINARY: process.execPath,
           },
           timeoutMs: 5_000,
         },
@@ -863,7 +851,7 @@ async function expectCliHeadlessChat(
     inputMode?: "message" | "message-file" | "stdin" | "implicit-stdin";
   },
 ): Promise<void> {
-  const fake = startCliHeadlessChatFakeServer([
+  const fake = await startCliHeadlessChatFakeServer([
     runtimeEvent({
       id: "event-assistant",
       name: "assistant.delta",
@@ -902,7 +890,7 @@ async function expectCliHeadlessChat(
             ? ["--stdin"]
             : [];
     const result = await runProcessCommand(
-      options.command ?? process.execPath,
+      options.command ?? (entryArgs[0]?.endsWith(".ts") ? tsxBinary : process.execPath),
       [
         ...entryArgs,
         "--server",
@@ -917,7 +905,6 @@ async function expectCliHeadlessChat(
         cwd: taskDir,
         env: {
           HOME: homeDir,
-          BUN_BINARY: process.execPath,
         },
         stdin: inputMode === "stdin" || inputMode === "implicit-stdin" ? `${options.expectedPrompt}\n` : undefined,
         timeoutMs: 10_000,
@@ -949,7 +936,7 @@ async function expectCliHeadlessTerminalState(options: {
   expectedStatus: "failed" | "interrupted";
   expectedError: string | null;
 }): Promise<void> {
-  const fake = startCliHeadlessChatFakeServer([
+  const fake = await startCliHeadlessChatFakeServer([
     runtimeEvent({
       id: "event-assistant-before-terminal",
       name: "assistant.delta",
@@ -968,7 +955,7 @@ async function expectCliHeadlessTerminalState(options: {
 
   try {
     const result = await runProcessCommand(
-      process.execPath,
+      tsxBinary,
       [
         path.join(REPO_ROOT, "apps", "cli", "src", "cli", "main.ts"),
         "chat",
@@ -984,7 +971,6 @@ async function expectCliHeadlessTerminalState(options: {
         cwd: taskDir,
         env: {
           HOME: homeDir,
-          BUN_BINARY: process.execPath,
         },
         timeoutMs: 5_000,
       },
@@ -1017,7 +1003,7 @@ function runtimeEvent(input: Partial<RuntimeEvent> & Pick<RuntimeEvent, "id" | "
   } as RuntimeEvent;
 }
 
-function startCliHeadlessChatFakeServer(
+async function startCliHeadlessChatFakeServer(
   events: RuntimeEvent[],
   options: {
     bootstrapStatus?: number;
@@ -1025,12 +1011,12 @@ function startCliHeadlessChatFakeServer(
     turnStatus?: number;
     turnBody?: Record<string, unknown>;
   } = {},
-): {
+): Promise<{
   url: string;
   turnRequests: Record<string, unknown>[];
   interruptRequests: number;
   stop: () => void;
-} {
+}> {
   const encoder = new TextEncoder();
   const eventControllers = new Set<ReadableStreamDefaultController<Uint8Array>>();
   const queuedFrames: string[] = [];
@@ -1048,9 +1034,7 @@ function startCliHeadlessChatFakeServer(
     }
   }
 
-  const server = Bun.serve({
-    port: 0,
-    async fetch(request) {
+  const server = await startFetchTestServer(async (request) => {
       const url = new URL(request.url);
       if (url.pathname === "/health") return new Response("ok");
       if (url.pathname === "/v1/bootstrap") {
@@ -1111,16 +1095,15 @@ function startCliHeadlessChatFakeServer(
         return Response.json({ ok: true }, { status: 202 });
       }
       return Response.json({ error: "not found" }, { status: 404 });
-    },
   });
 
   return {
-    url: `http://127.0.0.1:${server.port}`,
+    url: server.url,
     turnRequests,
     get interruptRequests() {
       return interruptRequests;
     },
-    stop: () => server.stop(true),
+    stop: () => server.stop(),
   };
 }
 

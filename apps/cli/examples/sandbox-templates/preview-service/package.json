@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "smoke": "bash scripts/smoke.sh",
-    "dev": "bun src/server.ts",
+    "dev": "node src/server.ts",
     "validate": "openpond sandbox-template validate --file openpond.yaml"
   }
 }
-

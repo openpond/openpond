@@ -60,8 +60,8 @@ async function main(): Promise<void> {
   let cdp: CdpClient | null = null;
 
   try {
-    runSetup("bundle-server", [bunBinary(), "run", "bundle:server"]);
-    runSetup("build-desktop", [bunBinary(), "run", "build:desktop"]);
+    runSetup("bundle-server", [pnpmBinary(), "run", "bundle:server"]);
+    runSetup("build-desktop", [pnpmBinary(), "run", "build:desktop"]);
 
     renderer = startRenderer(webPort);
     await waitForUrl(webUrl, timeoutMs);
@@ -300,7 +300,7 @@ async function runComposerCommitProof(cdp: CdpClient): Promise<{
   const proofText = "renderer commit boundary proof";
   await waitFor(async () => {
     await evaluateValue<boolean>(cdp, "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)");
-    await Bun.sleep(300);
+    await delay(300);
     const idle = await evaluateValue<Record<string, { commits?: number }>>(
       cdp,
       "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}",
@@ -354,7 +354,7 @@ function parseArgs(args: string[]): SmokeOptions {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--help" || arg === "-h") {
-      console.log("usage: bun scripts/smoke-dev-desktop.ts [--timeout-ms <ms>] [--json <path>] [--skip-chat]");
+      console.log("usage: pnpm run smoke:desktop:dev -- [--timeout-ms <ms>] [--json <path>] [--skip-chat]");
       process.exit(0);
     }
     if (arg === "--json") {
@@ -396,7 +396,7 @@ function runSetup(label: string, command: [string, ...string[]]): void {
 }
 
 function startRenderer(webPort: number): ProcessHandle {
-  const child = spawn(bunBinary(), ["run", "--cwd", "apps/web", "dev"], {
+  const child = spawn(pnpmBinary(), ["--dir", "apps/web", "run", "dev"], {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -772,8 +772,8 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function bunBinary(): string {
-  return process.versions.bun ? process.execPath : "bun";
+function pnpmBinary(): string {
+  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 }
 
 class CdpClient {

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, vi, test } from "vitest";
 
 import {
   buildTeamChatAgentContinuationInput,
@@ -32,7 +32,7 @@ describe("desktop Team Chat agent continuation", () => {
       token: "test",
       platform: "linux",
     };
-    const markRead = mock(async () => ({ sequence: 4 }));
+    const markRead = vi.fn(async () => ({ sequence: 4 }));
     const marked = await markOpenedTeamChatThreadRead(
       {
         connection,

@@ -2,15 +2,16 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
   inspectChannelSetup,
   normalizeChannelEvent,
   renderChannelResponse,
 } from "openpond-agent-sdk/channels";
 import type { AgentProjectDefinition } from "openpond-agent-sdk/primitives";
+import { runTestProcess } from "../../../tests/helpers/run-process";
 
-const packageRoot = path.resolve(import.meta.dir, "..");
+const packageRoot = path.resolve(import.meta.dirname, "..");
 const fixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "pilot-examples-contract");
 
 describe("pilot example contract", () => {
@@ -268,7 +269,8 @@ describe("pilot example contract", () => {
 
 async function importProject(name: string): Promise<AgentProjectDefinition> {
   const configPath = path.join(example(name), "agent", "agent.ts");
-  const moduleUrl = `${pathToFileURL(configPath).href}?pilot=${Date.now()}-${Math.random()}`;
+  const cacheKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const moduleUrl = `${pathToFileURL(configPath).href}?pilot=${cacheKey}`;
   const mod = await import(moduleUrl) as { default: AgentProjectDefinition };
   return mod.default;
 }
@@ -293,17 +295,9 @@ async function runSdkJsonAllowFailure(args: string[]) {
 }
 
 async function runSdk(args: string[]) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
+  return runTestProcess(process.execPath, ["./dist/cli.js", ...args], {
     cwd: packageRoot,
-    stdout: "pipe",
-    stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
 }
 
 function formatFailure(

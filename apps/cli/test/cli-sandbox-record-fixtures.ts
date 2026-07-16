@@ -39,7 +39,7 @@ export function largeSourceCheckPayload(): Record<string, unknown> {
     setup: {
       status: "completed",
       passed: true,
-      commands: ["bun install --offline"],
+      commands: ["pnpm install --offline"],
       expectedBinaryPath: "node_modules/.bin/openpond-agent",
       rawInstallLog: largeRawPayload(),
     },
@@ -134,12 +134,12 @@ export function sourceUploadMetadataStatusFixture(): Record<string, unknown> {
   return {
     schema: "openpond.agent.source_upload.v1",
     sourceTreeMode: "typescript_agent_sdk",
-    packageManager: "bun",
+    packageManager: "pnpm",
     commands: {
-      inspect: "bun run agent:inspect",
-      build: "bun run agent:build",
-      validate: "bun run agent:validate",
-      eval: "bun run agent:eval",
+      inspect: "pnpm run agent:inspect",
+      build: "pnpm run agent:build",
+      validate: "pnpm run agent:validate",
+      eval: "pnpm run agent:eval",
     },
     generatedManifestPath: ".openpond/openpond-manifest.preview.yaml",
     synthesizedOpenPondYaml: true,
@@ -169,8 +169,8 @@ export function sourceUploadMetadataStatusFixture(): Record<string, unknown> {
     },
     dependencySetup: {
       required: true,
-      installCommand: "bun install --offline",
-      commands: ["bun install --offline"],
+      installCommand: "pnpm install --offline",
+      commands: ["pnpm install --offline"],
       packageJsonPath: "package.json",
       expectedBinaryPath: "node_modules/.bin/openpond-agent",
       generatedArtifactDirectory: ".openpond",
@@ -218,9 +218,9 @@ export function sourceCheckClassificationPayload(
       setup: {
         status: "failed",
         message: "dependency install failed",
-        command: "bun install --offline",
+        command: "pnpm install --offline",
         exitCode: 1,
-        commands: ["bun install --offline"],
+        commands: ["pnpm install --offline"],
         expectedBinaryPath: "node_modules/.bin/openpond-agent",
         dependencyPackages: [
           {
@@ -240,7 +240,7 @@ export function sourceCheckClassificationPayload(
       policyDiscovery: {
         status: "failed",
         message: "missing node_modules/.bin/openpond-agent",
-        command: "bun run agent:inspect",
+        command: "pnpm run agent:inspect",
         exitCode: 127,
       },
     };
@@ -250,9 +250,9 @@ export function sourceCheckClassificationPayload(
       setup: {
         status: "failed",
         message: "unresolved local file dependency",
-        command: "bun install --offline",
+        command: "pnpm install --offline",
         exitCode: 1,
-        commands: ["bun install --offline"],
+        commands: ["pnpm install --offline"],
         expectedBinaryPath: "node_modules/.bin/openpond-agent",
         dependencyPackages: [
           {
@@ -272,7 +272,7 @@ export function sourceCheckClassificationPayload(
       policyDiscovery: {
         status: "failed",
         message: "missing generated artifact directory .openpond",
-        command: "bun run agent:inspect",
+        command: "pnpm run agent:inspect",
         exitCode: 1,
       },
     };
@@ -310,7 +310,7 @@ export function sourceCheckClassificationPayload(
       policyDiscovery: {
         status: "failed",
         message: "invalid inspect JSON",
-        command: "bun run agent:inspect",
+        command: "pnpm run agent:inspect",
         exitCode: 1,
       },
     };
@@ -319,7 +319,7 @@ export function sourceCheckClassificationPayload(
     return {
       checkRuns: [
         {
-          command: "bun run agent:validate",
+          command: "pnpm run agent:validate",
           status: "failed",
           passed: false,
           exitCode: 1,
@@ -338,7 +338,7 @@ export function sourceCheckClassificationPayload(
     return {
       checkRuns: [
         {
-          command: "bun run agent:eval",
+          command: "pnpm run agent:eval",
           status: "failed",
           passed: false,
           exitCode: 1,
@@ -389,7 +389,7 @@ export function sandboxRecord(
       workspaceRoot: "/workspace/project",
       defaultExecutionProfileId: "firecracker-direct-k8s",
       requiredTools: ["git", "sh", "rg", "curl", "tar", "unzip"],
-      excludedToolchains: ["node", "bun", "python", "browser"],
+      excludedToolchains: ["node", "pnpm", "python", "browser"],
       capabilities: [
         "files",
         "exec",
@@ -497,7 +497,7 @@ export function sandboxRuntimeRecord(
       workspaceRoot: "/workspace/project",
       defaultExecutionProfileId: "firecracker-direct-k8s",
       requiredTools: ["git", "sh", "rg", "curl", "tar", "unzip"],
-      excludedToolchains: ["node", "bun", "python", "browser"],
+      excludedToolchains: ["node", "pnpm", "python", "browser"],
       capabilities: [
         "files",
         "exec",

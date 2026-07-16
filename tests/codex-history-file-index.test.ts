@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, describe, expect, test } from "vitest";
 
 import {
   clearCodexHistoryFileIndex,
@@ -32,7 +33,7 @@ describe("Codex history file index", () => {
       expect(cached).toBe(first);
       expect(codexHistoryFileIndexStats(codexHome).scans).toBe(1);
 
-      await Bun.sleep(5);
+      await delay(5);
       await writeFile(path.join(codexHome, "history.jsonl"), '{"session_id":"changed"}\n');
       await loadCodexHistoryFileIndex(codexHome);
       expect(codexHistoryFileIndexStats(codexHome).scans).toBe(2);

@@ -1,5 +1,6 @@
-import sqlite3 from "sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import type { BootstrapPayload, RuntimeEvent, Session } from "@openpond/contracts";
+import { normalizeSqliteParameters } from "../../apps/server/src/store/sqlite/sqlite-values";
 
 import { desktopScenario } from "../../scripts/desktop-harness/scenario";
 import type { DesktopHarness } from "../../scripts/desktop-harness/types";
@@ -231,47 +232,18 @@ async function ageSubagentRuns(
 ): Promise<string> {
   const bootstrap = await harness.api.bootstrap<BootstrapPayload>();
   const agedAt = new Date(Date.now() - ageMs).toISOString();
-  const db = await openDatabase(bootstrap.server.storePath);
+  const db = new DatabaseSync(bootstrap.server.storePath, { timeout: 1_000 });
   try {
     for (const runId of runIds) {
-      await runSql(db, "UPDATE subagent_runs SET updated_at = ? WHERE id = ?", [agedAt, runId]);
+      runSql(db, "UPDATE subagent_runs SET updated_at = ? WHERE id = ?", [agedAt, runId]);
     }
   } finally {
-    await closeDatabase(db);
+    db.close();
   }
   return agedAt;
 }
 
-function openDatabase(filePath: string): Promise<sqlite3.Database> {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(filePath, (error) => {
-      if (error) reject(error);
-      else resolve(db);
-    });
-  });
-}
-
-function runSql(db: sqlite3.Database, sql: string, params: unknown[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function onRun(this: sqlite3.RunResult, error: Error | null) {
-      if (error) {
-        reject(error);
-        return;
-      }
-      if (this.changes === 0) {
-        reject(new Error(`No rows updated for SQL: ${sql}`));
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-function closeDatabase(db: sqlite3.Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.close((error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
+function runSql(db: DatabaseSync, sql: string, params: unknown[]): void {
+  const result = db.prepare(sql).run(...normalizeSqliteParameters(params));
+  if (result.changes === 0) throw new Error(`No rows updated for SQL: ${sql}`);
 }

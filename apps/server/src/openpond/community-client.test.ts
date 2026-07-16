@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, vi, test } from "vitest";
 import { CommunityApiError, communityRequestPayload } from "./community-client.js";
 
 describe("community hosted client", () => {
@@ -128,7 +128,7 @@ function attachment(status: "pending" | "ready") {
 }
 
 function mockFetch(implementation: (url: string, init?: RequestInit) => Promise<Response>): typeof fetch {
-  return mock(async (input: URL | RequestInfo, init?: RequestInit) => implementation(String(input), init)) as unknown as typeof fetch;
+  return vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => implementation(String(input), init)) as unknown as typeof fetch;
 }
 
 async function testAccountContext() {

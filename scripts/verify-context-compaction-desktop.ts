@@ -322,7 +322,7 @@ function seedEventsForProof(sessionId: string, timestamp: string): RuntimeEvent[
       source: "provider",
       output: [
         `Acknowledged seeded compaction proof turn ${index}.`,
-        "Relevant validation: bun test tests/context-compaction.test.ts tests/manual-compaction-usage.test.ts.",
+        "Relevant validation: pnpm exec vitest run tests/context-compaction.test.ts tests/manual-compaction-usage.test.ts.",
         "The visible transcript must keep compaction rows while provider replay uses the compacted summary.",
         "assistant-context ".repeat(45),
       ].join(" "),
@@ -528,7 +528,7 @@ function parseArgs(args: string[]): Options {
     const arg = args[index]!;
     if (arg === "--help" || arg === "-h") {
       console.log(
-        "usage: bun scripts/verify-context-compaction-desktop.ts [--provider openpond|zai|both] [--artifacts-dir <path>] [--source-app-home <path>] [--timeout-ms <ms>] [--keep-home]",
+        "usage: pnpm run verify:desktop:compaction -- [--provider openpond|zai|both] [--artifacts-dir <path>] [--source-app-home <path>] [--timeout-ms <ms>] [--keep-home]",
       );
       process.exit(0);
     }
@@ -894,7 +894,7 @@ async function writeCommandReceipt(
     [
       `generatedAt=${new Date().toISOString()}`,
       `cwd=${ROOT}`,
-      `command=bun scripts/verify-context-compaction-desktop.ts --provider ${options.provider} --artifacts-dir ${options.artifactsDir}`,
+      `command=pnpm run verify:desktop:compaction -- --provider ${options.provider} --artifacts-dir ${options.artifactsDir}`,
       `targets=${targets.join(",")}`,
       `requires=OPENPOND_APP_LIVE_DESKTOP_COMPACTION=1`,
       targets.includes("openpond") ? "requires=OPENPOND_APP_LIVE_OPENPOND=1" : null,

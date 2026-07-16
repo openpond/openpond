@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { register } from "tsx/esm/api";
 import { parse as parseYaml } from "yaml";
 
 import type {
@@ -27,6 +28,8 @@ export type LoadedAgentProject = {
     extendsManifest?: string;
   };
 };
+
+let typescriptLoaderRegistered = false;
 
 export async function loadAgentProject(cwd: string): Promise<AgentProjectDefinition> {
   return (await loadAgentProjectContext(cwd)).project;
@@ -71,12 +74,22 @@ export async function loadAgentProjectContext(cwd: string): Promise<LoadedAgentP
 
 async function loadTypescriptProject(configPath: string): Promise<AgentProjectDefinition> {
   await access(configPath);
-  const moduleUrl = `${pathToFileURL(configPath).href}?openpondAgent=${Date.now()}`;
-  const mod = (await import(moduleUrl)) as { default?: AgentProjectDefinition };
+  ensureTypescriptLoader();
+  const cacheKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const moduleUrl = `${pathToFileURL(configPath).href}?openpondAgent=${cacheKey}`;
+  const mod = (await import(moduleUrl)) as {
+    default?: AgentProjectDefinition;
+  };
   if (!mod.default) {
     throw new Error(`${DEFAULT_AGENT_CONFIG} must export a default agent project.`);
   }
   return mod.default;
+}
+
+function ensureTypescriptLoader() {
+  if (typescriptLoaderRegistered) return;
+  register();
+  typescriptLoaderRegistered = true;
 }
 
 async function loadOpenPondYamlProject(configPath: string): Promise<AgentProjectDefinition> {

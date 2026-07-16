@@ -19,7 +19,7 @@ This audit records the package surfaces that must stay generic before platform a
 The enforced audit command is:
 
 ```bash
-bun run check
+pnpm check
 ```
 
 That command proves:
@@ -34,6 +34,6 @@ That command proves:
 
 ## Current Verdict
 
-The package is generic enough for the next platform phase when `bun run check` passes from the Agent SDK package root.
+The package is generic enough for the next platform phase when `pnpm check` passes from the Agent SDK package root.
 
 Remaining non-SDK work stays platform-owned: integration lease selection, secret storage, volume provisioning, schedule enablement, run history, draft source refs, publish transactions, UI projections, and staging deployment.

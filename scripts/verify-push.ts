@@ -10,7 +10,7 @@ type VerificationStep = {
 };
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const bun = process.env.BUN_BINARY || process.execPath;
+const pnpm = process.env.PNPM_BINARY || "pnpm";
 const reuseBuildEnv = { ...process.env, OPENPOND_TEST_REUSE_BUILD: "1" };
 const steps: VerificationStep[] = [
   step("Install locked dependencies", "install", "--frozen-lockfile"),
@@ -68,14 +68,14 @@ if (verificationError) throw verificationError;
 console.log("\nPush verification passed without changing the workspace.");
 
 function step(label: string, ...args: string[]): VerificationStep {
-  return { label, command: bun, args };
+  return { label, command: pnpm, args };
 }
 
 function suite(label: string, suiteName: string): VerificationStep {
   return {
     label,
-    command: bun,
-    args: ["scripts/run-tests.ts", suiteName],
+    command: pnpm,
+    args: ["exec", "tsx", "scripts/run-tests.ts", suiteName],
     env: reuseBuildEnv,
   };
 }

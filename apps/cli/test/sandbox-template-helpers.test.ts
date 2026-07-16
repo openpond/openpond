@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   defineSandboxTemplate,
@@ -21,13 +21,13 @@ describe("sandbox template helpers", () => {
       resources: sandboxTemplateResources({ cpu: 1, memoryGb: 2, diskGb: 8 }),
       validation: { commands: ["echo ok"], probes: [] },
       start: {
-        command: "bun run process",
+        command: "pnpm process",
         ports: [],
       },
       services: [
         {
           name: "web",
-          command: "bun dev --host 0.0.0.0 --port 3000",
+          command: "pnpm dev -- --host 0.0.0.0 --port 3000",
           ports: [sandboxTemplatePreviewPort(3000, { label: "web" })],
         },
       ],

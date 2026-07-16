@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { matchChatFilePathAt, normalizeChatFilePath } from "../apps/web/src/lib/chat-file-links";
 
 describe("chat file links", () => {

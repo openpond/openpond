@@ -146,7 +146,7 @@ function parseArgs(args: string[]): { dir: string } {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--help" || arg === "-h") {
-      console.log("usage: bun scripts/validate-packaged-smoke-reports.ts [--dir <path>]");
+      console.log("usage: pnpm run smoke:desktop:packaged:validate -- [--dir <path>]");
       process.exit(0);
     }
     if (arg === "--dir") {

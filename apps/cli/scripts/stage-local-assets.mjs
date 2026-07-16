@@ -12,7 +12,7 @@ const skillsTarget = path.join(cliRoot, "dist", "skills");
 try {
   await fs.access(path.join(webSource, "index.html"));
 } catch {
-  throw new Error("The local CLI companion requires apps/web/dist. Run `bun run build:web` before packaging the CLI.");
+  throw new Error("The local CLI companion requires apps/web/dist. Run `pnpm build:web` before packaging the CLI.");
 }
 
 await Promise.all([

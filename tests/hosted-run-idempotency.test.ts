@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { buildHostedRunIdempotencyKey } from "../packages/cloud/src/profile/hosted-run-idempotency";
 

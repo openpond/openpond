@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 
 import { runProcessCommand } from "../apps/cli/src/process-runner";
 
 type PackResult = {
+  version: string;
   filename: string;
   size: number;
   unpackedSize: number;
@@ -23,18 +27,11 @@ type ReadyPayload = {
 };
 
 const MiB = 1024 * 1024;
-const root = path.resolve(import.meta.dir, "..");
-const archiveArg = valueAfter("--archive");
-const skipNpm = process.argv.includes("--skip-npm");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tempRoots: string[] = [];
 
 try {
-  if (skipNpm && !archiveArg) {
-    throw new Error("--skip-npm requires --archive so at least one distribution is checked");
-  }
-  const npmMetrics = skipNpm ? null : await checkNpmPackage();
-  const archiveMetrics = archiveArg ? await checkCompiledArchive(path.resolve(archiveArg)) : null;
-  console.log(JSON.stringify({ npm: npmMetrics, archive: archiveMetrics }, null, 2));
+  console.log(JSON.stringify({ npm: await checkNpmPackage() }, null, 2));
 } finally {
   await Promise.all(tempRoots.map((directory) => rm(directory, { recursive: true, force: true })));
 }
@@ -52,6 +49,8 @@ async function checkNpmPackage() {
   ]);
   const result = (JSON.parse(pack.stdout) as PackResult[])[0];
   if (!result) throw new Error("npm pack did not return package metadata");
+  const tarballPath = path.join(packDir, result.filename);
+  const tarballSha256 = createHash("sha256").update(await readFile(tarballPath)).digest("hex");
 
   enforce("npm packed bytes", result.size, 8 * MiB);
   enforce("npm unpacked bytes", result.unpackedSize, 32 * MiB);
@@ -72,55 +71,136 @@ async function checkNpmPackage() {
     "install",
     "--prefix",
     consumer,
-    path.join(packDir, result.filename),
+    tarballPath,
     "--no-audit",
     "--no-fund",
   ]);
+  for (const unsupportedDependency of ["sqlite3", "better-sqlite3"]) {
+    if (existsSync(path.join(consumer, "node_modules", unsupportedDependency))) {
+      throw new Error(`npm consumer unexpectedly installed ${unsupportedDependency}`);
+    }
+  }
+  const audit = await command("npm", ["audit", "--prefix", consumer, "--omit=dev", "--json"]);
+  const auditPayload = JSON.parse(audit.stdout) as {
+    metadata?: { vulnerabilities?: Record<string, number> };
+  };
+  const vulnerabilities = auditPayload.metadata?.vulnerabilities ?? {};
+  if ((vulnerabilities.high ?? 0) > 0 || (vulnerabilities.critical ?? 0) > 0) {
+    throw new Error(`npm consumer audit failed: ${JSON.stringify(vulnerabilities)}`);
+  }
   const cli = path.join(consumer, "node_modules", "openpond", "dist", "cli.js");
   const runtime = await checkRunnableDistribution("node", [cli]);
+  const installed = await checkInstalledEntrypoints({
+    consumer,
+    tarballPath,
+    version: result.version,
+  });
+  const ephemeral = await checkEphemeralEntrypoints(tarballPath, result.version);
   return {
+    tarballSha256,
     packedBytes: result.size,
     unpackedBytes: result.unpackedSize,
     fileCount: result.entryCount,
     entryBytes: fileMap.get("dist/cli.js"),
+    auditVulnerabilities: vulnerabilities,
+    installed,
+    ephemeral,
     ...runtime,
   };
 }
 
-async function checkCompiledArchive(archivePath: string) {
-  requireFile(archivePath);
-  const archiveBytes = (await stat(archivePath)).size;
-  const limits = process.platform === "darwin"
-    ? { archive: 60 * MiB, extracted: 145 * MiB, binary: 120 * MiB }
-    : { archive: 50 * MiB, extracted: 130 * MiB, binary: 110 * MiB };
-  enforce("compiled archive bytes", archiveBytes, limits.archive);
-
-  const extracted = await tempDir("openpond-cli-archive-");
-  await command("tar", ["-xzf", archivePath, "-C", extracted]);
-  const cli = path.join(extracted, "openpond");
-  requireFile(cli);
-  requireFile(path.join(extracted, "web", "index.html"));
-  requireFile(path.join(extracted, "LICENSE"));
-  const op = await lstat(path.join(extracted, "op"));
-  if (!op.isSymbolicLink()) throw new Error("compiled archive op alias must be a symlink");
-  const binaryBytes = (await stat(cli)).size;
-  enforce("compiled binary bytes", binaryBytes, limits.binary);
-
-  const inventoryPath = path.join(extracted, "cli-release-inventory.json");
-  const inventory = JSON.parse(await readFile(inventoryPath, "utf8")) as {
-    files: Array<{ path: string; bytes: number; sha256: string }>;
-  };
-  let extractedBytes = 0;
-  for (const item of inventory.files) {
-    const contents = await readFile(path.join(extracted, item.path));
-    extractedBytes += contents.byteLength;
-    if (contents.byteLength !== item.bytes) throw new Error(`archive size mismatch for ${item.path}`);
-    const hash = createHash("sha256").update(contents).digest("hex");
-    if (hash !== item.sha256) throw new Error(`archive hash mismatch for ${item.path}`);
+async function checkInstalledEntrypoints(input: {
+  consumer: string;
+  tarballPath: string;
+  version: string;
+}): Promise<{ localBins: string[]; globalBins: string[]; tui: "passed"; pty: "passed" }> {
+  const binNames = ["openpond", "openpond-code", "op"];
+  for (const binName of binNames) {
+    await assertVersionOutput(
+      installedBinPath(path.join(input.consumer, "node_modules", ".bin"), binName),
+      input.version,
+    );
   }
-  enforce("compiled extracted bytes", extractedBytes, limits.extracted);
-  const runtime = await checkRunnableDistribution(cli, []);
-  return { archiveBytes, extractedBytes, binaryBytes, fileCount: inventory.files.length, ...runtime };
+
+  const globalPrefix = await tempDir("openpond-cli-global-");
+  await command("npm", [
+    "install",
+    "--global",
+    "--prefix",
+    globalPrefix,
+    input.tarballPath,
+    "--no-audit",
+    "--no-fund",
+  ]);
+  const globalBinRoot = process.platform === "win32" ? globalPrefix : path.join(globalPrefix, "bin");
+  for (const binName of binNames) {
+    await assertVersionOutput(installedBinPath(globalBinRoot, binName), input.version);
+  }
+
+  const tuiHome = await tempDir("openpond-cli-tui-home-");
+  const tui = await command(installedBinPath(globalBinRoot, "openpond"), ["tui"], {
+    cwd: await tempDir("openpond-cli-tui-cwd-"),
+    env: {
+      HOME: tuiHome,
+      OPENPOND_APP_HOME: path.join(tuiHome, ".openpond", "openpond-app"),
+      USERPROFILE: tuiHome,
+    },
+    stdin: "/exit\n",
+    timeoutMs: 30_000,
+  });
+  if (!tui.stdout.includes("OpenPond")) {
+    throw new Error(`installed TUI did not render its heading: ${tui.stderr || tui.stdout}`);
+  }
+
+  const globalPackageRoot = process.platform === "win32"
+    ? path.join(globalPrefix, "node_modules", "openpond")
+    : path.join(globalPrefix, "lib", "node_modules", "openpond");
+  const pty = await command(process.execPath, [
+    "-e",
+    [
+      `const nodePty = require(${JSON.stringify(path.join(globalPackageRoot, "node_modules", "node-pty"))});`,
+      "const terminal = nodePty.spawn(process.execPath, ['-e', 'process.stdout.write(\\\"openpond-pty-ok\\\")'], { name: 'xterm', cols: 80, rows: 24, cwd: process.cwd(), env: process.env });",
+      "let output = '';",
+      "terminal.onData((chunk) => { output += chunk; });",
+      "terminal.onExit(({ exitCode }) => { if (exitCode !== 0 || output !== 'openpond-pty-ok') process.exit(1); });",
+    ].join("\n"),
+  ]);
+  if (pty.stderr.trim()) throw new Error(`installed node-pty proof wrote stderr: ${pty.stderr}`);
+
+  return { localBins: binNames, globalBins: binNames, tui: "passed", pty: "passed" };
+}
+
+async function checkEphemeralEntrypoints(
+  tarballPath: string,
+  version: string,
+): Promise<{ npx: "passed"; pnpmDlx: "passed" }> {
+  const cwd = await tempDir("openpond-cli-ephemeral-cwd-");
+  const npx = await command("npx", [
+    "--yes",
+    `--package=${tarballPath}`,
+    "openpond",
+    "--version",
+  ], { cwd });
+  assertVersion(npx.stdout, version, "npx");
+
+  const pnpmDlx = await command("pnpm", ["dlx", tarballPath, "--version"], { cwd });
+  assertVersion(pnpmDlx.stdout, version, "pnpm dlx");
+  return { npx: "passed", pnpmDlx: "passed" };
+}
+
+function installedBinPath(binRoot: string, binName: string): string {
+  return path.join(binRoot, process.platform === "win32" ? `${binName}.cmd` : binName);
+}
+
+async function assertVersionOutput(binPath: string, version: string): Promise<void> {
+  const result = await command(binPath, ["--version"]);
+  assertVersion(result.stdout, version, binPath);
+}
+
+function assertVersion(stdout: string, version: string, label: string): void {
+  if (stdout.trim() !== version) {
+    throw new Error(`${label} returned ${JSON.stringify(stdout.trim())}; expected ${version}`);
+  }
 }
 
 async function checkRunnableDistribution(commandName: string, prefixArgs: string[]) {
@@ -147,8 +227,18 @@ async function checkRunnableDistribution(commandName: string, prefixArgs: string
     throw new Error("embedded terminal companion did not print its usage contract");
   }
   const server = await liveServer(commandName, [...prefixArgs, "serve", "--port", "0"], cwd, env);
+  writePersistenceMarker(server.storePath);
   const ui = await liveServer(commandName, [...prefixArgs, "ui", "--port", "0"], cwd, env);
-  return { versionP95Ms, serverReadyMs: server.readyMs, uiReadyMs: ui.readyMs };
+  if (ui.storePath !== server.storePath) {
+    throw new Error(`npm CLI restart changed store path: ${server.storePath} -> ${ui.storePath}`);
+  }
+  assertPersistenceMarker(ui.storePath);
+  return {
+    versionP95Ms,
+    serverReadyMs: server.readyMs,
+    uiReadyMs: ui.readyMs,
+    sqlitePersistence: "passed",
+  };
 }
 
 async function liveServer(
@@ -156,7 +246,7 @@ async function liveServer(
   args: string[],
   cwd: string,
   env: Record<string, string>,
-): Promise<{ readyMs: number }> {
+): Promise<{ readyMs: number; storePath: string }> {
   const started = performance.now();
   const child = spawn(commandName, args, {
     cwd,
@@ -185,9 +275,41 @@ async function liveServer(
         throw new Error(`web mode returned ${response.status} without the built renderer`);
       }
     }
-    return { readyMs };
+    return { readyMs, storePath: payload.storePath };
   } finally {
     await stopProcess(child);
+  }
+}
+
+function writePersistenceMarker(filename: string): void {
+  const database = new DatabaseSync(filename, { timeout: 1_000 });
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS openpond_distribution_check (
+        id INTEGER PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+    database.prepare(
+      "INSERT OR REPLACE INTO openpond_distribution_check (id, value) VALUES (?, ?)",
+    ).run(1, "persisted-across-npm-cli-restart");
+  } finally {
+    database.close();
+  }
+}
+
+function assertPersistenceMarker(filename: string): void {
+  const database = new DatabaseSync(filename, { readOnly: true, timeout: 1_000 });
+  try {
+    const health = database.prepare("PRAGMA quick_check").get() as { quick_check?: unknown };
+    const marker = database.prepare(
+      "SELECT value FROM openpond_distribution_check WHERE id = ?",
+    ).get(1) as { value?: unknown } | undefined;
+    if (health.quick_check !== "ok" || marker?.value !== "persisted-across-npm-cli-restart") {
+      throw new Error(`npm CLI SQLite restart proof failed: ${JSON.stringify({ health, marker })}`);
+    }
+  } finally {
+    database.close();
   }
 }
 
@@ -204,7 +326,7 @@ async function waitForReady(
     if (child.exitCode !== null || child.signalCode) {
       throw new Error(`CLI server exited before ready: ${stderr() || stdout()}`);
     }
-    await Bun.sleep(25);
+    await delay(25);
   }
   throw new Error(`CLI server readiness timed out: ${stderr() || stdout()}`);
 }
@@ -213,7 +335,7 @@ async function waitForPath(filePath: string, timeoutMs: number): Promise<boolean
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (existsSync(filePath)) return true;
-    await Bun.sleep(25);
+    await delay(25);
   }
   return existsSync(filePath);
 }
@@ -222,7 +344,7 @@ async function stopProcess(child: ReturnType<typeof spawn>): Promise<void> {
   if (child.exitCode !== null || child.signalCode) return;
   signalTree(child.pid, "SIGTERM");
   const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
-  const graceful = await Promise.race([closed.then(() => true), Bun.sleep(5_000).then(() => false)]);
+  const graceful = await Promise.race([closed.then(() => true), delay(5_000).then(() => false)]);
   if (!graceful) {
     signalTree(child.pid, "SIGKILL");
     await closed;
@@ -241,12 +363,18 @@ function signalTree(pid: number | undefined, signal: NodeJS.Signals): void {
 async function command(
   commandName: string,
   args: string[],
-  options: { cwd?: string; env?: Record<string, string> } = {},
+  options: {
+    cwd?: string;
+    env?: Record<string, string>;
+    stdin?: string;
+    timeoutMs?: number;
+  } = {},
 ) {
   const result = await runProcessCommand(commandName, args, {
     cwd: options.cwd ?? root,
     env: options.env,
-    timeoutMs: 120_000,
+    stdin: options.stdin,
+    timeoutMs: options.timeoutMs ?? 120_000,
     maxOutputBytes: 4 * MiB,
   });
   if (result.code !== 0) throw new Error(`${commandName} failed: ${result.stderr || result.stdout}`);
@@ -290,12 +418,4 @@ async function tempDir(prefix: string): Promise<string> {
   const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), prefix)));
   tempRoots.push(directory);
   return directory;
-}
-
-function valueAfter(flag: string): string | null {
-  const index = process.argv.indexOf(flag);
-  if (index < 0) return null;
-  const value = process.argv[index + 1];
-  if (!value) throw new Error(`${flag} requires a value`);
-  return value;
 }

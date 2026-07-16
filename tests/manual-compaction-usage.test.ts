@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import type { RuntimeEvent, Session, UsageRecordsResponse } from "@openpond/contracts";
 
 import { createOpenPondServer } from "../apps/server/src/index";
@@ -404,7 +404,7 @@ function compactionEvents(sessionId: string): RuntimeEvent[] {
       name: "command.output",
       timestamp: "2026-07-04T12:01:02.000Z",
       source: "server",
-      action: "bun test tests/manual-compaction-usage.test.ts",
+      action: "pnpm test tests/manual-compaction-usage.test.ts",
       status: "failed",
       output: "FAIL tests/manual-compaction-usage.test.ts: compaction metadata fixture",
     },

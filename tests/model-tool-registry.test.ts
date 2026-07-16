@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   createCommandModelToolDefinition,
   createConnectedAppSkillModelToolDefinitions,
@@ -201,7 +201,7 @@ describe("model tool registry", () => {
       session: hybridSession,
     });
     const execResult = await exec.execute({
-      ...actionContext({ command: "bun run typecheck" }),
+      ...actionContext({ command: "pnpm typecheck" }),
       session: hybridSession,
     });
     const localOnlyResult = await actionRun.execute({
@@ -227,7 +227,7 @@ describe("model tool registry", () => {
       },
       {
         action: "sandbox_exec",
-        args: { command: "bun run typecheck" },
+        args: { command: "pnpm typecheck" },
         source: "chat_action",
       },
     ]);
@@ -521,7 +521,7 @@ describe("model tool registry", () => {
     })).toBe(false);
 
     const statusResult = await status.execute(actionContext({}));
-    const execResult = await exec.execute(actionContext({ command: "bun run typecheck", timeoutSeconds: 180 }));
+    const execResult = await exec.execute(actionContext({ command: "pnpm typecheck", timeoutSeconds: 180 }));
     const gitStatusResult = await gitStatus.execute(actionContext({}));
     const gitDiffResult = await gitDiff.execute(actionContext({ baseRef: "HEAD" }));
 
@@ -533,7 +533,7 @@ describe("model tool registry", () => {
       },
       {
         action: "sandbox_exec",
-        args: { command: "bun run typecheck", timeoutSeconds: 180 },
+        args: { command: "pnpm typecheck", timeoutSeconds: 180 },
         source: "chat_action",
       },
       {

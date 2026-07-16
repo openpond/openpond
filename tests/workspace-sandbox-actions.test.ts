@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { MUTATING_WORKSPACE_TOOL_ACTIONS } from "../apps/server/src/workspace-tools/workspace-tool-action-sets";
 import {
   isSandboxSourceMutationAction,

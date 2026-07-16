@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const workspaceDirectories = ["apps", "packages"] as const;
 
@@ -11,7 +12,9 @@ export type StageReleaseSourceArtifactsOptions = {
 export async function stageReleaseSourceArtifacts(
   options: StageReleaseSourceArtifactsOptions = {},
 ): Promise<string[]> {
-  const root = path.resolve(options.root ?? path.join(import.meta.dir, ".."));
+  const root = path.resolve(
+    options.root ?? path.join(path.dirname(fileURLToPath(import.meta.url)), ".."),
+  );
   const outputDirectory = path.resolve(
     options.outputDirectory ?? path.join(root, "release-source-artifacts"),
   );

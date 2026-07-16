@@ -22,10 +22,10 @@ Blank-agent remains the markdown-only pilot.
 ## Local Commands
 
 ```bash
-bun run agent:inspect
-bun run agent:build
-bun run agent:validate
-bun run agent:eval
+pnpm agent:inspect
+pnpm agent:build
+pnpm agent:validate
+pnpm agent:eval
 openpond-agent run chat --input '{"prompt":"Draft a reply","channel":"openpond_chat"}'
 ```
 

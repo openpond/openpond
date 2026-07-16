@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   connectedAppIconUrl,
@@ -19,10 +19,10 @@ describe("web public asset URLs", () => {
     ];
 
     for (const assetUrl of assetUrls) {
-      expect(assetUrl).toStartWith("./");
-      expect(new URL(assetUrl, rendererUrl).pathname).toStartWith(
+      expect(assetUrl.startsWith("./")).toBe(true);
+      expect(new URL(assetUrl, rendererUrl).pathname.startsWith(
         "/Applications/openpond.app/Contents/Resources/web/",
-      );
+      )).toBe(true);
     }
   });
 

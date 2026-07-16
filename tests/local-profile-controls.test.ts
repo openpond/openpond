@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   loadGlobalConfig,
@@ -100,7 +100,7 @@ describe("local profile control invariants", () => {
         generatedManifestPath: ".openpond/openpond-manifest.preview.yaml",
         synthesizedOpenPondYaml: true,
         uploadMetadataPath: ".openpond/source-upload-metadata.json",
-        setupCommands: ["bun install"],
+        setupCommands: ["pnpm install"],
         validationCommands: ["openpond-agent validate"],
         materializedAt: "2026-06-28T18:14:01.572Z",
       },
@@ -114,7 +114,7 @@ describe("local profile control invariants", () => {
         sourceRef: "main",
         sourceCommitSha: "5287f494a394f2d3e265382cafb7b8b10d7d4b05",
         manifestHash: "manifest_hash_123",
-        setupCommands: ["bun install"],
+        setupCommands: ["pnpm install"],
         validationCommands: ["openpond-agent validate"],
         requiredChecks: ["openpond-agent validate"],
         evalNames: ["support-items"],
@@ -213,7 +213,7 @@ describe("local profile control invariants", () => {
             manifestPath: "openpond.yaml",
           },
           checks: {
-            setupCommands: ["bun install"],
+            setupCommands: ["pnpm install"],
             validationCommands: ["openpond-agent validate"],
             requiredChecks: ["openpond-agent validate"],
             evalNames: ["support-items"],
@@ -274,7 +274,7 @@ describe("local profile control invariants", () => {
       status: "requested",
       workItemId: "work_item_123",
       manifestHash: "manifest_hash_123",
-      setupCommands: ["bun install"],
+      setupCommands: ["pnpm install"],
       runtimeId: "runtime_123",
       sandboxId: "sandbox_123",
     });

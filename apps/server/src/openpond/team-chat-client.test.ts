@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, vi, test } from "vitest";
 
 import { apiBaseUrlFromSandboxApiUrl, teamChatRequestPayload } from "./team-chat-client.js";
 
@@ -274,10 +274,10 @@ function attachmentPayload(status: "pending" | "ready") {
 
 function mockFetch(
   implementation: (url: string, init?: RequestInit) => Promise<Response>,
-): typeof fetch & ReturnType<typeof mock> {
-  return mock(async (input: URL | RequestInfo, init?: RequestInit) =>
+): typeof fetch & ReturnType<typeof vi.fn> {
+  return vi.fn(async (input: URL | RequestInfo, init?: RequestInit) =>
     implementation(String(input), init),
-  ) as typeof fetch & ReturnType<typeof mock>;
+  ) as typeof fetch & ReturnType<typeof vi.fn>;
 }
 
 function jsonResponse(payload: unknown): Response {

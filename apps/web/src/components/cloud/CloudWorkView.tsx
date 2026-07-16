@@ -105,10 +105,10 @@ function planChecks(snapshot: CreatePipelineSnapshot | null): Array<{ name: stri
   return snapshot?.plan?.checks?.length
     ? snapshot.plan.checks.map((check) => ({ name: check.name, command: check.command }))
     : [
-        { name: "inspect", command: "bun run agent:inspect" },
-        { name: "build", command: "bun run build" },
-        { name: "validate", command: "bun run agent:validate" },
-        { name: "eval", command: "bun run agent:eval" },
+        { name: "inspect", command: "pnpm agent:inspect" },
+        { name: "build", command: "pnpm build" },
+        { name: "validate", command: "pnpm agent:validate" },
+        { name: "eval", command: "pnpm agent:eval" },
       ];
 }
 

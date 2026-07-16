@@ -78,7 +78,7 @@ function requiredValue(argv: string[], index: number, flag: string): string {
 
 function reportUsage(): string {
   return [
-    "usage: bun scripts/desktop-harness-report.ts summarize <report.json...> [options]",
+    "usage: pnpm exec tsx scripts/desktop-harness-report.ts summarize <report.json...> [options]",
     "",
     "Options:",
     "  --json <path>       Write machine-readable release proof summary.",

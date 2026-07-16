@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { resolveRightSidebarFileSource } from "../apps/web/src/lib/right-sidebar-file-source";
 
 describe("resolveRightSidebarFileSource", () => {

@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createReadyLineParser } from "@openpond/runtime";
 
@@ -66,8 +67,12 @@ async function startServer(onLog: (line: string) => void): Promise<string> {
   const configuredArgs = parseConfiguredServerArgs(process.env.OPENPOND_SERVER_ARGS);
   const sourceMode = !configuredRunner && path.basename(__dirname) === "src";
   const serverEntry = path.join(root, "apps", "server", sourceMode ? "src/index.ts" : "dist/index.js");
-  const command = configuredRunner ?? (sourceMode ? process.env.BUN_BINARY || "bun" : process.execPath);
-  const args = configuredRunner ? configuredArgs : [serverEntry];
+  const command = configuredRunner ?? process.env.OPENPOND_NODE_BINARY ?? process.execPath;
+  const args = configuredRunner
+    ? configuredArgs
+    : sourceMode
+      ? [createRequire(import.meta.url).resolve("tsx/cli"), serverEntry]
+      : [serverEntry];
   const child = spawn(command, args, {
     cwd: process.env.OPENPOND_SERVER_CWD || root,
     env: process.env,

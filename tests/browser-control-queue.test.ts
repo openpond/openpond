@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createBrowserControlQueue } from "../apps/server/src/openpond/browser-control-queue";
 
 describe("browser control queue", () => {

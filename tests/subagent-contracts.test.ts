@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   SubagentRuntimeEventNameSchema,
   SubagentEvidenceRetentionPolicySchema,
@@ -98,12 +98,12 @@ describe("subagent contracts", () => {
         plan: ["Inspect the target files", "Patch the implementation"],
         targetFiles: ["apps/server/src/runtime/turn-runner.ts"],
         acceptanceCriteria: ["Child submits a review packet"],
-        validationCommands: ["bun test tests/turn-runner-subagents.test.ts"],
+        validationCommands: ["pnpm test tests/turn-runner-subagents.test.ts"],
         stopConditions: ["Report a blocker if validation cannot run"],
       }),
     ).toMatchObject({
       plan: ["Inspect the target files", "Patch the implementation"],
-      validationCommands: ["bun test tests/turn-runner-subagents.test.ts"],
+      validationCommands: ["pnpm test tests/turn-runner-subagents.test.ts"],
     });
 
     expect(SubagentRunStatusSchema.parse("submitted_for_review")).toBe("submitted_for_review");

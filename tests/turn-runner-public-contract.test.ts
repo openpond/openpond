@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   createTurnRunner,
   hostedToolInstructionModeForProvider,
@@ -57,6 +57,6 @@ describe("turn-runner public contract", () => {
       "resolveHostedToolRolloutFlags",
     ]);
     expect(flags.toolMode).toBe("auto");
-    expect(acceptsFrozenRunnerSurface).toBeFunction();
+    expect(typeof acceptsFrozenRunnerSurface).toBe("function");
   });
 });

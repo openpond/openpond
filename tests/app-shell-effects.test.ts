@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { Session } from "@openpond/contracts";
 import { shouldForceCloudWorkspaceProviderOpenPond } from "../apps/web/src/hooks/useAppShellEffects";
 import { hybridWorkspaceSessionMetadata } from "../apps/web/src/lib/workspace-location";

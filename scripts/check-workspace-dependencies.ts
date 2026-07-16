@@ -14,7 +14,12 @@ type PackageManifest = {
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const builtin = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`), "node:test", "bun", "bun:test"]);
+const builtin = new Set([
+  ...builtinModules,
+  ...builtinModules.map((name) => `node:${name}`),
+  "node:test",
+  "vitest",
+]);
 
 async function main(): Promise<void> {
   const packageDirs = [root, ...await workspacePackageDirectories()];

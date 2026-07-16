@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { HttpBodyError, applyCorsHeaders, isAllowedCorsOrigin, readJson } from "../apps/server/src/api/http";
 import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";

@@ -114,8 +114,8 @@ function assertOnlyExpectedFilesChanged(expectedFiles: readonly string[]): void 
 
 function runChecks(dryRun: boolean, skipChecks: boolean): void {
   if (skipChecks) return;
-  run("bun", ["run", "typecheck"], dryRun);
-  run("bun", ["run", "test"], dryRun);
+  run("pnpm", ["run", "typecheck"], dryRun);
+  run("pnpm", ["run", "test"], dryRun);
 }
 
 async function prepareReleasePullRequest(
@@ -128,7 +128,7 @@ async function prepareReleasePullRequest(
   run("git", ["switch", "-c", plan.branch], options.dryRun);
 
   const versionedFiles = await writeReleaseVersion(root, plan.version, { dryRun: options.dryRun });
-  run("bun", ["install", "--lockfile-only", "--save-text-lockfile"], options.dryRun);
+  run("pnpm", ["install", "--lockfile-only"], options.dryRun);
   if (!options.dryRun) {
     await assertReleaseVersion(root, plan.version);
     assertOnlyExpectedFilesChanged(versionedFiles);

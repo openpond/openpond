@@ -77,16 +77,16 @@ export default desktopScenario({
 Use the script runner during harness development:
 
 ```bash
-bun test tests/desktop-harness-runner.test.ts tests/scripted-chat-provider.test.ts
-bun scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts --isolated --timeout-ms 120000 --artifacts-dir tmp/desktop-harness/chat-two-turns --json tmp/desktop-harness/chat-two-turns/report.json
-bun scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts tests/desktop-scenarios/subagent-visible-lifecycle.ts tests/desktop-scenarios/subagent-running-state.ts tests/desktop-scenarios/subagent-handoff-parent-wake.ts tests/desktop-scenarios/subagent-blocked-approval.ts tests/desktop-scenarios/goal-scoped-subagent-details.ts tests/desktop-scenarios/context-compaction-followup.ts --isolated --timeout-ms 150000 --artifacts-dir tmp/desktop-harness/desktop-scenarios --json tmp/desktop-harness/desktop-scenarios/report.json
-bun scripts/desktop-harness-report.ts summarize tmp/desktop-harness/desktop-scenarios/report.json --json tmp/desktop-harness/release-proof/summary.json --markdown tmp/desktop-harness/release-proof/summary.md
+pnpm exec vitest run tests/desktop-harness-runner.test.ts tests/scripted-chat-provider.test.ts
+pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts --isolated --timeout-ms 120000 --artifacts-dir tmp/desktop-harness/chat-two-turns --json tmp/desktop-harness/chat-two-turns/report.json
+pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts tests/desktop-scenarios/subagent-visible-lifecycle.ts tests/desktop-scenarios/subagent-running-state.ts tests/desktop-scenarios/subagent-handoff-parent-wake.ts tests/desktop-scenarios/subagent-blocked-approval.ts tests/desktop-scenarios/goal-scoped-subagent-details.ts tests/desktop-scenarios/context-compaction-followup.ts --isolated --timeout-ms 150000 --artifacts-dir tmp/desktop-harness/desktop-scenarios --json tmp/desktop-harness/desktop-scenarios/report.json
+pnpm exec tsx scripts/desktop-harness-report.ts summarize tmp/desktop-harness/desktop-scenarios/report.json --json tmp/desktop-harness/release-proof/summary.json --markdown tmp/desktop-harness/release-proof/summary.md
 ```
 
 Use the CLI wrapper when validating the installed/source CLI entrypoint:
 
 ```bash
-bun run --cwd apps/cli cli harness desktop run tests/fixtures/desktop-harness/pass-scenario.ts --none --artifacts-dir tmp/desktop-harness/cli-wrapper --json tmp/desktop-harness/cli-wrapper/report.json
+pnpm --dir apps/cli cli harness desktop run tests/fixtures/desktop-harness/pass-scenario.ts --none --artifacts-dir tmp/desktop-harness/cli-wrapper --json tmp/desktop-harness/cli-wrapper/report.json
 openpond harness desktop run tests/desktop-scenarios/chat-two-turns.ts --isolated --json tmp/desktop-harness/chat-two-turns/report.json
 openpond harness desktop attach tests/desktop-scenarios/chat-two-turns.ts --server http://127.0.0.1:17874 --devtools-port 9333 --token-file tmp/token
 openpond harness desktop run tests/desktop-scenarios/chat-two-turns.ts --packaged --app release/linux-unpacked/openpond --json tmp/desktop-harness/packaged-chat/report.json

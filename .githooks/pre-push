@@ -4,4 +4,4 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "${root}"
 
-bun run verify:quick
+pnpm run verify:quick

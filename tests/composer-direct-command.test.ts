@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
   parseComposerDirectCommandPrompt,
@@ -8,8 +8,8 @@ import {
 describe("composer direct command parser", () => {
   test("parses command-only prompts that start with bang", () => {
     expect(parseComposerDirectCommandPrompt("!pwd")).toEqual({ command: "pwd" });
-    expect(parseComposerDirectCommandPrompt("  !  bun test tests/openpond-command-access.test.ts  ")).toEqual({
-      command: "bun test tests/openpond-command-access.test.ts",
+    expect(parseComposerDirectCommandPrompt("  !  pnpm test tests/openpond-command-access.test.ts  ")).toEqual({
+      command: "pnpm test tests/openpond-command-access.test.ts",
     });
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { TaskCandidateSchema, TaskMinerConfigSchema, TrainingTacticRecommendationSchema } from "../packages/contracts/src";
 
 describe("task miner contracts", () => {

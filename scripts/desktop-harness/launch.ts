@@ -64,8 +64,8 @@ export async function launchIsolatedDesktopHarness(input: {
   let cdp: CdpClient | null = null;
 
   try {
-    runSetup(input.repoRoot, "bundle-server", [bunBinary(), "run", "bundle:server"]);
-    runSetup(input.repoRoot, "build-desktop", [bunBinary(), "run", "build:desktop"]);
+    runSetup(input.repoRoot, "bundle-server", [pnpmBinary(), "run", "bundle:server"]);
+    runSetup(input.repoRoot, "build-desktop", [pnpmBinary(), "run", "build:desktop"]);
     renderer = startRenderer(input.repoRoot, webPort);
     await waitForUrl(webUrl, input.timeoutMs);
     const startDesktop = async () => {
@@ -181,7 +181,7 @@ function runSetup(repoRoot: string, label: string, command: [string, ...string[]
 }
 
 function startRenderer(repoRoot: string, webPort: number): ProcessHandle {
-  const child = spawn(bunBinary(), ["run", "--cwd", "apps/web", "dev"], {
+  const child = spawn(pnpmBinary(), ["--dir", "apps/web", "run", "dev"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -473,6 +473,6 @@ function prefixLines(prefix: string, value: string): string {
     .join("");
 }
 
-function bunBinary(): string {
-  return process.versions.bun ? process.execPath : "bun";
+function pnpmBinary(): string {
+  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 }

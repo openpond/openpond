@@ -18,7 +18,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "dev": "bun src/index.ts chat"
+    "dev": "tsx src/index.ts chat"
   },
   "dependencies": {
     "@openpond/contracts": "workspace:*",

@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { CLI_SECRET, type CapturedRequest, runCli, withSandboxApi } from "./cli-sandbox-fixture";
 
@@ -26,7 +26,7 @@ describe("sandbox template CLI scenarios", () => {
           "  memoryGb: 1",
           "  diskGb: 4",
           "start:",
-          "  command: bun run index.ts",
+          "  command: node index.ts",
           "actions: []",
           "services: []",
           "validation:",
@@ -90,7 +90,7 @@ describe("sandbox template CLI scenarios", () => {
         "  memoryGb: 1",
         "  diskGb: 4",
         "start:",
-        "  command: bun run index.ts",
+        "  command: node index.ts",
         "actions: []",
         "services: []",
         "validation:",

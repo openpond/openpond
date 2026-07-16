@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { parseDesktopHarnessArgs } from "../scripts/desktop-harness/cli";
 import { filterScenarios, loadScenarios, runDesktopHarness } from "../scripts/desktop-harness/runner";
 import { desktopScenario } from "../scripts/desktop-harness/scenario";

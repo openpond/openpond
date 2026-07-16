@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { AppPreferencesSchema, LocalModelChatConfigurationSchema, SftRecipeSchema, TrainingBundleManifestSchema, TrainingPlanSchema, TrainingRecipeSchema, UnsupportedTrainingRecipeSchema, UpdateAppPreferencesRequestSchema } from "../packages/contracts/src";

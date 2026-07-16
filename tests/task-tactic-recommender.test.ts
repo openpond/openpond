@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { recommendTrainingTactic } from "../apps/server/src/training/tactic-recommender";
 import type { TaskCandidateEvidence, TaskCandidateScorecard } from "../packages/contracts/src";
 

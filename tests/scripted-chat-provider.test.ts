@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { BootstrapPayload, Session, Turn } from "@openpond/contracts";
 import type { HostedChatTool } from "@openpond/cloud";
 import type { HostedChatTurnDelta, HostedChatTurnInput } from "@openpond/runtime";

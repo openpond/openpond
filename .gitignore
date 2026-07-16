@@ -17,6 +17,8 @@ packages/agent-sdk/examples/*/.env.*
 # Build outputs
 dist/
 build/
+!scripts/build/
+!scripts/build/**
 coverage/
 .coverage
 .coverage.*

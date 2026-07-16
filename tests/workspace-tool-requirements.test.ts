@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { requiresWorkspaceToolForPrompt } from "../apps/server/src/runtime/workspace-tool-requirements";
 

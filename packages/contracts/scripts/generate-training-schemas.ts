@@ -11,7 +11,7 @@ import {
 } from "../src/index.js";
 
 const outputDirectory = path.resolve(
-  import.meta.dir,
+  import.meta.dirname,
   "../../../python/openpond-training/src/openpond_training/schemas",
 );
 

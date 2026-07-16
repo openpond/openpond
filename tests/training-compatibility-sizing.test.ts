@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   estimateTrainingTaskSizing,
   recommendedTrainingSequenceLength,
@@ -26,7 +26,7 @@ describe("training trajectory sizing", () => {
       plan: planFor(taskset, 128),
       capabilities: capabilities(),
     });
-    expect(blocked.compatible).toBeFalse();
+    expect(blocked.compatible).toBe(false);
     expect(blocked.issues.map((issue) => issue.code)).toContain("training_completions_truncated");
 
     const bounded = validateTrainingCompatibility({
@@ -34,7 +34,7 @@ describe("training trajectory sizing", () => {
       plan: planFor(taskset, 512),
       capabilities: capabilities(),
     });
-    expect(bounded.compatible).toBeTrue();
+    expect(bounded.compatible).toBe(true);
     expect(bounded.issues.map((issue) => issue.code)).toContain("training_context_truncated");
   });
 });

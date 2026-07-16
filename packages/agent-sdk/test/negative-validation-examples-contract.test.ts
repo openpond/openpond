@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { runTestProcess } from "../../../tests/helpers/run-process";
 
-const packageRoot = path.resolve(import.meta.dir, "..");
+const packageRoot = path.resolve(import.meta.dirname, "..");
 
 describe("negative validation examples", () => {
   test("documents and pins validation-blocking setup states", async () => {
@@ -68,17 +69,9 @@ async function runSdkJsonAllowFailure(args: string[]) {
 }
 
 async function runSdk(args: string[]) {
-  const proc = Bun.spawn(["bun", "./dist/cli.js", ...args], {
+  return runTestProcess(process.execPath, ["./dist/cli.js", ...args], {
     cwd: packageRoot,
-    stdout: "pipe",
-    stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
 }
 
 async function withTempOutputDirectory(

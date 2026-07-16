@@ -1,7 +1,7 @@
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { Approval, RuntimeEvent, Session } from "@openpond/contracts";
 import {
   classifyCommandFamily,

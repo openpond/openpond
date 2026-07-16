@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
   action,
   defineAgentProject,
@@ -14,7 +14,7 @@ import {
 import { defineChannel } from "openpond-agent-sdk/channels";
 import { validateAgentProject } from "openpond-agent-sdk/validator";
 
-const packageRoot = path.resolve(import.meta.dir, "..");
+const packageRoot = path.resolve(import.meta.dirname, "..");
 const fixtureRoot = path.join(packageRoot, ".openpond-test-fixtures", "validation-issues-contract");
 
 const answerWorkflow = defineWorkflow({

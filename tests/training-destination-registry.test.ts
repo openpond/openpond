@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { OpenPondManagedTrainingClient, TrainingDestinationRegistry, runDestinationConformance } from "../packages/training-sdk/src";
 import { createImmediateCustomExample, ExportTrainingDestination } from "../apps/server/src/training/destinations";
 import { planFixture, tasksetFixture } from "./helpers/training-fixtures";

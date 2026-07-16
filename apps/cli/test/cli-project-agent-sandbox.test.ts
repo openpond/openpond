@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { createOpenPondSandboxClient } from "../src/sandbox/client";
 import { collectProfileSourceUploadForPush } from "../src/cli/profile";
@@ -442,10 +442,10 @@ describe("project and agent sandbox CLI scenarios", () => {
         sourceUploadMetadata: {
           sourceTreeMode: "typescript_agent_sdk",
           commands: {
-            inspect: "bun run agent:inspect",
-            build: "bun run agent:build",
-            validate: "bun run agent:validate",
-            eval: "bun run agent:eval",
+            inspect: "pnpm run agent:inspect",
+            build: "pnpm run agent:build",
+            validate: "pnpm run agent:validate",
+            eval: "pnpm run agent:eval",
           },
           generatedManifestPath: ".openpond/openpond-manifest.preview.yaml",
           synthesizedOpenPondYaml: true,
@@ -467,7 +467,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           },
           dependencySetup: {
             required: true,
-            installCommand: "bun install --offline",
+            installCommand: "pnpm install --offline",
             expectedBinaryPath: "node_modules/.bin/openpond-agent",
             sdkPackage: {
               path: ".openpond/vendor/openpond-agent-sdk.tgz",
@@ -490,7 +490,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         setup: {
           status: "completed",
           passed: true,
-          commands: ["bun install --offline"],
+          commands: ["pnpm install --offline"],
           expectedBinaryPath: "node_modules/.bin/openpond-agent",
         },
         policyDiscovery: {
@@ -550,9 +550,9 @@ describe("project and agent sandbox CLI scenarios", () => {
         setup: {
           status: "failed",
           message: "yaml@^2.9.0 failed to resolve",
-          command: "bun install --offline",
+          command: "pnpm install --offline",
           exitCode: 1,
-          commands: ["bun install --offline"],
+          commands: ["pnpm install --offline"],
           expectedBinaryPath: "node_modules/.bin/openpond-agent",
           dependencyPackages: [
             {
@@ -772,7 +772,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           },
           setup: {
             status: "failed",
-            command: "bun install --offline",
+            command: "pnpm install --offline",
             exitCode: 1,
             message: "dependency install failed",
           },
@@ -783,7 +783,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         expected: {
           policyDiscovery: {
             status: "failed",
-            command: "bun run agent:inspect",
+            command: "pnpm run agent:inspect",
             exitCode: 127,
             message: "missing node_modules/.bin/openpond-agent",
           },
@@ -794,7 +794,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         expected: {
           setup: {
             status: "failed",
-            command: "bun install --offline",
+            command: "pnpm install --offline",
             exitCode: 1,
             message: "unresolved local file dependency",
           },
@@ -805,7 +805,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         expected: {
           policyDiscovery: {
             status: "failed",
-            command: "bun run agent:inspect",
+            command: "pnpm run agent:inspect",
             exitCode: 1,
             message: "missing generated artifact directory .openpond",
           },
@@ -849,7 +849,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         expected: {
           policyDiscovery: {
             status: "failed",
-            command: "bun run agent:inspect",
+            command: "pnpm run agent:inspect",
             exitCode: 1,
             message: "invalid inspect JSON",
           },
@@ -864,7 +864,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           },
           checkRuns: [
             {
-              command: "bun run agent:validate",
+              command: "pnpm run agent:validate",
               status: "failed",
               passed: false,
               exitCode: 1,
@@ -882,7 +882,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           },
           checkRuns: [
             {
-              command: "bun run agent:eval",
+              command: "pnpm run agent:eval",
               status: "failed",
               passed: false,
               exitCode: 1,
@@ -1182,7 +1182,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         );
         await runDependencySetupFromUploadMetadata(materializedAgentRoot);
         const inspectResult = await runTestCommandWithOutput(
-          "bun",
+          "pnpm",
           ["run", "agent:inspect"],
           materializedAgentRoot
         );
@@ -1276,7 +1276,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           "base64"
         ).toString("utf8");
         expect(openPondYamlSource).toContain("schemaVersion: 1");
-        expect(openPondYamlSource).toContain("setup:\n  commands:\n    - bun install --offline");
+        expect(openPondYamlSource).toContain("setup:\n  commands:\n    - pnpm install --offline");
         expect(openPondYamlSource).not.toContain(
           "schema: openpond.runtime.manifest.v1"
         );
@@ -1332,18 +1332,18 @@ describe("project and agent sandbox CLI scenarios", () => {
             versionSpec: "file:.openpond/local-sdk-source",
           },
           commands: {
-            inspect: "bun run agent:inspect",
-            build: "bun run agent:build",
-            validate: "bun run agent:validate",
-            eval: "bun run agent:eval",
+            inspect: "pnpm run agent:inspect",
+            build: "pnpm run agent:build",
+            validate: "pnpm run agent:validate",
+            eval: "pnpm run agent:eval",
           },
           generatedManifestPath: ".openpond/openpond-manifest.preview.yaml",
           synthesizedOpenPondYaml: true,
           dependencySetup: {
             required: true,
             packageManager: "unknown",
-            installCommand: "bun install --offline",
-            commands: ["bun install --offline"],
+            installCommand: "pnpm install --offline",
+            commands: ["pnpm install --offline"],
             expectedBinaryPath: "node_modules/.bin/openpond-agent",
             generatedArtifactDirectory: ".openpond",
             sdkPackage: {
@@ -1413,14 +1413,14 @@ describe("project and agent sandbox CLI scenarios", () => {
           packageManager: "unknown",
           sourceTreeMode: "typescript_agent_sdk",
           commands: {
-            inspect: "bun run agent:inspect",
-            build: "bun run agent:build",
-            validate: "bun run agent:validate",
-            eval: "bun run agent:eval",
+            inspect: "pnpm run agent:inspect",
+            build: "pnpm run agent:build",
+            validate: "pnpm run agent:validate",
+            eval: "pnpm run agent:eval",
           },
           dependencySetup: {
             required: true,
-            installCommand: "bun install --offline",
+            installCommand: "pnpm install --offline",
           },
         });
         expect(output.uploaded?.agentSdk?.uploadMetadataHash).toEqual({
@@ -1442,7 +1442,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           await runDependencySetupFromUploadMetadata(materializedDir);
 
           const inspectResult = await runTestCommandWithOutput(
-            "bun",
+            "pnpm",
             ["run", "agent:inspect"],
             materializedDir
           );
@@ -1450,8 +1450,8 @@ describe("project and agent sandbox CLI scenarios", () => {
             editable: { enabled: true },
           });
 
-          await runTestCommand("bun", ["run", "agent:validate"], materializedDir);
-          await runTestCommand("bun", ["run", "agent:eval"], materializedDir);
+          await runTestCommand("pnpm", ["run", "agent:validate"], materializedDir);
+          await runTestCommand("pnpm", ["run", "agent:eval"], materializedDir);
 
           const materializedEval = await readFile(
             path.join(materializedDir, ".openpond", "eval-results.json"),
@@ -1575,7 +1575,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           await runDependencySetupFromUploadMetadata(materializedDir);
 
           const inspectResult = await runTestCommandWithOutput(
-            "bun",
+            "pnpm",
             ["run", "agent:inspect"],
             materializedDir
           );
@@ -1583,8 +1583,8 @@ describe("project and agent sandbox CLI scenarios", () => {
             editable: { enabled: true },
           });
 
-          await runTestCommand("bun", ["run", "agent:validate"], materializedDir);
-          await runTestCommand("bun", ["run", "agent:eval"], materializedDir);
+          await runTestCommand("pnpm", ["run", "agent:validate"], materializedDir);
+          await runTestCommand("pnpm", ["run", "agent:eval"], materializedDir);
 
           const materializedEval = await readFile(
             path.join(materializedDir, ".openpond", "eval-results.json"),
@@ -1608,7 +1608,7 @@ describe("project and agent sandbox CLI scenarios", () => {
     try {
       const packDir = path.join(workRoot, "pack");
       await mkdir(packDir, { recursive: true });
-      await runTestCommand("bun", ["run", "build"], sdkRoot);
+      await runTestCommand("pnpm", ["run", "build"], sdkRoot);
       const packResult = await runTestCommandWithOutput(
         "npm",
         ["pack", "--silent", "--pack-destination", packDir],
@@ -1641,7 +1641,7 @@ describe("project and agent sandbox CLI scenarios", () => {
             projectDir,
             `file:${path.relative(projectDir, sdkTarballPath)}`
           );
-          await runTestCommand("bun", ["install"], projectDir);
+          await runTestCommand("pnpm", ["install"], projectDir);
 
           requests.length = 0;
           const result = await runCli([
@@ -1656,7 +1656,7 @@ describe("project and agent sandbox CLI scenarios", () => {
             sandboxApiUrl,
           ]);
 
-          expect(result.code).toBe(0);
+          expect(result.code, result.stderr || result.stdout).toBe(0);
           const body = requests[0]?.body as {
             entries?: Array<{ path: string; contentsBase64?: string }>;
           };
@@ -1733,7 +1733,7 @@ describe("project and agent sandbox CLI scenarios", () => {
             );
             await runDependencySetupFromUploadMetadata(materializedDir);
             const inspectResult = await runTestCommandWithOutput(
-              "bun",
+              "pnpm",
               ["run", "agent:inspect"],
               materializedDir
             );
@@ -1741,11 +1741,11 @@ describe("project and agent sandbox CLI scenarios", () => {
               editable: { enabled: true },
             });
             await runTestCommand(
-              "bun",
+              "pnpm",
               ["run", "agent:validate"],
               materializedDir
             );
-            await runTestCommand("bun", ["run", "agent:eval"], materializedDir);
+            await runTestCommand("pnpm", ["run", "agent:eval"], materializedDir);
           } finally {
             await rm(materializedDir, { recursive: true, force: true });
           }

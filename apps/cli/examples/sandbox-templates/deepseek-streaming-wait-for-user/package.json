@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "validate": "openpond sandbox-template validate --file openpond.yaml",
-    "start": "bun wait-for-user-harness.ts",
-    "stream": "bun deepseek-chat-stream.ts"
+    "start": "node wait-for-user-harness.ts",
+    "stream": "node deepseek-chat-stream.ts"
   }
 }

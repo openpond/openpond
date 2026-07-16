@@ -460,7 +460,7 @@ async function deleteSchedulesForInactiveSources(
 
 async function inspectAgentProject(agentRootPath: string): Promise<AgentManifestPayload> {
   const cli = await resolveOpenPondAgentCli(agentRootPath);
-  const { stdout } = await runBunCli(
+  const { stdout } = await runAgentCli(
     cli,
     ["build", "--json", "--cwd", agentRootPath],
     agentRootPath,
@@ -546,7 +546,7 @@ async function runAgentAction(
   };
   await fs.writeFile(inputPath, `${JSON.stringify(input, null, 2)}\n`, "utf8");
   const relativeInputPath = path.relative(schedule.agentRootPath, inputPath);
-  const executed = await runBunCli(
+  const executed = await runAgentCli(
     cli,
     [
       "run",
@@ -572,7 +572,7 @@ async function runAgentAction(
   };
 }
 
-async function runBunCli(
+async function runAgentCli(
   cliPath: string,
   args: string[],
   cwd: string,
@@ -583,7 +583,7 @@ async function runBunCli(
     PATH: `${path.dirname(cliPath)}${path.delimiter}${process.env.PATH ?? ""}`,
   };
   try {
-    const result = await execFileAsync(resolveBunBinary(), [cliPath, ...args], {
+    const result = await execFileAsync(cliPath, args, {
       cwd,
       env,
       timeout: timeoutMs,
@@ -645,10 +645,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function resolveBunBinary(): string {
-  return process.env.BUN_BINARY?.trim() || "bun";
 }
 
 function safeNextRunAt(

@@ -31,7 +31,7 @@ start:
     - artifacts/smoke.json
 services:
   - name: web
-    command: bun src/server.ts
+    command: node src/server.ts
     ports:
       - port: 3000
         protocol: http
@@ -64,4 +64,3 @@ artifacts:
     - artifacts/smoke.json
 network:
   egress: restricted
-

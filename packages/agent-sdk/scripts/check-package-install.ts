@@ -1,9 +1,11 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(import.meta.dir, "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workRoot = path.join(root, ".openpond-test-fixtures", "package-install");
 const packDir = path.join(workRoot, "pack");
 const fixtureDir = path.join(workRoot, "fixture");
@@ -17,9 +19,9 @@ await mkdir(path.join(fixtureDir, "agent"), { recursive: true });
 
 const tarball = await packSdk();
 await writeFixture(tarball);
-await run(["bun", "install"], fixtureDir);
+await run(["npm", "install", "--no-audit", "--no-fund"], fixtureDir);
 await writeExportSmoke();
-await run(["bun", "exports-smoke.ts"], fixtureDir);
+await run([process.execPath, "exports-smoke.ts"], fixtureDir);
 
 const cli = path.join(fixtureDir, "node_modules/.bin/openpond-agent");
 const inspect = await runJson([cli, "inspect", "--json"], fixtureDir);
@@ -62,7 +64,7 @@ if (runResult.result?.intent !== "answer") {
 for (const templateName of templateNames) {
   const target = path.join(initRoot, templateName);
   await runJson([cli, "init", templateName, "--cwd", target, "--json"], fixtureDir);
-  await run(["bun", "install"], target);
+  await run(["npm", "install", "--no-audit", "--no-fund"], target);
   const initializedCli = path.join(target, "node_modules/.bin/openpond-agent");
   const initializedInspect = await runJson([initializedCli, "inspect", "--json"], target);
   if (initializedInspect.project?.name !== templateName) {
@@ -98,7 +100,7 @@ for (const pilotName of pilotNames) {
   await cp(path.join(root, "examples", pilotName), target, { recursive: true });
   await rm(path.join(target, ".openpond"), { force: true, recursive: true });
   await rewriteSdkDependency(target, tarball);
-  await run(["bun", "install"], target);
+  await run(["npm", "install", "--no-audit", "--no-fund"], target);
   const pilotCli = path.join(target, "node_modules/.bin/openpond-agent");
   const pilotInspect = await runJson([pilotCli, "inspect", "--json"], target);
   if (pilotInspect.project?.name !== expectedPilotProjectName(pilotName)) {
@@ -132,16 +134,10 @@ for (const pilotName of pilotNames) {
 console.log("Package-installed SDK acceptance check passed.");
 
 async function packSdk() {
-  const proc = Bun.spawn(["npm", "pack", "--pack-destination", packDir], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await runProcess(
+    ["npm", "pack", "--pack-destination", packDir],
+    root,
+  );
   if (exitCode !== 0) {
     throw new Error(["npm pack failed", stdout.trim(), stderr.trim()].filter(Boolean).join("\n"));
   }
@@ -350,17 +346,7 @@ async function runJson(command: string[], cwd: string) {
 }
 
 async function run(command: string[], cwd: string) {
-  const proc = Bun.spawn(command, {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, TMPDIR: tmpdir() },
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await runProcess(command, cwd);
   if (exitCode === 0) return stdout;
   throw new Error(
     [
@@ -369,6 +355,29 @@ async function run(command: string[], cwd: string) {
       stderr.trim(),
     ].filter(Boolean).join("\n"),
   );
+}
+
+function runProcess(
+  command: string[],
+  cwd: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command[0]!, command.slice(1), {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, TMPDIR: tmpdir() },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      resolve({ stdout, stderr, exitCode: code ?? (signal ? 1 : 0) });
+    });
+  });
 }
 
 async function assertFile(filePath: string) {

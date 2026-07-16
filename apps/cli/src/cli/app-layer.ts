@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CliUsageError } from "./common";
@@ -60,7 +61,14 @@ function resolveAppEntrypoint(app: "server" | "terminal"): AppEntrypoint {
   const workspaceRoot = findWorkspaceRoot();
   if (workspaceRoot) {
     const source = path.join(workspaceRoot, "apps", app, "src", "index.ts");
-    if (existsSync(source)) return { runner: process.env.BUN_BINARY || "bun", args: [source], cwd: workspaceRoot };
+    if (existsSync(source)) {
+      const workspaceRequire = createRequire(path.join(workspaceRoot, "package.json"));
+      return {
+        runner: process.execPath,
+        args: [workspaceRequire.resolve("tsx/cli"), source],
+        cwd: workspaceRoot,
+      };
+    }
     const built = path.join(workspaceRoot, "apps", app, "dist", "index.js");
     if (existsSync(built)) return { runner: process.execPath, args: [built], cwd: workspaceRoot };
   }

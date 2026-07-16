@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { createLocalGoal, runGoalCommand } from "../src/goal/cli";
 import { LocalGoalStateAdapter } from "../src/goal/state/local";

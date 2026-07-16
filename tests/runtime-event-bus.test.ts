@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 
 import { createRuntimeEventBus } from "../apps/server/src/runtime/runtime-event-bus";
@@ -131,7 +131,7 @@ describe("runtime event bus assistant delta coalescing", () => {
     close();
 
     expect(writes.map(runtimeEventFromSseWrite).map((event) => event.sequence)).toEqual([4, 5]);
-    expect(writes[0]).toStartWith("id: 4\n");
+    expect(writes[0]?.startsWith("id: 4\n")).toBe(true);
   });
 
   test("disconnects subscribers that apply stream backpressure", async () => {

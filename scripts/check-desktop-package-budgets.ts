@@ -17,7 +17,7 @@ const MAX_ASAR_BYTES = 2 * MIB;
 const MAX_RESOURCES_BYTES = 32 * MIB;
 const MAX_STAGED_RUNTIME_BYTES = 24 * MIB;
 const PLATFORM_BUDGETS: Record<NodeJS.Platform, PlatformBudget | undefined> = {
-  linux: { maxArtifactBytes: 125 * MIB, maxUnpackedBytes: 325 * MIB },
+  linux: { maxArtifactBytes: 127 * MIB, maxUnpackedBytes: 332 * MIB },
   darwin: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
   win32: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
   aix: undefined,

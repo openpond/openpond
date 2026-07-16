@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { startFetchTestServer } from "./helpers/fetch-test-server";
 import {
   emptyOpenPondProfileState,
   ProviderSettingsSchema,
@@ -81,7 +82,8 @@ import {
 } from "../apps/terminal/src/ui/commands";
 import { runProcessCommand } from "../apps/cli/src/process-runner";
 
-const REPO_ROOT = path.resolve(import.meta.dir, "..");
+const REPO_ROOT = path.resolve(import.meta.dirname, "..");
+const tsxBinary = path.join(REPO_ROOT, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 
 function eventStreamResponse(frames: string): Response {
   const encoder = new TextEncoder();
@@ -274,7 +276,7 @@ describe("terminal argument parser", () => {
 
   test("direct terminal usage advertises the headless trust controls", async () => {
     const result = await runProcessCommand(
-      process.execPath,
+      tsxBinary,
       [path.join(REPO_ROOT, "apps", "terminal", "src", "index.ts"), "help"],
       { timeoutMs: 5_000 },
     );
@@ -302,7 +304,7 @@ describe("terminal one-shot chat result accumulator", () => {
       id: "event-2",
       name: "command.output",
       turnId: "turn-1",
-      output: "bun test",
+      output: "pnpm test",
     }));
     accumulator.apply(runtimeEvent({
       id: "event-3",
@@ -475,7 +477,7 @@ describe("terminal one-shot chat runner", () => {
   });
 
   test("submits one turn, waits for terminal completion, and emits structured JSON", async () => {
-    const fake = startOneShotFakeServer([
+    const fake = await startOneShotFakeServer([
       runtimeEvent({
         id: "event-assistant",
         name: "assistant.delta",
@@ -582,7 +584,7 @@ describe("terminal one-shot chat runner", () => {
     const eventStreamGate = new Promise<void>((resolve) => {
       releaseEventStream = resolve;
     });
-    const fake = startOneShotFakeServer(
+    const fake = await startOneShotFakeServer(
       [
         runtimeEvent({
           id: "event-completed",
@@ -630,7 +632,7 @@ describe("terminal one-shot chat runner", () => {
   });
 
   test("reconnects the event stream before posting a one-shot turn", async () => {
-    const fake = startOneShotFakeServer(
+    const fake = await startOneShotFakeServer(
       [
         runtimeEvent({
           id: "event-completed",
@@ -675,7 +677,7 @@ describe("terminal one-shot chat runner", () => {
   });
 
   test("times out before posting a turn when the event stream never connects", async () => {
-    const fake = startOneShotFakeServer([], { eventStreamGate: new Promise(() => undefined) });
+    const fake = await startOneShotFakeServer([], { eventStreamGate: new Promise(() => undefined) });
     const output = createStringWritable();
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
@@ -715,7 +717,7 @@ describe("terminal one-shot chat runner", () => {
   });
 
   test("streams human-readable output when JSON is not requested", async () => {
-    const fake = startOneShotFakeServer([
+    const fake = await startOneShotFakeServer([
       runtimeEvent({
         id: "event-assistant",
         name: "assistant.delta",
@@ -728,7 +730,7 @@ describe("terminal one-shot chat runner", () => {
         name: "command.output",
         sessionId: "session-one-shot",
         turnId: "turn-one-shot",
-        output: "bun test",
+        output: "pnpm test",
       }),
       runtimeEvent({
         id: "event-workspace",
@@ -772,7 +774,7 @@ describe("terminal one-shot chat runner", () => {
       expect(result.status).toBe("completed");
       expect(printed).toContain("OpenPond / OpenPond Chat /bench/task");
       expect(printed).toContain("Human task complete.");
-      expect(printed).toContain("[command] bun test");
+      expect(printed).toContain("[command] pnpm test");
       expect(printed).toContain("[openpond] updated file");
       expect(printed).toContain("[turn completed]");
       expect(printed).not.toContain('"status":');
@@ -783,7 +785,7 @@ describe("terminal one-shot chat runner", () => {
   });
 
   test("interrupts the active turn and exits 124 when one-shot chat times out", async () => {
-    const fake = startOneShotFakeServer([]);
+    const fake = await startOneShotFakeServer([]);
     const output = createStringWritable();
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
@@ -837,17 +839,17 @@ function createStringWritable(): { stream: Writable; text: () => string } {
   };
 }
 
-function startOneShotFakeServer(
+async function startOneShotFakeServer(
   events: RuntimeEvent[],
   options: { eventStreamGate?: Promise<void>; eventStreamFailuresBeforeReady?: number } = {},
-): {
+): Promise<{
   url: string;
   sessionRequests: Record<string, unknown>[];
   turnRequests: Record<string, unknown>[];
   interruptRequests: number;
   eventStreamRequests: number;
   stop: () => void;
-} {
+}> {
   const encoder = new TextEncoder();
   const eventControllers = new Set<ReadableStreamDefaultController<Uint8Array>>();
   const queuedFrames: string[] = [];
@@ -871,9 +873,7 @@ function startOneShotFakeServer(
     enqueueFrame(`data: ${JSON.stringify(event)}\n\n`);
   }
 
-  const server = Bun.serve({
-    port: 0,
-    async fetch(request) {
+  const server = await startFetchTestServer(async (request) => {
       const url = new URL(request.url);
       if (url.pathname === "/health") return new Response("ok");
       if (url.pathname === "/v1/bootstrap") return Response.json(terminalSessionBootstrapFixture());
@@ -935,11 +935,10 @@ function startOneShotFakeServer(
         return Response.json({ ok: true }, { status: 202 });
       }
       return Response.json({ error: "not found" }, { status: 404 });
-    },
   });
 
   return {
-    url: `http://127.0.0.1:${server.port}`,
+    url: server.url,
     sessionRequests,
     turnRequests,
     get interruptRequests() {
@@ -948,7 +947,7 @@ function startOneShotFakeServer(
     get eventStreamRequests() {
       return eventStreamRequests;
     },
-    stop: () => server.stop(true),
+    stop: () => server.stop(),
   };
 }
 

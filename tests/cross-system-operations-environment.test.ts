@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
@@ -50,7 +50,7 @@ describe("Cross-System Operations environment", () => {
     try {
       const first = await environment.execute("search_crm", { query: "*", fields: ["account_id", "name"], cursor: null, limit: 2 });
       expect(first.items).toHaveLength(2);
-      expect(first.next_cursor).toBeString();
+      expect(typeof first.next_cursor).toBe("string");
       const second = await environment.execute("search_crm", { query: "*", fields: ["account_id", "name"], cursor: first.next_cursor, limit: 2 });
       expect(second.items).toHaveLength(2);
       await expect(environment.execute("search_crm", { query: "*", fields: ["account_id"], cursor: "tampered", limit: 2 })).rejects.toMatchObject({ code: "cursor_invalid" });
@@ -126,7 +126,7 @@ describe("Cross-System Operations environment", () => {
       recommendation: { tactic: "grpo_rft", eligible: true, generatedBy: "baseline_reassessment" },
       metadata: { flagship: "cross-system-operations", toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH },
     });
-    expect(candidates[0]?.metadata.approvedSuccessfulTrajectoryIds).toBeArray();
+    expect(Array.isArray(candidates[0]?.metadata.approvedSuccessfulTrajectoryIds)).toBe(true);
     expect(CROSS_SYSTEM_TOOL_NAMES).toEqual(["search_crm", "query_billing", "search_support", "run_python"]);
   }));
 

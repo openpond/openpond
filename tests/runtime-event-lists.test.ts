@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 import {
   latestRuntimeEventSequence,
@@ -114,12 +114,12 @@ describe("runtime event list merging", () => {
       { length: 1_000_000 },
       (_, index) => runtimeEvent(`recovery-${index + 1}`, index + 1),
     );
-    Bun.gc(true);
+    globalThis.gc?.();
     const heapBefore = process.memoryUsage().heapUsed;
     const started = performance.now();
     const merged = mergeLiveRuntimeEventLists([], events);
     const elapsedMs = performance.now() - started;
-    Bun.gc(true);
+    globalThis.gc?.();
     const retainedHeapBytes = Math.max(0, process.memoryUsage().heapUsed - heapBefore);
 
     expect(merged).toHaveLength(MAX_LIVE_RUNTIME_EVENTS);

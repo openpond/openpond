@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import { runOpenPondGoalControl } from "../apps/server/src/openpond/goal-control";
 

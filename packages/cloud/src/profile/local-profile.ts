@@ -374,12 +374,12 @@ export async function runAgentSdkProjectCommand(input: RunProfileCommandInput & 
   stderrTruncated: boolean;
 }> {
   const cwd = path.resolve(input.cwd);
-  const cliPath = resolveAgentSdkCliPath();
+  const cli = resolveAgentSdkCliLaunch();
   const args =
     input.command === "run"
-      ? [cliPath, input.command, ...(input.args ?? [])]
-      : [cliPath, input.command, "--cwd", cwd, ...(input.args ?? [])];
-  const result = await spawnCommand(process.env.BUN_BINARY || "bun", args, {
+      ? [...cli.args, input.command, ...(input.args ?? [])]
+      : [...cli.args, input.command, "--cwd", cwd, ...(input.args ?? [])];
+  const result = await spawnCommand(cli.command, args, {
     cwd,
     inherit: input.inherit,
     timeoutMs: input.timeoutMs,
@@ -591,7 +591,11 @@ async function ensureAgentSdkBuilt(sdkRoot: string): Promise<void> {
   if (!existsSync(buildScript)) {
     throw new Error(`Resolved openpond-agent-sdk at ${sdkRoot}, but built SDK files are missing.`);
   }
-  const result = await spawnCommand(process.env.BUN_BINARY || "bun", [buildScript], { cwd: sdkRoot });
+  const result = await spawnCommand(
+    process.execPath,
+    [resolveTsxCli(sdkRoot), buildScript],
+    { cwd: sdkRoot },
+  );
   if (result.code !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim();
     throw new Error(detail || `openpond-agent-sdk build failed with exit code ${result.code ?? "unknown"}`);
@@ -914,11 +918,19 @@ function resolveAgentSdkRoot(): string {
   return path.dirname(packageJsonPath);
 }
 
-function resolveAgentSdkCliPath(): string {
+function resolveAgentSdkCliLaunch(): { command: string; args: string[] } {
   const sdkRoot = resolveAgentSdkRoot();
+  const distCli = path.join(sdkRoot, "dist", "cli.js");
+  if (existsSync(distCli)) return { command: process.execPath, args: [distCli] };
   const sourceCli = path.join(sdkRoot, "src", "cli.ts");
-  if (existsSync(sourceCli)) return sourceCli;
-  return path.join(sdkRoot, "dist", "cli.js");
+  if (existsSync(sourceCli)) {
+    return { command: process.execPath, args: [resolveTsxCli(sdkRoot), sourceCli] };
+  }
+  throw new Error(`openpond-agent CLI was not found under ${sdkRoot}`);
+}
+
+function resolveTsxCli(packageRoot: string): string {
+  return createRequire(path.join(packageRoot, "package.json")).resolve("tsx/cli");
 }
 
 async function spawnCommand(

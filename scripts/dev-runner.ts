@@ -152,15 +152,15 @@ export function buildDevRunnerPlan(
   const processes: DevRunnerCommand[] = [];
 
   if (options.mode === "desktop") {
-    setupCommands.push(command("build-desktop", bunBinary(env), ["run", "build:desktop"], root));
+    setupCommands.push(command("build-desktop", pnpmBinary(env), ["run", "build:desktop"], root));
     processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
-    processes.push(command("renderer", bunBinary(env), ["run", "--cwd", "apps/web", "dev"], root, rendererEnv));
+    processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
     processes.push(command("desktop", electronBinary(root), ["."], path.join(root, "apps", "desktop"), desktopEnv));
   }
 
   if (options.mode === "web") {
     processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
-    processes.push(command("renderer", bunBinary(env), ["run", "--cwd", "apps/web", "dev"], root, rendererEnv));
+    processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
   }
 
   if (options.mode === "server") {
@@ -168,7 +168,7 @@ export function buildDevRunnerPlan(
   }
 
   if (options.mode === "renderer") {
-    processes.push(command("renderer", bunBinary(env), ["run", "--cwd", "apps/web", "dev"], root, rendererEnv));
+    processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
   }
 
   return {
@@ -457,9 +457,8 @@ function defaultServerPort(env: NodeJS.ProcessEnv): number {
   return env.OPENPOND_APP_CHANNEL === "nightly" ? 17875 : 17874;
 }
 
-function bunBinary(env: NodeJS.ProcessEnv): string {
-  if (env.BUN_BINARY) return env.BUN_BINARY;
-  return process.versions.bun ? process.execPath : "bun";
+function pnpmBinary(env: NodeJS.ProcessEnv): string {
+  return env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
 }
 
 function watchedServerCommand(
@@ -470,11 +469,15 @@ function watchedServerCommand(
 ): DevRunnerCommand {
   return command(
     "server",
-    bunBinary(env),
-    ["--watch", "apps/server/src/index.ts", "--port", String(serverPort)],
+    tsxBinary(root),
+    ["watch", "apps/server/src/index.ts", "--port", String(serverPort)],
     root,
     serverEnv,
   );
+}
+
+function tsxBinary(root: string): string {
+  return path.join(root, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 }
 
 function electronBinary(root: string): string {
