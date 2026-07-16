@@ -101,10 +101,10 @@ Run these from this package root:
 
 ```bash
 pnpm install
-pnpm inspect -- --cwd examples/blank-agent
-pnpm build -- --cwd examples/blank-agent
-pnpm validate -- --cwd examples/blank-agent
-pnpm eval -- --cwd examples/blank-agent
+pnpm inspect --cwd examples/blank-agent
+pnpm build --cwd examples/blank-agent
+pnpm validate --cwd examples/blank-agent
+pnpm eval --cwd examples/blank-agent
 pnpm check
 ```
 

@@ -20,7 +20,7 @@ actions:
     command: echo report
 services:
   - name: web
-    command: pnpm dev -- --host 0.0.0.0 --port 3000
+    command: pnpm dev --host 0.0.0.0 --port 3000
     ports:
       - port: 3000
 `;

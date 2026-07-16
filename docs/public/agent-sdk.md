@@ -18,8 +18,8 @@ From this monorepo, run SDK commands through the package workspace:
 
 ```bash
 pnpm --dir packages/agent-sdk build
-pnpm --dir packages/agent-sdk validate -- --cwd examples/blank-agent
-pnpm --dir packages/agent-sdk eval -- --cwd examples/blank-agent
+pnpm --dir packages/agent-sdk validate --cwd examples/blank-agent
+pnpm --dir packages/agent-sdk eval --cwd examples/blank-agent
 ```
 
 ## Source Layout
