@@ -17,6 +17,15 @@ npx openpond ui --no-open # Web server without opening a browser
 ```
 Requires Node.js 24.18 or newer.
 
+### Install globally with npm
+
+```bash
+npm install --global openpond
+openpond
+```
+
+The global command launches the same local server and browser UI as `npx openpond@latest`.
+
 ### Desktop app
 
 Install the latest version from [Github Releases](https://github.com/openpond/openpond/releases)
@@ -32,10 +41,12 @@ Conversations and settings persist under `~/.openpond/openpond-app`
 git clone https://github.com/openpond/openpond.git
 cd openpond
 
-corepack enable
+corepack enable # Enable the pnpm version pinned by this repository
 pnpm install --frozen-lockfile
 pnpm dev
 ```
+
+Corepack is only needed when running from source. It makes the repository's pinned `pnpm@11.13.0` command available; if that pnpm version is already installed, you can skip `corepack enable`.
 
 `pnpm dev` launches the Desktop app. To run the browser development UI instead, use `pnpm run dev:web` and open the URL printed in the terminal.
 
@@ -54,11 +65,11 @@ flowchart LR
     E --> K["Skill"]
     E --> M["Model"]
     E --> X["Extension"]
-    A --> V["Test in Lab"]
+    A --> V["Compare against baseline"]
     K --> V
     M --> V
     X --> V
-    V --> P["Promote or reject"]
+    V --> P["Adopt or iterate"]
     P --> S
 ```
 
