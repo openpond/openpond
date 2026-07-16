@@ -317,6 +317,7 @@ jobs:
 
       - name: Prove renderer commit boundaries in the dev browser harness
         if: matrix.name == 'linux-x64-appimage'
+        timeout-minutes: 10
         shell: bash
         run: |
           mkdir -p release-smoke

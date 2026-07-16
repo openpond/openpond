@@ -98,23 +98,23 @@ export async function launchIsolatedDesktopHarness(input: {
       cdp: started.cdp,
       restart: async () => {
         cdp?.close();
-        await stopProcess(desktop);
+        await stopDesktopHarnessProcess(desktop);
         desktop = null;
         cdp = null;
         return startDesktop();
       },
       close: async () => {
         cdp?.close();
-        await stopProcess(desktop);
-        await stopProcess(renderer);
+        await stopDesktopHarnessProcess(desktop);
+        await stopDesktopHarnessProcess(renderer);
         await rm(userData, { recursive: true, force: true });
         if (!input.keepHome) await rm(appHome, { recursive: true, force: true });
       },
     };
   } catch (error) {
     cdp?.close();
-    await stopProcess(desktop);
-    await stopProcess(renderer);
+    await stopDesktopHarnessProcess(desktop);
+    await stopDesktopHarnessProcess(renderer);
     await rm(userData, { recursive: true, force: true });
     if (!input.keepHome) await rm(appHome, { recursive: true, force: true });
     throw error;
@@ -156,14 +156,14 @@ export async function launchPackagedDesktopHarness(input: {
       cdp,
       close: async () => {
         cdp?.close();
-        await stopProcess(desktop);
+        await stopDesktopHarnessProcess(desktop);
         await rm(userData, { recursive: true, force: true });
         if (!input.keepHome) await rm(appHome, { recursive: true, force: true });
       },
     };
   } catch (error) {
     cdp?.close();
-    await stopProcess(desktop);
+    await stopDesktopHarnessProcess(desktop);
     await rm(userData, { recursive: true, force: true });
     if (!input.keepHome) await rm(appHome, { recursive: true, force: true });
     throw error;
@@ -190,7 +190,7 @@ function startRenderer(repoRoot: string, webPort: number): ProcessHandle {
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return trackProcess("renderer", child);
+  return trackDesktopHarnessProcess("renderer", child);
 }
 
 function launchDevElectron(input: {
@@ -224,7 +224,7 @@ function launchDevElectron(input: {
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return trackProcess("desktop", child);
+  return trackDesktopHarnessProcess("desktop", child);
 }
 
 function resolvePackagedLaunchTarget(repoRoot: string, appPath?: string | null): PackagedLaunchTarget {
@@ -327,10 +327,13 @@ function launchPackagedElectron(input: {
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return trackProcess("packaged-desktop", child);
+  return trackDesktopHarnessProcess("packaged-desktop", child);
 }
 
-function trackProcess(label: string, child: ChildProcessWithoutNullStreams): ProcessHandle {
+export function trackDesktopHarnessProcess(
+  label: string,
+  child: ChildProcessWithoutNullStreams,
+): ProcessHandle {
   const stderr: string[] = [];
   child.stdout.on("data", (chunk) => {
     if (expectedStops.has(child)) return;
@@ -391,18 +394,46 @@ async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: num
   });
 }
 
-async function stopProcess(handle: ProcessHandle | null): Promise<void> {
-  if (!handle || handle.child.exitCode !== null) return;
+export async function stopDesktopHarnessProcess(handle: ProcessHandle | null): Promise<void> {
+  if (!handle) return;
   expectedStops.add(handle.child);
-  const descendants = handle.child.pid ? descendantPids(handle.child.pid) : [];
+  const childWasRunning = handle.child.exitCode === null && handle.child.signalCode === null;
+  const descendants = childWasRunning && handle.child.pid ? descendantPids(handle.child.pid) : [];
   signalProcess(handle, "SIGTERM");
   signalPids(descendants, "SIGTERM");
-  const stopped = await waitForExit(handle.child, 3_000);
-  if (!stopped && handle.child.exitCode === null) {
+  const stopped = await waitForTrackedProcessExit(handle, childWasRunning, 3_000);
+  if (!stopped) {
     signalProcess(handle, "SIGKILL");
-    await waitForExit(handle.child, 1_000);
   }
   signalPids(descendants, "SIGKILL");
+  if (!stopped && !(await waitForTrackedProcessExit(handle, childWasRunning, 1_000))) {
+    throw new Error(`Desktop harness process tree ${handle.child.pid ?? "unknown"} did not exit.`);
+  }
+}
+
+async function waitForTrackedProcessExit(
+  handle: ProcessHandle,
+  childWasRunning: boolean,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (handle.processGroup && handle.child.pid) {
+    const deadline = Date.now() + timeoutMs;
+    while (processGroupIsAlive(handle.child.pid)) {
+      if (Date.now() >= deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return true;
+  }
+  return !childWasRunning || await waitForExit(handle.child, timeoutMs);
+}
+
+function processGroupIsAlive(groupId: number): boolean {
+  try {
+    process.kill(-groupId, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
 }
 
 function signalProcess(handle: ProcessHandle, signal: NodeJS.Signals): void {

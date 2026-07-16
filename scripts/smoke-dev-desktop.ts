@@ -5,6 +5,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  stopDesktopHarnessProcess,
+  trackDesktopHarnessProcess,
+  type ProcessHandle,
+} from "./desktop-harness/launch";
 
 type DevtoolsTarget = {
   type?: string;
@@ -37,14 +42,8 @@ type SmokeOptions = {
   timeoutMs?: number;
 };
 
-type ProcessHandle = {
-  child: ChildProcessWithoutNullStreams;
-  stderr: string[];
-};
-
 const DEFAULT_TIMEOUT_MS = 60_000;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const expectedStops = new WeakSet<ChildProcessWithoutNullStreams>();
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
@@ -212,8 +211,8 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(report, null, 2));
   } finally {
     cdp?.close();
-    await stopProcess(desktop);
-    await stopProcess(renderer);
+    await stopDesktopHarnessProcess(desktop);
+    await stopDesktopHarnessProcess(renderer);
     await Promise.all([
       rm(appHome, { recursive: true, force: true }),
       rm(userData, { recursive: true, force: true }),
@@ -354,7 +353,7 @@ function parseArgs(args: string[]): SmokeOptions {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--help" || arg === "-h") {
-      console.log("usage: pnpm run smoke:desktop:dev -- [--timeout-ms <ms>] [--json <path>] [--skip-chat]");
+      console.log("usage: pnpm run smoke:desktop:dev [--timeout-ms <ms>] [--json <path>] [--skip-chat]");
       process.exit(0);
     }
     if (arg === "--json") {
@@ -402,9 +401,10 @@ function startRenderer(webPort: number): ProcessHandle {
       ...process.env,
       OPENPOND_WEB_PORT: String(webPort),
     },
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return trackProcess("renderer", child);
+  return trackDesktopHarnessProcess("renderer", child);
 }
 
 function launchDevElectron(input: {
@@ -433,29 +433,10 @@ function launchDevElectron(input: {
       OPENPOND_WEB_PORT: String(input.webPort),
       OPENPOND_WEB_URL: input.webUrl,
     },
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return trackProcess("desktop", child);
-}
-
-function trackProcess(label: string, child: ChildProcessWithoutNullStreams): ProcessHandle {
-  const stderr: string[] = [];
-  child.stdout.on("data", (chunk) => {
-    if (expectedStops.has(child)) return;
-    process.stdout.write(prefixLines(label, chunk.toString("utf8")));
-  });
-  child.stderr.on("data", (chunk) => {
-    const text = chunk.toString("utf8");
-    stderr.push(text);
-    if (stderr.join("").length > 32_000) stderr.splice(0, stderr.length - 20);
-    if (expectedStops.has(child)) return;
-    process.stderr.write(prefixLines(label, text));
-  });
-  child.on("exit", (code, signal) => {
-    if (code === 0 || signal || expectedStops.has(child)) return;
-    console.error(`${label} exited early with code ${code}. stderr:\n${stderr.join("")}`);
-  });
-  return { child, stderr };
+  return trackDesktopHarnessProcess("desktop", child);
 }
 
 function wrapForDisplay(command: string, args: string[]): { command: string; args: string[] } {
@@ -737,14 +718,6 @@ async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: num
   });
 }
 
-async function stopProcess(handle: ProcessHandle | null): Promise<void> {
-  if (!handle || handle.child.exitCode !== null) return;
-  expectedStops.add(handle.child);
-  handle.child.kill("SIGTERM");
-  const stopped = await waitForExit(handle.child, 3_000);
-  if (!stopped && handle.child.exitCode === null) handle.child.kill("SIGKILL");
-}
-
 function redactLoopbackUrl(value: string): string {
   const url = new URL(value);
   return `${url.protocol}//${url.hostname}:${url.port || "(default)"}`;
@@ -759,13 +732,6 @@ function redactUrl(value: string): string {
   } catch {
     return value;
   }
-}
-
-function prefixLines(prefix: string, value: string): string {
-  return value
-    .split(/(?<=\n)/)
-    .map((line) => (line ? `[${prefix}] ${line}` : line))
-    .join("");
 }
 
 function delay(ms: number): Promise<void> {

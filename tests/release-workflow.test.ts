@@ -73,6 +73,9 @@ describe("release workflow", () => {
 
     expect(workflow).toContain("name: Smoke packaged desktop");
     expect(workflow).toContain("name: Prove renderer commit boundaries in the dev browser harness");
+    expect(workflow).toMatch(
+      /name: Prove renderer commit boundaries in the dev browser harness\n\s+if: matrix\.name == 'linux-x64-appimage'\n\s+timeout-minutes: 10/,
+    );
     expect(workflow).toContain("dev-render-commits.json");
     expect(workflow).toContain("mkdir -p release-smoke");
     expect(workflow).toContain('report_path="release-smoke/smoke-${{ matrix.name }}.json"');
