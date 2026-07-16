@@ -4,60 +4,6 @@
 
 OpenPond Harness is an open-source, mutable agent harness designed to improve alongside your work.
 
-## Installation
-
-### Run without Installalltion
-
-```bash
-npx openpond@latest # Start local Node server and web UI
-
-npx openpond tui         # Terminal UI
-npx openpond serve       # Headless API server
-npx openpond ui --no-open # Web server without opening a browser
-```
-Requires Node.js 24.18 or newer.
-
-### Install globally with npm
-
-```bash
-npm install --global openpond
-openpond
-```
-
-The global command launches the same local server and browser UI as `npx openpond@latest`.
-
-### Desktop app
-
-Install the latest version from [Github Releases](https://github.com/openpond/openpond/releases)
-
-> [!NOTE]
-> Pending uploads to package managers
-
-Conversations and settings persist under `~/.openpond/openpond-app`
-
-### Install via git
-
-```bash
-git clone https://github.com/openpond/openpond.git
-cd openpond
-
-corepack enable # Enable the pnpm version pinned by this repository
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-Corepack is only needed when running from source. It makes the repository's pinned `pnpm@11.13.0` command available; if that pnpm version is already installed, you can skip `corepack enable`.
-
-`pnpm dev` launches the Desktop app. To run the browser development UI instead, use `pnpm run dev:web` and open the URL printed in the terminal.
-
-## What is this
-
-An AI-assisted pipeline turns repeated work, conversations, corrections, and failures into opportunities to improve the system. It surfaces recurring patterns, helps define evals, and recommends the right kind of change—including training approaches such as SFT or RL when a model update is the best fit.
-
-OpenPond can improve both the agents that perform your work and the harness that runs them. It does this through Agents, Skills, trained Models, and Extensions that customize specific parts of the harness.
-
-### The Continuous Improvement Loop
-
 ```mermaid
 flowchart LR
     S["Conversations"] --> E["Evals"]
@@ -72,6 +18,53 @@ flowchart LR
     V --> P["Adopt or iterate"]
     P --> S
 ```
+
+## Installation
+
+```bash
+npm install --global openpond
+openpond
+```
+
+### Run without Installation
+
+```bash
+npx openpond@latest # Start local Node server and web UI
+
+npx openpond tui         # Terminal UI
+npx openpond serve       # Headless API server
+npx openpond ui --no-open # Web server without opening a browser
+```
+Requires Node.js 24.18 or newer.
+
+### Desktop app
+
+Install the latest version from [Github Releases](https://github.com/openpond/openpond/releases)
+
+> [!NOTE]
+> package managers coming soon
+
+Conversations and settings persist under `~/.openpond/openpond-app`
+
+### Install via git
+
+```bash
+git clone https://github.com/openpond/openpond.git
+cd openpond
+
+corepack enable # Enable the pnpm version pinned by this repository
+pnpm install --frozen-lockfile
+pnpm dev # Server & Desktop App
+pnpm run dev:web # Server & Web
+```
+
+Corepack is only needed when running from source. It makes the repository's pinned `pnpm@11.13.0` command available; if that pnpm version is already installed, you can skip `corepack enable`.
+
+## What is this
+
+An AI-assisted pipeline turns repeated work, conversations, corrections, and failures into opportunities to improve the system. It surfaces recurring patterns, helps define evals, and recommends the right kind of change—including training approaches such as SFT or RL when a model update is the best fit.
+
+OpenPond can improve both the agents that perform your work and the harness that runs them. It does this through Agents, Skills, trained Models, and Extensions that customize specific parts of the harness.
 
 ### Your Profile [docs](docs/public/agents-and-skills.md)
 
