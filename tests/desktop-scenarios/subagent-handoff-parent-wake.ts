@@ -10,6 +10,7 @@ import {
   reloadRenderer,
   stringFromRecord,
   toolResultFromEvent,
+  waitForAssistantOutput,
   waitForCompletedTurn,
   waitForRendererCondition,
   waitForSidebarSessionRow,
@@ -72,35 +73,37 @@ export default desktopScenario({
         return (
           stringFromRecord(message, "kind") === "handoff" &&
           stringFromRecord(message, "body") === handoffBody &&
-          stringFromRecord(delivery, "wakeQueuedParentSessionId") === session.id &&
-          stringFromRecord(delivery, "wakeParentReason") === "parent_wake_queued"
+          !stringFromRecord(delivery, "wakeQueuedParentSessionId") &&
+          stringFromRecord(delivery, "wakeParentReason") === "child_handoff_pending_submission"
         );
       },
-      `parent queued handoff wake for ${runId}`,
+      `parent deferred handoff wake for ${runId}`,
       { sessionId: session.id },
     ) as RuntimeEvent;
 
-    const joinEvent = await harness.events.waitForToolCompleted(
-      session.id,
-      "openpond_subagent_join",
-    ) as RuntimeEvent;
-    if (joinEvent.turnId === startEvent.turnId) {
-      throw new Error("Expected openpond_subagent_join to run in the queued parent wake turn, not the initial parent turn.");
-    }
-    await waitForCompletedTurn(harness, session.id, joinEvent, "queued parent wake turn completion");
     const submittedEvent = await harness.events.waitForSubagentSubmitted(session.id, runId) as RuntimeEvent;
+    const lifecycleWakeEvent = await waitForAssistantOutput(
+      harness,
+      session.id,
+      `Watcher lifecycle review wake received for ${runId}.`,
+      "submission-driven parent wake response",
+    );
+    if (lifecycleWakeEvent.turnId === startEvent.turnId) {
+      throw new Error("Expected the lifecycle response in a queued parent wake turn, not the initial parent turn.");
+    }
+    await waitForCompletedTurn(harness, session.id, lifecycleWakeEvent, "queued parent wake turn completion");
 
     await harness.renderer.selectSession(session.id, { timeoutMs: 10_000 });
     await harness.renderer.assertText(title, { label: "handoff parent session after wake" });
-    await harness.renderer.assertText("Child Message Received", { label: "handoff parent activity summary" });
+    await harness.renderer.assertText("Research subagent update", { label: "handoff parent activity summary" });
     await harness.renderer.assertText(handoffBody, { label: "handoff body visible in parent" });
     await expandHandoffActivityDetails(harness);
-    await harness.renderer.assertText("parent_wake_queued", { label: "handoff wake metadata value" });
-    await harness.renderer.assertText("Research subagent lifecycle submitted for review for", {
+    await harness.renderer.assertText("child_handoff_pending_submission", { label: "deferred handoff wake metadata value" });
+    await harness.renderer.assertText(`Watcher lifecycle review wake received for ${runId}.`, {
       label: "queued parent wake response",
     });
     harness.recordAssertion("parentHandoffVisible", true);
-    harness.recordAssertion("parentWakeQueuedMetadataVisible", true);
+    harness.recordAssertion("parentWakeDeferredUntilSubmission", true);
     harness.recordAssertion("queuedParentWakeTurnCompleted", true);
     await harness.screenshot("subagent-handoff-parent-wake-parent-metadata");
 
@@ -118,11 +121,19 @@ export default desktopScenario({
       const message = asRecord(data?.message);
       return stringFromRecord(message, "body") === handoffBody;
     });
+    const prematureJoinEvents = bootstrap.events.filter((event) =>
+      event.sessionId === session.id &&
+      event.name === "tool.completed" &&
+      event.action === "openpond_subagent_join"
+    );
     if (parentStartEvents.length !== 1) {
       throw new Error(`Expected exactly one parent subagent start event, found ${parentStartEvents.length}.`);
     }
     if (parentHandoffMessages.length !== 1) {
       throw new Error(`Expected exactly one parent handoff message event, found ${parentHandoffMessages.length}.`);
+    }
+    if (prematureJoinEvents.length !== 0) {
+      throw new Error(`Expected no premature parent join event, found ${prematureJoinEvents.length}.`);
     }
     const childSession = bootstrap.sessions.find((item) => item.id === submittedChildSessionId);
     if (!childSession) throw new Error(`Child session ${submittedChildSessionId} was not present in bootstrap.`);
@@ -134,6 +145,7 @@ export default desktopScenario({
     await waitForSidebarSessionRow(harness, childSession.id, { timeoutMs: 10_000 });
     harness.recordAssertion("singleParentSubagentStart", true);
     harness.recordAssertion("singleParentHandoffMessage", true);
+    harness.recordAssertion("noPrematureParentJoin", true);
     harness.recordAssertion("childSidebarRowVisible", true);
 
     await harness.renderer.selectSession(childSession.id);
@@ -145,7 +157,7 @@ export default desktopScenario({
       runId,
       childSessionId: submittedChildSessionId,
       initialParentTurnId: startEvent.turnId ?? null,
-      wakeParentTurnId: joinEvent.turnId ?? null,
+      wakeParentTurnId: lifecycleWakeEvent.turnId ?? null,
       parentMessageEventId: messageEvent.id ?? null,
       runtimeEventCount: bootstrap.events.filter((event) => event.sessionId === session.id).length,
     });
@@ -161,16 +173,12 @@ async function expandHandoffActivityDetails(harness: DesktopHarness): Promise<vo
     harness,
     `(() => {
       const cards = Array.from(document.querySelectorAll('.activity-child-message-card'));
-      const visibleCard = cards.find((candidate) =>
-        candidate.textContent?.includes(${expected}) &&
-        candidate.textContent?.includes('parent_wake_queued')
-      );
-      if (visibleCard) return true;
-      const buttons = Array.from(document.querySelectorAll('.activity-summary'));
-      const button = buttons.find((candidate) => candidate.textContent?.includes(${expected}));
-      if (!(button instanceof HTMLButtonElement)) return false;
-      if (button.getAttribute('aria-expanded') !== 'true') button.click();
-      return false;
+      const card = cards.find((candidate) => candidate.textContent?.includes(${expected}));
+      if (!(card instanceof HTMLElement)) return false;
+      const details = card.querySelector('details.activity-child-message-details');
+      if (!(details instanceof HTMLDetailsElement)) return false;
+      if (!details.open) details.open = true;
+      return card.textContent?.includes('child_handoff_pending_submission') ?? false;
     })()`,
     "expanded handoff activity details",
     { timeoutMs: 10_000 },

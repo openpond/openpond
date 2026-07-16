@@ -14,6 +14,7 @@ export type GoalRuntimeStatus = {
   detail: string;
   tooltip: string;
   tone: OpenPondGoalStatusTone;
+  observedAt?: string | null;
 };
 
 export type GoalRuntimeSubagentRunSummary = {
@@ -70,10 +71,12 @@ type ThreadGoalRecord = {
   timeUsedSeconds: number;
   tokensUsed: number | null;
   tokenBudget: number | null;
+  observedAt: string | null;
 };
 
 export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntimeStatus | null {
   let terminalTurnAfterGoal = false;
+  const observedAt = latestEventTimestamp(events);
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const item = events[index];
     if (isTerminalTurnEvent(item)) {
@@ -84,7 +87,7 @@ export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntime
     if (item?.name !== "diagnostic" || !data) continue;
     if (data.kind === "thread_goal_cleared") return null;
     if (data.kind === "thread_goal") {
-      const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider));
+      const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider), observedAt);
       if (goal) {
         const status = goalRuntimeStatus(goal);
         if (terminalTurnAfterGoal && status.tone === "active") return null;
@@ -92,7 +95,7 @@ export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntime
       }
     }
     if (data.kind === "goal_context") {
-      const goal = threadGoalFromGoalContext(item.output ?? "", stringValue(data.provider) ?? "codex");
+      const goal = threadGoalFromGoalContext(item.output ?? "", stringValue(data.provider) ?? "codex", observedAt);
       if (goal) {
         const status = goalRuntimeStatus(goal);
         if (terminalTurnAfterGoal && status.tone === "active") return null;
@@ -104,19 +107,20 @@ export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntime
 }
 
 export function latestKnownActiveGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntimeStatus | null {
+  const observedAt = latestEventTimestamp(events);
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const item = events[index];
     const data = asRecord(item?.data);
     if (item?.name !== "diagnostic" || !data) continue;
     if (data.kind === "thread_goal_cleared" && !booleanValue(data.synthetic)) return null;
     if (data.kind === "thread_goal") {
-      const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider));
+      const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider), observedAt);
       if (!goal) continue;
       const status = goalRuntimeStatus(goal);
       return status.tone === "active" ? status : null;
     }
     if (data.kind === "goal_context") {
-      const goal = threadGoalFromGoalContext(item.output ?? "", stringValue(data.provider) ?? "codex");
+      const goal = threadGoalFromGoalContext(item.output ?? "", stringValue(data.provider) ?? "codex", observedAt);
       if (!goal) continue;
       const status = goalRuntimeStatus(goal);
       return status.tone === "active" ? status : null;
@@ -161,33 +165,87 @@ function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
     detail,
     tooltip: `Goal runtime: ${formatDurationLong(goal.timeUsedSeconds)}. ${detail}. ${goal.objective}`,
     tone: presentation.tone,
+    observedAt: goal.observedAt,
+  };
+}
+
+export function projectGoalRuntimeTo(
+  goalRuntime: GoalRuntimeStatus | null,
+  observedAt: string,
+): GoalRuntimeStatus | null {
+  if (!goalRuntime || goalRuntime.tone !== "active" || !goalRuntime.observedAt) return goalRuntime;
+  const additionalSeconds = elapsedSecondsBetween(goalRuntime.observedAt, observedAt);
+  if (additionalSeconds <= 0) return goalRuntime;
+  const timeUsedSeconds = goalRuntime.timeUsedSeconds + additionalSeconds;
+  const timeLabel = formatDuration(timeUsedSeconds);
+  return {
+    ...goalRuntime,
+    timeUsedSeconds,
+    timeLabel,
+    label: `Goal ${timeLabel}`,
+    tooltip: `Goal runtime: ${formatDurationLong(timeUsedSeconds)}. ${goalRuntime.detail}. ${goalRuntime.objective}`,
+    observedAt,
   };
 }
 
 function threadGoalFromRecord(
   record: Record<string, unknown> | null,
   provider: string | null = null,
+  observedAt: string | null = null,
 ): ThreadGoalRecord | null {
   if (!record) return null;
   const objective = stringValue(record.objective) ?? "Active goal";
   const status = stringValue(record.status) ?? "active";
-  const timeUsedSeconds = numberValue(record.timeUsedSeconds) ?? numberValue(record.time_used_seconds) ?? 0;
+  const normalizedProvider = normalizeProvider(provider) ?? normalizeProvider(stringValue(record.provider));
+  const observation = observedAt ??
+    stringValue(record.updatedAt) ??
+    stringValue(record.updated_at) ??
+    null;
+  const reportedTimeUsedSeconds = numberValue(record.timeUsedSeconds) ?? numberValue(record.time_used_seconds) ?? 0;
+  const activeSinceAt = stringValue(record.activeSinceAt) ?? stringValue(record.active_since_at);
+  const projectedTimeUsedSeconds = goalStatusPresentation(status, normalizedProvider).tone === "active"
+    ? elapsedSecondsBetween(activeSinceAt ?? stringValue(record.createdAt) ?? stringValue(record.created_at), observation)
+    : 0;
+  const timeUsedSeconds = activeSinceAt
+    ? reportedTimeUsedSeconds + projectedTimeUsedSeconds
+    : Math.max(reportedTimeUsedSeconds, projectedTimeUsedSeconds);
   const tokensUsed = numberValue(record.tokensUsed) ?? numberValue(record.tokens_used);
   const tokenBudget = numberValue(record.tokenBudget) ?? numberValue(record.token_budget);
   const subagents = goalSubagentStateFromRecord(asRecord(record.subagents));
   return {
     objective,
-    provider: normalizeProvider(provider) ?? normalizeProvider(stringValue(record.provider)),
+    provider: normalizedProvider,
     status,
     statusLabel: statusLabel(status),
     subagents,
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed: tokensUsed === null ? null : Math.max(0, Math.floor(tokensUsed)),
     tokenBudget: tokenBudget === null ? null : Math.max(0, Math.floor(tokenBudget)),
+    observedAt: observation,
   };
 }
 
-function threadGoalFromGoalContext(value: string, provider: string | null = null): ThreadGoalRecord | null {
+function latestEventTimestamp(events: readonly RuntimeEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const timestamp = events[index]?.timestamp;
+    if (timestamp && Number.isFinite(Date.parse(timestamp))) return timestamp;
+  }
+  return null;
+}
+
+function elapsedSecondsBetween(startValue: string | null, endValue: string | null): number {
+  if (!startValue || !endValue) return 0;
+  const start = Date.parse(startValue);
+  const end = Date.parse(endValue);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.floor((end - start) / 1_000);
+}
+
+function threadGoalFromGoalContext(
+  value: string,
+  provider: string | null = null,
+  observedAt: string | null = null,
+): ThreadGoalRecord | null {
   if (!value.trim()) return null;
   const status = lineValue(value, "Status") ?? "active";
   const tokensUsed = numberFromLine(value, "Tokens used");
@@ -207,6 +265,7 @@ function threadGoalFromGoalContext(value: string, provider: string | null = null
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed,
     tokenBudget,
+    observedAt,
   };
 }
 

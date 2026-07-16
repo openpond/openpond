@@ -62,7 +62,7 @@ export function createCapabilityCatalogRuntime(deps: {
               statusSubagents: deps.handlers.statusSubagents,
               joinSubagent: deps.handlers.joinSubagent,
               cancelSubagent: deps.handlers.cancelSubagent,
-              reviewSubagent: deps.handlers.reviewSubagent,
+              followupSubagent: deps.handlers.followupSubagent,
               sendSubagentMessage: deps.handlers.sendSubagentMessage,
               subagentRoles: options.subagentRoles,
             }

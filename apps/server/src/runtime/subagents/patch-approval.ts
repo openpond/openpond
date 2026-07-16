@@ -1,7 +1,6 @@
 import {
   ResolveApprovalRequestSchema,
   SubagentProgressSchema,
-  SubagentReviewStateSchema,
   SubagentRunSchema,
   type Approval,
   type ResolveApprovalRequest,
@@ -12,7 +11,7 @@ import {
 import { runWorkspaceCommand } from "../../workspace/workspaces.js";
 import { event, now } from "../../utils.js";
 import type { TurnRunnerDependencies } from "../turns/ports.js";
-import { stringFromRecord, uniqueNonEmptyStrings } from "../turns/value-utils.js";
+import { stringFromRecord } from "../turns/value-utils.js";
 import {
   assertPathInside,
   subagentRetainedWorkspaceState,
@@ -72,20 +71,14 @@ export function createSubagentPatchApprovalRuntime(deps: {
       const applyResult = await applySubagentPatch(run, { approvalId: approval.id });
       nextRun = SubagentRunSchema.parse({
         ...run,
-        status: "accepted",
+        status: "completed",
         completedAt: decidedAt,
         report: run.report ? { ...run.report, followUpNeeded: false } : run.report,
         progress: SubagentProgressSchema.parse({
           ...(run.progress ?? {}),
-          latestMeaningfulActivity: "Parent accepted the child review packet and applied the patch.",
+          latestMeaningfulActivity: "Parent applied the child patch.",
           currentBlocker: null,
           updatedAt: decidedAt,
-        }),
-        review: SubagentReviewStateSchema.parse({
-          ...(run.review ?? {}),
-          status: "accepted",
-          decidedAt,
-          summary: run.report?.summary ?? run.review.summary ?? null,
         }),
         metadata: {
           ...(run.metadata ?? {}),
@@ -105,28 +98,15 @@ export function createSubagentPatchApprovalRuntime(deps: {
       });
       nextRun = SubagentRunSchema.parse({
         ...run,
-        status: input.decision === "cancel" ? "cancelled" : "needs_revision",
-        completedAt: input.decision === "cancel" ? decidedAt : null,
-        error: input.decision === "cancel" ? revisionMessage : run.error,
-        report: run.report ? { ...run.report, followUpNeeded: input.decision !== "cancel" } : run.report,
+        status: "cancelled",
+        completedAt: decidedAt,
+        error: revisionMessage,
+        report: run.report ? { ...run.report, followUpNeeded: false } : run.report,
         progress: SubagentProgressSchema.parse({
           ...(run.progress ?? {}),
           latestMeaningfulActivity: revisionMessage,
-          currentBlocker: input.decision === "cancel" ? revisionMessage : null,
+          currentBlocker: revisionMessage,
           updatedAt: decidedAt,
-        }),
-        review: SubagentReviewStateSchema.parse({
-          ...(run.review ?? {}),
-          status: input.decision === "cancel" ? "needs_user_input" : "needs_revision",
-          decidedAt,
-          issues: uniqueNonEmptyStrings([...(run.review.issues ?? []), revisionMessage]),
-          requiredCorrections: input.decision === "cancel"
-            ? run.review.requiredCorrections
-            : uniqueNonEmptyStrings([
-                ...(run.review.requiredCorrections ?? []),
-                "Revise the submitted patch or provide a replacement plan before acceptance.",
-              ]),
-          humanReviewRecommended: true,
         }),
         metadata: {
           ...(run.metadata ?? {}),
@@ -160,7 +140,7 @@ export function createSubagentPatchApprovalRuntime(deps: {
       parentSession: session,
       parentTurnId,
       run: nextRun,
-      eventName: accepted ? "subagent.accepted" : input.decision === "cancel" ? "subagent.cancelled" : "subagent.needs_revision",
+      eventName: accepted ? "subagent.completed" : "subagent.cancelled",
       status: accepted ? "completed" : "failed",
       output: accepted
         ? `${run.roleId} subagent patch applied to the parent workspace.`

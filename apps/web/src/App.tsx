@@ -616,7 +616,7 @@ export function App() {
     sessionEvents,
     chatMessages,
     contextUsage,
-    goalRuntime,
+    goalRuntime: indexedGoalRuntime,
     subagentRuntime,
   } = useSidebarData({
     localProjects: bootstrap?.localProjects ?? [],
@@ -666,6 +666,7 @@ export function App() {
   }, [activeTerminalScope]);
   const terminalSummaries = useMemo(() => terminalScopeSummaries(terminalTabs), [terminalTabs]);
   const {
+    goalRuntime,
     runningSessionIds,
     selectedSessionRunning,
     selectedSteerAutoDispatchBlocked,
@@ -677,7 +678,7 @@ export function App() {
     codexHistorySessions,
     connection,
     expandedProjectIds,
-    goalRuntime,
+    goalRuntime: indexedGoalRuntime,
     locallyActiveCodexHistorySessionIds,
     pendingApproval,
     pinnedSessions,
@@ -1084,6 +1085,7 @@ export function App() {
     changeDraftProvider,
     reviseCreatePipelineTurn,
     sendPrompt,
+    pauseGoal,
     stopTurn,
   } = useChatActions({
     applyBootstrapPayload,
@@ -1905,6 +1907,7 @@ export function App() {
         setMentionedAppId,
         showToast,
         sendPrompt: sendPromptFromMainComposer,
+        pauseGoal,
         stopTurn,
         syncWorkspaceLocally,
         refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,

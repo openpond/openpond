@@ -1,16 +1,20 @@
 import { describe, expect, test } from "vitest";
+import { SubagentRunSchema, type SubagentRun } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SubagentRuntimeStatus } from "../apps/web/src/lib/subagent-runtime";
 import { GoalDetailsView } from "../apps/web/src/components/goal/GoalDetailsView";
+import type {
+  SubagentFinalResultSummary,
+  SubagentRuntimeStatus,
+} from "../apps/web/src/lib/subagent-runtime";
 
 describe("GoalDetailsView subagents", () => {
-  test("renders the child-run task graph", () => {
+  test("renders the compact child conversation status", () => {
     const html = renderToStaticMarkup(
       createElement(GoalDetailsView, {
         createRuntime: null,
         goalRuntime: {
-          objective: "Ship subagent orchestration",
+          objective: "Ship simple subagent orchestration",
           status: "active",
           subagents: null,
           timeUsedSeconds: 42,
@@ -28,45 +32,37 @@ describe("GoalDetailsView subagents", () => {
     );
 
     expect(html).toContain("Subagents");
-    expect(html).toContain("Task Graph");
-    expect(html).toContain("Background check");
     expect(html).toContain("Latest update");
+    expect(html).toContain("Active");
+    expect(html).toContain("Completed");
     expect(html).toContain("Failed");
     expect(html).toContain("Cancelled");
-    expect(html).toContain("Required failed");
-    expect(html).toContain("Required cancelled");
+    expect(html).toContain("Paused");
     expect(html).toContain("Coding running: Inspecting files");
-    expect(html).toContain("zai/glm-5.2");
     expect(html).toContain("Implement the patch");
-    expect(html).toContain("Parent started");
-    expect(html).toContain("run_coding handoff");
+    expect(html).not.toContain("Task Graph");
+    expect(html).not.toContain("Required failed");
   });
 
-  test("renders cleanup and archive controls for eligible terminal child runs", () => {
+  test("renders cleanup and archive controls for an eligible finished child", () => {
     const runtime = subagentRuntimeFixture();
-    const acceptedRun = {
-      ...runtime.runs[0]!,
+    const completedRun = runFixture({
       id: "run_done",
       childSessionId: "child_done",
-      status: "accepted",
-      review: { status: "accepted" },
+      status: "completed",
+      completedAt: "2026-07-07T10:00:04.000Z",
       metadata: {
         workspaceHandoff: {
           status: "captured",
           changed: true,
         },
       },
-    } as const;
+    });
     const html = renderToStaticMarkup(
       createElement(GoalDetailsView, {
         createRuntime: null,
         goalRuntime: null,
-        subagentRuntime: {
-          ...runtime,
-          runs: [acceptedRun],
-          terminalRuns: [acceptedRun],
-          archivedRuns: [],
-        },
+        subagentRuntime: runtimeWithRuns([completedRun]),
         onRunSubagentLifecycleAction: async () => undefined,
       }),
     );
@@ -75,81 +71,47 @@ describe("GoalDetailsView subagents", () => {
     expect(html).toContain("Archive");
   });
 
-  test("renders compact child final results", () => {
+  test("renders compact child final results without review-harness fields", () => {
     const runtime = subagentRuntimeFixture();
+    const result: SubagentFinalResultSummary = {
+      runId: "run_done",
+      roleId: "coding",
+      status: "completed",
+      objective: "Clean up insights notification behavior",
+      summary: "Suppressed unchanged insight notifications.",
+      findings: ["No notification is sent when the insights payload is unchanged."],
+      changedFiles: ["apps/server/src/insights/insights-system.ts"],
+      refs: [{ kind: "diff", id: "subagent-run:run_done:diff", label: "Insights diff" }],
+      testsRun: ["pnpm test tests/insights-system.test.ts"],
+      validationAttempts: ["pnpm test tests/insights-system.test.ts"],
+      blockers: [],
+      confidence: "high",
+      importantMessages: [
+        {
+          id: "message_1",
+          runId: "run_done",
+          fromRunId: "run_done",
+          kind: "handoff",
+          body: "Implementation finished.",
+          createdAt: "2026-07-07T10:00:03.000Z",
+        },
+      ],
+      workspaceRetention: {
+        status: "retained",
+        reason: "Changed child workspace remains available for inspection.",
+        retainedAt: "2026-07-07T10:00:04.000Z",
+        expiresAt: "2026-07-14T10:00:04.000Z",
+        retentionDays: 7,
+        trigger: "child_completion",
+        cleanupAfterExpiry: true,
+      },
+      updatedAt: "2026-07-07T10:00:04.000Z",
+    };
     const html = renderToStaticMarkup(
       createElement(GoalDetailsView, {
         createRuntime: null,
         goalRuntime: null,
-        subagentRuntime: {
-          ...runtime,
-          finalResults: [
-            {
-              runId: "run_done",
-              roleId: "coding",
-              status: "accepted",
-              required: true,
-              objective: "Clean up insights notification behavior",
-              summary: "Suppressed unchanged insight notifications.",
-              findings: ["No notification is sent when the insights payload is unchanged."],
-              changedFiles: ["apps/server/src/insights/insights-system.ts"],
-              refs: [{ kind: "diff", id: "subagent-run:run_done:diff", label: "Insights diff" }],
-              testsRun: ["pnpm test tests/insights-system.test.ts"],
-              validationAttempts: ["pnpm test tests/insights-system.test.ts - passed exit 0"],
-              blockers: [],
-              confidence: "high",
-              packetQualityStatus: "weak",
-              packetQualityEvidence: {
-                finalSummaryPresent: true,
-                finalSummaryLength: 43,
-                requestedValidationCommandCount: 1,
-                validationAttemptCount: 0,
-                failedValidationCount: 0,
-                testsRunCount: 1,
-                changedFileCount: 1,
-                patchRefPresent: false,
-                diffRefPresent: true,
-                artifactCount: 0,
-                findingCount: 1,
-                blockerCount: 0,
-                unvalidatedWorkspaceChanges: false,
-              },
-              independentReviewRecommended: true,
-              reviewerRoutingReasons: ["high_risk_files"],
-              reviewerRoutingEvidence: {
-                packetQualityStatus: "reviewable",
-                confidence: "high",
-                changedFileCount: 1,
-                highRiskFileCount: 1,
-                validationAttemptCount: 1,
-                failedValidationCount: 0,
-                missingRequestedValidation: false,
-                providerFailureAfterChanges: false,
-                userRequestedIndependentReview: false,
-              },
-              importantMessages: [
-                {
-                  id: "message_1",
-                  runId: "run_done",
-                  fromRunId: "run_done",
-                  kind: "handoff",
-                  body: "Parent review requested.",
-                  createdAt: "2026-07-07T10:00:03.000Z",
-                },
-              ],
-              workspaceRetention: {
-                status: "retained",
-                reason: "Changed child workspace has not been applied; retain for inspection.",
-                retainedAt: "2026-07-07T10:00:04.000Z",
-                expiresAt: "2026-07-14T10:00:04.000Z",
-                retentionDays: 7,
-                trigger: "auto_after_acceptance",
-                cleanupAfterExpiry: true,
-              },
-              updatedAt: "2026-07-07T10:00:04.000Z",
-            },
-          ],
-        },
+        subagentRuntime: { ...runtime, finalResults: [result] },
       }),
     );
 
@@ -158,19 +120,16 @@ describe("GoalDetailsView subagents", () => {
     expect(html).toContain("apps/server/src/insights/insights-system.ts");
     expect(html).toContain("pnpm test tests/insights-system.test.ts");
     expect(html).toContain("diff: Insights diff");
-    expect(html).toContain("Weak packet");
-    expect(html).toContain("Packet evidence:");
-    expect(html).toContain("Independent review recommended");
-    expect(html).toContain("Review routing:");
-    expect(html).toContain("High Risk Files");
     expect(html).toContain("Workspace: retained until");
-    expect(html).toContain("Auto After Acceptance");
-    expect(html).toContain("Handoff: Parent review requested.");
+    expect(html).toContain("Child Completion");
+    expect(html).toContain("Handoff: Implementation finished.");
+    expect(html).not.toContain("Packet evidence");
+    expect(html).not.toContain("Independent review recommended");
   });
 });
 
-function subagentRuntimeFixture(): SubagentRuntimeStatus {
-  const codingRun = {
+function runFixture(overrides: Partial<SubagentRun> = {}): SubagentRun {
+  return SubagentRunSchema.parse({
     id: "run_coding",
     parentSessionId: "session_1",
     parentTurnId: "turn_1",
@@ -184,73 +143,61 @@ function subagentRuntimeFixture(): SubagentRuntimeStatus {
     background: true,
     peerMessages: "goal_scoped",
     status: "running",
-    required: true,
-    createdAt: "2026-07-07T10:00:00.000Z",
-    startedAt: "2026-07-07T10:00:01.000Z",
-    completedAt: null,
-    error: null,
-    report: null,
-    metadata: {},
-  } as const;
-  const reviewRun = {
-    ...codingRun,
-    id: "run_review",
-    childSessionId: "child_review",
-    roleId: "review",
-    objective: "Review the patch",
-    status: "queued",
-    startedAt: null,
-  } as const;
-  return {
-    sessionId: "session_1",
-    runs: [codingRun, reviewRun],
-    activeRuns: [codingRun, reviewRun],
-    submittedRuns: [],
-    needsRevisionRuns: [],
-    needsUserInputRuns: [],
-    acceptedRuns: [],
-    failedWithArtifactsRuns: [],
-    blockedRuns: [],
-    completedRuns: [],
-    unresolvedRuns: [codingRun, reviewRun],
-    terminalRuns: [],
-    archivedRuns: [],
-    latestRun: codingRun,
-    latestMeaningfulUpdate: {
-      runId: "run_coding",
-      roleId: "coding",
-      status: "running",
-      message: "Inspecting files",
+    progress: {
+      latestMeaningfulActivity: "Inspecting files",
       updatedAt: "2026-07-07T10:00:01.000Z",
     },
-    watcher: {
-      checkedAt: "2026-07-07T10:00:02.000Z",
-      activeCount: 2,
-      staleCount: 0,
-      wakeQueued: false,
-      wakePolicy: "not_waking_parent_for_routine_tick",
+    createdAt: "2026-07-07T10:00:00.000Z",
+    startedAt: "2026-07-07T10:00:01.000Z",
+    metadata: {
+      usage: {
+        totalTokens: 1200,
+        promptTokens: 800,
+        completionTokens: 400,
+        requestCount: 2,
+      },
     },
-    activeCount: 2,
-    submittedCount: 0,
-    needsRevisionCount: 0,
-    needsUserInputCount: 0,
-    acceptedCount: 0,
-    failedWithArtifactsCount: 0,
-    blockedCount: 0,
-    completedCount: 0,
-    unresolvedCount: 2,
-    terminalCount: 0,
-    archivedCount: 0,
-    requiredActiveCount: 2,
-    requiredSubmittedForReviewCount: 0,
-    requiredNeedsRevisionCount: 0,
-    requiredNeedsUserInputCount: 0,
-    requiredBlockingCount: 0,
-    requiredAcceptedCount: 0,
-    requiredTerminalCount: 0,
-    requiredArchivedCount: 0,
-    requiredUnresolvedCount: 2,
-    requiredOpenCount: 2,
+    ...overrides,
+  });
+}
+
+function subagentRuntimeFixture(): SubagentRuntimeStatus {
+  return runtimeWithRuns([runFixture()]);
+}
+
+function runtimeWithRuns(runs: SubagentRun[]): SubagentRuntimeStatus {
+  const activeRuns = runs.filter((run) => run.status === "queued" || run.status === "running");
+  const completedRuns = runs.filter((run) => run.status === "completed");
+  const failedRuns = runs.filter((run) => run.status === "failed");
+  const cancelledRuns = runs.filter((run) => run.status === "cancelled");
+  const needsResumeRuns = runs.filter((run) => run.status === "needs_resume");
+  const terminalRuns = [...completedRuns, ...failedRuns, ...cancelledRuns];
+  const latestRun = runs[0] ?? null;
+  return {
+    sessionId: "session_1",
+    runs,
+    activeRuns,
+    completedRuns,
+    failedRuns,
+    cancelledRuns,
+    needsResumeRuns,
+    terminalRuns,
+    latestRun,
+    latestMeaningfulUpdate: latestRun
+      ? {
+          runId: latestRun.id,
+          roleId: latestRun.roleId,
+          status: latestRun.status,
+          message: latestRun.progress.latestMeaningfulActivity ?? latestRun.objective,
+          updatedAt: latestRun.updatedAt ?? latestRun.startedAt ?? latestRun.createdAt,
+        }
+      : null,
+    activeCount: activeRuns.length,
+    completedCount: completedRuns.length,
+    failedCount: failedRuns.length,
+    cancelledCount: cancelledRuns.length,
+    needsResumeCount: needsResumeRuns.length,
+    terminalCount: terminalRuns.length,
     usage: {
       totalTokens: 1200,
       promptTokens: 800,
@@ -261,64 +208,7 @@ function subagentRuntimeFixture(): SubagentRuntimeStatus {
     evidenceRefs: [],
     finalResults: [],
     testsRunCount: 0,
-    taskGraph: {
-      rootId: "parent:session_1",
-      nodes: [
-        {
-          runId: "run_coding",
-          roleId: "coding",
-          status: "running",
-          objective: "Implement the patch",
-          required: true,
-          childSessionId: "child_coding",
-          modelLabel: "zai/glm-5.2",
-          isolationLabel: "copy on write - workspace write",
-          summary: null,
-          blockerCount: 0,
-          evidenceCount: 1,
-          testsRunCount: 0,
-          createdAt: "2026-07-07T10:00:00.000Z",
-          startedAt: "2026-07-07T10:00:01.000Z",
-          completedAt: null,
-        },
-        {
-          runId: "run_review",
-          roleId: "review",
-          status: "queued",
-          objective: "Review the patch",
-          required: true,
-          childSessionId: "child_review",
-          modelLabel: "openrouter/test-model",
-          isolationLabel: "copy on write - read only",
-          summary: null,
-          blockerCount: 0,
-          evidenceCount: 0,
-          testsRunCount: 0,
-          createdAt: "2026-07-07T10:00:02.000Z",
-          startedAt: null,
-          completedAt: null,
-        },
-      ],
-      edges: [
-        {
-          id: "start:run_coding",
-          fromRunId: "parent:session_1",
-          toRunId: "run_coding",
-          kind: "started",
-          label: "Started",
-          createdAt: "2026-07-07T10:00:00.000Z",
-        },
-        {
-          id: "message:message_1:run_coding:run_review",
-          fromRunId: "run_coding",
-          toRunId: "run_review",
-          kind: "handoff",
-          label: "Handoff",
-          createdAt: "2026-07-07T10:00:03.000Z",
-        },
-      ],
-    },
-    label: "2 subagents running",
-    tooltip: "Subagents: Coding running, Review queued",
+    label: activeRuns.length ? `${activeRuns.length} child running` : `${terminalRuns.length} child finished`,
+    tooltip: "Coding: Inspecting files",
   };
 }

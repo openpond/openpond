@@ -149,7 +149,7 @@ export function useRuntimeEvents({
 export function subagentChildSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {
   const sessions = new Map<string, Session>();
   for (const runtimeEvent of events) {
-    if (runtimeEvent.name !== "subagent.started" && runtimeEvent.name !== "subagent.blocked") continue;
+    if (runtimeEvent.name !== "subagent.started" && runtimeEvent.name !== "subagent.failed") continue;
     const data = runtimeEvent.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) continue;
     const parsed = SessionSchema.safeParse((data as Record<string, unknown>).childSession);

@@ -62,16 +62,9 @@ describe("desktop harness runner", () => {
     const scenarios = await loadScenarios(["tests/desktop-scenarios/subagent-suite.ts"], root);
 
     expect(scenarios.map((scenario) => scenario.name)).toEqual([
-      "subagent-heartbeat-settings",
-      "subagent-heartbeat-no-progress-wake",
-      "subagent-heartbeat-thread-scoped",
-      "subagent-heartbeat-stale",
       "subagent-visible-lifecycle",
       "subagent-running-state",
       "subagent-handoff-parent-wake",
-      "subagent-watch-submission-wake",
-      "subagent-review-revision-loop",
-      "subagent-bounded-worker-contract",
       "subagent-blocked-approval",
       "goal-scoped-subagent-details",
     ]);

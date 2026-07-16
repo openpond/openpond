@@ -7,7 +7,8 @@ const WORKER_SOURCE = String.raw`
 import contextlib, io, json, math, statistics, decimal, datetime, collections, itertools, functools, resource, sys
 
 resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
-resource.setrlimit(resource.RLIMIT_AS, (268435456, 268435456))
+if sys.platform != "darwin":
+    resource.setrlimit(resource.RLIMIT_AS, (268435456, 268435456))
 ALLOWED_MODULES = {"math", "statistics", "decimal", "datetime", "collections", "itertools", "functools", "json"}
 real_import = __import__
 def safe_import(name, globals=None, locals=None, fromlist=(), level=0):

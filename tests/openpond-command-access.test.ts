@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -92,6 +92,37 @@ describe("OpenPond command access service", () => {
       expect(result.ok).toBe(true);
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe(expectedCwd);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("terminates descendant processes when a command times out", async () => {
+    if (process.platform === "win32") return;
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "openpond-command-timeout-"));
+    const pidPath = path.join(cwd, "descendant.pid");
+    const service = createOpenPondCommandAccessService({
+      upsertApproval: async (_approval) => undefined,
+      appendRuntimeEvent: async (_event) => undefined,
+    });
+
+    try {
+      const childProgram = [
+        "const fs=require('node:fs')",
+        `fs.writeFileSync(${JSON.stringify(pidPath)},String(process.pid))`,
+        "setInterval(()=>{},1000)",
+      ].join(";");
+      const result = await service.executeCommand({
+        session: session({ cwd, openPondCommandAccessMode: "full-access" }),
+        command: `${JSON.stringify(process.execPath)} -e ${JSON.stringify(childProgram)} & wait`,
+        timeoutSeconds: 1,
+        source: "model_tool",
+      });
+
+      expect(result.timedOut).toBe(true);
+      const descendantPid = Number((await readFile(pidPath, "utf8")).trim());
+      expect(Number.isInteger(descendantPid)).toBe(true);
+      await expectProcessToExit(descendantPid);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -235,6 +266,19 @@ describe("OpenPond command access service", () => {
     }
   });
 });
+
+async function expectProcessToExit(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Descendant process ${pid} was still alive after command timeout.`);
+}
 
 function session(overrides: Partial<Session> = {}): Session {
   return {

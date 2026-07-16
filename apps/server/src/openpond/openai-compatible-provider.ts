@@ -60,7 +60,8 @@ export type OpenAiCompatibleResolvedProvider = {
     | { type: "chatgpt_subscription"; credential: ProviderChatGptSubscriptionCredential };
 };
 
-const DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS = 90_000;
+const DEFAULT_PROVIDER_REQUEST_HARD_TIMEOUT_MS = 5 * 60_000;
 const PROVIDER_RESPONSE_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
 const PROVIDER_ERROR_BODY_LIMIT_BYTES = 64 * 1024;
 const OPENAI_CODEX_RESPONSES_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
@@ -155,32 +156,39 @@ export async function listOpenAiCompatibleProviderModels(input: {
     return subscriptionModelsFromSettings(input.settings, provider.providerId);
   }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
-  let response: Response;
   try {
-    response = await fetch(providerEndpointUrl(provider.baseUrl, "models"), {
+    const response = await fetch(providerEndpointUrl(provider.baseUrl, "models"), {
       method: "GET",
       headers: providerHeaders(provider.auth.apiKey, "application/json"),
       signal: requestSignal.signal,
     });
+    if (!response.ok) {
+      requestSignal.touch();
+      const errorDetail = await readProviderError(
+        response,
+        input.errorBodyLimitBytes,
+        requestSignal.signal,
+        requestSignal.touch,
+      );
+      throw new Error(
+        `Provider ${provider.providerId} model list failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
+      );
+    }
+    const payload = await readProviderJson(
+      response,
+      `Provider ${provider.providerId} model list`,
+      input.responseBodyLimitBytes,
+      requestSignal.signal,
+      requestSignal.touch,
+    );
+    const models = modelsFromPayload(provider.providerId, payload);
+    if (models.length === 0) {
+      throw new Error(`Provider ${provider.providerId} returned no models.`);
+    }
+    return models;
   } finally {
     requestSignal.cleanup();
   }
-  if (!response.ok) {
-    const errorDetail = await readProviderError(response, input.errorBodyLimitBytes);
-    throw new Error(
-      `Provider ${provider.providerId} model list failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
-    );
-  }
-  const payload = await readProviderJson(
-    response,
-    `Provider ${provider.providerId} model list`,
-    input.responseBodyLimitBytes,
-  );
-  const models = modelsFromPayload(provider.providerId, payload);
-  if (models.length === 0) {
-    throw new Error(`Provider ${provider.providerId} returned no models.`);
-  }
-  return models;
 }
 
 export async function validateOpenAiCompatibleProvider(input: {
@@ -255,9 +263,8 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
     return;
   }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
-  let response: Response;
   try {
-    response = await fetch(providerEndpointUrl(provider.baseUrl, "chat/completions"), {
+    const response = await fetch(providerEndpointUrl(provider.baseUrl, "chat/completions"), {
       method: "POST",
       headers: providerHeaders(provider.auth.apiKey, "text/event-stream"),
       body: JSON.stringify(buildChatCompletionBody({
@@ -270,41 +277,48 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
       })),
       signal: requestSignal.signal,
     });
+    if (!response.ok || !response.body) {
+      requestSignal.touch();
+      const errorDetail = await readProviderError(
+        response,
+        input.errorBodyLimitBytes,
+        requestSignal.signal,
+        requestSignal.touch,
+      );
+      throw new Error(
+        `Provider ${provider.providerId} stream failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
+      );
+    }
+    let reasoningText = "";
+    let hasToolCalls = false;
+    let pendingFinish: OpenAiCompatibleStreamDelta | null = null;
+    let latestRaw: unknown = null;
+    requestSignal.touch();
+    for await (const raw of parseSse(response.body, requestSignal.signal, requestSignal.touch)) {
+      latestRaw = raw;
+      if (raw && typeof raw === "object" && "error" in raw) {
+        throw new Error(`Provider ${provider.providerId} stream failed: ${errorMessageFromPayload(raw)}`);
+      }
+      const usage = parseUsage(raw);
+      if (usage) yield { type: "usage", usage, raw };
+      for (const delta of streamDeltasFromChunk(raw)) {
+        if (delta.type === "reasoning_delta") reasoningText += delta.text;
+        if (delta.type === "tool_call_delta") hasToolCalls = true;
+        if (delta.type === "finish") pendingFinish = delta;
+        else yield delta;
+      }
+    }
+    const continuation = chatCompletionsContinuation({
+      provider: provider.providerId,
+      model: provider.model,
+      reasoningText,
+      hasToolCalls,
+    });
+    if (continuation) yield { type: "continuation", continuation, raw: latestRaw };
+    if (pendingFinish) yield pendingFinish;
   } finally {
     requestSignal.cleanup();
   }
-  if (!response.ok || !response.body) {
-    const errorDetail = await readProviderError(response, input.errorBodyLimitBytes);
-    throw new Error(
-      `Provider ${provider.providerId} stream failed: ${response.status} ${providerErrorDetail(provider, errorDetail)}`,
-    );
-  }
-  let reasoningText = "";
-  let hasToolCalls = false;
-  let pendingFinish: OpenAiCompatibleStreamDelta | null = null;
-  let latestRaw: unknown = null;
-  for await (const raw of parseSse(response.body, input.signal)) {
-    latestRaw = raw;
-    if (raw && typeof raw === "object" && "error" in raw) {
-      throw new Error(`Provider ${provider.providerId} stream failed: ${errorMessageFromPayload(raw)}`);
-    }
-    const usage = parseUsage(raw);
-    if (usage) yield { type: "usage", usage, raw };
-    for (const delta of streamDeltasFromChunk(raw)) {
-      if (delta.type === "reasoning_delta") reasoningText += delta.text;
-      if (delta.type === "tool_call_delta") hasToolCalls = true;
-      if (delta.type === "finish") pendingFinish = delta;
-      else yield delta;
-    }
-  }
-  const continuation = chatCompletionsContinuation({
-    provider: provider.providerId,
-    model: provider.model,
-    reasoningText,
-    hasToolCalls,
-  });
-  if (continuation) yield { type: "continuation", continuation, raw: latestRaw };
-  if (pendingFinish) yield pendingFinish;
 }
 
 async function* streamOpenAiSubscriptionResponses(input: {
@@ -332,9 +346,8 @@ async function* streamOpenAiSubscriptionResponses(input: {
   });
   if (!credential.accessToken) throw new Error("OpenAI ChatGPT subscription credential has no access token.");
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
-  let response: Response;
   try {
-    response = await fetch(OPENAI_CODEX_RESPONSES_ENDPOINT, {
+    const response = await fetch(OPENAI_CODEX_RESPONSES_ENDPOINT, {
       method: "POST",
       headers: subscriptionHeaders(credential, input.requestId),
       body: JSON.stringify(buildResponsesBody({
@@ -346,41 +359,48 @@ async function* streamOpenAiSubscriptionResponses(input: {
       })),
       signal: requestSignal.signal,
     });
+    if (!response.ok || !response.body) {
+      requestSignal.touch();
+      const errorDetail = await readProviderError(
+        response,
+        input.errorBodyLimitBytes,
+        requestSignal.signal,
+        requestSignal.touch,
+      );
+      throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${response.status} ${errorDetail}`);
+    }
+    const seenToolArgumentDeltas = new Set<string>();
+    const reasoningItems = new Map<string, Record<string, unknown>>();
+    let hasToolCalls = false;
+    let pendingFinish: OpenAiCompatibleStreamDelta | null = null;
+    let latestRaw: unknown = null;
+    requestSignal.touch();
+    for await (const raw of parseSse(response.body, requestSignal.signal, requestSignal.touch)) {
+      latestRaw = raw;
+      if (raw && typeof raw === "object" && "error" in raw) {
+        throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${errorMessageFromPayload(raw)}`);
+      }
+      for (const item of responsesReasoningItemsFromEvent(raw)) {
+        const key = stringValue(item.id) ?? JSON.stringify(item);
+        reasoningItems.set(key, item);
+      }
+      for (const delta of responseDeltasFromChunk(raw, seenToolArgumentDeltas)) {
+        if (delta.type === "tool_call_delta") hasToolCalls = true;
+        if (delta.type === "finish") pendingFinish = delta;
+        else yield delta;
+      }
+    }
+    if (hasToolCalls && reasoningItems.size > 0) {
+      yield {
+        type: "continuation",
+        continuation: { kind: "responses_reasoning_items", items: [...reasoningItems.values()] },
+        raw: latestRaw,
+      };
+    }
+    if (pendingFinish) yield pendingFinish;
   } finally {
     requestSignal.cleanup();
   }
-  if (!response.ok || !response.body) {
-    const errorDetail = await readProviderError(response, input.errorBodyLimitBytes);
-    throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${response.status} ${errorDetail}`);
-  }
-  const seenToolArgumentDeltas = new Set<string>();
-  const reasoningItems = new Map<string, Record<string, unknown>>();
-  let hasToolCalls = false;
-  let pendingFinish: OpenAiCompatibleStreamDelta | null = null;
-  let latestRaw: unknown = null;
-  for await (const raw of parseSse(response.body, input.signal)) {
-    latestRaw = raw;
-    if (raw && typeof raw === "object" && "error" in raw) {
-      throw new Error(`Provider ${input.provider.providerId} subscription stream failed: ${errorMessageFromPayload(raw)}`);
-    }
-    for (const item of responsesReasoningItemsFromEvent(raw)) {
-      const key = stringValue(item.id) ?? JSON.stringify(item);
-      reasoningItems.set(key, item);
-    }
-    for (const delta of responseDeltasFromChunk(raw, seenToolArgumentDeltas)) {
-      if (delta.type === "tool_call_delta") hasToolCalls = true;
-      if (delta.type === "finish") pendingFinish = delta;
-      else yield delta;
-    }
-  }
-  if (hasToolCalls && reasoningItems.size > 0) {
-    yield {
-      type: "continuation",
-      continuation: { kind: "responses_reasoning_items", items: [...reasoningItems.values()] },
-      raw: latestRaw,
-    };
-  }
-  if (pendingFinish) yield pendingFinish;
 }
 
 async function usableSubscriptionCredential(input: {
@@ -747,11 +767,19 @@ function rawProviderModel(record: Record<string, unknown>): Record<string, unkno
   return Object.fromEntries(allowed.map((key) => [key, record[key]]).filter(([, value]) => value !== undefined));
 }
 
-async function readProviderError(response: Response, maxBytes = PROVIDER_ERROR_BODY_LIMIT_BYTES): Promise<string> {
-  const result = await readLimitedResponseText(response, maxBytes, { truncate: true }).catch(() => ({
-    text: "",
-    truncated: false,
-  }));
+async function readProviderError(
+  response: Response,
+  maxBytes = PROVIDER_ERROR_BODY_LIMIT_BYTES,
+  signal?: AbortSignal,
+  onProgress?: () => void,
+): Promise<string> {
+  const result = await readLimitedResponseText(response, maxBytes, { truncate: true }, signal, onProgress).catch(() => {
+    if (signal?.aborted) throw abortReason(signal);
+    return {
+      text: "",
+      truncated: false,
+    };
+  });
   const text = result.text;
   if (!text) return response.statusText || `HTTP ${response.status}`;
   try {
@@ -778,8 +806,14 @@ function providerErrorDetail(
   return detail;
 }
 
-async function readProviderJson(response: Response, label: string, maxBytes = PROVIDER_RESPONSE_BODY_LIMIT_BYTES): Promise<unknown> {
-  const result = await readLimitedResponseText(response, maxBytes, { truncate: false });
+async function readProviderJson(
+  response: Response,
+  label: string,
+  maxBytes = PROVIDER_RESPONSE_BODY_LIMIT_BYTES,
+  signal?: AbortSignal,
+  onProgress?: () => void,
+): Promise<unknown> {
+  const result = await readLimitedResponseText(response, maxBytes, { truncate: false }, signal, onProgress);
   try {
     return JSON.parse(result.text) as unknown;
   } catch {
@@ -791,6 +825,8 @@ async function readLimitedResponseText(
   response: Response,
   maxBytes: number,
   options: { truncate: boolean },
+  signal?: AbortSignal,
+  onProgress?: () => void,
 ): Promise<{ text: string; truncated: boolean }> {
   if (!response.body) return { text: "", truncated: false };
   const reader = response.body.getReader();
@@ -800,7 +836,7 @@ async function readLimitedResponseText(
   let truncated = false;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readResponseChunk(reader, signal, onProgress);
       if (done) break;
       bytes += value.byteLength;
       if (bytes > maxBytes) {
@@ -825,19 +861,31 @@ async function readLimitedResponseText(
 function createProviderRequestSignal(
   signal: AbortSignal | undefined,
   timeoutMs = DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS,
-): { signal: AbortSignal; cleanup: () => void } {
+): { signal: AbortSignal; touch: () => void; cleanup: () => void } {
   if (signal?.aborted) throw abortReason(signal);
   const controller = new AbortController();
   const onAbort = () => controller.abort(abortReason(signal));
   signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(
-    () => controller.abort(new Error(`Provider request timed out after ${timeoutMs}ms.`)),
-    timeoutMs,
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const touch = () => {
+    if (controller.signal.aborted) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(
+      () => controller.abort(new Error(`Provider request timed out after ${timeoutMs}ms without progress.`)),
+      timeoutMs,
+    );
+  };
+  touch();
+  const hardTimer = setTimeout(
+    () => controller.abort(new Error(`Provider request exceeded ${DEFAULT_PROVIDER_REQUEST_HARD_TIMEOUT_MS}ms.`)),
+    DEFAULT_PROVIDER_REQUEST_HARD_TIMEOUT_MS,
   );
   return {
     signal: controller.signal,
+    touch,
     cleanup: () => {
-      clearTimeout(timer);
+      if (idleTimer) clearTimeout(idleTimer);
+      clearTimeout(hardTimer);
       signal?.removeEventListener("abort", onAbort);
     },
   };
@@ -845,6 +893,31 @@ function createProviderRequestSignal(
 
 function abortReason(signal: AbortSignal | undefined): Error {
   return signal?.reason instanceof Error ? signal.reason : new Error("provider_request_aborted");
+}
+
+async function readResponseChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal?: AbortSignal,
+  onProgress?: () => void,
+) {
+  if (!signal) {
+    const result = await reader.read();
+    if (!result.done) onProgress?.();
+    return result;
+  }
+  if (signal.aborted) throw abortReason(signal);
+  const onAbort = () => {
+    void reader.cancel(abortReason(signal)).catch(() => undefined);
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const result = await reader.read();
+    if (signal.aborted) throw abortReason(signal);
+    if (!result.done) onProgress?.();
+    return result;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 function errorMessageFromPayload(payload: unknown): string {
@@ -867,15 +940,14 @@ function errorMessageFromPayload(payload: unknown): string {
 async function* parseSse(
   stream: ReadableStream<Uint8Array>,
   signal?: AbortSignal,
+  onProgress?: () => void,
 ): AsyncGenerator<unknown, void, unknown> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const abortError = () => (signal?.reason instanceof Error ? signal.reason : new Error("provider_stream_aborted"));
   try {
     while (true) {
-      if (signal?.aborted) throw abortError();
-      const result = await reader.read();
+      const result = await readResponseChunk(reader, signal, onProgress);
       if (result.done) break;
       buffer += decoder.decode(result.value, { stream: true });
       const blocks = buffer.split(/\r?\n\r?\n/);

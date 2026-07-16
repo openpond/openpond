@@ -9,7 +9,6 @@ import {
   type OpenPondApp,
   type RuntimeEvent,
   type Session,
-  type SubagentExplorationSteeringPolicy,
   type SubagentRoleSettings,
   type SubagentRun,
   type Turn,
@@ -53,11 +52,6 @@ import {
   type HostedToolRolloutFlags,
 } from "./rollout.js";
 import type { ProfileSkillRuntime } from "./native-tools-runtime.js";
-import {
-  createSubagentToolLoopSteeringTracker,
-  subagentToolLoopSteeringMessagesForNativeResults,
-  subagentToolLoopSteeringMessagesForWorkspaceResult,
-} from "../subagents/progress-reducer.js";
 import type { SubagentTurnPermissions } from "../subagents/continuation-runtime.js";
 import type { HostedToolLoopDelta, TurnRunnerDependencies } from "../turns/ports.js";
 import { isTerminalOneShotTurn } from "../turns/request-context.js";
@@ -103,19 +97,6 @@ const READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS = new Set<WorkspaceToolRequest["
   "sandbox_receipts",
 ]);
 const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
-  "subagent.progress",
-  "subagent.reported",
-  "subagent.submitted",
-  "subagent.accepted",
-  "subagent.needs_revision",
-  "subagent.completed",
-  "subagent.failed",
-  "subagent.blocked",
-  "subagent.cancelled",
-  "subagent.workspace_retained",
-  "subagent.archived",
-  "subagent.superseded",
-  "subagent.dismissed",
   "subagent.message",
 ]);
 
@@ -137,10 +118,6 @@ export function createHostedToolLoopRuntime(deps: {
     provider: ChatProvider,
     runtime: ProfileSkillRuntime,
   ): ProfileSkillInstructionMode;
-  subagentExplorationSteeringPolicyForSession(
-    session: Session,
-    preferences?: AppPreferences,
-  ): Promise<SubagentExplorationSteeringPolicy>;
   subagentToolsAvailable(): boolean;
   runtimeEventsForSession(sessionId: string, query?: {
     afterSequence?: number | null;
@@ -184,7 +161,6 @@ export function createHostedToolLoopRuntime(deps: {
   const nativeToolsEnabledForProvider = deps.nativeToolsEnabledForProvider;
   const createNativeModelToolDefinitions = deps.createNativeModelToolDefinitions;
   const profileSkillInstructionModeForProvider = deps.profileSkillInstructionModeForProvider;
-  const subagentExplorationSteeringPolicyForSession = deps.subagentExplorationSteeringPolicyForSession;
   const subagentToolsAvailable = deps.subagentToolsAvailable;
   const appendHostedContextUsage = deps.appendHostedContextUsage;
   const maxHostedWorkspaceToolRounds = deps.maxHostedWorkspaceToolRounds;
@@ -259,9 +235,6 @@ export function createHostedToolLoopRuntime(deps: {
           0,
         );
     const deliveredSubagentAsideKeys = new Set<string>();
-    const subagentSteeringTracker = createSubagentToolLoopSteeringTracker(
-      await subagentExplorationSteeringPolicyForSession(session, appPreferences ?? undefined),
-    );
     async function appendContextUsage(input: {
       messages: HostedMessages;
       usage?: unknown;
@@ -382,14 +355,6 @@ export function createHostedToolLoopRuntime(deps: {
         await applyNativeToolUsageAttribution(params.turn, nativeResults);
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
-        }
-        for (const content of subagentToolLoopSteeringMessagesForNativeResults({
-          session,
-          toolCalls: nativeToolCalls,
-          results: nativeResults,
-          tracker: subagentSteeringTracker,
-        })) {
-          messages.push({ role: "user", content });
         }
         session = await getSession(session.id);
         await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
@@ -535,7 +500,6 @@ export function createHostedToolLoopRuntime(deps: {
       await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
 
       const toolResults: string[] = [];
-      const subagentSteeringMessages: string[] = [];
       for (const request of requests) {
         throwIfInterrupted(params.signal);
         const toolRequest = normalizeMentionedSandboxToolRequest({
@@ -584,12 +548,6 @@ export function createHostedToolLoopRuntime(deps: {
         workspaceToolResultCount += 1;
         session = await getSession(session.id);
         toolResults.push(formatWorkspaceToolResultForModel(result));
-        subagentSteeringMessages.push(...subagentToolLoopSteeringMessagesForWorkspaceResult({
-          session,
-          request: toolRequest,
-          result,
-          tracker: subagentSteeringTracker,
-        }));
       }
 
       messages.push({
@@ -597,7 +555,6 @@ export function createHostedToolLoopRuntime(deps: {
         content: [
           "Workspace tool result:",
           toolResults.join("\n\n"),
-          ...subagentSteeringMessages,
           "Continue. If another workspace action is required, respond with exactly one openpond_tool block. Otherwise answer the user normally without tool JSON.",
         ].join("\n\n"),
       });
@@ -687,11 +644,11 @@ export function createHostedToolLoopRuntime(deps: {
       `kind: ${message.kind}`,
       `from: ${message.fromRunId}`,
       message.parentGoalId ? `goal: ${message.parentGoalId}` : null,
-      `body: ${truncateForModelAside(message.body, 2000)}`,
+      `body: ${truncateForModelAside(message.body, 4000)}`,
       message.refs.length
         ? `refs: ${message.refs.slice(0, 8).map((ref) => `${ref.kind}:${ref.id} (${ref.label})`).join(", ")}`
         : null,
-      "Treat this as an active handoff from a child agent. Decide whether to respond, message the child back, route work, join/cancel, update the goal, or continue without action.",
+      "This is the child's bounded final result. Decide what it means and what to do next; the runtime does not accept, reject, review, or advance work for you.",
     ].filter(Boolean).join("\n");
   }
 

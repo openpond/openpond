@@ -17,6 +17,7 @@ describe("OpenPond capability tool registry", () => {
       statusSubagents: async () => ({ runs: [], nextStep: "No runs." }),
       joinSubagent: async () => subagentToolResult("completed"),
       cancelSubagent: async () => subagentToolResult("cancelled"),
+      followupSubagent: async () => subagentToolResult("queued"),
       sendSubagentMessage: async () => subagentMessageToolResult(),
     });
 
@@ -27,6 +28,7 @@ describe("OpenPond capability tool registry", () => {
       "openpond_subagent_status",
       "openpond_subagent_join",
       "openpond_subagent_cancel",
+      "openpond_subagent_followup",
       "openpond_subagent_send_message",
     ]);
   });
@@ -51,9 +53,9 @@ describe("OpenPond capability tool registry", () => {
         calls.push({ tool: "cancel", input });
         return subagentToolResult("cancelled");
       },
-      reviewSubagent: async (_context, input) => {
-        calls.push({ tool: "review", input });
-        return subagentToolResult("completed");
+      followupSubagent: async (_context, input) => {
+        calls.push({ tool: "followup", input });
+        return subagentToolResult("queued");
       },
       sendSubagentMessage: async (_context, input) => {
         calls.push({ tool: "message", input });
@@ -65,21 +67,13 @@ describe("OpenPond capability tool registry", () => {
     const status = requireTool(definitions, "openpond_subagent_status");
     const join = requireTool(definitions, "openpond_subagent_join");
     const cancel = requireTool(definitions, "openpond_subagent_cancel");
-    const review = requireTool(definitions, "openpond_subagent_review");
+    const followup = requireTool(definitions, "openpond_subagent_followup");
     const message = requireTool(definitions, "openpond_subagent_send_message");
 
     const startResult = await start.execute(context({
       roleId: "coding",
       objective: "Fix the failing tests",
       context: "Use the current branch diff.",
-      workerBrief: {
-        plan: ["Inspect failing tests", "Patch the implementation"],
-        targetFiles: ["tests/failing.test.ts"],
-        acceptanceCriteria: ["Focused tests pass"],
-        validationCommands: ["pnpm test tests/failing.test.ts"],
-        stopConditions: ["Report a blocker if dependencies are missing"],
-      },
-      required: false,
     }));
     const statusResult = await status.execute(context({ parentGoalId: "goal_1" }));
     const joinResult = await join.execute(context({ runId: "run_1" }));
@@ -88,11 +82,9 @@ describe("OpenPond capability tool registry", () => {
       reason: "No longer needed.",
       cleanupWorkspace: false,
     }));
-    const reviewResult = await review.execute(context({
+    const followupResult = await followup.execute(context({
       runId: "run_1",
-      decision: "dismiss",
-      summary: "Acknowledged blocked child work.",
-      issues: ["Child is blocked on unavailable external approval."],
+      message: "Add the focused regression proof.",
     }));
     const messageResult = await message.execute(context({
       toRole: "review",
@@ -108,14 +100,6 @@ describe("OpenPond capability tool registry", () => {
           roleId: "coding",
           objective: "Fix the failing tests",
           context: "Use the current branch diff.",
-          workerBrief: {
-            plan: ["Inspect failing tests", "Patch the implementation"],
-            targetFiles: ["tests/failing.test.ts"],
-            acceptanceCriteria: ["Focused tests pass"],
-            validationCommands: ["pnpm test tests/failing.test.ts"],
-            stopConditions: ["Report a blocker if dependencies are missing"],
-          },
-          required: false,
         },
       },
       { tool: "status", input: { parentGoalId: "goal_1" } },
@@ -129,15 +113,10 @@ describe("OpenPond capability tool registry", () => {
         },
       },
       {
-        tool: "review",
+        tool: "followup",
         input: {
           runId: "run_1",
-          decision: "dismiss",
-          summary: "Acknowledged blocked child work.",
-          issues: ["Child is blocked on unavailable external approval."],
-          requiredCorrections: null,
-          messageChild: null,
-          priority: null,
+          message: "Add the focused regression proof.",
         },
       },
       {
@@ -169,9 +148,9 @@ describe("OpenPond capability tool registry", () => {
       name: "openpond_subagent_cancel",
       data: { status: "cancelled" },
     });
-    expect(reviewResult).toMatchObject({
-      name: "openpond_subagent_review",
-      data: { status: "completed" },
+    expect(followupResult).toMatchObject({
+      name: "openpond_subagent_followup",
+      data: { status: "queued" },
     });
     expect(messageResult).toMatchObject({
       name: "openpond_subagent_send_message",

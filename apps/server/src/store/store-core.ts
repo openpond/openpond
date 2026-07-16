@@ -24,6 +24,45 @@ type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
 type TableInfoRow = { name: string };
 
+const SQLITE_HEALTH_RETRY_DELAYS_MS = [50, 100, 200, 400, 800] as const;
+
+class SqliteIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SqliteIntegrityError";
+  }
+}
+
+function sqliteErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  return typeof error.code === "string" ? error.code.toUpperCase() : null;
+}
+
+function sqliteErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+}
+
+function isConfirmedSqliteCorruption(error: unknown): boolean {
+  if (error instanceof SqliteIntegrityError) return true;
+  const code = sqliteErrorCode(error);
+  if (code === "SQLITE_CORRUPT" || code === "SQLITE_NOTADB") return true;
+  const message = sqliteErrorMessage(error);
+  return message.includes("database disk image is malformed") ||
+    message.includes("file is not a database") ||
+    message.includes("file is encrypted or is not a database");
+}
+
+function isTransientSqliteAvailabilityError(error: unknown): boolean {
+  const code = sqliteErrorCode(error);
+  if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") return true;
+  const message = sqliteErrorMessage(error);
+  return message.includes("database is locked") || message.includes("database is busy");
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export type SqliteStoreCoreOptions = {
   logger?: Logger;
 };
@@ -62,8 +101,6 @@ export class SqliteStoreCore {
     await fs.mkdir(storeDir, { recursive: true });
     const hadDatabase = await this.fileExists(this.storePath);
     await this.openDatabaseWithRecovery(storeDir);
-    await this.configureDatabase();
-    await this.assertHealthyDatabase();
     await this.runMigrations(storeDir, hadDatabase);
     this.data = await readStoreData({
       allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
@@ -82,7 +119,26 @@ export class SqliteStoreCore {
     const rows = await this.all<QuickCheckRow>("PRAGMA quick_check");
     const failures = rows.map((row) => row.quick_check).filter((value) => value !== "ok");
     if (failures.length > 0) {
-      throw new Error(`SQLite quick_check failed: ${failures.join("; ")}`);
+      throw new SqliteIntegrityError(`SQLite quick_check failed: ${failures.join("; ")}`);
+    }
+  }
+
+  protected async assertHealthyDatabaseWithRetry(): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.assertHealthyDatabase();
+        return;
+      } catch (error) {
+        const retryDelay = SQLITE_HEALTH_RETRY_DELAYS_MS[attempt];
+        if (!isTransientSqliteAvailabilityError(error) || retryDelay === undefined) throw error;
+        this.logger?.warn("sqlite health check temporarily unavailable; retrying", {
+          storePath: this.storePath,
+          attempt: attempt + 1,
+          retryDelayMs: retryDelay,
+          error,
+        });
+        await delay(retryDelay);
+      }
     }
   }
 
@@ -121,19 +177,41 @@ export class SqliteStoreCore {
     try {
       this.db = await this.openDatabase(this.storePath);
     } catch (error) {
-      this.logger?.error("sqlite open failed; moving database files aside", { storePath: this.storePath, error });
+      if (!isConfirmedSqliteCorruption(error)) {
+        this.logger?.error("sqlite open failed without confirmed corruption; preserving database files", {
+          storePath: this.storePath,
+          error,
+        });
+        throw error;
+      }
+      this.logger?.error("sqlite open confirmed corruption; moving database files aside", {
+        storePath: this.storePath,
+        error,
+      });
       await this.moveDatabaseFilesAside(storeDir, "open-failed");
       this.db = await this.openDatabase(this.storePath);
     }
 
     try {
       await this.configureDatabase();
-      await this.assertHealthyDatabase();
+      await this.assertHealthyDatabaseWithRetry();
     } catch (error) {
-      this.logger?.error("sqlite health check failed; moving database files aside", { storePath: this.storePath, error });
       await this.closeDatabaseHandle();
+      if (!isConfirmedSqliteCorruption(error)) {
+        this.logger?.error("sqlite health check failed without confirmed corruption; preserving database files", {
+          storePath: this.storePath,
+          error,
+        });
+        throw error;
+      }
+      this.logger?.error("sqlite health check confirmed corruption; moving database files aside", {
+        storePath: this.storePath,
+        error,
+      });
       await this.moveDatabaseFilesAside(storeDir, "quick-check-failed");
       this.db = await this.openDatabase(this.storePath);
+      await this.configureDatabase();
+      await this.assertHealthyDatabaseWithRetry();
     }
   }
 
@@ -418,6 +496,22 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS subagent_messages_receiver_created_idx
         ON subagent_messages(to_run_id, to_role, created_at);
     `);
+  }
+
+  async resetLegacySubagentTransportState(): Promise<void> {
+    // The v18 subagent runtime deliberately replaces the previous semantic
+    // review/watcher state machine. Its stored payloads are not meaningful to
+    // the new generic child-conversation transport, so begin with a clean
+    // transport ledger instead of carrying legacy behavior forward.
+    await this.exec(`
+      DELETE FROM subagent_messages;
+      DELETE FROM subagent_runs;
+    `);
+  }
+
+  async resetLegacySubagentRuntimeEvents(): Promise<void> {
+    await this.run("DELETE FROM events WHERE name LIKE 'subagent.%'", []);
+    await this.rebuildReadModels();
   }
 
   async createOpenPondThreadGoalTable(): Promise<void> {
@@ -948,5 +1042,13 @@ const SQLITE_MIGRATIONS: Migration[] = [
   {
     version: 18,
     run: (store) => store.createCrossSystemFrontierBaselineRunTables(),
+  },
+  {
+    version: 19,
+    run: (store) => store.resetLegacySubagentTransportState(),
+  },
+  {
+    version: 20,
+    run: (store) => store.resetLegacySubagentRuntimeEvents(),
   },
 ];

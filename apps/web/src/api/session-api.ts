@@ -53,6 +53,8 @@ export const sessionApi = {
     ),
   interruptTurn: (connection: ClientConnection, sessionId: string) =>
     apiFetch<Turn>(connection, `/v1/sessions/${sessionId}/turns/interrupt`, { method: "POST" }),
+  pauseGoal: (connection: ClientConnection, sessionId: string) =>
+    apiFetch<unknown>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/goals/pause`, { method: "POST" }),
   compactSession: (
     connection: ClientConnection,
     sessionId: string,

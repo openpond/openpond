@@ -26,5 +26,7 @@ export function booleanFromRecord(record: Record<string, unknown>, key: string):
 export function truncateForModelAside(value: string, maxLength: number): string {
   const trimmed = value.trim();
   if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
+  const suffix = "...";
+  if (maxLength <= suffix.length) return suffix.slice(0, Math.max(0, maxLength));
+  return `${trimmed.slice(0, maxLength - suffix.length).trimEnd()}${suffix}`;
 }

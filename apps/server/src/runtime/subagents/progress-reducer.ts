@@ -1,20 +1,11 @@
 import {
   SubagentProgressSchema,
   type RuntimeEvent,
-  type Session,
-  type SubagentExplorationSteeringPolicy,
   type SubagentProgress,
   type SubagentProgressPhase,
   type SubagentRun,
   type SubagentValidationAttempt,
-  type WorkspaceToolRequest,
-  type WorkspaceToolResult,
 } from "@openpond/contracts";
-import {
-  parseNativeToolArguments,
-  type NativeModelToolCall,
-  type NativeModelToolResult,
-} from "../../openpond/native-tool-calls.js";
 import {
   booleanFromRecord,
   numberFromRecord,
@@ -127,7 +118,7 @@ export function subagentProgressProjectionFromRuntimeEvents(input: {
     Object.entries(input.state.startedArgsByToolCallId),
   );
   const processedResultIds = new Set<string>(input.state.processedResultIds);
-  const validationCommands = new Set(input.run.workerBrief.validationCommands.map(normalizeCommandKey));
+  const validationCommands = new Set<string>();
   let latestMeaningfulActivity = input.latestMeaningfulActivity ?? base.latestMeaningfulActivity ?? null;
   let currentBlocker = input.currentBlocker ?? base.currentBlocker ?? null;
   const latestPriorValidation = base.validationAttempts.at(-1) ?? null;
@@ -272,7 +263,7 @@ export function subagentProgressProjectionFromRuntimeEvents(input: {
     changedFiles: uniqueNonEmptyStrings(changedFiles).slice(0, 500),
     validationAttempts: dedupedValidationAttempts.slice(-100),
     latestMeaningfulActivity,
-    currentBlocker,
+    currentBlocker: currentBlocker ? truncateForModelAside(currentBlocker, 5_000) : null,
     updatedAt,
   });
   return {
@@ -489,7 +480,10 @@ function subagentValidationAttemptFromEvent(input: {
   });
   const timing = recordFromUnknown(input.resultData?.workspaceToolTiming);
   return {
-    command,
+    // Provider-native exec commands can contain large inline scripts. Keep the
+    // full command for classification above, then bound the persisted evidence
+    // to the contracts limit so a successful child cannot fail finalization.
+    command: truncateForModelAside(command, 2_000),
     status,
     exitCode,
     outputSummary: summarizeSubagentCommandOutput(output),
@@ -609,7 +603,6 @@ function inferSubagentProgressPhase(input: {
   hasChanges: boolean;
   hasBlocker: boolean;
 }): SubagentProgressPhase {
-  if (input.basePhase === "submitted") return "submitted";
   if (input.hasBlocker) return "report";
   if (input.lastInferredPhase !== "orient") return input.lastInferredPhase;
   if (input.hasValidation) return "validate";
@@ -631,135 +624,4 @@ function stringArrayFromUnknown(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
-}
-
-export type SubagentToolLoopSteeringTracker = {
-  policy: SubagentExplorationSteeringPolicy;
-  searches: Map<string, number>;
-  reads: Map<string, number>;
-  commands: Map<string, number>;
-  deliveredKeys: Set<string>;
-};
-
-export function createSubagentToolLoopSteeringTracker(
-  policy: SubagentExplorationSteeringPolicy,
-): SubagentToolLoopSteeringTracker {
-  return {
-    policy,
-    searches: new Map(),
-    reads: new Map(),
-    commands: new Map(),
-    deliveredKeys: new Set(),
-  };
-}
-
-export function subagentToolLoopSteeringMessagesForNativeResults(input: {
-  session: Session;
-  toolCalls: NativeModelToolCall[];
-  results: NativeModelToolResult[];
-  tracker: SubagentToolLoopSteeringTracker;
-}): string[] {
-  if (!input.session.subagentRunId) return [];
-  const argsByToolCallId = new Map<string, Record<string, unknown>>();
-  for (const call of input.toolCalls) {
-    try {
-      argsByToolCallId.set(call.id, parseNativeToolArguments(call));
-    } catch {
-      argsByToolCallId.set(call.id, {});
-    }
-  }
-  return input.results.flatMap((result) =>
-    subagentToolLoopSteeringMessagesForAction({
-      session: input.session,
-      action: result.name,
-      args: argsByToolCallId.get(result.toolCallId) ?? {},
-      resultData: recordFromUnknown(result.data),
-      tracker: input.tracker,
-    }),
-  );
-}
-
-export function subagentToolLoopSteeringMessagesForWorkspaceResult(input: {
-  session: Session;
-  request: WorkspaceToolRequest;
-  result: WorkspaceToolResult;
-  tracker: SubagentToolLoopSteeringTracker;
-}): string[] {
-  if (!input.session.subagentRunId) return [];
-  return subagentToolLoopSteeringMessagesForAction({
-    session: input.session,
-    action: input.result.action,
-    args: input.request.args,
-    resultData: recordFromUnknown(input.result.data),
-    tracker: input.tracker,
-  });
-}
-
-function subagentToolLoopSteeringMessagesForAction(input: {
-  session: Session;
-  action: string;
-  args: Record<string, unknown>;
-  resultData: Record<string, unknown> | null;
-  tracker: SubagentToolLoopSteeringTracker;
-}): string[] {
-  if (!input.tracker.policy.enabled) return [];
-  const repeated: Array<{ kind: "search" | "read" | "command"; key: string }> = [];
-  if (SUBAGENT_SEARCH_ACTIONS.has(input.action)) {
-    const key = subagentSearchKey(input.action, input.args, input.resultData);
-    if (key && incrementSteeringCount(input.tracker.searches, key) >= input.tracker.policy.repeatedSearchThreshold) {
-      repeated.push({ kind: "search", key });
-    }
-  }
-  if (SUBAGENT_READ_ACTIONS.has(input.action)) {
-    const readTargets = uniqueNonEmptyStrings([
-      ...subagentPathsFromArgs(input.args),
-      ...subagentPathsFromReadResult(input.resultData),
-    ]);
-    const key = subagentReadKey(input.action, input.args, readTargets);
-    if (key && incrementSteeringCount(input.tracker.reads, key) >= input.tracker.policy.repeatedReadThreshold) {
-      repeated.push({ kind: "read", key });
-    }
-  }
-  if (SUBAGENT_COMMAND_ACTIONS.has(input.action)) {
-    const command = subagentCommandFromEvent(input.args, input.resultData);
-    const key = command ? normalizeCommandKey(command) : null;
-    if (key && incrementSteeringCount(input.tracker.commands, key) >= input.tracker.policy.repeatedCommandThreshold) {
-      repeated.push({ kind: "command", key });
-    }
-  }
-  const messages: string[] = [];
-  for (const item of repeated) {
-    const deliveryKey = `${item.kind}:${item.key}`;
-    if (input.tracker.deliveredKeys.has(deliveryKey)) continue;
-    input.tracker.deliveredKeys.add(deliveryKey);
-    messages.push(subagentRepeatedExplorationSteeringMessage({
-      roleId: input.session.subagentRoleId ?? "child",
-      kind: item.kind,
-      key: item.key,
-    }));
-  }
-  return messages;
-}
-
-function incrementSteeringCount(map: Map<string, number>, key: string): number {
-  const count = (map.get(key) ?? 0) + 1;
-  map.set(key, count);
-  return count;
-}
-
-function subagentRepeatedExplorationSteeringMessage(input: {
-  roleId: string;
-  kind: "search" | "read" | "command";
-  key: string;
-}): string {
-  const label = input.kind === "search"
-    ? "search"
-    : input.kind === "read"
-      ? "read"
-      : "command";
-  return [
-    "Runtime subagent steering:",
-    `${input.roleId} subagent repeated the same ${label} pattern: ${truncateForModelAside(input.key, 500)}.`,
-    "If this did not produce new information, stop repeating it and move to the next useful boundary: edit the target, run validation, submit a review packet, or report the blocker/question.",
-  ].join(" ");
 }

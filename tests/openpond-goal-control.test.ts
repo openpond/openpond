@@ -19,11 +19,11 @@ describe("OpenPond goal control facade", () => {
     expect(result).toMatchObject({
       action: "start",
       mode: "local",
-      status: "queued",
-      nextStep: "OpenPond goal queued.",
+      status: "running",
+      nextStep: "OpenPond goal started.",
       goal: {
         provider: "openpond",
-        status: "queued",
+        status: "running",
         objective: "Ship capability tools.",
         mode: "local",
         controlAction: "start",
@@ -63,7 +63,31 @@ describe("OpenPond goal control facade", () => {
         targetGoalId: "goal_active",
         reason: "Model supplied the continuation goal id to start.",
       },
-    })).toThrow("targetGoalId cannot be used with start");
+    })).toThrow("OpenPond goal goal_active is already running");
+  });
+
+  test("ignores synthetic target ids when starting a new goal", () => {
+    const result = runOpenPondGoalControl({
+      session: baseSession({ workspaceKind: "local_project", cwd: "/repo" }),
+      events: [],
+      request: {
+        action: "start",
+        objective: "Run the requested goal.",
+        targetGoalId: "new",
+        reason: "Model emitted a placeholder id for a goal that does not exist yet.",
+      },
+      now: "2026-07-03T10:00:00.000Z",
+    });
+
+    expect(result).toMatchObject({
+      action: "start",
+      status: "running",
+      nextStep: "OpenPond goal started.",
+      goal: {
+        status: "running",
+        targetGoalId: null,
+      },
+    });
   });
 
   test("pauses, resumes, and stops the targeted OpenPond goal", () => {
@@ -73,6 +97,7 @@ describe("OpenPond goal control facade", () => {
         objective: "Ship capability tools.",
         status: "running",
         mode: "local",
+        createdAt: "2026-07-03T10:00:00.000Z",
       }),
     ];
     const session = baseSession({ workspaceKind: "local_project", cwd: "/repo" });
@@ -92,6 +117,7 @@ describe("OpenPond goal control facade", () => {
       status: "paused",
       previousStatus: "running",
       controlAction: "pause",
+      timeUsedSeconds: 60,
     });
 
     const resumed = runOpenPondGoalControl({
@@ -106,9 +132,11 @@ describe("OpenPond goal control facade", () => {
     });
     expect(resumed.goal).toMatchObject({
       id: "goal_1",
-      status: "queued",
+      status: "running",
       previousStatus: "paused",
       controlAction: "resume",
+      timeUsedSeconds: 60,
+      activeSinceAt: "2026-07-03T10:02:00.000Z",
     });
 
     const stopped = runOpenPondGoalControl({
@@ -124,8 +152,9 @@ describe("OpenPond goal control facade", () => {
     expect(stopped.goal).toMatchObject({
       id: "goal_1",
       status: "cancelled",
-      previousStatus: "queued",
+      previousStatus: "running",
       controlAction: "stop",
+      timeUsedSeconds: 120,
     });
   });
 

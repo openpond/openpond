@@ -698,6 +698,61 @@ describe("OpenAI-compatible provider adapter", () => {
     ).rejects.toThrow(/timed out/);
   });
 
+  test("keeps the provider timeout active while an SSE response body is open", async () => {
+    globalThis.fetch = async () => new Response(
+      new ReadableStream<Uint8Array>({
+        start() {
+          // Headers arrive immediately, but the provider never emits or closes the body.
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+
+    await expect((async () => {
+      for await (const _delta of streamOpenAiCompatibleChatCompletion({
+        ...providerState(),
+        providerId: "openrouter",
+        modelId: "test/model",
+        messages: [{ role: "user", content: "never finish" }],
+        requestTimeoutMs: 5,
+      })) {
+        // Drain the stream.
+      }
+    })()).rejects.toThrow(/Provider request timed out after 5ms without progress/);
+  });
+
+  test("resets the provider idle timeout when response chunks keep arriving", async () => {
+    globalThis.fetch = async () => new Response(
+      new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          for (const text of [
+            'data: {"choices":[{"delta":{"content":"a"}}]}\n\n',
+            'data: {"choices":[{"delta":{"content":"b"}}]}\n\n',
+            "data: [DONE]\n\n",
+          ]) {
+            await new Promise((resolve) => setTimeout(resolve, 4));
+            controller.enqueue(encoder.encode(text));
+          }
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+
+    const text: string[] = [];
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState(),
+      providerId: "openrouter",
+      modelId: "test/model",
+      messages: [{ role: "user", content: "keep streaming" }],
+      requestTimeoutMs: 8,
+    })) {
+      if (delta.type === "text_delta") text.push(delta.text);
+    }
+    expect(text).toEqual(["a", "b"]);
+  });
+
   test("caps provider error bodies before surfacing failures", async () => {
     const hiddenTail = "tail-secret";
     globalThis.fetch = async () => new Response(`${"x".repeat(70 * 1024)}${hiddenTail}`, { status: 500 });

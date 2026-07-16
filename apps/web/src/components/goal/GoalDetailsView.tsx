@@ -353,31 +353,13 @@ function SubagentDetails({
       <DetailSection title="Subagents">
         <DetailGrid
           rows={[
-            ["Background check", subagentWatcherLabel(runtime)],
             ["Latest update", subagentLatestUpdateLabel(runtime)],
             ["Active", String(runtime.activeCount)],
-            ["Blocked", String(runtime.blockedCount)],
-            ["Failed", String(subagentStatusCount(runtime, ["failed", "failed_with_artifacts"]))],
-            ["Cancelled", String(subagentStatusCount(runtime, ["cancelled"]))],
-            ["Unresolved", String(runtime.unresolvedCount)],
+            ["Completed", String(runtime.completedCount)],
+            ["Failed", String(runtime.failedCount)],
+            ["Cancelled", String(runtime.cancelledCount)],
+            ["Paused", String(runtime.needsResumeCount)],
             ["Terminal", String(runtime.terminalCount)],
-            ["Archived", String(runtime.archivedCount)],
-            ["Review submitted", String(runtime.submittedCount)],
-            ["Review revision", String(runtime.needsRevisionCount)],
-            ["Review user input", String(runtime.needsUserInputCount)],
-            ["Review failed artifacts", String(runtime.failedWithArtifactsCount)],
-            ["Review accepted", String(runtime.acceptedCount)],
-            ["Required active", String(runtime.requiredActiveCount)],
-            ["Required submitted", String(runtime.requiredSubmittedForReviewCount)],
-            ["Required revision", String(runtime.requiredNeedsRevisionCount)],
-            ["Required user input", String(runtime.requiredNeedsUserInputCount)],
-            ["Required blocking", String(runtime.requiredBlockingCount)],
-            ["Required failed", String(subagentStatusCount(runtime, ["failed", "failed_with_artifacts"], true))],
-            ["Required cancelled", String(subagentStatusCount(runtime, ["cancelled"], true))],
-            ["Required accepted", String(runtime.requiredAcceptedCount)],
-            ["Required terminal", String(runtime.requiredTerminalCount)],
-            ["Required archived", String(runtime.requiredArchivedCount)],
-            ["Required unresolved", String(runtime.requiredUnresolvedCount)],
             ["Usage", subagentUsageLabel(runtime.usage.totalTokens, runtime.usage.requestCount)],
             ["Evidence", String(runtime.evidenceRefs.length)],
             ["Checks", String(runtime.testsRunCount)],
@@ -423,7 +405,6 @@ function SubagentDetails({
         ) : null}
       </DetailSection>
       {runtime.finalResults.length > 0 ? <SubagentFinalResultDetails results={runtime.finalResults} /> : null}
-      {runtime.taskGraph.nodes.length > 0 ? <SubagentTaskGraphDetails runtime={runtime} /> : null}
     </>
   );
 }
@@ -443,25 +424,16 @@ function SubagentFinalResultDetails({ results }: { results: SubagentFinalResultS
             </div>
             <p>{result.summary}</p>
             <div className="goal-details-task-node-meta">
-              <span>{result.required ? "Required" : "Optional"}</span>
               <span>{result.refs.length} refs</span>
               <span>{result.testsRun.length + result.validationAttempts.length} checks</span>
               <span>{result.blockers.length} blockers</span>
               <span>{result.confidence ? `${createStateLabel(result.confidence)} confidence` : "Confidence unknown"}</span>
-              <span>{createStateLabel(result.packetQualityStatus)} packet</span>
-              <span>{result.independentReviewRecommended ? "Independent review recommended" : "Parent review"}</span>
             </div>
             {result.findings.length > 0 ? <small>Findings: {compactList(result.findings, 3)}</small> : null}
             {result.changedFiles.length > 0 ? <small>Files: {compactList(result.changedFiles, 4)}</small> : null}
             {result.testsRun.length > 0 ? <small>Tests: {compactList(result.testsRun, 3)}</small> : null}
             {result.validationAttempts.length > 0 ? (
               <small>Validation: {compactList(result.validationAttempts, 2)}</small>
-            ) : null}
-            {subagentPacketQualityEvidenceLabel(result) ? (
-              <small>Packet evidence: {subagentPacketQualityEvidenceLabel(result)}</small>
-            ) : null}
-            {result.reviewerRoutingReasons.length > 0 ? (
-              <small>Review routing: {compactList(result.reviewerRoutingReasons.map(createStateLabel), 3)}</small>
             ) : null}
             {result.refs.length > 0 ? <small>Refs: {compactList(result.refs.map(subagentRefLabel), 4)}</small> : null}
             {result.blockers.length > 0 ? <small>Blockers: {compactList(result.blockers, 3)}</small> : null}
@@ -542,91 +514,15 @@ function subagentRunArchiveEligible(run: SubagentRun): boolean {
 }
 
 function subagentRunTerminalOrAccepted(run: SubagentRun): boolean {
-  return run.status === "accepted" ||
-    run.status === "completed" ||
-    run.status === "failed_with_artifacts" ||
+  return run.status === "completed" ||
     run.status === "failed" ||
-    run.status === "cancelled" ||
-    run.status === "superseded" ||
-    run.review?.status === "accepted";
-}
-
-function subagentWatcherLabel(runtime: SubagentRuntimeStatus): string {
-  if (!runtime.watcher) return "Not checked";
-  const policy = runtime.watcher.wakeQueued
-    ? "parent wake queued"
-    : runtime.watcher.wakePolicy === "not_waking_parent_for_routine_tick"
-      ? "routine check"
-      : runtime.watcher.wakePolicy
-        ? createStateLabel(runtime.watcher.wakePolicy)
-        : "no parent wake";
-  const stale = runtime.watcher.staleCount > 0 ? ` · ${runtime.watcher.staleCount} stale` : "";
-  return `${formatTimestamp(runtime.watcher.checkedAt)} · ${policy}${stale}`;
+    run.status === "cancelled";
 }
 
 function subagentLatestUpdateLabel(runtime: SubagentRuntimeStatus): string {
   const update = runtime.latestMeaningfulUpdate;
   if (!update) return "No structured update";
   return `${subagentRoleLabel(update.roleId)} ${update.status}: ${update.message}`;
-}
-
-function subagentStatusCount(
-  runtime: SubagentRuntimeStatus,
-  statuses: readonly SubagentRun["status"][],
-  requiredOnly = false,
-): number {
-  const statusSet = new Set(statuses);
-  return runtime.runs.filter((run) => (!requiredOnly || run.required) && statusSet.has(run.status)).length;
-}
-
-function SubagentTaskGraphDetails({ runtime }: { runtime: SubagentRuntimeStatus }) {
-  const edgesByTarget = new Map<string, typeof runtime.taskGraph.edges>();
-  for (const edge of runtime.taskGraph.edges) {
-    const bucket = edgesByTarget.get(edge.toRunId) ?? [];
-    bucket.push(edge);
-    edgesByTarget.set(edge.toRunId, bucket);
-  }
-  return (
-    <DetailSection title="Task Graph">
-      <ol className="goal-details-task-graph">
-        {runtime.taskGraph.nodes.map((node) => {
-          const incoming = edgesByTarget.get(node.runId) ?? [];
-          return (
-            <li className="goal-details-task-node" key={node.runId}>
-              <div className="goal-details-task-node-header">
-                <span className={`goal-details-inline-state ${node.status}`}>{node.status}</span>
-                <div>
-                  <strong>{subagentRoleLabel(node.roleId)}</strong>
-                  <small>{node.modelLabel} · {node.isolationLabel}</small>
-                </div>
-              </div>
-              <p>{node.objective}</p>
-              <div className="goal-details-task-node-meta">
-                <span>{node.required ? "Required" : "Optional"}</span>
-                <span>{node.evidenceCount} evidence</span>
-                <span>{node.testsRunCount} checks</span>
-                <span>{node.blockerCount} blockers</span>
-              </div>
-              {incoming.length > 0 ? (
-                <div className="goal-details-task-edges">
-                  {incoming.slice(0, 3).map((edge) => (
-                    <span key={edge.id}>{edgeLabel(edge.fromRunId, edge.label, runtime.sessionId)}</span>
-                  ))}
-                </div>
-              ) : null}
-              {node.summary ? <small>{node.summary}</small> : null}
-            </li>
-          );
-        })}
-      </ol>
-    </DetailSection>
-  );
-}
-
-function edgeLabel(fromRunId: string, label: string, sessionId: string): string {
-  if (fromRunId === `parent:${sessionId}`) return `Parent ${label.toLowerCase()}`;
-  if (fromRunId.startsWith("parent:")) return `Parent ${label.toLowerCase()}`;
-  return `${fromRunId} ${label.toLowerCase()}`;
 }
 
 function subagentUsageLabel(totalTokens: number, requestCount: number): string {
@@ -645,23 +541,6 @@ function subagentRefLabel(ref: SubagentFinalResultSummary["refs"][number]): stri
 
 function subagentMessageLabel(message: SubagentFinalResultSummary["importantMessages"][number]): string {
   return `${createStateLabel(message.kind)}: ${message.body}`;
-}
-
-function subagentPacketQualityEvidenceLabel(result: SubagentFinalResultSummary): string | null {
-  const evidence = result.packetQualityEvidence;
-  const parts = [
-    result.packetQualityStatus !== "reviewable" ? createStateLabel(result.packetQualityStatus) : null,
-    evidence.finalSummaryPresent ? null : "summary missing",
-    evidence.requestedValidationCommandCount > 0 && evidence.validationAttemptCount + evidence.testsRunCount === 0
-      ? "validation missing"
-      : null,
-    evidence.failedValidationCount > 0 ? `${evidence.failedValidationCount} failed validation` : null,
-    evidence.unvalidatedWorkspaceChanges ? "unvalidated workspace changes" : null,
-    evidence.changedFileCount > 0
-      ? `${evidence.changedFileCount} changed ${evidence.changedFileCount === 1 ? "file" : "files"}`
-      : null,
-  ].filter(Boolean) as string[];
-  return parts.length > 0 ? compactList(parts, 4) : null;
 }
 
 function subagentWorkspaceRetentionLabel(

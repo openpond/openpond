@@ -12,9 +12,7 @@ export function subagentToolResultFromRun(run: SubagentRun, nextStep: string): O
     toolPolicy: run.toolPolicy,
     background: run.background,
     peerMessages: run.peerMessages,
-    workerBrief: run.workerBrief,
     progress: run.progress,
-    review: run.review,
     report: run.report,
     nextStep,
   };

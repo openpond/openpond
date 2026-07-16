@@ -41,6 +41,7 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { normalizePreferences, type AppView, type ChatMessage, type LabsTab } from "../../lib/app-models";
+import { isCodexHistorySessionId } from "../../lib/sidebar-session-projects";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
@@ -257,6 +258,7 @@ type MainPaneProps = {
     options?: { clearPrompt?: () => void; displayPrompt?: string; usageAttribution?: UsageRequestAttribution },
   ) => Promise<boolean>;
   stopTurn: () => Promise<boolean>;
+  pauseGoal: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;
@@ -407,6 +409,7 @@ export function MainPane({
   showToast,
   sendPrompt,
   stopTurn,
+  pauseGoal,
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
   onToggleDiffPanelExpanded,
@@ -1650,6 +1653,7 @@ export function MainPane({
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}
+                onPauseGoal={selectedSessionId && !isCodexHistorySessionId(selectedSessionId) ? pauseGoal : undefined}
               />
             </div>
           </div>

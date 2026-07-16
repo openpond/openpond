@@ -22,16 +22,10 @@ import {
   normalizeOpenPondGoalForContinuation,
   openPondGoalContinuationPrompt,
 } from "./continuation-policy.js";
-import {
-  subagentRunAccepted,
-  subagentRunDismissed,
-} from "../subagents/policies-and-prompts.js";
 import { event, now, textFromUnknown } from "../../utils.js";
 import type { BackgroundWorkerQueue, BackgroundWorkReceipt } from "../background-worker-queue.js";
 import type { KeyedRegistry } from "../turns/keyed-registry.js";
 import { recordFromUnknown, stringFromRecord } from "../turns/value-utils.js";
-
-const GOAL_CONTINUATION_IDLE_WAIT_MS = 10_000;
 
 export function createGoalControlRuntime(deps: {
   enableGoalContinuations: boolean;
@@ -59,11 +53,6 @@ export function createGoalControlRuntime(deps: {
   sendTurn(sessionId: string, payload: unknown): Promise<Turn>;
   activeInProgressTurn(sessionId: string): Promise<Turn | null>;
   findInProgressTurn(sessionId: string): Promise<Turn | null>;
-  assertGoalSubagentsResolvedForCompletion(input: {
-    context: ModelToolExecutionContext;
-    goalId: string;
-    action: string;
-  }): Promise<void>;
   markGoalSubagentsNeedsResume(input: {
     context: ModelToolExecutionContext;
     goalId: string;
@@ -74,12 +63,6 @@ export function createGoalControlRuntime(deps: {
     goalId: string;
     action: OpenPondGoalControlAction;
   }): Promise<Record<string, number>>;
-  markGoalSubagentsSuperseded(input: {
-    context: ModelToolExecutionContext;
-    action: OpenPondGoalControlAction;
-    previousGoal: OpenPondGoalControlGoal | null;
-    supersededByGoal: OpenPondGoalControlGoal;
-  }): Promise<number>;
 }) {
   const enableGoalContinuations = deps.enableGoalContinuations;
   const subagentToolsAvailable = deps.subagentToolsAvailable;
@@ -90,10 +73,8 @@ export function createGoalControlRuntime(deps: {
   const sendTurn = deps.sendTurn;
   const activeInProgressTurn = deps.activeInProgressTurn;
   const findInProgressTurn = deps.findInProgressTurn;
-  const assertGoalSubagentsResolvedForCompletion = deps.assertGoalSubagentsResolvedForCompletion;
   const markGoalSubagentsNeedsResume = deps.markGoalSubagentsNeedsResume;
   const applyGoalLifecycleToSubagents = deps.applyGoalLifecycleToSubagents;
-  const markGoalSubagentsSuperseded = deps.markGoalSubagentsSuperseded;
   const store = {
     currentOpenPondThreadGoal: deps.currentGoal,
     openPondThreadGoalById: deps.goalById,
@@ -137,11 +118,6 @@ export function createGoalControlRuntime(deps: {
     input: OpenPondGoalControlToolInput,
     result: OpenPondGoalControlResult,
   ): Promise<OpenPondGoalControlToolResult> {
-    await assertGoalSubagentsResolvedForCompletion({
-      context,
-      goalId: result.goal.id,
-      action: result.action,
-    });
     const resumedSubagentCount = await markGoalSubagentsNeedsResume({
       context,
       goalId: result.goal.id,
@@ -152,22 +128,12 @@ export function createGoalControlRuntime(deps: {
       goalId: result.goal.id,
       action: result.action,
     });
-    const supersededSubagentCount = await markGoalSubagentsSuperseded({
-      context,
-      action: result.action,
-      previousGoal: normalizeOpenPondGoalForContinuation(result.previousGoal),
-      supersededByGoal: result.goal,
-    });
-    const subagentLifecycle = {
-      ...lifecycleSubagentResult,
-      supersededCount: supersededSubagentCount,
-    };
+    const subagentLifecycle = lifecycleSubagentResult;
     const lifecycleNotes = [
       resumedSubagentCount > 0
-        ? `${resumedSubagentCount} active ${resumedSubagentCount === 1 ? "subagent needs" : "subagents need"} resume.`
-        : null,
-      supersededSubagentCount > 0
-        ? `${supersededSubagentCount} linked ${supersededSubagentCount === 1 ? "subagent was" : "subagents were"} superseded.`
+        ? result.action === "resume"
+          ? `${resumedSubagentCount} ${resumedSubagentCount === 1 ? "subagent was" : "subagents were"} queued to resume.`
+          : `${resumedSubagentCount} active ${resumedSubagentCount === 1 ? "subagent needs" : "subagents need"} resume.`
         : null,
       lifecycleSubagentResult.cancelledCount > 0
         ? `${lifecycleSubagentResult.cancelledCount} linked ${lifecycleSubagentResult.cancelledCount === 1 ? "subagent was" : "subagents were"} cancelled.`
@@ -266,32 +232,20 @@ export function createGoalControlRuntime(deps: {
       parentGoalId: input.parentGoalId,
       limit: 1000,
     });
-    const requiredRuns = runs.filter((run) => run.required);
     const summaries = runs.map(goalSubagentRunSummary);
     return {
       source: "subagent_runs",
       updatedAt: now(),
       totalCount: runs.length,
-      requiredCount: requiredRuns.length,
-      optionalCount: runs.length - requiredRuns.length,
       activeCount: runs.filter(goalSubagentRunActive).length,
-      submittedForReviewCount: runs.filter((run) => run.status === "submitted_for_review").length,
-      needsRevisionCount: runs.filter((run) => run.status === "needs_revision").length,
-      needsUserInputCount: runs.filter((run) => run.status === "needs_user_input").length,
-      acceptedCount: runs.filter(subagentRunAccepted).length,
-      blockingCount: runs.filter(goalSubagentRunBlocking).length,
+      completedCount: runs.filter((run) => run.status === "completed").length,
+      failedCount: runs.filter((run) => run.status === "failed").length,
+      cancelledCount: runs.filter((run) => run.status === "cancelled").length,
+      needsResumeCount: runs.filter((run) => run.status === "needs_resume").length,
       terminalCount: runs.filter(goalSubagentRunTerminal).length,
       cleanupNeededCount: runs.filter(goalSubagentRunCleanupNeeded).length,
       archivedCount: runs.filter(goalSubagentRunArchived).length,
       unresolvedCount: runs.filter((run) => !subagentRunResolvedForGoal(run)).length,
-      requiredActiveCount: requiredRuns.filter(goalSubagentRunActive).length,
-      requiredSubmittedForReviewCount: requiredRuns.filter((run) => run.status === "submitted_for_review").length,
-      requiredNeedsRevisionCount: requiredRuns.filter((run) => run.status === "needs_revision").length,
-      requiredNeedsUserInputCount: requiredRuns.filter((run) => run.status === "needs_user_input").length,
-      requiredAcceptedCount: requiredRuns.filter(subagentRunAccepted).length,
-      requiredBlockingCount: requiredRuns.filter(goalSubagentRunBlocking).length,
-      requiredArchivedCount: requiredRuns.filter(goalSubagentRunArchived).length,
-      requiredUnresolvedCount: requiredRuns.filter((run) => !subagentRunResolvedForGoal(run)).length,
       runs: summaries,
     };
   }
@@ -306,9 +260,7 @@ export function createGoalControlRuntime(deps: {
       childSessionId: run.childSessionId,
       roleId: run.roleId,
       status: run.status,
-      required: run.required,
       objective: run.objective,
-      reviewStatus: run.review?.status ?? null,
       updatedAt: run.updatedAt ?? run.completedAt ?? run.startedAt ?? run.createdAt ?? null,
       cleanupStatus: stringFromRecord(workspaceCleanup ?? cleanup ?? {}, "status"),
       archiveStatus,
@@ -324,32 +276,12 @@ export function createGoalControlRuntime(deps: {
     return run.status === "queued" || run.status === "running" || run.status === "needs_resume";
   }
 
-  function goalSubagentRunBlocking(run: SubagentRun): boolean {
-    if (subagentRunResolvedForGoal(run)) return false;
-    return run.status === "blocked";
-  }
-
   function goalSubagentRunTerminal(run: SubagentRun): boolean {
-    return subagentRunAccepted(run) ||
-      subagentRunDismissed(run) ||
-      run.status === "failed" ||
-      run.status === "failed_with_artifacts" ||
-      run.status === "cancelled" ||
-      run.status === "superseded";
+    return run.status === "completed" || run.status === "failed" || run.status === "cancelled";
   }
 
   function subagentRunResolvedForGoal(run: SubagentRun): boolean {
-    return subagentRunAccepted(run) ||
-      subagentRunDismissed(run) ||
-      run.status === "superseded" ||
-      subagentRunCancelledByParentGoal(run) ||
-      (!run.required && goalSubagentRunTerminal(run));
-  }
-
-  function subagentRunCancelledByParentGoal(run: SubagentRun): boolean {
-    if (run.status !== "cancelled") return false;
-    const lifecycle = recordFromUnknown(run.metadata?.goalLifecycle);
-    return stringFromRecord(lifecycle ?? {}, "action") === "cancelled_by_parent_goal";
+    return goalSubagentRunTerminal(run);
   }
 
   function goalSubagentRunCleanupNeeded(run: SubagentRun): boolean {
@@ -373,7 +305,7 @@ export function createGoalControlRuntime(deps: {
   ): boolean {
     return enableGoalContinuations &&
       (action === "start" || action === "restart" || action === "resume") &&
-      goal.status === "queued";
+      isContinuableOpenPondGoal(goal);
   }
 
   function queueOpenPondGoalContinuation(input: {
@@ -397,7 +329,7 @@ export function createGoalControlRuntime(deps: {
       },
       async () => {
         try {
-          await waitForSessionIdle(input.session.id, GOAL_CONTINUATION_IDLE_WAIT_MS);
+          await waitForSessionIdle(input.session.id);
           const latestGoal = normalizeOpenPondGoalForContinuation(
             await store.currentOpenPondThreadGoal(input.session.id),
           );
@@ -419,6 +351,34 @@ export function createGoalControlRuntime(deps: {
               }),
             );
             return;
+          }
+
+          if (subagentToolsAvailable()) {
+            const activeChildren = await requireSubagentDeps().listRuns({
+              parentSessionId: input.session.id,
+              parentGoalId: latestGoal.id,
+              status: ["queued", "running", "needs_resume"],
+              limit: 1_000,
+            });
+            if (activeChildren.length > 0) {
+              await appendRuntimeEvent(
+                event({
+                  sessionId: input.session.id,
+                  turnId: input.sourceTurnId,
+                  name: "goal.continuation.skipped",
+                  source: "server",
+                  appId: input.session.appId,
+                  status: "completed",
+                  output: "Goal continuation deferred to active child completion.",
+                  data: {
+                    goalId: latestGoal.id,
+                    activeSubagentRunIds: activeChildren.map((run) => run.id),
+                    reason: "active_subagent_completion_will_continue_parent",
+                  },
+                }),
+              );
+              return;
+            }
           }
 
           await appendRuntimeEvent(
@@ -479,12 +439,8 @@ export function createGoalControlRuntime(deps: {
     goalContinuationJobs.set(key, receipt);
   }
 
-  async function waitForSessionIdle(sessionId: string, timeoutMs: number): Promise<void> {
-    const started = Date.now();
+  async function waitForSessionIdle(sessionId: string): Promise<void> {
     while ((await activeInProgressTurn(sessionId)) || (await findInProgressTurn(sessionId))) {
-      if (Date.now() - started >= timeoutMs) {
-        throw new Error("Timed out waiting for the current turn to finish before continuing the goal.");
-      }
       await delay(100);
     }
   }

@@ -20,7 +20,6 @@ import {
   type ModelUsageRecord,
   type RuntimeEvent,
   type ServerStatus,
-  type SubagentRun,
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import { loadOpenPondProfileState, readProfileSkill, runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "@openpond/cloud";
@@ -83,7 +82,6 @@ import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/serve
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
-import { createSubagentLifecycleWatcher } from "./runtime/subagent-lifecycle-watcher.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { readChatAttachmentImageFile } from "./chat-attachments.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
@@ -629,8 +627,6 @@ export async function createOpenPondServer(
     updateSession,
   });
 
-  let notifySubagentLifecycleStateChanged: ((run: SubagentRun) => void) | null = null;
-
   const turnRunner = createTurnRunner({
     attachmentRootDir,
     store,
@@ -721,19 +717,17 @@ export async function createOpenPondServer(
     streamOpenPondHostedChatTurn,
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
-    notifySubagentRunStateChanged: (run) => notifySubagentLifecycleStateChanged?.(run),
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
   const {
     sendTurn,
-    isSessionTurnActive,
     interruptSessionTurn,
+    pauseSessionGoal,
     updateTurnCreatePipeline,
     resolveCreatePipelineApproval,
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
-    cleanupExpiredRetainedSubagentWorkspace,
   } = turnRunner;
   const insightsService = createInsightsService({
     store,
@@ -760,27 +754,6 @@ export async function createOpenPondServer(
     appendRuntimeEvent,
     logger,
   });
-  const subagentLifecycleWatcher = createSubagentLifecycleWatcher({
-    store,
-    queue: workQueues.subagentLifecycle,
-    parentWakeQueue: workQueues.turnFollowUp,
-    loadAppPreferences,
-    appendRuntimeEvent,
-    getSession,
-    sendTurn,
-    interruptSessionTurn,
-    cleanupExpiredRetainedWorkspace: async ({ run, checkedAt, retention }) =>
-      (await cleanupExpiredRetainedSubagentWorkspace(run.id, {
-        checkedAt,
-        retention,
-        reason: `Retained subagent workspace expired at ${retention.expiresAt}.`,
-      })).run,
-    isSessionActive: isSessionTurnActive,
-    isClosing: () => closing,
-    logger,
-  });
-  notifySubagentLifecycleStateChanged = subagentLifecycleWatcher.notifySubagentRunStateChanged;
-
   async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval> {
     const commandApproval = await openPondCommandAccess.resolveApproval(approvalId, payload);
     if (commandApproval) return commandApproval;
@@ -1394,6 +1367,7 @@ export async function createOpenPondServer(
       recordPreflightTurnFailure,
       updateTurnCreatePipeline,
       interruptSessionTurn,
+      pauseSessionGoal,
       compactSession,
       executeWorkspaceTool,
       runSubagentLifecycleAction,
@@ -1409,10 +1383,10 @@ export async function createOpenPondServer(
     webRoot: options.webRoot ?? null,
   });
   actualPort = await listenOpenPondHttpServer({ host, httpServer, logger, port, serverId });
+  await turnRunner.recoverPendingSubagentCompletions();
   insightsBackgroundLoop.start();
   taskMinerBackgroundLoop.start();
   localAgentScheduleLoop.start();
-  subagentLifecycleWatcher.start();
 
   const status: ServerStatus = {
     id: serverId,
@@ -1431,7 +1405,7 @@ export async function createOpenPondServer(
     workQueues,
     codexSessions: codexSessions.values(),
     markClosing: () => { closing = true; },
-    backgroundLoops: [insightsBackgroundLoop, taskMinerBackgroundLoop, localAgentScheduleLoop, subagentLifecycleWatcher],
+    backgroundLoops: [insightsBackgroundLoop, taskMinerBackgroundLoop, localAgentScheduleLoop],
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,

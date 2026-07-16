@@ -2,7 +2,14 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import type { Approval, InsightItem, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import {
+  SubagentRunSchema,
+  type Approval,
+  type InsightItem,
+  type RuntimeEvent,
+  type Session,
+  type Turn,
+} from "@openpond/contracts";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SqliteStore } from "../apps/server/src/store/store";
 import {
   allTestSql as all,
@@ -31,6 +38,28 @@ async function withStoreDir(fn: (storeDir: string) => Promise<void>): Promise<vo
   }
 }
 
+function sqliteBusyError(): Error & { code: string } {
+  return Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" });
+}
+
+class TransientBusySqliteStore extends SqliteStore {
+  static remainingFailures = 0;
+
+  protected override async assertHealthyDatabase(): Promise<void> {
+    if (TransientBusySqliteStore.remainingFailures > 0) {
+      TransientBusySqliteStore.remainingFailures -= 1;
+      throw sqliteBusyError();
+    }
+    return super.assertHealthyDatabase();
+  }
+}
+
+class AlwaysBusySqliteStore extends SqliteStore {
+  protected override async assertHealthyDatabase(): Promise<void> {
+    throw sqliteBusyError();
+  }
+}
+
 describe("SqliteStore hardening", () => {
   test("initializes fresh stores at the current schema version", async () => {
     await withStoreDir(async (storeDir) => {
@@ -39,6 +68,64 @@ describe("SqliteStore hardening", () => {
       await store.close();
 
       expect(await userVersion(path.join(storeDir, "state.sqlite"))).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+    });
+  });
+
+  test("clears replaced subagent transport rows and events during migration", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const store = new SqliteStore(storeDir);
+      await store.upsertSubagentRun(SubagentRunSchema.parse({
+        id: "legacy-subagent-run",
+        parentSessionId: "session-parent",
+        parentGoalId: "goal-parent",
+        roleId: "coding",
+        objective: "Old lifecycle work",
+        createdAt: "2026-07-15T13:00:00.000Z",
+      }));
+      await store.appendRuntimeEvent({
+        id: "legacy-subagent-event",
+        sessionId: "session-parent",
+        turnId: "turn-parent",
+        name: "subagent.progress",
+        timestamp: "2026-07-15T13:00:00.000Z",
+        source: "server",
+        status: "pending",
+        output: "Old lifecycle update",
+      });
+      await store.close();
+
+      const db = openTestDatabase(storePath);
+      await run(
+        db,
+        `INSERT INTO subagent_messages (
+           id, parent_goal_id, from_run_id, to_run_id, to_role, kind, payload, created_at
+         ) VALUES (
+           'legacy-message', 'goal-parent', 'legacy-subagent-run', NULL, NULL, 'status', '{}',
+           '2026-07-15T13:00:01.000Z'
+         )`,
+      );
+      await run(db, "PRAGMA user_version = 17");
+      await close(db);
+
+      const migrated = new SqliteStore(storeDir);
+      await expect(migrated.listSubagentRuns()).resolves.toEqual([]);
+      await migrated.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const counts = await get<{ runs: number; messages: number; events: number }>(
+          migratedDb,
+          `SELECT
+             (SELECT COUNT(*) FROM subagent_runs) AS runs,
+             (SELECT COUNT(*) FROM subagent_messages) AS messages,
+             (SELECT COUNT(*) FROM events WHERE name LIKE 'subagent.%') AS events`,
+        );
+        expect(counts).toEqual({ runs: 0, messages: 0, events: 0 });
+        expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      } finally {
+        await close(migratedDb);
+      }
     });
   });
 
@@ -165,6 +252,52 @@ describe("SqliteStore hardening", () => {
       expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
       const corruptFiles = await readdir(path.join(storeDir, "corrupt"));
       expect(corruptFiles.some((file) => file.includes("quick-check-failed") && file.endsWith(".sqlite"))).toBe(true);
+    });
+  });
+
+  test("retries transient busy health checks without quarantining a healthy database", async () => {
+    await withStoreDir(async (storeDir) => {
+      const initial = new SqliteStore(storeDir);
+      await initial.mutate((data) => {
+        data.sessions.push(session("session-preserved-after-busy"));
+      });
+      await initial.close();
+
+      TransientBusySqliteStore.remainingFailures = 2;
+      const reopened = new TransientBusySqliteStore(storeDir);
+      await expect(reopened.getSession("session-preserved-after-busy")).resolves.toMatchObject({
+        id: "session-preserved-after-busy",
+      });
+      await reopened.close();
+
+      const corruptFiles = await readdir(path.join(storeDir, "corrupt")).catch(() => []);
+      expect(corruptFiles).toEqual([]);
+    });
+  });
+
+  test("preserves database files when transient busy health checks exhaust retries", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initial = new SqliteStore(storeDir);
+      await initial.mutate((data) => {
+        data.sessions.push(session("session-preserved-after-exhausted-busy"));
+      });
+      await initial.close();
+
+      const busy = new AlwaysBusySqliteStore(storeDir);
+      await expect(busy.snapshot()).rejects.toThrow("database is locked");
+
+      const corruptFiles = await readdir(path.join(storeDir, "corrupt")).catch(() => []);
+      expect(corruptFiles).toEqual([]);
+      const db = openTestDatabase(storePath);
+      try {
+        const rows = await all<{ id: string }>(db, "SELECT id FROM sessions WHERE id = ?", [
+          "session-preserved-after-exhausted-busy",
+        ]);
+        expect(rows).toEqual([{ id: "session-preserved-after-exhausted-busy" }]);
+      } finally {
+        await close(db);
+      }
     });
   });
 
@@ -387,6 +520,29 @@ describe("SqliteStore hardening", () => {
       } finally {
         await close(db);
       }
+    });
+  });
+
+  test("returns a committed subagent upsert without joining later queued reads", async () => {
+    await withStoreDir(async (storeDir) => {
+      const store = new SqliteStore(storeDir);
+      const run = SubagentRunSchema.parse({
+        id: "run-finalizing",
+        parentSessionId: "session-parent",
+        parentGoalId: "goal-parent",
+        roleId: "coding",
+        objective: "Submit the completed child handoff",
+        required: true,
+        createdAt: "2026-07-15T13:00:00.000Z",
+      });
+      (store as any).getSubagentRun = async () => new Promise<never>(() => undefined);
+
+      await expect(Promise.race([
+        store.upsertSubagentRun(run),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("upsert joined a later read")), 500)),
+      ])).resolves.toMatchObject({ id: run.id });
+
+      await store.close();
     });
   });
 

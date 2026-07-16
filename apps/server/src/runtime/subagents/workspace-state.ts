@@ -25,7 +25,7 @@ export function subagentCleanupRetainReason(run: SubagentRun, policy: SubagentCl
   const applyResult = recordFromUnknown(handoff?.applyResult);
   const applied = applyResult ? stringFromRecord(applyResult, "status") === "applied" : false;
   if (changed && !applied) return "Changed child workspace has not been applied; retain for inspection.";
-  if (run.status === "failed" || run.status === "failed_with_artifacts") {
+  if (run.status === "failed") {
     return "Failed child workspace retained for inspection.";
   }
   return null;

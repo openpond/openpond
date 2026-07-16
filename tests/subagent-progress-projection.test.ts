@@ -144,6 +144,51 @@ describe("subagent progress projection", () => {
     await runtime.subagentRuntimeDerivedProgress({ run, childSessionId: "session_child" });
     expect(queries.map((query) => query.afterSequence)).toEqual([2_501]);
   });
+
+  test("bounds failed tool output before storing it as the current blocker", () => {
+    const run = subagentRunFixture();
+    const projection = subagentProgressProjectionFromRuntimeEvents({
+      run,
+      state: subagentProgressProjectionStateFromRun(run),
+      events: [runtimeEvent(1, "tool.completed", {
+        action: "unknown_tool",
+        status: "failed",
+        output: "x".repeat(12_000),
+      })],
+      phase: null,
+      latestMeaningfulActivity: null,
+      currentBlocker: null,
+    });
+
+    expect(projection.progress.currentBlocker?.length).toBeLessThanOrEqual(5_000);
+    expect(projection.progress.currentBlocker?.endsWith("...")).toBe(true);
+  });
+
+  test("bounds inline validation commands before persisting progress", () => {
+    const run = subagentRunFixture();
+    const longCommand = `python3 -c '${"x".repeat(3_000)}' # test`;
+    const projection = subagentProgressProjectionFromRuntimeEvents({
+      run,
+      state: subagentProgressProjectionStateFromRun(run),
+      events: [
+        runtimeEvent(1, "tool.completed", {
+          action: "exec_command",
+          status: "completed",
+          args: { command: longCommand },
+          output: "audit test passed",
+          data: { result: { command: longCommand, exitCode: 0, stdout: "audit test passed" } },
+        }),
+      ],
+      phase: null,
+      latestMeaningfulActivity: null,
+      currentBlocker: null,
+    });
+
+    expect(projection.progress.validationAttempts).toHaveLength(1);
+    expect(projection.progress.validationAttempts[0]?.command.length).toBe(2_000);
+    expect(projection.progress.validationAttempts[0]?.command.endsWith("...")).toBe(true);
+    expect(projection.progress.validationAttempts[0]?.status).toBe("passed");
+  });
 });
 
 function subagentRunFixture(): SubagentRun {
@@ -153,11 +198,7 @@ function subagentRunFixture(): SubagentRun {
     childSessionId: "session_child",
     roleId: "test",
     objective: "Prove incremental progress projection",
-    workerBrief: {
-      validationCommands: ["pnpm test tests/progress.test.ts"],
-    },
     progress: {},
-    review: {},
     evidenceRetention: {},
     createdAt: "2026-07-10T00:00:00.000Z",
   });

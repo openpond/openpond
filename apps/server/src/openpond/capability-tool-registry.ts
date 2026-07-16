@@ -5,13 +5,11 @@ import type {
   SubagentPeerMessages,
   SubagentProgress,
   SubagentReport,
-  SubagentReviewState,
   SubagentRunStatus,
   SubagentRoleSettings,
   SubagentToolPolicy,
-  SubagentWorkerBrief,
 } from "@openpond/contracts";
-import { SUBAGENT_ROLE_PRESETS, SubagentWorkerBriefSchema } from "@openpond/contracts";
+import { SUBAGENT_ROLE_PRESETS } from "@openpond/contracts";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,
@@ -74,7 +72,6 @@ export type OpenPondSubagentStartToolInput = {
   roleId: string;
   objective: string;
   context?: string | null;
-  workerBrief?: SubagentWorkerBrief | null;
   required?: boolean | null;
 };
 
@@ -88,9 +85,7 @@ export type OpenPondSubagentToolResult = {
   toolPolicy: SubagentToolPolicy;
   background: boolean;
   peerMessages: SubagentPeerMessages;
-  workerBrief?: SubagentWorkerBrief;
   progress?: SubagentProgress;
-  review?: SubagentReviewState;
   report?: SubagentReport | null;
   nextStep: string;
 };
@@ -115,14 +110,9 @@ export type OpenPondSubagentCancelToolInput = {
   cleanupWorkspace?: boolean | null;
 };
 
-export type OpenPondSubagentReviewToolInput = {
+export type OpenPondSubagentFollowupToolInput = {
   runId: string;
-  decision: "accept" | "needs_revision" | "needs_user_input" | "dismiss";
-  summary?: string | null;
-  issues?: string[] | null;
-  requiredCorrections?: string[] | null;
-  messageChild?: boolean | null;
-  priority?: "normal" | "interrupt" | null;
+  message: string;
 };
 
 export type OpenPondSubagentMessageToolInput = {
@@ -182,9 +172,9 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     context: ModelToolExecutionContext,
     input: OpenPondSubagentCancelToolInput,
   ) => Promise<OpenPondSubagentToolResult>;
-  reviewSubagent?: (
+  followupSubagent?: (
     context: ModelToolExecutionContext,
-    input: OpenPondSubagentReviewToolInput,
+    input: OpenPondSubagentFollowupToolInput,
   ) => Promise<OpenPondSubagentToolResult>;
   sendSubagentMessage?: (
     context: ModelToolExecutionContext,
@@ -234,7 +224,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     {
       name: "openpond_goal_control",
       description:
-        "Start a goal only when the thread has no nonterminal goal, or restart, pause, resume, complete, or stop the current goal. Never use start from a goal continuation; control the supplied goal id instead.",
+        "Start a goal only when the thread has no nonterminal goal, or restart, pause, resume, complete, or stop the current goal. Never use start from a goal continuation; control the supplied goal id instead. Omit targetGoalId when action is start because a new goal has no id yet.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -252,7 +242,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           targetGoalId: {
             type: "string",
             minLength: 1,
-            description: "Goal id to control when the current chat context is not enough. Invalid with action start.",
+            description: "Goal id to control when the current chat context is not enough. Omit this field when action is start.",
           },
           mode: {
             type: "string",
@@ -292,50 +282,12 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           objective: {
             type: "string",
             minLength: 1,
-            description: "Specific child assignment. Keep it scoped enough for one background worker.",
+            description: "Specific child assignment. The child owns its thread and returns one final result.",
           },
           context: {
             type: "string",
             minLength: 1,
             description: "Optional concise context pack or constraints not obvious from the parent chat.",
-          },
-          workerBrief: {
-            type: "object",
-            additionalProperties: false,
-            description:
-              "Structured child execution brief. If omitted or incomplete, OpenPond constructs a valid typed brief before creating the child run.",
-            properties: {
-              plan: {
-                type: "array",
-                maxItems: 50,
-                items: { type: "string", minLength: 1 },
-                description: "Short ordered steps the child should follow.",
-              },
-              targetFiles: {
-                type: "array",
-                maxItems: 200,
-                items: { type: "string", minLength: 1 },
-                description: "Known or suspected files/directories to inspect first.",
-              },
-              acceptanceCriteria: {
-                type: "array",
-                maxItems: 100,
-                items: { type: "string", minLength: 1 },
-                description: "Observable conditions for a reviewable submission.",
-              },
-              validationCommands: {
-                type: "array",
-                maxItems: 100,
-                items: { type: "string", minLength: 1 },
-                description: "Commands the child should run or explain why it cannot run.",
-              },
-              stopConditions: {
-                type: "array",
-                maxItems: 100,
-                items: { type: "string", minLength: 1 },
-                description: "Conditions that should force a blocker or submitted review packet instead of more exploration.",
-              },
-            },
           },
           required: {
             type: "boolean",
@@ -383,7 +335,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_join",
       description:
-        "Inspect a specific child run report. If the child is still running or blocked, this returns its current receipt state instead of waiting indefinitely.",
+        "Wait up to 60 seconds for a specific child and return its final result when available. Call once when you need the result; do not poll or add shell sleeps.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -436,11 +388,11 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
       },
     });
   }
-  if (deps.reviewSubagent) {
+  if (deps.followupSubagent) {
     definitions.push({
-      name: "openpond_subagent_review",
+      name: "openpond_subagent_followup",
       description:
-        "Record a parent/reviewer decision for a child run. Use accept only when the review packet satisfies the brief. Use needs_revision with concrete requiredCorrections to send child corrective steering. Use needs_user_input when the parent cannot decide without the user. Use dismiss only to explicitly acknowledge a blocked, failed, or cancelled child run without accepting it.",
+        "Send a follow-up task to an existing child conversation. If it is idle, start a new turn in that same thread; if it is running, queue the message for its next safe model boundary.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -448,44 +400,20 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           runId: {
             type: "string",
             minLength: 1,
-            description: "Submitted child run id to review.",
+            description: "Existing child run id returned by openpond_subagent_start.",
           },
-          decision: {
-            type: "string",
-            enum: ["accept", "needs_revision", "needs_user_input", "dismiss"],
-            description: "Review decision for the submitted child work.",
-          },
-          summary: {
+          message: {
             type: "string",
             minLength: 1,
-            description: "Concise review summary or acceptance rationale.",
-          },
-          issues: {
-            type: "array",
-            items: { type: "string", minLength: 1 },
-            description: "Specific review issues found in the child submission.",
-          },
-          requiredCorrections: {
-            type: "array",
-            items: { type: "string", minLength: 1 },
-            description: "Concrete corrections the child must make before acceptance.",
-          },
-          messageChild: {
-            type: "boolean",
-            description: "For needs_revision, defaults true and sends correction text to the child mailbox.",
-          },
-          priority: {
-            type: "string",
-            enum: ["normal", "interrupt"],
-            description: "Correction-message priority. Use interrupt when the child should see corrections at the next safe boundary.",
+            description: "The next task or correction for the existing child thread.",
           },
         },
-        required: ["runId", "decision"],
+        required: ["runId", "message"],
       },
       execute: async (context) => {
-        const input = subagentReviewToolInput(context.args);
-        const result = await deps.reviewSubagent!(context, input);
-        return subagentToolResult(context.callId, "openpond_subagent_review", result);
+        const input = subagentFollowupToolInput(context.args);
+        const result = await deps.followupSubagent!(context, input);
+        return subagentToolResult(context.callId, "openpond_subagent_followup", result);
       },
     });
   }
@@ -633,13 +561,11 @@ function subagentStartToolInput(args: Record<string, unknown>): OpenPondSubagent
   const roleId = stringArg(args, "roleId");
   const objective = stringArg(args, "objective");
   const context = optionalStringArg(args, "context");
-  const workerBrief = subagentWorkerBriefArg(args);
   const required = optionalBooleanArg(args, "required");
   return {
     roleId,
     objective,
     ...(context ? { context } : {}),
-    ...(workerBrief ? { workerBrief } : {}),
     ...(required === null ? {} : { required }),
   };
 }
@@ -658,12 +584,6 @@ function subagentRoleCatalogDescription(roles: readonly SubagentRoleSettings[]):
     return `${role.id}: ${purpose} Capabilities: ${role.toolPolicy}, ${role.isolationMode}, ${role.background ? "background" : "foreground"}, ${role.peerMessages} peer messages, model ${model}.`;
   });
   return `Enabled subagent roles: ${catalog.join(" ")}`;
-}
-
-function subagentWorkerBriefArg(args: Record<string, unknown>): SubagentWorkerBrief | null {
-  const value = args.workerBrief;
-  if (value === undefined || value === null || value === "") return null;
-  return SubagentWorkerBriefSchema.parse(value);
 }
 
 function subagentStatusToolInput(args: Record<string, unknown>): OpenPondSubagentStatusToolInput {
@@ -687,19 +607,10 @@ function subagentCancelToolInput(args: Record<string, unknown>): OpenPondSubagen
   };
 }
 
-function subagentReviewToolInput(args: Record<string, unknown>): OpenPondSubagentReviewToolInput {
-  const decision = args.decision;
-  if (decision !== "accept" && decision !== "needs_revision" && decision !== "needs_user_input" && decision !== "dismiss") {
-    throw new Error("decision must be accept, needs_revision, needs_user_input, or dismiss");
-  }
+function subagentFollowupToolInput(args: Record<string, unknown>): OpenPondSubagentFollowupToolInput {
   return {
     runId: stringArg(args, "runId"),
-    decision,
-    summary: optionalStringArg(args, "summary"),
-    issues: optionalStringArrayArg(args, "issues"),
-    requiredCorrections: optionalStringArrayArg(args, "requiredCorrections"),
-    messageChild: optionalBooleanArg(args, "messageChild"),
-    priority: subagentMessagePriorityArg(args),
+    message: stringArg(args, "message"),
   };
 }
 
@@ -737,7 +648,7 @@ function subagentToolResult(
     | "openpond_subagent_start"
     | "openpond_subagent_join"
     | "openpond_subagent_cancel"
-    | "openpond_subagent_review",
+    | "openpond_subagent_followup",
   result: OpenPondSubagentToolResult,
 ): NativeModelToolResult {
   return {
@@ -902,13 +813,4 @@ function optionalBooleanArg(args: Record<string, unknown>, key: string): boolean
   if (value === undefined || value === null) return null;
   if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
   return value;
-}
-
-function optionalStringArrayArg(args: Record<string, unknown>, key: string): string[] | null {
-  const value = args[key];
-  if (value === undefined || value === null) return null;
-  if (!Array.isArray(value)) throw new Error(`${key} must be an array of strings`);
-  return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter((item) => item.length > 0);
 }

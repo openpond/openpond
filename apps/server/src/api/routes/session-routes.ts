@@ -11,6 +11,7 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     recordPreflightTurnFailure,
     updateTurnCreatePipeline,
     interruptSessionTurn,
+    pauseSessionGoal,
     compactSession,
     executeWorkspaceTool,
     runSubagentLifecycleAction,
@@ -79,6 +80,11 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   );
   if (request.method === "POST" && turnInterruptMatch) {
     sendJson(response, 202, await interruptSessionTurn(turnInterruptMatch[1]!));
+    return true;
+  }
+  const goalPauseMatch = /^\/v1\/sessions\/([^/]+)\/goals\/pause$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && goalPauseMatch) {
+    sendJson(response, 200, await pauseSessionGoal(decodeURIComponent(goalPauseMatch[1]!)));
     return true;
   }
   const compactMatch = /^\/v1\/sessions\/([^/]+)\/compact$/.exec(requestUrl.pathname);

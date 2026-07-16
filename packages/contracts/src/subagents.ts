@@ -40,57 +40,13 @@ export const SubagentDelegationModeSchema = z.enum(["manual", "balanced", "proac
 
 export type SubagentDelegationMode = z.infer<typeof SubagentDelegationModeSchema>;
 
-export const SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS = [
-  "(^|/)(package\\.json|bun\\.lockb?|pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock|deno\\.lock)$",
-  "(^|/)(migrations?|schema|auth|security|permissions?|billing|payments?)(/|$)",
-  "(^|/)packages/contracts(/|$)",
-] as const;
-
-export const SubagentReviewRoutingPolicySchema = z.object({
-  broadEditSurfaceFileThreshold: z.number().int().min(1).max(500).default(8),
-  highRiskPathPatterns: z
-    .array(z.string().trim().min(1).max(500))
-    .max(100)
-    .default(() => [...SUBAGENT_DEFAULT_HIGH_RISK_PATH_PATTERNS]),
-}).superRefine((policy, ctx) => {
-  for (const [index, pattern] of policy.highRiskPathPatterns.entries()) {
-    try {
-      new RegExp(pattern);
-    } catch {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["highRiskPathPatterns", index],
-        message: "High-risk path pattern must be a valid regular expression.",
-      });
-    }
-  }
-});
-
-export type SubagentReviewRoutingPolicy = z.infer<typeof SubagentReviewRoutingPolicySchema>;
-
-export const SubagentExplorationSteeringPolicySchema = z.object({
-  enabled: z.boolean().default(true),
-  repeatedSearchThreshold: z.number().int().min(2).max(20).default(2),
-  repeatedReadThreshold: z.number().int().min(2).max(20).default(2),
-  repeatedCommandThreshold: z.number().int().min(2).max(20).default(2),
-});
-
-export type SubagentExplorationSteeringPolicy = z.infer<typeof SubagentExplorationSteeringPolicySchema>;
-
 export const SubagentRunStatusSchema = z.enum([
   "queued",
   "running",
-  "blocked",
-  "submitted_for_review",
-  "needs_revision",
-  "needs_user_input",
-  "accepted",
   "completed",
-  "failed_with_artifacts",
   "failed",
   "cancelled",
   "needs_resume",
-  "superseded",
 ]);
 
 export type SubagentRunStatus = z.infer<typeof SubagentRunStatusSchema>;
@@ -98,21 +54,14 @@ export type SubagentRunStatus = z.infer<typeof SubagentRunStatusSchema>;
 export const SUBAGENT_RUNTIME_EVENT_NAMES = [
   "subagent.started",
   "subagent.reported",
-  "subagent.submitted",
-  "subagent.accepted",
-  "subagent.needs_revision",
   "subagent.completed",
   "subagent.progress",
   "subagent.failed",
-  "subagent.blocked",
-  "subagent.stale",
   "subagent.cancelled",
   "subagent.cleanup",
   "subagent.workspace_retained",
   "subagent.workspace_retention_expiring",
   "subagent.archived",
-  "subagent.superseded",
-  "subagent.dismissed",
   "subagent.message",
 ] as const;
 
@@ -178,15 +127,9 @@ export const SubagentRoleSettingsSchema = z.object({
   modelRef: ChatModelRefSchema.nullable().default(null),
   isolationMode: SubagentIsolationModeSchema.default("none"),
   maxConcurrentRuns: z.number().int().min(1).max(16).default(1),
-  maxTurns: z.number().int().min(1).max(100).nullable().default(null),
-  maxTokens: z.number().int().min(1).max(10_000_000).nullable().default(null),
   toolPolicy: SubagentToolPolicySchema.default("read_only"),
   background: z.boolean().default(true),
   peerMessages: SubagentPeerMessagesSchema.default("goal_scoped"),
-  reviewRouting: SubagentReviewRoutingPolicySchema.default(() => SubagentReviewRoutingPolicySchema.parse({})),
-  explorationSteering: SubagentExplorationSteeringPolicySchema.default(() =>
-    SubagentExplorationSteeringPolicySchema.parse({})
-  ),
 });
 
 export type SubagentRoleSettings = z.infer<typeof SubagentRoleSettingsSchema>;
@@ -204,8 +147,6 @@ export const SubagentPreferencesSchema = z.object({
   maxConcurrentRuns: z.number().int().min(1).max(32).default(4),
   maxConcurrentRunsPerProvider: z.number().int().min(1).max(32).nullable().default(2),
   maxConcurrentRunsPerWorkspaceTarget: z.number().int().min(1).max(32).nullable().default(1),
-  maxTokens: z.number().int().min(1).max(50_000_000).nullable().default(null),
-  heartbeatIntervalSeconds: z.number().int().min(10).max(3600).default(60),
 }).transform((preferences) => ({
   ...preferences,
   roles: normalizeSubagentRoleSettings(preferences.roles),
@@ -235,23 +176,7 @@ export const SubagentEvidenceRetentionPolicySchema = z.object({
 
 export type SubagentEvidenceRetentionPolicy = z.infer<typeof SubagentEvidenceRetentionPolicySchema>;
 
-export const SubagentWorkerBriefSchema = z.object({
-  plan: z.array(z.string().trim().min(1).max(2000)).max(50).default([]),
-  targetFiles: z.array(z.string().trim().min(1).max(1000)).max(200).default([]),
-  acceptanceCriteria: z.array(z.string().trim().min(1).max(2000)).max(100).default([]),
-  validationCommands: z.array(z.string().trim().min(1).max(2000)).max(100).default([]),
-  stopConditions: z.array(z.string().trim().min(1).max(2000)).max(100).default([]),
-}).default(() => ({
-  plan: [],
-  targetFiles: [],
-  acceptanceCriteria: [],
-  validationCommands: [],
-  stopConditions: [],
-}));
-
-export type SubagentWorkerBrief = z.infer<typeof SubagentWorkerBriefSchema>;
-
-export const SubagentProgressPhaseSchema = z.enum(["orient", "edit", "validate", "report", "submitted"]);
+export const SubagentProgressPhaseSchema = z.enum(["orient", "edit", "validate", "report"]);
 
 export type SubagentProgressPhase = z.infer<typeof SubagentProgressPhaseSchema>;
 
@@ -265,104 +190,6 @@ export const SubagentValidationAttemptSchema = z.object({
 });
 
 export type SubagentValidationAttempt = z.infer<typeof SubagentValidationAttemptSchema>;
-
-export const SubagentReviewPacketQualityEvidenceSchema = z.object({
-  finalSummaryPresent: z.boolean().default(false),
-  finalSummaryLength: z.number().int().min(0).default(0),
-  requestedValidationCommandCount: z.number().int().min(0).default(0),
-  validationAttemptCount: z.number().int().min(0).default(0),
-  failedValidationCount: z.number().int().min(0).default(0),
-  testsRunCount: z.number().int().min(0).default(0),
-  changedFileCount: z.number().int().min(0).default(0),
-  patchRefPresent: z.boolean().default(false),
-  diffRefPresent: z.boolean().default(false),
-  artifactCount: z.number().int().min(0).default(0),
-  findingCount: z.number().int().min(0).default(0),
-  blockerCount: z.number().int().min(0).default(0),
-  unvalidatedWorkspaceChanges: z.boolean().default(false),
-}).default(() => ({
-  finalSummaryPresent: false,
-  finalSummaryLength: 0,
-  requestedValidationCommandCount: 0,
-  validationAttemptCount: 0,
-  failedValidationCount: 0,
-  testsRunCount: 0,
-  changedFileCount: 0,
-  patchRefPresent: false,
-  diffRefPresent: false,
-  artifactCount: 0,
-  findingCount: 0,
-  blockerCount: 0,
-  unvalidatedWorkspaceChanges: false,
-}));
-
-export type SubagentReviewPacketQualityEvidence = z.infer<typeof SubagentReviewPacketQualityEvidenceSchema>;
-
-export const SubagentReviewPacketQualitySchema = z.object({
-  status: z.enum(["reviewable", "weak", "incomplete"]).default("reviewable"),
-  issues: z.array(z.string().trim().min(1).max(5000)).max(100).default([]),
-  warnings: z.array(z.string().trim().min(1).max(5000)).max(100).default([]),
-  evidence: SubagentReviewPacketQualityEvidenceSchema,
-}).default(() => ({
-  status: "reviewable" as const,
-  issues: [],
-  warnings: [],
-  evidence: {
-    finalSummaryPresent: false,
-    finalSummaryLength: 0,
-    requestedValidationCommandCount: 0,
-    validationAttemptCount: 0,
-    failedValidationCount: 0,
-    testsRunCount: 0,
-    changedFileCount: 0,
-    patchRefPresent: false,
-    diffRefPresent: false,
-    artifactCount: 0,
-    findingCount: 0,
-    blockerCount: 0,
-    unvalidatedWorkspaceChanges: false,
-  },
-}));
-
-export type SubagentReviewPacketQuality = z.infer<typeof SubagentReviewPacketQualitySchema>;
-
-export const SubagentReviewRoutingEvidenceSchema = z.object({
-  packetQualityStatus: z.enum(["reviewable", "weak", "incomplete"]).default("reviewable"),
-  confidence: z.enum(["low", "medium", "high"]).nullable().default(null),
-  changedFileCount: z.number().int().min(0).default(0),
-  highRiskFileCount: z.number().int().min(0).default(0),
-  validationAttemptCount: z.number().int().min(0).default(0),
-  failedValidationCount: z.number().int().min(0).default(0),
-  missingRequestedValidation: z.boolean().default(false),
-  providerFailureAfterChanges: z.boolean().default(false),
-  userRequestedIndependentReview: z.boolean().default(false),
-}).default(() => ({
-  packetQualityStatus: "reviewable" as const,
-  confidence: null,
-  changedFileCount: 0,
-  highRiskFileCount: 0,
-  validationAttemptCount: 0,
-  failedValidationCount: 0,
-  missingRequestedValidation: false,
-  providerFailureAfterChanges: false,
-  userRequestedIndependentReview: false,
-}));
-
-export type SubagentReviewRoutingEvidence = z.infer<typeof SubagentReviewRoutingEvidenceSchema>;
-
-export const SubagentReviewRoutingReasonSchema = z.enum([
-  "packet_quality_incomplete",
-  "packet_quality_weak",
-  "low_confidence",
-  "validation_failed",
-  "validation_missing",
-  "broad_edit_surface",
-  "high_risk_files",
-  "provider_failure_after_changes",
-  "user_requested_independent_review",
-]);
-
-export type SubagentReviewRoutingReason = z.infer<typeof SubagentReviewRoutingReasonSchema>;
 
 export const SubagentProgressSchema = z.object({
   phase: SubagentProgressPhaseSchema.default("orient"),
@@ -394,73 +221,6 @@ export const SubagentProgressSchema = z.object({
 
 export type SubagentProgress = z.infer<typeof SubagentProgressSchema>;
 
-export const SubagentReviewStateSchema = z.object({
-  status: z.enum([
-    "pending",
-    "submitted_for_review",
-    "needs_revision",
-    "accepted",
-    "needs_user_input",
-    "failed_with_artifacts",
-    "dismissed",
-  ]).default("pending"),
-  submittedAt: z.string().nullable().default(null),
-  decidedAt: z.string().nullable().default(null),
-  reviewerSessionId: z.string().trim().min(1).max(200).nullable().default(null),
-  summary: z.string().trim().max(20_000).nullable().default(null),
-  issues: z.array(z.string().trim().min(1).max(5000)).max(200).default([]),
-  requiredCorrections: z.array(z.string().trim().min(1).max(5000)).max(200).default([]),
-  humanReviewRecommended: z.boolean().default(false),
-  independentReviewRecommended: z.boolean().default(false),
-  reviewerRoutingReasons: z.array(SubagentReviewRoutingReasonSchema).max(50).default([]),
-  reviewerRoutingEvidence: SubagentReviewRoutingEvidenceSchema,
-  packetQuality: SubagentReviewPacketQualitySchema,
-}).default(() => ({
-  status: "pending" as const,
-  submittedAt: null,
-  decidedAt: null,
-  reviewerSessionId: null,
-  summary: null,
-  issues: [],
-  requiredCorrections: [],
-  humanReviewRecommended: false,
-  independentReviewRecommended: false,
-  reviewerRoutingReasons: [],
-  reviewerRoutingEvidence: {
-    packetQualityStatus: "reviewable" as const,
-    confidence: null,
-    changedFileCount: 0,
-    highRiskFileCount: 0,
-    validationAttemptCount: 0,
-    failedValidationCount: 0,
-    missingRequestedValidation: false,
-    providerFailureAfterChanges: false,
-    userRequestedIndependentReview: false,
-  },
-  packetQuality: {
-    status: "reviewable" as const,
-    issues: [],
-    warnings: [],
-    evidence: {
-      finalSummaryPresent: false,
-      finalSummaryLength: 0,
-      requestedValidationCommandCount: 0,
-      validationAttemptCount: 0,
-      failedValidationCount: 0,
-      testsRunCount: 0,
-      changedFileCount: 0,
-      patchRefPresent: false,
-      diffRefPresent: false,
-      artifactCount: 0,
-      findingCount: 0,
-      blockerCount: 0,
-      unvalidatedWorkspaceChanges: false,
-    },
-  },
-}));
-
-export type SubagentReviewState = z.infer<typeof SubagentReviewStateSchema>;
-
 export const SubagentReportSchema = z.object({
   summary: z.string().trim().max(20_000).default(""),
   findings: z.array(z.string().trim().min(1).max(5000)).max(200).default([]),
@@ -489,10 +249,7 @@ export const SubagentRunSchema = z.object({
   background: z.boolean().default(true),
   peerMessages: SubagentPeerMessagesSchema.default("goal_scoped"),
   status: SubagentRunStatusSchema.default("queued"),
-  required: z.boolean().default(true),
-  workerBrief: SubagentWorkerBriefSchema,
   progress: SubagentProgressSchema,
-  review: SubagentReviewStateSchema,
   evidenceRetention: SubagentEvidenceRetentionPolicySchema,
   createdAt: z.string(),
   startedAt: z.string().nullable().default(null),

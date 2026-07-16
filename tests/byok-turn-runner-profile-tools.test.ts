@@ -1170,7 +1170,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
       },
       threadGoal: {
         id: goalId,
-        status: "queued",
+        status: "running",
         objective: "Implement the lifecycle watcher.",
       },
     });
@@ -1240,7 +1240,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect((completed?.data as any)?.result).toMatchObject({
       goalId: "goal_1",
       action: "restart",
-      status: "queued",
+      status: "running",
       objective: "Ship the goal-control tool.",
       mode: "local",
     });
@@ -1250,7 +1250,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect(control?.output).toBe("OpenPond goal restarted.");
     expect((control?.data as any)?.goal).toMatchObject({
       id: "goal_1",
-      status: "queued",
+      status: "running",
       previousStatus: "blocked",
       controlAction: "restart",
       timeUsedSeconds: 20,
@@ -1265,9 +1265,64 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     ).at(-1);
     expect((latestThreadGoal?.data as any)?.goal).toMatchObject({
       id: "goal_1",
-      status: "queued",
+      status: "running",
       objective: "Ship the goal-control tool.",
       controlAction: "restart",
+    });
+  });
+
+  test("pauses an active goal from the composer even when no parent turn is running", async () => {
+    const harness = createNativeGoalControlHarness({
+      sessionOverrides: {
+        workspaceKind: "local_project",
+        cwd: "/tmp/openpond-goal-workspace",
+      },
+      initialEvents: [
+        {
+          id: "goal_running_event",
+          sessionId: "session_1",
+          turnId: "turn_prior",
+          name: "diagnostic",
+          timestamp: "2026-07-03T09:59:00.000Z",
+          source: "provider",
+          status: "completed",
+          output: "Pause this goal safely.",
+          data: {
+            kind: "thread_goal",
+            provider: "openpond",
+            goal: {
+              id: "goal_pause_from_composer",
+              provider: "openpond",
+              objective: "Pause this goal safely.",
+              status: "running",
+              mode: "local",
+              reason: "Goal is active.",
+              controlAction: "start",
+              previousStatus: null,
+              source: "model_tool",
+              createdAt: "2026-07-03T09:59:00.000Z",
+              updatedAt: "2026-07-03T09:59:00.000Z",
+            },
+          },
+        },
+      ],
+    });
+
+    const result = await harness.runner.pauseSessionGoal("session_1");
+
+    expect(result).toMatchObject({
+      goalId: "goal_pause_from_composer",
+      action: "pause",
+      status: "paused",
+    });
+    const latestGoal = harness.events.filter(
+      (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
+    ).at(-1);
+    expect((latestGoal?.data as any)?.goal).toMatchObject({
+      id: "goal_pause_from_composer",
+      status: "paused",
+      controlAction: "pause",
+      previousStatus: "running",
     });
   });
 
