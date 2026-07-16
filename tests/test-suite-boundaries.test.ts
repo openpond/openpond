@@ -40,6 +40,9 @@ describe("test suite boundaries", () => {
     expect(packageJson.scripts["verify:quick"]).toContain("run-tests.ts unit");
     expect(packageJson.scripts["verify:push"]).toBe("tsx scripts/verify-push.ts");
     expect(packageJson.scripts.prepare).toBe("tsx scripts/install-git-hooks.ts");
+    expect(packageJson.scripts["cli:build"]).toBe(
+      "pnpm run build:web && pnpm --dir apps/cli run build",
+    );
     expect(prePushHook).toContain("pnpm run verify:quick");
     expect(prePushHook).not.toContain("pnpm run verify:push");
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_");

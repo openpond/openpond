@@ -16,7 +16,7 @@ describe("CLI headless chat", () => {
     if (process.env.OPENPOND_TEST_REUSE_BUILD === "1") return;
     const build = await runProcessCommand(pnpmBinary, ["run", "cli:build"], {
       cwd: REPO_ROOT,
-      timeoutMs: 30_000,
+      timeoutMs: 120_000,
     });
     if (build.code !== 0) {
       throw new Error(build.stderr || build.stdout || "CLI build failed");

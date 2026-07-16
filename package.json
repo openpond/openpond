@@ -79,7 +79,7 @@
     "cli:dev": "pnpm --dir apps/cli run dev",
     "cli:test": "vitest run apps/cli/test",
     "cli:typecheck": "pnpm --dir apps/cli run typecheck",
-    "cli:build": "pnpm --dir apps/cli run build",
+    "cli:build": "pnpm run build:web && pnpm --dir apps/cli run build",
     "cli:pack:dry-run": "npm pack ./apps/cli --dry-run",
     "agent-sdk:build": "pnpm --dir packages/agent-sdk run build",
     "agent-sdk:typecheck": "pnpm --dir packages/agent-sdk run typecheck",
