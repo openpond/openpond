@@ -2,7 +2,7 @@
   <h2>OpenPond Harness</h2>
 </div>
 
-OpenPond Harness is an open-source, mutable agent harness designed to improve alongside your work.
+OpenPond Harness is an open-source, mutable agent harness designed to continuously improve alongside your work.
 
 ```mermaid
 flowchart LR
