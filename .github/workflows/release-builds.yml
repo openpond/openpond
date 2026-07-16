@@ -179,7 +179,7 @@ jobs:
 
       - name: Verify stable source version
         if: steps.release.outputs.channel == 'stable' && steps.release.outputs.should_release == 'true'
-        run: pnpm run release:version:check -- --version "${{ steps.release.outputs.version }}"
+        run: pnpm run release:version:check --version "${{ steps.release.outputs.version }}"
 
   ci_gate:
     name: Require green CI
@@ -320,7 +320,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-smoke
-          xvfb-run -a pnpm run smoke:desktop:dev -- --skip-chat --json release-smoke/dev-render-commits.json
+          xvfb-run -a pnpm run smoke:desktop:dev --skip-chat --json release-smoke/dev-render-commits.json
 
       - name: Smoke packaged desktop
         shell: bash
@@ -329,9 +329,9 @@ jobs:
           mkdir -p release-smoke
           report_path="release-smoke/smoke-${{ matrix.name }}.json"
           if [[ "${RUNNER_OS}" == "Linux" ]]; then
-            xvfb-run -a pnpm run smoke:desktop:packaged -- --json "${report_path}"
+            xvfb-run -a pnpm run smoke:desktop:packaged --json "${report_path}"
           else
-            pnpm run smoke:desktop:packaged -- --json "${report_path}"
+            pnpm run smoke:desktop:packaged --json "${report_path}"
           fi
 
       - name: Upload packaged smoke diagnostics
@@ -448,13 +448,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Validate packaged smoke reports
-        run: pnpm run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts
+        run: pnpm run smoke:desktop:packaged:validate --dir release-smoke-artifacts
 
       - name: Generate SBOM
         run: pnpm run release:sbom
 
       - name: Generate release inventory
-        run: pnpm run release:inventory -- --release-assets release-assets --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
+        run: pnpm run release:inventory --release-assets release-assets --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
       - name: Generate checksums
         run: |

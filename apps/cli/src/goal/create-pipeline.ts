@@ -168,10 +168,10 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
       },
     ],
     checks: [
-      { name: "inspect", command: "pnpm agent:inspect -- --json", required: true },
+      { name: "inspect", command: "pnpm agent:inspect --json", required: true },
       { name: "build", command: "pnpm agent:build", required: true },
-      { name: "validate", command: "pnpm agent:validate -- --json", required: true },
-      { name: "eval", command: "pnpm agent:eval -- --json", required: true },
+      { name: "validate", command: "pnpm agent:validate --json", required: true },
+      { name: "eval", command: "pnpm agent:eval --json", required: true },
     ],
     approvalId,
     approvedAt: null,

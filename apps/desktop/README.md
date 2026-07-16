@@ -31,7 +31,7 @@ pnpm package:mac
 ## Smoke and diagnostics
 
 ```bash
-pnpm smoke:desktop:dev -- --skip-chat
+pnpm smoke:desktop:dev --skip-chat
 pnpm smoke:desktop:packaged
 ```
 

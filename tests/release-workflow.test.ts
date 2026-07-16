@@ -40,7 +40,7 @@ describe("release workflow", () => {
     expect(workflow).toContain("name: Require green CI");
     expect(workflow).toContain("name: Build release source artifacts once");
     expect(workflow).toContain("name: Verify stable source version");
-    expect(workflow).toContain("run: pnpm run release:version:check -- --version");
+    expect(workflow).toContain("run: pnpm run release:version:check --version");
     expect(workflow.indexOf("name: Verify stable source version")).toBeLessThan(
       workflow.indexOf("name: Require green CI"),
     );
@@ -76,15 +76,16 @@ describe("release workflow", () => {
     expect(workflow).toContain("dev-render-commits.json");
     expect(workflow).toContain("mkdir -p release-smoke");
     expect(workflow).toContain('report_path="release-smoke/smoke-${{ matrix.name }}.json"');
-    expect(workflow).toContain('xvfb-run -a pnpm run smoke:desktop:packaged -- --json "${report_path}"');
-    expect(workflow).toContain('pnpm run smoke:desktop:packaged -- --json "${report_path}"');
+    expect(workflow).toContain('xvfb-run -a pnpm run smoke:desktop:packaged --json "${report_path}"');
+    expect(workflow).toContain('pnpm run smoke:desktop:packaged --json "${report_path}"');
     expect(workflow).toContain("name: packaged-smoke-${{ matrix.name }}");
     expect(workflow).toContain("if: always()");
     expect(workflow).toContain("path: release-smoke/**");
     expect(workflow).toContain("pattern: packaged-smoke-*");
     expect(workflow).toContain("path: release-smoke-artifacts");
     expect(workflow).toContain("name: Validate packaged smoke reports");
-    expect(workflow).toContain("pnpm run smoke:desktop:packaged:validate -- --dir release-smoke-artifacts");
+    expect(workflow).toContain("pnpm run smoke:desktop:packaged:validate --dir release-smoke-artifacts");
+    expect(workflow).not.toMatch(/pnpm run [^\n]* -- --/);
     expect(workflow).not.toContain("name: Build and verify native CLI archive");
     expect(workflow).not.toContain("cli:release:build");
     expect(workflow).not.toContain("--archive");

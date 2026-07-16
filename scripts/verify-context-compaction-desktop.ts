@@ -894,7 +894,7 @@ async function writeCommandReceipt(
     [
       `generatedAt=${new Date().toISOString()}`,
       `cwd=${ROOT}`,
-      `command=pnpm run verify:desktop:compaction -- --provider ${options.provider} --artifacts-dir ${options.artifactsDir}`,
+      `command=pnpm run verify:desktop:compaction --provider ${options.provider} --artifacts-dir ${options.artifactsDir}`,
       `targets=${targets.join(",")}`,
       `requires=OPENPOND_APP_LIVE_DESKTOP_COMPACTION=1`,
       targets.includes("openpond") ? "requires=OPENPOND_APP_LIVE_OPENPOND=1" : null,
