@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OpenPond Harness</h1>
-  <p><strong>The open-source toolkit to build your own AGI harness.</strong></p>
+  <p><strong>Toolkit to build your own AGI harness.</strong></p>
   <p>Agent Builder · Model Trainer · Mutable Harness</p>
   <p>
     <a href="https://github.com/openpond/openpond/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/openpond/openpond/actions/workflows/ci.yml/badge.svg" /></a>
@@ -10,34 +10,33 @@
 
 ## Goal
 
-The goal is for OpenPond Harness to become a mutable, continuously improving system you can tweak to your usecase wheather that be in a startup, enterprise, personal project, or OSS project.
+OpenPond Harness is an open-source, mutable agent harness designed to improve alongside the work you use it for—whether in a startup, an enterprise, a personal project, or an open-source project.
 
-We do this via an AI assisted pipeline, baked into our harness.
+An AI-assisted pipeline turns repeated work, conversations, corrections, and failures into opportunities to improve the system. It surfaces recurring patterns, helps define evals, and recommends the right kind of change—including training approaches such as SFT or RL when a model update is the best fit.
 
-AI Assisted surfacing of repeated work/conversations & suggesting training algorithms and models that fit your use case. (SFT, RL etc.)
-
-The model has two outputs unique to our harness - agents and the harness itself. The model can modify specific portions of the harness with an extension, and also create a specific "Agent" ....
+OpenPond can improve both the agents that perform your work and the harness that runs them. It does this through Agents, Skills, trained Models, and Extensions that customize specific parts of the harness.
 
 ### Continuous Improvement Loop
 
 ```mermaid
 flowchart LR
     S["Signals"] --> E["Evals"]
-    E --> R["Choose the target"]
-    R --> X["Deterministic Extension code"]
-    R --> M["Trained model"]
-    R --> A["Agent change"]
-    R --> K["Skill change"]
-    X --> V["Evaluate candidate"]
-    M --> V
-    A --> V
+    E --> R["Choose what to improve"]
+    R --> A["Agent candidate"]
+    R --> K["Skill candidate"]
+    R --> M["Model candidate"]
+    R --> X["Extension candidate"]
+    A --> V["Test in Lab"]
     K --> V
+    M --> V
+    X --> V
     V --> P["Promote or reject"]
-    P --> E
+    P --> S
 ```
 
-- Signals become Evals, then OpenPond chooses the part of the system that needs to change.
-- Every change becomes a candidate that gets tested in Lab before it is promoted or rejected, then the results feed back into Evals.
+- Signals—such as repeated tasks, corrections, and failures—become evals that define what better performance looks like.
+- OpenPond uses those evals to choose the smallest useful target: an Agent, Skill, Model, or Extension.
+- It tests each candidate in Lab before promoting or rejecting it. The results become new signals for the next improvement cycle.
 
 [Docs](docs/public/README.md)
 
