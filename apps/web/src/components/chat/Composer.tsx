@@ -1,4 +1,14 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type {
   ChatAttachment,
   ChatProvider,
@@ -60,10 +70,7 @@ import {
   type ComposerProjectTargetState,
 } from "./ComposerControls";
 import { ComposerGoalStrip } from "./ComposerGoalStrip";
-import {
-  ComposerCreateImproveStrip,
-  type ComposerCreateImproveRuntime,
-} from "./ComposerCreateImproveStrip";
+import type { ComposerCreateImproveRuntime } from "./ComposerCreateImproveStrip";
 import { ComposerSteerQueue } from "./ComposerSteerQueue";
 import {
   composerSteerDraftsForScope,
@@ -93,6 +100,12 @@ import {
   readComposerAttachmentPayload,
 } from "./ComposerAttachments";
 import { useComposerAttachments } from "./useComposerAttachments";
+
+const ComposerCreateImproveStrip = lazy(() =>
+  import("./ComposerCreateImproveStrip").then((module) => ({
+    default: module.ComposerCreateImproveStrip,
+  })),
+);
 
 export type {
   ComposerProjectTargetOption,
@@ -1343,9 +1356,11 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {createImproveRuntime && (
-        <ComposerCreateImproveStrip runtime={createImproveRuntime} />
-      )}
+      {createImproveRuntime ? (
+        <Suspense fallback={null}>
+          <ComposerCreateImproveStrip runtime={createImproveRuntime} />
+        </Suspense>
+      ) : null}
       <ComposerSteerQueue
         drafts={steerDrafts}
         editDraftValue={editSteerDraftValue}

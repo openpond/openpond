@@ -165,27 +165,17 @@
   padding: 8px 0 56px;
 }
 
-.labs-resource-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0 4px;
-}
-
 .labs-resource-actions {
   display: flex;
   justify-content: flex-end;
   padding: 12px 0 4px;
 }
 
-.labs-resource-heading h1,
 .labs-dataset-detail-heading h1 {
   margin: 0;
   font-size: 20px;
 }
 
-.labs-resource-heading p,
 .labs-dataset-detail-heading p {
   max-width: 760px;
   margin: 4px 0 0;
@@ -611,10 +601,6 @@
 .labs-pagination button:disabled {
   opacity: 0.42;
   cursor: default;
-}
-
-.labs-profile-tab {
-  min-height: 100%;
 }
 
 .labs-suggestions-page {
@@ -1535,19 +1521,8 @@
   min-width: 720px;
 }
 
-.labs-model-data-table,
 .labs-model-eval-table {
   min-width: 680px;
-}
-
-.labs-model-data-table td:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.labs-model-data-table td:first-child code {
-  color: var(--muted);
-  font-size: 10px;
 }
 
 .labs-training-error {
@@ -1594,50 +1569,6 @@
   margin-top: 14px;
 }
 
-.labs-candidate-diff-stat {
-  margin: 0;
-  padding: 10px 12px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-soft);
-  color: var(--muted-strong);
-  font: 12px/1.5 monospace;
-  white-space: pre-wrap;
-}
-
-.labs-candidate-paths {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.labs-candidate-paths code {
-  display: block;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.labs-pull-request-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.labs-pull-request-row a {
-  color: var(--text);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 .labs-models-table {
   min-width: 820px;
 }
@@ -1650,65 +1581,6 @@
 .labs-models-table th:nth-child(2),
 .labs-models-table td:nth-child(2) {
   width: 190px;
-}
-
-.labs-linked-datasets {
-  display: grid;
-  gap: 8px;
-}
-
-.labs-linked-datasets > button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  padding: 11px 12px;
-  color: var(--text);
-  text-align: left;
-}
-
-.labs-linked-datasets > button:hover {
-  background: var(--panel-soft);
-}
-
-.labs-linked-datasets > button > span:first-child {
-  display: grid;
-  gap: 2px;
-}
-
-.labs-linked-datasets small,
-.labs-linked-datasets > button > span:last-child {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.labs-run-filter {
-  display: inline-flex;
-  gap: 3px;
-  margin-bottom: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-soft);
-  padding: 3px;
-}
-
-.labs-run-filter button {
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  padding: 6px 12px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.labs-run-filter button.active {
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 0 0 1px var(--border);
 }
 
 .labs-model-versions-table {

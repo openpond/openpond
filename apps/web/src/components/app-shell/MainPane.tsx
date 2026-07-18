@@ -1,4 +1,5 @@
 import {
+  lazy,
   Suspense,
   useEffect,
   useCallback,
@@ -62,11 +63,6 @@ import type { RightPanelMode, ShowAppToast } from "../../app/app-state";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { normalizeChatFilePath } from "../../lib/chat-file-links";
 import {
-  buildLabAgentCreateImproveRun,
-  buildLabAgentImproveRun,
-  continueLabAgentRunFromTaskset,
-} from "../../lib/create-pipeline-request";
-import {
   buildChatTimelineRows,
   shouldShowThinkingIndicator,
 } from "../../lib/chat-timeline-rows";
@@ -88,8 +84,6 @@ import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
-import { TrainingDraftPanel } from "../training/TrainingDraftPanel";
-import { TrainingCreationPanel, TrainingStatusReceipt } from "../training/TrainingCreationPanel";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/TrainingView";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
@@ -127,6 +121,7 @@ import {
   userMessageNavigationState,
   type UserMessageNavigationState,
 } from "./main-pane-helpers";
+
 import {
   AppsView,
   BrowserSidebar,
@@ -139,6 +134,22 @@ import {
   CommunityView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
+
+const TrainingDraftPanel = lazy(() =>
+  import("../training/TrainingDraftPanel").then((module) => ({
+    default: module.TrainingDraftPanel,
+  })),
+);
+const TrainingCreationPanel = lazy(() =>
+  import("../training/TrainingCreationPanel").then((module) => ({
+    default: module.TrainingCreationPanel,
+  })),
+);
+const TrainingStatusReceipt = lazy(() =>
+  import("../training/TrainingCreationPanel").then((module) => ({
+    default: module.TrainingStatusReceipt,
+  })),
+);
 
 type MainPaneProps = {
   view: AppView;
@@ -554,6 +565,7 @@ export function MainPane({
       bootstrap.providers,
     );
     if (!modelRef) throw new Error("Choose a model before changing an Agent.");
+    const createImproveRequestPromise = import("../../lib/create-pipeline-request");
     const session = await api.createSession(connection, {
       provider: modelRef.providerId,
       modelRef,
@@ -570,6 +582,11 @@ export function MainPane({
     const authoringRun = input.authoringRunId
       ? await api.getCreateImproveRun(connection, input.authoringRunId)
       : null;
+    const {
+      buildLabAgentCreateImproveRun,
+      buildLabAgentImproveRun,
+      continueLabAgentRunFromTaskset,
+    } = await createImproveRequestPromise;
     const run = authoringRun
       ? continueLabAgentRunFromTaskset({
           authoringRun,
@@ -1551,14 +1568,16 @@ export function MainPane({
     />
   ) : null;
   const trainingDraftPanel = showTrainingDraftPanel ? (
-    <TrainingDraftPanel
-      training={training}
-      sessionId={selectedSessionId}
-      expanded={diffPanelExpanded}
-      onOpenTraining={() => setView("labs")}
-      onResizeStart={onDiffPanelResizeStart}
-      onToggleExpanded={onToggleDiffPanelExpanded}
-    />
+    <Suspense fallback={null}>
+      <TrainingDraftPanel
+        training={training}
+        sessionId={selectedSessionId}
+        expanded={diffPanelExpanded}
+        onOpenTraining={() => setView("labs")}
+        onResizeStart={onDiffPanelResizeStart}
+        onToggleExpanded={onToggleDiffPanelExpanded}
+      />
+    </Suspense>
   ) : null;
   const rightPanel =
     teamAgentConversationPanel ??
@@ -1784,16 +1803,22 @@ export function MainPane({
                   />
                 ),
               )}
-              {selectedTrainingCreation ? <TrainingStatusReceipt creation={selectedTrainingCreation} /> : null}
+              {selectedTrainingCreation ? (
+                <Suspense fallback={null}>
+                  <TrainingStatusReceipt creation={selectedTrainingCreation} />
+                </Suspense>
+              ) : null}
             </section>
             <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`} ref={composerStackRef}>
               {selectedTrainingCreation ? (
-                <TrainingCreationPanel
-                  compact
-                  creation={selectedTrainingCreation}
-                  training={training}
-                  onOpenTraining={() => setView("labs")}
-                />
+                <Suspense fallback={null}>
+                  <TrainingCreationPanel
+                    compact
+                    creation={selectedTrainingCreation}
+                    training={training}
+                    onOpenTraining={() => setView("labs")}
+                  />
+                </Suspense>
               ) : null}
               {trainingChatHandoffBar}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />

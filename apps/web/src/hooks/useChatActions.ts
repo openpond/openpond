@@ -41,9 +41,6 @@ import {
 } from "../lib/connected-app-mentions";
 import { resolveMentionedAction } from "../lib/action-mentions";
 import {
-  buildComposerCreateImproveRun,
-} from "../lib/create-pipeline-request";
-import {
   parseComposerDirectCommandPrompt,
   parseComposerSlashCommandPrompt,
 } from "../lib/composer-slash-commands";
@@ -914,7 +911,7 @@ export function useChatActions({
       }
       const parsedCreateImproveCommand = parsedSlashCommandForTurn;
       const createImproveRun = parsedCreateImproveCommand
-        ? buildComposerCreateImproveRun({
+        ? (await import("../lib/create-pipeline-request")).buildComposerCreateImproveRun({
             parsed: parsedCreateImproveCommand,
             prompt: value,
             payload: bootstrap,
