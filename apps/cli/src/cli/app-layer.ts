@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { CliUsageError } from "./common";
 import { runProcessCommand } from "../process-runner";
 import { IS_COMPILED_CLI } from "./build-mode";
+import { openPondTuiNodeRuntimeMessage } from "./node-runtime";
 
 type CliOptions = Record<string, string | boolean>;
 type AppEntrypoint = { runner: string; args: string[]; cwd: string };
@@ -35,6 +36,8 @@ export async function runOpenPondServerCommand(
 
 export async function runOpenPondTerminalCommand(options: CliOptions, rest: string[]): Promise<void> {
   validateTerminalForwardingOptions(options);
+  const runtimeMessage = openPondTuiNodeRuntimeMessage();
+  if (runtimeMessage) throw new CliUsageError(runtimeMessage);
   const terminal = resolveAppEntrypoint("terminal");
   const server = resolveAppEntrypoint("server");
   const args = [...terminal.args, "chat", ...forwardedOptions(normalizeTerminalPaths(options)), ...rest];

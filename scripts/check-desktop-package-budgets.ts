@@ -66,6 +66,7 @@ export async function checkDesktopPackageBudgets(input: {
   assertBudget("staged runtime", metrics.stagedRuntime.bytes, MAX_STAGED_RUNTIME_BYTES);
   assertMinimalAsar(asarPath);
   await verifyRuntimeInventory(resourcesRoot, packagedInventory, platform);
+  if (platform === "darwin") await verifyDarwinAppBundleSignature(unpackedRoot);
   if (JSON.stringify(stageInventory.files) !== JSON.stringify(packagedInventory.files)) {
     throw new Error("Packaged runtime inventory differs from the staged runtime inventory.");
   }
@@ -121,6 +122,16 @@ async function verifyDarwinCodeSignature(filePath: string, entry: RuntimeInvento
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Packaged runtime code signature failed verification: ${entry.path}: ${detail}`);
+  }
+}
+
+export async function verifyDarwinAppBundleSignature(unpackedRoot: string): Promise<void> {
+  const appBundle = path.join(unpackedRoot, firstAppBundle(unpackedRoot));
+  try {
+    await execFileAsync("codesign", ["--verify", "--deep", "--strict", "--verbose=4", appBundle]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Packaged macOS app bundle failed code-signature verification: ${detail}`);
   }
 }
 
