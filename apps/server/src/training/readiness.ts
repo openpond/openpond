@@ -15,12 +15,26 @@ export function buildTasksetReadiness(input: {
 }): TasksetReadinessReport {
   const validation = validateTaskset(input.taskset);
   const blockers = validation.issues.filter((issue) => issue.severity === "error").map((issue) => ({ code: issue.code, message: issue.message, path: issue.path }));
+  const authoredMethod = typeof input.taskset.metadata.trainingMethod === "string"
+    ? input.taskset.metadata.trainingMethod
+    : null;
+  const authoredTrainingMethod = trainingPathMethod(authoredMethod);
+  const requiresApprovedDemonstrations = authoredTrainingMethod !== "grpo";
   const approvedDemonstrationTaskIds = new Set(input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved && signal.taskId).map((signal) => signal.taskId!));
-  const trainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput && approvedDemonstrationTaskIds.has(task.id));
+  const allTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput);
+  const trainTasks = requiresApprovedDemonstrations
+    ? allTrainTasks.filter((task) => approvedDemonstrationTaskIds.has(task.id))
+    : allTrainTasks;
   const unapprovedTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput && !approvedDemonstrationTaskIds.has(task.id));
   const frozenTasks = input.taskset.tasks.filter((task) => task.split === "frozen_eval" && task.expectedOutput);
-  if (trainTasks.length === 0) blockers.push({ code: "sft_demonstrations_missing", message: "At least one explicitly approved training demonstration is required.", path: "learningSignals.demonstrations" });
-  if (unapprovedTrainTasks.length) blockers.push({ code: "sft_demonstrations_unapproved", message: `${unapprovedTrainTasks.length} training example${unapprovedTrainTasks.length === 1 ? " is" : "s are"} not explicitly approved.`, path: "learningSignals.demonstrations" });
+  if (trainTasks.length === 0) {
+    blockers.push(
+      requiresApprovedDemonstrations
+        ? { code: "sft_demonstrations_missing", message: "At least one explicitly approved training demonstration is required.", path: "learningSignals.demonstrations" }
+        : { code: "grpo_training_tasks_missing", message: "At least one reward-bearing training task is required for GRPO.", path: "tasks" },
+    );
+  }
+  if (requiresApprovedDemonstrations && unapprovedTrainTasks.length) blockers.push({ code: "sft_demonstrations_unapproved", message: `${unapprovedTrainTasks.length} training example${unapprovedTrainTasks.length === 1 ? " is" : "s are"} not explicitly approved.`, path: "learningSignals.demonstrations" });
   if (frozenTasks.length === 0) blockers.push({ code: "frozen_eval_missing", message: "At least one independent evaluation example is required.", path: "tasks" });
   const trainClusters = new Set(trainTasks.map((task) => task.clusterKey));
   const frozenClusters = new Set(frozenTasks.map((task) => task.clusterKey));
@@ -35,12 +49,11 @@ export function buildTasksetReadiness(input: {
   if (input.graderAudit && !input.graderAudit.hackingChecksPassed) blockers.push({ code: "grader_hacking", message: "Grader hacking or prompt-injection checks failed.", path: "graders" });
   if (input.graderAudit && !input.graderAudit.leakageChecksPassed) blockers.push({ code: "environment_leakage", message: "Environment or privileged-state leakage checks failed.", path: "environment" });
   if (input.graderAudit && !input.graderAudit.infrastructureSafetyPassed) blockers.push({ code: "infrastructure_reward", message: "An infrastructure failure produced a score or eligible reward.", path: "graderFixtures" });
+  const hasRewardEligibleGrader = input.taskset.graders.some((grader) => grader.rewardEligible && (grader.kind !== "model_judge" || grader.calibrationStatus === "passed"));
+  if (authoredTrainingMethod === "grpo" && !hasRewardEligibleGrader) blockers.push({ code: "grpo_reward_missing", message: "GRPO requires a calibrated reward-eligible grader.", path: "graders" });
   const currentBaseline = input.baseline?.tasksetHash === input.taskset.contentHash ? input.baseline : null;
   const baselineReward = currentBaseline?.reward;
   const hasRewardVariance = Boolean(baselineReward && (baselineReward.variance ?? 0) > 0 && (baselineReward.mean ?? 0) > 0.05 && (baselineReward.mean ?? 0) < 0.95);
-  const hasRewardEligibleGrader = input.taskset.graders.some((grader) => grader.rewardEligible && (grader.kind !== "model_judge" || grader.calibrationStatus === "passed"));
-  const authoredMethod = typeof input.taskset.metadata.trainingMethod === "string" ? input.taskset.metadata.trainingMethod : null;
-  const authoredTrainingMethod = trainingPathMethod(authoredMethod);
   const recommendedMethod = authoredTrainingMethod
     ?? (hasRewardVariance && hasRewardEligibleGrader && input.taskset.capabilities.compatibleMethods.includes("grpo") ? "grpo" : trainTasks.length > 0 && input.taskset.capabilities.compatibleMethods.includes("sft") ? "sft" : "none");
   const demonstrationRefs = input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved).map((signal) => signal.id);
@@ -75,6 +88,7 @@ export function buildTasksetReadiness(input: {
       ...metadataStrings(input.taskset.metadata.warnings),
     ],
     baselineReportId: currentBaseline?.id ?? null,
+    baselineReward: currentBaseline?.reward ?? null,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     metadata: { reportHash: contentHash([input.taskset.contentHash, currentBaseline?.id ?? null, blockers]) },
   });

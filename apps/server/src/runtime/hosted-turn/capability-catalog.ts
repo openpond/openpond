@@ -51,7 +51,7 @@ export function createCapabilityCatalogRuntime(deps: {
     const definitions: ModelToolDefinition[] = [];
     if (!options.disableWorkflowDelegationTools) {
       const handlers: CapabilityHandlers = {
-        startCreatePipeline: deps.handlers.startCreatePipeline,
+        startCreateImprove: deps.handlers.startCreateImprove,
         startGoalControl: deps.handlers.startGoalControl,
         ...(deps.handlers.startProfileSkillGoal
           ? { startProfileSkillGoal: deps.handlers.startProfileSkillGoal }

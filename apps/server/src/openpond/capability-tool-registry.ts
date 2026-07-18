@@ -1,6 +1,6 @@
 import type {
   ChatModelRef,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
   SubagentIsolationMode,
   SubagentPeerMessages,
   SubagentProgress,
@@ -26,10 +26,9 @@ export type OpenPondCreatePipelineToolInput = {
 };
 
 export type OpenPondCreatePipelineToolResult = {
-  requestId: string;
-  pipelineId: string;
-  operation: "create" | "edit";
-  state: CreatePipelineSnapshot["state"];
+  runId: string;
+  operation: CreateImproveRun["operation"];
+  state: CreateImproveRun["state"];
   nextStep: string;
 };
 
@@ -154,7 +153,7 @@ export type OpenPondSubagentMessageToolResult = {
 };
 
 export function createOpenPondCapabilityModelToolDefinitions(deps: {
-  startCreatePipeline: (
+  startCreateImprove: (
     context: ModelToolExecutionContext,
     input: OpenPondCreatePipelineToolInput,
   ) => Promise<OpenPondCreatePipelineToolResult>;
@@ -195,9 +194,9 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
   const enabledSubagentRoles = (deps.subagentRoles ?? []).filter((role) => role.enabled);
   const definitions: ModelToolDefinition[] = [
     {
-      name: "openpond_create_pipeline",
+      name: "openpond_create_improve",
       description:
-        "Start the OpenPond Create Pipeline workflow to create or edit a source-backed agent or workflow after interpreting the user's request.",
+        "Start the OpenPond Create/Improve workflow for a source-backed workproduct after interpreting the user's request.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -210,7 +209,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           objective: {
             type: "string",
             minLength: 1,
-            description: "The user-facing create/edit objective to plan.",
+            description: "The user-facing Create/Improve objective to plan.",
           },
           targetAgentId: {
             type: "string",
@@ -227,7 +226,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
       },
       execute: async (context) => {
         const input = createPipelineToolInput(context.args);
-        const result = await deps.startCreatePipeline(context, input);
+        const result = await deps.startCreateImprove(context, input);
         return createPipelineToolResult(context.callId, result);
       },
     },
@@ -827,12 +826,12 @@ function createPipelineToolResult(
 ): NativeModelToolResult {
   return {
     toolCallId: callId,
-    name: "openpond_create_pipeline",
+    name: "openpond_create_improve",
     ok: true,
     contentText: JSON.stringify(
       {
         ok: true,
-        action: "openpond_create_pipeline",
+        action: "openpond_create_improve",
         output: result.nextStep,
         data: result,
       },

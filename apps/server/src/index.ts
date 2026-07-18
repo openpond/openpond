@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
 import {
   CompactSessionRequestSchema,
   InsightsAskRequestSchema,
   PatchInsightRequestSchema,
   RunSessionCommandRequestSchema,
-  TaskAttemptResultSchema,
-  TaskAttemptArtifactSchema,
   type Approval,
   type ChatProvider,
   type ChatModelRef,
   type CodexReasoningEffort,
-  type TaskDataRecord,
   type InsightStatus,
   type InsightsListResponse,
   type InsightsScanResponse,
@@ -23,7 +19,12 @@ import {
   type SubagentRun,
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
-import { loadOpenPondProfileState, readProfileSkill, runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "@openpond/cloud";
+import {
+  loadOpenPondProfileState,
+  readProfileSkill,
+  runProfileSkillCommandFromPrompt,
+  runProfileSkillGoalCommand,
+} from "@openpond/cloud";
 import {
   getBundledRuntimeVersion,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
@@ -56,6 +57,7 @@ import {
   startMacOSCommandLineToolsInstall,
 } from "./workspace/workspaces.js";
 import { readLocalImageFile } from "./workspace/workspace-common.js";
+import { loadGitCommitDiffAtPath } from "./workspace/workspace-diff.js";
 import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
 import { createServerPayloads } from "./api/server-payloads.js";
@@ -63,12 +65,16 @@ import {
   runtimeEventPageRequestFromUrl,
   runtimeEventsPagePayloadFromEntries,
 } from "./api/event-page.js";
-import { usageRecordsPayload, usageSummaryPayload } from "./api/usage-payloads.js";
+import {
+  usageRecordsPayload,
+  usageSummaryPayload,
+} from "./api/usage-payloads.js";
 import { readProvidersFile } from "./openpond/provider-settings.js";
 import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
 import {
   readProviderSecrets,
+  updateProviderCredentialValidation,
   writeProviderChatGptSubscriptionCredential,
 } from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
@@ -76,10 +82,16 @@ import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
 import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
-import { isCodexHistorySessionId, readCodexHistoryThreadPayload } from "./codex-history.js";
+import {
+  isCodexHistorySessionId,
+  readCodexHistoryThreadPayload,
+} from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionStore } from "./store/session-store.js";
-import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
+import {
+  createOpenPondHttpSurface,
+  listenOpenPondHttpServer,
+} from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
@@ -106,7 +118,7 @@ import {
 import { createTeamChatAiExecutionService } from "./openpond/team-chat-executor.js";
 import { teamChatRequestPayload } from "./openpond/team-chat-client.js";
 import { communityRequestPayload } from "./openpond/community-client.js";
-import { contentHash, sha256 } from "@openpond/taskset-sdk";
+import { contentHash } from "@openpond/taskset-sdk";
 import { createTaskCreatorService } from "./training/task-creator.js";
 import { authorTaskDesignWithModel } from "./training/task-authoring-model.js";
 import { loadTasksetAuthoringSkillBundle } from "./training/task-authoring-skill.js";
@@ -116,6 +128,7 @@ import { createTaskEvaluationService } from "./training/evaluation-service.js";
 import { createTrainingService } from "./training/training-service.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
+import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
 import { createComputeService } from "./compute/compute-service.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import {
@@ -136,17 +149,19 @@ const DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS = 64;
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
 export async function createOpenPondServer(
-  options: OpenPondServerOptions = {},
+  options: OpenPondServerOptions = {}
 ): Promise<OpenPondServerInstance> {
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const storeDir = options.storeDir ?? appDataDir();
   const version = options.version ?? VERSION;
   const runtimeVersion = getBundledRuntimeVersion();
-  const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(options.maxHostedWorkspaceToolRounds);
+  const maxHostedWorkspaceToolRounds = resolveMaxHostedWorkspaceToolRounds(
+    options.maxHostedWorkspaceToolRounds
+  );
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
-    { enabled: scriptedOpenPondModelsEnabled() },
+    { enabled: scriptedOpenPondModelsEnabled() }
   );
   const executeWebSearch = createWebSearchExecutorFromEnv();
   const executeConnectedAppTool = createCloudConnectedAppToolExecutor();
@@ -168,10 +183,14 @@ export async function createOpenPondServer(
   const store = new SqliteStore(storeDir, { logger });
   const startedAt = now();
   const serverId = randomUUID();
-  const { appendRuntimeEvent, closeEventSubscribers, openEventSubscriber, truncateLogValue } =
-    createRuntimeEventBus({
-      logger,
-      store,
+  const {
+    appendRuntimeEvent,
+    closeEventSubscribers,
+    openEventSubscriber,
+    truncateLogValue,
+  } = createRuntimeEventBus({
+    logger,
+    store,
   });
   const workQueues = createServerWorkQueues(logger);
   const browserControlQueue = createBrowserControlQueue();
@@ -185,7 +204,8 @@ export async function createOpenPondServer(
 
   logger.info("server starting", { host, port, storeDir, serverId });
 
-  const refreshCodexStatus = (force = false) => codexStatusService.refresh(force);
+  const refreshCodexStatus = (force = false) =>
+    codexStatusService.refresh(force);
 
   void refreshCodexStatus();
 
@@ -193,7 +213,10 @@ export async function createOpenPondServer(
     await store.upsertApproval(approval);
   }
 
-  async function withWorkspaceLock<T>(appId: string, fn: () => Promise<T>): Promise<T> {
+  async function withWorkspaceLock<T>(
+    appId: string,
+    fn: () => Promise<T>
+  ): Promise<T> {
     const existing = workspaceLocks.get(appId);
     if (existing) throw new Error("Workspace is busy");
     const lock = fn();
@@ -272,6 +295,7 @@ export async function createOpenPondServer(
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
+    profileRenameAgentPayload,
     profileCommitPayload,
     profilePushPayload,
     profileRunPayload,
@@ -323,7 +347,11 @@ export async function createOpenPondServer(
     storeDir,
     workspaceDiffPayload,
   });
-  const { closeCloudWorkspaceReadiness, executeWorkspaceTool, ensureCloudWorkspaceReady } = createWorkspaceToolExecutor({
+  const {
+    closeCloudWorkspaceReadiness,
+    executeWorkspaceTool,
+    ensureCloudWorkspaceReady,
+  } = createWorkspaceToolExecutor({
     logger,
     truncateLogValue,
     appendRuntimeEvent,
@@ -363,12 +391,15 @@ export async function createOpenPondServer(
     ]);
     return {
       secrets,
-      settings: withLocalAdapterProviderModels(buildProviderSettings({
-        file,
-        secrets,
-        codex: codexStatusService.get(),
-        catalog: cachedProviderCatalog(file),
-      }), localAdapterModels),
+      settings: withLocalAdapterProviderModels(
+        buildProviderSettings({
+          file,
+          secrets,
+          codex: codexStatusService.get(),
+          catalog: cachedProviderCatalog(file),
+        }),
+        localAdapterModels
+      ),
     };
   }
   async function trainingModelText(input: {
@@ -380,7 +411,12 @@ export async function createOpenPondServer(
   }): Promise<string> {
     let text = "";
     if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      for await (const delta of localAdapterChatRuntime.stream({
+      const runtime = (await trainingService.isFireworksModel(
+        input.model.modelId
+      ))
+        ? trainingService.streamFireworksModel
+        : localAdapterChatRuntime.stream;
+      for await (const delta of runtime({
         modelId: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
@@ -391,13 +427,27 @@ export async function createOpenPondServer(
       return text;
     }
     if (input.model.providerId === "openpond") {
-      for await (const delta of streamOpenPondHostedChatTurn({ model: input.model.modelId, messages: input.messages, requestId: input.requestId, signal: input.signal })) {
+      for await (const delta of streamOpenPondHostedChatTurn({
+        model: input.model.modelId,
+        messages: input.messages,
+        requestId: input.requestId,
+        signal: input.signal,
+      })) {
         if (delta.type === "text_delta" && delta.text) text += delta.text;
       }
       return text;
     }
     const state = await localByokRuntimeState();
-    for await (const delta of streamOpenAiCompatibleChatCompletion({ providerId: input.model.providerId, settings: state.settings, secrets: state.secrets, modelId: input.model.modelId, messages: input.messages, requestId: input.requestId, signal: input.signal, reasoningEffort: input.reasoningEffort })) {
+    for await (const delta of streamOpenAiCompatibleChatCompletion({
+      providerId: input.model.providerId,
+      settings: state.settings,
+      secrets: state.secrets,
+      modelId: input.model.modelId,
+      messages: input.messages,
+      requestId: input.requestId,
+      signal: input.signal,
+      reasoningEffort: input.reasoningEffort,
+    })) {
       if (delta.type === "text_delta" && delta.text) text += delta.text;
     }
     return text;
@@ -406,46 +456,80 @@ export async function createOpenPondServer(
   const tasksetAuthoringSkillText = await loadTasksetAuthoringSkillBundle();
   const taskCreatorService = createTaskCreatorService({
     store,
+    tasksetRootDir: path.join(storeDir, "training", "tasksets"),
     authoringSkillHash: contentHash(tasksetAuthoringSkillText),
-    loadCodexHistoryThread: (sessionId) => readCodexHistoryThreadPayload(sessionId, {
-      attachmentRootDir,
-      maxEvents: 100_000,
-    }),
-    authorProposal: (input) => authorTaskDesignWithModel({
-      ...input,
-      skillText: tasksetAuthoringSkillText,
-      stream: async function* ({ model, reasoningEffort, messages, signal }) {
-        yield { text: await trainingModelText({ model, reasoningEffort, messages, signal, requestId: `task-authoring:${contentHash(input.id).slice(0, 40)}` }) };
-      },
-    }),
+    loadCodexHistoryThread: (sessionId) =>
+      readCodexHistoryThreadPayload(sessionId, {
+        attachmentRootDir,
+        maxEvents: 100_000,
+      }),
+    authorProposal: (input) =>
+      authorTaskDesignWithModel({
+        ...input,
+        skillText: tasksetAuthoringSkillText,
+        stream: async function* ({ model, reasoningEffort, messages, signal }) {
+          yield {
+            text: await trainingModelText({
+              model,
+              reasoningEffort,
+              messages,
+              signal,
+              requestId: `task-authoring:${contentHash(input.id).slice(0, 40)}`,
+            }),
+          };
+        },
+      }),
   });
   await taskCreatorService.reconcileInterruptedCreations();
   const taskMinerService = createTaskMinerService({
     store,
     addSessionSource: (input) => taskCreatorService.addSessionSource(input),
   });
+  let trainingBaselineAttemptRunner: ReturnType<
+    typeof createTrainingBaselineAttemptRunner
+  > | null = null;
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
-    runAttempt: async (input) => runTrainingBaselineAttempt(input),
+    runAttempt: async (input) => {
+      if (!trainingBaselineAttemptRunner) {
+        throw new Error("The Taskset baseline runner is not initialized.");
+      }
+      return trainingBaselineAttemptRunner(input);
+    },
     modelJudge: async ({ grader, task, attempt }) => {
       const raw = await trainingModelText({
         model: grader.judge,
         signal: new AbortController().signal,
         requestId: `task-judge:${attempt.id}:${grader.id}`,
         messages: [
-          { role: "system", content: `Apply this rubric and return JSON only with score (0..1), passed, and feedback.\n\n${grader.rubric}` },
-          { role: "user", content: JSON.stringify({ input: task.input, expectedOutput: task.expectedOutput, output: attempt.output }) },
+          {
+            role: "system",
+            content: `Apply this rubric and return JSON only with score (0..1), passed, and feedback.\n\n${grader.rubric}`,
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              input: task.input,
+              expectedOutput: task.expectedOutput,
+              output: attempt.output,
+            }),
+          },
         ],
       });
       const parsed = parseModelJudgeResult(raw);
-      if (!parsed) throw new Error("Model judge returned invalid structured output.");
+      if (!parsed)
+        throw new Error("Model judge returned invalid structured output.");
       return parsed;
     },
   });
   const computeService = createComputeService({
     storeDir,
-    localWorkerProjectDir: path.resolve(process.cwd(), "python", "openpond-training"),
+    localWorkerProjectDir: path.resolve(
+      process.cwd(),
+      "python",
+      "openpond-training"
+    ),
   });
   const computePayload = async (action: string, payload: unknown) => {
     if (action === "state") return computeService.state();
@@ -455,10 +539,15 @@ export async function createOpenPondServer(
       await computeService.scan();
       return settings;
     }
-    if (action === "download_smollm2") return computeService.startModelDownload();
+    if (action === "download_smollm2")
+      return computeService.startModelDownload();
     if (action === "cancel_download") {
-      const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
-      if (typeof input.jobId !== "string" || !input.jobId) throw new Error("jobId is required.");
+      const input =
+        payload && typeof payload === "object"
+          ? (payload as Record<string, unknown>)
+          : {};
+      if (typeof input.jobId !== "string" || !input.jobId)
+        throw new Error("jobId is required.");
       return computeService.cancelModelDownload(input.jobId);
     }
     throw new Error(`Unknown compute action ${action}.`);
@@ -466,11 +555,55 @@ export async function createOpenPondServer(
   const trainingService = createTrainingService({
     store,
     storeDir,
-    localWorkerProjectDir: path.resolve(process.cwd(), "python", "openpond-training"),
-    revalidateCompute: async () => { await computeService.scan(); },
+    localWorkerProjectDir: path.resolve(
+      process.cwd(),
+      "python",
+      "openpond-training"
+    ),
+    revalidateCompute: async () => {
+      await computeService.scan();
+    },
     resolveModelPath: computeService.modelPath,
-    modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
+    modelArtifactStore: async () =>
+      (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
+    resolveApprovalActor: async () => {
+      const account = (await bootstrapPayload()).account;
+      if (account.state !== "signed_in") return null;
+      return account.profile?.handle?.trim() || null;
+    },
+    resolveFireworksCredential: async () => {
+      const credential = (await readProviderSecrets(providerSecretPaths))
+        .providers.fireworks;
+      if (!credential) return null;
+      const value =
+        credential.source === "local_secret"
+          ? credential.value
+          : credential.source === "env" && credential.envVar
+          ? process.env[credential.envVar] ?? null
+          : null;
+      if (
+        !value?.trim() ||
+        (credential.source !== "local_secret" && credential.source !== "env")
+      ) {
+        return null;
+      }
+      return {
+        value,
+        source: credential.source,
+        createdAt: credential.createdAt,
+        updatedAt: credential.updatedAt,
+      };
+    },
+    recordFireworksCredentialValidation: async (error) => {
+      await updateProviderCredentialValidation({
+        paths: providerSecretPaths,
+        providerId: "fireworks",
+        timestamp: now(),
+        lastError: error,
+      });
+    },
+    gradeTaskAttempt: taskEvaluationService.grade,
   });
   const localAdapterChatRuntime = createLocalAdapterChatRuntime({
     store,
@@ -482,77 +615,102 @@ export async function createOpenPondServer(
     gradeAttempt: taskEvaluationService.grade,
   });
   const trainingChatSearchService = createTrainingChatSearchService({ store });
-  const crossSystemFrontierModelStream: CrossSystemFrontierModelStream = async function* (input) {
-    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      for await (const delta of localAdapterChatRuntime.stream({
+  const crossSystemFrontierModelStream: CrossSystemFrontierModelStream =
+    async function* (input) {
+      if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
+        const runtime = (await trainingService.isFireworksModel(
+          input.model.modelId
+        ))
+          ? trainingService.streamFireworksModel
+          : localAdapterChatRuntime.stream;
+        for await (const delta of runtime({
+          modelId: input.model.modelId,
+          messages: input.messages,
+          tools: input.tools,
+          toolChoice: input.toolChoice,
+          requestId: input.requestId,
+          signal: input.signal,
+        })) {
+          yield { text: delta.text, toolCalls: delta.toolCalls };
+        }
+        return;
+      }
+      if (input.model.providerId === "openpond") {
+        for await (const delta of streamOpenPondHostedChatTurn({
+          model: input.model.modelId,
+          messages: input.messages,
+          tools: input.tools,
+          toolChoice: input.toolChoice,
+          requestId: input.requestId,
+          signal: input.signal,
+        })) {
+          if (delta.type === "text_delta") yield { text: delta.text };
+          if (delta.type === "continuation")
+            yield { continuation: delta.continuation };
+          if (delta.type === "tool_call_delta")
+            yield { toolCalls: delta.toolCalls };
+        }
+        return;
+      }
+      const state = await localByokRuntimeState();
+      for await (const delta of streamOpenAiCompatibleChatCompletion({
+        providerId: input.model.providerId,
+        settings: state.settings,
+        secrets: state.secrets,
         modelId: input.model.modelId,
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
         requestId: input.requestId,
         signal: input.signal,
-      })) {
-        yield { text: delta.text, toolCalls: delta.toolCalls };
-      }
-      return;
-    }
-    if (input.model.providerId === "openpond") {
-      for await (const delta of streamOpenPondHostedChatTurn({
-        model: input.model.modelId,
-        messages: input.messages,
-        tools: input.tools,
-        toolChoice: input.toolChoice,
-        requestId: input.requestId,
-        signal: input.signal,
+        reasoningEffort: input.reasoningEffort,
+        saveChatGptSubscriptionCredential: async (providerId, credential) => {
+          await writeProviderChatGptSubscriptionCredential({
+            paths: providerSecretPaths,
+            providerId,
+            credential,
+            timestamp: now(),
+          });
+        },
       })) {
         if (delta.type === "text_delta") yield { text: delta.text };
-        if (delta.type === "continuation") yield { continuation: delta.continuation };
-        if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls };
+        if (delta.type === "continuation")
+          yield { continuation: delta.continuation };
+        if (delta.type === "tool_call_delta")
+          yield { toolCalls: delta.toolCalls };
       }
-      return;
-    }
-    const state = await localByokRuntimeState();
-    for await (const delta of streamOpenAiCompatibleChatCompletion({
-      providerId: input.model.providerId,
-      settings: state.settings,
-      secrets: state.secrets,
-      modelId: input.model.modelId,
-      messages: input.messages,
-      tools: input.tools,
-      toolChoice: input.toolChoice,
-      requestId: input.requestId,
-      signal: input.signal,
-      reasoningEffort: input.reasoningEffort,
-      saveChatGptSubscriptionCredential: async (providerId, credential) => {
-        await writeProviderChatGptSubscriptionCredential({
-          paths: providerSecretPaths,
-          providerId,
-          credential,
-          timestamp: now(),
-        });
-      },
-    })) {
-      if (delta.type === "text_delta") yield { text: delta.text };
-      if (delta.type === "continuation") yield { continuation: delta.continuation };
-      if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls };
-    }
-  };
-  const crossSystemFrontierBaselineService = createCrossSystemFrontierBaselineService({
+    };
+  trainingBaselineAttemptRunner = createTrainingBaselineAttemptRunner({
     store,
-    stream: crossSystemFrontierModelStream,
-    findLocalProject: findLocalWorkspace,
-    createEvidenceSource: ({ profileId, model, localProject, task, trajectory }) => createFrontierBaselineChatSource({
-      store,
-      profileId,
-      model,
-      localProject,
-      task,
-      trajectory,
-      createSession,
-      appendRuntimeEvent,
-      addSessionSource: taskCreatorService.addSessionSource,
-    }),
+    storeDir,
+    modelText: trainingModelText,
+    crossSystemStream: crossSystemFrontierModelStream,
+    timestamp: now,
   });
+  const crossSystemFrontierBaselineService =
+    createCrossSystemFrontierBaselineService({
+      store,
+      stream: crossSystemFrontierModelStream,
+      findLocalProject: findLocalWorkspace,
+      createEvidenceSource: ({
+        profileId,
+        model,
+        localProject,
+        task,
+        trajectory,
+      }) =>
+        createFrontierBaselineChatSource({
+          store,
+          profileId,
+          model,
+          localProject,
+          task,
+          trajectory,
+          createSession,
+          appendRuntimeEvent,
+          addSessionSource: taskCreatorService.addSessionSource,
+        }),
+    });
   const trainingApi = createTrainingApi({
     store,
     taskCreator: taskCreatorService,
@@ -563,41 +721,6 @@ export async function createOpenPondServer(
     frontierBaseline: crossSystemFrontierBaselineService,
   });
 
-  async function runTrainingBaselineAttempt(input: { tasksetId: string; task: TaskDataRecord; model: ChatModelRef; seed: number; attempt: number }) {
-    const startedAt = now();
-    const requestId = `training-baseline:${input.task.id}:${input.model.providerId}:${input.model.modelId}:${input.seed}:${input.attempt}`;
-    try {
-      const text = await trainingModelText({
-        model: input.model,
-        signal: new AbortController().signal,
-        requestId,
-        messages: [
-          { role: "system", content: `Complete the task using only policy-visible input. Sampling seed: ${input.seed}.` },
-          { role: "user", content: JSON.stringify(input.task.input) },
-        ],
-      });
-      const completedAt = now();
-      const attemptId = `attempt_${contentHash([requestId, text]).slice(0, 24)}`;
-      const artifact = await persistBaselineRawArtifact({ tasksetId: input.tasksetId, taskId: input.task.id, attemptId, requestId, payload: { model: input.model, seed: input.seed, attempt: input.attempt, output: { text }, startedAt, completedAt } });
-      return TaskAttemptResultSchema.parse({ schemaVersion: "openpond.taskAttempt.v1", id: attemptId, tasksetId: input.tasksetId, taskId: input.task.id, split: input.task.split, attempt: input.attempt, seed: input.seed, modelRef: input.model, startedAt, completedAt, output: { text }, runtimeEventRefs: [], artifactRefs: [artifact.id], privilegedOutcomeRef: input.task.privilegedContextRef, infrastructureError: null, costUsd: null, latencyMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)), userInterventions: 0, metadata: { requestId } });
-    } catch (error) {
-      const completedAt = now();
-      const message = error instanceof Error ? error.message : String(error);
-      const attemptId = `attempt_${contentHash([requestId, "failure"]).slice(0, 24)}`;
-      const artifact = await persistBaselineRawArtifact({ tasksetId: input.tasksetId, taskId: input.task.id, attemptId, requestId, payload: { model: input.model, seed: input.seed, attempt: input.attempt, error: message, startedAt, completedAt } });
-      return TaskAttemptResultSchema.parse({ schemaVersion: "openpond.taskAttempt.v1", id: attemptId, tasksetId: input.tasksetId, taskId: input.task.id, split: input.task.split, attempt: input.attempt, seed: input.seed, modelRef: input.model, startedAt, completedAt, output: {}, runtimeEventRefs: [], artifactRefs: [artifact.id], privilegedOutcomeRef: null, infrastructureError: message, costUsd: null, latencyMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)), userInterventions: 0, metadata: { requestId } });
-    }
-  }
-
-  async function persistBaselineRawArtifact(input: { tasksetId: string; taskId: string; attemptId: string; requestId: string; payload: Record<string, unknown> }) {
-    const directory = path.join(storeDir, "training", "baseline-artifacts", input.tasksetId);
-    const file = path.join(directory, `${input.attemptId}.json`);
-    const bytes = Buffer.from(`${JSON.stringify({ schemaVersion: "openpond.rawBaselineArtifact.v1", requestId: input.requestId, ...input.payload }, null, 2)}\n`, "utf8");
-    await mkdir(directory, { recursive: true });
-    await writeFile(file, bytes, { mode: 0o600 });
-    const artifact = TaskAttemptArtifactSchema.parse({ schemaVersion: "openpond.taskAttemptArtifact.v1", id: `attempt_artifact_${contentHash([input.attemptId, sha256(bytes)]).slice(0, 24)}`, tasksetId: input.tasksetId, taskId: input.taskId, attemptId: input.attemptId, kind: "raw_model_response", path: file, sha256: sha256(bytes), sizeBytes: bytes.byteLength, createdAt: now(), metadata: { requestId: input.requestId, localOnly: true } });
-    return store.saveTaskAttemptArtifact(artifact);
-  }
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -629,11 +752,18 @@ export async function createOpenPondServer(
     updateSession,
   });
 
-  let notifySubagentLifecycleStateChanged: ((run: SubagentRun) => void) | null = null;
+  let notifySubagentLifecycleStateChanged: ((run: SubagentRun) => void) | null =
+    null;
 
   const turnRunner = createTurnRunner({
     attachmentRootDir,
     store,
+    resolveCreateImproveTaskset: (
+      tasksetId: string,
+      revision: number,
+      contentHash: string
+    ) => store.getTasksetRevision(tasksetId, revision, contentHash),
+    gradeCreateImproveTaskAttempt: taskEvaluationService.grade,
     createSession,
     upsertApproval,
     getSession,
@@ -659,13 +789,15 @@ export async function createOpenPondServer(
     finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
     readOpenPondProfileSkill: readProfileSkill,
-    executeProfileSkillCommand: ({ prompt }) => runProfileSkillCommandFromPrompt(prompt),
+    executeProfileSkillCommand: ({ prompt }) =>
+      runProfileSkillCommandFromPrompt(prompt),
     executeProfileSkillGoal: (input) => runProfileSkillGoalCommand(input),
     executeWebSearch: executeWebSearch ?? undefined,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
     listIntegrationConnections: listSandboxIntegrationConnections,
-    loadPersonalizationSoul: async () => (await loadPersonalizationSettings(store, storeDir)).soul,
+    loadPersonalizationSoul: async () =>
+      (await loadPersonalizationSettings(store, storeDir)).soul,
     loadAppPreferences,
     loadProviderSettings: async () => (await localByokRuntimeState()).settings,
     maybeCreateScaffoldForTurn,
@@ -674,7 +806,10 @@ export async function createOpenPondServer(
     appendHostedContextUsage,
     streamLocalByokChatTurn: async function* (input) {
       if (input.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        yield* localAdapterChatRuntime.stream({
+        const runtime = (await trainingService.isFireworksModel(input.modelId))
+          ? trainingService.streamFireworksModel
+          : localAdapterChatRuntime.stream;
+        yield* runtime({
           modelId: input.modelId,
           messages: input.messages,
           tools: input.tools,
@@ -713,15 +848,19 @@ export async function createOpenPondServer(
         if (delta.type === "continuation") {
           yield { continuation: delta.continuation, raw: delta.raw };
         }
-        if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls, raw: delta.raw };
-        if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
-        if (delta.type === "finish") yield { finishReason: delta.finishReason, raw: delta.raw };
+        if (delta.type === "tool_call_delta")
+          yield { toolCalls: delta.toolCalls, raw: delta.raw };
+        if (delta.type === "usage")
+          yield { raw: delta.raw, usage: delta.usage };
+        if (delta.type === "finish")
+          yield { finishReason: delta.finishReason, raw: delta.raw };
       }
     },
     streamOpenPondHostedChatTurn,
     subagentQueue: workQueues.subagent,
     turnFollowUpQueue: workQueues.turnFollowUp,
-    notifySubagentRunStateChanged: (run) => notifySubagentLifecycleStateChanged?.(run),
+    notifySubagentRunStateChanged: (run) =>
+      notifySubagentLifecycleStateChanged?.(run),
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests: MAX_REPEATED_INVALID_TOOL_REQUESTS,
   });
@@ -729,8 +868,10 @@ export async function createOpenPondServer(
     sendTurn,
     isSessionTurnActive,
     interruptSessionTurn,
-    updateTurnCreatePipeline,
-    resolveCreatePipelineApproval,
+    applyCreateImproveAction,
+    getCreateImproveRun,
+    listCreateImproveRuns,
+    resolveCreateImproveApproval,
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
     cleanupExpiredRetainedSubagentWorkspace,
@@ -751,7 +892,12 @@ export async function createOpenPondServer(
     isClosing: () => closing,
     logger,
   });
-  const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({ service: taskMinerService, loadProfileState: loadOpenPondProfileState, isClosing: () => closing, logger });
+  const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({
+    service: taskMinerService,
+    loadProfileState: loadOpenPondProfileState,
+    isClosing: () => closing,
+    logger,
+  });
   const localAgentScheduleLoop = createLocalAgentScheduleLoop({
     store,
     queue: workQueues.localAgentSchedule,
@@ -770,23 +916,38 @@ export async function createOpenPondServer(
     sendTurn,
     interruptSessionTurn,
     cleanupExpiredRetainedWorkspace: async ({ run, checkedAt, retention }) =>
-      (await cleanupExpiredRetainedSubagentWorkspace(run.id, {
-        checkedAt,
-        retention,
-        reason: `Retained subagent workspace expired at ${retention.expiresAt}.`,
-      })).run,
+      (
+        await cleanupExpiredRetainedSubagentWorkspace(run.id, {
+          checkedAt,
+          retention,
+          reason: `Retained subagent workspace expired at ${retention.expiresAt}.`,
+        })
+      ).run,
     isSessionActive: isSessionTurnActive,
     isClosing: () => closing,
     logger,
   });
-  notifySubagentLifecycleStateChanged = subagentLifecycleWatcher.notifySubagentRunStateChanged;
+  notifySubagentLifecycleStateChanged =
+    subagentLifecycleWatcher.notifySubagentRunStateChanged;
 
-  async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval> {
-    const commandApproval = await openPondCommandAccess.resolveApproval(approvalId, payload);
+  async function resolveApproval(
+    approvalId: string,
+    payload: unknown
+  ): Promise<Approval> {
+    const commandApproval = await openPondCommandAccess.resolveApproval(
+      approvalId,
+      payload
+    );
     if (commandApproval) return commandApproval;
-    const createPipelineApproval = await resolveCreatePipelineApproval(approvalId, payload);
-    if (createPipelineApproval) return createPipelineApproval;
-    const subagentPatchApplyApproval = await resolveSubagentPatchApplyApproval(approvalId, payload);
+    const createImproveApproval = await resolveCreateImproveApproval(
+      approvalId,
+      payload
+    );
+    if (createImproveApproval) return createImproveApproval;
+    const subagentPatchApplyApproval = await resolveSubagentPatchApplyApproval(
+      approvalId,
+      payload
+    );
     if (subagentPatchApplyApproval) return subagentPatchApplyApproval;
     return resolveCodexApproval(approvalId, payload);
   }
@@ -795,7 +956,7 @@ export async function createOpenPondServer(
     session: Awaited<ReturnType<typeof getSession>>,
     codexThreadId: string,
     reason: "manual",
-    model: string | null,
+    model: string | null
   ): Promise<RuntimeEvent> {
     const existing = findRecentCodexCompactionCompleted(
       await store.runtimeEventsForSession(session.id, {
@@ -803,7 +964,7 @@ export async function createOpenPondServer(
         limit: 100,
       }),
       session.id,
-      codexThreadId,
+      codexThreadId
     );
     if (existing) return existing;
     const completedEvent = event({
@@ -831,7 +992,7 @@ export async function createOpenPondServer(
     provider: ChatProvider,
     model: string | null,
     reason: "manual",
-    error: unknown,
+    error: unknown
   ): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     await appendRuntimeEvent(
@@ -850,11 +1011,13 @@ export async function createOpenPondServer(
           reason,
           error: message,
         },
-      }),
+      })
     );
   }
 
-  async function safeUpsertModelUsageRecord(record: ModelUsageRecord): Promise<void> {
+  async function safeUpsertModelUsageRecord(
+    record: ModelUsageRecord
+  ): Promise<void> {
     try {
       await store.upsertModelUsageRecord(record);
     } catch (error) {
@@ -865,14 +1028,17 @@ export async function createOpenPondServer(
           name: "diagnostic",
           source: "server",
           status: "failed",
-          output: error instanceof Error ? error.message : "Failed to persist model usage record.",
+          output:
+            error instanceof Error
+              ? error.message
+              : "Failed to persist model usage record.",
           data: {
             kind: "model_usage_record_failed",
             requestId: record.requestId,
             provider: record.provider,
             model: record.model,
           },
-        }),
+        })
       ).catch(() => undefined);
     }
   }
@@ -887,7 +1053,9 @@ export async function createOpenPondServer(
     requestId: string;
   }) {
     const usageState: {
-      recorder: Awaited<ReturnType<typeof startProviderRequestUsageRecorder>> | null;
+      recorder: Awaited<
+        ReturnType<typeof startProviderRequestUsageRecorder>
+      > | null;
       finalized: boolean;
     } = { recorder: null, finalized: false };
 
@@ -896,7 +1064,9 @@ export async function createOpenPondServer(
       usageState.finalized = true;
       await usageState.recorder.fail(
         error,
-        error instanceof Error && error.name === "AbortError" ? "interrupted" : "failed",
+        error instanceof Error && error.name === "AbortError"
+          ? "interrupted"
+          : "failed"
       );
     }
 
@@ -926,14 +1096,21 @@ export async function createOpenPondServer(
                 requestId: streamInput.requestId,
                 signal: streamInput.signal,
               })) {
-                if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
+                if (delta.type === "text_delta" && delta.text)
+                  usageState.recorder.observeDelta({ text: delta.text });
                 if (delta.type === "reasoning_delta" && delta.text) {
-                  usageState.recorder.observeDelta({ reasoningText: delta.text });
+                  usageState.recorder.observeDelta({
+                    reasoningText: delta.text,
+                  });
                 }
-                if (delta.type === "usage") usageState.recorder.observeDelta({ usage: delta.usage });
-                if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
-                if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
-                if (delta.type === "usage") yield { usage: delta.usage, raw: delta.raw };
+                if (delta.type === "usage")
+                  usageState.recorder.observeDelta({ usage: delta.usage });
+                if (delta.type === "text_delta" && delta.text)
+                  yield { text: delta.text, raw: delta.raw };
+                if (delta.type === "reasoning_delta" && delta.text)
+                  yield { reasoningText: delta.text, raw: delta.raw };
+                if (delta.type === "usage")
+                  yield { usage: delta.usage, raw: delta.raw };
               }
               return;
             }
@@ -947,7 +1124,10 @@ export async function createOpenPondServer(
               messages: streamInput.messages,
               requestId: streamInput.requestId,
               signal: streamInput.signal,
-              saveChatGptSubscriptionCredential: async (providerId, credential) => {
+              saveChatGptSubscriptionCredential: async (
+                providerId,
+                credential
+              ) => {
                 await writeProviderChatGptSubscriptionCredential({
                   paths: providerSecretPaths,
                   providerId,
@@ -956,14 +1136,19 @@ export async function createOpenPondServer(
                 });
               },
             })) {
-              if (delta.type === "text_delta" && delta.text) usageState.recorder.observeDelta({ text: delta.text });
+              if (delta.type === "text_delta" && delta.text)
+                usageState.recorder.observeDelta({ text: delta.text });
               if (delta.type === "reasoning_delta" && delta.text) {
                 usageState.recorder.observeDelta({ reasoningText: delta.text });
               }
-              if (delta.type === "usage") usageState.recorder.observeDelta({ usage: delta.usage });
-              if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
-              if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
-              if (delta.type === "usage") yield { usage: delta.usage, raw: delta.raw };
+              if (delta.type === "usage")
+                usageState.recorder.observeDelta({ usage: delta.usage });
+              if (delta.type === "text_delta" && delta.text)
+                yield { text: delta.text, raw: delta.raw };
+              if (delta.type === "reasoning_delta" && delta.text)
+                yield { reasoningText: delta.text, raw: delta.raw };
+              if (delta.type === "usage")
+                yield { usage: delta.usage, raw: delta.raw };
             }
           } catch (error) {
             await failUsageRecorder(error);
@@ -982,12 +1167,16 @@ export async function createOpenPondServer(
     }
   }
 
-  async function compactSession(sessionId: string, payload: unknown): Promise<unknown> {
+  async function compactSession(
+    sessionId: string,
+    payload: unknown
+  ): Promise<unknown> {
     const input = CompactSessionRequestSchema.parse(payload ?? {});
     const session = await getSession(sessionId);
     if (session.status === "active")
       throw new Error("Cannot compact context while a turn is running.");
-    if (session.status === "closed") throw new Error("Cannot compact a closed session.");
+    if (session.status === "closed")
+      throw new Error("Cannot compact a closed session.");
     const requestedModel = input.model ?? session.modelRef?.modelId ?? null;
 
     const priorEvents = await store.runtimeEventsForSession(sessionId);
@@ -1015,14 +1204,16 @@ export async function createOpenPondServer(
           model: requestedModel,
           codexPermissionMode: "default",
         });
-        const compacted = await runtime.client.compactThread({ threadId: runtime.threadId });
+        const compacted = await runtime.client.compactThread({
+          threadId: runtime.threadId,
+        });
         const completedEvent =
           compacted.completion === "response"
             ? await appendCodexCompactionCompletedIfNeeded(
                 session,
                 runtime.threadId,
                 input.reason,
-                requestedModel,
+                requestedModel
               )
             : null;
         return {
@@ -1036,17 +1227,19 @@ export async function createOpenPondServer(
 
       const adapter = resolveContextCompactionAdapter(session.provider);
       if (adapter.kind !== "app_summary") throw new Error(adapter.reason);
-      const state = adapter.route === "local_byok" ? await localByokRuntimeState() : null;
-      const maxContextTokens = adapter.route === "local_byok"
-        ? trustedProviderContextLimit({
-            provider: session.provider,
-            model: requestedModel,
-            settings: state?.settings ?? null,
-          })
-        : null;
+      const state =
+        adapter.route === "local_byok" ? await localByokRuntimeState() : null;
+      const maxContextTokens =
+        adapter.route === "local_byok"
+          ? trustedProviderContextLimit({
+              provider: session.provider,
+              model: requestedModel,
+              settings: state?.settings ?? null,
+            })
+          : null;
       if (adapter.route === "local_byok" && !maxContextTokens) {
         throw new Error(
-          `Context compaction for ${session.provider} requires a selected model with a trusted context window.`,
+          `Context compaction for ${session.provider} requires a selected model with a trusted context window.`
         );
       }
       const result = await runRecordedManualHostedContextCompaction({
@@ -1103,7 +1296,7 @@ export async function createOpenPondServer(
         session.provider,
         requestedModel,
         input.reason,
-        error,
+        error
       );
       throw error;
     }
@@ -1132,36 +1325,56 @@ export async function createOpenPondServer(
 
   async function listInsightsPayload(requestUrl: URL): Promise<unknown> {
     const rawStatus = requestUrl.searchParams.get("status");
-    const status = rawStatus === "active" || rawStatus === "resolved" || rawStatus === "dismissed" || rawStatus === "all"
-      ? rawStatus
-      : "all";
+    const status =
+      rawStatus === "active" ||
+      rawStatus === "resolved" ||
+      rawStatus === "dismissed" ||
+      rawStatus === "all"
+        ? rawStatus
+        : "all";
     const rawLimit = Number(requestUrl.searchParams.get("limit") ?? "200");
     const limit = Number.isFinite(rawLimit) ? rawLimit : 200;
     const rawEvidenceSource = requestUrl.searchParams.get("evidenceSource");
-    const evidenceSource = isInsightEvidenceSourceFilter(rawEvidenceSource) ? rawEvidenceSource : "all";
+    const evidenceSource = isInsightEvidenceSourceFilter(rawEvidenceSource)
+      ? rawEvidenceSource
+      : "all";
     const rawRunStatus = requestUrl.searchParams.get("runStatus");
-    const runStatus = rawRunStatus === "running" || rawRunStatus === "completed" || rawRunStatus === "failed" || rawRunStatus === "skipped" || rawRunStatus === "all"
-      ? rawRunStatus
-      : "all";
+    const runStatus =
+      rawRunStatus === "running" ||
+      rawRunStatus === "completed" ||
+      rawRunStatus === "failed" ||
+      rawRunStatus === "skipped" ||
+      rawRunStatus === "all"
+        ? rawRunStatus
+        : "all";
     const rawRunTrigger = requestUrl.searchParams.get("runTrigger");
-    const runTrigger = rawRunTrigger === "startup" || rawRunTrigger === "interval" || rawRunTrigger === "manual" || rawRunTrigger === "slash_command" || rawRunTrigger === "all"
-      ? rawRunTrigger
-      : "all";
+    const runTrigger =
+      rawRunTrigger === "startup" ||
+      rawRunTrigger === "interval" ||
+      rawRunTrigger === "manual" ||
+      rawRunTrigger === "slash_command" ||
+      rawRunTrigger === "all"
+        ? rawRunTrigger
+        : "all";
     const runModel = requestUrl.searchParams.get("runModel");
-    return withInsightsSchedule(await insightsService.list({
-      status,
-      limit,
-      evidenceSource,
-      runStatus,
-      runTrigger,
-      runModel,
-    }));
+    return withInsightsSchedule(
+      await insightsService.list({
+        status,
+        limit,
+        evidenceSource,
+        runStatus,
+        runTrigger,
+        runModel,
+      })
+    );
   }
 
   async function runInsightsScanPayload(requestUrl?: URL): Promise<unknown> {
     const rawTrigger = requestUrl?.searchParams.get("trigger");
     const trigger = rawTrigger === "slash_command" ? "slash_command" : "manual";
-    return withInsightsSchedule(await insightsBackgroundLoop.scanNow({ force: true, trigger }));
+    return withInsightsSchedule(
+      await insightsBackgroundLoop.scanNow({ force: true, trigger })
+    );
   }
 
   async function askInsightsPayload(payload: unknown): Promise<unknown> {
@@ -1169,12 +1382,22 @@ export async function createOpenPondServer(
     return withInsightsSchedule(await insightsService.ask(input.question));
   }
 
-  async function patchInsightPayload(insightId: string, payload: unknown): Promise<unknown> {
+  async function patchInsightPayload(
+    insightId: string,
+    payload: unknown
+  ): Promise<unknown> {
     const input = PatchInsightRequestSchema.parse(payload);
-    return withInsightsSchedule(await insightsService.patchStatus(insightId, input.status as InsightStatus));
+    return withInsightsSchedule(
+      await insightsService.patchStatus(
+        insightId,
+        input.status as InsightStatus
+      )
+    );
   }
 
-  function withInsightsSchedule<T extends InsightsListResponse | InsightsScanResponse>(payload: T): T {
+  function withInsightsSchedule<
+    T extends InsightsListResponse | InsightsScanResponse
+  >(payload: T): T {
     const status = insightsBackgroundLoop.status();
     return {
       ...payload,
@@ -1184,12 +1407,16 @@ export async function createOpenPondServer(
     };
   }
 
-  async function listLocalAgentSchedulesPayload(payload?: unknown): Promise<unknown> {
-    const input = payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as { localProjectId?: unknown }
-      : {};
+  async function listLocalAgentSchedulesPayload(
+    payload?: unknown
+  ): Promise<unknown> {
+    const input =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as { localProjectId?: unknown })
+        : {};
     return localAgentScheduleLoop.list({
-      localProjectId: typeof input.localProjectId === "string" ? input.localProjectId : null,
+      localProjectId:
+        typeof input.localProjectId === "string" ? input.localProjectId : null,
     });
   }
 
@@ -1197,64 +1424,86 @@ export async function createOpenPondServer(
     return localAgentScheduleLoop.syncNow();
   }
 
-  async function patchLocalAgentSchedulePayload(scheduleId: string, payload: unknown): Promise<unknown> {
+  async function patchLocalAgentSchedulePayload(
+    scheduleId: string,
+    payload: unknown
+  ): Promise<unknown> {
     const updated = await localAgentScheduleLoop.patchSchedule(
       scheduleId,
       payload && typeof payload === "object" && !Array.isArray(payload)
-        ? payload as { enabled?: boolean }
-        : {},
+        ? (payload as { enabled?: boolean })
+        : {}
     );
     if (!updated) throw new Error("Local agent schedule not found");
     return { schedule: updated };
   }
 
-  async function runLocalAgentSchedulePayload(scheduleId: string, payload: unknown): Promise<unknown> {
-    const input = payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as { input?: unknown }
-      : {};
+  async function runLocalAgentSchedulePayload(
+    scheduleId: string,
+    payload: unknown
+  ): Promise<unknown> {
+    const input =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as { input?: unknown })
+        : {};
     return localAgentScheduleLoop.runNow(
       scheduleId,
-      input.input && typeof input.input === "object" && !Array.isArray(input.input)
-        ? input.input as Record<string, unknown>
-        : undefined,
+      input.input &&
+        typeof input.input === "object" &&
+        !Array.isArray(input.input)
+        ? (input.input as Record<string, unknown>)
+        : undefined
     );
   }
 
   async function listLocalAgentScheduleRunsPayload(
     scheduleId: string,
-    payload?: unknown,
+    payload?: unknown
   ): Promise<unknown> {
-    const input = payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as { limit?: unknown }
-      : {};
+    const input =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as { limit?: unknown })
+        : {};
     const limit = typeof input.limit === "number" ? input.limit : undefined;
     return { runs: await localAgentScheduleLoop.listRuns(scheduleId, limit) };
   }
 
-  async function patchSessionPayload(sessionId: string, payload: unknown): Promise<unknown> {
+  async function patchSessionPayload(
+    sessionId: string,
+    payload: unknown
+  ): Promise<unknown> {
     return isCodexHistorySessionId(sessionId)
       ? patchCodexHistorySessionPayload(sessionId, payload)
       : patchSession(sessionId, payload);
   }
 
-  async function runSessionCommandPayload(sessionId: string, payload: unknown): Promise<unknown> {
+  async function runSessionCommandPayload(
+    sessionId: string,
+    payload: unknown
+  ): Promise<unknown> {
     const input = RunSessionCommandRequestSchema.parse(payload);
     const session = await getSession(sessionId);
     if (session.provider === "codex" || isCodexHistorySessionId(session.id)) {
-      throw new Error("OpenPond command access is not available for Codex sessions.");
+      throw new Error(
+        "OpenPond command access is not available for Codex sessions."
+      );
     }
-    return runOpenPondDirectCommand({
-      appendRuntimeEvent,
-      executeLocalCommand: openPondCommandAccess.executeCommand,
-      executeWorkspaceTool,
-      getSession,
-      runtimeEventsForSession: (targetSessionId) => store.runtimeEventsForSession(targetSessionId),
-    }, {
-      session,
-      command: input.command,
-      cwd: input.cwd ?? null,
-      timeoutSeconds: input.timeoutSeconds ?? null,
-    });
+    return runOpenPondDirectCommand(
+      {
+        appendRuntimeEvent,
+        executeLocalCommand: openPondCommandAccess.executeCommand,
+        executeWorkspaceTool,
+        getSession,
+        runtimeEventsForSession: (targetSessionId) =>
+          store.runtimeEventsForSession(targetSessionId),
+      },
+      {
+        session,
+        command: input.command,
+        cwd: input.cwd ?? null,
+        timeoutSeconds: input.timeoutSeconds ?? null,
+      }
+    );
   }
 
   async function startGitInstallPayload(): Promise<unknown> {
@@ -1270,7 +1519,10 @@ export async function createOpenPondServer(
     webRoot: options.webRoot ?? null,
     webTargetUrl: process.env.OPENPOND_REMOTE_ACCESS_TARGET,
   });
-  const voiceTranscription = createVoiceTranscriptionService({ storeDir, logger });
+  const voiceTranscription = createVoiceTranscriptionService({
+    storeDir,
+    logger,
+  });
 
   const { httpServer, terminalWebSockets } = createOpenPondHttpSurface({
     routeOptions: {
@@ -1291,6 +1543,7 @@ export async function createOpenPondServer(
       askInsightsPayload,
       patchInsightPayload,
       trainingPayload: trainingApi.request,
+      fireworksRftPayload: trainingService.handleFireworksRft,
       computePayload,
       listLocalAgentSchedulesPayload,
       syncLocalAgentSchedulesPayload,
@@ -1311,6 +1564,7 @@ export async function createOpenPondServer(
       profileInitPayload,
       profileLoadPayload,
       profileCheckPayload,
+      profileRenameAgentPayload,
       profileCommitPayload,
       profilePushPayload,
       profileRunPayload,
@@ -1392,7 +1646,44 @@ export async function createOpenPondServer(
       runSessionCommand: runSessionCommandPayload,
       ensureCloudWorkspaceReady,
       recordPreflightTurnFailure,
-      updateTurnCreatePipeline,
+      listCreateImproveRunsPayload: async (requestUrl) => ({
+        schemaVersion: "openpond.createImprove.runList.v1",
+        runs: await listCreateImproveRuns({
+          profileId: requestUrl.searchParams.get("profileId"),
+          conversationId: requestUrl.searchParams.get("conversationId"),
+          targetKind: createImproveTargetKind(
+            requestUrl.searchParams.get("targetKind")
+          ),
+          targetId: requestUrl.searchParams.get("targetId"),
+          limit: createImproveLimit(requestUrl.searchParams.get("limit")),
+        }),
+        generatedAt: new Date().toISOString(),
+      }),
+      getCreateImproveRunPayload: getCreateImproveRun,
+      getCreateImproveCandidateDiffPayload: async (runId, candidateId) => {
+        const run = await getCreateImproveRun(runId);
+        if (!run) throw new Error("Create/Improve run not found.");
+        const candidate = run.candidates.find(
+          (item) => item.id === candidateId
+        );
+        if (!candidate?.git?.headCommit)
+          throw new Error("Candidate change is not available.");
+        const repoPath =
+          candidate.git.worktreePath ??
+          (run.adapter.kind === "local" ||
+          run.adapter.kind === "promote_local_to_hosted"
+            ? run.adapter.repoPath
+            : null);
+        if (!repoPath)
+          throw new Error("Candidate source is no longer available.");
+        return loadGitCommitDiffAtPath(
+          repoPath,
+          `candidate:${run.id}:${candidate.id}`,
+          candidate.git.baseCommit,
+          candidate.git.headCommit
+        );
+      },
+      applyCreateImproveAction,
       interruptSessionTurn,
       compactSession,
       executeWorkspaceTool,
@@ -1408,7 +1699,13 @@ export async function createOpenPondServer(
     },
     webRoot: options.webRoot ?? null,
   });
-  actualPort = await listenOpenPondHttpServer({ host, httpServer, logger, port, serverId });
+  actualPort = await listenOpenPondHttpServer({
+    host,
+    httpServer,
+    logger,
+    port,
+    serverId,
+  });
   insightsBackgroundLoop.start();
   taskMinerBackgroundLoop.start();
   localAgentScheduleLoop.start();
@@ -1430,13 +1727,32 @@ export async function createOpenPondServer(
     store,
     workQueues,
     codexSessions: codexSessions.values(),
-    markClosing: () => { closing = true; },
-    backgroundLoops: [insightsBackgroundLoop, taskMinerBackgroundLoop, localAgentScheduleLoop, subagentLifecycleWatcher],
+    markClosing: () => {
+      closing = true;
+    },
+    backgroundLoops: [
+      insightsBackgroundLoop,
+      taskMinerBackgroundLoop,
+      localAgentScheduleLoop,
+      subagentLifecycleWatcher,
+    ],
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,
-    runtimeClosers: [waitForOpenPondRefresh, turnRunner.close, teamChatAiExecutions.close, localAdapterChatRuntime.close, crossSystemChatToolRuntime.close, crossSystemFrontierBaselineService.close, taskMinerService.close, trainingService.close, computeService.close,
-      closeCloudWorkspaceReadiness, closeWorkspaceLsp, voiceTranscription.close],
+    runtimeClosers: [
+      waitForOpenPondRefresh,
+      turnRunner.close,
+      teamChatAiExecutions.close,
+      localAdapterChatRuntime.close,
+      crossSystemChatToolRuntime.close,
+      crossSystemFrontierBaselineService.close,
+      taskMinerService.close,
+      trainingService.close,
+      computeService.close,
+      closeCloudWorkspaceReadiness,
+      closeWorkspaceLsp,
+      voiceTranscription.close,
+    ],
   });
 
   return {
@@ -1453,15 +1769,29 @@ export async function createOpenPondServer(
   };
 }
 
-function parseModelJudgeResult(raw: string): { score: number; passed: boolean; feedback: string; evidenceRefs: string[] } | null {
-  const normalized = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+function parseModelJudgeResult(
+  raw: string
+): {
+  score: number;
+  passed: boolean;
+  feedback: string;
+  evidenceRefs: string[];
+} | null {
+  const normalized = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "");
   try {
     const value = JSON.parse(normalized) as Record<string, unknown>;
-    if (typeof value.score !== "number" || typeof value.passed !== "boolean") return null;
+    if (typeof value.score !== "number" || typeof value.passed !== "boolean")
+      return null;
     return {
       score: Math.max(0, Math.min(1, value.score)),
       passed: value.passed,
-      feedback: typeof value.feedback === "string" ? value.feedback.slice(0, 20_000) : "Model judge completed.",
+      feedback:
+        typeof value.feedback === "string"
+          ? value.feedback.slice(0, 20_000)
+          : "Model judge completed.",
       evidenceRefs: [],
     };
   } catch {
@@ -1469,20 +1799,29 @@ function parseModelJudgeResult(raw: string): { score: number; passed: boolean; f
   }
 }
 
-function resolveMaxHostedWorkspaceToolRounds(optionValue: number | undefined): number {
-  if (typeof optionValue === "number" && Number.isFinite(optionValue) && optionValue > 0) {
+function resolveMaxHostedWorkspaceToolRounds(
+  optionValue: number | undefined
+): number {
+  if (
+    typeof optionValue === "number" &&
+    Number.isFinite(optionValue) &&
+    optionValue > 0
+  ) {
     return Math.floor(optionValue);
   }
   const envValue = process.env.OPENPOND_HOSTED_WORKSPACE_TOOL_ROUNDS?.trim();
   if (!envValue) return DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
-  if (/^(unlimited|infinite|infinity)$/i.test(envValue)) return Number.POSITIVE_INFINITY;
+  if (/^(unlimited|infinite|infinity)$/i.test(envValue))
+    return Number.POSITIVE_INFINITY;
   const parsed = Number.parseInt(envValue, 10);
   return Number.isFinite(parsed) && parsed > 0
     ? parsed
     : DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
 }
 
-function isInsightEvidenceSourceFilter(value: string | null): value is
+function isInsightEvidenceSourceFilter(
+  value: string | null
+): value is
   | "all"
   | "create_edit"
   | "stuck_turn"
@@ -1506,19 +1845,44 @@ function isInsightEvidenceSourceFilter(value: string | null): value is
 function findRecentCodexCompactionCompleted(
   events: RuntimeEvent[],
   sessionId: string,
-  codexThreadId: string,
+  codexThreadId: string
 ): RuntimeEvent | null {
   const cutoff = Date.now() - 60_000;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const item = events[index]!;
     const timestamp = Date.parse(item.timestamp);
     if (Number.isFinite(timestamp) && timestamp < cutoff) return null;
-    if (item.sessionId !== sessionId || item.name !== "session.compaction.completed") continue;
+    if (
+      item.sessionId !== sessionId ||
+      item.name !== "session.compaction.completed"
+    )
+      continue;
     const data =
-      item.data && typeof item.data === "object" ? (item.data as Record<string, unknown>) : null;
-    if (data?.provider === "codex" && data.codexThreadId === codexThreadId) return item;
+      item.data && typeof item.data === "object"
+        ? (item.data as Record<string, unknown>)
+        : null;
+    if (data?.provider === "codex" && data.codexThreadId === codexThreadId)
+      return item;
   }
   return null;
+}
+
+function createImproveTargetKind(
+  value: string | null
+): "agent" | "skill" | "extension" | "model" | "configuration" | null {
+  return value === "agent" ||
+    value === "skill" ||
+    value === "extension" ||
+    value === "model" ||
+    value === "configuration"
+    ? value
+    : null;
+}
+
+function createImproveLimit(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined;
 }
 
 if (isCliEntrypoint(import.meta.url)) {

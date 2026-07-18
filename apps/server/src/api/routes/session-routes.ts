@@ -9,7 +9,6 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     runSessionCommand,
     ensureCloudWorkspaceReady,
     recordPreflightTurnFailure,
-    updateTurnCreatePipeline,
     interruptSessionTurn,
     compactSession,
     executeWorkspaceTool,
@@ -55,20 +54,6 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
       200,
       await ensureCloudWorkspaceReady(
         decodeURIComponent(workspaceReadyMatch[1]!),
-        await readJson(request),
-      ),
-    );
-    return true;
-  }
-  const turnCreatePipelineMatch =
-    /^\/v1\/sessions\/([^/]+)\/turns\/([^/]+)\/create-pipeline$/.exec(requestUrl.pathname);
-  if (request.method === "POST" && turnCreatePipelineMatch) {
-    sendJson(
-      response,
-      200,
-      await updateTurnCreatePipeline(
-        decodeURIComponent(turnCreatePipelineMatch[1]!),
-        decodeURIComponent(turnCreatePipelineMatch[2]!),
         await readJson(request),
       ),
     );

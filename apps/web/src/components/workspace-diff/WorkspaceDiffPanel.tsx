@@ -54,7 +54,9 @@ export function WorkspaceDiffPanel({
   workspaceError,
   expanded,
   fileRootPath,
+  filesWithPreview = false,
   openFileRequest,
+  readOnly = false,
   sideChatTabs,
   sourceSwitcher,
   tabRequest,
@@ -84,7 +86,9 @@ export function WorkspaceDiffPanel({
   workspaceError: string | null;
   expanded: boolean;
   fileRootPath?: string | null;
+  filesWithPreview?: boolean;
   openFileRequest?: { id: number; path: string } | null;
+  readOnly?: boolean;
   sideChatTabs?: WorkspaceDiffSideChatTab[];
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   tabRequest?: WorkspaceDiffTabRequest | null;
@@ -116,7 +120,9 @@ export function WorkspaceDiffPanel({
       workspaceError={workspaceError}
       expanded={expanded}
       fileRootPath={fileRootPath ?? null}
+      filesWithPreview={filesWithPreview}
       openFileRequest={openFileRequest}
+      readOnly={readOnly}
       sideChatTabs={sideChatTabs ?? []}
       sourceSwitcher={sourceSwitcher ?? null}
       tabRequest={tabRequest ?? null}
@@ -239,7 +245,9 @@ function WorkspaceDiffPanelInner({
   workspaceError,
   expanded,
   fileRootPath,
+  filesWithPreview,
   openFileRequest,
+  readOnly,
   sideChatTabs,
   sourceSwitcher,
   tabRequest,
@@ -268,7 +276,9 @@ function WorkspaceDiffPanelInner({
   workspaceError: string | null;
   expanded: boolean;
   fileRootPath: string | null;
+  filesWithPreview: boolean;
   openFileRequest?: { id: number; path: string } | null;
+  readOnly: boolean;
   sideChatTabs: WorkspaceDiffSideChatTab[];
   sourceSwitcher: WorkspaceFileSourceSwitcher | null;
   tabRequest: WorkspaceDiffTabRequest | null;
@@ -543,7 +553,7 @@ function WorkspaceDiffPanelInner({
   }, [currentViewState, onViewStateChange]);
 
   useEffect(() => {
-    if (sandboxMode || !connection || !appId || !workspaceInitialized || diff || workspaceError) return;
+    if (readOnly || sandboxMode || !connection || !appId || !workspaceInitialized || diff || workspaceError) return;
     if (refreshBusyRef.current) return;
 
     refreshBusyRef.current = true;
@@ -554,7 +564,7 @@ function WorkspaceDiffPanelInner({
       .finally(() => {
         refreshBusyRef.current = false;
       });
-  }, [appId, connection, diff, sandboxMode, workspaceError, workspaceInitialized]);
+  }, [appId, connection, diff, readOnly, sandboxMode, workspaceError, workspaceInitialized]);
 
   useEffect(() => {
     if (previousSourceKeyRef.current !== sourceKey) {
@@ -626,7 +636,7 @@ function WorkspaceDiffPanelInner({
   }, [connection, refreshSandboxWorkspace, sandboxId, sandboxMode]);
 
   useEffect(() => {
-    if (sandboxMode || !connection || !appId || !workspaceInitialized) return undefined;
+    if (readOnly || sandboxMode || !connection || !appId || !workspaceInitialized) return undefined;
 
     let disposed = false;
     async function refresh() {
@@ -655,7 +665,7 @@ function WorkspaceDiffPanelInner({
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [appId, connection, sandboxMode, workspaceInitialized]);
+  }, [appId, connection, readOnly, sandboxMode, workspaceInitialized]);
 
   useEffect(() => {
     if (sandboxMode || !connection || !appId || workspaceKind === "local_project") {
@@ -698,7 +708,9 @@ function WorkspaceDiffPanelInner({
     if (!summaryAvailable && activeTab === "summary") setActiveTab("files");
   }, [activeTab, summaryAvailable]);
 
-  const selectedDetailPath = activeTab === "file" ? selectedPath : null;
+  const selectedDetailPath = activeTab === "file" || (filesWithPreview && activeTab === "files")
+    ? selectedPath
+    : null;
 
   useEffect(() => {
     if (!connection || !selectedDetailPath) return undefined;
@@ -709,6 +721,11 @@ function WorkspaceDiffPanelInner({
     }
     const forceReload = fileReloadRequest?.path === selectedDetailPath;
     const diffFile = fileForPath(selectedDetailPath);
+    if (readOnly && (diffFile?.content != null || diffFile?.patch)) {
+      setFileError(null);
+      setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
+      return undefined;
+    }
     if (!forceReload && (diffFile?.content != null || (diffFile?.patch && !loadFullFiles))) {
       setFileError(null);
       setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
@@ -763,6 +780,7 @@ function WorkspaceDiffPanelInner({
     connection,
     fileReloadRequest,
     loadFullFiles,
+    readOnly,
     runtimeEvents,
     sandboxFileSource?.emptyMessage,
     sandboxId,
@@ -780,9 +798,11 @@ function WorkspaceDiffPanelInner({
       return next;
     });
     setFileReloadRequest({ id: Date.now(), path: normalizedPath });
-    setOpenFilePaths((current) => (current.includes(normalizedPath) ? current : [...current, normalizedPath]));
+    if (!filesWithPreview) {
+      setOpenFilePaths((current) => (current.includes(normalizedPath) ? current : [...current, normalizedPath]));
+    }
     setSelectedPath(normalizedPath);
-    setActiveTab("file");
+    setActiveTab(filesWithPreview ? "files" : "file");
     if (!sandboxMode && connection && appId && isWorkspaceImagePath(normalizedPath)) setPreviewImagePath(normalizedPath);
     setAddMenuOpen(false);
     setSearchOpen(false);
@@ -948,7 +968,8 @@ function WorkspaceDiffPanelInner({
     : null;
   const selectedFileShowsDiff = Boolean(selectedFileForEditor?.patch && !loadFullFiles);
   const selectedFileIsEditableSource = Boolean(
-    activeTab === "file" &&
+    !readOnly &&
+      activeTab === "file" &&
       !selectedFileShowsDiff &&
       selectedPath &&
       selectedFileContentForEditor != null &&
@@ -1114,13 +1135,15 @@ function WorkspaceDiffPanelInner({
     !sandboxMode && previewImagePath && isWorkspaceImagePath(previewImagePath) ? previewImagePath : null;
   const selectedImageSrc = useWorkspaceImageUrl(connection, appId, selectedImagePath);
   const previewImageSrc = useWorkspaceImageUrl(connection, appId, previewImagePreviewPath);
-  const activeToolbarPath = visibleTab === "file" ? selectedPath : null;
+  const activeToolbarPath = visibleTab === "file" || (filesWithPreview && visibleTab === "files")
+    ? selectedPath
+    : null;
   const showRenderMarkdownToggle = Boolean(activeToolbarPath && isMarkdownPath(activeToolbarPath));
   const activeDiagnostics = selectedPath ? lspDiagnosticsByPath[selectedPath] ?? [] : [];
   const activeServers = selectedPath ? lspServersByPath[selectedPath] ?? null : null;
   const editorDiagnosticsChecking = Boolean(selectedPath && lspCheckingPath === selectedPath);
   const showEditorCommandBar = editorControlsVisible && selectedFileIsEditableSource;
-  const editorLspEnabled = !sandboxMode && activeEditorPreferences.languageServers !== "off";
+  const editorLspEnabled = !readOnly && !sandboxMode && activeEditorPreferences.languageServers !== "off";
   const editorDiagnosticStatus = useMemo(
     () =>
       resolveEditorDiagnosticStatus({
@@ -1143,6 +1166,36 @@ function WorkspaceDiffPanelInner({
     },
     [connection, onRefresh],
   );
+  const selectedFilePreview = selectedPath ? (
+    <FilePreview
+      diagnostics={editorLspEnabled ? lspDiagnosticsByPath[selectedPath] ?? [] : []}
+      draftContent={fileDrafts[selectedPath]?.content}
+      editorRef={editorHandleRef}
+      editable={!readOnly && !selectedImageSrc}
+      error={fileError}
+      file={fileForPath(selectedPath)}
+      collapsed={collapsed}
+      hideWhiteSpace={hideWhiteSpace}
+      imageSrc={selectedImageSrc}
+      loading={fileLoadingPath === selectedPath}
+      loadFullFiles={loadFullFiles}
+      saveError={fileSaveErrors[selectedPath] ?? null}
+      saving={savingPath === selectedPath}
+      onOpenImage={() => {
+        if (selectedImageSrc) setPreviewImagePath(selectedPath);
+      }}
+      onDraftContentChange={(content) => updateFileDraft(selectedPath, content)}
+      onLspAction={editorLspEnabled ? runLspAction : undefined}
+      onSave={() => void saveFile(selectedPath)}
+      onSelectBreadcrumbPath={selectBreadcrumbPath}
+      renderMarkdown={renderMarkdown}
+      splitView={splitView}
+      wordDiffs={wordDiffs}
+      wordWrap={wordWrap}
+      workspaceName={workspaceName}
+      workspaceRootPath={workspaceRootPath}
+    />
+  ) : null;
   return (
     <>
     <aside className={`workspace-diff-panel ${expanded ? "expanded" : ""}`} aria-label="Workspace diffs">
@@ -1228,7 +1281,7 @@ function WorkspaceDiffPanelInner({
       ) : (
         <>
           <WorkspaceDiffToolbar
-            canSaveActiveFile={Boolean(selectedPath && dirtyFilePaths.has(selectedPath) && savingPath !== selectedPath)}
+            canSaveActiveFile={Boolean(!readOnly && selectedPath && dirtyFilePaths.has(selectedPath) && savingPath !== selectedPath)}
             canCheckActiveFile={editorLspEnabled}
             collapsed={collapsed}
             editorControlsVisible={editorControlsVisible}
@@ -1260,45 +1313,34 @@ function WorkspaceDiffPanelInner({
             onToggleWordWrap={() => setWordWrap((value) => !value)}
           />
 
-          {visibleTab === "files" && (
+          {visibleTab === "files" && (filesWithPreview ? (
+            <div className="workspace-diff-files-preview-layout">
+              <WorkspaceDiffFiles
+                diff={displayDiff}
+                expandedFolderPaths={expandedFileTreeFolders}
+                rootPath={fileRootPath}
+                repoFiles={repoFiles}
+                selectedPath={selectedPath}
+                onOpenFile={openFile}
+                onToggleFolder={toggleFileTreeFolder}
+              />
+              {selectedFilePreview ?? (
+                <div className="workspace-diff-files-preview-empty">Select a file to review its changes.</div>
+              )}
+            </div>
+          ) : (
             <WorkspaceDiffFiles
               diff={displayDiff}
               expandedFolderPaths={expandedFileTreeFolders}
               rootPath={fileRootPath}
               repoFiles={repoFiles}
+              selectedPath={selectedPath}
               onOpenFile={openFile}
               onToggleFolder={toggleFileTreeFolder}
             />
-          )}
+          ))}
           {visibleTab === "file" && selectedPath && (
-            <FilePreview
-              diagnostics={editorLspEnabled ? lspDiagnosticsByPath[selectedPath] ?? [] : []}
-              draftContent={fileDrafts[selectedPath]?.content}
-              editorRef={editorHandleRef}
-              editable={!selectedImageSrc}
-              error={fileError}
-              file={fileForPath(selectedPath)}
-              collapsed={collapsed}
-              hideWhiteSpace={hideWhiteSpace}
-              imageSrc={selectedImageSrc}
-              loading={fileLoadingPath === selectedPath}
-              loadFullFiles={loadFullFiles}
-              saveError={fileSaveErrors[selectedPath] ?? null}
-              saving={savingPath === selectedPath}
-              onOpenImage={() => {
-                if (selectedImageSrc) setPreviewImagePath(selectedPath);
-              }}
-              onDraftContentChange={(content) => updateFileDraft(selectedPath, content)}
-              onLspAction={editorLspEnabled ? runLspAction : undefined}
-              onSave={() => void saveFile(selectedPath)}
-              onSelectBreadcrumbPath={selectBreadcrumbPath}
-              renderMarkdown={renderMarkdown}
-              splitView={splitView}
-              wordDiffs={wordDiffs}
-              wordWrap={wordWrap}
-              workspaceName={workspaceName}
-              workspaceRootPath={workspaceRootPath}
-            />
+            selectedFilePreview
           )}
         </>
       )}

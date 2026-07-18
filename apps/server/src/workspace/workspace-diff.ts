@@ -213,6 +213,116 @@ export async function loadWorkspaceDiffAtPath(
   return cloneWorkspaceDiffSummary(summary);
 }
 
+export async function loadGitCommitDiffAtPath(
+  repoPath: string,
+  workspaceId: string,
+  baseCommit: string,
+  headCommit: string,
+): Promise<WorkspaceDiffSummary> {
+  const initialized = await isGitRepo(repoPath);
+  if (!initialized) throw new Error("Candidate source is not a Git repository.");
+  const gitContext = await gitWorkspaceContext(repoPath);
+  const range = `${baseCommit}..${headCommit}`;
+  const [base, head, statusResult, patchResult, repoFilesResult] = await Promise.all([
+    runCommand("git", ["rev-parse", "--verify", `${baseCommit}^{commit}`], gitContext.commandCwd),
+    runCommand("git", ["rev-parse", "--verify", `${headCommit}^{commit}`], gitContext.commandCwd),
+    runCommand(
+      "git",
+      ["-c", "core.quotePath=false", "diff", "--name-status", "--find-renames", range, "--", "."],
+      gitContext.commandCwd,
+    ),
+    runCommand(
+      "git",
+      ["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--unified=80", range, "--", "."],
+      gitContext.commandCwd,
+    ),
+    runCommand(
+      "git",
+      ["-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", headCommit],
+      gitContext.commandCwd,
+    ),
+  ]);
+  if (base.code !== 0 || head.code !== 0) {
+    throw new Error("Candidate Git history is no longer available.");
+  }
+  if (statusResult.code !== 0) {
+    throw new Error(statusResult.stderr.trim() || "Unable to read the candidate change.");
+  }
+
+  const entries = parseCommitDiffEntries(statusResult.stdout)
+    .filter((entry) => !isGeneratedWorkspacePath(entry.path));
+  const patchMap = patchResult.code === 0
+    ? parseGitPatchStreamByWorkspacePath(patchResult.stdout || patchResult.stderr, "")
+    : new Map<string, string>();
+  const files = await mapWorkspaceDiffEntriesWithConcurrency(entries, async (entry) => {
+    const statsResult = await runCommand(
+      "git",
+      ["diff", "--numstat", range, "--", entry.path],
+      gitContext.commandCwd,
+    );
+    const stats = statsResult.code === 0
+      ? [...parseNumstat(statsResult.stdout).values()][0] ?? { additions: 0, deletions: 0 }
+      : { additions: 0, deletions: 0 };
+    const contentResult = entry.status === "deleted"
+      ? null
+      : await runCommand("git", ["show", `${headCommit}:${entry.path}`], gitContext.commandCwd);
+    return {
+      path: entry.path,
+      status: entry.status,
+      additions: stats.additions,
+      deletions: stats.deletions,
+      patch: truncatePatch(patchMap.get(entry.path) ?? ""),
+      content: contentResult?.code === 0 ? contentResult.stdout : null,
+    };
+  });
+  const repoFiles = repoFilesResult.code === 0
+    ? uniqueSortedPaths(
+        repoFilesResult.stdout
+          .split("\n")
+          .map((value) => value.trim())
+          .filter((value) => value && !isGeneratedWorkspacePath(value)),
+      )
+    : files.map((file) => file.path);
+  return {
+    appId: workspaceId,
+    repoPath,
+    initialized: true,
+    dirty: files.length > 0,
+    filesChanged: files.length,
+    additions: files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+    repoFiles,
+    files,
+    error: null,
+    updatedAt: now(),
+  };
+}
+
+function parseCommitDiffEntries(
+  output: string,
+): Array<{ path: string; status: WorkspaceDiffFile["status"] }> {
+  return output
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [rawStatus, firstPath, secondPath] = line.split("\t");
+      const statusCode = rawStatus?.[0] ?? "M";
+      const rawPath = statusCode === "R" || statusCode === "C"
+        ? secondPath
+        : firstPath;
+      const normalized = rawPath ? normalizeWorkspaceFilePath(rawPath) : null;
+      if (!normalized) return [];
+      const status = statusCode === "A" || statusCode === "C"
+        ? "added"
+        : statusCode === "D"
+          ? "deleted"
+          : statusCode === "R"
+            ? "renamed"
+            : "modified";
+      return [{ path: normalized, status }];
+    });
+}
+
 function countTextLines(content: string | null): number {
   if (!content) return 0;
   const withoutTrailingNewline = content.endsWith("\n") ? content.slice(0, -1) : content;

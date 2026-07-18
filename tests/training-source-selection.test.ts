@@ -3,33 +3,36 @@ import { readFile } from "node:fs/promises";
 
 describe("Training source selection UI", () => {
   test("supports intent-first flow followed by compact shared evidence selection", async () => {
-    const [rows, view, labs, pane, dialog, flow, startStep, manualStep, sourceStep, hook] = await Promise.all([
+    const [rows, view, labs, pane, dialog, flow, startStep, sourceStep, hook] = await Promise.all([
       readFile("apps/web/src/components/sidebar/SidebarRows.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingView.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsView.tsx", "utf8"),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
-      readFile("apps/web/src/components/training/TrainingRunDialog.tsx", "utf8"),
+      readFile("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx", "utf8"),
       readFile("apps/web/src/components/training/training-flow.ts", "utf8"),
       readFile("apps/web/src/components/training/TrainingStartModeStep.tsx", "utf8"),
-      readFile("apps/web/src/components/training/TrainingManualGoalStep.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingSourceStep.tsx", "utf8"),
       readFile("apps/web/src/hooks/useTraining.ts", "utf8"),
     ]);
     expect(rows).toContain('label="Add to training"');
     expect(view).not.toContain("New model");
-    expect(labs).toContain("New model");
-    expect(pane).toContain('setLabsTab("models")');
+    expect(labs).toContain("onCreateModel");
     expect(pane).toContain("setTrainingLaunchRequest");
-    expect(dialog).toContain('type NewModelMode = "automated" | "manual"');
+    expect(pane).toContain("onNewModel");
+    expect(startStep).toContain('type NewModelMode = "automated" | "manual"');
+    expect(startStep).toContain('NewModelMode | "existing_dataset"');
     expect(flow).toContain('type NewModelStep =');
-    for (const step of ["start", "automatic_scope", "automatic_candidates", "manual_goal", "evidence", "recommendation"]) expect(flow).toContain(`| "${step}"`);
+    for (const step of ["start", "base_model", "existing_dataset", "automatic_scope", "automatic_candidates", "evidence", "recommendation"]) expect(flow).toContain(`| "${step}"`);
+    expect(flow).not.toContain("manual_goal");
     expect(dialog).toContain("selectedSessionIds");
     expect(dialog).toContain("addSources(missingSessionIds)");
-    expect(startStep).toContain("How do you want to start?");
+    expect(startStep).toContain("Choose a setup");
     expect(startStep).toContain("Automated");
     expect(startStep).toContain("Manual");
-    expect(manualStep).toContain("What should the model learn?");
-    expect(manualStep).toContain("required");
+    expect(startStep).toContain("Existing Dataset");
+    expect(sourceStep).toContain("Build the Dataset");
+    expect(sourceStep).toContain("onObjectiveChange");
+    expect(sourceStep).toContain("required");
     expect(dialog).not.toContain("methodHintForApproach");
     expect(sourceStep).toContain("CodexModelReasoningMenu");
     expect(sourceStep).toContain('placeholder="Search chats"');
@@ -39,7 +42,7 @@ describe("Training source selection UI", () => {
     expect(sourceStep).toContain("training-chat-search-snippet");
     expect(sourceStep).toContain("Indexing messages");
     expect(sourceStep).not.toContain("trainingApproachLabel");
-    expect(sourceStep).not.toContain("What should the model learn?");
+    expect(sourceStep).toContain("Capability");
     expect(dialog).toContain("estimateSources");
     expect(sourceStep).toContain("About {formatTokens");
     expect(sourceStep).not.toContain(" · ");
@@ -49,6 +52,7 @@ describe("Training source selection UI", () => {
     expect(hook).toContain('"/sources/batch"');
     expect(hook).toContain('"/sources/estimate"');
     expect(hook).toContain('"/sources/search"');
+    expect(hook).toContain('"/models/from-taskset"');
     expect(hook).toContain('TaskCreationRequest["methodHint"]');
   });
 });

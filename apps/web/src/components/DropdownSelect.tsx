@@ -13,6 +13,7 @@ export function DropdownSelect({
   placement = "bottom",
   label,
   tooltip,
+  searchable = false,
   onChange,
 }: {
   value: string;
@@ -24,14 +25,25 @@ export function DropdownSelect({
   placement?: "bottom" | "top";
   label: string;
   tooltip?: string;
+  searchable?: boolean;
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selected = options.find((option) => option.value === value) ?? options[0];
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) =>
+        [option.label, option.shortLabel, option.description]
+          .some((candidate) => candidate?.toLowerCase().includes(normalizedQuery)))
+    : options;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery("");
+      return;
+    }
     function handlePointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -67,7 +79,18 @@ export function DropdownSelect({
       </button>
       {open && (
         <div className="dropdown-menu" role="menu">
-          {options.map((option) => (
+          {searchable ? (
+            <label className="dropdown-search" onClick={(event) => event.stopPropagation()}>
+              <span className="sr-only">Search {label}</span>
+              <input
+                autoFocus
+                placeholder={`Search ${label.toLowerCase()}`}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          ) : null}
+          {visibleOptions.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -80,6 +103,7 @@ export function DropdownSelect({
               ].filter(Boolean).join(" ")}
               onClick={() => {
                 onChange(option.value);
+                setQuery("");
                 setOpen(false);
               }}
             >
@@ -90,6 +114,7 @@ export function DropdownSelect({
               {option.description && <small>{option.description}</small>}
             </button>
           ))}
+          {!visibleOptions.length ? <div className="dropdown-empty">No matches</div> : null}
         </div>
       )}
     </div>

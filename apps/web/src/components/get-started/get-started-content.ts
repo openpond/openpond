@@ -132,13 +132,13 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
   {
     id: "insights",
     label: "Insights Loop",
-    description: "How Insights is a specific implementation on top of goals and create/edit pipeline state.",
+    description: "How Insights reviews goal and Create/Improve state.",
     slides: [
       {
         id: "insights-detect",
         eyebrow: "Detector",
         title: "Insights runs on top of goals",
-        body: "Insights is a specific implementation on top of goals: it watches `create_pipeline.updated` events and turns stuck create/edit states into active rows.",
+        body: "Insights watches `create_improve.updated` events and turns stuck Create/Improve runs into active rows.",
         detail: "Awaiting questions, plan approval, blocked, and failed states become concern or blocker rows tied back to the source event.",
         visual: "insights-loop",
         accent: cyan,
@@ -147,7 +147,7 @@ export const GET_STARTED_DECKS: GetStartedDeck[] = [
         id: "insights-action",
         eyebrow: "Action",
         title: "Insights stay actionable",
-        body: "Observation scanning is off by default. Turn it on in Lab → Signals, then review, resolve, or dismiss the resulting observations there.",
+        body: "Observation scanning is off by default. Open the suggestions inbox in Lab to enable scanning, then review, resolve, or dismiss the resulting observations there.",
         detail: "Rows persist in `insight_items` and resolve when the pipeline moves forward or the user marks them handled.",
         visual: "insights-list",
         accent: cyan,

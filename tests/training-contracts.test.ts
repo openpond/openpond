@@ -5,12 +5,13 @@ import { AppPreferencesSchema, LocalModelChatConfigurationSchema, SftRecipeSchem
 import { planFixture, sftRecipeFixture } from "./helpers/training-fixtures";
 
 describe("training contracts", () => {
-  test("makes LoRA SFT executable and every other method explicitly unsupported", () => {
+  test("makes LoRA SFT and GRPO executable while retaining explicit unsupported recipes", () => {
     expect(SftRecipeSchema.safeParse(sftRecipeFixture()).success).toBe(true);
     expect(TrainingPlanSchema.safeParse(planFixture()).success).toBe(true);
-    const unsupported = UnsupportedTrainingRecipeSchema.parse({ schemaVersion: "openpond.unsupportedRecipe.v1", method: "grpo", parameterization: "lora", unsupportedReason: "Hosted/managed readiness only." });
-    expect(TrainingRecipeSchema.parse(unsupported).method).toBe("grpo");
+    const unsupported = UnsupportedTrainingRecipeSchema.parse({ schemaVersion: "openpond.unsupportedRecipe.v1", method: "dpo", parameterization: "lora", unsupportedReason: "No executable destination is connected." });
+    expect(TrainingRecipeSchema.parse(unsupported).method).toBe("dpo");
     expect(SftRecipeSchema.safeParse(unsupported).success).toBe(false);
+    expect(UnsupportedTrainingRecipeSchema.safeParse({ ...unsupported, method: "grpo" }).success).toBe(false);
     expect(SftRecipeSchema.safeParse({ ...sftRecipeFixture(), parameterization: "full" }).success).toBe(false);
   });
 

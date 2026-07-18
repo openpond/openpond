@@ -9,7 +9,6 @@ import {
   defaultServerPort,
   desktopDirname,
   desktopLogger,
-  nodeBinary,
   pnpmBinary,
   releaseChannel,
   repoRoot,
@@ -298,7 +297,10 @@ async function ensureServer(): Promise<ServerConnection> {
   const serverEntry = app.isPackaged
     ? path.join(process.resourcesPath, "server", "index.js")
     : path.join(root, "apps", "server", "dist", "index.js");
-  const command = app.isPackaged ? process.execPath : nodeBinary();
+  // Use Electron's pinned Node runtime for the bundled server in both dev and
+  // packaged builds. Falling back to a shell `node` makes desktop behavior
+  // depend on the caller's PATH and can silently launch an unsupported runtime.
+  const command = process.execPath;
   const args = app.isPackaged
     ? [serverEntry, "web", "--port", String(launchPort)]
     : [serverEntry, "--port", String(launchPort)];
@@ -316,7 +318,7 @@ async function ensureServer(): Promise<ServerConnection> {
             OPENPOND_REMOTE_ACCESS_TARGET:
               process.env.OPENPOND_WEB_URL || defaultRendererDevUrl(),
           }),
-      ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      ELECTRON_RUN_AS_NODE: "1",
     },
     detached: process.platform !== "win32",
   });

@@ -72,6 +72,16 @@ export async function openTrainingPage(harness: DesktopHarness) {
 export async function registerTrainingModel(harness: DesktopHarness, suffix: string) {
   const model = scriptedTrainingModel(suffix);
   await registerScriptedOpenPondModel(harness, model);
+  await harness.api.fetchJson("/v1/preferences", {
+    method: "PATCH",
+    body: {
+      training: {
+        defaultModelRef: model,
+        creationMode: "defaults",
+        autoApproveEvidence: false,
+      },
+    },
+  });
   return model;
 }
 

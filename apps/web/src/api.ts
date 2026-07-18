@@ -134,7 +134,10 @@ export type OpenAiSubscriptionAuthResponse =
 
 type CodexHistoryTurnInterruptResponse =
   | { interrupted: true }
-  | { interrupted: false; reason: "no_active_openpond_turn" | "turn_not_ready" };
+  | {
+      interrupted: false;
+      reason: "no_active_openpond_turn" | "turn_not_ready";
+    };
 
 export type PreferencesPayload = {
   preferences: AppPreferences;
@@ -153,7 +156,11 @@ export type RuntimeEventPagePayload = {
   remainingMatchingEvents: number;
 };
 
-export { openEventStream, terminalWebSocketProtocols, terminalWebSocketUrl } from "./api/api-client";
+export {
+  openEventStream,
+  terminalWebSocketProtocols,
+  terminalWebSocketUrl,
+} from "./api/api-client";
 export { resolveConnection } from "./api/connection";
 export type { ClientConnection } from "./api/api-client";
 export type {
@@ -176,42 +183,50 @@ export const api = {
   teamChatMembers: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ members: TeamChatMember[] }>(
       connection,
-      `/v1/team-chat/members?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/members?teamId=${encodeURIComponent(teamId)}`
     ),
   teamChatAgents: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ agents: TeamChatAgentCatalogEntry[] }>(
       connection,
-      `/v1/team-chat/agents?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/agents?teamId=${encodeURIComponent(teamId)}`
     ),
   teamChatThreads: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ threads: TeamChatThread[] }>(
       connection,
-      `/v1/team-chat/threads?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/threads?teamId=${encodeURIComponent(teamId)}`
     ),
   teamChatRealtimeSession: (connection: ClientConnection, teamId: string) =>
     apiFetch<TeamChatRealtimeSession>(
       connection,
-      `/v1/team-chat/realtime-session?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/realtime-session?teamId=${encodeURIComponent(teamId)}`
     ),
   teamChatEvents: (
     connection: ClientConnection,
     teamId: string,
-    input: { after?: number; limit?: number } = {},
+    input: { after?: number; limit?: number } = {}
   ) => {
     const query = new URLSearchParams({ teamId });
     if (input.after != null) query.set("after", String(input.after));
     if (input.limit != null) query.set("limit", String(input.limit));
     return apiFetch<TeamChatEventPage>(
       connection,
-      `/v1/team-chat/events?${query.toString()}`,
+      `/v1/team-chat/events?${query.toString()}`
     );
   },
   teamChatGeneral: (connection: ClientConnection, teamId: string) =>
-    apiFetch<TeamChatThreadDetail>(connection, "/v1/team-chat/threads/general", {
-      method: "POST",
-      body: JSON.stringify({ teamId }),
-    }),
-  teamChatDm: (connection: ClientConnection, teamId: string, otherUserId: string) =>
+    apiFetch<TeamChatThreadDetail>(
+      connection,
+      "/v1/team-chat/threads/general",
+      {
+        method: "POST",
+        body: JSON.stringify({ teamId }),
+      }
+    ),
+  teamChatDm: (
+    connection: ClientConnection,
+    teamId: string,
+    otherUserId: string
+  ) =>
     apiFetch<TeamChatThreadDetail>(connection, "/v1/team-chat/threads/dm", {
       method: "POST",
       body: JSON.stringify({ teamId, otherUserId }),
@@ -220,34 +235,41 @@ export const api = {
     connection: ClientConnection,
     teamId: string,
     threadId: string,
-    input: { beforeSequence?: number; limit?: number } = {},
+    input: { beforeSequence?: number; limit?: number } = {}
   ) => {
     const query = new URLSearchParams({ teamId });
-    if (input.beforeSequence != null) query.set("beforeSequence", String(input.beforeSequence));
+    if (input.beforeSequence != null)
+      query.set("beforeSequence", String(input.beforeSequence));
     if (input.limit != null) query.set("limit", String(input.limit));
     return apiFetch<TeamChatThreadDetail>(
       connection,
-      `/v1/team-chat/threads/${encodeURIComponent(threadId)}?${query.toString()}`,
+      `/v1/team-chat/threads/${encodeURIComponent(
+        threadId
+      )}?${query.toString()}`
     );
   },
   uploadTeamChatAttachment: (
     connection: ClientConnection,
     threadId: string,
-    input: { teamId: string; attachment: ChatAttachment },
+    input: { teamId: string; attachment: ChatAttachment }
   ) =>
     apiFetch<TeamChatAttachment>(
       connection,
-      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/attachments/upload`,
-      { method: "POST", body: JSON.stringify(input) },
+      `/v1/team-chat/threads/${encodeURIComponent(
+        threadId
+      )}/attachments/upload`,
+      { method: "POST", body: JSON.stringify(input) }
     ),
   teamChatAttachmentDownload: (
     connection: ClientConnection,
     teamId: string,
-    attachmentId: string,
+    attachmentId: string
   ) =>
     apiFetch<TeamChatAttachmentDownload>(
       connection,
-      `/v1/team-chat/attachments/${encodeURIComponent(attachmentId)}/download?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/attachments/${encodeURIComponent(
+        attachmentId
+      )}/download?teamId=${encodeURIComponent(teamId)}`
     ),
   sendTeamChatMessage: (
     connection: ClientConnection,
@@ -259,12 +281,12 @@ export const api = {
       mentionUserIds?: string[];
       attachmentIds?: string[];
       replyToMessageId?: string | null;
-    },
+    }
   ) =>
     apiFetch<TeamChatMessage>(
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages`,
-      { method: "POST", body: JSON.stringify(input) },
+      { method: "POST", body: JSON.stringify(input) }
     ),
   createTeamChatAgentRun: (
     connection: ClientConnection,
@@ -278,65 +300,71 @@ export const api = {
       conversationId?: string | null;
       targetProjectId?: string | null;
       approvalId?: string | null;
-    },
+    }
   ) =>
     apiFetch<TeamChatAgentRunResult>(
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/agent-runs`,
-      { method: "POST", body: JSON.stringify(input) },
+      { method: "POST", body: JSON.stringify(input) }
     ),
   teamChatAgentConversation: (
     connection: ClientConnection,
     teamId: string,
-    agentRunId: string,
+    agentRunId: string
   ) =>
     apiFetch<TeamChatAgentConversation>(
       connection,
-      `/v1/team-chat/agent-runs/${encodeURIComponent(agentRunId)}?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/agent-runs/${encodeURIComponent(
+        agentRunId
+      )}?teamId=${encodeURIComponent(teamId)}`
     ),
   editTeamChatMessage: (
     connection: ClientConnection,
     threadId: string,
     messageId: string,
-    input: { teamId: string; body: string },
+    input: { teamId: string; body: string }
   ) =>
     apiFetch<TeamChatMessage>(
       connection,
-      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`,
-      { method: "PATCH", body: JSON.stringify(input) },
+      `/v1/team-chat/threads/${encodeURIComponent(
+        threadId
+      )}/messages/${encodeURIComponent(messageId)}`,
+      { method: "PATCH", body: JSON.stringify(input) }
     ),
   deleteTeamChatMessage: (
     connection: ClientConnection,
     threadId: string,
     messageId: string,
-    teamId: string,
+    teamId: string
   ) =>
     apiFetch<TeamChatMessage>(
       connection,
-      `/v1/team-chat/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`,
-      { method: "DELETE", body: JSON.stringify({ teamId }) },
+      `/v1/team-chat/threads/${encodeURIComponent(
+        threadId
+      )}/messages/${encodeURIComponent(messageId)}`,
+      { method: "DELETE", body: JSON.stringify({ teamId }) }
     ),
   markTeamChatRead: (
     connection: ClientConnection,
     threadId: string,
     teamId: string,
-    sequence: number,
+    sequence: number
   ) =>
     apiFetch<{ sequence: number }>(
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/read`,
-      { method: "POST", body: JSON.stringify({ teamId, sequence }) },
+      { method: "POST", body: JSON.stringify({ teamId, sequence }) }
     ),
   setTeamChatThreadMuted: (
     connection: ClientConnection,
     threadId: string,
     teamId: string,
-    muted: boolean,
+    muted: boolean
   ) =>
     apiFetch<TeamChatThreadMuteResult>(
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/mute`,
-      { method: "POST", body: JSON.stringify({ teamId, muted }) },
+      { method: "POST", body: JSON.stringify({ teamId, muted }) }
     ),
   createTeamChatAiThread: (
     connection: ClientConnection,
@@ -347,17 +375,23 @@ export const api = {
       clientRequestId: string;
       providerId: string;
       modelId: string;
-    },
+    }
   ) =>
     apiFetch<TeamChatHostedAiThread>(
       connection,
       `/v1/team-chat/threads/${encodeURIComponent(threadId)}/ai-threads`,
-      { method: "POST", body: JSON.stringify(input) },
+      { method: "POST", body: JSON.stringify(input) }
     ),
-  teamChatAiThread: (connection: ClientConnection, teamId: string, conversationId: string) =>
+  teamChatAiThread: (
+    connection: ClientConnection,
+    teamId: string,
+    conversationId: string
+  ) =>
     apiFetch<TeamChatHostedAiThread>(
       connection,
-      `/v1/team-chat/ai-threads/${encodeURIComponent(conversationId)}?teamId=${encodeURIComponent(teamId)}`,
+      `/v1/team-chat/ai-threads/${encodeURIComponent(
+        conversationId
+      )}?teamId=${encodeURIComponent(teamId)}`
     ),
   sendTeamChatAiTurn: (
     connection: ClientConnection,
@@ -368,32 +402,32 @@ export const api = {
       clientRequestId: string;
       providerId: string;
       modelId: string;
-    },
+    }
   ) =>
     apiFetch<TeamChatHostedAiThread>(
       connection,
       `/v1/team-chat/ai-threads/${encodeURIComponent(conversationId)}/turns`,
-      { method: "POST", body: JSON.stringify(input) },
+      { method: "POST", body: JSON.stringify(input) }
     ),
   executeTeamChatAiTurn: (
     connection: ClientConnection,
     turnId: string,
-    teamId: string,
+    teamId: string
   ) =>
     apiFetch<{ accepted: true }>(
       connection,
       `/v1/team-chat/ai-turns/${encodeURIComponent(turnId)}/execute`,
-      { method: "POST", body: JSON.stringify({ teamId }) },
+      { method: "POST", body: JSON.stringify({ teamId }) }
     ),
   cancelTeamChatAiTurnExecution: (
     connection: ClientConnection,
     turnId: string,
-    teamId: string,
+    teamId: string
   ) =>
     apiFetch<{ cancelled: boolean }>(
       connection,
       `/v1/team-chat/ai-turns/${encodeURIComponent(turnId)}/execute/cancel`,
-      { method: "POST", body: JSON.stringify({ teamId }) },
+      { method: "POST", body: JSON.stringify({ teamId }) }
     ),
   usage: (
     connection: ClientConnection,
@@ -401,7 +435,7 @@ export const api = {
       range?: "7d" | "30d" | "90d" | "all";
       visibility?: UsageVisibilityFilter;
       status?: UsageStatusFilter;
-    } = {},
+    } = {}
   ) => {
     const params = usageSearchParams(input);
     const query = params.size ? `?${params.toString()}` : "";
@@ -416,33 +450,45 @@ export const api = {
       sessionId?: string | null;
       turnId?: string | null;
       limit?: number;
-    } = {},
+    } = {}
   ) => {
     const params = usageSearchParams(input);
     if (input.sessionId) params.set("sessionId", input.sessionId);
     if (input.turnId) params.set("turnId", input.turnId);
     if (input.limit !== undefined) params.set("limit", String(input.limit));
     const query = params.size ? `?${params.toString()}` : "";
-    return apiFetch<UsageRecordsResponse>(connection, `/v1/usage/records${query}`);
+    return apiFetch<UsageRecordsResponse>(
+      connection,
+      `/v1/usage/records${query}`
+    );
   },
   runtimeEventsPage: (
     connection: ClientConnection,
-    input: { sessionId?: string | null; afterSequence?: number; beforeSequence?: number | null; limit?: number } = {},
+    input: {
+      sessionId?: string | null;
+      afterSequence?: number;
+      beforeSequence?: number | null;
+      limit?: number;
+    } = {}
   ) => {
     const params = new URLSearchParams();
     if (input.sessionId) params.set("sessionId", input.sessionId);
-    if (input.afterSequence !== undefined) params.set("afterSequence", String(input.afterSequence));
+    if (input.afterSequence !== undefined)
+      params.set("afterSequence", String(input.afterSequence));
     if (input.beforeSequence !== undefined && input.beforeSequence !== null) {
       params.set("beforeSequence", String(input.beforeSequence));
     }
     if (input.limit !== undefined) params.set("limit", String(input.limit));
     const query = params.size ? `?${params.toString()}` : "";
-    return apiFetch<RuntimeEventPagePayload>(connection, `/v1/events/page${query}`);
+    return apiFetch<RuntimeEventPagePayload>(
+      connection,
+      `/v1/events/page${query}`
+    );
   },
   runSubagentLifecycleAction: (
     connection: ClientConnection,
     runId: string,
-    input: SubagentLifecycleActionRequest,
+    input: SubagentLifecycleActionRequest
   ) =>
     apiFetch<SubagentLifecycleActionResponse>(
       connection,
@@ -450,7 +496,7 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   insights: (
     connection: ClientConnection,
@@ -461,84 +507,134 @@ export const api = {
       runStatus?: InsightRunStatus | "all";
       runTrigger?: InsightRunTrigger | "all";
       runModel?: string | null;
-    } = {},
+    } = {}
   ) => {
     const params = new URLSearchParams();
     if (input.status) params.set("status", input.status);
     if (input.limit !== undefined) params.set("limit", String(input.limit));
-    if (input.evidenceSource) params.set("evidenceSource", input.evidenceSource);
+    if (input.evidenceSource)
+      params.set("evidenceSource", input.evidenceSource);
     if (input.runStatus) params.set("runStatus", input.runStatus);
     if (input.runTrigger) params.set("runTrigger", input.runTrigger);
     if (input.runModel?.trim()) params.set("runModel", input.runModel.trim());
     const query = params.size ? `?${params.toString()}` : "";
     return apiFetch<InsightsListResponse>(connection, `/v1/insights${query}`);
   },
-  runInsightsScan: (connection: ClientConnection, input: { trigger?: InsightRunTrigger } = {}) => {
+  runInsightsScan: (
+    connection: ClientConnection,
+    input: { trigger?: InsightRunTrigger } = {}
+  ) => {
     const params = new URLSearchParams();
     if (input.trigger) params.set("trigger", input.trigger);
     const query = params.size ? `?${params.toString()}` : "";
-    return apiFetch<InsightsScanResponse>(connection, `/v1/insights/scan${query}`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    return apiFetch<InsightsScanResponse>(
+      connection,
+      `/v1/insights/scan${query}`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      }
+    );
   },
   askInsights: (connection: ClientConnection, input: InsightsAskRequest) =>
     apiFetch<InsightsAskResponse>(connection, "/v1/insights/question", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  patchInsight: (connection: ClientConnection, insightId: string, input: { status: InsightStatus }) =>
-    apiFetch<InsightsListResponse>(connection, `/v1/insights/${encodeURIComponent(insightId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    }),
+  patchInsight: (
+    connection: ClientConnection,
+    insightId: string,
+    input: { status: InsightStatus }
+  ) =>
+    apiFetch<InsightsListResponse>(
+      connection,
+      `/v1/insights/${encodeURIComponent(insightId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    ),
   trainingState: (connection: ClientConnection, profileId: string) =>
-    apiFetch<TrainingStateResponse>(connection, `/v1/training?profileId=${encodeURIComponent(profileId)}`),
+    apiFetch<TrainingStateResponse>(
+      connection,
+      `/v1/training?profileId=${encodeURIComponent(profileId)}`
+    ),
   trainingRunDetail: (connection: ClientConnection, jobId: string) =>
-    apiFetch<TrainingRunDetail>(connection, `/v1/training/jobs/${encodeURIComponent(jobId)}/detail`),
+    apiFetch<TrainingRunDetail>(
+      connection,
+      `/v1/training/jobs/${encodeURIComponent(jobId)}/detail`
+    ),
   trainingRequest: <T>(
     connection: ClientConnection,
     path: string,
     input: unknown,
-    method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST",
-  ) => apiFetch<T>(connection, `/v1/training${path}`, {
-    method,
-    body: method === "DELETE" ? undefined : JSON.stringify(input),
-  }),
+    method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST"
+  ) =>
+    apiFetch<T>(connection, `/v1/training${path}`, {
+      method,
+      body: method === "DELETE" ? undefined : JSON.stringify(input),
+    }),
   computeState: (connection: ClientConnection) =>
     apiFetch<ComputeStateResponse>(connection, "/v1/compute"),
   scanCompute: (connection: ClientConnection) =>
-    apiFetch<ComputeStateResponse["inventory"]>(connection, "/v1/compute/scan", {
-      method: "POST",
-      body: JSON.stringify({}),
-    }),
-  updateComputeSettings: (connection: ClientConnection, input: { modelStorePath?: string | null; defaultDeviceIds?: string[]; additionalModelPaths?: string[] }) =>
+    apiFetch<ComputeStateResponse["inventory"]>(
+      connection,
+      "/v1/compute/scan",
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      }
+    ),
+  updateComputeSettings: (
+    connection: ClientConnection,
+    input: {
+      modelStorePath?: string | null;
+      defaultDeviceIds?: string[];
+      additionalModelPaths?: string[];
+    }
+  ) =>
     apiFetch<ComputeSettings>(connection, "/v1/compute/settings", {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
   downloadSmolLm2: (connection: ClientConnection) =>
-    apiFetch<ModelDownloadJob>(connection, "/v1/compute/models/smollm2/download", { method: "POST", body: JSON.stringify({}) }),
+    apiFetch<ModelDownloadJob>(
+      connection,
+      "/v1/compute/models/smollm2/download",
+      { method: "POST", body: JSON.stringify({}) }
+    ),
   cancelModelDownload: (connection: ClientConnection, jobId: string) =>
-    apiFetch<ModelDownloadJob>(connection, `/v1/compute/downloads/${encodeURIComponent(jobId)}/cancel`, { method: "POST", body: JSON.stringify({}) }),
+    apiFetch<ModelDownloadJob>(
+      connection,
+      `/v1/compute/downloads/${encodeURIComponent(jobId)}/cancel`,
+      { method: "POST", body: JSON.stringify({}) }
+    ),
   localAgentSchedules: (
     connection: ClientConnection,
-    input: { localProjectId?: string | null } = {},
+    input: { localProjectId?: string | null } = {}
   ) => {
     const params = new URLSearchParams();
-    if (input.localProjectId) params.set("localProjectId", input.localProjectId);
+    if (input.localProjectId)
+      params.set("localProjectId", input.localProjectId);
     const query = params.size ? `?${params.toString()}` : "";
-    return apiFetch<LocalAgentSchedulesResponse>(connection, `/v1/local-agent-schedules${query}`);
+    return apiFetch<LocalAgentSchedulesResponse>(
+      connection,
+      `/v1/local-agent-schedules${query}`
+    );
   },
   syncLocalAgentSchedules: (connection: ClientConnection) =>
-    apiFetch<LocalAgentSchedulesResponse>(connection, "/v1/local-agent-schedules/sync", {
-      method: "POST",
-      body: JSON.stringify({}),
-    }),
+    apiFetch<LocalAgentSchedulesResponse>(
+      connection,
+      "/v1/local-agent-schedules/sync",
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      }
+    ),
   patchLocalAgentSchedule: (
     connection: ClientConnection,
     scheduleId: string,
-    input: PatchLocalAgentScheduleRequest,
+    input: PatchLocalAgentScheduleRequest
   ) =>
     apiFetch<{ schedule: LocalAgentSchedulesResponse["schedules"][number] }>(
       connection,
@@ -546,12 +642,12 @@ export const api = {
       {
         method: "PATCH",
         body: JSON.stringify(input),
-      },
+      }
     ),
   runLocalAgentSchedule: (
     connection: ClientConnection,
     scheduleId: string,
-    input: LocalAgentScheduleRunNowRequest = {},
+    input: LocalAgentScheduleRunNowRequest = {}
   ) =>
     apiFetch<LocalAgentScheduleRunResponse>(
       connection,
@@ -559,19 +655,19 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   localAgentScheduleRuns: (
     connection: ClientConnection,
     scheduleId: string,
-    input: { limit?: number } = {},
+    input: { limit?: number } = {}
   ) => {
     const params = new URLSearchParams();
     if (input.limit !== undefined) params.set("limit", String(input.limit));
     const query = params.size ? `?${params.toString()}` : "";
     return apiFetch<LocalAgentScheduleRunsResponse>(
       connection,
-      `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}/runs${query}`,
+      `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}/runs${query}`
     );
   },
   refreshOpenPond: (connection: ClientConnection) =>
@@ -586,7 +682,10 @@ export const api = {
       account: BootstrapPayload["account"];
       accountMeta: BootstrapPayload["accountMeta"];
     }>(connection, "/v1/openpond/account?refresh=1"),
-  loadMoreOpenPondApps: (connection: ClientConnection, input: { offset: number; limit: number }) =>
+  loadMoreOpenPondApps: (
+    connection: ClientConnection,
+    input: { offset: number; limit: number }
+  ) =>
     apiFetch<{
       bootstrap: BootstrapPayload;
       addedCount: number;
@@ -595,29 +694,46 @@ export const api = {
       hasMore: boolean;
     }>(
       connection,
-      `/v1/openpond/apps/more?offset=${encodeURIComponent(String(input.offset))}&limit=${encodeURIComponent(String(input.limit))}`,
+      `/v1/openpond/apps/more?offset=${encodeURIComponent(
+        String(input.offset)
+      )}&limit=${encodeURIComponent(String(input.limit))}`
     ),
-  switchOpenPondAccount: (connection: ClientConnection, input: SwitchOpenPondAccountRequest) =>
+  switchOpenPondAccount: (
+    connection: ClientConnection,
+    input: SwitchOpenPondAccountRequest
+  ) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/switch", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  saveOpenPondAccount: (connection: ClientConnection, input: SaveOpenPondAccountRequest) =>
+  saveOpenPondAccount: (
+    connection: ClientConnection,
+    input: SaveOpenPondAccountRequest
+  ) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/login", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  updateOpenPondAccountConfig: (connection: ClientConnection, input: UpdateOpenPondAccountConfigRequest) =>
+  updateOpenPondAccountConfig: (
+    connection: ClientConnection,
+    input: UpdateOpenPondAccountConfigRequest
+  ) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/config", {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
-  savePreferences: (connection: ClientConnection, input: UpdateAppPreferencesRequest) =>
+  savePreferences: (
+    connection: ClientConnection,
+    input: UpdateAppPreferencesRequest
+  ) =>
     apiFetch<PreferencesPayload>(connection, "/v1/preferences", {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
-  saveProviderSettings: (connection: ClientConnection, input: UpdateProviderSettingsRequest) =>
+  saveProviderSettings: (
+    connection: ClientConnection,
+    input: UpdateProviderSettingsRequest
+  ) =>
     apiFetch<ProviderSettings>(connection, "/v1/providers", {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -627,7 +743,7 @@ export const api = {
   loadProviderModels: (
     connection: ClientConnection,
     providerId: string,
-    input: { query?: string | null; limit?: number } = {},
+    input: { query?: string | null; limit?: number } = {}
   ) => {
     const params = new URLSearchParams();
     if (input.query?.trim()) params.set("query", input.query.trim());
@@ -635,48 +751,64 @@ export const api = {
     const query = params.size ? `?${params.toString()}` : "";
     return apiFetch<ProviderModelsResponse>(
       connection,
-      `/v1/providers/${encodeURIComponent(providerId)}/models${query}`,
+      `/v1/providers/${encodeURIComponent(providerId)}/models${query}`
     );
   },
   refreshProviderModels: (
     connection: ClientConnection,
     providerId: string,
-    input: ProviderModelsRefreshRequest,
+    input: ProviderModelsRefreshRequest
   ) =>
-    apiFetch<ProviderModelsResponse>(connection, `/v1/providers/${encodeURIComponent(providerId)}/models`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<ProviderModelsResponse>(
+      connection,
+      `/v1/providers/${encodeURIComponent(providerId)}/models`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   saveProviderCredential: (
     connection: ClientConnection,
     providerId: string,
-    input: ProviderCredentialWriteRequest,
+    input: ProviderCredentialWriteRequest
   ) =>
-    apiFetch<ProviderSettings>(connection, `/v1/providers/${encodeURIComponent(providerId)}/credential`, {
-      method: "PUT",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<ProviderSettings>(
+      connection,
+      `/v1/providers/${encodeURIComponent(providerId)}/credential`,
+      {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }
+    ),
   deleteProviderCredential: (
     connection: ClientConnection,
     providerId: string,
-    input: ProviderCredentialDeleteRequest,
+    input: ProviderCredentialDeleteRequest
   ) =>
-    apiFetch<ProviderSettings>(connection, `/v1/providers/${encodeURIComponent(providerId)}/credential`, {
-      method: "DELETE",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<ProviderSettings>(
+      connection,
+      `/v1/providers/${encodeURIComponent(providerId)}/credential`,
+      {
+        method: "DELETE",
+        body: JSON.stringify(input),
+      }
+    ),
   startOpenAiSubscriptionAuth: (
     connection: ClientConnection,
-    input: { method: "browser" | "device" },
+    input: { method: "browser" | "device" }
   ) =>
-    apiFetch<OpenAiSubscriptionAuthResponse>(connection, "/v1/providers/openai/subscription-auth", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<OpenAiSubscriptionAuthResponse>(
+      connection,
+      "/v1/providers/openai/subscription-auth",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   validateProviderCredential: (
     connection: ClientConnection,
     providerId: string,
-    input: ProviderValidationRequest,
+    input: ProviderValidationRequest
   ) =>
     apiFetch<{
       providerId: string;
@@ -691,21 +823,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  savePersonalization: (connection: ClientConnection, input: UpdatePersonalizationRequest) =>
+  savePersonalization: (
+    connection: ClientConnection,
+    input: UpdatePersonalizationRequest
+  ) =>
     apiFetch<BootstrapPayload>(connection, "/v1/personalization", {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
-  recordClientDiagnostic: (connection: ClientConnection, input: RecordClientDiagnosticRequest) =>
-    apiFetch<{ diagnostic: RuntimeEvent }>(connection, "/v1/diagnostics/client", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+  recordClientDiagnostic: (
+    connection: ClientConnection,
+    input: RecordClientDiagnosticRequest
+  ) =>
+    apiFetch<{ diagnostic: RuntimeEvent }>(
+      connection,
+      "/v1/diagnostics/client",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   profileCurrent: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile"),
   profileInit: (
     connection: ClientConnection,
-    input: { path?: string | null; profile?: string | null; template?: string | null; force?: boolean },
+    input: {
+      path?: string | null;
+      profile?: string | null;
+      template?: string | null;
+      force?: boolean;
+    }
   ) =>
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile/init", {
       method: "POST",
@@ -713,18 +860,37 @@ export const api = {
     }),
   profileLoad: (
     connection: ClientConnection,
-    input: { path: string; profile?: string | null },
+    input: { path: string; profile?: string | null }
   ) =>
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile/load", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  profileCheck: (connection: ClientConnection, input: { kind?: string | null }) =>
+  profileCheck: (
+    connection: ClientConnection,
+    input: { kind?: string | null }
+  ) =>
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile/check", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  profileCommit: (connection: ClientConnection, input: { message?: string | null }) =>
+  profileAgentRename: (
+    connection: ClientConnection,
+    agentId: string,
+    input: { name: string }
+  ) =>
+    apiFetch<BootstrapPayload["profile"]>(
+      connection,
+      `/v1/profile/agents/${encodeURIComponent(agentId)}/name`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    ),
+  profileCommit: (
+    connection: ClientConnection,
+    input: { message?: string | null }
+  ) =>
     apiFetch<{
       committed: boolean;
       stdout: string;
@@ -753,7 +919,7 @@ export const api = {
       hostedRunRetry?: boolean;
       expectedManifestHash?: string | null;
       workItemId?: string | null;
-    },
+    }
   ) =>
     apiFetch<{
       profile: unknown;
@@ -764,36 +930,65 @@ export const api = {
       body: JSON.stringify(input),
     }),
   workspaceLspSettingsStatus: (connection: ClientConnection) =>
-    apiFetch<WorkspaceLspSettingsStatusResponse>(connection, "/v1/lsp/settings-status"),
+    apiFetch<WorkspaceLspSettingsStatusResponse>(
+      connection,
+      "/v1/lsp/settings-status"
+    ),
   workspaceLspRuntimeStatus: (connection: ClientConnection) =>
     apiFetch<WorkspaceLspRuntimeStatusResponse>(connection, "/v1/lsp/status"),
   restartWorkspaceLsp: (connection: ClientConnection) =>
-    apiFetch<{ ok: boolean; updatedAt: string }>(connection, "/v1/lsp/restart", {
-      method: "POST",
-    }),
+    apiFetch<{ ok: boolean; updatedAt: string }>(
+      connection,
+      "/v1/lsp/restart",
+      {
+        method: "POST",
+      }
+    ),
   remoteAccess: (connection: ClientConnection) =>
     apiFetch<RemoteAccessStatus>(connection, "/v1/remote-access"),
   enableRemoteAccess: (connection: ClientConnection) =>
-    apiFetch<RemoteAccessToggleResponse>(connection, "/v1/remote-access/enable", {
-      method: "POST",
-    }),
+    apiFetch<RemoteAccessToggleResponse>(
+      connection,
+      "/v1/remote-access/enable",
+      {
+        method: "POST",
+      }
+    ),
   disableRemoteAccess: (connection: ClientConnection) =>
-    apiFetch<RemoteAccessToggleResponse>(connection, "/v1/remote-access/disable", {
-      method: "POST",
-    }),
+    apiFetch<RemoteAccessToggleResponse>(
+      connection,
+      "/v1/remote-access/disable",
+      {
+        method: "POST",
+      }
+    ),
   voiceTranscriptionStatus: (connection: ClientConnection) =>
-    apiFetch<VoiceTranscriptionStatus>(connection, "/v1/audio/transcriptions/status"),
-  transcribeVoice: (connection: ClientConnection, input: VoiceTranscriptionRequest) =>
-    apiFetch<VoiceTranscriptionResponse>(connection, "/v1/audio/transcriptions", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<VoiceTranscriptionStatus>(
+      connection,
+      "/v1/audio/transcriptions/status"
+    ),
+  transcribeVoice: (
+    connection: ClientConnection,
+    input: VoiceTranscriptionRequest
+  ) =>
+    apiFetch<VoiceTranscriptionResponse>(
+      connection,
+      "/v1/audio/transcriptions",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   createSession: (connection: ClientConnection, input: CreateSessionRequest) =>
     apiFetch<Session>(connection, "/v1/sessions", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  patchSession: (connection: ClientConnection, sessionId: string, input: PatchSessionRequest) =>
+  patchSession: (
+    connection: ClientConnection,
+    sessionId: string,
+    input: PatchSessionRequest
+  ) =>
     apiFetch<Session>(connection, `/v1/sessions/${sessionId}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -801,7 +996,7 @@ export const api = {
   codexHistoryThread: (
     connection: ClientConnection,
     sessionId: string,
-    input: { limit?: number; tail?: boolean } = {},
+    input: { limit?: number; tail?: boolean } = {}
   ) => {
     const params = new URLSearchParams();
     if (input.limit !== undefined) params.set("limit", String(input.limit));
@@ -809,36 +1004,50 @@ export const api = {
     const query = params.size ? `?${params.toString()}` : "";
     return apiFetch<{ session: Session; events: RuntimeEvent[] }>(
       connection,
-      `/v1/codex-history/${encodeURIComponent(sessionId)}${query}`,
+      `/v1/codex-history/${encodeURIComponent(sessionId)}${query}`
     );
   },
-  sendCodexHistoryTurn: (connection: ClientConnection, sessionId: string, input: SendTurnRequest) =>
+  sendCodexHistoryTurn: (
+    connection: ClientConnection,
+    sessionId: string,
+    input: SendTurnRequest
+  ) =>
     apiFetch<{ session: Session; events: RuntimeEvent[] }>(
       connection,
       `/v1/codex-history/${encodeURIComponent(sessionId)}/turns`,
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
-  interruptCodexHistoryTurn: (connection: ClientConnection, sessionId: string) =>
+  interruptCodexHistoryTurn: (
+    connection: ClientConnection,
+    sessionId: string
+  ) =>
     apiFetch<CodexHistoryTurnInterruptResponse>(
       connection,
       `/v1/codex-history/${encodeURIComponent(sessionId)}/turns/interrupt`,
       {
         method: "POST",
-      },
+      }
     ),
   patchSidebarAppPreference: (
     connection: ClientConnection,
     appId: string,
-    input: PatchSidebarAppPreferenceRequest,
+    input: PatchSidebarAppPreferenceRequest
   ) =>
-    apiFetch<SidebarAppPreference>(connection, `/v1/sidebar/apps/${encodeURIComponent(appId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    }),
-  reorderSidebarApps: (connection: ClientConnection, input: ReorderSidebarAppsRequest) =>
+    apiFetch<SidebarAppPreference>(
+      connection,
+      `/v1/sidebar/apps/${encodeURIComponent(appId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    ),
+  reorderSidebarApps: (
+    connection: ClientConnection,
+    input: ReorderSidebarAppsRequest
+  ) =>
     apiFetch<SidebarAppPreferences>(connection, "/v1/sidebar/apps/reorder", {
       method: "POST",
       body: JSON.stringify(input),
@@ -847,50 +1056,60 @@ export const api = {
     connection: ClientConnection,
     appId: string,
     ensure = false,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal } = {}
   ) =>
     apiFetch<WorkspaceState>(
       connection,
       `/v1/workspaces/${encodeURIComponent(appId)}${ensure ? "?ensure=1" : ""}`,
-      { signal: options.signal },
+      { signal: options.signal }
     ),
   createWorkspaceBranch: (
     connection: ClientConnection,
     appId: string,
-    input: WorkspaceBranchRequest,
+    input: WorkspaceBranchRequest
   ) =>
-    apiFetch<WorkspaceState>(connection, `/v1/workspaces/${encodeURIComponent(appId)}/branches`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<WorkspaceState>(
+      connection,
+      `/v1/workspaces/${encodeURIComponent(appId)}/branches`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   checkoutWorkspaceBranch: (
     connection: ClientConnection,
     appId: string,
-    input: WorkspaceBranchRequest,
+    input: WorkspaceBranchRequest
   ) =>
-    apiFetch<WorkspaceState>(connection, `/v1/workspaces/${encodeURIComponent(appId)}/branch`, {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<WorkspaceState>(
+      connection,
+      `/v1/workspaces/${encodeURIComponent(appId)}/branch`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    ),
   workspaceDiff: (
     connection: ClientConnection,
     appId: string,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal } = {}
   ) =>
     apiFetch<WorkspaceDiffSummary>(
       connection,
       `/v1/workspaces/${encodeURIComponent(appId)}/diff`,
-      { signal: options.signal },
+      { signal: options.signal }
     ),
   workspaceFile: (connection: ClientConnection, appId: string, path: string) =>
     apiFetch<WorkspaceDiffFile>(
       connection,
-      `/v1/workspaces/${encodeURIComponent(appId)}/file?path=${encodeURIComponent(path)}`,
+      `/v1/workspaces/${encodeURIComponent(
+        appId
+      )}/file?path=${encodeURIComponent(path)}`
     ),
   saveWorkspaceFile: (
     connection: ClientConnection,
     appId: string,
-    input: SaveWorkspaceFileRequest,
+    input: SaveWorkspaceFileRequest
   ) =>
     apiFetch<WorkspaceDiffFile>(
       connection,
@@ -898,31 +1117,46 @@ export const api = {
       {
         method: "PATCH",
         body: JSON.stringify(input),
-      },
+      }
     ),
-  signWorkspaceImageUrl: (connection: ClientConnection, input: { appId: string; path: string }) =>
-    apiFetch<{ url: string; expiresAt: number }>(connection, "/v1/assets/workspace-image-url", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+  signWorkspaceImageUrl: (
+    connection: ClientConnection,
+    input: { appId: string; path: string }
+  ) =>
+    apiFetch<{ url: string; expiresAt: number }>(
+      connection,
+      "/v1/assets/workspace-image-url",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   signLocalImageUrl: (connection: ClientConnection, input: { path: string }) =>
-    apiFetch<{ url: string; expiresAt: number }>(connection, "/v1/assets/local-image-url", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<{ url: string; expiresAt: number }>(
+      connection,
+      "/v1/assets/local-image-url",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   signChatAttachmentImageUrl: (
     connection: ClientConnection,
-    input: NonNullable<ChatAttachmentSummary["imagePreview"]>,
+    input: NonNullable<ChatAttachmentSummary["imagePreview"]>
   ) =>
-    apiFetch<{ url: string; expiresAt: number }>(connection, "/v1/assets/chat-attachment-image-url", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<{ url: string; expiresAt: number }>(
+      connection,
+      "/v1/assets/chat-attachment-image-url",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   workspaceLspTouch: (
     connection: ClientConnection,
     appId: string,
     input: WorkspaceLspTouchRequest,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal } = {}
   ) =>
     apiFetch<WorkspaceLspDiagnosticsResponse>(
       connection,
@@ -931,12 +1165,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
         signal: options.signal,
-      },
+      }
     ),
   workspaceLspAction: (
     connection: ClientConnection,
     appId: string,
-    input: WorkspaceLspActionRequest,
+    input: WorkspaceLspActionRequest
   ) =>
     apiFetch<WorkspaceLspActionResponse>(
       connection,
@@ -944,24 +1178,31 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   workspaceTemplateConfig: (connection: ClientConnection, appId: string) =>
     apiFetch<WorkspaceTemplateConfigView>(
       connection,
-      `/v1/openpond/apps/${encodeURIComponent(appId)}/template-config`,
+      `/v1/openpond/apps/${encodeURIComponent(appId)}/template-config`
     ),
   ...organizationApi,
   ...sandboxApi,
-  createLocalProject: (connection: ClientConnection, input: CreateLocalProjectRequest) =>
-    apiFetch<{ project: LocalProject; bootstrap: BootstrapPayload; created?: boolean }>(connection, "/v1/projects", {
+  createLocalProject: (
+    connection: ClientConnection,
+    input: CreateLocalProjectRequest
+  ) =>
+    apiFetch<{
+      project: LocalProject;
+      bootstrap: BootstrapPayload;
+      created?: boolean;
+    }>(connection, "/v1/projects", {
       method: "POST",
       body: JSON.stringify(input),
     }),
   updateLocalProjectAgentSetup: (
     connection: ClientConnection,
     projectId: string,
-    input: UpdateLocalProjectAgentSetupRequest,
+    input: UpdateLocalProjectAgentSetupRequest
   ) =>
     apiFetch<{ project: LocalProject; bootstrap: BootstrapPayload }>(
       connection,
@@ -969,12 +1210,12 @@ export const api = {
       {
         method: "PATCH",
         body: JSON.stringify(input),
-      },
+      }
     ),
   uploadLocalProjectCloudSource: (
     connection: ClientConnection,
     projectId: string,
-    input: UploadLocalProjectCloudSourceRequest,
+    input: UploadLocalProjectCloudSourceRequest
   ) =>
     apiFetch<LocalProjectCloudSourceUploadResponse>(
       connection,
@@ -982,47 +1223,55 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   previewLocalProjectCloudSource: (
     connection: ClientConnection,
     projectId: string,
-    input: { branch?: string | null } = {},
+    input: { branch?: string | null } = {}
   ) => {
     const query = new URLSearchParams();
     if (input.branch?.trim()) query.set("branch", input.branch.trim());
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return apiFetch<LocalProjectCloudSourcePreviewResponse>(
       connection,
-      `/v1/projects/${encodeURIComponent(projectId)}/cloud-source/preview${suffix}`,
+      `/v1/projects/${encodeURIComponent(
+        projectId
+      )}/cloud-source/preview${suffix}`
     );
   },
-  cloudWorkItems: (connection: ClientConnection, input: ListCloudWorkItemsRequest) => {
+  cloudWorkItems: (
+    connection: ClientConnection,
+    input: ListCloudWorkItemsRequest
+  ) => {
     const query = new URLSearchParams({
       teamId: input.teamId,
       limit: String(input.limit ?? 100),
     });
-    for (const projectId of input.projectIds) query.append("projectId", projectId);
+    for (const projectId of input.projectIds)
+      query.append("projectId", projectId);
     if (input.includeArchived) query.set("includeArchived", "true");
     return apiFetch<CloudWorkItemsResponse>(
       connection,
-      `/v1/cloud/work-items?${query.toString()}`,
+      `/v1/cloud/work-items?${query.toString()}`
     );
   },
   cloudWorkItem: (
     connection: ClientConnection,
     workItemId: string,
-    input: { teamId: string },
+    input: { teamId: string }
   ) => {
     const query = new URLSearchParams({ teamId: input.teamId });
     return apiFetch<CloudWorkItemDetail>(
       connection,
-      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}?${query.toString()}`,
+      `/v1/cloud/work-items/${encodeURIComponent(
+        workItemId
+      )}?${query.toString()}`
     );
   },
   createCloudWorkItem: (
     connection: ClientConnection,
-    input: CreateCloudWorkItemRequest,
+    input: CreateCloudWorkItemRequest
   ) =>
     apiFetch<CloudWorkItemDetail>(connection, "/v1/cloud/work-items", {
       method: "POST",
@@ -1031,7 +1280,7 @@ export const api = {
   sendCloudWorkItemMessage: (
     connection: ClientConnection,
     workItemId: string,
-    input: SendCloudWorkItemMessageRequest,
+    input: SendCloudWorkItemMessageRequest
   ) =>
     apiFetch<CloudWorkItemMessageResponse>(
       connection,
@@ -1039,25 +1288,27 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   handleCloudWorkItemInBackground: (
     connection: ClientConnection,
     workItemId: string,
-    input: CloudWorkItemBackgroundRequest,
+    input: CloudWorkItemBackgroundRequest
   ) =>
     apiFetch<unknown>(
       connection,
-      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/handle-background`,
+      `/v1/cloud/work-items/${encodeURIComponent(
+        workItemId
+      )}/handle-background`,
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   cancelCloudWorkItemTask: (
     connection: ClientConnection,
     workItemId: string,
-    input: { teamId: string },
+    input: { teamId: string }
   ) =>
     apiFetch<CloudWorkItemCancelTaskResponse>(
       connection,
@@ -1065,12 +1316,12 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   openCloudWorkItem: (
     connection: ClientConnection,
     workItemId: string,
-    input: OpenCloudWorkItemRequest,
+    input: OpenCloudWorkItemRequest
   ) =>
     apiFetch<CloudWorkItemOpenCloudResponse>(
       connection,
@@ -1078,12 +1329,12 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   applyCloudWorkItemLocalPatch: (
     connection: ClientConnection,
     workItemId: string,
-    input: ApplyCloudWorkItemLocalPatchRequest,
+    input: ApplyCloudWorkItemLocalPatchRequest
   ) =>
     apiFetch<CloudWorkItemApplyLocalPatchResponse>(
       connection,
@@ -1091,12 +1342,16 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(input),
-      },
+      }
     ),
   deleteLocalProject: (connection: ClientConnection, projectId: string) =>
-    apiFetch<BootstrapPayload>(connection, `/v1/projects/${encodeURIComponent(projectId)}`, {
-      method: "DELETE",
-    }),
+    apiFetch<BootstrapPayload>(
+      connection,
+      `/v1/projects/${encodeURIComponent(projectId)}`,
+      {
+        method: "DELETE",
+      }
+    ),
   gitAvailability: (connection: ClientConnection) =>
     apiFetch<GitAvailability>(connection, "/v1/system/git"),
   installMacOSCommandLineTools: (connection: ClientConnection) =>
@@ -1106,13 +1361,13 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify({}),
-      },
+      }
     ),
   ...sessionApi,
   resolveApproval: (
     connection: ClientConnection,
     approvalId: string,
-    input: ResolveApprovalRequest,
+    input: ResolveApprovalRequest
   ) =>
     apiFetch<Approval>(connection, `/v1/approvals/${approvalId}`, {
       method: "POST",

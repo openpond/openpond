@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
-  CreatePipelineRequestSchema,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  CreateImproveRunSchema,
+  type CreateImproveRun,
   type OpenPondApp,
   type OpenPondProfileState,
   type RuntimeEvent,
@@ -16,16 +15,16 @@ import type {
 import type { ModelToolExecutionContext } from "../../openpond/model-tool-registry.js";
 import { resolveWorkspaceExecutionTarget } from "../../workspace/workspace-execution-target.js";
 import { event, now } from "../../utils.js";
-import type { CreatePipelineRuntime } from "./runtime.js";
+import type { CreateImproveRuntime } from "./runtime.js";
 
-export function createCreatePipelineModelTool(deps: {
+export function createCreateImproveModelTool(deps: {
   getTurn(turnId: string): Promise<Turn | null>;
   loadProfileState?: (() => Promise<OpenPondProfileState>) | null;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
-  planCreatePipelineForTurn: CreatePipelineRuntime["planCreatePipelineForTurn"];
-  persistCreatePipelineSnapshot: CreatePipelineRuntime["persistCreatePipelineSnapshot"];
+  planCreateImproveForTurn: CreateImproveRuntime["planCreateImproveForTurn"];
+  persistCreateImproveRun: CreateImproveRuntime["persistCreateImproveRun"];
 }) {
-  return async function startCreatePipelineFromModelTool(
+  return async function startCreateImproveFromModelTool(
     context: ModelToolExecutionContext,
     input: OpenPondCreatePipelineToolInput,
   ): Promise<OpenPondCreatePipelineToolResult> {
@@ -33,15 +32,16 @@ export function createCreatePipelineModelTool(deps: {
     if (!objective) throw new Error("objective is required");
     const targetAgentId = input.operation === "edit"
       ? input.targetAgentId?.trim() || context.session.appId || null
-      : null;
+      : agentIdFromObjective(objective);
     if (input.operation === "edit" && !targetAgentId) {
-      throw new Error("openpond_create_pipeline edit requires targetAgentId or a selected agent in the current chat.");
+      throw new Error("openpond_create_improve edit requires a targeted Agent.");
     }
     const turn = await deps.getTurn(context.turnId);
     if (!turn) throw new Error("Turn not found");
     const profile = deps.loadProfileState ? await deps.loadProfileState() : null;
-    const request = buildCreatePipelineRequest({
+    const initialRun = buildCreateImproveRun({
       session: context.session,
+      turnId: context.turnId,
       profile,
       operation: input.operation,
       objective,
@@ -53,39 +53,37 @@ export function createCreatePipelineModelTool(deps: {
     await deps.appendRuntimeEvent(event({
       sessionId: context.session.id,
       turnId: context.turnId,
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source: "provider",
       appId: context.session.appId,
       status: "pending",
-      output: "Create planner is preparing the plan.",
-      data: { createPipelineRequest: request, createPipeline: null },
+      output: "Create/Improve planner is preparing the plan.",
+      data: { createImproveRun: initialRun },
     }));
-    const snapshot = await deps.planCreatePipelineForTurn({
+    const plannedRun = await deps.planCreateImproveForTurn({
       session: context.session,
       turn,
-      request,
-      previousSnapshot: null,
+      run: initialRun,
       signal: context.signal,
     });
-    await deps.persistCreatePipelineSnapshot({
+    await deps.persistCreateImproveRun({
       session: context.session,
       turnId: context.turnId,
-      request,
-      snapshot,
+      run: plannedRun,
       source: "provider",
     });
     return {
-      requestId: request.id,
-      pipelineId: snapshot.id,
-      operation: input.operation,
-      state: snapshot.state,
-      nextStep: createPipelineToolNextStep(snapshot),
+      runId: plannedRun.id,
+      operation: plannedRun.operation,
+      state: plannedRun.state,
+      nextStep: createImproveToolNextStep(plannedRun),
     };
   };
 }
 
-function buildCreatePipelineRequest(input: {
+function buildCreateImproveRun(input: {
   session: Session;
+  turnId: string;
   profile: OpenPondProfileState | null;
   operation: "create" | "edit";
   objective: string;
@@ -93,7 +91,7 @@ function buildCreatePipelineRequest(input: {
   mentionedApps: OpenPondApp[];
   userPrompt: string;
   source: "natural_language" | "model_tool";
-}): CreatePipelineRequest {
+}): CreateImproveRun {
   const executionTarget = resolveWorkspaceExecutionTarget({ session: input.session });
   const localProfileLoaded =
     executionTarget.target !== "sandbox" &&
@@ -101,13 +99,16 @@ function buildCreatePipelineRequest(input: {
     Boolean(input.profile.repoPath) &&
     Boolean(input.profile.sourcePath);
   const hosted = input.profile?.hosted ?? null;
-  return CreatePipelineRequestSchema.parse({
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id: `create_request_${randomUUID()}`,
-    operation: input.operation,
-    surface: input.operation === "create" ? "direct_prompt_create" : "direct_prompt_edit",
+  const timestamp = now();
+  return CreateImproveRunSchema.parse({
+    schemaVersion: "openpond.createImprove.run.v1",
+    id: `create_improve_${randomUUID()}`,
+    revision: 0,
+    operation: input.operation === "create" ? "create" : "improve",
+    surface: input.operation === "create" ? "direct_prompt_create" : "direct_prompt_improve",
     command: input.operation === "create" ? "/create" : "/edit",
     objective: input.objective,
+    state: "planning",
     adapter: localProfileLoaded
       ? {
           kind: "local",
@@ -131,7 +132,9 @@ function buildCreatePipelineRequest(input: {
         },
     actor: { id: null, kind: "user", label: null },
     scope: {
+      profileId: input.profile?.activeProfile ?? "default",
       conversationId: input.session.id,
+      originTurnId: input.turnId,
       workItemId: null,
       projectId: input.session.cloudProjectId ?? input.session.localProjectId ?? null,
       targetProject: input.session.workspaceId
@@ -150,32 +153,90 @@ function buildCreatePipelineRequest(input: {
         messageId: null,
         role: "user",
         excerpt: (input.userPrompt || input.objective).slice(0, 1200),
-        reason: "Natural-language Create Pipeline tool request",
+        reason: "Natural-language Create/Improve tool request",
       }],
       attachments: [],
       apps: capturedApps(input.mentionedApps, input.session),
       tools: [],
+      signalRefs: [],
+      evalRefs: [],
       targetRepoAssumptions: targetRepoAssumptions(input.session),
     },
-    targetAgent: {
-      agentId: input.targetAgentId,
+    target: {
+      kind: "agent",
+      id: input.targetAgentId,
       displayName: input.targetAgentId === input.session.appId ? input.session.appName : null,
       defaultActionKey: input.targetAgentId ? `${input.targetAgentId}.chat` : "chat",
     },
+    plan: null,
+    workflowCapture: null,
+    executionPolicy: {
+      mode: "background",
+      pauseAllowed: true,
+      cancellationAllowed: true,
+    },
+    iterationPolicy: {
+      mode: "single",
+      maximumAttempts: 1,
+      currentAttempt: 0,
+    },
+    approvalIds: [],
+    questionIds: [],
+    questions: [],
+    candidates: [],
+    evaluationReceipts: [],
+    checkRefs: [],
+    sourceRefs: [],
+    externalExecutionRefs: [],
+    localProfileCommit: localProfileLoaded ? input.profile?.git?.head ?? null : null,
+    hostedSourceCommit: null,
+    hostedSourceRef: localProfileLoaded ? null : hosted?.sourceRef ?? null,
+    releaseOutcome: {
+      status: "not_requested",
+      profileCommit: null,
+      profileTag: null,
+      releaseReceiptRef: null,
+      updatedAt: null,
+    },
+    blockedReason: null,
+    appliedActionIds: [],
     metadata: {
       source: "native_model_tool",
-      toolName: "openpond_create_pipeline",
+      toolName: "openpond_create_improve",
       routingSource: input.source,
     },
-    createdAt: now(),
+    createdAt: timestamp,
+    updatedAt: timestamp,
   });
 }
 
+function agentIdFromObjective(objective: string): string {
+  const normalized = objective
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return normalized || "created-agent";
+}
+
 function capturedApps(apps: OpenPondApp[], session: Session) {
-  const byId = new Map<string, { id: string; name: string; connectionId: string | null; required: boolean }>();
-  for (const app of apps) byId.set(app.id, { id: app.id, name: app.name, connectionId: null, required: true });
+  const byId = new Map<string, {
+    id: string;
+    name: string;
+    connectionId: string | null;
+    required: boolean;
+  }>();
+  for (const app of apps) {
+    byId.set(app.id, { id: app.id, name: app.name, connectionId: null, required: true });
+  }
   if (session.appId && session.appName) {
-    byId.set(session.appId, { id: session.appId, name: session.appName, connectionId: null, required: true });
+    byId.set(session.appId, {
+      id: session.appId,
+      name: session.appName,
+      connectionId: null,
+      required: true,
+    });
   }
   return [...byId.values()];
 }
@@ -190,16 +251,22 @@ function targetRepoAssumptions(session: Session): string[] {
     ];
   }
   if (target.target === "local" && target.cwd) return [`workspace: ${target.cwd}`];
-  if (target.target === "local" && target.localProjectId) return [`local project: ${target.localProjectId}`];
+  if (target.target === "local" && target.localProjectId) {
+    return [`local project: ${target.localProjectId}`];
+  }
   return [];
 }
 
-function createPipelineToolNextStep(snapshot: CreatePipelineSnapshot): string {
-  if (snapshot.state === "awaiting_questions") return "Create Pipeline is waiting for user answers before planning can continue.";
-  if (snapshot.state === "awaiting_plan_approval") return "Create Pipeline plan is ready for review and approval.";
-  if (snapshot.state === "blocked" || snapshot.state === "failed") {
-    return snapshot.blockedReason ?? "Create Pipeline could not prepare a plan.";
+function createImproveToolNextStep(run: CreateImproveRun): string {
+  if (run.state === "awaiting_questions") {
+    return "Create/Improve is waiting for user answers before planning can continue.";
   }
-  if (snapshot.state === "cancelled") return "Create Pipeline was cancelled.";
-  return `Create Pipeline state: ${snapshot.state}.`;
+  if (run.state === "awaiting_plan_approval") {
+    return "Create/Improve plan is ready for review and approval.";
+  }
+  if (run.state === "blocked" || run.state === "failed") {
+    return run.blockedReason ?? "Create/Improve could not prepare a plan.";
+  }
+  if (run.state === "cancelled") return "Create/Improve was cancelled.";
+  return `Create/Improve state: ${run.state}.`;
 }

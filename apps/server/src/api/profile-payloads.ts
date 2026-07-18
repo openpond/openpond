@@ -12,6 +12,7 @@ import {
   initLocalProfileRepo,
   loadLocalProfileRepo,
   loadOpenPondProfileState,
+  renameActiveProfileAgent,
   runProfileCheck,
   runProfileSdkCommand,
   saveProfilePushStatus,
@@ -19,7 +20,11 @@ import {
   type ProfileRepoManifest,
 } from "@openpond/cloud";
 import { event } from "../utils.js";
-import { sandboxRequestPayload } from "../openpond/sandboxes.js";
+import {
+  resolveOpenPondSandboxClient,
+  sandboxRequestPayload,
+} from "../openpond/sandboxes.js";
+import { materializeHostedProfileAgentSource } from "../openpond/profile-agent-materialization.js";
 import {
   asRecord,
   booleanValue,
@@ -50,7 +55,8 @@ export function createProfilePayloads(deps: {
   async function profileInitPayload(payload: unknown) {
     const input = asRecord(payload);
     const state = await initLocalProfileRepo({
-      repoPath: stringValue(input.path) ?? stringValue(input.repoPath) ?? undefined,
+      repoPath:
+        stringValue(input.path) ?? stringValue(input.repoPath) ?? undefined,
       profile: stringValue(input.profile) ?? undefined,
       template: stringValue(input.template) ?? undefined,
       force: booleanValue(input.force) ?? false,
@@ -61,7 +67,9 @@ export function createProfilePayloads(deps: {
         source: "server",
         action: "openpond.profile.init",
         status: "completed",
-        output: `Initialized OpenPond profile ${state.activeProfile ?? "default"}.`,
+        output: `Initialized OpenPond profile ${
+          state.activeProfile ?? "default"
+        }.`,
       })
     );
     return state;
@@ -71,7 +79,10 @@ export function createProfilePayloads(deps: {
     const input = asRecord(payload);
     const repoPath = stringValue(input.path) ?? stringValue(input.repoPath);
     if (!repoPath) throw new Error("Profile repo path is required.");
-    const state = await loadLocalProfileRepo(repoPath, stringValue(input.profile) ?? undefined);
+    const state = await loadLocalProfileRepo(
+      repoPath,
+      stringValue(input.profile) ?? undefined
+    );
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
@@ -101,16 +112,39 @@ export function createProfilePayloads(deps: {
     return state;
   }
 
+  async function profileRenameAgentPayload(agentId: string, payload: unknown) {
+    const input = asRecord(payload);
+    const name = stringValue(input.name);
+    if (!name) throw new Error("Agent name is required.");
+    const state = await renameActiveProfileAgent(agentId, name);
+    await appendRuntimeEvent(
+      event({
+        name: "diagnostic",
+        source: "server",
+        action: "openpond.profile.agent.rename",
+        status: "completed",
+        output: `Renamed Profile agent ${agentId} to ${name.trim()}.`,
+      })
+    );
+    return state;
+  }
+
   async function profileCommitPayload(payload: unknown) {
     const input = asRecord(payload);
-    const result = await commitActiveProfileChanges(stringValue(input.message) ?? stringValue(input.commitMessage) ?? undefined);
+    const result = await commitActiveProfileChanges(
+      stringValue(input.message) ??
+        stringValue(input.commitMessage) ??
+        undefined
+    );
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
         source: "server",
         action: "openpond.profile.commit",
         status: "completed",
-        output: result.committed ? "Committed OpenPond profile changes." : "No OpenPond profile changes to commit.",
+        output: result.committed
+          ? "Committed OpenPond profile changes."
+          : "No OpenPond profile changes to commit.",
       })
     );
     return result;
@@ -129,31 +163,50 @@ export function createProfilePayloads(deps: {
       throw new Error("Active OpenPond profile source is not Git-backed.");
     }
     if (!profile.git.head) {
-      throw new Error("Profile source must have a committed Git head before push.");
+      throw new Error(
+        "Profile source must have a committed Git head before push."
+      );
     }
     if (profile.git.dirty) {
-      throw new Error("Profile source has uncommitted changes. Commit before pushing.");
+      throw new Error(
+        "Profile source has uncommitted changes. Commit before pushing."
+      );
     }
 
     const hostedPayload = asRecord(
       await sandboxRequestPayload({
-        type: booleanValue(input.ensureHosted) ? "profile_ensure" : "profile_get",
+        type: booleanValue(input.ensureHosted)
+          ? "profile_ensure"
+          : "profile_get",
         payload: { teamId },
-      }),
+      })
     );
     const hostedProfile = asRecord(hostedPayload.profile);
     if (!hostedProfile) {
-      throw new Error("No hosted OpenPond profile repo found. Run `openpond profile ensure-hosted` first.");
+      throw new Error(
+        "No hosted OpenPond profile repo found. Run `openpond profile ensure-hosted` first."
+      );
     }
     const sourceUpload = asRecord(hostedProfile.sourceUpload);
-    const currentHostedHead = stringValue(sourceUpload?.sourceCommitSha) ?? null;
+    const currentHostedHead =
+      stringValue(sourceUpload?.sourceCommitSha) ?? null;
     const lastPushedHostedHead = profile.hosted?.sourceCommitSha ?? null;
-    if (lastPushedHostedHead && currentHostedHead !== lastPushedHostedHead && !booleanValue(input.force)) {
-      throw new Error("Hosted profile source changed since the last local push. Inspect hosted changes or push with force.");
+    if (
+      lastPushedHostedHead &&
+      currentHostedHead !== lastPushedHostedHead &&
+      !booleanValue(input.force)
+    ) {
+      throw new Error(
+        "Hosted profile source changed since the last local push. Inspect hosted changes or push with force."
+      );
     }
 
-    const manifest = JSON.parse(await readFile(profile.manifestPath, "utf8")) as ProfileRepoManifest;
-    const sourcePath = manifest.profiles[profile.activeProfile ?? manifest.defaultProfile]?.path ?? "profiles/default";
+    const manifest = JSON.parse(
+      await readFile(profile.manifestPath, "utf8")
+    ) as ProfileRepoManifest;
+    const sourcePath =
+      manifest.profiles[profile.activeProfile ?? manifest.defaultProfile]
+        ?.path ?? "profiles/default";
     const upload = await collectProfileSourceUploadEntries(profile.repoPath);
     const pushPayload = asRecord(
       await sandboxRequestPayload({
@@ -165,18 +218,21 @@ export function createProfilePayloads(deps: {
           commitMessage:
             stringValue(input.commitMessage) ??
             stringValue(input.message) ??
-            `Push OpenPond profile ${profile.activeProfile ?? "default"} at ${profile.git.shortHead ?? profile.git.head}`,
+            `Push OpenPond profile ${profile.activeProfile ?? "default"} at ${
+              profile.git.shortHead ?? profile.git.head
+            }`,
           expectedSourceCommitSha: currentHostedHead,
           localHeadSha: profile.git.head,
           manifest,
           sourcePath,
           agents: profile.agents.map((agent) => ({
             id: agent.id,
+            name: agent.name,
             path: agent.path,
             enabled: agent.enabled,
           })),
         },
-      }),
+      })
     );
     const pushedProfile = asRecord(pushPayload.profile);
     const pushedSourceUpload = asRecord(pushPayload.sourceUpload);
@@ -195,59 +251,154 @@ export function createProfilePayloads(deps: {
     await saveProfilePushStatus(pushStatus);
 
     const hostedSourceAgentId =
-      stringValue(input.hostedSourceAgentId) ?? stringValue(input.hostedRunAgentId);
-    const requestHostedSourceChecks = Boolean(booleanValue(input.hostedSourceChecks));
-    const publishHostedSource = Boolean(booleanValue(input.publishHostedSource));
+      stringValue(input.hostedSourceAgentId) ??
+      stringValue(input.hostedRunAgentId);
+    const requestHostedSourceChecks = Boolean(
+      booleanValue(input.hostedSourceChecks)
+    );
+    const publishHostedSource = Boolean(
+      booleanValue(input.publishHostedSource)
+    );
     const hostedSourceDispatch =
-      parseHostedSourceDispatch(stringValue(input.hostedSourceDispatch)) ?? "coding_core";
+      parseHostedSourceDispatch(stringValue(input.hostedSourceDispatch)) ??
+      "coding_core";
+    let hostedRuntimeAgentId = hostedSourceAgentId;
     let hostedSourceDeployPlan: Record<string, unknown> | null = null;
     let hostedSourceChecks: Record<string, unknown> | null = null;
     let hostedSourcePublish: Record<string, unknown> | null = null;
+
+    if (hostedSourceAgentId) {
+      const profileProjectId = pushStatus.projectId;
+      const sourceRef =
+        stringValue(pushedSourceUpload?.sourceRef) ??
+        profile.git.branch ??
+        "main";
+      if (!profileProjectId) {
+        throw new Error(
+          "Hosted profile push did not return a profile project id.",
+        );
+      }
+      try {
+        const hostedSourceMaterialization =
+          await materializeHostedProfileAgentSource({
+            client: await resolveOpenPondSandboxClient(),
+            teamId,
+            profileProjectId,
+            profileName: profile.activeProfile ?? manifest.defaultProfile,
+            state: profile,
+            agentId: hostedSourceAgentId,
+            sourceRef,
+            localHead: profile.git.head,
+            hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
+            projectId:
+              profile.hosted?.teamId === teamId &&
+              profile.hosted.hostedSourceMaterialization?.agentId ===
+                hostedSourceAgentId
+                ? profile.hosted.hostedSourceMaterialization.projectId
+                : null,
+          });
+        hostedRuntimeAgentId =
+          hostedSourceMaterialization.runtimeAgentId ?? hostedSourceAgentId;
+        pushStatus = {
+          ...pushStatus,
+          promotionStatus: "hosted_source_materialized",
+          hostedSourceMaterialization,
+        };
+        await saveProfilePushStatus(pushStatus);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        pushStatus = {
+          ...pushStatus,
+          promotionStatus: "hosted_source_materialize_failed",
+          hostedSourceMaterialization: {
+            status: "failed",
+            agentId: hostedSourceAgentId,
+            projectId: null,
+            error: message,
+          },
+          error: message,
+        };
+        await saveProfilePushStatus(pushStatus);
+        throw new Error(
+          `Hosted source materialization failed after push: ${message}`,
+        );
+      }
+    }
+
     if (requestHostedSourceChecks || publishHostedSource) {
       if (!hostedSourceAgentId) {
-        throw new Error("hostedSourceAgentId or hostedRunAgentId is required for hosted source checks or publish.");
+        throw new Error(
+          "hostedSourceAgentId or hostedRunAgentId is required for hosted source checks or publish."
+        );
+      }
+      if (!hostedRuntimeAgentId) {
+        throw new Error(
+          "Unable to resolve the hosted runtime agent for source checks.",
+        );
       }
       try {
         const deployPlanPayload = asRecord(
           await sandboxRequestPayload({
             type: "agent_source_deploy_plan",
-            agentId: hostedSourceAgentId,
+            agentId: hostedRuntimeAgentId,
             payload: { teamId },
-          }),
+          })
         );
         hostedSourceDeployPlan = asRecord(deployPlanPayload.deployPlan);
         if (requestHostedSourceChecks) {
           hostedSourceChecks = asRecord(
             await sandboxRequestPayload({
               type: "agent_source_checks",
-              agentId: hostedSourceAgentId,
+              agentId: hostedRuntimeAgentId,
               payload: {
                 teamId,
-                sourceRef: stringValue(pushedSourceUpload?.sourceRef),
-                baseSha: stringValue(pushedSourceUpload?.sourceCommitSha),
-                checkKind: stringValue(input.hostedCheckKind) ?? stringValue(input.checkKind) ?? "all",
+                sourceRef:
+                  pushStatus.hostedSourceMaterialization?.sourceRef ??
+                  stringValue(pushedSourceUpload?.sourceRef),
+                baseSha:
+                  pushStatus.hostedSourceMaterialization?.sourceCommitSha ??
+                  stringValue(pushedSourceUpload?.sourceCommitSha),
+                checkKind:
+                  stringValue(input.hostedCheckKind) ??
+                  stringValue(input.checkKind) ??
+                  "all",
                 dispatch: hostedSourceDispatch,
                 metadata: {
                   source: "openpond_profile_push_checks",
                   localHead: profile.git.head,
                   hostedHead: stringValue(pushedSourceUpload?.sourceCommitSha),
-                  sourceRef: stringValue(pushedSourceUpload?.sourceRef),
+                  materializedProjectId:
+                    pushStatus.hostedSourceMaterialization?.projectId ?? null,
+                  materializedSourceCommitSha:
+                    pushStatus.hostedSourceMaterialization?.sourceCommitSha ??
+                    null,
+                  sourceRef:
+                    pushStatus.hostedSourceMaterialization?.sourceRef ??
+                    stringValue(pushedSourceUpload?.sourceRef),
                   dispatch: hostedSourceDispatch,
                 },
               },
-            }),
+            })
           );
           const dispatchResult = asRecord(hostedSourceChecks.dispatchResult);
           if (stringValue(dispatchResult.status) === "failed") {
-            throw new Error(stringValue(dispatchResult.error) ?? "hosted_source_check_dispatch_failed");
+            throw new Error(
+              stringValue(dispatchResult.error) ??
+                "hosted_source_check_dispatch_failed"
+            );
           }
         }
         pushStatus = {
           ...pushStatus,
-          promotionStatus: requestHostedSourceChecks ? "hosted_source_check_pending" : pushStatus.promotionStatus,
+          promotionStatus: requestHostedSourceChecks
+            ? "hosted_source_check_pending"
+            : pushStatus.promotionStatus,
           hostedSourceCheck: hostedSourceCheckStatusFromPayload({
-            agentId: hostedSourceAgentId,
-            status: requestHostedSourceChecks ? "requested" : "deploy_plan_ready",
+            agentId: hostedRuntimeAgentId,
+            status: requestHostedSourceChecks
+              ? "requested"
+              : "deploy_plan_ready",
             deployPlan: hostedSourceDeployPlan,
             checkResult: hostedSourceChecks,
           }),
@@ -259,7 +410,7 @@ export function createProfilePayloads(deps: {
           ...pushStatus,
           promotionStatus: "hosted_source_check_failed",
           hostedSourceCheck: hostedSourceCheckStatusFromPayload({
-            agentId: hostedSourceAgentId,
+            agentId: hostedRuntimeAgentId,
             status: "failed",
             deployPlan: hostedSourceDeployPlan,
             checkedAt: new Date().toISOString(),
@@ -274,7 +425,14 @@ export function createProfilePayloads(deps: {
 
     if (publishHostedSource) {
       if (!hostedSourceAgentId) {
-        throw new Error("hostedSourceAgentId or hostedRunAgentId is required for hosted source publish.");
+        throw new Error(
+          "hostedSourceAgentId or hostedRunAgentId is required for hosted source publish."
+        );
+      }
+      if (!hostedRuntimeAgentId) {
+        throw new Error(
+          "Unable to resolve the hosted runtime agent for source publish.",
+        );
       }
       try {
         const deployPlanSource = asRecord(hostedSourceDeployPlan?.source);
@@ -285,20 +443,23 @@ export function createProfilePayloads(deps: {
         hostedSourcePublish = asRecord(
           await sandboxRequestPayload({
             type: "agent_source_publish",
-            agentId: hostedSourceAgentId,
+            agentId: hostedRuntimeAgentId,
             payload: {
               teamId,
               expectedManifestHash,
-              expectedSourceCommitSha: stringValue(pushedSourceUpload?.sourceCommitSha),
+              expectedSourceCommitSha: stringValue(
+                pushStatus.hostedSourceMaterialization?.sourceCommitSha ??
+                  pushedSourceUpload?.sourceCommitSha
+              ),
               workItemId: stringValue(input.workItemId),
             },
-          }),
+          })
         );
         pushStatus = {
           ...pushStatus,
           promotionStatus: "hosted_source_published",
           hostedPublish: hostedPublishStatusFromPayload({
-            agentId: hostedSourceAgentId,
+            agentId: hostedRuntimeAgentId,
             publishResult: hostedSourcePublish,
           }),
         };
@@ -310,7 +471,7 @@ export function createProfilePayloads(deps: {
           promotionStatus: "hosted_source_publish_failed",
           hostedPublish: {
             status: "failed",
-            agentId: hostedSourceAgentId,
+            agentId: hostedRuntimeAgentId,
             error: message,
           },
           error: message,
@@ -324,9 +485,13 @@ export function createProfilePayloads(deps: {
     let hostedRun: Record<string, unknown> | null = null;
     if (hostedRunAgentId) {
       const hostedRunStartedAt = new Date().toISOString();
-      const hostedRunInput = nonEmptyRecord(input.hostedRunInput)
-        ?? { prompt: "hello", channel: "openpond_chat" };
-      const hostedRunTargetProjectId = stringValue(input.hostedRunTargetProjectId);
+      const hostedRunInput = nonEmptyRecord(input.hostedRunInput) ?? {
+        prompt: "hello",
+        channel: "openpond_chat",
+      };
+      const hostedRunTargetProjectId = stringValue(
+        input.hostedRunTargetProjectId
+      );
       const hostedRunIdempotencyKey = buildHostedRunIdempotencyKey({
         explicitKey: stringValue(input.hostedRunIdempotencyKey),
         retry: booleanValue(input.hostedRunRetry) ?? false,
@@ -350,8 +515,12 @@ export function createProfilePayloads(deps: {
             agentId: hostedRunAgentId,
             payload: {
               teamId,
-              ...(hostedRunTargetProjectId ? { targetProjectId: hostedRunTargetProjectId } : {}),
-              ...(hostedRunTargetProjectId ? { targetProject: { id: hostedRunTargetProjectId } } : {}),
+              ...(hostedRunTargetProjectId
+                ? { targetProjectId: hostedRunTargetProjectId }
+                : {}),
+              ...(hostedRunTargetProjectId
+                ? { targetProject: { id: hostedRunTargetProjectId } }
+                : {}),
               idempotencyKey: hostedRunIdempotencyKey,
               input: hostedRunInput,
               metadata: {
@@ -362,7 +531,8 @@ export function createProfilePayloads(deps: {
                 hostedRunIdempotencyKey,
                 hostedRunRetry: Boolean(booleanValue(input.hostedRunRetry)),
                 sourceRef: stringValue(pushedSourceUpload?.sourceRef),
-                publishedSnapshotId: pushStatus.hostedPublish?.snapshotId ?? null,
+                publishedSnapshotId:
+                  pushStatus.hostedPublish?.snapshotId ?? null,
                 manifestHash:
                   pushStatus.hostedPublish?.manifestHash ??
                   pushStatus.hostedSourceCheck?.manifestHash ??
@@ -378,7 +548,7 @@ export function createProfilePayloads(deps: {
                     source: "diagnostic",
                   },
             },
-          }),
+          })
         );
         const run = asRecord(hostedRun.run);
         const hostedRunSummary = hostedRunSummaryFromPayload({
@@ -392,8 +562,8 @@ export function createProfilePayloads(deps: {
             hostedRunStatus === "passed"
               ? "hosted_run_passed"
               : hostedRunStatus === "failed"
-                ? "hosted_run_failed"
-                : "hosted_run_pending",
+              ? "hosted_run_failed"
+              : "hosted_run_pending",
           hostedRunStatus,
           hostedRunAgentId,
           hostedRunId: stringValue(run.id),
@@ -415,7 +585,9 @@ export function createProfilePayloads(deps: {
           },
           error: message,
         });
-        throw new Error(`Hosted invocation failed to start after push: ${message}`);
+        throw new Error(
+          `Hosted invocation failed to start after push: ${message}`
+        );
       }
     }
     await appendRuntimeEvent(
@@ -424,7 +596,9 @@ export function createProfilePayloads(deps: {
         source: "server",
         action: "openpond.profile.push",
         status: "completed",
-        output: `Pushed OpenPond profile ${profile.activeProfile ?? "default"}.`,
+        output: `Pushed OpenPond profile ${
+          profile.activeProfile ?? "default"
+        }.`,
       })
     );
     return {
@@ -444,7 +618,10 @@ export function createProfilePayloads(deps: {
     const metadata = asRecord(input.metadata);
     const actionInput = asRecord(input.input);
     const sessionId = stringValue(metadata.sessionId);
-    const prompt = stringValue(actionInput.prompt) ?? stringValue(actionInput.message) ?? `Run ${action}`;
+    const prompt =
+      stringValue(actionInput.prompt) ??
+      stringValue(actionInput.message) ??
+      `Run ${action}`;
     const displayPrompt = stringValue(metadata.displayPrompt) ?? prompt;
     const selectedActionLabel =
       stringValue(metadata.selectedActionLabel) ??
@@ -473,7 +650,7 @@ export function createProfilePayloads(deps: {
           turnId,
           source: "chat_action",
           args: { prompt: displayPrompt },
-        }),
+        })
       );
       await appendRuntimeEvent(
         event({
@@ -490,7 +667,10 @@ export function createProfilePayloads(deps: {
             action: {
               name: action,
               label: selectedActionLabel,
-              implementation: { type: "openpond-profile-action", actionId: action },
+              implementation: {
+                type: "openpond-profile-action",
+                actionId: action,
+              },
             },
             stdout: result.stdout,
             stderr: result.stderr,
@@ -499,7 +679,7 @@ export function createProfilePayloads(deps: {
             artifactRefs: runSummary.artifactRefs,
             traceArtifactRefs: runSummary.traceArtifactRefs,
           },
-        }),
+        })
       );
     }
     await appendRuntimeEvent(
@@ -519,13 +699,13 @@ export function createProfilePayloads(deps: {
     };
   }
 
-
   return {
     profileCurrentPayload,
     profileCatalogPayload,
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
+    profileRenameAgentPayload,
     profileCommitPayload,
     profilePushPayload,
     profileRunPayload,

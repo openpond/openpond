@@ -110,10 +110,10 @@ describe("GetStartedView", () => {
 
     expect(insightsDeck?.label).toBe("Insights Loop");
     expect(detectorSlide?.title).toBe("Insights runs on top of goals");
-    expect(detectorSlide?.body).toContain("specific implementation on top of goals");
-    expect(detectorSlide?.body).toContain("create_pipeline.updated");
+    expect(detectorSlide?.body).toContain("Create/Improve runs");
+    expect(detectorSlide?.body).toContain("create_improve.updated");
     expect(detectorSlide?.detail).toContain("Awaiting questions");
-    expect(actionSlide?.body).toContain("Lab → Signals");
+    expect(actionSlide?.body).toContain("suggestions inbox in Lab");
     expect(actionSlide?.detail).toContain("insight_items");
   });
 

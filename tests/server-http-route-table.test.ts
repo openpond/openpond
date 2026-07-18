@@ -4,7 +4,10 @@ import type { AddressInfo } from "node:net";
 
 import { describe, expect, test } from "vitest";
 
-import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src/api/http-routes";
+import {
+  createHttpRequestHandler,
+  type HttpRouteDeps,
+} from "../apps/server/src/api/http-routes";
 import { CommunityApiError } from "../apps/server/src/openpond/community-client";
 
 type RecordedCall = {
@@ -23,93 +26,171 @@ describe("server HTTP route table", () => {
     const address = server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${address.port}`;
     try {
-      await expect(expectJsonRequest(origin, "GET", "/v1/profile", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/profile", 200)
+      ).resolves.toMatchObject({
         name: "profileCurrentPayload",
       });
-      await expect(expectJsonRequest(origin, "GET", "/v1/organizations", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(
+          origin,
+          "PATCH",
+          "/v1/profile/agents/support%20agent/name",
+          200,
+          { name: "Support Assistant" }
+        )
+      ).resolves.toMatchObject({
+        name: "profileRenameAgentPayload",
+        args: ["support agent", { name: "Support Assistant" }],
+      });
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/organizations", 200)
+      ).resolves.toMatchObject({
         name: "organizationPayload",
         args: [{ type: "list" }],
       });
-      await expect(expectJsonRequest(origin, "GET", "/v1/sandboxes?teamId=team-1", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/sandboxes?teamId=team-1", 200)
+      ).resolves.toMatchObject({
         name: "sandboxPayload",
         args: [{ type: "list", payload: { teamId: "team-1" } }],
       });
       await expect(
-        expectJsonRequest(origin, "GET", "/v1/team-chat/agents?teamId=team-1", 200),
+        expectJsonRequest(
+          origin,
+          "GET",
+          "/v1/team-chat/agents?teamId=team-1",
+          200
+        )
       ).resolves.toMatchObject({
         name: "teamChatPayload",
         args: [{ type: "agents", teamId: "team-1" }],
       });
       await expect(
-        expectJsonRequest(origin, "GET", "/v1/communities?cursor=community-cursor", 200),
+        expectJsonRequest(
+          origin,
+          "GET",
+          "/v1/communities?cursor=community-cursor",
+          200
+        )
       ).resolves.toMatchObject({
         name: "communityPayload",
         args: [{ type: "discover", cursor: "community-cursor" }],
       });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/communities/community-1/join", 201, {
-          acceptedRulesVersionId: "rules-1",
-        }),
+        expectJsonRequest(
+          origin,
+          "POST",
+          "/v1/communities/community-1/join",
+          201,
+          {
+            acceptedRulesVersionId: "rules-1",
+          }
+        )
       ).resolves.toMatchObject({
         name: "communityPayload",
-        args: [{ type: "join", communityId: "community-1", acceptedRulesVersionId: "rules-1" }],
+        args: [
+          {
+            type: "join",
+            communityId: "community-1",
+            acceptedRulesVersionId: "rules-1",
+          },
+        ],
       });
-      await expect(expectJsonRequest(origin, "POST", "/v1/projects", 201, { name: "Local repo" })).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/projects", 201, {
+          name: "Local repo",
+        })
+      ).resolves.toMatchObject({
         name: "createLocalProjectPayload",
         args: [{ name: "Local repo" }],
       });
       await expect(
-        expectJsonRequest(origin, "GET", "/v1/providers/provider-one/models?refresh=1&limit=5", 200),
+        expectJsonRequest(
+          origin,
+          "GET",
+          "/v1/providers/provider-one/models?refresh=1&limit=5",
+          200
+        )
       ).resolves.toMatchObject({
-          name: "listProviderModelsPayload",
-          args: ["provider-one", { refresh: true, limit: 5 }],
-        });
+        name: "listProviderModelsPayload",
+        args: ["provider-one", { refresh: true, limit: 5 }],
+      });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/diagnostics/client", 201, { message: "UI failed", surface: "app" }),
+        expectJsonRequest(origin, "POST", "/v1/diagnostics/client", 201, {
+          message: "UI failed",
+          surface: "app",
+        })
       ).resolves.toMatchObject({
         name: "recordClientDiagnosticPayload",
         args: [{ message: "UI failed", surface: "app" }],
       });
-      await expect(expectJsonRequest(origin, "GET", "/v1/workspaces/app-1/diff", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/workspaces/app-1/diff", 200)
+      ).resolves.toMatchObject({
         name: "workspaceDiffPayload",
         args: ["app-1"],
       });
-      await expect(expectJsonRequest(origin, "GET", "/v1/lsp/status", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/lsp/status", 200)
+      ).resolves.toMatchObject({
         name: "workspaceLspRuntimeStatusPayload",
       });
-      await expect(expectJsonRequest(origin, "GET", "/v1/insights?status=active", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "GET", "/v1/insights?status=active", 200)
+      ).resolves.toMatchObject({
         name: "listInsightsPayload",
       });
-      await expect(expectJsonRequest(origin, "POST", "/v1/insights/scan", 202)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/insights/scan", 202)
+      ).resolves.toMatchObject({
         name: "runInsightsScanPayload",
       });
       await expect(
-        expectJsonRequest(origin, "PATCH", "/v1/insights/insight-1", 200, { status: "dismissed" }),
+        expectJsonRequest(origin, "PATCH", "/v1/insights/insight-1", 200, {
+          status: "dismissed",
+        })
       ).resolves.toMatchObject({
         name: "patchInsightPayload",
         args: ["insight-1", { status: "dismissed" }],
       });
-      await expect(expectJsonRequest(origin, "POST", "/v1/lsp/restart", 200)).resolves.toMatchObject({
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/lsp/restart", 200)
+      ).resolves.toMatchObject({
         name: "restartWorkspaceLspPayload",
       });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/sessions/session-1/turns", 202, { prompt: "Hi" }),
+        expectJsonRequest(origin, "POST", "/v1/sessions/session-1/turns", 202, {
+          prompt: "Hi",
+        })
       ).resolves.toMatchObject({
-          name: "sendTurn",
-          args: ["session-1", { prompt: "Hi" }],
-        });
+        name: "sendTurn",
+        args: ["session-1", { prompt: "Hi" }],
+      });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/subagents/run-1/lifecycle", 200, { action: "archive" }),
+        expectJsonRequest(
+          origin,
+          "POST",
+          "/v1/subagents/run-1/lifecycle",
+          200,
+          { action: "archive" }
+        )
       ).resolves.toMatchObject({
         name: "runSubagentLifecycleAction",
         args: ["run-1", { action: "archive" }],
       });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/sessions/session-1/preflight-turns/failure", 200, {
-          prompt: "Edit README",
-          error: "Cloud sandbox sandbox_1 is error.",
-          target: "hybrid_sandbox",
-        }),
+        expectJsonRequest(
+          origin,
+          "POST",
+          "/v1/sessions/session-1/preflight-turns/failure",
+          200,
+          {
+            prompt: "Edit README",
+            error: "Cloud sandbox sandbox_1 is error.",
+            target: "hybrid_sandbox",
+          }
+        )
       ).resolves.toMatchObject({
         name: "recordPreflightTurnFailure",
         args: [
@@ -122,16 +203,27 @@ describe("server HTTP route table", () => {
         ],
       });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/sessions/session-1/workspace/ensure-ready", 200, {
-          branch: "feature/ready",
-          surface: "terminal",
-        }),
+        expectJsonRequest(
+          origin,
+          "POST",
+          "/v1/sessions/session-1/workspace/ensure-ready",
+          200,
+          {
+            branch: "feature/ready",
+            surface: "terminal",
+          }
+        )
       ).resolves.toMatchObject({
         name: "ensureCloudWorkspaceReady",
         args: ["session-1", { branch: "feature/ready", surface: "terminal" }],
       });
       await expect(
-        expectJsonRequest(origin, "POST", "/v1/codex-history/codex_history_thread-1/turns/interrupt", 202),
+        expectJsonRequest(
+          origin,
+          "POST",
+          "/v1/codex-history/codex_history_thread-1/turns/interrupt",
+          202
+        )
       ).resolves.toMatchObject({
         name: "interruptCodexHistoryTurnPayload",
         args: ["codex_history_thread-1"],
@@ -139,6 +231,7 @@ describe("server HTTP route table", () => {
 
       expect(calls.map((call) => call.name)).toEqual([
         "profileCurrentPayload",
+        "profileRenameAgentPayload",
         "organizationPayload",
         "sandboxPayload",
         "teamChatPayload",
@@ -177,14 +270,17 @@ describe("server HTTP route table", () => {
     await once(server, "listening");
     const address = server.address() as AddressInfo;
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/v1/communities/community-1/join`, {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer route-table-token",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ acceptedRulesVersionId: "rules-1" }),
-      });
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/v1/communities/community-1/join`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer route-table-token",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ acceptedRulesVersionId: "rules-1" }),
+        }
+      );
       expect(response.status).toBe(409);
       await expect(response.json()).resolves.toEqual({
         error: "community_rules_version_stale",
@@ -202,7 +298,7 @@ async function expectJsonRequest(
   method: string,
   path: string,
   expectedStatus: number,
-  body?: unknown,
+  body?: unknown
 ): Promise<unknown> {
   const response = await fetch(`${origin}${path}`, {
     method,
@@ -230,7 +326,9 @@ function routeTableDeps(calls: RecordedCall[]): HttpRouteDeps {
     },
     subscribers: new Set<ServerResponse>(),
     async workspaceImagePayload() {
-      throw new Error("workspace image route not expected in route table dispatch test");
+      throw new Error(
+        "workspace image route not expected in route table dispatch test"
+      );
     },
   };
   return new Proxy(base, {
@@ -239,7 +337,7 @@ function routeTableDeps(calls: RecordedCall[]): HttpRouteDeps {
       return async (...args: unknown[]) => {
         const call = {
           name: String(property),
-          args: args.map((arg) => arg instanceof URL ? arg.toString() : arg),
+          args: args.map((arg) => (arg instanceof URL ? arg.toString() : arg)),
         };
         calls.push(call);
         return call;

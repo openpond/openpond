@@ -5,7 +5,7 @@ import { SidebarNavigation } from "../apps/web/src/components/sidebar/SidebarNav
 
 describe("Training navigation", () => {
   test("keeps training inside the single Lab destination", () => {
-    const html = renderToStaticMarkup(createElement(SidebarNavigation, { beginNewChat: () => undefined, setLabsTab: () => undefined, setSectionMenuOpen: () => undefined, setSelectedAppId: () => undefined, setSelectedProjectId: () => undefined, setSelectedSessionId: () => undefined, setView: () => undefined, view: "labs" }));
+    const html = renderToStaticMarkup(createElement(SidebarNavigation, { beginNewChat: () => undefined, setSectionMenuOpen: () => undefined, setSelectedAppId: () => undefined, setSelectedProjectId: () => undefined, setSelectedSessionId: () => undefined, setView: () => undefined, view: "labs" }));
     expect(html).toContain("Lab");
     expect(html).not.toContain("Agents");
     expect(html).not.toContain("Training");

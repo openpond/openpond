@@ -317,6 +317,14 @@ export const GradeResultSchema = z.object({
   createdAt: TimestampSchema,
 });
 
+export const BaselineRewardSummarySchema = z.object({
+  count: z.number().int().nonnegative(),
+  mean: z.number().min(0).max(1).nullable(),
+  min: z.number().min(0).max(1).nullable(),
+  max: z.number().min(0).max(1).nullable(),
+  variance: z.number().nonnegative().nullable(),
+});
+
 export const BaselineReportSchema = z.object({
   schemaVersion: z.literal("openpond.baselineReport.v1"),
   id: IdSchema,
@@ -326,13 +334,7 @@ export const BaselineReportSchema = z.object({
   attemptRefs: z.array(IdSchema).min(1).max(1_000_000),
   gradeRefs: z.array(IdSchema).min(1).max(1_000_000),
   passAtK: z.record(z.string(), z.number().min(0).max(1)),
-  reward: z.object({
-    count: z.number().int().nonnegative(),
-    mean: z.number().min(0).max(1).nullable(),
-    min: z.number().min(0).max(1).nullable(),
-    max: z.number().min(0).max(1).nullable(),
-    variance: z.number().nonnegative().nullable(),
-  }),
+  reward: BaselineRewardSummarySchema,
   failureClusters: z.record(z.string(), z.number().int().nonnegative()),
   totalCostUsd: z.number().nonnegative().nullable(),
   userInterventions: z.number().int().nonnegative(),
@@ -377,6 +379,7 @@ export const TasksetReadinessReportSchema = z.object({
   blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
   baselineReportId: NullableIdSchema,
+  baselineReward: BaselineRewardSummarySchema.nullable().default(null),
   generatedAt: TimestampSchema,
 });
 
@@ -421,7 +424,9 @@ export const AuthoringProvenanceSchema = z.object({
 export const TasksetSchema = z.object({
   schemaVersion: z.literal("openpond.taskset.v1"),
   id: IdSchema,
+  revision: z.number().int().positive().default(1),
   profileId: IdSchema,
+  createImproveRunId: NullableIdSchema.default(null),
   name: z.string().trim().min(1).max(500),
   objective: z.string().trim().min(1).max(20_000),
   status: TasksetStatusSchema,
@@ -473,6 +478,24 @@ export const TaskDesignProposalSchema = z.object({
   createdAt: TimestampSchema,
 });
 
+/**
+ * Hosted Taskset authoring includes the authoring skill and the proposal JSON
+ * schema in addition to the selected evidence. Keep the raw-evidence portion
+ * bounded so a disclosure cannot monopolize the hosted gateway or fail after
+ * the private excerpts have already been sent.
+ */
+export const TASK_AUTHORING_MAX_DISCLOSED_EVIDENCE_TOKENS = 48_000;
+export const WORKPRODUCT_NAME_MAX_WORDS = 5;
+
+export function conciseWorkproductName(
+  value: string | null | undefined,
+  fallback = "New model",
+): string {
+  const words = value?.trim().split(/\s+/).filter(Boolean) ?? [];
+  if (words.length === 0) return fallback;
+  return words.slice(0, WORKPRODUCT_NAME_MAX_WORDS).join(" ");
+}
+
 export const TaskCreationRequestSchema = z.object({
   schemaVersion: z.literal("openpond.taskCreationRequest.v1"),
   id: IdSchema,
@@ -480,12 +503,21 @@ export const TaskCreationRequestSchema = z.object({
   surface: TaskCreationSurfaceSchema,
   mode: TaskCreationModeSchema,
   entryMode: NewModelModeSchema.default("manual"),
+  resourceIntent: z.enum(["workproduct", "dataset"]).default("workproduct"),
   objective: z.string().trim().min(1).max(20_000).nullable(),
   methodHint: z.enum(["sft", "dpo", "grpo"]).nullable().default(null),
+  preferredBaseModelId: IdSchema.nullable().default(null),
   sourceIds: z.array(IdSchema).max(100_000),
   candidateId: NullableIdSchema,
   analysisModel: ChatModelRefSchema.nullable(),
   analysisReasoningEffort: CodexReasoningEffortSchema.nullable().default(null),
+  createImproveRunId: NullableIdSchema.default(null),
+  targetIntent: z.object({
+    kind: z.enum(["agent", "skill", "extension", "model", "configuration"]).nullable(),
+    id: NullableIdSchema,
+    displayName: z.string().trim().min(1).max(500).nullable(),
+    operation: z.enum(["create", "improve"]),
+  }).default({ kind: "model", id: null, displayName: null, operation: "create" }),
   disclosure: z.object({
     status: z.enum(["not_required", "pending", "approved", "declined"]),
     content: z.literal("raw_excerpts"),

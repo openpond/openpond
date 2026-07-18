@@ -46,10 +46,23 @@ describe("grader execution", () => {
     const profileSource = path.join(directory, "profile");
     await buildTaskset(taskset, path.join(profileSource, "tasksets", taskset.id));
     await store.upsertTaskset(taskset);
-    const service = createTaskEvaluationService({ store, loadProfileState: async () => ({ mode: "local", sourcePath: profileSource } as any), modelJudge: async ({ attempt }) => { const passed = attempt.output.text === "Goodbye friend"; return { score: passed ? 1 : 0, passed, feedback: passed ? "matched" : "did not match" }; } });
+    const service = createTaskEvaluationService({ store, storeDir: directory, loadProfileState: async () => ({ mode: "local", sourcePath: profileSource } as any), modelJudge: async ({ attempt }) => { const passed = attempt.output.text === "Goodbye friend"; return { score: passed ? 1 : 0, passed, feedback: passed ? "matched" : "did not match" }; } });
     const calibrated = await service.calibrateModelJudges(taskset.id);
     expect(calibrated.passed).toBe(true);
+    expect(calibrated.taskset).toMatchObject({
+      revision: taskset.revision + 1,
+      metadata: {
+        judgeCalibration: {
+          parentTasksetHash: taskset.contentHash,
+          graderIds: ["judge"],
+        },
+      },
+    });
     expect(calibrated.taskset.graders[0]).toMatchObject({ kind: "model_judge", calibrationStatus: "passed", rewardEligible: true, metadata: { calibrationEvidenceHash: expect.any(String), calibrationAccuracy: 1 } });
     expect(calibrated.taskset.contentHash).not.toBe(taskset.contentHash);
+    await expect(store.getTasksetRevision(taskset.id, taskset.revision, taskset.contentHash)).resolves.toMatchObject({
+      contentHash: taskset.contentHash,
+      revision: taskset.revision,
+    });
   }));
 });

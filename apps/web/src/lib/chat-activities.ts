@@ -381,7 +381,7 @@ function activityContent(item: RuntimeEvent, imagePreview?: ActivityItem["imageP
 function capabilityToolActivityLabel(item: RuntimeEvent): string | null {
   if (item.name !== "tool.started" && item.name !== "tool.completed") return null;
   const failed = item.status === "failed";
-  if (item.action === "openpond_create_pipeline") {
+  if (item.action === "openpond_create_improve") {
     if (item.name === "tool.started") return "Starting Create Pipeline";
     return failed ? "Create Pipeline failed" : "Started Create Pipeline";
   }
@@ -437,7 +437,7 @@ function browserToolActivityContent(item: RuntimeEvent): string | null {
 
 function capabilityToolActivityContent(item: RuntimeEvent): string | null {
   if (
-    item.action !== "openpond_create_pipeline" &&
+    item.action !== "openpond_create_improve" &&
     item.action !== "openpond_profile_skill_goal" &&
     item.action !== "openpond_goal_control"
   ) {

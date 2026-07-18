@@ -115,6 +115,7 @@ type ParseCodexSessionInput = {
 };
 
 const metadataCache = new Map<string, { mtimeMs: number; size: number; metadata: SessionMetadata }>();
+const threadLookupCache = new Map<string, CodexHistoryThread>();
 
 export function codexHistorySessionId(threadId: string): string {
   return `${CODEX_HISTORY_SESSION_PREFIX}${threadId}`;
@@ -156,12 +157,17 @@ export async function readCodexHistoryThreadPayload(
 ): Promise<CodexHistoryThreadPayload> {
   const threadId = codexHistoryThreadIdFromSessionId(sessionId);
   if (!threadId) throw new Error("Codex history session not found");
-  const threads = await loadCodexHistoryThreads({
-    codexHome: options.codexHome,
-    includeThreadId: threadId,
-    metadataLimit: 1,
-  });
-  const thread = threads.find((candidate) => candidate.threadId === threadId);
+  const codexHome = options.codexHome ?? codexHomePath();
+  const cacheKey = threadLookupCacheKey(codexHome, threadId);
+  let thread = threadLookupCache.get(cacheKey);
+  if (!thread || !existsSync(thread.filePath)) {
+    const threads = await loadCodexHistoryThreads({
+      codexHome,
+      includeThreadId: threadId,
+      metadataLimit: 1,
+    });
+    thread = threads.find((candidate) => candidate.threadId === threadId);
+  }
   if (!thread) throw new Error("Codex history session not found");
   const parseInput = {
     attachmentRootDir: options.attachmentRootDir,
@@ -271,7 +277,17 @@ export async function loadCodexHistoryThreads(options: {
       },
     });
   }
+  for (const thread of threads) {
+    threadLookupCache.set(
+      threadLookupCacheKey(codexHome, thread.threadId),
+      thread,
+    );
+  }
   return threads;
+}
+
+function threadLookupCacheKey(codexHome: string, threadId: string): string {
+  return `${path.resolve(codexHome)}\0${threadId}`;
 }
 
 export function parseCodexSessionRecords(

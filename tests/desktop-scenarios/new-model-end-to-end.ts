@@ -235,7 +235,11 @@ export default desktopScenario({
       adapterArtifactId: adapter.id,
       evaluationArtifactId: evaluation.id,
       modelId: model.id,
-      chatSessionIds: [firstChat.sessionId, secondChat.sessionId],
+      chatSessionIds: [
+        firstChat.sessionId,
+        firstChat.secondSessionId,
+        secondChat.sessionId,
+      ].filter((sessionId): sessionId is string => Boolean(sessionId)),
       chatTaskIds: [chatTask.metadata.taskId, secondChatTask.metadata.taskId],
     });
   },
@@ -278,29 +282,31 @@ async function runConstrainedModelChatThroughUi(harness: DesktopHarness, input: 
   await waitForRendererCondition(
     harness,
     `(() => {
-      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Training');
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Lab');
       if (!(button instanceof HTMLButtonElement)) return false;
       button.click();
       return true;
     })()`,
-    "Training navigation",
+    "Lab navigation",
   );
   await waitForRendererCondition(
     harness,
     `(() => {
-      const button = [...document.querySelectorAll('[role="tab"]')].find((item) => item.textContent?.trim().startsWith('Models'));
-      if (!(button instanceof HTMLButtonElement)) return false;
-      button.click();
-      return true;
-    })()`,
-    "Models tab",
-  );
-  await waitForRendererCondition(
-    harness,
-    `(() => {
-      const row = [...document.querySelectorAll('.training-models-table tbody tr')]
+      const row = [...document.querySelectorAll('.labs-workproducts-table tbody tr')]
         .find((item) => item.textContent?.includes(${JSON.stringify(input.tasksetName)}));
-      const button = row?.querySelector('.training-table-chat');
+      const button = row?.querySelector('button');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+    `Open ${input.tasksetName} workproduct`,
+  );
+  await waitForRendererCondition(
+    harness,
+    `(() => {
+      const button = document.querySelector(
+        ${JSON.stringify(`button[aria-label="Chat with ${input.tasksetName}"]`)}
+      );
       if (!(button instanceof HTMLButtonElement)) return false;
       button.click();
       return true;
@@ -328,41 +334,47 @@ async function runConstrainedModelChatThroughUi(harness: DesktopHarness, input: 
   await waitForCompletedTurn(harness, session.id, delta, `${input.title} completion`);
   let secondToolEvent = null;
   let secondOutput = "";
+  let secondSessionId: string | null = null;
   if (input.secondPrompt) {
     await waitForRendererCondition(
       harness,
       `document.querySelector('.training-chat-handoff small')?.textContent?.includes('2 of') === true`,
       "second generated Taskset question",
     );
+    const beforeSecond = await harness.api.bootstrap<{ sessions?: Session[] }>();
+    const previousSecondSessionIds = new Set(
+      (beforeSecond.sessions ?? []).map((candidate) => candidate.id),
+    );
     await harness.renderer.submitComposer(input.secondPrompt);
-    secondToolEvent = await harness.events.waitFor(
-      (event) =>
-        event.sessionId === session.id &&
-        event.turnId !== delta.turnId &&
-        event.name === "tool.completed" &&
-        event.action === "search_crm" &&
-        (event.status === undefined || event.status === "completed"),
-      `second generated search_crm completion in ${session.id}`,
-      { timeoutMs: 45_000, sessionId: session.id },
+    const secondSession = await waitForNewModelChatSession(harness, {
+      previousSessionIds: previousSecondSessionIds,
+      modelId: input.modelId,
+      projectId: input.project.id,
+    });
+    secondSessionId = secondSession.id;
+    secondToolEvent = await harness.events.waitForToolCompleted(
+      secondSession.id,
+      "search_crm",
+      { timeoutMs: 45_000 },
     );
     const secondDelta = await harness.events.waitFor(
       (event) =>
-        event.sessionId === session.id &&
+        event.sessionId === secondSession.id &&
         event.turnId === secondToolEvent?.turnId &&
         event.name === "assistant.delta" &&
         typeof event.output === "string" &&
         event.output.includes("ANSWER: {}"),
       `${input.title} second generated final answer`,
-      { sessionId: session.id },
+      { sessionId: secondSession.id },
     );
     await harness.events.waitFor(
       (event) =>
-        event.sessionId === session.id &&
+        event.sessionId === secondSession.id &&
         event.turnId === secondToolEvent?.turnId &&
         event.name === "turn.completed" &&
         event.status === "completed",
       `${input.title} second generated completion`,
-      { sessionId: session.id },
+      { sessionId: secondSession.id },
     );
     secondOutput = secondDelta.output ?? "";
   }
@@ -372,6 +384,7 @@ async function runConstrainedModelChatThroughUi(harness: DesktopHarness, input: 
     output: delta.output ?? "",
     secondToolEvent,
     secondOutput,
+    secondSessionId,
     handoffVisible: true,
     localProjectId: session.localProjectId ?? session.workspaceId ?? null,
   };

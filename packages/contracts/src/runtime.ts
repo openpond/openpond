@@ -17,7 +17,7 @@ export const RuntimeEventNameSchema = z.enum([
   "workspace_action",
   "workspace_action_result",
   "workspace.diff",
-  "create_pipeline.updated",
+  "create_improve.updated",
   "session.context.updated",
   "session.compaction.started",
   "session.compaction.completed",

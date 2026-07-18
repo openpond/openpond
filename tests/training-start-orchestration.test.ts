@@ -73,6 +73,17 @@ describe.sequential("training start orchestration", () => {
       expect(await store.listTrainingPlans()).toHaveLength(1);
       expect(await store.listTrainingBundles()).toHaveLength(1);
       expect(await store.listModelArtifactLineage(taskset.id)).toHaveLength(1);
+      const events = await store.listTrainingJobEvents(started.job.id);
+      const metricEvent = events.find((event) => event.type === "metric");
+      expect(metricEvent).toBeDefined();
+      await store.saveTrainingJobEvent({
+        ...metricEvent!,
+        id: "duplicate_metric_event",
+        sequence: Math.max(...events.map((event) => event.sequence)) + 1,
+        timestamp: new Date(
+          Date.parse(metricEvent!.timestamp) + 1_000,
+        ).toISOString(),
+      });
       const detail = await trainingRunDetail(store, started.job.id);
       expect(detail.stepMetrics).toHaveLength(2);
       expect(detail.stepMetrics.map((metric) => metric.step)).toEqual([1, 2]);

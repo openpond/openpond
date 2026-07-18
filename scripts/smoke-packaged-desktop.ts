@@ -11,6 +11,7 @@ import {
   preservePackagedAppLogs,
   type PackagedProcessCapture,
 } from "./packaged-smoke-diagnostics";
+import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 type DevtoolsTarget = {
   type?: string;
@@ -421,7 +422,7 @@ function launchPackagedApp(
       ...process.env,
       APPIMAGE_EXTRACT_AND_RUN: "1",
       ELECTRON_ENABLE_LOGGING: "1",
-      OPENPOND_APP_HOME: options.appHome,
+      ...isolatedOpenPondEnvironment(options.appHome),
       OPENPOND_SERVER_PORT: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],

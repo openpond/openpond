@@ -1,16 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
+  CreateImproveRunSchema,
   InsightsAskResponseSchema,
   InsightsListResponseSchema,
   InsightsScanResponseSchema,
   InsightsEvidenceSourceSettingsSchema,
   InsightItemSchema,
   type AppPreferences,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  type CreateImproveRun,
   type InsightItem,
   type InsightEvidenceSource,
   type InsightRun,
@@ -59,7 +57,7 @@ const USAGE_ANOMALY_SCAN_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 export type CreateEditInsightDetectorCandidate = {
   item: InsightItem | null;
-  createPipelineId: string;
+  createImproveRunId: string;
   keepFingerprint: string | null;
 };
 
@@ -101,7 +99,7 @@ const InsightsStructuredActionSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("no_op"),
-    createPipelineId: z.string().trim().min(1).nullable(),
+    createImproveRunId: z.string().trim().min(1).nullable(),
     reason: z.string().trim().min(1),
   }),
 ]);
@@ -408,7 +406,7 @@ export function createInsightsService(options: {
         noOpCount += 1;
         actions.push({
           action: "no_op",
-          createPipelineId: candidate.evidenceKey,
+          createImproveRunId: candidate.evidenceKey,
           reason: "Latest evidence state does not need an active insight.",
         });
       }
@@ -428,7 +426,7 @@ export function createInsightsService(options: {
           action: "resolve",
           insightId: item.id,
           fingerprint: item.fingerprint,
-          reason: "Latest create/edit pipeline state no longer matches this active insight.",
+          reason: "Latest Create/Improve state no longer matches this active insight.",
         });
       }
     }
@@ -566,8 +564,7 @@ export function createInsightsService(options: {
         ...(input.evidencePreview ? { insightsEvidencePreview: input.evidencePreview } : {}),
         threadGoal: insightsThreadGoal(input.metadata),
       },
-      createPipelineRequest: null,
-      createPipeline: null,
+      createImproveRun: null,
     };
     await store.insertTurn(turn);
     await options.appendRuntimeEvent(
@@ -695,34 +692,34 @@ export function detectCreateEditInsights(
   entries: RuntimeEventEntry[],
   timestamp: string = now(),
 ): CreateEditInsightDetectorCandidate[] {
-  const latestByPipelineId = new Map<string, RuntimeEventEntry>();
+  const latestByRunId = new Map<string, RuntimeEventEntry>();
   for (const entry of entries) {
-    const snapshot = parseCreatePipelineSnapshotFromEvent(entry.event);
-    if (!snapshot || !isCreateEditRequest(snapshot.request)) continue;
-    latestByPipelineId.set(snapshot.id, entry);
+    const run = parseCreateImproveRunFromEvent(entry.event);
+    if (!run || !isCreateImproveRun(run)) continue;
+    latestByRunId.set(run.id, entry);
   }
 
   const candidates: CreateEditInsightDetectorCandidate[] = [];
-  for (const entry of latestByPipelineId.values()) {
-    const snapshot = parseCreatePipelineSnapshotFromEvent(entry.event);
-    if (!snapshot) continue;
-    const attention = attentionForSnapshot(snapshot);
+  for (const entry of latestByRunId.values()) {
+    const run = parseCreateImproveRunFromEvent(entry.event);
+    if (!run) continue;
+    const attention = attentionForRun(run);
     if (!attention) {
       candidates.push({
-        createPipelineId: snapshot.id,
+        createImproveRunId: run.id,
         keepFingerprint: null,
         item: null,
       });
       continue;
     }
-    const item = insightItemForSnapshot({
+    const item = insightItemForRun({
       entry,
-      snapshot,
+      run,
       attention,
       timestamp,
     });
     candidates.push({
-      createPipelineId: snapshot.id,
+      createImproveRunId: run.id,
       keepFingerprint: item.fingerprint,
       item,
     });
@@ -773,9 +770,9 @@ function collectInsightEvidence(input: {
 
 function createEditEvidenceCandidate(candidate: CreateEditInsightDetectorCandidate): InsightEvidenceCandidate {
   return {
-    item: candidate.item ? withEvidencePayload(candidate.item, "create_edit", candidate.createPipelineId) : null,
+    item: candidate.item ? withEvidencePayload(candidate.item, "create_edit", candidate.createImproveRunId) : null,
     evidenceSource: "create_edit",
-    evidenceKey: candidate.createPipelineId,
+    evidenceKey: candidate.createImproveRunId,
     keepFingerprint: candidate.keepFingerprint,
   };
 }
@@ -789,64 +786,64 @@ function usageAnomalyEvidenceCandidate(candidate: UsageAnomalyInsightDetectorCan
   };
 }
 
-function parseCreatePipelineSnapshotFromEvent(event: RuntimeEvent): CreatePipelineSnapshot | null {
-  if (event.name !== "create_pipeline.updated") return null;
+function parseCreateImproveRunFromEvent(event: RuntimeEvent): CreateImproveRun | null {
+  if (event.name !== "create_improve.updated") return null;
   const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
-  const parsedSnapshot = CreatePipelineSnapshotSchema.safeParse(data.createPipeline);
-  if (parsedSnapshot.success) return parsedSnapshot.data;
+  const parsedRun = CreateImproveRunSchema.safeParse(data.createImproveRun);
+  if (parsedRun.success) return parsedRun.data;
   return null;
 }
 
-function isCreateEditRequest(request: CreatePipelineRequest): boolean {
-  const parsed = CreatePipelineRequestSchema.safeParse(request);
-  return parsed.success && (parsed.data.operation === "create" || parsed.data.operation === "edit");
+function isCreateImproveRun(run: CreateImproveRun): boolean {
+  const parsed = CreateImproveRunSchema.safeParse(run);
+  return parsed.success && (parsed.data.operation === "create" || parsed.data.operation === "improve");
 }
 
-function attentionForSnapshot(snapshot: CreatePipelineSnapshot): {
+function attentionForRun(run: CreateImproveRun): {
   severity: InsightSeverity;
   type: string;
   title: string;
   summary: string;
 } | null {
-  const operationLabel = snapshot.request.operation === "edit" ? "Edit agent" : "Create agent";
-  if (snapshot.state === "awaiting_questions") {
+  const operationLabel = run.operation === "improve" ? "Improve workproduct" : "Create workproduct";
+  if (run.state === "awaiting_questions") {
     return {
       severity: "concern",
       type: "create_edit.awaiting_questions",
       title: `${operationLabel} is waiting for answers`,
       summary: compactInsightSummary(
-        snapshot.questions.find((question) => question.status === "pending")?.prompt ??
+        run.questions.find((question) => question.status === "pending")?.prompt ??
           `${operationLabel} needs user input before planning can continue.`,
       ),
     };
   }
-  if (snapshot.state === "awaiting_plan_approval") {
+  if (run.state === "awaiting_plan_approval") {
     return {
       severity: "concern",
       type: "create_edit.awaiting_plan_approval",
       title: `${operationLabel} is waiting for plan approval`,
       summary: compactInsightSummary(
-        snapshot.plan?.summary ?? `${operationLabel} needs plan approval before source changes run.`,
+        run.plan?.summary ?? `${operationLabel} needs plan approval before source changes run.`,
       ),
     };
   }
-  if (snapshot.state === "blocked") {
+  if (run.state === "blocked") {
     return {
       severity: "blocker",
       type: "create_edit.blocked",
       title: `${operationLabel} is blocked`,
       summary: compactInsightSummary(
-        snapshot.blockedReason ?? `${operationLabel} cannot continue until the blocker is resolved.`,
+        run.blockedReason ?? `${operationLabel} cannot continue until the blocker is resolved.`,
       ),
     };
   }
-  if (snapshot.state === "failed") {
+  if (run.state === "failed") {
     return {
       severity: "blocker",
       type: "create_edit.failed",
       title: `${operationLabel} failed`,
       summary: compactInsightSummary(
-        snapshot.blockedReason ?? `${operationLabel} failed during the create/edit flow.`,
+        run.blockedReason ?? `${operationLabel} failed during the Create/Improve flow.`,
       ),
     };
   }
@@ -859,20 +856,20 @@ function compactInsightSummary(value: string): string {
   return `${normalized.slice(0, MAX_INSIGHT_SUMMARY_CHARS - 3).trimEnd()}...`;
 }
 
-function insightItemForSnapshot(input: {
+function insightItemForRun(input: {
   entry: RuntimeEventEntry;
-  snapshot: CreatePipelineSnapshot;
-  attention: NonNullable<ReturnType<typeof attentionForSnapshot>>;
+  run: CreateImproveRun;
+  attention: NonNullable<ReturnType<typeof attentionForRun>>;
   timestamp: string;
 }): InsightItem {
-  const { entry, snapshot, attention, timestamp } = input;
+  const { entry, run, attention, timestamp } = input;
   const scopeType = entry.event.sessionId ? "session" : "global";
   const scopeId = entry.event.sessionId ?? "local";
   const fingerprint = [
     "openpond.insights",
     "create-edit",
-    snapshot.id,
-    snapshot.state,
+    run.id,
+    run.state,
   ].join(":");
   return {
     id: `insight_${hashId(fingerprint)}`,
@@ -885,15 +882,14 @@ function insightItemForSnapshot(input: {
     title: attention.title,
     summary: attention.summary,
     payload: {
-      detector: "create-edit-pipeline-state",
+      detector: "create-improve-run-state",
       evidenceSource: "create_edit",
-      evidenceKey: snapshot.id,
+      evidenceKey: run.id,
       sessionId: entry.event.sessionId ?? null,
       turnId: entry.event.turnId ?? null,
-      createPipelineId: snapshot.id,
-      createPipelineState: snapshot.state,
-      createPipelineOperation: snapshot.request.operation,
-      sourceGoalId: snapshot.goalId,
+      createImproveRunId: run.id,
+      createImproveRunState: run.state,
+      createImproveRunOperation: run.operation,
       sourceEventId: entry.event.id,
       sourceEventSequence: entry.sequence,
     },
@@ -925,7 +921,7 @@ function withEvidencePayload(
 function insightEvidenceKey(item: InsightItem): string | null {
   const evidenceKey = item.payload.evidenceKey;
   if (typeof evidenceKey === "string" && evidenceKey.trim()) return evidenceKey;
-  const value = item.payload.createPipelineId;
+  const value = item.payload.createImproveRunId;
   return typeof value === "string" && value.trim() ? value : null;
 }
 
@@ -1036,7 +1032,7 @@ function insightsStructuredOutputSchemaDescription(): Record<string, unknown> {
             { type: "object", required: ["action", "item"], properties: { action: { const: "upsert" }, item: "InsightItem" } },
             { type: "object", required: ["action", "insightId", "fingerprint", "reason"], properties: { action: { const: "resolve" } } },
             { type: "object", required: ["action", "insightId", "reason"], properties: { action: { const: "dismiss" } } },
-            { type: "object", required: ["action", "createPipelineId", "reason"], properties: { action: { const: "no_op" } } },
+            { type: "object", required: ["action", "createImproveRunId", "reason"], properties: { action: { const: "no_op" } } },
           ],
         },
       },
@@ -1050,7 +1046,7 @@ function insightRunSummary(stats: {
   updatedCount: number;
   resolvedCount: number;
 }): string {
-  if (stats.findingCount === 0 && stats.resolvedCount === 0) return "No active create/edit insights found.";
+  if (stats.findingCount === 0 && stats.resolvedCount === 0) return "No active Create/Improve insights found.";
   const parts = [
     `${stats.findingCount} finding${stats.findingCount === 1 ? "" : "s"}`,
     `${stats.createdCount} new`,
@@ -1126,7 +1122,7 @@ function insightsRunPrompt(input: {
     : body;
   return [
     "You are the built-in OpenPond Insights agent.",
-    "Goal: review the compact create/edit evidence and summarize actionable blockers or concerns for the user.",
+    "Goal: review the compact Create/Improve evidence and summarize actionable blockers or concerns for the user.",
     "Do not modify files or run tools. Keep the answer concise and reference the source sessions or turns when present.",
     "The app will persist structured insight rows separately from this transcript.",
     "",
@@ -1204,7 +1200,7 @@ function insightsEvidenceItems(candidates: InsightEvidenceCandidate[]): Array<Re
           summary: candidate.item.summary,
           sourceSessionId: candidate.item.payload.sessionId ?? null,
           sourceTurnId: candidate.item.payload.turnId ?? null,
-          createPipelineState: candidate.item.payload.createPipelineState ?? null,
+          createImproveRunState: candidate.item.payload.createImproveRunState ?? null,
           sourceEventSequence: candidate.item.payload.sourceEventSequence ?? null,
         }
       : null,
@@ -1246,9 +1242,9 @@ function insightsQuestionPrompt(input: {
       updatedAt: item.updatedAt,
       sourceSessionId: item.payload.sessionId ?? null,
       sourceTurnId: item.payload.turnId ?? null,
-      createPipelineId: item.payload.createPipelineId ?? null,
-      createPipelineState: item.payload.createPipelineState ?? null,
-      createPipelineOperation: item.payload.createPipelineOperation ?? null,
+      createImproveRunId: item.payload.createImproveRunId ?? null,
+      createImproveRunState: item.payload.createImproveRunState ?? null,
+      createImproveRunOperation: item.payload.createImproveRunOperation ?? null,
       sourceEventSequence: item.payload.sourceEventSequence ?? null,
       lastRunSessionId: item.lastRunSessionId ?? null,
       lastRunTurnId: item.lastRunTurnId ?? null,
@@ -1274,7 +1270,7 @@ function insightsThreadGoal(metadata: InsightsRunMetadata): Record<string, unkno
   return {
     id: metadata.id,
     provider: INSIGHTS_SYSTEM_KIND,
-    objective: "Review recent OpenPond create/edit activity and summarize actionable insights.",
+    objective: "Review recent OpenPond Create/Improve activity and summarize actionable insights.",
     status: metadata.status === "failed"
       ? "blocked"
       : metadata.status === "completed" || metadata.status === "skipped"

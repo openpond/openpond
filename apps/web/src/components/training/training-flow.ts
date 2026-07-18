@@ -5,9 +5,10 @@ type TrainingController = ReturnType<typeof useTraining>;
 
 export type NewModelStep =
   | "start"
+  | "base_model"
+  | "existing_dataset"
   | "automatic_scope"
   | "automatic_candidates"
-  | "manual_goal"
   | "evidence"
   | "recommendation";
 

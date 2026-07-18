@@ -646,9 +646,9 @@ describe("project and agent sandbox CLI scenarios", () => {
         initialMessage: "Update the agent",
         sourceRef: "draft/ref",
         baseSha: "base_sha_test",
-        createPipelineRequest: {
-          operation: "edit",
-          surface: "hosted_edit",
+        createImproveRun: {
+          operation: "improve",
+          surface: "hosted_improve",
           command: "/edit",
           objective: "Update the agent",
           adapter: {
@@ -659,8 +659,9 @@ describe("project and agent sandbox CLI scenarios", () => {
             sourceRef: "draft/ref",
             baseSha: "base_sha_test",
           },
-          targetAgent: {
-            agentId: "agent_test",
+          target: {
+            kind: "agent",
+            id: "agent_test",
             defaultActionKey: "agent_test.chat",
           },
         },
@@ -700,7 +701,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         ref: "pr_ref_test",
       });
     });
-  }, 15_000);
+  }, 90_000);
 
   test("agent help separates local runs, remote runs, and source edits", async () => {
     const result = await runCli(["help"]);

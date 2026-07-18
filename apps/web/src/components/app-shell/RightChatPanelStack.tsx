@@ -500,7 +500,7 @@ function RightChatPane({
           selectedMentionAppId={null}
           contextWindowStatus={panel.contextWindowStatus}
           goalRuntime={panel.goalRuntime}
-          createPipelineRuntime={null}
+          createImproveRuntime={null}
           busy={panel.running}
           running={panel.running}
           submissionScopeKey={panel.sessionId ?? panel.id}

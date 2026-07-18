@@ -21,7 +21,7 @@ describe("OpenPond capability tool registry", () => {
     });
 
     expect(withSubagents.map((definition) => definition.name)).toEqual([
-      "openpond_create_pipeline",
+      "openpond_create_improve",
       "openpond_goal_control",
       "openpond_subagent_start",
       "openpond_subagent_status",
@@ -240,7 +240,7 @@ describe("OpenPond capability tool registry", () => {
 
 function requiredHandlers() {
   return {
-    startCreatePipeline: async () => ({
+    startCreateImprove: async () => ({
       requestId: "request_1",
       pipelineId: "pipeline_1",
       operation: "create" as const,

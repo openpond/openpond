@@ -87,7 +87,13 @@ export function createTaskMinerService(deps: {
         workflowSignature: signature,
         evidence,
         scorecard,
-        recommendation: recommendTrainingTactic({ evidence, scorecard, changingFacts: group.some((source) => source.metadata.changingFacts === true), baselineReward: crossSystem?.reward }),
+        recommendation: crossSystemRecommendation(crossSystem)
+          ?? recommendTrainingTactic({
+            evidence,
+            scorecard,
+            changingFacts: group.some((source) => source.metadata.changingFacts === true),
+            baselineReward: crossSystem?.reward,
+          }),
         mergedIntoId: existing?.mergedIntoId ?? null,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
@@ -353,6 +359,27 @@ function crossSystemBaseline(sources: TrainingSourceRef[]): {
     toolContractHash: [...hashes][0]!,
     reward: { count: rewards.length, mean, min: Math.min(...rewards), max: Math.max(...rewards), variance },
     approvedSuccessfulTrajectoryIds: traces.flatMap((trace) => trace.outcome === "correct" && trace.approved === true && typeof trace.trajectoryId === "string" ? [trace.trajectoryId] : []),
+  };
+}
+
+function crossSystemRecommendation(
+  baseline: ReturnType<typeof crossSystemBaseline>,
+) {
+  if (!baseline || baseline.reward.variance > 0) return null;
+  return {
+    tactic: "grpo_rft" as const,
+    eligible: false,
+    reasons: [
+      "The deterministic Cross-System environment has an exact reward, but the measured base policy did not reach distinct reward-bearing states.",
+    ],
+    blockers: [
+      "The base policy produced zero eligible reward variance. Add approved expert bootstrap trajectories or use a policy that reaches reward-bearing states before paid RFT.",
+    ],
+    requiredSignals: [
+      "non-trivial frozen reward variance",
+      "approved expert trajectories when bootstrapping",
+    ],
+    generatedBy: "baseline_reassessment" as const,
   };
 }
 

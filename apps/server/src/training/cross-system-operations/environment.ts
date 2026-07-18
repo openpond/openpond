@@ -201,10 +201,12 @@ function queryBilling(world: CrossSystemWorld, accountIds: string[], range: { fr
   const invoices = world.invoices
     .filter((item) => accountIds.includes(item.accountId) && statuses.includes(item.status) && item.issuedDate >= range.from && item.issuedDate <= range.to)
     .map((item) => ({ kind: "invoice", invoice_id: item.invoiceId, account_id: item.accountId, contract_id: item.contractId, issued_date: item.issuedDate, due_date: item.dueDate, currency: item.currency, amount_cents: item.amountCents, status: item.status, descriptor: item.descriptor, billed_term_months: item.billedTermMonths }));
-  const payments = world.payments
-    .filter((item) => item.receivedDate >= range.from && item.receivedDate <= range.to)
-    .filter((item) => item.accountId ? accountIds.includes(item.accountId) : accountIds.some((id) => descriptorMatches(item.descriptor, accountById.get(id))))
-    .map((item) => ({ kind: "payment", payment_id: item.paymentId, account_id: item.accountId, received_date: item.receivedDate, currency: item.currency, amount_cents: item.amountCents, descriptor: item.descriptor, matched_invoice_id: item.matchedInvoiceId }));
+  const payments = statuses.includes("paid")
+    ? world.payments
+      .filter((item) => item.receivedDate >= range.from && item.receivedDate <= range.to)
+      .filter((item) => item.accountId ? accountIds.includes(item.accountId) : accountIds.some((id) => descriptorMatches(item.descriptor, accountById.get(id))))
+      .map((item) => ({ kind: "payment", payment_id: item.paymentId, account_id: item.accountId, received_date: item.receivedDate, currency: item.currency, amount_cents: item.amountCents, descriptor: item.descriptor, matched_invoice_id: item.matchedInvoiceId }))
+    : [];
   return [...invoices, ...payments].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 

@@ -74,43 +74,40 @@ function buildGoalUserContext(goal: GoalState): string {
     decisionNote: approval.decisionNote,
     decidedAt: approval.decidedAt,
   }));
-  const createPipeline = goal.createPipeline
+  const createImproveRun = goal.createImproveRun
     ? {
-        id: goal.createPipeline.id,
-        state: goal.createPipeline.state,
-        request: {
-          id: goal.createPipeline.request.id,
-          operation: goal.createPipeline.request.operation,
-          surface: goal.createPipeline.request.surface,
-          command: goal.createPipeline.request.command,
-          sourceAuthority: goal.createPipeline.request.adapter.sourceAuthority,
-          confirmationPolicy: goal.createPipeline.request.adapter.confirmationPolicy,
-        },
-        plan: goal.createPipeline.plan
+        id: goal.createImproveRun.id,
+        state: goal.createImproveRun.state,
+        operation: goal.createImproveRun.operation,
+        surface: goal.createImproveRun.surface,
+        command: goal.createImproveRun.command,
+        sourceAuthority: goal.createImproveRun.adapter.sourceAuthority,
+        confirmationPolicy: goal.createImproveRun.adapter.confirmationPolicy,
+        plan: goal.createImproveRun.plan
           ? {
-              id: goal.createPipeline.plan.id,
-              status: goal.createPipeline.plan.status,
-              summary: goal.createPipeline.plan.summary,
-              defaultChatAction: goal.createPipeline.plan.defaultChatAction,
-              sourcePlan: goal.createPipeline.plan.sourcePlan,
-              requirements: goal.createPipeline.plan.requirements,
-              checks: goal.createPipeline.plan.checks,
+              id: goal.createImproveRun.plan.id,
+              status: goal.createImproveRun.plan.status,
+              summary: goal.createImproveRun.plan.summary,
+              defaultChatAction: goal.createImproveRun.plan.defaultChatAction,
+              sourcePlan: goal.createImproveRun.plan.sourcePlan,
+              requirements: goal.createImproveRun.plan.requirements,
+              checks: goal.createImproveRun.plan.checks,
               metadata: {
                 actionShape:
-                  goal.createPipeline.plan.metadata?.actionShape ?? null,
+                  goal.createImproveRun.plan.metadata?.actionShape ?? null,
                 actionShapeDecisionSource:
-                  goal.createPipeline.plan.metadata?.actionShapeDecisionSource ?? null,
+                  goal.createImproveRun.plan.metadata?.actionShapeDecisionSource ?? null,
               },
-              approvedAt: goal.createPipeline.plan.approvedAt,
+              approvedAt: goal.createImproveRun.plan.approvedAt,
             }
           : null,
-        workflowCapture: goal.createPipeline.workflowCapture
+        workflowCapture: goal.createImproveRun.workflowCapture
           ? {
-              id: goal.createPipeline.workflowCapture.id,
-              tools: goal.createPipeline.workflowCapture.tools,
-              apps: goal.createPipeline.workflowCapture.apps,
+              id: goal.createImproveRun.workflowCapture.id,
+              tools: goal.createImproveRun.workflowCapture.tools,
+              apps: goal.createImproveRun.workflowCapture.apps,
               targetRepoAssumptions:
-                goal.createPipeline.workflowCapture.targetRepoAssumptions,
+                goal.createImproveRun.workflowCapture.targetRepoAssumptions,
             }
           : null,
       }
@@ -130,7 +127,7 @@ function buildGoalUserContext(goal: GoalState): string {
         evidenceRefs: goal.evidenceRefs,
         executionPolicy: goal.executionPolicy,
         verification: goal.verification,
-        createPipeline,
+        createImproveRun,
         answeredQuestions,
         openQuestions,
         approvals,

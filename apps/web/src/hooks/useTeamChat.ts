@@ -1231,6 +1231,7 @@ export function useTeamChat(input: {
     deleteMessage,
     retryMessage,
     dismissFailedMessage,
+    refreshDirectory,
     refresh: async () => {
       await Promise.all([
         refreshDirectory(),

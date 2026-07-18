@@ -175,6 +175,10 @@ type ResolvedSandboxClient = {
   sandboxApiUrl: string;
 };
 
+export async function resolveOpenPondSandboxClient(): Promise<OpenPondSandboxClient> {
+  return (await resolveSandboxClient()).client;
+}
+
 const DEFAULT_OPENPOND_SANDBOX_BASE_URL = "https://api.openpond.ai";
 
 export async function sandboxRequestPayload(action: SandboxRequestAction): Promise<unknown> {

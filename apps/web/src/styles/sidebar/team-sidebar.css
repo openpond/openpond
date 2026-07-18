@@ -22,13 +22,38 @@
 
 .team-sidebar-group-toggle {
   color: var(--text);
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.team-sidebar-group-title {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
 }
 
 .team-sidebar-group-chevron {
+  flex: 0 0 auto;
   display: inline-grid;
+  width: 12px;
+  height: 16px;
   place-items: center;
   color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.team-sidebar-group-chevron svg {
+  display: block;
+}
+
+.team-sidebar-group-toggle:hover .team-sidebar-group-chevron,
+.team-sidebar-group-toggle:focus-visible .team-sidebar-group-chevron,
+.team-sidebar-group-toggle:focus-within .team-sidebar-group-chevron {
+  opacity: 1;
 }
 
 .team-sidebar-conversations > .team-sidebar-row {
@@ -91,6 +116,7 @@
 }
 
 .team-sidebar-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

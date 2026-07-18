@@ -77,6 +77,7 @@ import { useAppErrorReporter } from "./hooks/useAppErrorReporter";
 import { useAppState } from "./hooks/useAppState";
 import { useGitSetupNotifications } from "./hooks/useGitSetupNotifications";
 import { useLayoutPreferences } from "./hooks/useLayoutPreferences";
+import { useLabDetailNavigation } from "./hooks/useLabDetailNavigation";
 import { useMainComposerSubmit } from "./hooks/useMainComposerSubmit";
 import { useInsights } from "./hooks/useInsights";
 import { useTraining } from "./hooks/useTraining";
@@ -93,6 +94,7 @@ import { useSidebarMutations } from "./hooks/useSidebarMutations";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useTeamChat } from "./hooks/useTeamChat";
+import { useTeamProfileAgentPublisher } from "./hooks/useTeamProfileAgentPublisher";
 import { useTeamChatIncomingToast } from "./hooks/useTeamChatIncomingToast";
 import { useCommunityController } from "./hooks/useCommunityController";
 import { useOpenPondOrganizations } from "./hooks/useOpenPondOrganizations";
@@ -129,6 +131,7 @@ export function App() {
     });
   }, []);
   const [mainComposerFocusRequestId, setMainComposerFocusRequestId] = useState(0);
+  const [labSuggestionsRequestId, setLabSuggestionsRequestId] = useState(0);
   const [draftSubagentDelegationMode, setDraftSubagentDelegationMode] =
     useState<SubagentDelegationMode | null>(null);
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
@@ -147,7 +150,6 @@ export function App() {
     chatRowsVisibleCount,
     sidebarOpen,
     view,
-    labsTab,
     selectedAppId,
     selectedProjectId,
     selectedSessionId,
@@ -178,6 +180,7 @@ export function App() {
     toast,
     error,
   } = appState;
+  const labDetailNavigation = useLabDetailNavigation(view === "labs");
   const {
     setQuery,
     setSearchOpen,
@@ -188,7 +191,6 @@ export function App() {
     setChatRowsVisibleCount,
     setSidebarOpen,
     setView,
-    setLabsTab,
     setSelectedAppId,
     setSelectedProjectId,
     setSelectedSessionId,
@@ -385,6 +387,12 @@ export function App() {
     teamId: teamChatTeamId,
     currentUserId: account?.profile?.id ?? null,
     refreshToken: bootstrap?.accountMeta.asOf ?? null,
+  });
+  const publishTeamProfileAgent = useTeamProfileAgentPublisher({
+    connection,
+    teamId: teamChatTeamId,
+    applyBootstrapPayload,
+    refreshDirectory: teamChat.refreshDirectory,
   });
   useTeamChatIncomingToast({
     notification: teamChat.incomingNotification,
@@ -1078,11 +1086,15 @@ export function App() {
     [setCodexHistorySessions],
   );
   const {
-    answerCreatePipelineQuestionTurn,
-    approveCreatePipelineTurn,
-    cancelCreatePipelineTurn,
+    answerCreateImproveQuestion,
+    applyCreateImproveCandidate,
+    approveCreateImproveRun,
+    cancelCreateImproveRun,
     changeDraftProvider,
-    reviseCreatePipelineTurn,
+    openCreateImprovePullRequest, reconcileCreateImprovePullRequest, rejectCreateImproveCandidate,
+    pauseCreateImproveRun,
+    resumeCreateImproveRun,
+    reviseCreateImproveRun,
     sendPrompt,
     stopTurn,
   } = useChatActions({
@@ -1377,6 +1389,10 @@ export function App() {
     onOpenSession: openSessionInChat,
     onShowBrowserPanel: showBrowserPanel,
   });
+  const openLabSuggestions = useCallback(() => {
+    setView("labs");
+    setLabSuggestionsRequestId((requestId) => requestId + 1);
+  }, [setView]);
   const {
     closeRightChatPanel,
     openRightChatPanel,
@@ -1396,6 +1412,7 @@ export function App() {
     connection,
     contextCompaction: appDefaults.contextCompaction,
     insights,
+    openLabSuggestions,
     locallyActiveCodexHistorySessionIds,
     openPondCommandAccessMode,
     pendingChatUserMessages,
@@ -1416,7 +1433,6 @@ export function App() {
     setRightChatPanels,
     setRightPanelMode,
     setRightPanelTabRequest,
-    setLabsTab,
     setView,
     showChangesPanel,
     showToast,
@@ -1425,10 +1441,9 @@ export function App() {
   });
   const openProfileSettings = useCallback(() => {
     setSectionMenuOpen(null);
-    setLabsTab("agents");
     setView("labs");
     setSidebarOpen(true);
-  }, [setLabsTab, setSectionMenuOpen, setSidebarOpen, setView]);
+  }, [setSectionMenuOpen, setSidebarOpen, setView]);
   const diagnosticEvents = useMemo(
     () =>
       mergeLiveRuntimeEventLists(
@@ -1589,8 +1604,6 @@ export function App() {
         arch: connection?.arch ?? null,
         onSidebarResizeStart: startSidebarResize,
         setSidebarOpen,
-        labsTab,
-        setLabsTab,
         setView,
         setSelectedAppId,
         setSelectedProjectId,
@@ -1641,7 +1654,6 @@ export function App() {
         addSessionToTraining: (session) => {
           void training.actions.addSource(session.id).then((source) => {
             if (!source) return;
-            setLabsTab("models");
             setView("labs");
             showToast("Added chat to training sources.", "info");
           });
@@ -1657,9 +1669,8 @@ export function App() {
       topBar={{
         sidebarOpen,
         title,
-        backAction: view === "labs" && labsTab === "models" && trainingDetailTasksetId
-          ? { label: "Back to models", onSelect: () => setTrainingDetailTasksetId(null) }
-          : null,
+        backAction: labDetailNavigation.backAction,
+        breadcrumbs: labDetailNavigation.breadcrumbs,
         conversationId: view === "chat" ? selectedSessionId : null,
         workspaceName: viewWorkspaceName,
         workspaceId: viewWorkspaceId,
@@ -1672,7 +1683,7 @@ export function App() {
         managedWorkspace,
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat" || view === "cloud" || (view === "labs" && (labsTab === "profile" || labsTab === "agents")),
+        showDiffControls: view === "chat" || view === "cloud",
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
@@ -1686,8 +1697,7 @@ export function App() {
         onToggleTerminal: () => setTerminalOpen((open) => !open),
         onOpenInsights: () => {
           setSectionMenuOpen(null);
-          setLabsTab("signals");
-          setView("labs");
+          openLabSuggestions();
         },
         onRunTerminalCommand: (command) => {
           setPendingTerminalCommand({ id: Date.now(), scope: viewTerminalScope, command });
@@ -1702,19 +1712,20 @@ export function App() {
         onOpenSandboxWorkspace: openSandboxWorkspace,
         onShowSidebar: () => setSidebarOpen(true),
         platform,
-        showWorkspaceControls: view !== "team" && view !== "community" && (view !== "labs" || labsTab === "profile" || labsTab === "agents"),
+        showWorkspaceControls: view !== "team" && view !== "community" && view !== "labs",
         insightsItems: insights.items,
         insightsSummary: insights.summary,
         insightsScanning: insights.scanRunning,
       }}
       mainPane={{
         view,
-        labsTab,
-        setLabsTab,
         teamChat: {
           currentUserId: teamChat.currentUserId,
           members: teamChat.members,
           agents: teamChat.agents,
+          profile: bootstrap?.profile ?? null,
+          teamId: teamChatTeamId,
+          teamName: teamChatOrganization?.displayName ?? null,
           detail: teamChat.detail,
           aiThread: teamChat.aiThread,
           agentConversation: teamChat.agentConversation,
@@ -1740,6 +1751,7 @@ export function App() {
             setView("settings");
           },
           onSendMessage: teamChat.sendMessage,
+          onPublishProfileAgent: publishTeamProfileAgent,
           onOpenAiThread: async (conversationId) => {
             await teamChat.openAiThread(conversationId);
             setRightPanelMode("chat");
@@ -1775,6 +1787,9 @@ export function App() {
         selectedSessionId,
         composerDraftStore,
         mainComposerFocusRequestId,
+        labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
+        labCloseDetailKind: labDetailNavigation.closeDetailKind,
+        labSuggestionsRequestId,
         steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
         mentionApps: chatMentionApps,
@@ -1859,6 +1874,12 @@ export function App() {
         },
         onShowRightChatPanel: showRightChatPanel,
         onAddRightChat: () => openRightChatPanel(null),
+        onOpenRightChatForSession: (sessionId) => {
+          const session = sidebarSessions.find((candidate) => candidate.id === sessionId) ?? null;
+          if (session) openRightChatPanel(session, { preserveView: true });
+        },
+        onOpenLabSuggestions: openLabSuggestions,
+        onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
         onTerminalTabsChange: setTerminalTabs,
         onCloseRightChatPanel: closeRightChatPanel,
         onRightChatModelChange: updateRightChatModel,
@@ -1898,10 +1919,14 @@ export function App() {
         changeOpenPondCommandAccessMode,
         changeSubagentDelegationMode,
         resolveApproval,
-        answerCreatePipelineQuestionTurn,
-        approveCreatePipelineTurn,
-        cancelCreatePipelineTurn,
-        reviseCreatePipelineTurn,
+        answerCreateImproveQuestion,
+        applyCreateImproveCandidate,
+        approveCreateImproveRun,
+        cancelCreateImproveRun,
+        openCreateImprovePullRequest, reconcileCreateImprovePullRequest, rejectCreateImproveCandidate,
+        pauseCreateImproveRun,
+        resumeCreateImproveRun,
+        reviseCreateImproveRun,
         setMentionedAppId,
         showToast,
         sendPrompt: sendPromptFromMainComposer,

@@ -1,7 +1,5 @@
-import type { CreatePipelineRequest, CreatePipelineSnapshot } from "@openpond/contracts";
+import type { CreateImproveRun } from "@openpond/contracts";
 
-export type CreatePipelineReviewActionInput = {
-  turnId: string;
-  request: CreatePipelineRequest;
-  snapshot: CreatePipelineSnapshot | null;
+export type CreateImproveReviewActionInput = {
+  run: CreateImproveRun;
 };

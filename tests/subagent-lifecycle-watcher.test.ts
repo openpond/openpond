@@ -1350,8 +1350,7 @@ function turnFixture(patch: Partial<Turn> = {}): Turn {
     status: "completed",
     error: null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
     ...patch,
   };
 }

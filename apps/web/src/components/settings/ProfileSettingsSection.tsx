@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
 import {
   FileText,
@@ -6,12 +6,12 @@ import {
   FolderGit2,
   GitCommit,
   Plus,
-  RefreshCw,
   UploadCloud,
   X,
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
+import "../../styles/workspace/git-dialogs.css";
 
 type ProfileState = NonNullable<BootstrapPayload["profile"]>;
 type ProfileSkill = ProfileState["skills"][number];
@@ -27,7 +27,7 @@ type ProfileStatusCell = {
 };
 
 type ProfileSettingsSectionProps = {
-  section?: "all" | "profile" | "agents";
+  section?: "all" | "profile" | "agents" | "controls";
   payload: BootstrapPayload | null;
   connection: ClientConnection | null;
   onPayload: (payload: BootstrapPayload) => void;
@@ -47,18 +47,13 @@ export function ProfileSettingsSection({
   onSkillCommand,
   overviewContent,
 }: ProfileSettingsSectionProps) {
-  const [profilePath, setProfilePath] = useState("");
-  const [profileName, setProfileName] = useState("default");
   const [profileCommitMessage, setProfileCommitMessage] = useState("");
   const [profileBusy, setProfileBusy] = useState<string | null>(null);
   const profile = payload?.profile ?? null;
   const selectedDefaultTeamId = payload?.preferences.defaultTeamId?.trim() || "";
-
-  useEffect(() => {
-    if (!profile) return;
-    setProfilePath((current) => current || profile.repoPath || "");
-    setProfileName((current) => current || profile.activeProfile || "default");
-  }, [profile]);
+  const showControls = section === "all" || section === "profile" || section === "controls";
+  const showAgents = section === "all" || section === "agents";
+  const showSkills = section === "all" || section === "profile";
 
   async function refreshBootstrapAfterProfileChange(message: string) {
     if (!connection) return;
@@ -81,23 +76,8 @@ export function ProfileSettingsSection({
 
   function submitProfileInit() {
     void runProfileControl("init", async () => {
-      await api.profileInit(connection!, {
-        path: profilePath.trim() || null,
-        profile: profileName.trim() || "default",
-      });
+      await api.profileInit(connection!, {});
       await refreshBootstrapAfterProfileChange("Profile initialized");
-    });
-  }
-
-  function submitProfileLoad() {
-    void runProfileControl("load", async () => {
-      const path = profilePath.trim();
-      if (!path) throw new Error("Profile repo path is required.");
-      await api.profileLoad(connection!, {
-        path,
-        profile: profileName.trim() || null,
-      });
-      await refreshBootstrapAfterProfileChange("Profile loaded");
     });
   }
 
@@ -130,23 +110,17 @@ export function ProfileSettingsSection({
     <section className="account-settings">
       {profile?.mode === "local" ? (
         <>
-          {section !== "agents" ? (
+          {showControls ? (
             <>
               <ProfileControls
                 connection={connection}
                 profile={profile}
                 profileBusy={profileBusy}
                 profileCommitMessage={profileCommitMessage}
-                profileName={profileName}
-                profilePath={profilePath}
                 selectedDefaultTeamId={selectedDefaultTeamId}
                 syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
                 setProfileCommitMessage={setProfileCommitMessage}
-                setProfileName={setProfileName}
-                setProfilePath={setProfilePath}
                 submitProfileCommit={submitProfileCommit}
-                submitProfileInit={submitProfileInit}
-                submitProfileLoad={submitProfileLoad}
                 submitProfilePush={submitProfilePush}
               />
 
@@ -154,7 +128,7 @@ export function ProfileSettingsSection({
             </>
           ) : null}
 
-          {section !== "profile" ? (
+          {showAgents ? (
             <ProfileAgentsSection
               connection={connection}
               profile={profile}
@@ -162,7 +136,7 @@ export function ProfileSettingsSection({
             />
           ) : null}
 
-          {section !== "agents" ? (
+          {showSkills ? (
             <ProfileSkillsSection
               onSkillCommand={onSkillCommand}
               profile={profile}
@@ -189,25 +163,16 @@ export function ProfileSettingsSection({
           </div>
           <div className="empty-account-list">
             <strong>No local profile loaded</strong>
-            <span>Create a default profile here, or load an existing profile repo path.</span>
-            <ProfileControls
-              connection={connection}
-              inline
-              profile={null}
-              profileBusy={profileBusy}
-              profileCommitMessage={profileCommitMessage}
-              profileName={profileName}
-              profilePath={profilePath}
-              selectedDefaultTeamId={selectedDefaultTeamId}
-              syncDisabledReason="Load a local profile before syncing."
-              setProfileCommitMessage={setProfileCommitMessage}
-              setProfileName={setProfileName}
-              setProfilePath={setProfilePath}
-              submitProfileCommit={submitProfileCommit}
-              submitProfileInit={submitProfileInit}
-              submitProfileLoad={submitProfileLoad}
-              submitProfilePush={submitProfilePush}
-            />
+            <span>OpenPond uses one Git-backed Profile in the default repo.</span>
+            <button
+              className="settings-secondary"
+              disabled={!connection || Boolean(profileBusy)}
+              type="button"
+              onClick={submitProfileInit}
+            >
+              <Plus size={14} />
+              <span>{profileBusy === "init" ? "Creating" : "Create default Profile"}</span>
+            </button>
           </div>
         </div>
       )}
@@ -220,79 +185,61 @@ type ProfileControlsProps = {
   profile: ProfileState | null;
   profileBusy: string | null;
   profileCommitMessage: string;
-  profileName: string;
-  profilePath: string;
   selectedDefaultTeamId: string;
   syncDisabledReason: string | null;
-  inline?: boolean;
   setProfileCommitMessage: (value: string) => void;
-  setProfileName: (value: string) => void;
-  setProfilePath: (value: string) => void;
   submitProfileCommit: () => void;
-  submitProfileInit: () => void;
-  submitProfileLoad: () => void;
   submitProfilePush: () => void;
 };
 
 function ProfileControls({
   connection,
-  inline = false,
   profile,
   profileBusy,
   profileCommitMessage,
-  profileName,
-  profilePath,
   selectedDefaultTeamId,
   syncDisabledReason,
   setProfileCommitMessage,
-  setProfileName,
-  setProfilePath,
   submitProfileCommit,
-  submitProfileInit,
-  submitProfileLoad,
   submitProfilePush,
 }: ProfileControlsProps) {
-  const [pathDialogOpen, setPathDialogOpen] = useState(false);
+  const [repoDialogOpen, setRepoDialogOpen] = useState(false);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const disabled = !connection || Boolean(profileBusy);
 
   return (
-    <div className={`profile-control-panel ${inline ? "inline" : ""}`}>
+    <div className="profile-control-panel">
       <div className="profile-control-toolbar">
         <div className="profile-control-actions">
-          {!inline ? (
-            <>
-              <button
-                className="settings-secondary"
-                disabled={disabled}
-                type="button"
-                onClick={() => setCommitDialogOpen(true)}
-              >
-                <GitCommit size={14} />
-                <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
-              </button>
-              <button
-                className="settings-secondary"
-                disabled={disabled || !profile}
-                type="button"
-                onClick={() => setSyncDialogOpen(true)}
-              >
-                <UploadCloud size={14} />
-                <span>{profileBusy === "push" ? "Syncing" : "Sync"}</span>
-              </button>
-            </>
-          ) : null}
           <button
             className="settings-secondary"
-            disabled={Boolean(profileBusy)}
+            disabled={disabled}
             type="button"
-            onClick={() => setPathDialogOpen(true)}
+            onClick={() => setCommitDialogOpen(true)}
+          >
+            <GitCommit size={14} />
+            <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
+          </button>
+          <button
+            className="settings-secondary"
+            disabled={disabled || !profile}
+            type="button"
+            onClick={() => setSyncDialogOpen(true)}
+          >
+            <UploadCloud size={14} />
+            <span>{profileBusy === "push" ? "Syncing" : "Sync"}</span>
+          </button>
+          <button
+            className="settings-secondary"
+            disabled={Boolean(profileBusy) || !profile}
+            type="button"
+            onClick={() => setRepoDialogOpen(true)}
           >
             <FolderGit2 size={14} />
             <span>Repo</span>
           </button>
-          {!inline && profile ? (
+          {profile ? (
             <span
               className="profile-hosted-status"
               title={`Hosted profile status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
@@ -303,18 +250,20 @@ function ProfileControls({
             </span>
           ) : null}
         </div>
+        {profile ? (
+          <span
+            className={`profile-local-status ${profile.summary.state}`}
+            title={profile.summary.message}
+          >
+            {profile.summary.message}
+          </span>
+        ) : null}
       </div>
-      {pathDialogOpen ? (
-        <ProfilePathDialog
-          disabled={disabled}
+      {repoDialogOpen && profile ? (
+        <ProfileRepoDialog
+          profile={profile}
           profileBusy={profileBusy}
-          profileName={profileName}
-          profilePath={profilePath}
-          setProfileName={setProfileName}
-          setProfilePath={setProfilePath}
-          submitProfileInit={submitProfileInit}
-          submitProfileLoad={submitProfileLoad}
-          onClose={() => setPathDialogOpen(false)}
+          onClose={() => setRepoDialogOpen(false)}
         />
       ) : null}
       {commitDialogOpen ? (
@@ -489,49 +438,23 @@ function ProfileSyncDialog({
   );
 }
 
-function ProfilePathDialog({
-  disabled,
+function ProfileRepoDialog({
+  profile,
   profileBusy,
-  profileName,
-  profilePath,
-  setProfileName,
-  setProfilePath,
-  submitProfileInit,
-  submitProfileLoad,
   onClose,
 }: {
-  disabled: boolean;
+  profile: ProfileState;
   profileBusy: string | null;
-  profileName: string;
-  profilePath: string;
-  setProfileName: (value: string) => void;
-  setProfilePath: (value: string) => void;
-  submitProfileInit: () => void;
-  submitProfileLoad: () => void;
   onClose: () => void;
 }) {
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (disabled || !profilePath.trim()) return;
-    submitProfileLoad();
-    onClose();
-  }
-
-  function createProfile() {
-    if (disabled) return;
-    submitProfileInit();
-    onClose();
-  }
-
   return (
     <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <form
+      <div
         className="git-dialog profile-path-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-path-dialog-title"
         onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={submit}
       >
         <button className="git-dialog-close" disabled={Boolean(profileBusy)} type="button" title="Close" aria-label="Close" onClick={onClose}>
           <X size={14} />
@@ -543,35 +466,23 @@ function ProfilePathDialog({
         <label className="git-dialog-field">
           <span>Profile repo path</span>
           <input
-            value={profilePath}
-            disabled={Boolean(profileBusy)}
-            placeholder="~/.openpond/profiles/default-repo"
-            onChange={(event) => setProfilePath(event.target.value)}
+            aria-label="Profile repo path"
+            readOnly
+            value={profile.repoPath ?? ""}
           />
         </label>
-        <label className="git-dialog-field">
-          <span>Active profile</span>
-          <input
-            value={profileName}
-            disabled={Boolean(profileBusy)}
-            placeholder="default"
-            onChange={(event) => setProfileName(event.target.value)}
-          />
-        </label>
+        <div className="profile-dialog-summary">
+          <strong>{profile.git?.isRepo ? "Git-backed" : "Git setup required"}</strong>
+          <span>
+            {profile.git?.branch ?? "No branch"} · {shortSha(profile.git?.head)}
+          </span>
+        </div>
         <div className="git-dialog-footer">
           <button className="git-dialog-secondary" disabled={Boolean(profileBusy)} type="button" onClick={onClose}>
             Close
           </button>
-          <button className="git-dialog-secondary" disabled={disabled} type="button" onClick={createProfile}>
-            <Plus size={14} />
-            <span>{profileBusy === "init" ? "Creating" : "Create"}</span>
-          </button>
-          <button className="git-dialog-primary" disabled={disabled || !profilePath.trim()} type="submit">
-            <RefreshCw size={14} className={profileBusy === "load" ? "settings-spin" : undefined} />
-            <span>{profileBusy === "load" ? "Loading" : "Load"}</span>
-          </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

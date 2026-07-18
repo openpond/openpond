@@ -239,8 +239,7 @@ function codexTurn(overrides: Partial<Turn> = {}): Turn {
     status: "in_progress",
     error: null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
     ...overrides,
   };
 }

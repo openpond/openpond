@@ -16,6 +16,30 @@
   padding: 0;
 }
 
+.workspace-diff-files-preview-layout {
+  display: grid;
+  grid-template-columns: minmax(138px, 30%) minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-diff-files-preview-layout > .workspace-diff-files-view {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workspace-diff-files-preview-empty {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  color: #858585;
+  padding: 24px;
+  text-align: center;
+  font-size: 12px;
+}
+
 .workspace-file-tree-view {
   display: grid;
   grid-template-rows: 36px auto;
@@ -68,6 +92,11 @@
 
 .workspace-file-tree-row:hover {
   background: rgba(255, 255, 255, 0.055);
+  color: #f1f1f1;
+}
+
+.workspace-file-tree-row.file.selected {
+  background: rgba(255, 255, 255, 0.09);
   color: #f1f1f1;
 }
 

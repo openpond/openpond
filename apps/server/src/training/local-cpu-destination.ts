@@ -203,7 +203,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const plan = await this.deps.store.getTrainingPlan(initialJob.planId);
     if (!taskset || !plan) throw new Error("Training lineage source was not found.");
     const mirroredArtifactDirectory = await this.mirrorPortableArtifact(taskset.id, initialJob.id, outputDirectory);
-    await this.deps.store.saveModelArtifactLineage(ModelArtifactLineageSchema.parse({ schemaVersion: "openpond.modelArtifactLineage.v1", id: `lineage_${adapter.id}`, artifactId: adapter.id, jobId: initialJob.id, tasksetId: taskset.id, tasksetHash: taskset.contentHash, graderHash: contentHash(taskset.graders), planHash: plan.contentHash, bundleHash: initialJob.bundleHash, recipeHash: contentHash(plan.recipe), workerVersion: "0.0.1", trainerVersion: "trl-0.26.2", importedAt: timestamp, frozenEvaluationArtifactId: evaluation?.id ?? null, promotable: false }));
+    await this.deps.store.saveModelArtifactLineage(ModelArtifactLineageSchema.parse({ schemaVersion: "openpond.modelArtifactLineage.v1", id: `lineage_${adapter.id}`, modelId: plan.modelId, artifactId: adapter.id, jobId: initialJob.id, tasksetId: taskset.id, tasksetHash: taskset.contentHash, graderHash: contentHash(taskset.graders), planHash: plan.contentHash, bundleHash: initialJob.bundleHash, recipeHash: contentHash(plan.recipe), workerVersion: "0.0.1", trainerVersion: "trl-0.26.2", importedAt: timestamp, frozenEvaluationArtifactId: evaluation?.id ?? null, promotable: false }));
     await this.deps.store.saveTrainingJob({ ...latest, status: "succeeded", completedAt: timestamp, updatedAt: timestamp, error: null, metadata: { ...latest.metadata, artifactCount: artifacts.length, reloadVerified: true, frozenEvaluationExecuted: Boolean(evaluation), mirroredArtifactDirectory } });
   }
 
@@ -294,8 +294,6 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
       path.join(this.deps.storeDir, "training", "tasksets", taskset.id, "taskset.json"),
       ...taskset.sourceRefs.map(() => ""),
     ];
-    const profile = await (this.deps.loadProfileState ?? loadOpenPondProfileState)();
-    if (profile.sourcePath) candidates.unshift(path.join(profile.sourcePath, "tasksets", taskset.id, "taskset.json"));
     for (const candidate of candidates) if (candidate) { try { await access(candidate); return candidate; } catch { /* continue */ } }
     throw new Error("Materialized Taskset source file was not found.");
   }

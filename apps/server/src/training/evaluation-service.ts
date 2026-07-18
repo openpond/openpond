@@ -5,13 +5,15 @@ import {
   TasksetSchema,
   TaskAttemptResultSchema,
   type ChatModelRef,
+  type GraderAuditReport,
   type TaskAttemptResult,
 } from "@openpond/contracts";
-import { buildTaskset, computeTasksetHash, contentHash, gradeAttempt, runBaseline, type BaselineAttemptRunner, type ModelJudgeRunner } from "@openpond/taskset-sdk";
+import { buildBaselineReport, buildTaskset, computeTasksetHash, contentHash, gradeAttempt, runBaseline, type BaselineAttemptRunner, type ModelJudgeRunner } from "@openpond/taskset-sdk";
 import { loadOpenPondProfileState } from "@openpond/cloud";
 import type { SqliteStore } from "../store/store.js";
 import { buildTasksetReadiness } from "./readiness.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
+import { gradeTasksetBaselineAttempt } from "./task-baseline-grade-runner.js";
 
 export function createTaskEvaluationService(deps: {
   store: SqliteStore;
@@ -26,12 +28,13 @@ export function createTaskEvaluationService(deps: {
     if (!task) throw new Error("Task not found.");
     const attempt = TaskAttemptResultSchema.parse(input.attempt);
     const customVerifier = await customVerifierFor(taskset.id);
-    const result = await gradeAttempt({
+    const result = await gradeTasksetBaselineAttempt({
       task,
       attempt,
       graders: taskset.graders,
       modelJudge: deps.modelJudge ?? undefined,
       customVerifier,
+      now: () => new Date().toISOString(),
     });
     await deps.store.saveTaskAttempt(attempt);
     await deps.store.saveGradeResult(result);
@@ -42,16 +45,62 @@ export function createTaskEvaluationService(deps: {
     if (!deps.runAttempt) throw new Error("No baseline model runner is configured.");
     const taskset = await requireTaskset(input.tasksetId);
     const fixtureAudit = await auditFixtures({ tasksetId: taskset.id });
-    const execution = await runBaseline({ taskset, models: input.models, seeds: input.seeds?.length ? input.seeds : [0, 1, 2], attemptsPerTask: Math.max(1, Math.min(10, input.attemptsPerTask ?? 3)), runAttempt: deps.runAttempt, modelJudge: deps.modelJudge ?? undefined, customVerifier: await customVerifierFor(taskset.id) });
-    const baselineFlags = auditFlags(execution.attempts, execution.grades);
-    const auditedReport = BaselineReportSchema.parse({ ...execution.report, hackingChecksPassed: baselineFlags.hackingChecksPassed && fixtureAudit.report.hackingChecksPassed && fixtureAudit.report.infrastructureSafetyPassed, leakageChecksPassed: baselineFlags.leakageChecksPassed && fixtureAudit.report.leakageChecksPassed });
-    for (const attempt of execution.attempts) await deps.store.saveTaskAttempt(attempt);
-    for (const result of execution.grades) await deps.store.saveGradeResult(result);
-    await deps.store.saveBaselineReport(auditedReport);
-    const readiness = buildTasksetReadiness({ taskset, baseline: auditedReport, graderAudit: fixtureAudit.report });
-    await deps.store.saveReadinessReport(readiness);
-    await deps.store.upsertTaskset({ ...taskset, status: readiness.ready ? "ready" : "needs_review", readiness, updatedAt: new Date().toISOString() });
-    return { report: auditedReport, readiness, attempts: execution.attempts, grades: execution.grades };
+    const execution = await runBaseline({ taskset, models: input.models, seeds: input.seeds?.length ? input.seeds : [0, 1, 2], attemptsPerTask: Math.max(1, Math.min(10, input.attemptsPerTask ?? 3)), runAttempt: deps.runAttempt, gradeAttempt: gradeTasksetBaselineAttempt, modelJudge: deps.modelJudge ?? undefined, customVerifier: await customVerifierFor(taskset.id) });
+    return persistBaselineExecution({ taskset, fixtureAudit: fixtureAudit.report, execution });
+  }
+
+  async function regradeBaseline(input: { tasksetId: string; baselineReportId: string }) {
+    const taskset = await requireTaskset(input.tasksetId);
+    const reports = await deps.store.listBaselineReports(taskset.id);
+    const sourceReport = reports.find((report) => report.id === input.baselineReportId);
+    if (!sourceReport) throw new Error("Baseline report not found.");
+    if (sourceReport.tasksetHash !== taskset.contentHash) {
+      throw new Error("Baseline report does not match the current immutable Taskset revision.");
+    }
+    const attemptsById = new Map(
+      (await deps.store.listTaskAttempts(taskset.id))
+        .map((attempt) => [attempt.id, attempt]),
+    );
+    const attempts = sourceReport.attemptRefs.map((attemptId) => {
+      const attempt = attemptsById.get(attemptId);
+      if (!attempt) throw new Error(`Baseline attempt ${attemptId} was not found.`);
+      return attempt;
+    });
+    const customVerifier = await customVerifierFor(taskset.id);
+    const grades = [];
+    for (const attempt of attempts) {
+      const task = taskset.tasks.find((candidate) => candidate.id === attempt.taskId);
+      if (!task) throw new Error(`Baseline task ${attempt.taskId} was not found.`);
+      grades.push(await gradeTasksetBaselineAttempt({
+        task,
+        attempt,
+        graders: taskset.graders,
+        modelJudge: deps.modelJudge ?? undefined,
+        customVerifier,
+        now: () => new Date().toISOString(),
+      }));
+    }
+    const attemptsPerTask = Math.max(
+      1,
+      ...Object.keys(sourceReport.passAtK)
+        .map((key) => Number.parseInt(key, 10))
+        .filter(Number.isFinite),
+    );
+    const fixtureAudit = await auditFixtures({ tasksetId: taskset.id });
+    return persistBaselineExecution({
+      taskset,
+      fixtureAudit: fixtureAudit.report,
+      execution: {
+        attempts,
+        grades,
+        report: buildBaselineReport({
+          taskset,
+          attempts,
+          grades,
+          attemptsPerTask,
+        }),
+      },
+    });
   }
 
   async function auditFixtures(input: { tasksetId: string; fixtures?: Array<{ label: "positive" | "negative" | "boundary" | "adversarial" | "prompt_injection" | "infrastructure_failure"; taskId: string; attempt: unknown; expectedPassed?: boolean; expectedRewardEligible?: boolean }> }) {
@@ -118,11 +167,26 @@ export function createTaskEvaluationService(deps: {
       calibrationResults.push({ graderId: grader.id, passed, evidenceHash, results });
     }
     const timestamp = new Date().toISOString();
-    const unhashed = TasksetSchema.parse({ ...taskset, graders, status: "needs_review", readiness: null, contentHash: "00000000", updatedAt: timestamp });
+    const unhashed = TasksetSchema.parse({
+      ...taskset,
+      revision: taskset.revision + 1,
+      graders,
+      status: "needs_review",
+      readiness: null,
+      contentHash: "00000000",
+      updatedAt: timestamp,
+      metadata: {
+        ...taskset.metadata,
+        judgeCalibration: {
+          parentTasksetHash: taskset.contentHash,
+          calibratedAt: timestamp,
+          graderIds: calibrationResults.map((result) => result.graderId),
+        },
+      },
+    });
     const updated = TasksetSchema.parse({ ...unhashed, contentHash: computeTasksetHash(unhashed) });
-    const profile = await (deps.loadProfileState ?? loadOpenPondProfileState)();
-    if (!profile.sourcePath) throw new Error("A local source-owned Taskset is required for judge calibration.");
-    await buildTaskset(updated, path.join(profile.sourcePath, "tasksets", updated.id));
+    if (!deps.storeDir) throw new Error("Managed Taskset storage is required for judge calibration.");
+    await buildTaskset(updated, path.join(deps.storeDir, "training", "tasksets", updated.id));
     await deps.store.upsertTaskset(updated);
     return { taskset: updated, results: calibrationResults, passed: calibrationResults.every((result) => result.passed) };
   }
@@ -171,7 +235,46 @@ export function createTaskEvaluationService(deps: {
       ? ({ grader, task, attempt }: Parameters<NonNullable<Parameters<typeof gradeAttempt>[0]["customVerifier"]>>[0]) => runSandboxedVerifier({ grader, task, attempt, allowedRoot: tasksetRoot })
       : undefined;
   }
-  return { grade, baseline, auditFixtures, calibrateModelJudges, readiness };
+  async function persistBaselineExecution(input: {
+    taskset: Awaited<ReturnType<typeof requireTaskset>>;
+    fixtureAudit: GraderAuditReport;
+    execution: Awaited<ReturnType<typeof runBaseline>>;
+  }) {
+    const baselineFlags = auditFlags(input.execution.attempts, input.execution.grades);
+    const auditedReport = BaselineReportSchema.parse({
+      ...input.execution.report,
+      hackingChecksPassed:
+        baselineFlags.hackingChecksPassed
+        && input.fixtureAudit.hackingChecksPassed
+        && input.fixtureAudit.infrastructureSafetyPassed,
+      leakageChecksPassed:
+        baselineFlags.leakageChecksPassed
+        && input.fixtureAudit.leakageChecksPassed,
+    });
+    for (const attempt of input.execution.attempts) await deps.store.saveTaskAttempt(attempt);
+    for (const result of input.execution.grades) await deps.store.saveGradeResult(result);
+    await deps.store.saveBaselineReport(auditedReport);
+    const readiness = buildTasksetReadiness({
+      taskset: input.taskset,
+      baseline: auditedReport,
+      graderAudit: input.fixtureAudit,
+    });
+    await deps.store.saveReadinessReport(readiness);
+    await deps.store.upsertTaskset({
+      ...input.taskset,
+      status: readiness.ready ? "ready" : "needs_review",
+      readiness,
+      updatedAt: new Date().toISOString(),
+    });
+    return {
+      report: auditedReport,
+      readiness,
+      attempts: input.execution.attempts,
+      grades: input.execution.grades,
+    };
+  }
+
+  return { grade, baseline, regradeBaseline, auditFixtures, calibrateModelJudges, readiness };
 }
 
 function fixtureAttempt(tasksetId: string, fixture: { id: string; taskId: string; label: string; output: Record<string, unknown>; infrastructureError: string | null }, index: number) {

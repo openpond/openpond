@@ -2,8 +2,16 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import type { Approval, InsightItem, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import {
+  nextCreateImproveRunRevision,
+  type Approval,
+  type InsightItem,
+  type RuntimeEvent,
+  type Session,
+  type Turn,
+} from "@openpond/contracts";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SqliteStore } from "../apps/server/src/store/store";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import {
   allTestSql as all,
   closeTestDatabase as close,
@@ -136,6 +144,36 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("creates Taskset revision storage for databases already migrated past training v11", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initialStore = new SqliteStore(storeDir);
+      await initialStore.snapshot();
+      await initialStore.close();
+
+      const db = openTestDatabase(storePath);
+      await run(db, "DROP TABLE taskset_revisions");
+      await run(db, "PRAGMA user_version = 20");
+      await close(db);
+
+      const migratedStore = new SqliteStore(storeDir);
+      await migratedStore.snapshot();
+      await migratedStore.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const table = await get<{ name: string }>(
+          migratedDb,
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'taskset_revisions'",
+        );
+        expect(table.name).toBe("taskset_revisions");
+      } finally {
+        await close(migratedDb);
+      }
+      expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+    });
+  });
+
   test("backs up an existing unversioned database before migrating", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");
@@ -165,6 +203,29 @@ describe("SqliteStore hardening", () => {
       expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
       const corruptFiles = await readdir(path.join(storeDir, "corrupt"));
       expect(corruptFiles.some((file) => file.includes("quick-check-failed") && file.endsWith(".sqlite"))).toBe(true);
+    });
+  });
+
+  test("does not classify a database open failure as corruption", async () => {
+    await withStoreDir(async (storeDir) => {
+      let attempts = 0;
+      class TransientOpenFailureStore extends SqliteStore {
+        protected override async openDatabase(filename: string) {
+          attempts += 1;
+          if (attempts < 3) throw new Error("database is temporarily busy");
+          return super.openDatabase(filename);
+        }
+      }
+
+      const store = new TransientOpenFailureStore(storeDir);
+      await store.snapshot();
+      await store.close();
+
+      expect(attempts).toBe(3);
+      expect(await readdir(storeDir)).not.toContain("corrupt");
+      expect(await userVersion(path.join(storeDir, "state.sqlite"))).toBe(
+        CURRENT_SQLITE_SCHEMA_VERSION,
+      );
     });
   });
 
@@ -484,6 +545,87 @@ describe("SqliteStore hardening", () => {
       }
     });
   });
+
+  test("persists indexed Create/Improve runs with CAS, idempotent actions, and one active run per target", async () => {
+    await withStoreDir(async (storeDir) => {
+      const store = new SqliteStore(storeDir);
+      const run = createImproveRunFixture({
+        id: "create_improve_store",
+        state: "awaiting_plan_approval",
+        scope: {
+          profileId: "default",
+          conversationId: "session-create-improve",
+          originTurnId: "turn-create-improve",
+          workItemId: null,
+          projectId: null,
+          targetProject: null,
+        },
+      });
+      await store.upsertCreateImproveRun(run);
+
+      await expect(store.getCreateImproveRun(run.id)).resolves.toEqual(run);
+      await expect(store.listCreateImproveRuns({
+        profileId: "default",
+        targetKind: "agent",
+        targetId: run.target.id,
+      })).resolves.toEqual([run]);
+
+      const action = {
+        runId: run.id,
+        expectedRevision: run.revision,
+        actionId: "approve_create_improve_store",
+        type: "approve_plan" as const,
+      };
+      const first = await store.mutateCreateImproveRun(action, (current) =>
+        nextCreateImproveRunRevision(current, {
+          state: "applying_source",
+          plan: current.plan ? {
+            ...current.plan,
+            status: "approved",
+            approvedAt: "2026-07-01T10:01:00.000Z",
+            updatedAt: "2026-07-01T10:01:00.000Z",
+          } : null,
+          updatedAt: "2026-07-01T10:01:00.000Z",
+        }, action.actionId));
+      expect(first).toMatchObject({
+        replayed: false,
+        run: { revision: 1, state: "applying_source" },
+      });
+
+      const replay = await store.mutateCreateImproveRun(action, () => {
+        throw new Error("idempotent replay must not call the updater");
+      });
+      expect(replay).toEqual({ run: first.run, replayed: true });
+
+      await expect(store.mutateCreateImproveRun({
+        ...action,
+        actionId: "stale_create_improve_store",
+      }, (current) => current)).rejects.toThrow("changed from revision 0 to 1");
+
+      await expect(store.upsertCreateImproveRun(createImproveRunFixture({
+        id: "create_improve_competing",
+        target: run.target,
+        scope: run.scope,
+      }))).rejects.toThrow(`already has active Create/Improve run ${run.id}`);
+
+      const blocked = nextCreateImproveRunRevision(first.run, {
+        state: "blocked",
+        blockedReason: "Planner output could not be applied.",
+        updatedAt: "2026-07-01T10:02:00.000Z",
+      });
+      await store.upsertCreateImproveRun(blocked);
+      await expect(store.upsertCreateImproveRun(createImproveRunFixture({
+        id: "create_improve_retry",
+        target: run.target,
+        scope: run.scope,
+      }))).resolves.toMatchObject({
+        id: "create_improve_retry",
+        state: "planning",
+      });
+
+      await store.close();
+    });
+  });
 });
 
 function session(id: string): Session {
@@ -527,8 +669,7 @@ function turn(
     status,
     error: null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
   };
 }
 

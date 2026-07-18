@@ -124,6 +124,11 @@
     justify-content: flex-start;
   }
 
+  .profile-local-status {
+    max-width: 100%;
+    text-align: left;
+  }
+
   .profile-agent-table-head,
   .profile-skill-table-head {
     display: none;

@@ -4,13 +4,16 @@ import {
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   CROSS_SYSTEM_TOOL_NAMES,
   CrossSystemTrajectorySchema,
+  DEFAULT_CROSS_SYSTEM_WORLD_SPECS,
   TaskDesignProposalSchema,
 } from "@openpond/contracts";
 import {
   buildCrossSystemBootstrapDataset,
+  buildExpertCrossSystemTrajectories,
   CrossSystemEnvironment,
   CrossSystemToolError,
   crossSystemAdversarialAnswers,
+  crossSystemGeneratedTaskFiles,
   crossSystemTrainingSourceMetadata,
   generateCrossSystemSuite,
   generateCrossSystemTasks,
@@ -43,6 +46,104 @@ describe("Cross-System Operations environment", () => {
     expect(() => generateCrossSystemSuite({ trainSeeds: [1], validationSeeds: [1], frozenEvalSeeds: [2] })).toThrow("reused");
   });
 
+  test("varies renewal-risk membership and exposure without changing legacy worlds", () => {
+    const legacy = generateCrossSystemWorld({
+      seed: 601,
+      split: "train",
+      difficulty: "easy",
+    });
+    const first = generateCrossSystemWorld({
+      seed: 601,
+      split: "train",
+      difficulty: "easy",
+      scenarioProfile: "renewal_risk_v2",
+    });
+    const repeated = generateCrossSystemWorld({
+      seed: 601,
+      split: "train",
+      difficulty: "easy",
+      scenarioProfile: "renewal_risk_v2",
+    });
+    const second = generateCrossSystemWorld({
+      seed: 602,
+      split: "train",
+      difficulty: "easy",
+      scenarioProfile: "renewal_risk_v2",
+    });
+    const renewal = (world: typeof first) =>
+      world.groundTruth.renewal_exposure.expectedAnswer as {
+        account_ids: string[];
+        total_overdue_usd_cents: number;
+      };
+
+    expect(repeated).toEqual(first);
+    expect(first).not.toEqual(legacy);
+    expect(renewal(first).account_ids).toHaveLength(2);
+    expect(renewal(second).account_ids).toHaveLength(3);
+    expect(renewal(first).total_overdue_usd_cents)
+      .not.toBe(renewal(second).total_overdue_usd_cents);
+    expect(renewal(first).account_ids.every((id) => id.startsWith("train_601_")))
+      .toBe(true);
+  });
+
+  test("makes the renewal-risk join explicit and exact across seeds and difficulty", async () => {
+    const specs = [
+      { seed: 601, split: "train" as const, difficulty: "easy" as const },
+      { seed: 625, split: "train" as const, difficulty: "medium" as const },
+      { seed: 650, split: "train" as const, difficulty: "hard" as const },
+      { seed: 617, split: "train" as const, difficulty: "easy" as const },
+      { seed: 633, split: "train" as const, difficulty: "medium" as const },
+      { seed: 641, split: "train" as const, difficulty: "hard" as const },
+      { seed: 649, split: "train" as const, difficulty: "hard" as const },
+    ].map((spec) => ({ ...spec, scenarioProfile: "renewal_risk_v2" as const }));
+    const worlds = specs.map(generateCrossSystemWorld);
+    const tasks = worlds.flatMap((world) =>
+      generateCrossSystemTasks(world).filter((task) =>
+        task.family === "renewal_exposure" && task.phrasingVariant === 0
+      )
+    );
+    const expert = await buildExpertCrossSystemTrajectories({ worlds, tasks });
+
+    expect(expert.results).toHaveLength(specs.length);
+    expect(expert.results.every((result) =>
+      result.outcome === "correct" && result.exactAnswer
+    )).toBe(true);
+    expert.trajectories.forEach((trajectory, index) => {
+      expect(trajectory.steps.flatMap((step) =>
+        step.kind === "tool_call" ? [step.name] : []
+      )).toEqual([
+        "search_crm",
+        "query_billing",
+        "search_support",
+        "run_python",
+      ]);
+      const pythonResult = trajectory.steps.find((step) =>
+        step.kind === "tool_result" && step.name === "run_python"
+      );
+      expect(
+        (pythonResult?.kind === "tool_result"
+          ? pythonResult.result as { result?: unknown }
+          : null)?.result,
+      ).toEqual(tasks[index]?.expectedAnswer);
+    });
+  });
+
+  test("shards the 30/10/10 portable suite below the Taskset file limit", () => {
+    const worlds = DEFAULT_CROSS_SYSTEM_WORLD_SPECS.map(generateCrossSystemWorld);
+    const files = crossSystemGeneratedTaskFiles({
+      worlds,
+      tasks: worlds.flatMap(generateCrossSystemTasks),
+    });
+    expect(files.every((file) => file.content.length <= 250_000)).toBe(true);
+    expect(files.map((file) => file.path)).toContain("environment/worlds.json");
+    expect(files.some((file) => file.path.startsWith("environment/worlds/"))).toBe(true);
+    const manifest = JSON.parse(
+      files.find((file) => file.path === "environment/worlds.json")!.content,
+    ) as { count: number; files: string[] };
+    expect(manifest.count).toBe(10);
+    expect(manifest.files).toHaveLength(10);
+  });
+
   test("enforces schemas, cursors, row/byte/turn budgets, and a persistent standard-library-only Python sandbox", async () => {
     const world = generateCrossSystemWorld({ seed: 9, split: "train", difficulty: "easy" });
     const task = generateCrossSystemTasks(world)[0]!;
@@ -55,6 +156,18 @@ describe("Cross-System Operations environment", () => {
       expect(second.items).toHaveLength(2);
       await expect(environment.execute("search_crm", { query: "*", fields: ["account_id"], cursor: "tampered", limit: 2 })).rejects.toMatchObject({ code: "cursor_invalid" });
       await expect(environment.execute("query_billing", { account_ids: [], date_range: { from: "2026-01-01", to: "2026-12-31" }, status: ["overdue"], cursor: null, limit: 5 })).rejects.toMatchObject({ code: "schema_violation" });
+      const overdueOnly = await environment.execute("query_billing", {
+        account_ids: world.accounts.map((account) => account.accountId),
+        date_range: { from: "2025-01-01", to: world.referenceDate },
+        status: ["overdue"],
+        cursor: null,
+        limit: 50,
+      });
+      expect(overdueOnly.items).not.toHaveLength(0);
+      expect(overdueOnly.items?.every((item) =>
+        (item as { kind?: string; status?: string }).kind === "invoice"
+        && (item as { status?: string }).status === "overdue",
+      )).toBe(true);
       expect(await environment.execute("run_python", { code: "counter = 4\n_result = counter" })).toMatchObject({ result: 4 });
       expect(await environment.execute("run_python", { code: "counter += 3\n_result = counter" })).toMatchObject({ result: 7 });
       await expect(environment.execute("run_python", { code: "import socket\n_result = socket.socket()" })).rejects.toBeInstanceOf(CrossSystemToolError);
@@ -104,6 +217,15 @@ describe("Cross-System Operations environment", () => {
     expect(records.every((record) => record.messages[0]?.role === "system" && record.messages[0].content === CROSS_SYSTEM_LOCAL_TOOL_SYSTEM_PROMPT)).toBe(true);
     expect(records.every((record) => record.messages.some((message) => message.role === "tool") && record.messages.some((message) => message.tool_calls?.length))).toBe(true);
     expect(records.every((record) => record.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH)).toBe(true);
+    const renewal = records.find((record) =>
+      record.taskId.includes("renewal_exposure"));
+    expect(renewal?.messages.filter((message) =>
+      message.tool_calls?.some((call) => call.function.name === "run_python"),
+    )).toHaveLength(1);
+    expect(renewal?.messages.some((message) =>
+      message.role === "tool"
+      && message.content.includes("total_overdue_usd_cents"),
+    )).toBe(true);
   });
 
   test("Task Miner recognizes the repeated flagship traces and recommends GRPO from measured reward variance", async () => withTrainingStore(async ({ store }) => {
@@ -128,6 +250,43 @@ describe("Cross-System Operations environment", () => {
     });
     expect(Array.isArray(candidates[0]?.metadata.approvedSuccessfulTrajectoryIds)).toBe(true);
     expect(CROSS_SYSTEM_TOOL_NAMES).toEqual(["search_crm", "query_billing", "search_support", "run_python"]);
+  }));
+
+  test("Task Miner blocks paid RFT instead of inventing SFT demonstrations when reward variance is zero", async () => withTrainingStore(async ({ store }) => {
+    const world = generateCrossSystemWorld({ seed: 54, split: "train", difficulty: "hard" });
+    const tasks = generateCrossSystemTasks(world);
+    const baseline = await runScriptedCrossSystemBaseline({ worlds: [world], tasks });
+    for (let index = 0; index < baseline.trajectories.length; index += 1) {
+      const trajectory = baseline.trajectories[index]!;
+      const result = baseline.results[index]!;
+      const metadata = crossSystemTrainingSourceMetadata({
+        trajectory,
+        result,
+        report: baseline.report,
+        approved: false,
+      });
+      const crossSystemOperations = {
+        ...(metadata.crossSystemOperations as Record<string, unknown>),
+        outcome: "incorrect",
+        reward: 0,
+        rewardEligible: true,
+        approved: false,
+      };
+      await store.upsertTrainingSource({
+        ...sourceFixture(`cso_zero_source_${index}`, `cso_zero_world_${index}`),
+        metadata: { ...metadata, crossSystemOperations },
+      });
+    }
+
+    const [candidate] = await createTaskMinerService({ store }).run({ profileId: "default" });
+
+    expect(candidate?.recommendation).toMatchObject({
+      tactic: "grpo_rft",
+      eligible: false,
+      generatedBy: "baseline_reassessment",
+    });
+    expect(candidate?.recommendation.blockers.join(" ")).toContain("zero eligible reward variance");
+    expect(candidate?.recommendation.reasons.join(" ")).not.toContain("successful outputs");
   }));
 
   test("records harness baseline sources with verified structured lineage and split-safe clusters", async () => withTrainingStore(async ({ store }) => {
@@ -216,10 +375,32 @@ describe("Cross-System Operations environment", () => {
     });
     const enriched = enrichCrossSystemProposal(proposal, sources);
     expect(enriched).toMatchObject({ proposedMethod: "grpo", taskKind: "single_agent", diagnosis: { intervention: "grpo_rft", requiredTools: CROSS_SYSTEM_TOOL_NAMES } });
-    expect(enriched.proposedExamples).toHaveLength(baseline.results.filter((result) => result.outcome === "correct").length);
+    expect(enriched.proposedExamples).toHaveLength(sources.length);
+    expect(enriched.proposedExamples.filter((example) => example.expectedOutputText)).toHaveLength(
+      baseline.results.filter((result) => result.outcome === "correct").length,
+    );
     expect(enriched.generatedFiles.map((file) => file.path)).toEqual(expect.arrayContaining(["environment/taskset.ts", "environment/tool-contract.json", "environment/worlds.json", "environment/tasks.json", "graders/cross-system-verifier.ts", "fixtures/adversarial.json"]));
     expect(enriched.generatedFiles.every((file) => file.content.includes(CROSS_SYSTEM_TOOL_CONTRACT_HASH) || ["environment/worlds.json", "environment/tasks.json"].includes(file.path))).toBe(true);
     expect(enriched.warnings).toContain("Keep this independent-world warning.");
     expect(enriched.warnings.some((warning) => warning.includes("fourth tool") || warning.includes("generatedFiles is therefore empty"))).toBe(false);
+
+    const zeroRewardSources = sources.map((source) => {
+      const crossSystemOperations = {
+        ...(source.metadata.crossSystemOperations as Record<string, unknown>),
+        outcome: "incorrect",
+        reward: 0,
+        rewardEligible: true,
+        approved: false,
+        bootstrapMessages: null,
+      };
+      return {
+        ...source,
+        metadata: { ...source.metadata, crossSystemOperations },
+      };
+    });
+    const zeroReward = enrichCrossSystemProposal(proposal, zeroRewardSources);
+    expect(zeroReward.proposedExamples).toHaveLength(zeroRewardSources.length);
+    expect(zeroReward.proposedExamples.every((example) => example.expectedOutputText === null)).toBe(true);
+    expect(zeroReward.warnings.join(" ")).toContain("failed policy outputs remain excluded");
   });
 });

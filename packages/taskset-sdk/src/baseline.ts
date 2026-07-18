@@ -17,6 +17,15 @@ export type BaselineAttemptRunner = (input: {
   attempt: number;
 }) => Promise<TaskAttemptResult>;
 
+export type BaselineGradeRunner = (input: {
+  task: TaskDataRecord;
+  attempt: TaskAttemptResult;
+  graders: Taskset["graders"];
+  modelJudge?: ModelJudgeRunner;
+  customVerifier?: CustomVerifierRunner;
+  now: () => string;
+}) => Promise<GradeResult>;
+
 export type BaselineExecution = {
   report: BaselineReport;
   attempts: TaskAttemptResult[];
@@ -29,6 +38,7 @@ export async function runBaseline(input: {
   seeds: number[];
   attemptsPerTask: number;
   runAttempt: BaselineAttemptRunner;
+  gradeAttempt?: BaselineGradeRunner;
   modelJudge?: ModelJudgeRunner;
   customVerifier?: CustomVerifierRunner;
   now?: () => string;
@@ -48,34 +58,67 @@ export async function runBaseline(input: {
             split: task.split,
           };
           attempts.push(attempt);
-          grades.push(await gradeAttempt({ task, attempt, graders: input.taskset.graders, modelJudge: input.modelJudge, customVerifier: input.customVerifier, now }));
+          grades.push(await (input.gradeAttempt ?? gradeAttempt)({
+            task,
+            attempt,
+            graders: input.taskset.graders,
+            modelJudge: input.modelJudge,
+            customVerifier: input.customVerifier,
+            now,
+          }));
         }
       }
     }
   }
-  const scored = grades.map((grade) => grade.score).filter((score): score is number => score !== null);
+  return {
+    report: buildBaselineReport({
+      taskset: input.taskset,
+      attempts,
+      grades,
+      attemptsPerTask: input.attemptsPerTask,
+      now,
+    }),
+    attempts,
+    grades,
+  };
+}
+
+export function buildBaselineReport(input: {
+  taskset: Taskset;
+  attempts: TaskAttemptResult[];
+  grades: GradeResult[];
+  attemptsPerTask: number;
+  now?: () => string;
+}): BaselineReport {
+  const now = input.now ?? (() => new Date().toISOString());
+  if (input.attempts.length !== input.grades.length) {
+    throw new Error("Baseline attempts and grades must have the same length.");
+  }
+  if (input.attemptsPerTask < 1) {
+    throw new Error("Baseline attemptsPerTask must be at least one.");
+  }
+  const scored = input.grades.map((grade) => grade.score).filter((score): score is number => score !== null);
   const mean = scored.length ? scored.reduce((sum, score) => sum + score, 0) / scored.length : null;
   const variance = mean === null || scored.length === 0 ? null : scored.reduce((sum, score) => sum + (score - mean) ** 2, 0) / scored.length;
   const failureClusters: Record<string, number> = {};
-  for (const grade of grades) if (grade.failureClass) failureClusters[grade.failureClass] = (failureClusters[grade.failureClass] ?? 0) + 1;
-  const report: BaselineReport = {
+  for (const grade of input.grades) if (grade.failureClass) failureClusters[grade.failureClass] = (failureClusters[grade.failureClass] ?? 0) + 1;
+  return {
     schemaVersion: "openpond.baselineReport.v1",
-    id: `baseline_${contentHash(grades).slice(0, 24)}`,
+    id: `baseline_${contentHash(input.grades).slice(0, 24)}`,
     tasksetId: input.taskset.id,
     tasksetHash: input.taskset.contentHash,
     graderSetHash: contentHash(input.taskset.graders),
-    attemptRefs: attempts.map((attempt) => attempt.id),
-    gradeRefs: grades.map((grade) => grade.id),
-    passAtK: passAtK(grades, input.attemptsPerTask),
+    attemptRefs: input.attempts.map((attempt) => attempt.id),
+    gradeRefs: input.grades.map((grade) => grade.id),
+    passAtK: passAtK(input.grades, input.attemptsPerTask),
     reward: { count: scored.length, mean, min: scored.length ? Math.min(...scored) : null, max: scored.length ? Math.max(...scored) : null, variance },
     failureClusters,
-    totalCostUsd: attempts.every((attempt) => attempt.costUsd !== null) ? attempts.reduce((sum, attempt) => sum + (attempt.costUsd ?? 0), 0) : null,
-    userInterventions: attempts.reduce((sum, attempt) => sum + attempt.userInterventions, 0),
-    hackingChecksPassed: grades.every((grade) => !grade.feedback.some((item) => item.toLowerCase().includes("reward hack"))),
-    leakageChecksPassed: grades.every((grade) => !grade.feedback.some((item) => item.toLowerCase().includes("leak"))),
+    totalCostUsd: input.attempts.every((attempt) => attempt.costUsd !== null) ? input.attempts.reduce((sum, attempt) => sum + (attempt.costUsd ?? 0), 0) : null,
+    userInterventions: input.attempts.reduce((sum, attempt) => sum + attempt.userInterventions, 0),
+    hackingChecksPassed: input.grades.every((grade) => !grade.feedback.some((item) => item.toLowerCase().includes("reward hack"))),
+    leakageChecksPassed: input.grades.every((grade) => !grade.feedback.some((item) => item.toLowerCase().includes("leak"))),
     createdAt: now(),
   };
-  return { report, attempts, grades };
 }
 
 function passAtK(grades: GradeResult[], maximumK: number): Record<string, number> {

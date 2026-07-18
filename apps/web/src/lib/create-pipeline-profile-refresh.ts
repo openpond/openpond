@@ -10,25 +10,23 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-export function latestReadyLocalCreatePipelineProfileRefreshKey(
+export function latestReadyLocalCreateImproveProfileRefreshKey(
   events: RuntimeEvent[],
 ): string | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const runtimeEvent = events[index]!;
-    if (runtimeEvent.name !== "create_pipeline.updated") continue;
+    if (runtimeEvent.name !== "create_improve.updated") continue;
     const data = asRecord(runtimeEvent.data);
-    const snapshot = asRecord(data?.createPipeline);
-    if (snapshot?.state !== "ready_local") continue;
-
-    const request = asRecord(data?.createPipelineRequest) ?? asRecord(snapshot.request);
-    const adapter = asRecord(request?.adapter);
+    const run = asRecord(data?.createImproveRun);
+    if (run?.state !== "ready_local" && run?.state !== "released") continue;
+    const adapter = asRecord(run.adapter);
     if (adapter?.kind !== "local") continue;
 
-    const pipelineId = text(snapshot.id) ?? runtimeEvent.id;
+    const runId = text(run.id) ?? runtimeEvent.id;
     return [
       runtimeEvent.sessionId ?? "global",
       runtimeEvent.turnId ?? "turn",
-      pipelineId,
+      runId,
     ].join(":");
   }
 

@@ -16,7 +16,7 @@ Create a source-backed OpenPond agent from the user's prompt. Ask structured que
 
 Do not invoke openpond-agent through shell, npx, pnpm dlx, or yarn dlx.
 
-Create-agent and edit-agent Goals use a create pipeline. The pipeline request, plan, and workflow capture are durable Goal state under the configured local Goal storage root, normally ~/.openpond/goals/<goalId>; they are operational run history, not profile source to commit. Source mutation is allowed only after the create_plan approval is approved. When the Goal metadata contains an approved create pipeline plan, follow that plan, preserve or create a default chat action, keep openpond_chat routed to that default action, and run the required SDK checks before claiming the agent is ready.
+Create-agent and edit-agent Goals use the shared Create/Improve run. Its plan and workflow capture are durable Goal state under the configured local Goal storage root, normally ~/.openpond/goals/<goalId>; they are operational run history, not profile source to commit. Source mutation is allowed only after the create_plan approval is approved. When the Goal metadata contains an approved Create/Improve plan, follow that plan, preserve or create a default chat action, keep openpond_chat routed to that default action, and run the required SDK checks before claiming the agent is ready.
 
 ## Create Plan Action Shape
 

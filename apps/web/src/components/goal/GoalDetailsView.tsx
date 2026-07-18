@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from "react";
 import {
-  createPipelineActionShapeFromMetadata,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  createImproveActionShapeFromMetadata,
+  type CreateImproveRun,
   type SubagentLifecycleAction,
   type SubagentRun,
 } from "@openpond/contracts";
@@ -11,9 +10,7 @@ import type { SubagentFinalResultSummary, SubagentRuntimeStatus } from "../../li
 import { CircleAlert, FileText } from "../icons";
 
 export type GoalDetailsCreateRuntime = {
-  turnId: string | null;
-  request: CreatePipelineRequest;
-  snapshot: CreatePipelineSnapshot | null;
+  run: CreateImproveRun;
 };
 
 export type GoalDetailsViewProps = {
@@ -29,9 +26,9 @@ export function GoalDetailsView({
   subagentRuntime = null,
   onRunSubagentLifecycleAction,
 }: GoalDetailsViewProps) {
-  const title = createRuntime ? "Create Plan Details" : "Goal Details";
+  const title = createRuntime ? "Create/Improve Details" : "Goal Details";
   const stateLabel = createRuntime
-    ? createStateLabel(createRuntime.snapshot?.state ?? "planning")
+    ? createStateLabel(createRuntime.run.state)
     : subagentRuntime?.activeCount
       ? subagentRuntime.label
       : goalRuntime?.actionLabel ?? "No active goal";
@@ -43,7 +40,7 @@ export function GoalDetailsView({
           <FileText size={15} aria-hidden="true" />
           <span>{title}</span>
         </div>
-        <span className={`goal-details-state ${createStateTone(createRuntime?.snapshot?.state ?? null)}`}>
+        <span className={`goal-details-state ${createStateTone(createRuntime?.run.state ?? null)}`}>
           {stateLabel}
         </span>
       </div>
@@ -65,31 +62,32 @@ export function GoalDetailsView({
 }
 
 function CreateDetails({ runtime }: { runtime: GoalDetailsCreateRuntime }) {
-  const { request, snapshot } = runtime;
-  const plan = snapshot?.plan ?? null;
+  const run = runtime.run;
+  const plan = run.plan;
   const actionShape =
-    createPipelineActionShapeFromMetadata(plan?.metadata) ??
-    createPipelineActionShapeFromMetadata(request.metadata);
-  const questions = snapshot?.questions ?? [];
+    createImproveActionShapeFromMetadata(plan?.metadata) ??
+    createImproveActionShapeFromMetadata(run.metadata);
+  const questions = run.questions;
   const pendingQuestions = questions.filter((question) => question.status === "pending");
-  const sourceRefs = snapshot?.sourceRefs ?? [];
-  const checkRefs = snapshot?.checkRefs ?? [];
-  const state = snapshot?.state ?? "planning";
+  const sourceRefs = run.sourceRefs;
+  const checkRefs = run.checkRefs;
+  const state = run.state;
+  const targetAction = run.target.kind === "agent" ? run.target.defaultActionKey : null;
 
   return (
     <>
-      <DetailSection title="Create State">
+      <DetailSection title="Current Work">
         <DetailGrid
           rows={[
             ["State", createStateLabel(state)],
-            ["Operation", request.operation],
-            ["Surface", createStateLabel(request.surface)],
-            ["Command", request.command],
-            ["Agent", request.targetAgent.displayName ?? request.targetAgent.agentId ?? "Model will decide"],
-            ["Agent ID", request.targetAgent.agentId ?? "Pending"],
-            ["Default action", request.targetAgent.defaultActionKey ?? plan?.defaultChatAction.key ?? "Pending"],
-            ["Adapter", createStateLabel(request.adapter.kind)],
-            ["Turn", runtime.turnId ?? "Pending"],
+            ["Operation", run.operation],
+            ["Target", createStateLabel(run.target.kind)],
+            ["Name", run.target.displayName ?? run.target.id ?? "Pending"],
+            ["Target ID", run.target.id ?? "Pending"],
+            ["Default action", targetAction ?? plan?.defaultChatAction.key ?? "Pending"],
+            ["Adapter", createStateLabel(run.adapter.kind)],
+            ["Run", run.id],
+            ["Revision", String(run.revision)],
           ]}
         />
       </DetailSection>
@@ -104,7 +102,7 @@ function CreateDetails({ runtime }: { runtime: GoalDetailsCreateRuntime }) {
                 ["Context", plan.capturedContextSummary],
                 ["Status", createStateLabel(plan.status)],
                 ["Plan ID", plan.id],
-                ["Goal ID", plan.goalId],
+                ["Run ID", plan.runId],
                 ["Approval", plan.approvalId ?? "Pending"],
                 ["Approved", plan.approvedAt ?? "Not approved"],
               ]}
@@ -208,13 +206,13 @@ function CreateDetails({ runtime }: { runtime: GoalDetailsCreateRuntime }) {
         </DetailSection>
       ) : null}
 
-      <CreateContextDetails request={request} snapshot={snapshot} />
+      <CreateContextDetails run={run} />
 
-      {snapshot?.blockedReason ? (
+      {run.blockedReason ? (
         <DetailSection title="Blocked">
           <div className="goal-details-alert">
             <CircleAlert size={15} />
-            <span>{snapshot.blockedReason}</span>
+            <span>{run.blockedReason}</span>
           </div>
         </DetailSection>
       ) : null}
@@ -222,7 +220,7 @@ function CreateDetails({ runtime }: { runtime: GoalDetailsCreateRuntime }) {
       <DetailSection title="Raw State">
         <details className="goal-details-raw">
           <summary>Show structured payload</summary>
-          <pre>{JSON.stringify({ request, snapshot }, null, 2)}</pre>
+          <pre>{JSON.stringify(run, null, 2)}</pre>
         </details>
       </DetailSection>
     </>
@@ -230,35 +228,33 @@ function CreateDetails({ runtime }: { runtime: GoalDetailsCreateRuntime }) {
 }
 
 function CreateContextDetails({
-  request,
-  snapshot,
+  run,
 }: {
-  request: CreatePipelineRequest;
-  snapshot: CreatePipelineSnapshot | null;
+  run: CreateImproveRun;
 }) {
   const contextItems = [
-    ...request.context.attachments.map((item) => ({
+    ...run.context.attachments.map((item) => ({
       id: `attachment:${item.id ?? item.name}`,
       primary: item.name,
       secondary: item.ref ?? item.mediaType ?? "Attachment",
     })),
-    ...request.context.apps.map((item) => ({
+    ...run.context.apps.map((item) => ({
       id: `app:${item.id}`,
       primary: item.name,
       secondary: item.required ? "Required app context" : "Optional app context",
     })),
-    ...request.context.tools.map((item) => ({
+    ...run.context.tools.map((item) => ({
       id: `tool:${item.name}`,
       primary: item.name,
       secondary: item.outputSummary ?? item.inputSummary ?? "Tool context",
     })),
-    ...request.context.targetRepoAssumptions.map((item) => ({
+    ...run.context.targetRepoAssumptions.map((item) => ({
       id: `target:${item}`,
       primary: item,
       secondary: "Target assumption",
     })),
   ];
-  const workflowCapture = snapshot?.workflowCapture;
+  const workflowCapture = run.workflowCapture;
   const workflowItems = workflowCapture
     ? [
         ...workflowCapture.files.map((item) => ({
@@ -767,7 +763,7 @@ function createStateLabel(value: string): string {
     .join(" ");
 }
 
-function createStateTone(state: CreatePipelineSnapshot["state"] | null): "active" | "warning" | "success" | "danger" {
+function createStateTone(state: CreateImproveRun["state"] | null): "active" | "warning" | "success" | "danger" {
   if (state === "ready_local" || state === "published_hosted") return "success";
   if (state === "blocked" || state === "failed" || state === "cancelled") return "danger";
   if (state === "awaiting_questions" || state === "awaiting_plan_approval") return "warning";

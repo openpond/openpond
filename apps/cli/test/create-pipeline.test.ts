@@ -64,7 +64,7 @@ async function readCreatePipeline(workspace: string, goalId: string): Promise<{
   questionIds?: string[];
 }> {
   const goalDir = join(workspace, ".openpond", "goals", goalId);
-  return JSON.parse(await readFile(join(goalDir, "create-pipeline.json"), "utf8")) as {
+  return JSON.parse(await readFile(join(goalDir, "create-improve-run.json"), "utf8")) as {
     state?: string;
     questionIds?: string[];
   };
@@ -100,8 +100,8 @@ describe("create pipeline", () => {
     });
 
     expect(goal.status).toBe("awaiting_approval");
-    expect(goal.createPipeline?.state).toBe("awaiting_plan_approval");
-    expect(goal.createPipeline?.plan?.status).toBe("pending_approval");
+    expect(goal.createImproveRun?.state).toBe("awaiting_plan_approval");
+    expect(goal.createImproveRun?.plan?.status).toBe("pending_approval");
     expect(goal.approvals[0]?.kind).toBe("create_plan");
 
     const plan = await readCreatePlan(workspace, goal.id);
@@ -128,14 +128,14 @@ describe("create pipeline", () => {
       "eval",
     ]);
     expect(JSON.stringify(plan.checks)).not.toContain("smoke");
-    expect(capture.schemaVersion).toBe("openpond.createPipeline.workflowCapture.v1");
+    expect(capture.schemaVersion).toBe("openpond.createImprove.workflowCapture.v1");
 
     const planLogs = await captureConsoleLog(async () => {
       await runGoalCommand({ cwd: workspace, goalStorage: "workspace" }, ["plan", goal.id]);
     });
     const planOutput = planLogs.join("\n");
     expect(planOutput).toContain(`Goal: ${goal.id}`);
-    expect(planOutput).toContain("Pipeline: awaiting_plan_approval");
+    expect(planOutput).toContain("Create/Improve: awaiting_plan_approval");
     expect(planOutput).toContain("Action shape:");
     expect(planOutput).toContain("Chat only");
     expect(planOutput).not.toContain("Direct action:");
@@ -151,8 +151,8 @@ describe("create pipeline", () => {
 
     expect(approved.status).toBe("queued");
     expect(approved.approvals[0]?.status).toBe("approved");
-    expect(approved.createPipeline?.state).toBe("applying_source");
-    expect(approved.createPipeline?.plan?.status).toBe("approved");
+    expect(approved.createImproveRun?.state).toBe("applying_source");
+    expect(approved.createImproveRun?.plan?.status).toBe("approved");
     expect(approvedPlan.status).toBe("approved");
   });
 
@@ -177,8 +177,8 @@ describe("create pipeline", () => {
 
     const awaiting = await localState.addQuestion(goal.id, question);
     expect(awaiting.status).toBe("awaiting_user_input");
-    expect(awaiting.createPipeline?.state).toBe("awaiting_questions");
-    expect(awaiting.createPipeline?.questionIds).toContain(question.id);
+    expect(awaiting.createImproveRun?.state).toBe("awaiting_questions");
+    expect(awaiting.createImproveRun?.questionIds).toContain(question.id);
     expect((await readCreatePipeline(workspace, goal.id)).questionIds).toContain(question.id);
 
     const answer: GoalAnswer = {
@@ -197,8 +197,8 @@ describe("create pipeline", () => {
     });
 
     expect(resumed.status).toBe("queued");
-    expect(resumed.createPipeline?.state).toBe("awaiting_plan_approval");
-    expect(resumed.createPipeline?.questionIds).toContain(question.id);
+    expect(resumed.createImproveRun?.state).toBe("awaiting_plan_approval");
+    expect(resumed.createImproveRun?.questionIds).toContain(question.id);
     expect((await readCreatePipeline(workspace, goal.id)).state).toBe("awaiting_plan_approval");
   });
 
@@ -220,11 +220,11 @@ describe("create pipeline", () => {
     expect(rejected.status).toBe("blocked");
     expect(rejected.approvals[0]?.status).toBe("rejected");
     expect(rejected.approvals[0]?.decisionNote).toBe("Narrow the scope first.");
-    expect(rejected.createPipeline?.state).toBe("blocked");
-    expect(rejected.createPipeline?.blockedReason).toBe(
+    expect(rejected.createImproveRun?.state).toBe("blocked");
+    expect(rejected.createImproveRun?.blockedReason).toBe(
       "Create plan rejected before source mutation."
     );
-    expect(rejected.createPipeline?.plan?.status).toBe("rejected");
+    expect(rejected.createImproveRun?.plan?.status).toBe("rejected");
     expect(rejectedPlan.status).toBe("rejected");
     expect(rejectedPlan.metadata?.decisionNote).toBe("Narrow the scope first.");
   });
@@ -249,8 +249,8 @@ describe("create pipeline", () => {
 
     expect(editLogs.join("\n")).toContain("plan revised");
     expect(edited.status).toBe("awaiting_approval");
-    expect(edited.createPipeline?.state).toBe("awaiting_plan_approval");
-    expect(edited.createPipeline?.plan?.status).toBe("pending_approval");
+    expect(edited.createImproveRun?.state).toBe("awaiting_plan_approval");
+    expect(edited.createImproveRun?.plan?.status).toBe("pending_approval");
     expect(editedPlan.id).not.toBe(originalPlan.id);
     expect(editedPlan.editedFromPlanId).toBe(originalPlan.id);
     expect(editedPlan.summary).toContain("Focus on refund requests");
@@ -265,8 +265,8 @@ describe("create pipeline", () => {
     await runGoalCommand({ cwd: workspace, goalId: goal.id, goalStorage: "workspace" }, ["approve"]);
     const approved = await getGoal(workspace, goal.id);
     expect(approved.status).toBe("queued");
-    expect(approved.createPipeline?.state).toBe("applying_source");
-    expect(approved.createPipeline?.plan?.id).toBe(editedPlan.id);
+    expect(approved.createImproveRun?.state).toBe("applying_source");
+    expect(approved.createImproveRun?.plan?.id).toBe(editedPlan.id);
   });
 
   test("cancels a pending create plan and records the cancelled artifact", async () => {
@@ -287,11 +287,11 @@ describe("create pipeline", () => {
     expect(cancelled.status).toBe("cancelled");
     expect(cancelled.approvals[0]?.status).toBe("cancelled");
     expect(cancelled.approvals[0]?.decisionNote).toBe("User withdrew the request.");
-    expect(cancelled.createPipeline?.state).toBe("cancelled");
-    expect(cancelled.createPipeline?.blockedReason).toBe(
+    expect(cancelled.createImproveRun?.state).toBe("cancelled");
+    expect(cancelled.createImproveRun?.blockedReason).toBe(
       "Create plan cancelled before source mutation."
     );
-    expect(cancelled.createPipeline?.plan?.status).toBe("cancelled");
+    expect(cancelled.createImproveRun?.plan?.status).toBe("cancelled");
     expect(cancelledPlan.status).toBe("cancelled");
     expect(cancelledPlan.metadata?.decisionNote).toBe("User withdrew the request.");
   });
@@ -333,7 +333,7 @@ describe("create pipeline", () => {
       options: { cwd: sourcePath, goalStorage: "workspace" },
       objective,
       kind: "create_agent",
-      createPipeline: {
+      createImprove: {
         command: "openpond extend",
         surface: "local_extend",
         profile: {
@@ -362,9 +362,9 @@ describe("create pipeline", () => {
     );
 
     expect(blocked.status).toBe("blocked");
-    expect(blocked.createPipeline?.state).toBe("blocked");
-    expect(blocked.createPipeline?.plan?.status).toBe("approved");
-    expect(blocked.createPipeline?.blockedReason).toContain("model-backed SDK source application");
+    expect(blocked.createImproveRun?.state).toBe("blocked");
+    expect(blocked.createImproveRun?.plan?.status).toBe("approved");
+    expect(blocked.createImproveRun?.blockedReason).toContain("model-backed SDK source application");
     expect(existsSync(generatedSourcePath)).toBe(false);
     expect(existsSync(join(repoPath, "openpond-profile.json"))).toBe(false);
     expect(defaultSource).toContain("do-not-clobber-default");
@@ -388,9 +388,9 @@ describe("create pipeline", () => {
       options: { cwd: sourcePath, agentId: "support-agent", goalStorage: "workspace" },
       objective,
       kind: "update_agent",
-      createPipeline: {
+      createImprove: {
         command: "/edit",
-        surface: "direct_prompt_edit",
+        surface: "direct_prompt_improve",
         profile: {
           activeProfile: "default",
           repoPath,
@@ -411,10 +411,10 @@ describe("create pipeline", () => {
     );
 
     expect(blocked.status).toBe("blocked");
-    expect(blocked.createPipeline?.request.operation).toBe("edit");
-    expect(blocked.createPipeline?.state).toBe("blocked");
-    expect(blocked.createPipeline?.plan?.status).toBe("approved");
-    expect(blocked.createPipeline?.blockedReason).toContain("model-backed SDK source application");
+    expect(blocked.createImproveRun?.operation).toBe("improve");
+    expect(blocked.createImproveRun?.state).toBe("blocked");
+    expect(blocked.createImproveRun?.plan?.status).toBe("approved");
+    expect(blocked.createImproveRun?.blockedReason).toContain("model-backed SDK source application");
     expect(agentSource).toContain("do-not-clobber-support-agent");
     expect(agentSource).not.toContain(objective);
     expect(existsSync(join(repoPath, "openpond-profile.json"))).toBe(false);

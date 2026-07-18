@@ -5,8 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   AppPreferencesSchema,
   type AppPreferences,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  type CreateImproveRun,
   type ModelUsageRecord,
   type RuntimeEvent,
   type Turn,
@@ -17,6 +16,7 @@ import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { event, now } from "../apps/server/src/utils";
 import { listLocalProjects } from "../apps/server/src/workspace/local-projects";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 const timestamp = "2026-07-01T10:00:00.000Z";
 
@@ -30,14 +30,11 @@ describe("Insights goal loop", () => {
         id: "source_event_1",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "pending",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const response = await service.scan({ force: true, trigger: "manual" });
@@ -74,7 +71,7 @@ describe("Insights goal loop", () => {
         payload: {
           sessionId: "source_session",
           turnId: "source_turn",
-          sourceGoalId: "create_pipeline_waiting_goal",
+          createImproveRunId: "create_pipeline_waiting",
           insightsRunId: run?.id,
           insightsRunSessionId: systemSession?.id,
           insightsRunTurnId: "insights_turn_1",
@@ -119,14 +116,11 @@ describe("Insights goal loop", () => {
         id: "source_event_background",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "failed",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const skipped = await harness.service.scan({ trigger: "startup" });
@@ -153,14 +147,11 @@ describe("Insights goal loop", () => {
         id: "source_event_per_run_session",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "pending",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const first = await harness.service.scan({ force: true, trigger: "manual" });
@@ -191,14 +182,11 @@ describe("Insights goal loop", () => {
         id: "source_event_question",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "pending",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
       await harness.service.scan({ force: true, trigger: "manual" });
 
@@ -228,14 +216,11 @@ describe("Insights goal loop", () => {
         id: "source_event_dismissed",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "failed",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const first = await harness.service.scan({ force: true, trigger: "manual" });
@@ -265,14 +250,11 @@ describe("Insights goal loop", () => {
         id: "source_event_model_missing",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "failed",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const response = await harness.service.scan({ force: true, trigger: "manual" });
@@ -310,14 +292,11 @@ describe("Insights goal loop", () => {
         id: "source_event_invalid_output",
         sessionId: "source_session",
         turnId: "source_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "failed",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const response = await harness.service.scan({ force: true, trigger: "manual" });
@@ -435,14 +414,11 @@ describe("Insights goal loop", () => {
         id: "legacy_preferences_event",
         sessionId: "legacy_preferences_session",
         turnId: "legacy_preferences_turn",
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         timestamp,
         source: "server",
         status: "pending",
-        data: {
-          createPipelineRequest: snapshot.request,
-          createPipeline: snapshot,
-        },
+        data: { createImproveRun: snapshot },
       });
 
       const response = await harness.service.scan({ force: true, trigger: "manual" });
@@ -493,8 +469,7 @@ function createInsightsHarness(
       status: "completed",
       error: null,
       metadata: input.metadata ?? {},
-      createPipelineRequest: null,
-      createPipeline: null,
+      createImproveRun: null,
     };
     await store.insertTurn(turn);
     sentTurns.push(turn);
@@ -689,24 +664,6 @@ function usageRecord(patch: Partial<ModelUsageRecord> = {}): ModelUsageRecord {
     totalTokens: 1000,
     errorType: null,
     errorMessage: null,
-    attribution: {
-      surface: "chat",
-      workflowKind: "direct_chat",
-      sessionId: patch.sessionId ?? "source_session_usage",
-      turnId: patch.turnId ?? "source_turn_usage",
-      insightRunId: null,
-      goalId: null,
-      createPipelineRequestId: null,
-      createPipelineId: null,
-      commandName: null,
-      commandSource: null,
-      appId: null,
-      workspaceKind: "local_project",
-      workspaceId: "project_usage",
-      localProjectId: "project_usage",
-      cloudProjectId: null,
-      sourceEventSequence: null,
-    },
     ...patch,
     attribution: {
       surface: "chat",
@@ -715,8 +672,7 @@ function usageRecord(patch: Partial<ModelUsageRecord> = {}): ModelUsageRecord {
       turnId: patch.turnId ?? "source_turn_usage",
       insightRunId: null,
       goalId: null,
-      createPipelineRequestId: null,
-      createPipelineId: null,
+      createImproveRunId: null,
       commandName: null,
       commandSource: null,
       appId: null,
@@ -747,102 +703,39 @@ function turnFixture(input: {
     status: input.status,
     error: input.error ?? null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
   };
 }
 
 function createPipelineSnapshot(
   id: string,
-  operation: CreatePipelineRequest["operation"],
-  state: CreatePipelineSnapshot["state"],
-): CreatePipelineSnapshot {
-  const request = createPipelineRequest(`${id}_request`, operation);
-  return {
-    schemaVersion: "openpond.createPipeline.snapshot.v1",
+  operation: "create" | "edit",
+  state: CreateImproveRun["state"],
+): CreateImproveRun {
+  const canonicalOperation = operation === "edit" ? "improve" : "create";
+  return createImproveRunFixture({
     id,
-    goalId: `${id}_goal`,
+    operation: canonicalOperation,
+    surface: canonicalOperation === "improve" ? "direct_prompt_improve" : "direct_prompt_create",
+    command: canonicalOperation === "improve" ? "/edit" : "/create",
+    objective: canonicalOperation === "improve" ? "Refine an agent" : "Create an agent",
     state,
-    request,
-    plan: {
-      schemaVersion: "openpond.createPipeline.plan.v1",
-      id: `${id}_plan`,
-      goalId: `${id}_goal`,
-      requestId: request.id,
-      status: "pending_approval",
-      objective: request.objective,
-      summary: "Build the requested agent.",
-      capturedContextSummary: "User asked for an agent.",
-      defaultChatAction: { key: "chat", label: "Chat", required: true },
-      sourcePlan: [],
-      requirements: [],
-      checks: [],
-      approvalId: `${id}_approval`,
-      approvedAt: null,
-      editedFromPlanId: null,
-      metadata: {},
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    },
-    workflowCapture: null,
-    approvalIds: [`${id}_approval`],
-    questionIds: [],
-    questions: [],
-    checkRefs: [],
-    sourceRefs: [],
-    localGoalId: null,
-    localProfileCommit: null,
-    hostedGoalId: null,
-    hostedSourceCommit: null,
-    hostedSourceRef: null,
     blockedReason: state === "blocked" ? "Source application failed." : null,
-    metadata: {},
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-function createPipelineRequest(
-  id: string,
-  operation: CreatePipelineRequest["operation"],
-): CreatePipelineRequest {
-  return {
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id,
-    operation,
-    surface: operation === "edit" ? "direct_prompt_edit" : "direct_prompt_create",
-    command: operation === "edit" ? "/edit" : "/create",
-    objective: operation === "edit" ? "Refine an agent" : "Create an agent",
-    adapter: {
-      kind: "local",
-      sourceAuthority: "local_profile",
-      activeProfile: "default",
-      repoPath: "/tmp/openpond-profile",
-      sourcePath: "/tmp/openpond-profile/agents",
-      localHead: null,
-      confirmationPolicy: "always_require_plan_approval",
-    },
-    actor: { id: null, kind: "user", label: null },
     scope: {
+      profileId: "default",
       conversationId: "source_session",
+      originTurnId: "source_turn",
       workItemId: null,
       projectId: null,
       targetProject: null,
     },
-    context: {
-      messageIds: [],
-      conversationExcerpts: [],
-      attachments: [],
-      apps: [],
-      tools: [],
-      targetRepoAssumptions: [],
+    target: {
+      kind: "agent",
+      id: "insights-agent",
+      displayName: "Insights Agent",
+      defaultActionKey: "insights-agent.chat",
     },
-    targetAgent: {
-      agentId: null,
-      displayName: null,
-      defaultActionKey: "chat",
-    },
-    metadata: {},
+    updatedAt: timestamp,
     createdAt: timestamp,
-  };
+  });
 }

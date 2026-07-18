@@ -61,9 +61,9 @@ import {
 } from "./ComposerControls";
 import { ComposerGoalStrip } from "./ComposerGoalStrip";
 import {
-  ComposerCreatePipelineStrip,
-  type ComposerCreatePipelineRuntime,
-} from "./ComposerCreatePipelineStrip";
+  ComposerCreateImproveStrip,
+  type ComposerCreateImproveRuntime,
+} from "./ComposerCreateImproveStrip";
 import { ComposerSteerQueue } from "./ComposerSteerQueue";
 import {
   composerSteerDraftsForScope,
@@ -116,7 +116,7 @@ export type ComposerProps = {
   contextWindowStatus: ContextWindowStatus;
   goalRuntime?: GoalRuntimeStatus | null;
   subagentRuntime?: SubagentRuntimeStatus | null;
-  createPipelineRuntime?: ComposerCreatePipelineRuntime | null;
+  createImproveRuntime?: ComposerCreateImproveRuntime | null;
   busy: boolean;
   running?: boolean;
   submissionScopeKey?: string;
@@ -132,6 +132,7 @@ export type ComposerProps = {
   model: string;
   projectTarget: ComposerProjectTargetState;
   actionCatalog?: SandboxActionCatalogEntry[];
+  requestedAction?: { actionId: string; requestId: number } | null;
   workspaceTarget: WorkspaceTargetState;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
@@ -324,7 +325,7 @@ export function Composer({
   contextWindowStatus,
   goalRuntime = null,
   subagentRuntime = null,
-  createPipelineRuntime = null,
+  createImproveRuntime = null,
   busy,
   running = busy,
   submissionScopeKey = "default",
@@ -340,6 +341,7 @@ export function Composer({
   model,
   projectTarget,
   actionCatalog = [],
+  requestedAction = null,
   workspaceTarget,
   codexPermissionMode,
   codexReasoningEffort,
@@ -367,6 +369,7 @@ export function Composer({
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const autoFocusAppliedRef = useRef(false);
   const focusRequestAppliedRef = useRef(0);
+  const requestedActionAppliedRef = useRef(0);
   const submittingScopeKeysRef = useRef<Set<string>>(new Set());
   const previousRunningScopeKeysRef = useRef<Set<string>>(running ? new Set([submissionScopeKey]) : new Set());
   const autoDispatchWaitingForStartedTurnScopeKeysRef = useRef<Set<string>>(new Set());
@@ -636,7 +639,7 @@ export function Composer({
     actionMenuDismissedPrompt !== activeSlashKey,
   );
 
-  const showGoalRuntime = Boolean(goalRuntime && !createPipelineRuntime);
+  const showGoalRuntime = Boolean(goalRuntime);
   const activeGoalRuntime = showGoalRuntime && goalRuntime?.tone === "active";
   const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
   const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
@@ -669,7 +672,7 @@ export function Composer({
 
   useLayoutEffect(() => {
     inputRef.current?.resize();
-  }, [attachments.length, attachmentError, createPipelineRuntime, goalRuntime, prompt, selectedActionId, selectedCommandId, selectedInvocationPosition]);
+  }, [attachments.length, attachmentError, createImproveRuntime, goalRuntime, prompt, selectedActionId, selectedCommandId, selectedInvocationPosition]);
 
   useEffect(() => {
     if (!autoFocus) {
@@ -713,6 +716,27 @@ export function Composer({
       setSelectedInvocationPosition(null);
     }
   }, [actionCatalog, selectedActionId]);
+
+  useEffect(() => {
+    if (
+      !requestedAction
+      || requestedAction.requestId <= requestedActionAppliedRef.current
+    ) return;
+    const action = actionCatalog.find(
+      (candidate) => candidate.id === requestedAction.actionId,
+    );
+    if (!action) return;
+    requestedActionAppliedRef.current = requestedAction.requestId;
+    setSelectedActionId(action.id);
+    setSelectedCommandId(null);
+    setSelectedInvocationPosition(0);
+    setSelectedActionMentionText(null);
+    onPromptChange("");
+    setCursorIndex(0);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(0, { afterToken: true });
+    });
+  }, [actionCatalog, onPromptChange, requestedAction]);
 
   useEffect(() => {
     if (!selectedAction && !selectedCommand) return;
@@ -776,7 +800,7 @@ export function Composer({
       window.removeEventListener("resize", updateSlashMenuPosition);
       window.removeEventListener("scroll", updateSlashMenuPosition, true);
     };
-  }, [attachments.length, createPipelineRuntime, goalRuntime, prompt, selectedActionId, showActionMenu]);
+  }, [attachments.length, createImproveRuntime, goalRuntime, prompt, selectedActionId, showActionMenu]);
 
   useLayoutEffect(() => {
     if (!showSkillMenu) return;
@@ -797,7 +821,7 @@ export function Composer({
       window.removeEventListener("resize", updateSkillMenuPosition);
       window.removeEventListener("scroll", updateSkillMenuPosition, true);
     };
-  }, [attachments.length, createPipelineRuntime, goalRuntime, prompt, selectedActionId, showSkillMenu]);
+  }, [attachments.length, createImproveRuntime, goalRuntime, prompt, selectedActionId, showSkillMenu]);
 
   useLayoutEffect(() => {
     if (!showMentionMenu) return;
@@ -818,7 +842,7 @@ export function Composer({
       window.removeEventListener("resize", updateMentionMenuPosition);
       window.removeEventListener("scroll", updateMentionMenuPosition, true);
     };
-  }, [attachments.length, createPipelineRuntime, goalRuntime, prompt, selectedActionId, showMentionMenu]);
+  }, [attachments.length, createImproveRuntime, goalRuntime, prompt, selectedActionId, showMentionMenu]);
 
   function clearSelectedInvocation() {
     setSelectedActionId(null);
@@ -1243,7 +1267,7 @@ export function Composer({
     const wasRunning = previousRunningScopeKeysRef.current.has(scopeKey);
     if (wasRunning && !steerAutoDispatchReady) return;
     const shouldDispatch = shouldAutoDispatchComposerSteer({
-      autoDispatchReady: steerAutoDispatchReady && !createPipelineRuntime,
+      autoDispatchReady: steerAutoDispatchReady && !createImproveRuntime,
       hasQueuedDrafts: steerDrafts.length > 0,
       running,
       sending: Boolean(sendingSteerDraftId) || isSubmittingScope(scopeKey),
@@ -1256,7 +1280,7 @@ export function Composer({
     if (!nextDraft) return;
     void submitQueuedSteerDraft(nextDraft.id, "auto");
   }, [
-    createPipelineRuntime,
+    createImproveRuntime,
     running,
     sendingSteerDraftId,
     steerAutoDispatchBlocked,
@@ -1278,7 +1302,7 @@ export function Composer({
   return (
     <form
       ref={composerRef}
-      className={`composer ${mode} ${createPipelineRuntime ? "has-create-runtime" : ""} ${showGoalRuntime ? "has-goal-runtime" : ""} ${steering ? "is-steering" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${selectedAction || selectedCommand ? "has-selected-action" : ""} ${attachmentError ? "has-attachment-error" : ""}`}
+      className={`composer ${mode} ${createImproveRuntime ? "has-create-runtime" : ""} ${showGoalRuntime ? "has-goal-runtime" : ""} ${steering ? "is-steering" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${selectedAction || selectedCommand ? "has-selected-action" : ""} ${attachmentError ? "has-attachment-error" : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
         void submitComposer();
@@ -1319,8 +1343,8 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {createPipelineRuntime && (
-        <ComposerCreatePipelineStrip runtime={createPipelineRuntime} />
+      {createImproveRuntime && (
+        <ComposerCreateImproveStrip runtime={createImproveRuntime} />
       )}
       <ComposerSteerQueue
         drafts={steerDrafts}

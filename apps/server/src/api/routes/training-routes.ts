@@ -3,6 +3,11 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { readJson, sendBinary, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
+import {
+  streamTrainingArtifactPackage,
+  trainingArtifactPackageSize,
+  type TrainingArtifactPackage,
+} from "../../training/training-artifact-package.js";
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
@@ -17,6 +22,23 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     if (!info.isFile() || info.size !== result.artifact.sizeBytes) throw new Error("Training artifact changed before download.");
     response.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": String(info.size), "Content-Disposition": `attachment; filename="${path.basename(result.path).replaceAll('"', '')}"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
     createReadStream(result.path).pipe(response);
+    return true;
+  }
+  const modelDownloadMatch = /^\/v1\/training\/models\/([^/]+)\/download$/.exec(requestUrl.pathname);
+  if (request.method === "GET" && modelDownloadMatch) {
+    const result = await deps.trainingPayload(
+      "model_package_download",
+      { modelId: decodeURIComponent(modelDownloadMatch[1]!) },
+      requestUrl,
+    ) as TrainingArtifactPackage;
+    response.writeHead(200, {
+      "Content-Type": "application/x-tar",
+      "Content-Length": String(trainingArtifactPackageSize(result)),
+      "Content-Disposition": `attachment; filename="${result.filename.replaceAll('"', "")}"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    await streamTrainingArtifactPackage(response, result);
     return true;
   }
   const bundleDownloadMatch = /^\/v1\/training\/bundles\/([^/]+)\/download$/.exec(requestUrl.pathname);
@@ -34,10 +56,12 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/cross-system-operations/frontier-baseline", action: "run_cross_system_frontier_baseline", status: 202 },
     { method: "POST", path: "/v1/training/cross-system-operations/fixture-baseline", action: "record_cross_system_fixture_baseline", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
+    { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
     { method: "POST", path: "/v1/training/grade", action: "grade" },
     { method: "POST", path: "/v1/training/baseline", action: "baseline", status: 202 },
+    { method: "POST", path: "/v1/training/baseline/regrade", action: "regrade_baseline" },
     { method: "POST", path: "/v1/training/audit-graders", action: "audit_graders" },
     { method: "POST", path: "/v1/training/calibrate-judges", action: "calibrate_judges" },
     { method: "POST", path: "/v1/training/readiness", action: "readiness" },
@@ -45,6 +69,8 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/bundles", action: "build_bundle", status: 201 },
     { method: "POST", path: "/v1/training/approvals", action: "approve_training", status: 201 },
     { method: "POST", path: "/v1/training/launch", action: "launch", status: 202 },
+    { method: "POST", path: "/v1/training/prepare", action: "prepare_start", status: 201 },
+    { method: "POST", path: "/v1/training/start/prepared", action: "start_prepared", status: 202 },
     { method: "POST", path: "/v1/training/start", action: "start", status: 202 },
     { method: "POST", path: "/v1/training/import", action: "import_artifact", status: 202 },
     { method: "POST", path: "/v1/training/credentials", action: "save_credential" },
@@ -57,7 +83,10 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
   const dynamic = [
     { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)$/, method: "DELETE", action: "delete_taskset", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/preview$/, method: "POST", action: "preview_expert_bootstrap", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/approve$/, method: "POST", action: "approve_expert_bootstrap", key: "tasksetId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/disclosure$/, method: "POST", action: "approve_disclosure", key: "creationId" },
+    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/retry$/, method: "POST", action: "retry_creation", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/questions$/, method: "POST", action: "answer_questions", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/materialize$/, method: "POST", action: "approve_materialization", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/chat$/, method: "POST", action: "chat_creation", key: "creationId" },
@@ -68,10 +97,16 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/candidates\/([^/]+)$/, method: "PATCH", action: "patch_candidate", key: "candidateId", wrap: "patch" },
     { pattern: /^\/v1\/training\/candidates\/([^/]+)\/create$/, method: "POST", action: "create_candidate", key: "candidateId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_job", key: "jobId" },
+    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/evaluate$/, method: "POST", action: "evaluate_job", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/events$/, method: "GET", action: "job_events", key: "jobId" },
     { pattern: /^\/v1\/training\/jobs\/([^/]+)\/detail$/, method: "GET", action: "run_detail", key: "jobId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/reject$/, method: "POST", action: "reject_model", key: "modelId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/bind$/, method: "POST", action: "bind_model", key: "modelId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/serving$/, method: "POST", action: "start_model_serving", key: "modelId" },
+    { pattern: /^\/v1\/training\/serving\/([^/]+)\/stop$/, method: "POST", action: "stop_model_serving", key: "servingSessionId" },
+    { pattern: /^\/v1\/training\/bindings\/([^/]+)\/rollback$/, method: "POST", action: "rollback_model_binding", key: "bindingId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/configuration$/, method: "PATCH", action: "update_model_configuration", key: "modelId", wrap: "configuration" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/pin$/, method: "PATCH", action: "set_model_pinned", key: "modelId" },
   ];
   for (const item of dynamic) {
     const match = item.pattern.exec(requestUrl.pathname);

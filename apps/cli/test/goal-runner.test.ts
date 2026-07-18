@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runTestProcess } from "../../../tests/helpers/run-process";
+import { createImproveRunFixture } from "../../../tests/helpers/create-improve-fixtures";
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -196,55 +197,28 @@ describe("goal runner hosted tool loop", () => {
         kind: "create_agent",
       })
     );
-    goal.createPipeline = {
-      schemaVersion: "openpond.createPipeline.snapshot.v1",
-      id: "create_pipeline_test",
-      goalId: goal.id,
+    goal.createImproveRun = createImproveRunFixture({
+      id: "create_improve_test",
       state: "awaiting_plan_approval",
-      request: {
-        schemaVersion: "openpond.createPipeline.request.v1",
-        id: "create_request_test",
-        operation: "create",
-        surface: "direct_prompt_create",
-        command: "/create",
-        objective: goal.objective,
-        adapter: {
-          kind: "local",
-          sourceAuthority: "local_profile",
-          activeProfile: "default",
-          repoPath: "/repo",
-          sourcePath: "/repo/profiles/default",
-          localHead: null,
-          confirmationPolicy: "always_require_plan_approval",
-        },
-        actor: { id: null, kind: "user", label: null },
-        scope: {
-          conversationId: null,
-          workItemId: null,
-          projectId: null,
-          targetProject: null,
-        },
-        context: {
-          messageIds: [],
-          conversationExcerpts: [],
-          attachments: [],
-          apps: [],
-          tools: [],
-          targetRepoAssumptions: [],
-        },
-        targetAgent: {
-          agentId: null,
-          displayName: null,
-          defaultActionKey: "chat",
-        },
-        metadata: {},
-        createdAt: "2026-07-01T00:00:00.000Z",
+      objective: goal.objective,
+      scope: {
+        profileId: "default",
+        conversationId: null,
+        originTurnId: null,
+        workItemId: null,
+        projectId: null,
+        targetProject: null,
+      },
+      target: {
+        kind: "agent",
+        id: "weekly-report-agent",
+        displayName: "Weekly Report Agent",
+        defaultActionKey: "weekly-report-agent.chat",
       },
       plan: {
-        schemaVersion: "openpond.createPipeline.plan.v1",
+        schemaVersion: "openpond.createImprove.plan.v1",
         id: "create_plan_test",
-        goalId: goal.id,
-        requestId: "create_request_test",
+        runId: "create_improve_test",
         status: "pending_approval",
         objective: goal.objective,
         summary: "Create a source-backed profile agent.",
@@ -270,21 +244,9 @@ describe("goal runner hosted tool loop", () => {
         createdAt: "2026-07-01T00:00:00.000Z",
         updatedAt: "2026-07-01T00:00:00.000Z",
       },
-      workflowCapture: null,
-      approvalIds: ["approval_test"],
-      questionIds: [],
-      checkRefs: [],
-      sourceRefs: [],
-      localGoalId: goal.id,
-      localProfileCommit: null,
-      hostedGoalId: null,
-      hostedSourceCommit: null,
-      hostedSourceRef: null,
-      blockedReason: null,
-      metadata: {},
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
-    };
+    });
 
     const messages = buildGoalLlmMessages(goal);
 

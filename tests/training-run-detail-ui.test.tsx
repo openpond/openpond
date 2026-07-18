@@ -64,4 +64,37 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Improved 0.300");
     expect(html).toContain("Grader feedback");
   });
+
+  test("labels live RFT points as observed optimizer updates without implying completion", () => {
+    const rftDetail = TrainingRunDetailSchema.parse({
+      ...detail,
+      job: {
+        ...detail.job,
+        status: "running",
+        completedAt: null,
+        metadata: {
+          trainingMethod: "grpo",
+          optimizerUpdatesObserved: 2,
+        },
+      },
+      stepMetrics: detail.stepMetrics.map((metric) => ({
+        ...metric,
+        loss: null,
+        reward: metric.step === 1 ? 0.1264 : 0.133,
+      })).concat([{
+        ...detail.stepMetrics[0]!,
+        maxSteps: 3,
+        loss: null,
+        reward: 0.1264,
+      }]),
+    });
+    const html = renderToStaticMarkup(
+      <TrainingRunMetrics detail={rftDetail} loading={false} />,
+    );
+    expect(html).toContain("Optimizer updates");
+    expect(html).toContain(">2<");
+    expect(html).not.toContain("2 of 2");
+    expect(html).toContain("Reward by optimizer step");
+    expect(html.match(/Step 1:/g)).toHaveLength(1);
+  });
 });

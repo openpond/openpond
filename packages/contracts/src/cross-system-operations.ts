@@ -142,7 +142,12 @@ export const CROSS_SYSTEM_TOOL_CONTRACT_HASH = contractHash({
   tools: CROSS_SYSTEM_TOOL_DEFINITIONS,
 });
 
-export const CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT = `Use only the four registered synthetic Cross-System Operations tools. Contract ${CROSS_SYSTEM_TOOL_CONTRACT_HASH}. Finish with ANSWER: JSON.`;
+export const CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT = [
+  `Use only the four registered synthetic Cross-System Operations tools. Contract ${CROSS_SYSTEM_TOOL_CONTRACT_HASH}.`,
+  "Treat every filter as exact. An overdue-only query_billing call returns invoice rows; payment rows are included only when paid is requested.",
+  "For cross-system joins, retrieve the bounded projected rows and use run_python for date filtering, set intersection, and arithmetic before answering.",
+  "Finish with ANSWER: JSON.",
+].join(" ");
 export const CROSS_SYSTEM_LOCAL_TOOL_MAX_TURNS = 15;
 
 export function crossSystemLocalToolSystemPrompt(toolChoice: unknown = "auto"): string {
@@ -310,11 +315,55 @@ export const CrossSystemBootstrapRecordSchema = z.object({
   messages: z.array(CrossSystemBootstrapMessageSchema).min(3).max(1_000),
 });
 
+export const CrossSystemExpertBootstrapTaskPreviewSchema = z.object({
+  tasksetTaskId: z.string().trim().min(1).max(240),
+  environmentTaskId: z.string().trim().min(1).max(240),
+  family: z.enum([
+    "renewal_exposure",
+    "collections_prioritization",
+    "invoice_reconciliation",
+    "sla_escalation",
+    "contract_billing_mismatch",
+  ]),
+  prompt: z.string().trim().min(1).max(100_000),
+  finalAnswer: z.string().trim().min(1).max(200_000),
+  trajectoryId: z.string().trim().min(1).max(240),
+  trajectoryHash: z.string().trim().min(8).max(256),
+  toolNames: z.array(CrossSystemToolNameSchema).min(1).max(100),
+  toolCallCount: z.number().int().positive(),
+  messageCount: z.number().int().min(3),
+  reward: z.number().min(0).max(1.15),
+  messages: z.array(CrossSystemBootstrapMessageSchema).min(3).max(1_000),
+});
+
+export const CrossSystemExpertBootstrapApprovalSchema = z.object({
+  status: z.literal("approved"),
+  approvedBy: z.string().trim().min(1).max(240),
+  approvedAt: z.string().trim().min(1),
+  previewHash: z.string().trim().min(8).max(256),
+  trajectoryCount: z.number().int().positive(),
+});
+
+export const CrossSystemExpertBootstrapPreviewSchema = z.object({
+  schemaVersion: z.literal("openpond.crossSystemExpertBootstrapPreview.v1"),
+  tasksetId: z.string().trim().min(1).max(240),
+  tasksetHash: z.string().trim().min(8).max(256),
+  tasksetRevision: z.number().int().positive(),
+  previewHash: z.string().trim().min(8).max(256),
+  toolContractHash: z.literal(CROSS_SYSTEM_TOOL_CONTRACT_HASH),
+  status: z.enum(["ready_for_review", "approved"]),
+  approval: CrossSystemExpertBootstrapApprovalSchema.nullable(),
+  tasks: z.array(CrossSystemExpertBootstrapTaskPreviewSchema).min(1).max(100),
+});
+
 export type CrossSystemTrajectoryStep = z.infer<typeof CrossSystemTrajectoryStepSchema>;
 export type CrossSystemTrajectory = z.infer<typeof CrossSystemTrajectorySchema>;
 export type CrossSystemVerifierResult = z.infer<typeof CrossSystemVerifierResultSchema>;
 export type CrossSystemBootstrapMessage = z.infer<typeof CrossSystemBootstrapMessageSchema>;
 export type CrossSystemBootstrapRecord = z.infer<typeof CrossSystemBootstrapRecordSchema>;
+export type CrossSystemExpertBootstrapTaskPreview = z.infer<typeof CrossSystemExpertBootstrapTaskPreviewSchema>;
+export type CrossSystemExpertBootstrapApproval = z.infer<typeof CrossSystemExpertBootstrapApprovalSchema>;
+export type CrossSystemExpertBootstrapPreview = z.infer<typeof CrossSystemExpertBootstrapPreviewSchema>;
 
 function contractHash(value: unknown): string {
   const text = stableJson(value);

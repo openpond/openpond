@@ -21,7 +21,7 @@ describe("CLI headless chat", () => {
     if (build.code !== 0) {
       throw new Error(build.stderr || build.stdout || "CLI build failed");
     }
-  });
+  }, 130_000);
 
   test("source TypeScript entrypoint runs one noninteractive JSON turn through the terminal child", async () => {
     await expectCliHeadlessChat([

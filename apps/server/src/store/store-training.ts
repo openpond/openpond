@@ -3,7 +3,10 @@ import type {
   CrossSystemFrontierBaselineRun,
   GradeResult,
   GraderAuditReport,
+  FireworksModelServingSession,
+  ModelBinding,
   ModelArtifactLineage,
+  RolloutTrajectoryReceipt,
   RuntimeEvent,
   Session,
   TaskAttemptArtifact,
@@ -30,7 +33,10 @@ import {
   CrossSystemFrontierBaselineRunSchema,
   GradeResultSchema,
   GraderAuditReportSchema,
+  FireworksModelServingSessionSchema,
+  ModelBindingSchema,
   ModelArtifactLineageSchema,
+  RolloutTrajectoryReceiptSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TaskCandidateSchema,
@@ -372,13 +378,35 @@ export class SqliteTrainingStore extends SqliteStoreCore {
     return this.getParsedPayload("SELECT payload FROM tasksets WHERE id = ?", [id], TasksetSchema.parse);
   }
 
+  async getTasksetRevision(id: string, revision: number, contentHash?: string | null): Promise<Taskset | null> {
+    const taskset = await this.getParsedPayload(
+      "SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND revision = ?",
+      [id, revision],
+      TasksetSchema.parse,
+    );
+    if (taskset && contentHash && taskset.contentHash !== contentHash) {
+      throw new Error(`Taskset ${id}@${revision} does not match the requested immutable content hash.`);
+    }
+    return taskset;
+  }
+
   async upsertTaskset(tasksetInput: Taskset): Promise<Taskset> {
     const taskset = TasksetSchema.parse(tasksetInput);
+    const existingRevision = await this.getTasksetRevision(taskset.id, taskset.revision);
+    if (existingRevision && existingRevision.contentHash !== taskset.contentHash) {
+      throw new Error(`Taskset ${taskset.id}@${taskset.revision} is immutable and already has another content hash.`);
+    }
     await this.upsertPayload(
       `INSERT INTO tasksets (id, profile_id, status, payload, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
       [taskset.id, taskset.profileId, taskset.status, JSON.stringify(taskset), taskset.createdAt, taskset.updatedAt],
+    );
+    await this.upsertPayload(
+      `INSERT INTO taskset_revisions (taskset_id, revision, content_hash, profile_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(taskset_id, revision) DO UPDATE SET status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [taskset.id, taskset.revision, taskset.contentHash, taskset.profileId, taskset.status, JSON.stringify(taskset), taskset.createdAt, taskset.updatedAt],
     );
     return taskset;
   }
@@ -395,6 +423,8 @@ export class SqliteTrainingStore extends SqliteStoreCore {
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
+        await this.run("DELETE FROM training_rollout_receipts WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM model_bindings WHERE model_artifact_lineage_id IN (SELECT id FROM model_artifact_lineage WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM training_job_events WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
         await this.run("DELETE FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM training_approvals WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
@@ -405,6 +435,7 @@ export class SqliteTrainingStore extends SqliteStoreCore {
         await this.run("DELETE FROM task_creation_transcripts WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
         await this.run("DELETE FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?", [id]);
         await this.run("DELETE FROM tasksets WHERE id = ?", [id]);
+        await this.run("DELETE FROM taskset_revisions WHERE taskset_id = ?", [id]);
         await this.exec("COMMIT");
       } catch (error) {
         await this.exec("ROLLBACK").catch(() => undefined);
@@ -475,6 +506,10 @@ export class SqliteTrainingStore extends SqliteStoreCore {
       [result.id, result.attemptId, JSON.stringify(result), result.createdAt],
     );
     return result;
+  }
+
+  async deleteGradeResultsForAttempt(attemptId: string): Promise<void> {
+    await this.run("DELETE FROM grade_results WHERE attempt_id = ?", [attemptId]);
   }
 
   async listGradeResultsForTaskset(tasksetId: string): Promise<GradeResult[]> {
@@ -701,6 +736,207 @@ export class SqliteTrainingStore extends SqliteStoreCore {
 
   async getModelArtifactLineage(id: string): Promise<ModelArtifactLineage | null> {
     return this.getParsedPayload("SELECT payload FROM model_artifact_lineage WHERE id = ?", [id], ModelArtifactLineageSchema.parse);
+  }
+
+  async saveFireworksModelServingSession(
+    sessionInput: FireworksModelServingSession,
+  ): Promise<FireworksModelServingSession> {
+    const session = FireworksModelServingSessionSchema.parse(sessionInput);
+    await this.upsertPayload(
+      `INSERT INTO fireworks_model_serving_sessions
+        (id, profile_id, model_artifact_lineage_id, state, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         profile_id = excluded.profile_id,
+         model_artifact_lineage_id = excluded.model_artifact_lineage_id,
+         state = excluded.state,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [
+        session.id,
+        session.profileId,
+        session.modelArtifactLineageId,
+        session.state,
+        JSON.stringify(session),
+        session.createdAt,
+        session.updatedAt,
+      ],
+    );
+    return session;
+  }
+
+  async getFireworksModelServingSession(
+    id: string,
+  ): Promise<FireworksModelServingSession | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM fireworks_model_serving_sessions WHERE id = ?",
+      [id],
+      FireworksModelServingSessionSchema.parse,
+    );
+  }
+
+  async listFireworksModelServingSessions(input: {
+    profileId?: string;
+    modelArtifactLineageId?: string;
+  } = {}): Promise<FireworksModelServingSession[]> {
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM fireworks_model_serving_sessions WHERE profile_id = ? ORDER BY updated_at DESC",
+        [input.profileId],
+        FireworksModelServingSessionSchema.parse,
+      );
+    }
+    if (input.modelArtifactLineageId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM fireworks_model_serving_sessions WHERE model_artifact_lineage_id = ? ORDER BY updated_at DESC",
+        [input.modelArtifactLineageId],
+        FireworksModelServingSessionSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM fireworks_model_serving_sessions ORDER BY updated_at DESC",
+      [],
+      FireworksModelServingSessionSchema.parse,
+    );
+  }
+
+  async saveRolloutTrajectoryReceipt(receiptInput: RolloutTrajectoryReceipt): Promise<RolloutTrajectoryReceipt> {
+    const receipt = RolloutTrajectoryReceiptSchema.parse(receiptInput);
+    await this.upsertPayload(
+      `INSERT INTO training_rollout_receipts (id, job_id, taskset_id, provider_rollout_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET job_id = excluded.job_id, taskset_id = excluded.taskset_id,
+         provider_rollout_id = excluded.provider_rollout_id, status = excluded.status,
+         payload = excluded.payload, updated_at = excluded.updated_at`,
+      [receipt.id, receipt.jobId, receipt.tasksetId, receipt.providerTrace.rolloutId, receipt.status, JSON.stringify(receipt), receipt.receivedAt, receipt.updatedAt],
+    );
+    return receipt;
+  }
+
+  async getRolloutTrajectoryReceiptByProviderId(providerRolloutId: string): Promise<RolloutTrajectoryReceipt | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM training_rollout_receipts WHERE provider_rollout_id = ?",
+      [providerRolloutId],
+      RolloutTrajectoryReceiptSchema.parse,
+    );
+  }
+
+  async listRolloutTrajectoryReceipts(input: { jobId?: string; tasksetId?: string } = {}): Promise<RolloutTrajectoryReceipt[]> {
+    if (input.jobId) return this.listParsedPayloads("SELECT payload FROM training_rollout_receipts WHERE job_id = ? ORDER BY updated_at DESC", [input.jobId], RolloutTrajectoryReceiptSchema.parse);
+    if (input.tasksetId) return this.listParsedPayloads("SELECT payload FROM training_rollout_receipts WHERE taskset_id = ? ORDER BY updated_at DESC", [input.tasksetId], RolloutTrajectoryReceiptSchema.parse);
+    return this.listParsedPayloads("SELECT payload FROM training_rollout_receipts ORDER BY updated_at DESC", [], RolloutTrajectoryReceiptSchema.parse);
+  }
+
+  async saveModelBinding(bindingInput: ModelBinding): Promise<ModelBinding> {
+    const binding = ModelBindingSchema.parse(bindingInput);
+    await this.upsertPayload(
+      `INSERT INTO model_bindings (id, profile_id, role, role_target_id, model_artifact_lineage_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, role = excluded.role,
+         role_target_id = excluded.role_target_id, model_artifact_lineage_id = excluded.model_artifact_lineage_id,
+         status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [binding.id, binding.profileId, binding.role, binding.roleTargetId, binding.modelArtifactLineageId, binding.status, JSON.stringify(binding), binding.promotedAt, binding.rolledBackAt ?? binding.promotedAt],
+    );
+    return binding;
+  }
+
+  async replaceActiveModelBinding(input: {
+    profileId: string;
+    role: ModelBinding["role"];
+    roleTargetId: string;
+    expectedActiveBindingId: string | null;
+    next: ModelBinding | null;
+    timestamp: string;
+  }): Promise<{ previous: ModelBinding | null; active: ModelBinding | null }> {
+    const next = input.next ? ModelBindingSchema.parse(input.next) : null;
+    if (
+      next &&
+      (
+        next.status !== "active" ||
+        next.profileId !== input.profileId ||
+        next.role !== input.role ||
+        next.roleTargetId !== input.roleTargetId
+      )
+    ) {
+      throw new Error("Replacement Model binding does not match the requested active role.");
+    }
+    await this.ready;
+    let result: { previous: ModelBinding | null; active: ModelBinding | null } = {
+      previous: null,
+      active: null,
+    };
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        const row = await this.get<PayloadRow>(
+          "SELECT payload FROM model_bindings WHERE profile_id = ? AND role = ? AND role_target_id = ? AND status = 'active' LIMIT 1",
+          [input.profileId, input.role, input.roleTargetId],
+        );
+        const current = row ? ModelBindingSchema.parse(JSON.parse(row.payload)) : null;
+        if ((current?.id ?? null) !== input.expectedActiveBindingId) {
+          throw new Error("The active Model binding changed before this promotion could be applied.");
+        }
+        if (current) {
+          const rolledBack = ModelBindingSchema.parse({
+            ...current,
+            status: "rolled_back",
+            rolledBackAt: input.timestamp,
+          });
+          await this.run(
+            `UPDATE model_bindings
+             SET status = 'rolled_back', payload = ?, updated_at = ?
+             WHERE id = ? AND status = 'active'`,
+            [JSON.stringify(rolledBack), input.timestamp, current.id],
+          );
+        }
+        if (next) {
+          await this.run(
+            `INSERT INTO model_bindings
+              (id, profile_id, role, role_target_id, model_artifact_lineage_id, status, payload, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              next.id,
+              next.profileId,
+              next.role,
+              next.roleTargetId,
+              next.modelArtifactLineageId,
+              next.status,
+              JSON.stringify(next),
+              next.promotedAt,
+              next.promotedAt,
+            ],
+          );
+        }
+        await this.exec("COMMIT");
+        result = { previous: current, active: next };
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return result;
+  }
+
+  async getModelBinding(id: string): Promise<ModelBinding | null> {
+    return this.getParsedPayload("SELECT payload FROM model_bindings WHERE id = ?", [id], ModelBindingSchema.parse);
+  }
+
+  async getActiveModelBinding(input: { profileId: string; role: ModelBinding["role"]; roleTargetId: string }): Promise<ModelBinding | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_bindings WHERE profile_id = ? AND role = ? AND role_target_id = ? AND status = 'active' LIMIT 1",
+      [input.profileId, input.role, input.roleTargetId],
+      ModelBindingSchema.parse,
+    );
+  }
+
+  async listModelBindings(profileId?: string): Promise<ModelBinding[]> {
+    return this.listParsedPayloads(
+      profileId ? "SELECT payload FROM model_bindings WHERE profile_id = ? ORDER BY updated_at DESC" : "SELECT payload FROM model_bindings ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
+      ModelBindingSchema.parse,
+    );
   }
 
   private async upsertPayload(sql: string, params: unknown[]): Promise<void> {

@@ -1,7 +1,12 @@
 import { readJson, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 
-export async function handleCoreRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
+export async function handleCoreRoutes({
+  deps,
+  request,
+  requestUrl,
+  response,
+}: HttpRouteContext): Promise<boolean> {
   const {
     refreshCodexStatus,
     bootstrapPayload,
@@ -10,6 +15,7 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
+    profileRenameAgentPayload,
     profileCommitPayload,
     profilePushPayload,
     profileRunPayload,
@@ -23,14 +29,15 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     workspaceTemplateConfigPayload,
   } = deps;
   if (request.method === "GET" && requestUrl.pathname === "/v1/bootstrap") {
-    if (requestUrl.searchParams.get("refreshCodex") === "1") await refreshCodexStatus(true);
+    if (requestUrl.searchParams.get("refreshCodex") === "1")
+      await refreshCodexStatus(true);
     sendJson(
       response,
       200,
       await bootstrapPayload({
         forceOpenPond: requestUrl.searchParams.get("refreshOpenPond") === "1",
         ensureProfile: requestUrl.searchParams.get("ensureProfile") !== "0",
-      }),
+      })
     );
     return true;
   }
@@ -50,7 +57,10 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
       return true;
     }
   }
-  if (request.method === "GET" && requestUrl.pathname === "/v1/profile/catalog") {
+  if (
+    request.method === "GET" &&
+    requestUrl.pathname === "/v1/profile/catalog"
+  ) {
     sendJson(response, 200, await profileCatalogPayload());
     return true;
   }
@@ -62,12 +72,36 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     sendJson(response, 200, await profileLoadPayload(await readJson(request)));
     return true;
   }
-  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/check") {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === "/v1/profile/check"
+  ) {
     sendJson(response, 200, await profileCheckPayload(await readJson(request)));
     return true;
   }
-  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/commit") {
-    sendJson(response, 200, await profileCommitPayload(await readJson(request)));
+  const profileAgentNameMatch = /^\/v1\/profile\/agents\/([^/]+)\/name$/.exec(
+    requestUrl.pathname
+  );
+  if (request.method === "PATCH" && profileAgentNameMatch) {
+    sendJson(
+      response,
+      200,
+      await profileRenameAgentPayload(
+        decodeURIComponent(profileAgentNameMatch[1]!),
+        await readJson(request)
+      )
+    );
+    return true;
+  }
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === "/v1/profile/commit"
+  ) {
+    sendJson(
+      response,
+      200,
+      await profileCommitPayload(await readJson(request))
+    );
     return true;
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/profile/push") {
@@ -84,15 +118,24 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
       return true;
     }
   }
-  if (request.method === "POST" && requestUrl.pathname === "/v1/remote-access/enable") {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === "/v1/remote-access/enable"
+  ) {
     sendJson(response, 200, await enableRemoteAccessPayload());
     return true;
   }
-  if (request.method === "POST" && requestUrl.pathname === "/v1/remote-access/disable") {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === "/v1/remote-access/disable"
+  ) {
     sendJson(response, 200, await disableRemoteAccessPayload());
     return true;
   }
-  if (request.method === "GET" && requestUrl.pathname === "/v1/openpond/account") {
+  if (
+    request.method === "GET" &&
+    requestUrl.pathname === "/v1/openpond/account"
+  ) {
     const payload = await bootstrapPayload({
       forceOpenPond: requestUrl.searchParams.get("refresh") === "1",
     });
@@ -105,41 +148,66 @@ export async function handleCoreRoutes({ deps, request, requestUrl, response }: 
     });
     return true;
   }
-  if (request.method === "GET" && requestUrl.pathname === "/v1/openpond/apps/more") {
+  if (
+    request.method === "GET" &&
+    requestUrl.pathname === "/v1/openpond/apps/more"
+  ) {
     sendJson(response, 200, await loadMoreOpenPondAppsPayload(requestUrl));
     return true;
   }
-  const codexHistoryThreadMatch = /^\/v1\/codex-history\/([^/]+)$/.exec(requestUrl.pathname);
+  const codexHistoryThreadMatch = /^\/v1\/codex-history\/([^/]+)$/.exec(
+    requestUrl.pathname
+  );
   if (request.method === "GET" && codexHistoryThreadMatch) {
-    sendJson(response, 200, await codexHistoryThreadPayload(decodeURIComponent(codexHistoryThreadMatch[1]!), requestUrl));
+    sendJson(
+      response,
+      200,
+      await codexHistoryThreadPayload(
+        decodeURIComponent(codexHistoryThreadMatch[1]!),
+        requestUrl
+      )
+    );
     return true;
   }
-  const codexHistoryTurnMatch = /^\/v1\/codex-history\/([^/]+)\/turns$/.exec(requestUrl.pathname);
+  const codexHistoryTurnMatch = /^\/v1\/codex-history\/([^/]+)\/turns$/.exec(
+    requestUrl.pathname
+  );
   if (request.method === "POST" && codexHistoryTurnMatch) {
     sendJson(
       response,
       202,
-      await sendCodexHistoryTurnPayload(decodeURIComponent(codexHistoryTurnMatch[1]!), await readJson(request)),
+      await sendCodexHistoryTurnPayload(
+        decodeURIComponent(codexHistoryTurnMatch[1]!),
+        await readJson(request)
+      )
     );
     return true;
   }
-  const codexHistoryTurnInterruptMatch = /^\/v1\/codex-history\/([^/]+)\/turns\/interrupt$/.exec(requestUrl.pathname);
+  const codexHistoryTurnInterruptMatch =
+    /^\/v1\/codex-history\/([^/]+)\/turns\/interrupt$/.exec(
+      requestUrl.pathname
+    );
   if (request.method === "POST" && codexHistoryTurnInterruptMatch) {
     sendJson(
       response,
       202,
-      await interruptCodexHistoryTurnPayload(decodeURIComponent(codexHistoryTurnInterruptMatch[1]!)),
+      await interruptCodexHistoryTurnPayload(
+        decodeURIComponent(codexHistoryTurnInterruptMatch[1]!)
+      )
     );
     return true;
   }
-  const appTemplateConfigMatch = /^\/v1\/openpond\/apps\/([^/]+)\/template-config$/.exec(
-    requestUrl.pathname,
-  );
+  const appTemplateConfigMatch =
+    /^\/v1\/openpond\/apps\/([^/]+)\/template-config$/.exec(
+      requestUrl.pathname
+    );
   if (request.method === "GET" && appTemplateConfigMatch) {
     sendJson(
       response,
       200,
-      await workspaceTemplateConfigPayload(decodeURIComponent(appTemplateConfigMatch[1]!)),
+      await workspaceTemplateConfigPayload(
+        decodeURIComponent(appTemplateConfigMatch[1]!)
+      )
     );
     return true;
   }

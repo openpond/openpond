@@ -75,7 +75,19 @@ export function trainingRunMethodLabel(taskset: Taskset, plan: TrainingPlan | nu
   ) {
     return "SFT bootstrap";
   }
-  return method.toUpperCase();
+  return trainingMethodLabel(method);
+}
+
+export function trainingMethodLabel(method: string | null | undefined): string {
+  if (method === "grpo") return "RFT";
+  if (method === "sft") return "SFT";
+  return method?.toUpperCase() ?? "Review";
+}
+
+export function trainingMethodName(method: string | null | undefined): string {
+  if (method === "grpo") return "Reinforcement";
+  if (method === "sft") return "Supervised";
+  return "Training";
 }
 
 export function modelName(value: string, _method: string): string {

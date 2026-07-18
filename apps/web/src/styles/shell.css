@@ -387,9 +387,18 @@
   color: #ff706a;
 }
 
-.app-toast span {
+.app-toast-message {
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.app-toast-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .app-toast button {
@@ -408,6 +417,7 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.app-toast .app-toast-icon-action,
 .app-toast .app-toast-close {
   display: grid;
   place-items: center;

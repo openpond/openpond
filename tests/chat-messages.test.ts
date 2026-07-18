@@ -7,6 +7,7 @@ import { activityGroupSummary, buildChatMessages } from "../apps/web/src/lib/cha
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
 import { subagentChildSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
 import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
   return {
@@ -899,15 +900,12 @@ describe("chat message projection", () => {
     expect(html).toContain('src="./connected-apps/github.svg"');
   });
 
-  test("projects create pipeline turn metadata into a review message", () => {
+  test("projects Create/Improve turn metadata into a review message", () => {
     const now = "2026-05-16T00:00:00.000Z";
-    const createPipelineRequest = {
-      schemaVersion: "openpond.createPipeline.request.v1",
-      id: "create_request_1",
-      operation: "create",
-      surface: "direct_prompt_create",
-      command: "/create",
+    const createImproveRun = createImproveRunFixture({
+      id: "create_improve_1",
       objective: "Create a release notes agent",
+      state: "awaiting_plan_approval",
       adapter: {
         kind: "hosted",
         sourceAuthority: "hosted_profile",
@@ -919,50 +917,31 @@ describe("chat message projection", () => {
         workItemId: null,
         confirmationPolicy: "always_require_plan_approval",
       },
-      actor: { id: "sam", kind: "user", label: "Sam" },
       scope: {
+        profileId: "default",
         conversationId: "session_1",
+        originTurnId: "turn_1",
         workItemId: null,
         projectId: "profile_project_1",
         targetProject: null,
       },
-      context: {
-        messageIds: [],
-        conversationExcerpts: [],
-        attachments: [],
-        apps: [],
-        tools: [],
-        targetRepoAssumptions: [],
-      },
-      targetAgent: {
-        agentId: null,
-        displayName: null,
-        defaultActionKey: "chat",
+      target: {
+        kind: "agent",
+        id: "release-notes-agent",
+        displayName: "Release Notes Agent",
+        defaultActionKey: "release-notes-agent.chat",
       },
       metadata: { source: "web_composer_slash" },
       createdAt: now,
-    };
-    const createPipeline = {
-      schemaVersion: "openpond.createPipeline.snapshot.v1",
-      id: "create_pipeline_1",
-      goalId: "create_request_1",
-      state: "awaiting_plan_approval",
-      request: createPipelineRequest,
-      plan: null,
-      workflowCapture: null,
-      approvalIds: [],
-      checkRefs: [],
-      sourceRefs: [],
-      localGoalId: null,
-      localProfileCommit: null,
-      hostedGoalId: null,
-      hostedSourceCommit: null,
-      hostedSourceRef: null,
-      blockedReason: null,
-      metadata: {},
-      createdAt: now,
       updatedAt: now,
-    };
+    });
+    const applyingRun = createImproveRunFixture({
+      ...createImproveRun,
+      revision: 1,
+      state: "applying_source",
+      appliedActionIds: ["approve_create_improve_1"],
+      updatedAt: now,
+    });
 
     const messages = buildChatMessages([
       runtimeEvent({
@@ -972,22 +951,16 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         args: {
           prompt: "/create release notes agent",
-          createPipelineRequest,
-          createPipeline,
+          createImproveRun,
         },
       }),
       runtimeEvent({
-        id: "create_pipeline_approved",
-        name: "create_pipeline.updated",
+        id: "create_improve_approved",
+        name: "create_improve.updated",
         sessionId: "session_1",
         turnId: "turn_1",
         data: {
-          createPipelineRequest,
-          createPipeline: {
-            ...createPipeline,
-            state: "applying_source",
-            updatedAt: now,
-          },
+          createImproveRun: applyingRun,
         },
       }),
       runtimeEvent({
@@ -1033,8 +1006,8 @@ describe("chat message projection", () => {
     ]);
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant", "activity_group"]);
-    expect(messages[1]?.createPipelineRequest?.objective).toBe("Create a release notes agent");
-    expect(messages[1]?.createPipeline?.state).toBe("applying_source");
+    expect(messages[1]?.createImproveRun?.objective).toBe("Create a release notes agent");
+    expect(messages[1]?.createImproveRun?.state).toBe("applying_source");
     expect(messages[1]?.content).toBeUndefined();
     expect(messages[1]?.actionRun).toBeUndefined();
     expect(messages[2]?.content).toBe("I will inspect the existing profile and create files now.");
@@ -1314,7 +1287,7 @@ describe("chat message projection", () => {
         id: "create_started",
         name: "tool.started",
         turnId: "turn_1",
-        action: "openpond_create_pipeline",
+        action: "openpond_create_improve",
         status: "started",
         args: { objective: "Create a support triage agent." },
       }),
@@ -1322,7 +1295,7 @@ describe("chat message projection", () => {
         id: "create_completed",
         name: "tool.completed",
         turnId: "turn_1",
-        action: "openpond_create_pipeline",
+        action: "openpond_create_improve",
         status: "completed",
         output: JSON.stringify({ ok: true, output: "Create Pipeline plan is ready for review." }),
         data: {

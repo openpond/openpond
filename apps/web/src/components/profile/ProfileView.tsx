@@ -6,7 +6,7 @@ import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
 import { ProfileSettingsSection } from "../settings/ProfileSettingsSection";
 
-export type ProfileViewSection = "profile" | "agents" | "all";
+export type ProfileViewSection = "profile" | "agents" | "controls" | "all";
 
 export type ProfileViewProps = {
   section?: ProfileViewSection;
