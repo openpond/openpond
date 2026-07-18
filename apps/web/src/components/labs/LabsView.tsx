@@ -9,6 +9,7 @@ import {
   Plus,
 } from "../icons";
 import "../../styles/labs/labs.css";
+import "../../styles/labs/labs-detail.css";
 
 export type LabPrimaryTab = "workproducts" | "datasets" | "suggestions";
 

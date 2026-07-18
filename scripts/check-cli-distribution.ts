@@ -138,7 +138,10 @@ async function checkInstalledEntrypoints(input: {
   }
 
   const tuiHome = await tempDir("openpond-cli-tui-home-");
-  const tui = await command(installedBinPath(globalBinRoot, "openpond"), ["tui"], {
+  const tui = await command(
+    installedBinPath(globalBinRoot, "openpond"),
+    ["tui", "--server", "http://127.0.0.1:0"],
+    {
     cwd: await tempDir("openpond-cli-tui-cwd-"),
     env: {
       HOME: tuiHome,
@@ -147,7 +150,8 @@ async function checkInstalledEntrypoints(input: {
     },
     stdin: "/exit\n",
     timeoutMs: 30_000,
-  });
+    },
+  );
   if (!tui.stdout.includes("OpenPond")) {
     throw new Error(`installed TUI did not render its heading: ${tui.stderr || tui.stdout}`);
   }

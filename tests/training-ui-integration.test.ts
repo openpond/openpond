@@ -79,12 +79,18 @@ describe("Training UI", () => {
   });
 
   test("opens the existing workspace Files sidebar at the selected Taskset folder", async () => {
-    const [app, pane, workspace, diffPanel] = await Promise.all([
-      readFile("apps/web/src/App.tsx", "utf8"),
+    const [appModules, pane, workspace, diffPanel] = await Promise.all([
+      Promise.all([
+        readFile("apps/web/src/App.tsx", "utf8"),
+        readFile("apps/web/src/app/useAppPrimaryRuntime.ts", "utf8"),
+        readFile("apps/web/src/app/useAppSecondaryRuntime.ts", "utf8"),
+        readFile("apps/web/src/app/AppRuntimeView.tsx", "utf8"),
+      ]),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
       readFile("apps/web/src/hooks/useWorkspaceController.ts", "utf8"),
       readFile("apps/web/src/components/workspace-diff/WorkspaceDiffPanel.tsx", "utf8"),
     ]);
+    const app = appModules.join("\n");
     expect(app).toContain('view === "labs"');
     expect(app).toContain('if (view === "labs")');
     expect(app).toContain('tab: "summary"');

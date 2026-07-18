@@ -106,12 +106,16 @@ describe("training model chat handoff", () => {
     expect(html).toContain("Load question");
     expect(html).toContain('aria-label="Next generated question"');
 
-    const [app, chatActions, handoffHook, submitHook] = await Promise.all([
-      readFile("apps/web/src/App.tsx", "utf8"),
+    const [appModules, chatActions, handoffHook, submitHook] = await Promise.all([
+      Promise.all([
+        readFile("apps/web/src/app/useAppPrimaryRuntime.ts", "utf8"),
+        readFile("apps/web/src/app/useAppSecondaryRuntime.ts", "utf8"),
+      ]),
       readFile("apps/web/src/hooks/useChatActions.ts", "utf8"),
       readFile("apps/web/src/hooks/useTrainingModelChatHandoff.ts", "utf8"),
       readFile("apps/web/src/hooks/useMainComposerSubmit.ts", "utf8"),
     ]);
+    const app = appModules.join("\n");
     expect(app).toContain("prepareTrainingTurn: prepareTrainingModelChatTurn");
     expect(app).toContain("selectLocalProjectForTrainingChat");
     expect(handoffHook).toContain("selectLocalProject(next.sourceProjectId)");

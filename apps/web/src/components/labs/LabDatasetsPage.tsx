@@ -5,7 +5,10 @@ import type {
   TrainingStateResponse,
 } from "@openpond/contracts";
 
+import type { ShowAppToast } from "../../app/app-state";
+import type { useTraining } from "../../hooks/useTraining";
 import { ArrowLeft, Search } from "../icons";
+import { LabExpertBootstrap } from "./LabExpertBootstrap";
 import { LabModelDataset } from "./LabModelDataset";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { labModelDatasets } from "./lab-models";
@@ -20,6 +23,8 @@ export function LabDatasetsPage({
   onSelectedIdChange,
   onCreate,
   onOpenFiles,
+  training,
+  onToast,
 }: {
   state: TrainingStateResponse | null;
   runs: CreateImproveRun[];
@@ -27,6 +32,8 @@ export function LabDatasetsPage({
   onSelectedIdChange: (tasksetId: string | null) => void;
   onCreate: () => void;
   onOpenFiles: (tasksetId: string) => void;
+  training: ReturnType<typeof useTraining>;
+  onToast: ShowAppToast;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -81,6 +88,17 @@ export function LabDatasetsPage({
           taskset={selected}
           onOpenFiles={() => onOpenFiles(selected.id)}
         />
+        {selected.metadata.flagship === "cross-system-operations" ? (
+          <LabExpertBootstrap
+            busyAction={training.busyAction}
+            taskset={selected}
+            onApprove={(previewHash) =>
+              training.actions.approveExpertBootstrap(selected.id, previewHash)
+            }
+            onPreview={() => training.actions.previewExpertBootstrap(selected.id)}
+            onToast={onToast}
+          />
+        ) : null}
       </div>
     );
   }

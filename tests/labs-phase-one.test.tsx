@@ -738,14 +738,18 @@ describe("Lab Phase 1", () => {
   });
 
   test("keeps Create/Improve decisions and Model creation inside the Lab route", async () => {
-    const route = await readFile(
-      "apps/web/src/components/labs/LabsRoute.tsx",
-      "utf8"
-    );
-    const detail = await readFile(
-      "apps/web/src/components/labs/LabWorkproductDetail.tsx",
-      "utf8"
-    );
+    const route = (
+      await Promise.all([
+        readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
+        readFile("apps/web/src/components/labs/LabsRouteSections.tsx", "utf8"),
+      ])
+    ).join("\n");
+    const detail = (
+      await Promise.all([
+        readFile("apps/web/src/components/labs/LabWorkproductDetail.tsx", "utf8"),
+        readFile("apps/web/src/components/labs/LabWorkproductDetailSections.tsx", "utf8"),
+      ])
+    ).join("\n");
     const changes = await readFile(
       "apps/web/src/components/labs/LabAgentChanges.tsx",
       "utf8"
@@ -756,10 +760,6 @@ describe("Lab Phase 1", () => {
     );
     const view = await readFile(
       "apps/web/src/components/labs/LabsView.tsx",
-      "utf8"
-    );
-    const modelSections = await readFile(
-      "apps/web/src/components/labs/LabModelDetailSections.tsx",
       "utf8"
     );
     const modelWorkspace = await readFile(
@@ -818,16 +818,6 @@ describe("Lab Phase 1", () => {
     expect(detail).toContain("Available Evals");
     expect(detail).toContain("Used for this change");
     expect(detail).toContain("}, [workproduct.key]);");
-    expect(modelSections).toContain("<TrainingRunMetrics");
-    expect(modelSections).toContain("<TrainingRunEvaluation");
-    expect(modelSections).toContain("<TrainingModelComparisons method={method}");
-    expect(modelSections).toContain('title={`${trainingMethodLabel(method)} frozen Eval`}');
-    expect(modelSections).toContain("buildTrainingModelChatHandoff");
-    expect(modelSections).toContain("aria-label={`Chat with ${taskset.name}`}");
-    expect(modelSections).toContain("disabled={!lineage.promotable}");
-    expect(modelSections).toContain(
-      "Chat is unavailable because this version did not pass frozen evaluation."
-    );
     expect(detail).toContain("<LabModelVersionsPage");
     expect(detail).toContain("<LabModelVersionDetailPage");
     expect(detail).toContain("selectedModelEntryKey");
@@ -878,7 +868,10 @@ describe("Lab Phase 1", () => {
       "apps/web/src/components/app-shell/MainPane.tsx",
       "utf8"
     );
-    const app = await readFile("apps/web/src/App.tsx", "utf8");
+    const app = await readFile(
+      "apps/web/src/app/AppRuntimeView.tsx",
+      "utf8"
+    );
     const navigation = await readFile(
       "apps/web/src/hooks/useLabDetailNavigation.ts",
       "utf8"

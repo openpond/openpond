@@ -6,6 +6,14 @@ import type { PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store-schema.js";
 import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
+import {
+  createCreateImproveRunTables,
+  createFireworksModelServingSessionTables,
+  createTasksetRevisionTables,
+  createTrainingReceiptAndModelBindingTables,
+  deduplicateFireworksMetricArtifacts,
+} from "./store-continuous-improvement-schema.js";
+import { SQLITE_MIGRATIONS } from "./store-migrations.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
@@ -28,11 +36,6 @@ const SQLITE_OPEN_RETRY_DELAYS_MS = [0, 100, 250, 500] as const;
 
 export type SqliteStoreCoreOptions = {
   logger?: Logger;
-};
-
-type Migration = {
-  version: number;
-  run: (store: SqliteStoreCore) => Promise<void>;
 };
 
 export class SqliteStoreCore {
@@ -475,38 +478,7 @@ export class SqliteStoreCore {
   }
 
   async createCreateImproveRunTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS create_improve_runs (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL,
-        conversation_id TEXT,
-        origin_turn_id TEXT,
-        target_kind TEXT NOT NULL,
-        target_id TEXT,
-        state TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS create_improve_runs_profile_state_updated_idx
-        ON create_improve_runs(profile_id, state, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS create_improve_runs_conversation_updated_idx
-        ON create_improve_runs(conversation_id, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS create_improve_runs_target_updated_idx
-        ON create_improve_runs(profile_id, target_kind, target_id, updated_at DESC);
-      CREATE TABLE IF NOT EXISTS create_improve_run_actions (
-        action_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        expected_revision INTEGER NOT NULL,
-        resulting_revision INTEGER NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY(run_id) REFERENCES create_improve_runs(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS create_improve_run_actions_run_revision_idx
-        ON create_improve_run_actions(run_id, resulting_revision);
-    `);
+    await createCreateImproveRunTables((sql) => this.exec(sql));
   }
 
   async createTrainingTables(): Promise<void> {
@@ -554,103 +526,19 @@ export class SqliteStoreCore {
   }
 
   async createTasksetRevisionTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS taskset_revisions (
-        taskset_id TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        content_hash TEXT NOT NULL,
-        profile_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY(taskset_id, revision)
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS taskset_revisions_hash_idx
-        ON taskset_revisions(taskset_id, content_hash);
-    `);
+    await createTasksetRevisionTables((sql) => this.exec(sql));
   }
 
   async createTrainingReceiptAndModelBindingTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS training_rollout_receipts (
-        id TEXT PRIMARY KEY,
-        job_id TEXT NOT NULL,
-        taskset_id TEXT NOT NULL,
-        provider_rollout_id TEXT NOT NULL UNIQUE,
-        status TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS training_rollout_receipts_job_updated_idx
-        ON training_rollout_receipts(job_id, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS training_rollout_receipts_taskset_updated_idx
-        ON training_rollout_receipts(taskset_id, updated_at DESC);
-      CREATE TABLE IF NOT EXISTS model_bindings (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL,
-        role TEXT NOT NULL,
-        role_target_id TEXT NOT NULL,
-        model_artifact_lineage_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS model_bindings_active_role_idx
-        ON model_bindings(profile_id, role, role_target_id)
-        WHERE status = 'active';
-      CREATE INDEX IF NOT EXISTS model_bindings_model_idx
-        ON model_bindings(model_artifact_lineage_id, updated_at DESC);
-    `);
+    await createTrainingReceiptAndModelBindingTables((sql) => this.exec(sql));
   }
 
   async createFireworksModelServingSessionTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS fireworks_model_serving_sessions (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL,
-        model_artifact_lineage_id TEXT NOT NULL,
-        state TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS fireworks_serving_profile_state_updated_idx
-        ON fireworks_model_serving_sessions(profile_id, state, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS fireworks_serving_model_updated_idx
-        ON fireworks_model_serving_sessions(model_artifact_lineage_id, updated_at DESC);
-    `);
+    await createFireworksModelServingSessionTables((sql) => this.exec(sql));
   }
 
   async deduplicateFireworksMetricArtifacts(): Promise<void> {
-    await this.exec(`
-      DELETE FROM training_artifacts AS older
-      WHERE older.kind = 'metrics'
-        AND json_extract(older.payload, '$.metadata.provider') = 'fireworks'
-        AND EXISTS (
-          SELECT 1
-          FROM training_artifacts AS newer
-          WHERE newer.kind = 'metrics'
-            AND newer.job_id = older.job_id
-            AND json_extract(newer.payload, '$.metadata.provider') = 'fireworks'
-            AND COALESCE(
-              json_extract(newer.payload, '$.metadata.metricSource'),
-              ''
-            ) = COALESCE(
-              json_extract(older.payload, '$.metadata.metricSource'),
-              ''
-            )
-            AND (
-              newer.created_at > older.created_at
-              OR (
-                newer.created_at = older.created_at
-                AND newer.id > older.id
-              )
-            )
-        );
-    `);
+    await deduplicateFireworksMetricArtifacts((sql) => this.exec(sql));
   }
 
   async createTaskCreationProjectionTables(): Promise<void> {
@@ -1028,98 +916,3 @@ export class SqliteStoreCore {
     return this.db;
   }
 }
-
-const SQLITE_MIGRATIONS: Migration[] = [
-  {
-    version: 1,
-    run: (store) => store.createSchema(),
-  },
-  {
-    version: 2,
-    run: (store) => store.createHotQueryIndexes(),
-  },
-  {
-    version: 3,
-    run: (store) => store.createReadModelTables(),
-  },
-  {
-    version: 4,
-    run: (store) => store.createInsightTables(),
-  },
-  {
-    version: 5,
-    run: (store) => store.createInsightRunLinkColumns(),
-  },
-  {
-    version: 6,
-    run: (store) => store.createInsightRunLinkColumns(),
-  },
-  {
-    version: 7,
-    run: (store) => store.createModelUsageTables(),
-  },
-  {
-    version: 8,
-    run: (store) => store.createLocalAgentScheduleTables(),
-  },
-  {
-    version: 9,
-    run: (store) => store.createSubagentTables(),
-  },
-  {
-    version: 10,
-    run: (store) => store.createOpenPondThreadGoalTable(),
-  },
-  {
-    version: 11,
-    run: (store) => store.createTrainingTables(),
-  },
-  {
-    version: 12,
-    run: (store) => store.createTaskCreationProjectionTables(),
-  },
-  {
-    version: 13,
-    run: (store) => store.createGraderAuditTables(),
-  },
-  {
-    version: 14,
-    run: (store) => store.createTaskAttemptArtifactTables(),
-  },
-  {
-    version: 15,
-    run: (store) => store.createTrainingChatSearchTables(),
-  },
-  {
-    version: 16,
-    run: (store) => store.resetTrainingChatSearchForProgressiveIndexing(),
-  },
-  {
-    version: 17,
-    run: (store) => store.createTaskMinerRunTables(),
-  },
-  {
-    version: 18,
-    run: (store) => store.createCrossSystemFrontierBaselineRunTables(),
-  },
-  {
-    version: 19,
-    run: (store) => store.createCreateImproveRunTables(),
-  },
-  {
-    version: 20,
-    run: (store) => store.createTrainingReceiptAndModelBindingTables(),
-  },
-  {
-    version: 21,
-    run: (store) => store.createTasksetRevisionTables(),
-  },
-  {
-    version: 22,
-    run: (store) => store.createFireworksModelServingSessionTables(),
-  },
-  {
-    version: 23,
-    run: (store) => store.deduplicateFireworksMetricArtifacts(),
-  },
-];

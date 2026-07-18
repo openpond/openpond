@@ -29,6 +29,9 @@ importers:
       '@openpond/runtime':
         specifier: workspace:*
         version: link:packages/runtime
+      '@openpond/taskset-sdk':
+        specifier: workspace:*
+        version: link:packages/taskset-sdk
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
