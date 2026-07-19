@@ -52,4 +52,28 @@ describe("shared surface stylesheet ownership", () => {
     expect(featureCss).not.toContain(".team-sidebar-row");
     expect(featureCss).not.toContain(".team-sidebar-avatar");
   });
+
+  test("loads shared table and dialog styles with the Lab surface", async () => {
+    const [component, dialog, sharedCss] = await Promise.all([
+      source("apps/web/src/components/labs/LabsView.tsx"),
+      source("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx"),
+      source("apps/web/src/styles/training/training.css"),
+    ]);
+
+    expect(component).toContain('import "../../styles/training/training.css"');
+    expect(
+      component.indexOf('import "../../styles/training/training.css"'),
+    ).toBeLessThan(component.indexOf('import "../../styles/labs/labs.css"'));
+    expect(sharedCss).toContain(".training-table-wrap");
+    expect(sharedCss).toContain(".training-data-table");
+    expect(sharedCss).toContain(".training-dialog-backdrop");
+    expect(sharedCss).toContain(".training-dialog");
+    expect(dialog.match(/className="training-icon-button"/g)).toHaveLength(2);
+    expect(sharedCss).toContain(".training-icon-button");
+    expect(sharedCss).toContain(".training-run-dialog .training-start-mode-options");
+    expect(sharedCss).toContain(".training-base-model-options");
+    expect(sharedCss).not.toContain(".training-base-model-card");
+    expect(sharedCss).toContain(".training-run-dialog.training-run-workflow-step");
+    expect(sharedCss).toContain("height:auto");
+  });
 });

@@ -64,15 +64,18 @@ export function TrainingStartModeStep({
               onClick={() => onChange(option.id)}
               onDoubleClick={onContinue}
             >
-              <Icon size={17} />
-              <strong>{option.title}</strong>
+              <span className="training-start-mode-icon" aria-hidden="true">
+                <Icon size={18} />
+              </span>
+              <span className="training-start-mode-copy">
+                <strong>{option.title}</strong>
+                <small>{option.description}</small>
+              </span>
+              <span className="training-choice-indicator" aria-hidden="true" />
             </button>
           );
         })}
       </div>
-      <p className="training-start-mode-description">
-        {mode ? options.find((option) => option.id === mode)?.description : `Choose how to define this ${targetLabel}.`}
-      </p>
       <div className="training-dialog-actions">
         <button className="training-button" type="button" disabled={!mode} onClick={onContinue}>Continue</button>
       </div>
