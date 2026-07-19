@@ -49,6 +49,7 @@ export function TrainingDatasetStep({
                   <small>{taskset.objective}</small>
                 </span>
                 <DatasetSplitSummary taskset={taskset} />
+                <span className="training-choice-indicator" aria-hidden="true" />
               </button>
             );
           })}

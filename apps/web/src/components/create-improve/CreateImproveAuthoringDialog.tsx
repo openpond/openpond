@@ -595,7 +595,16 @@ export function CreateImproveAuthoringDialog({
       >
         <div className="training-dialog-header">
           <div className="training-run-dialog-title">
-            {step !== "start" ? <button data-autofocus type="button" aria-label={backLabel(step)} onClick={goBack}><ArrowLeft size={16} /></button> : null}
+            {step !== "start" ? (
+              <button
+                data-autofocus
+                type="button"
+                aria-label={backLabel(step, usesBaseModelStep, mode)}
+                onClick={goBack}
+              >
+                <ArrowLeft size={16} />
+              </button>
+            ) : null}
             <h2>{step === "recommendation" ? reviewTitle(targetIntent, resourceIntent) : dialogTitle(targetIntent, resourceIntent)}</h2>
           </div>
           <button type="button" aria-label="Close" onClick={() => void closeDialog()}><X size={16} /></button>
@@ -807,12 +816,19 @@ function aggregateEstimate(sessionIds: string[], estimates: Record<string, { mes
   return { messageCount, estimatedTokens, measuredChats };
 }
 
-function backLabel(step: NewModelStep): string {
+function backLabel(
+  step: NewModelStep,
+  usesBaseModelStep: boolean,
+  mode: NewModelMode | null,
+): string {
   if (step === "base_model") return "Back to setup";
   if (step === "existing_dataset") return "Back to base model";
-  if (step === "automatic_scope") return "Back to start mode";
+  if (step === "automatic_scope") return usesBaseModelStep ? "Back to base model" : "Back to setup";
   if (step === "automatic_candidates") return "Back to scan scope";
-  if (step === "evidence") return "Back to start mode";
+  if (step === "evidence") {
+    if (mode === "automated") return "Back to repeated workflows";
+    return usesBaseModelStep ? "Back to base model" : "Back to setup";
+  }
   return "Back to Dataset";
 }
 

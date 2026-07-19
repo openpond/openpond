@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TaskCreationSnapshotSchema, TaskMinerRunSchema } from "../packages/contracts/src";
 import { TrainingAutomaticScopeStep } from "../apps/web/src/components/training/TrainingAutomaticScopeStep";
+import { TrainingBaseModelStep } from "../apps/web/src/components/training/TrainingBaseModelStep";
 import { CreateImproveAuthoringDialog } from "../apps/web/src/components/create-improve/CreateImproveAuthoringDialog";
 import { shouldRevealMinerCandidates } from "../apps/web/src/components/training/training-flow";
 import { TrainingDatasetStep } from "../apps/web/src/components/training/TrainingDatasetStep";
@@ -32,6 +33,31 @@ describe("New model flow", () => {
     );
     expect(html).toContain("Existing Dataset");
     expect(html).toContain("without changing its tasks, graders, or held-out Evals");
+    expect(html).toContain("training-start-mode-copy");
+    expect(html).toContain("training-choice-indicator");
+  });
+
+  test("presents base models as choices instead of a form dropdown", () => {
+    const html = renderToStaticMarkup(
+      <TrainingBaseModelStep
+        modelIds={[
+          "accounts/fireworks/models/qwen3-0p6b",
+          "accounts/fireworks/models/qwen3-8b",
+        ]}
+        value="accounts/fireworks/models/qwen3-8b"
+        onChange={() => undefined}
+        onContinue={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('aria-label="Available base models"');
+    expect(html).toContain("Qwen3 0.6B");
+    expect(html).toContain("Qwen3 8B");
+    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain("Fireworks");
+    expect(html).toContain("LoRA");
+    expect(html).not.toContain("<select");
   });
 
   test("reuses any ready Dataset even when it predates the dedicated Dataset intent", () => {

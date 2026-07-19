@@ -1,3 +1,5 @@
+import { Boxes } from "../icons";
+
 export function TrainingBaseModelStep({
   modelIds,
   value,
@@ -15,27 +17,42 @@ export function TrainingBaseModelStep({
         <h3>Choose a base model</h3>
         <p>Select the intended starting model. OpenPond checks method and provider compatibility again before any paid training launch.</p>
       </div>
-      <div className="training-base-model-card">
-        <label>
-          <span>Base model</span>
-          <select
-            data-autofocus
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-          >
-            {modelIds.map((modelId) => (
-              <option key={modelId} value={modelId}>{baseModelLabel(modelId)}</option>
-            ))}
-          </select>
-        </label>
-        <dl>
-          <div><dt>Provider</dt><dd>Fireworks</dd></div>
-          <div><dt>Parameterization</dt><dd>LoRA</dd></div>
-          <div><dt>Final confirmation</dt><dd>Training page</dd></div>
-        </dl>
+      <div
+        aria-label="Available base models"
+        className="training-base-model-options"
+        role="radiogroup"
+      >
+        {modelIds.map((modelId, index) => {
+          const selected = modelId === value;
+          return (
+            <button
+              key={modelId}
+              aria-checked={selected}
+              className={selected ? "selected" : undefined}
+              data-autofocus={selected || (!value && index === 0) ? true : undefined}
+              role="radio"
+              type="button"
+              onClick={() => onChange(modelId)}
+              onDoubleClick={onContinue}
+            >
+              <span className="training-base-model-icon" aria-hidden="true">
+                <Boxes size={18} />
+              </span>
+              <span className="training-base-model-copy">
+                <strong>{baseModelLabel(modelId)}</strong>
+                <small>{modelId}</small>
+              </span>
+              <span className="training-base-model-tags" aria-hidden="true">
+                <small>Fireworks</small>
+                <small>LoRA</small>
+              </span>
+              <span className="training-choice-indicator" aria-hidden="true" />
+            </button>
+          );
+        })}
       </div>
       <p className="training-start-note">
-        This records a preferred base for the Model draft. Individual SFT or RFT runs may override it at the explicit configuration and spend gate.
+        You can change the base model for an individual version before launch. Paid training still requires confirmation.
       </p>
       <div className="training-dialog-actions">
         <button className="training-button" type="button" disabled={!value} onClick={onContinue}>Continue</button>

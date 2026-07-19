@@ -67,5 +67,10 @@ describe("shared surface stylesheet ownership", () => {
     expect(sharedCss).toContain(".training-data-table");
     expect(sharedCss).toContain(".training-dialog-backdrop");
     expect(sharedCss).toContain(".training-dialog");
+    expect(sharedCss).toContain(".training-run-dialog-title>button");
+    expect(sharedCss).toContain(".training-run-dialog .training-start-mode-options");
+    expect(sharedCss).toContain(".training-base-model-options");
+    expect(sharedCss).toContain(".training-run-dialog.training-run-workflow-step");
+    expect(sharedCss).toContain("height:auto");
   });
 });
