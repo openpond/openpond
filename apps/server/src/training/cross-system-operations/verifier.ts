@@ -18,7 +18,7 @@ export function verifyCrossSystemTrajectory(input: {
   const schemaViolation = trajectory.steps.some((step) => step.kind === "tool_result" && !step.ok && /schema|cursor|unknown tool/i.test(step.error ?? ""));
   const final = [...trajectory.steps].reverse().find((step) => step.kind === "final");
   const parsed = final ? parseAnswer(final.content) : { ok: false as const, value: null, error: "Trajectory has no final ANSWER envelope." };
-  const exact = parsed.ok && deepEqual(normalizeAnswer(parsed.value), normalizeAnswer(input.task.expectedAnswer));
+  const exact = parsed.ok && crossSystemAnswersEqual(parsed.value, input.task.expectedAnswer);
   let outcome: CrossSystemVerifierResult["outcome"];
   if (infrastructure) outcome = "infrastructure_failure";
   else if (trajectory.status === "cancelled") outcome = "cancelled";
@@ -49,6 +49,10 @@ export function parseCrossSystemAnswer(content: string): unknown {
   const parsed = parseAnswer(content);
   if (!parsed.ok) throw new Error(parsed.error);
   return parsed.value;
+}
+
+export function crossSystemAnswersEqual(left: unknown, right: unknown): boolean {
+  return deepEqual(normalizeAnswer(left), normalizeAnswer(right));
 }
 
 function parseAnswer(content: string): { ok: true; value: unknown } | { ok: false; value: null; error: string } {

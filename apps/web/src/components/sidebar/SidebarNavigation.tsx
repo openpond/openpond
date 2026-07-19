@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { OpenPondApp } from "@openpond/contracts";
 import { BookOpenText, Duck, Plug, SquarePen } from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
-import type { AppView, LabsTab } from "../../lib/app-models";
+import type { AppView } from "../../lib/app-models";
 
 export function SidebarNavigation({
   beginNewChat,
@@ -10,7 +10,6 @@ export function SidebarNavigation({
   setSelectedAppId,
   setSelectedProjectId,
   setSelectedSessionId,
-  setLabsTab,
   setView,
   view,
 }: {
@@ -19,7 +18,6 @@ export function SidebarNavigation({
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
-  setLabsTab: Dispatch<SetStateAction<LabsTab>>;
   setView: Dispatch<SetStateAction<AppView>>;
   view: AppView;
 }) {
@@ -52,7 +50,6 @@ export function SidebarNavigation({
         aria-label="Lab"
         onClick={() => {
           clearWorkspaceSelection();
-          setLabsTab("profile");
           setView("labs");
         }}
       >

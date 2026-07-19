@@ -9,7 +9,7 @@ import { TrainingTasksetDetail } from "./TrainingTasksetDetail";
 import { TrainingModels } from "./TrainingModels";
 import { TrainingSuggestions } from "./TrainingSuggestions";
 import { TrainingCreationPanel } from "./TrainingCreationPanel";
-import { TrainingRunDialog } from "./TrainingRunDialog";
+import { CreateImproveAuthoringDialog } from "../create-improve/CreateImproveAuthoringDialog";
 import { TrainingSettingsDialog } from "./TrainingSettingsDialog";
 import "../../styles/training/training.css";
 
@@ -94,6 +94,14 @@ export function TrainingView({
     if (launchRequest) onLaunchHandled(launchRequest.id);
   }
 
+  function finishExistingDatasetModel(taskset: Taskset) {
+    setRunDialogOpen(false);
+    onSelectedTasksetIdChange(taskset.id);
+    onDetailTasksetIdChange(taskset.id);
+    onSectionChange?.("models");
+    if (launchRequest) onLaunchHandled(launchRequest.id);
+  }
+
   return (
     <section className="training-view" aria-label={trainingSectionLabel(section)}>
       <div className="training-header actions-only">
@@ -142,11 +150,12 @@ export function TrainingView({
       ) : null}
 
       {runDialogOpen && state ? (
-        <TrainingRunDialog
+        <CreateImproveAuthoringDialog
           defaultModel={defaultModel}
           initialObjective={launchRequest?.objective ?? null}
           initialSessionIds={launchRequest?.initialSessionIds ?? []}
           onClose={closeRunDialog}
+          onModelCreatedFromTaskset={finishExistingDatasetModel}
           onTasksetCreated={finishTasksetCreation}
           preferences={preferences}
           providerSettings={providerSettings}

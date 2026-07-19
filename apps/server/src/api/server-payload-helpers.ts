@@ -3,16 +3,14 @@ import {
   CloudWorkItemMessageSchema,
   CloudWorkItemRuntimeSessionSchema,
   CloudWorkItemSchema,
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
+  CreateImproveRunSchema,
   type CloudProject,
   type CloudProjectSourceType,
   type CloudWorkItem,
   type CloudWorkItemActivity,
   type CloudWorkItemMessage,
   type CloudWorkItemRuntimeSession,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  type CreateImproveRun,
   type LocalProject,
   type ProjectAgentSdk,
   type ProjectAgentSdkDependencyType,
@@ -22,7 +20,7 @@ import {
   type WorkspaceState,
 } from "@openpond/contracts";
 import type { CodexAppServerClient } from "@openpond/codex-provider";
-import { assertCreatePipelineMutationApproved } from "../create-pipeline-guards.js";
+import { assertCreateImproveMutationApproved } from "../create-pipeline-guards.js";
 import { organizationRequestPayload } from "../openpond/organizations.js";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
 import {
@@ -110,14 +108,13 @@ export function countPatchFiles(patchText: string): number {
   return paths.size;
 }
 
-export function assertCreatePipelineBackgroundApproved(input: {
-  request?: CreatePipelineRequest | null;
-  snapshot?: CreatePipelineSnapshot | null;
+export function assertCreateImproveBackgroundApproved(input: {
+  run?: CreateImproveRun | null;
 }): void {
-  assertCreatePipelineMutationApproved({
-    actionLabel: "Create pipeline background work",
-    request: input.request,
-    snapshot: input.snapshot,
+  if (!input.run) return;
+  assertCreateImproveMutationApproved({
+    actionLabel: "Create/Improve background work",
+    run: input.run,
   });
 }
 
@@ -623,24 +620,15 @@ export function cloudWorkItemTeamInput(payload: unknown): { teamId: string } {
   return { teamId };
 }
 
-export function parseCreatePipelineRequest(value: unknown): CreatePipelineRequest | null {
-  const parsed = CreatePipelineRequestSchema.safeParse(value);
+export function parseCreateImproveRun(value: unknown): CreateImproveRun | null {
+  const parsed = CreateImproveRunSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
-export function parseCreatePipelineSnapshot(value: unknown): CreatePipelineSnapshot | null {
-  const parsed = CreatePipelineSnapshotSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
-
-export function createPipelineMetadata(input: {
-  request?: CreatePipelineRequest | null;
-  snapshot?: CreatePipelineSnapshot | null;
-}): Record<string, unknown> {
-  return {
-    ...(input.request ? { createPipelineRequest: input.request } : {}),
-    ...(input.snapshot ? { createPipeline: input.snapshot } : {}),
-  };
+export function createImproveMetadata(
+  run: CreateImproveRun | null | undefined,
+): Record<string, unknown> {
+  return run ? { createImproveRun: run } : {};
 }
 
 export function usageAttributionMetadata(
@@ -649,63 +637,43 @@ export function usageAttributionMetadata(
   return usageAttribution ? { usageAttribution } : {};
 }
 
-export function linkCreatePipelineToWorkItem(input: {
+export function linkCreateImproveRunToWorkItem(input: {
   workItem: CloudWorkItem;
-  request: CreatePipelineRequest | null;
-  snapshot: CreatePipelineSnapshot | null;
-}): {
-  request: CreatePipelineRequest | null;
-  snapshot: CreatePipelineSnapshot | null;
-} {
-  const requestSource = input.snapshot?.request ?? input.request;
-  const request = requestSource
-    ? CreatePipelineRequestSchema.parse({
-        ...requestSource,
+  run: CreateImproveRun | null;
+}): CreateImproveRun | null {
+  return input.run
+    ? CreateImproveRunSchema.parse({
+        ...input.run,
         adapter:
-          requestSource.adapter.kind === "hosted"
+          input.run.adapter.kind === "hosted"
             ? {
-                ...requestSource.adapter,
+                ...input.run.adapter,
                 projectId: input.workItem.projectId,
                 workItemId: input.workItem.id,
               }
-            : requestSource.adapter,
+            : input.run.adapter,
         scope: {
-          ...requestSource.scope,
-          conversationId: input.workItem.conversationId ?? requestSource.scope.conversationId,
+          ...input.run.scope,
+          conversationId: input.workItem.conversationId ?? input.run.scope.conversationId,
           workItemId: input.workItem.id,
           projectId: input.workItem.projectId,
         },
-        metadata: {
-          ...requestSource.metadata,
-          workItemId: input.workItem.id,
-          conversationId: input.workItem.conversationId,
-          projectId: input.workItem.projectId,
-        },
-      })
-    : null;
-  const snapshot = input.snapshot
-    ? CreatePipelineSnapshotSchema.parse({
-        ...input.snapshot,
-        goalId: input.workItem.id,
-        request: request ?? input.snapshot.request,
-        plan: input.snapshot.plan
+        plan: input.run.plan
           ? {
-              ...input.snapshot.plan,
-              goalId: input.workItem.id,
+              ...input.run.plan,
               metadata: {
-                ...input.snapshot.plan.metadata,
+                ...input.run.plan.metadata,
                 workItemId: input.workItem.id,
                 conversationId: input.workItem.conversationId,
                 projectId: input.workItem.projectId,
               },
             }
           : null,
-        workflowCapture: input.snapshot.workflowCapture
+        workflowCapture: input.run.workflowCapture
           ? {
-              ...input.snapshot.workflowCapture,
-              goalId: input.workItem.id,
+              ...input.run.workflowCapture,
               metadata: {
-                ...input.snapshot.workflowCapture.metadata,
+                ...input.run.workflowCapture.metadata,
                 workItemId: input.workItem.id,
                 conversationId: input.workItem.conversationId,
                 projectId: input.workItem.projectId,
@@ -713,87 +681,44 @@ export function linkCreatePipelineToWorkItem(input: {
             }
           : null,
         metadata: {
-          ...input.snapshot.metadata,
+          ...input.run.metadata,
           workItemId: input.workItem.id,
           conversationId: input.workItem.conversationId,
           projectId: input.workItem.projectId,
         },
       })
     : null;
-  return {
-    request: request ?? snapshot?.request ?? null,
-    snapshot,
-  };
 }
 
-export function extractCreatePipelineSnapshot(record: Record<string, unknown>): CreatePipelineSnapshot | null {
+export function extractCreateImproveRun(record: Record<string, unknown>): CreateImproveRun | null {
   const metadata = asRecord(record.metadata);
   const payload = asRecord(record.payload);
   return (
-    parseCreatePipelineSnapshot(record.createPipeline) ??
-    parseCreatePipelineSnapshot(record.createPipelineSnapshot) ??
-    parseCreatePipelineSnapshot(metadata.createPipeline) ??
-    parseCreatePipelineSnapshot(metadata.createPipelineSnapshot) ??
-    parseCreatePipelineSnapshot(payload.createPipeline) ??
-    parseCreatePipelineSnapshot(payload.createPipelineSnapshot)
+    parseCreateImproveRun(record.createImproveRun) ??
+    parseCreateImproveRun(metadata.createImproveRun) ??
+    parseCreateImproveRun(payload.createImproveRun)
   );
 }
 
-export function extractCreatePipelineRequest(
-  record: Record<string, unknown>,
-  snapshot: CreatePipelineSnapshot | null,
-): CreatePipelineRequest | null {
-  const metadata = asRecord(record.metadata);
-  const payload = asRecord(record.payload);
-  return (
-    parseCreatePipelineRequest(record.createPipelineRequest) ??
-    parseCreatePipelineRequest(metadata.createPipelineRequest) ??
-    parseCreatePipelineRequest(payload.createPipelineRequest) ??
-    parseCreatePipelineRequest(asRecord(record.createPipeline).request) ??
-    parseCreatePipelineRequest(asRecord(metadata.createPipeline).request) ??
-    parseCreatePipelineRequest(asRecord(payload.createPipeline).request) ??
-    snapshot?.request ??
-    null
-  );
-}
-
-export function attachCreatePipelineToWorkItem(
+export function attachCreateImproveRunToWorkItem(
   workItem: CloudWorkItem,
-  request: CreatePipelineRequest | null,
-  snapshot: CreatePipelineSnapshot | null,
+  run: CreateImproveRun | null,
 ): CloudWorkItem {
   return {
     ...workItem,
-    createPipelineRequest: request ?? workItem.createPipelineRequest ?? snapshot?.request ?? null,
-    createPipeline: snapshot ?? workItem.createPipeline ?? null,
+    createImproveRun: run ?? workItem.createImproveRun ?? null,
   };
 }
 
-export function latestCreatePipelineFromTimeline(
+export function latestCreateImproveRunFromTimeline(
   workItem: CloudWorkItem,
   messages: CloudWorkItemMessage[],
   activity: CloudWorkItemActivity[],
-): CreatePipelineSnapshot | null {
-  let latest = workItem.createPipeline ?? null;
+): CreateImproveRun | null {
+  let latest = workItem.createImproveRun ?? null;
   for (const item of [...messages, ...activity]) {
-    const snapshot = parseCreatePipelineSnapshot(asRecord(item.metadata).createPipeline);
-    if (snapshot) latest = snapshot;
-  }
-  return latest;
-}
-
-export function latestCreatePipelineRequestFromTimeline(
-  workItem: CloudWorkItem,
-  messages: CloudWorkItemMessage[],
-  activity: CloudWorkItemActivity[],
-): CreatePipelineRequest | null {
-  let latest = workItem.createPipelineRequest ?? null;
-  for (const item of [...messages, ...activity]) {
-    const metadata = asRecord(item.metadata);
-    const request =
-      parseCreatePipelineRequest(metadata.createPipelineRequest) ??
-      parseCreatePipelineRequest(asRecord(metadata.createPipeline).request);
-    if (request) latest = request;
+    const run = parseCreateImproveRun(asRecord(item.metadata).createImproveRun);
+    if (run) latest = run;
   }
   return latest;
 }
@@ -801,8 +726,7 @@ export function latestCreatePipelineRequestFromTimeline(
 export function normalizeCloudWorkItem(value: unknown): CloudWorkItem | null {
   const record = asRecord(value);
   if (!stringValue(record.id)) return null;
-  const createPipeline = extractCreatePipelineSnapshot(record);
-  const createPipelineRequest = extractCreatePipelineRequest(record, createPipeline);
+  const createImproveRun = extractCreateImproveRun(record);
   const parsed = CloudWorkItemSchema.safeParse({
     ...record,
     conversationId: stringValue(record.conversationId),
@@ -814,8 +738,7 @@ export function normalizeCloudWorkItem(value: unknown): CloudWorkItem | null {
     assignedAgentId: stringValue(record.assignedAgentId),
     archivedAt: stringValue(record.archivedAt),
     metadata: asRecord(record.metadata),
-    createPipelineRequest,
-    createPipeline,
+    createImproveRun,
   });
   return parsed.success ? parsed.data : null;
 }

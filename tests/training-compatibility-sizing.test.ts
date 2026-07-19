@@ -3,6 +3,7 @@ import {
   estimateTrainingTaskSizing,
   recommendedTrainingSequenceLength,
   TasksetSchema,
+  type Taskset,
   type TrainingPlan,
 } from "../packages/contracts/src";
 import { validateTrainingCompatibility } from "../packages/training-sdk/src/compatibility";
@@ -37,6 +38,43 @@ describe("training trajectory sizing", () => {
     expect(bounded.compatible).toBe(true);
     expect(bounded.issues.map((issue) => issue.code)).toContain("training_context_truncated");
   });
+
+  test("allows the explicitly staged SFT bootstrap for a GRPO-primary Taskset", () => {
+    const taskset = structuredTaskset();
+    const staged = TasksetSchema.parse({
+      ...taskset,
+      capabilities: {
+        ...taskset.capabilities,
+        compatibleMethods: ["grpo"],
+      },
+      readiness: {
+        ...taskset.readiness!,
+        recommendedMethod: "grpo",
+        trainingPath: {
+          primaryMethod: "grpo",
+          bootstrap: {
+            method: "sft",
+            purpose: "trajectory_bootstrap",
+            demonstrationRefs: ["demo_train"],
+            limitations: [
+              "The SFT bootstrap imitates approved trajectories; it does not optimize verifier reward.",
+            ],
+          },
+        },
+      },
+    });
+
+    const report = validateTrainingCompatibility({
+      taskset: staged,
+      plan: planFor(staged, 4_096),
+      capabilities: capabilities(),
+    });
+
+    expect(report.compatible).toBe(true);
+    expect(report.issues.map((issue) => issue.code)).not.toContain(
+      "taskset_method_incompatible",
+    );
+  });
 });
 
 function structuredTaskset() {
@@ -59,7 +97,7 @@ function structuredTaskset() {
   });
 }
 
-function planFor(taskset: ReturnType<typeof structuredTaskset>, maxSequenceLength: number): TrainingPlan {
+function planFor(taskset: Taskset, maxSequenceLength: number): TrainingPlan {
   return {
     schemaVersion: "openpond.trainingPlan.v1",
     id: `plan-${maxSequenceLength}`,

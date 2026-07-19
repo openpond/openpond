@@ -7,7 +7,7 @@ import {
   AppPreferencesSchema,
   CloudWorkItemDetailSchema,
   CreateCloudWorkItemRequestSchema,
-  CreatePipelineRequestSchema,
+  CreateImproveRunSchema,
   CreateSessionRequestSchema,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   ChatProviderSchema,
@@ -20,10 +20,85 @@ import {
   SendTurnRequestSchema,
   SessionSchema,
   TurnSchema,
-  UpdateTurnCreatePipelineRequestSchema,
-  WorkflowCaptureArtifactSchema,
+  CreateImproveWorkflowCaptureSchema,
   createPlaceholderPanes,
 } from "../packages/contracts/dist/index.js";
+
+function createImproveRunFixture(overrides = {}) {
+  const timestamp = new Date().toISOString();
+  return CreateImproveRunSchema.parse({
+    schemaVersion: "openpond.createImprove.run.v1",
+    id: "create_improve_fixture",
+    revision: 0,
+    operation: "create",
+    surface: "direct_prompt_create",
+    command: "/create",
+    objective: "Create a fixture agent",
+    state: "planning",
+    adapter: {
+      kind: "local",
+      sourceAuthority: "local_profile",
+      activeProfile: "default",
+      repoPath: "/profiles/default-repo",
+      sourcePath: "/profiles/default-repo/profiles/default",
+      localHead: null,
+      confirmationPolicy: "always_require_plan_approval",
+    },
+    actor: { id: "user", kind: "user", label: "User" },
+    scope: {
+      profileId: "default",
+      conversationId: null,
+      originTurnId: null,
+      workItemId: null,
+      projectId: null,
+      targetProject: null,
+    },
+    context: {
+      messageIds: [],
+      conversationExcerpts: [],
+      attachments: [],
+      apps: [],
+      tools: [],
+      signalRefs: [],
+      evalRefs: [],
+      targetRepoAssumptions: [],
+    },
+    target: {
+      kind: "agent",
+      id: "fixture-agent",
+      displayName: "Fixture Agent",
+      defaultActionKey: "fixture-agent.chat",
+    },
+    plan: null,
+    workflowCapture: null,
+    executionPolicy: { mode: "background", pauseAllowed: true, cancellationAllowed: true },
+    iterationPolicy: { mode: "single", maximumAttempts: 1, currentAttempt: 0 },
+    approvalIds: [],
+    questionIds: [],
+    questions: [],
+    candidates: [],
+    evaluationReceipts: [],
+    checkRefs: [],
+    sourceRefs: [],
+    externalExecutionRefs: [],
+    localProfileCommit: null,
+    hostedSourceCommit: null,
+    hostedSourceRef: null,
+    releaseOutcome: {
+      status: "not_requested",
+      profileCommit: null,
+      profileTag: null,
+      releaseReceiptRef: null,
+      updatedAt: null,
+    },
+    blockedReason: null,
+    appliedActionIds: [],
+    metadata: {},
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  });
+}
 
 describe("contracts", () => {
   test("session and turn requests validate defaults", () => {
@@ -116,8 +191,7 @@ describe("contracts", () => {
         turnId: "turn_1",
         insightRunId: null,
         goalId: null,
-        createPipelineRequestId: null,
-        createPipelineId: null,
+        createImproveRunId: null,
         commandName: null,
         commandSource: null,
         appId: null,
@@ -171,7 +245,7 @@ describe("contracts", () => {
     assert.equal(RuntimeEventNameSchema.parse("session.compaction.started"), "session.compaction.started");
     assert.equal(RuntimeEventNameSchema.parse("session.compaction.completed"), "session.compaction.completed");
     assert.equal(RuntimeEventNameSchema.parse("session.compaction.failed"), "session.compaction.failed");
-    assert.equal(RuntimeEventNameSchema.parse("create_pipeline.updated"), "create_pipeline.updated");
+    assert.equal(RuntimeEventNameSchema.parse("create_improve.updated"), "create_improve.updated");
     assert.equal(RuntimeEventNameSchema.parse("assistant.reasoning.delta"), "assistant.reasoning.delta");
     const snapshot = ContextUsageSnapshotSchema.parse({
       provider: "openpond",
@@ -230,11 +304,9 @@ describe("contracts", () => {
     );
   });
 
-  test("create pipeline request validates source authority envelope", () => {
-    const request = CreatePipelineRequestSchema.parse({
-      schemaVersion: "openpond.createPipeline.request.v1",
-      id: "create_request_test",
-      operation: "create",
+  test("Create/Improve run validates source authority envelope", () => {
+    const run = createImproveRunFixture({
+      id: "create_improve_test",
       surface: "local_extend",
       command: "openpond extend",
       objective: "Create a triage agent",
@@ -247,40 +319,31 @@ describe("contracts", () => {
         localHead: "abc123",
         confirmationPolicy: "always_require_plan_approval",
       },
-      actor: { id: "user", kind: "user", label: "User" },
       scope: {
+        profileId: "default",
         conversationId: null,
+        originTurnId: null,
         workItemId: null,
         projectId: null,
         targetProject: null,
       },
-      context: {
-        messageIds: [],
-        conversationExcerpts: [],
-        attachments: [],
-        apps: [],
-        tools: [],
-        targetRepoAssumptions: [],
+      target: {
+        kind: "agent",
+        id: "triage-agent",
+        displayName: "Triage Agent",
+        defaultActionKey: "triage-agent.chat",
       },
-      targetAgent: {
-        agentId: null,
-        displayName: null,
-        defaultActionKey: "chat",
-      },
-      metadata: {},
-      createdAt: new Date().toISOString(),
     });
-    assert.equal(request.adapter.sourceAuthority, "local_profile");
-    assert.equal(request.adapter.confirmationPolicy, "always_require_plan_approval");
+    assert.equal(run.adapter.sourceAuthority, "local_profile");
+    assert.equal(run.adapter.confirmationPolicy, "always_require_plan_approval");
   });
 
   test("workflow capture artifacts carry side effect summaries", () => {
     const now = new Date().toISOString();
-    const capture = WorkflowCaptureArtifactSchema.parse({
-      schemaVersion: "openpond.createPipeline.workflowCapture.v1",
+    const capture = CreateImproveWorkflowCaptureSchema.parse({
+      schemaVersion: "openpond.createImprove.workflowCapture.v1",
       id: "workflow_capture_test",
-      goalId: "goal_1",
-      requestId: "create_request_1",
+      runId: "create_improve_1",
       command: "/create",
       objective: "Create release notes agent",
       conversationExcerpts: [],
@@ -303,7 +366,7 @@ describe("contracts", () => {
     });
     assert.deepEqual(capture.sideEffects, ["posted draft release notes"]);
     assert.deepEqual(
-      WorkflowCaptureArtifactSchema.parse({
+      CreateImproveWorkflowCaptureSchema.parse({
         ...capture,
         id: "workflow_capture_default_side_effects",
         sideEffects: undefined,
@@ -312,12 +375,10 @@ describe("contracts", () => {
     );
   });
 
-  test("turn contracts carry create pipeline metadata", () => {
+  test("turn contracts carry one Create/Improve run", () => {
     const now = new Date().toISOString();
-    const createPipelineRequest = CreatePipelineRequestSchema.parse({
-      schemaVersion: "openpond.createPipeline.request.v1",
-      id: "create_request_turn",
-      operation: "create",
+    const createImproveRun = createImproveRunFixture({
+      id: "create_improve_turn",
       surface: "direct_prompt_create",
       command: "/create",
       objective: "Create release notes agent",
@@ -332,9 +393,10 @@ describe("contracts", () => {
         workItemId: null,
         confirmationPolicy: "always_require_plan_approval",
       },
-      actor: { id: "sam", kind: "user", label: "Sam" },
       scope: {
+        profileId: "default",
         conversationId: "session_1",
+        originTurnId: "turn_1",
         workItemId: null,
         projectId: "profile_project_1",
         targetProject: null,
@@ -352,22 +414,26 @@ describe("contracts", () => {
         attachments: [],
         apps: [],
         tools: [],
+        signalRefs: [],
+        evalRefs: [],
         targetRepoAssumptions: [],
       },
-      targetAgent: {
-        agentId: null,
-        displayName: null,
-        defaultActionKey: "chat",
+      target: {
+        kind: "agent",
+        id: "release-notes-agent",
+        displayName: "Release Notes Agent",
+        defaultActionKey: "release-notes-agent.chat",
       },
       metadata: { source: "web_composer_slash" },
       createdAt: now,
+      updatedAt: now,
     });
 
     const sendTurn = SendTurnRequestSchema.parse({
       prompt: "/create release notes agent",
-      createPipelineRequest,
+      createImproveRun,
     });
-    assert.equal(sendTurn.createPipelineRequest.command, "/create");
+    assert.equal(sendTurn.createImproveRun.command, "/create");
 
     const turn = TurnSchema.parse({
       id: "turn_1",
@@ -378,44 +444,16 @@ describe("contracts", () => {
       completedAt: null,
       status: "in_progress",
       error: null,
-      createPipelineRequest,
-      metadata: { createPipelineRequest },
+      createImproveRun,
+      metadata: { createImproveRun },
     });
-    assert.equal(turn.createPipelineRequest.context.messageIds[0], "message_1");
-
-    const update = UpdateTurnCreatePipelineRequestSchema.parse({
-      createPipelineRequest,
-      createPipeline: {
-        schemaVersion: "openpond.createPipeline.snapshot.v1",
-        id: "create_pipeline_turn",
-        goalId: "turn_1",
-        state: "awaiting_plan_approval",
-        request: createPipelineRequest,
-        plan: null,
-        workflowCapture: null,
-        approvalIds: [],
-        checkRefs: [],
-        sourceRefs: [],
-        localGoalId: null,
-        localProfileCommit: null,
-        hostedGoalId: null,
-        hostedSourceCommit: null,
-        hostedSourceRef: null,
-        blockedReason: null,
-        metadata: {},
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-    assert.equal(update.createPipeline.request.command, "/create");
+    assert.equal(turn.createImproveRun.context.messageIds[0], "message_1");
   });
 
-  test("cloud work item contracts carry create pipeline metadata", () => {
+  test("cloud work item contracts carry one Create/Improve run", () => {
     const now = new Date().toISOString();
-    const createPipelineRequest = CreatePipelineRequestSchema.parse({
-      schemaVersion: "openpond.createPipeline.request.v1",
-      id: "create_request_cloud",
-      operation: "create",
+    const createImproveRun = createImproveRunFixture({
+      id: "create_improve_cloud",
       surface: "hosted_create",
       command: "/create",
       objective: "Create a hosted triage agent",
@@ -430,9 +468,10 @@ describe("contracts", () => {
         workItemId: null,
         confirmationPolicy: "always_require_plan_approval",
       },
-      actor: { id: "user", kind: "user", label: "User" },
       scope: {
+        profileId: "default",
         conversationId: null,
+        originTurnId: null,
         workItemId: null,
         projectId: "cloud_project_1",
         targetProject: {
@@ -449,15 +488,19 @@ describe("contracts", () => {
         attachments: [],
         apps: [],
         tools: [],
+        signalRefs: [],
+        evalRefs: [],
         targetRepoAssumptions: ["cloud project: openpond/cloud-project"],
       },
-      targetAgent: {
-        agentId: null,
-        displayName: null,
-        defaultActionKey: "chat",
+      target: {
+        kind: "agent",
+        id: "hosted-triage-agent",
+        displayName: "Hosted Triage Agent",
+        defaultActionKey: "hosted-triage-agent.chat",
       },
       metadata: { source: "cloud_work_home" },
       createdAt: now,
+      updatedAt: now,
     });
 
     const createRequest = CreateCloudWorkItemRequestSchema.parse({
@@ -467,9 +510,9 @@ describe("contracts", () => {
       initialMessage: "/create Create a hosted triage agent",
       sourceRef: "main",
       baseSha: "abc123",
-      createPipelineRequest,
+      createImproveRun,
     });
-    assert.equal(createRequest.createPipelineRequest.adapter.sourceAuthority, "hosted_profile");
+    assert.equal(createRequest.createImproveRun.adapter.sourceAuthority, "hosted_profile");
 
     const detail = CloudWorkItemDetailSchema.parse({
       workItem: {
@@ -489,22 +532,22 @@ describe("contracts", () => {
         updatedAt: now,
         archivedAt: null,
         metadata: {},
-        createPipelineRequest,
+        createImproveRun,
       },
       messages: [],
       activity: [],
       runtimeSessions: [],
-      createPipelineRequest,
+      createImproveRun,
     });
-    assert.equal(detail.workItem.createPipelineRequest.objective, "Create a hosted triage agent");
-    assert.equal(detail.createPipelineRequest.adapter.kind, "hosted");
+    assert.equal(detail.workItem.createImproveRun.objective, "Create a hosted triage agent");
+    assert.equal(detail.createImproveRun.adapter.kind, "hosted");
 
     const message = SendCloudWorkItemMessageRequestSchema.parse({
       teamId: "team_1",
       message: "Revise plan: keep it concise",
-      createPipelineRequest,
+      createImproveRun,
     });
-    assert.equal(message.createPipelineRequest.command, "/create");
+    assert.equal(message.createImproveRun.command, "/create");
   });
 
   test("bootstrap contract requires account balance placeholder", () => {

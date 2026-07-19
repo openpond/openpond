@@ -5,7 +5,7 @@ import {
   latestKnownActiveGoalRuntimeFromEvents,
   type GoalRuntimeStatus,
 } from "./goal-runtime";
-import { latestCreatePipelineRuntimeFromEvents } from "./create-pipeline-runtime";
+import { latestCreateImproveRuntimeFromEvents } from "./create-pipeline-runtime";
 import { latestSubagentRuntimeFromEvents, type SubagentRuntimeStatus } from "./subagent-runtime";
 
 export type ApprovalStatus = Approval["status"];
@@ -224,7 +224,7 @@ function preserveGoalRuntimeForSubagent(input: {
 
 function latestVisibleGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntimeStatus | null {
   return (
-    latestCreatePipelineRuntimeFromEvents(events) ??
+    latestCreateImproveRuntimeFromEvents(events) ??
     latestGoalRuntimeFromEvents(events) ??
     latestKnownActiveGoalRuntimeFromEvents(events)
   );

@@ -1,6 +1,6 @@
 {
   "name": "@openpond/local-server",
-  "version": "0.0.30",
+  "version": "0.0.33",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "main": "./dist/index.js",
@@ -13,7 +13,9 @@
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/training-sdk": "workspace:*",
     "cron-parser": "^5.6.1",
+    "eval-protocol": "0.1.13",
     "node-pty": "^1.1.0",
+    "openai": "4.104.0",
     "shell-quote": "^1.9.0",
     "ws": "^8.20.1",
     "zod": "^4.1.13"

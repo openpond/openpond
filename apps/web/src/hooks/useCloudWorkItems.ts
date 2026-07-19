@@ -12,13 +12,6 @@ import { api, type ClientConnection } from "../api";
 import type { ShowAppToast } from "../app/app-state";
 import { projectSelectionKey, type AppView } from "../lib/app-models";
 import { parseComposerSlashCommandPrompt, type ParsedComposerSlashCommand } from "../lib/composer-slash-commands";
-import {
-  approveCreatePipelineSnapshot,
-  buildHostedCloudWorkCreatePipelineRequest,
-  buildInitialCreatePipelineSnapshot,
-  cancelCreatePipelineSnapshot,
-  reviseCreatePipelineSnapshot,
-} from "../lib/create-pipeline-request";
 
 type UseCloudWorkItemsInput = {
   bootstrap: BootstrapPayload | null;
@@ -200,9 +193,13 @@ export function useCloudWorkItems({
       }
       const title = input.prompt.split(/\s+/).slice(0, 12).join(" ").slice(0, 120) || "Cloud task";
       const parsed = parseComposerSlashCommandPrompt(input.prompt);
-      const createPipelineRequest =
+      const createImproveRequest =
         parsed && (parsed.command === "create" || parsed.command === "edit")
-          ? buildHostedCloudWorkCreatePipelineRequest({
+          ? await import("../lib/create-pipeline-request")
+          : null;
+      const proposedCreateImproveRun =
+        createImproveRequest && parsed && (parsed.command === "create" || parsed.command === "edit")
+          ? createImproveRequest.buildHostedCloudWorkCreateImproveRun({
               command: parsed.command,
               objective: parsed.args || input.prompt,
               payload: bootstrap,
@@ -210,23 +207,23 @@ export function useCloudWorkItems({
               source: "cloud_work_home",
             })
           : null;
-      if (parsed?.command === "edit" && !createPipelineRequest) {
+      if (parsed?.command === "edit" && !proposedCreateImproveRun) {
         const message = "Select an agent-backed Cloud work item before using /edit.";
         setCloudError(message);
         setError(message);
         return false;
       }
-      const createPipeline = createPipelineRequest
-        ? buildInitialCreatePipelineSnapshot(createPipelineRequest)
+      const createImproveRun = proposedCreateImproveRun
+        ? createImproveRequest?.buildInitialCreateImproveRun(proposedCreateImproveRun) ?? null
         : null;
       const usageAttribution = cloudSlashUsageAttribution(parsed);
       const sourceRef =
-        createPipelineRequest?.adapter.kind === "hosted"
-          ? createPipelineRequest.adapter.sourceRef
+        createImproveRun?.adapter.kind === "hosted"
+          ? createImproveRun.adapter.sourceRef
           : input.sourceRef ?? project.defaultBranch ?? null;
       const baseSha =
-        createPipelineRequest?.adapter.kind === "hosted"
-          ? createPipelineRequest.adapter.baseSha
+        createImproveRun?.adapter.kind === "hosted"
+          ? createImproveRun.adapter.baseSha
           : input.baseSha ?? null;
       const shouldSelectWorkItem = input.select ?? true;
       setCloudBusy(true);
@@ -235,7 +232,7 @@ export function useCloudWorkItems({
         const detail = await api.createCloudWorkItem(connection, {
           teamId: project.teamId,
           projectId: project.id,
-          title: createPipelineRequest?.objective ?? title,
+          title: createImproveRun?.objective ?? title,
           initialMessage: input.prompt,
           sourceRef,
           baseSha,
@@ -243,8 +240,7 @@ export function useCloudWorkItems({
           localProjectName: input.localProjectName ?? null,
           localWorkspacePath: input.localWorkspacePath ?? null,
           requestedExecutionTarget: input.requestedExecutionTarget ?? null,
-          createPipelineRequest,
-          createPipeline,
+          createImproveRun,
           usageAttribution,
         });
         setCloudWorkItemDetail(detail);
@@ -256,7 +252,7 @@ export function useCloudWorkItems({
           setSelectedSessionId(null);
           setView("cloud");
         }
-        if (createPipelineRequest) {
+        if (createImproveRun) {
           showToast("Agent plan is ready for review.", "info");
           return true;
         }
@@ -298,47 +294,38 @@ export function useCloudWorkItems({
   const sendCloudWorkItemMessage = useCallback(
     async (message: string) => {
       if (!connection || !selectedCloudWorkItem) return;
-      const createPipelineRequest =
-        cloudWorkItemDetail?.createPipelineRequest ??
-        selectedCloudWorkItem.createPipelineRequest ??
-        null;
-      const currentCreatePipeline =
-        cloudWorkItemDetail?.createPipeline ??
-        selectedCloudWorkItem.createPipeline ??
+      const currentCreateImproveRun =
+        cloudWorkItemDetail?.createImproveRun ??
+        selectedCloudWorkItem.createImproveRun ??
         null;
       const revision = message.trim().match(/^revise plan:\s*([\s\S]+)$/i)?.[1]?.trim() ?? "";
-      const revisedCreatePipeline =
-        createPipelineRequest && revision
-          ? reviseCreatePipelineSnapshot(
-              currentCreatePipeline ?? buildInitialCreatePipelineSnapshot(createPipelineRequest),
+      const revisedCreateImproveRun =
+        currentCreateImproveRun && revision
+          ? (await import("../lib/create-pipeline-request")).reviseCreateImproveRun(
+              currentCreateImproveRun,
               revision,
             )
-          : currentCreatePipeline;
+          : currentCreateImproveRun;
       setCloudBusy(true);
       setCloudError(null);
       try {
         const response = await api.sendCloudWorkItemMessage(connection, selectedCloudWorkItem.id, {
           teamId: selectedCloudWorkItem.teamId,
           message,
-          createPipelineRequest: revision ? createPipelineRequest : undefined,
-          createPipeline: revision ? revisedCreatePipeline : undefined,
-          usageAttribution: revision ? createPipelineUsageAttribution(createPipelineRequest) : undefined,
+          createImproveRun: revision ? revisedCreateImproveRun : undefined,
+          usageAttribution: revision ? createImproveUsageAttribution(currentCreateImproveRun) : undefined,
         });
         setCloudWorkItemDetail((current) =>
           current
             ? {
                 ...current,
-                createPipelineRequest: revision
-                  ? createPipelineRequest
-                  : current.createPipelineRequest,
-                createPipeline: revision
-                  ? revisedCreatePipeline
-                  : current.createPipeline,
+                createImproveRun: revision
+                  ? revisedCreateImproveRun
+                  : current.createImproveRun,
                 workItem: revision
                   ? {
                       ...current.workItem,
-                      createPipelineRequest,
-                      createPipeline: revisedCreatePipeline,
+                      createImproveRun: revisedCreateImproveRun,
                     }
                   : current.workItem,
                 messages: [
@@ -363,20 +350,16 @@ export function useCloudWorkItems({
   const handleCloudWorkItemBackground = useCallback(
     async (message: string | null) => {
       if (!connection || !selectedCloudWorkItem) return;
-      const createPipelineRequest =
-        cloudWorkItemDetail?.createPipelineRequest ??
-        selectedCloudWorkItem.createPipelineRequest ??
+      const currentCreateImproveRun =
+        cloudWorkItemDetail?.createImproveRun ??
+        selectedCloudWorkItem.createImproveRun ??
         null;
-      const currentCreatePipeline =
-        cloudWorkItemDetail?.createPipeline ??
-        selectedCloudWorkItem.createPipeline ??
-        null;
-      const approvedCreatePipeline = createPipelineRequest
-        ? approveCreatePipelineSnapshot(
-            currentCreatePipeline ?? buildInitialCreatePipelineSnapshot(createPipelineRequest),
+      const approvedCreateImproveRun = currentCreateImproveRun
+        ? (await import("../lib/create-pipeline-request")).approveCreateImproveRun(
+            currentCreateImproveRun,
           )
         : null;
-      const usageAttribution = createPipelineUsageAttribution(createPipelineRequest);
+      const usageAttribution = createImproveUsageAttribution(currentCreateImproveRun);
       setCloudBusy(true);
       setCloudError(null);
       try {
@@ -394,17 +377,16 @@ export function useCloudWorkItems({
           ...cloudWorkItemBackgroundTarget(selectedCloudWorkItem, cloudWorkItemDetail),
           branchPolicy: { mode: "patch_only" },
           budget: { maxDurationSeconds: 1800 },
-          createPipelineRequest,
-          createPipeline: approvedCreatePipeline,
+          createImproveRun: approvedCreateImproveRun,
           usageAttribution,
-          payload: createPipelineRequest
-            ? { createPipelineDecision: "approved", createPipelineState: "applying_source" }
+          payload: currentCreateImproveRun
+            ? { createImproveDecision: "approved", createImproveState: "applying_source" }
             : undefined,
         });
         await refreshSelectedCloudWorkItem(selectedCloudWorkItem);
         showToast(
-          createPipelineRequest
-            ? "Agent create pipeline started in the background."
+          currentCreateImproveRun
+            ? "Agent Create/Improve run started in the background."
             : "Cloud task started in the background.",
           "success",
         );
@@ -507,39 +489,34 @@ export function useCloudWorkItems({
   const cancelCloudWorkItemCreatePipeline = useCallback(
     async () => {
       if (!connection || !selectedCloudWorkItem) return;
-      const createPipelineRequest =
-        cloudWorkItemDetail?.createPipelineRequest ??
-        selectedCloudWorkItem.createPipelineRequest ??
+      const currentCreateImproveRun =
+        cloudWorkItemDetail?.createImproveRun ??
+        selectedCloudWorkItem.createImproveRun ??
         null;
-      if (!createPipelineRequest) {
+      if (!currentCreateImproveRun) {
         await cancelCloudWorkItemTask();
         return;
       }
-      const currentCreatePipeline =
-        cloudWorkItemDetail?.createPipeline ??
-        selectedCloudWorkItem.createPipeline ??
-        buildInitialCreatePipelineSnapshot(createPipelineRequest);
-      const cancelledCreatePipeline = cancelCreatePipelineSnapshot(currentCreatePipeline);
+      const cancelledCreateImproveRun = (
+        await import("../lib/create-pipeline-request")
+      ).cancelCreateImproveRun(currentCreateImproveRun);
       setCloudBusy(true);
       setCloudError(null);
       try {
         const response = await api.sendCloudWorkItemMessage(connection, selectedCloudWorkItem.id, {
           teamId: selectedCloudWorkItem.teamId,
           message: "Cancel create plan",
-          createPipelineRequest,
-          createPipeline: cancelledCreatePipeline,
-          usageAttribution: createPipelineUsageAttribution(createPipelineRequest),
+          createImproveRun: cancelledCreateImproveRun,
+          usageAttribution: createImproveUsageAttribution(currentCreateImproveRun),
         });
         setCloudWorkItemDetail((current) =>
           current
             ? {
                 ...current,
-                createPipelineRequest,
-                createPipeline: cancelledCreatePipeline,
+                createImproveRun: cancelledCreateImproveRun,
                 workItem: {
                   ...current.workItem,
-                  createPipelineRequest,
-                  createPipeline: cancelledCreatePipeline,
+                  createImproveRun: cancelledCreateImproveRun,
                 },
                 messages: [...current.messages, response.userMessage, response.message],
               }
@@ -550,8 +527,7 @@ export function useCloudWorkItems({
             item.id === selectedCloudWorkItem.id
               ? {
                   ...item,
-                  createPipelineRequest,
-                  createPipeline: cancelledCreatePipeline,
+                  createImproveRun: cancelledCreateImproveRun,
                 }
               : item,
           ),
@@ -610,15 +586,15 @@ function cloudSlashUsageAttribution(
     : undefined;
 }
 
-function createPipelineUsageAttribution(
-  request: CloudWorkItem["createPipelineRequest"],
+function createImproveUsageAttribution(
+  run: CloudWorkItem["createImproveRun"],
 ): UsageRequestAttribution | undefined {
-  if (!request?.command) return undefined;
+  if (!run?.command) return undefined;
   return {
-    surface: "create_pipeline",
+    surface: "create_improve",
     workflowKind: "planner",
-    createPipelineRequestId: request.id,
-    commandName: request.command,
+    createImproveRunId: run.id,
+    commandName: run.command,
     commandSource: "api",
   };
 }

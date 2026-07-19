@@ -1,4 +1,4 @@
-import { CreatePipelineSnapshotSchema } from "@openpond/contracts";
+import { nextCreateImproveRunRevision } from "@openpond/contracts";
 
 import { createGoalEvent, recordGoalEvent } from "./events";
 import { createGoalRunResult } from "./result";
@@ -21,12 +21,12 @@ type LocalCreatePipelineRunInput = {
 };
 
 export function shouldRunLocalCreatePipeline(goal: GoalState, mode: string): boolean {
-  const pipeline = goal.createPipeline;
+  const pipeline = goal.createImproveRun;
   return Boolean(
     mode === "local" &&
       pipeline &&
       pipeline.state === "applying_source" &&
-      pipeline.request.adapter.kind === "local"
+      pipeline.adapter.kind === "local"
   );
 }
 
@@ -39,7 +39,7 @@ export async function runLocalCreatePipeline(
       goalId: input.goal.id,
       iterationId: input.iterationId,
       kind: "goal.blocked",
-      summary: "Local create pipeline requires local Goal state",
+      summary: "Local Create/Improve execution requires local Goal state",
       payload: { reason: "missing_local_state" },
     });
     return createGoalRunResult({
@@ -51,13 +51,13 @@ export async function runLocalCreatePipeline(
   }
 
   const current = (await localState.get(input.goal.id)) ?? input.goal;
-  const pipeline = current.createPipeline;
-  if (!pipeline || pipeline.request.adapter.kind !== "local") {
+  const pipeline = current.createImproveRun;
+  if (!pipeline || pipeline.adapter.kind !== "local") {
     const blocked = createGoalEvent({
       goalId: current.id,
       iterationId: input.iterationId,
       kind: "goal.blocked",
-      summary: "Goal does not have a local create pipeline to run",
+      summary: "Goal does not have a local Create/Improve run to execute",
       payload: { reason: "missing_local_create_pipeline" },
     });
     await recordGoalEvent(blocked, { localState });
@@ -91,10 +91,10 @@ export async function runLocalCreatePipeline(
     summary: MODEL_BACKED_LOCAL_CREATE_REQUIRED_REASON,
     payload: {
       pipelineId: pipeline.id,
-      operation: pipeline.request.operation,
+      operation: pipeline.operation,
       reason: "model_backed_source_application_required",
-      sourcePath: pipeline.request.adapter.sourcePath ?? null,
-      repoPath: pipeline.request.adapter.repoPath ?? null,
+      sourcePath: pipeline.adapter.sourcePath ?? null,
+      repoPath: pipeline.adapter.repoPath ?? null,
     },
   });
   await recordGoalEvent(blocked, { localState });
@@ -120,24 +120,23 @@ async function transitionLocalCreatePipeline(input: {
   checkRefs?: string[];
 }): Promise<{ goal: GoalState; event: GoalEvent }> {
   const current = await input.localState.get(input.goalId);
-  if (!current?.createPipeline) {
-    throw new Error(`goal has no create pipeline: ${input.goalId}`);
+  if (!current?.createImproveRun) {
+    throw new Error(`goal has no Create/Improve run: ${input.goalId}`);
   }
   const now = new Date().toISOString();
-  const previousState = current.createPipeline.state;
-  const nextPipeline = CreatePipelineSnapshotSchema.parse({
-    ...current.createPipeline,
+  const previousState = current.createImproveRun.state;
+  const nextPipeline = nextCreateImproveRunRevision(current.createImproveRun, {
     state: input.state,
-    checkRefs: mergeRefs(current.createPipeline.checkRefs, input.checkRefs ?? []),
+    checkRefs: mergeRefs(current.createImproveRun.checkRefs, input.checkRefs ?? []),
     blockedReason:
       input.blockedReason === undefined
-        ? current.createPipeline.blockedReason
+        ? current.createImproveRun.blockedReason
         : input.blockedReason,
     updatedAt: now,
   });
   const goal = await input.localState.update({
     ...current,
-    createPipeline: nextPipeline,
+    createImproveRun: nextPipeline,
     updatedAt: now,
   });
   const event = createGoalEvent({

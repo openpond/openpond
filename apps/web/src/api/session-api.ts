@@ -1,6 +1,9 @@
 import type {
   BootstrapPayload,
   CompactSessionRequest,
+  CreateImproveRun,
+  CreateImproveRunAction,
+  CreateImproveRunListResponse,
   EnsureCloudWorkspaceReadyRequest,
   EnsureCloudWorkspaceReadyResponse,
   RecordPreflightTurnFailureRequest,
@@ -9,7 +12,7 @@ import type {
   SendTurnRequest,
   Session,
   Turn,
-  UpdateTurnCreatePipelineRequest,
+  WorkspaceDiffSummary,
   WorkspaceToolRequest,
   WorkspaceToolResult,
 } from "@openpond/contracts";
@@ -40,15 +43,42 @@ export const sessionApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  updateTurnCreatePipeline: (
+  listCreateImproveRuns: (
     connection: ClientConnection,
-    sessionId: string,
-    turnId: string,
-    input: UpdateTurnCreatePipelineRequest,
+    query: {
+      profileId?: string | null;
+      conversationId?: string | null;
+      targetKind?: CreateImproveRun["target"]["kind"] | null;
+      targetId?: string | null;
+      limit?: number;
+    } = {},
   ) =>
-    apiFetch<Turn>(
+    apiFetch<CreateImproveRunListResponse>(
       connection,
-      `/v1/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/create-pipeline`,
+      `/v1/create-improve-runs?${createImproveQuery(query).toString()}`,
+    ),
+  getCreateImproveRun: (connection: ClientConnection, runId: string) =>
+    apiFetch<CreateImproveRun>(
+      connection,
+      `/v1/create-improve-runs/${encodeURIComponent(runId)}`,
+    ),
+  getCreateImproveCandidateDiff: (
+    connection: ClientConnection,
+    runId: string,
+    candidateId: string,
+  ) =>
+    apiFetch<WorkspaceDiffSummary>(
+      connection,
+      `/v1/create-improve-runs/${encodeURIComponent(runId)}/candidates/${encodeURIComponent(candidateId)}/diff`,
+    ),
+  applyCreateImproveAction: (
+    connection: ClientConnection,
+    runId: string,
+    input: CreateImproveRunAction,
+  ) =>
+    apiFetch<CreateImproveRun>(
+      connection,
+      `/v1/create-improve-runs/${encodeURIComponent(runId)}/actions`,
       { method: "POST", body: JSON.stringify(input) },
     ),
   interruptTurn: (connection: ClientConnection, sessionId: string) =>
@@ -80,3 +110,19 @@ export const sessionApi = {
       { method: "POST", body: JSON.stringify(input) },
     ),
 };
+
+function createImproveQuery(query: {
+  profileId?: string | null;
+  conversationId?: string | null;
+  targetKind?: CreateImproveRun["target"]["kind"] | null;
+  targetId?: string | null;
+  limit?: number;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  if (query.profileId) params.set("profileId", query.profileId);
+  if (query.conversationId) params.set("conversationId", query.conversationId);
+  if (query.targetKind) params.set("targetKind", query.targetKind);
+  if (query.targetId) params.set("targetId", query.targetId);
+  if (query.limit) params.set("limit", String(query.limit));
+  return params;
+}

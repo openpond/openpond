@@ -46,6 +46,43 @@ describe("scripted OpenPond chat provider", () => {
     expect(deltas.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
   });
 
+  test("returns a deterministic Agent plan for Lab Create/Improve tests", async () => {
+    const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        {
+          role: "system",
+          content: "You are the OpenPond Create/Improve planner.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            run: {
+              objective: "Review release changes and draft concise notes.",
+              target: {
+                kind: "agent",
+                id: "release-notes-reviewer",
+              },
+            },
+          }),
+        },
+      ],
+    })));
+    const decision = JSON.parse(textFromDeltas(deltas));
+
+    expect(decision).toMatchObject({
+      schemaVersion: "openpond.createImprove.plannerDecision.v1",
+      decision: "plan",
+      plan: {
+        targetId: "release-notes-reviewer",
+        actionShape: {
+          mode: "chat",
+          defaultActionKey: "release-notes-reviewer.chat",
+        },
+      },
+    });
+  });
+
   test("starts a generic child and joins its completed result", async () => {
     const startDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
       model: "openpond-scripted-subagent-lifecycle",

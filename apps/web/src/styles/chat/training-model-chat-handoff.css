@@ -75,6 +75,12 @@
   font-weight: 650;
 }
 
+.training-chat-handoff-actions .training-chat-handoff-stop {
+  width: auto;
+  padding: 0 10px;
+  color: var(--danger, #e75b5b);
+}
+
 @media (max-width: 680px) {
   .training-chat-handoff {
     align-items: flex-start;

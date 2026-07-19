@@ -197,7 +197,8 @@
 }
 
 .submit-issue-repo-row strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
   font-size: 12px;
 }
 
@@ -424,10 +425,7 @@
   overflow: hidden;
   opacity: 0;
   transform: translateY(-3px);
-  transition:
-    max-height 160ms ease,
-    opacity 120ms ease,
-    transform 120ms ease;
+  transition: max-height 160ms ease, opacity 120ms ease, transform 120ms ease;
   visibility: hidden;
 }
 
@@ -463,8 +461,30 @@
   text-align: left;
 }
 
+.composer-create-status-body > button {
+  display: inline-flex;
+  width: fit-content;
+  min-width: 88px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.065);
+  color: #f4f4f5;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
 .composer-create-options button:hover:not(:disabled),
 .composer-create-options button:focus-visible,
+.composer-create-status-body > button:hover:not(:disabled),
+.composer-create-status-body > button:focus-visible,
 .composer-create-actions button:hover:not(:disabled),
 .composer-create-actions button:focus-visible,
 .composer-create-revision button:hover:not(:disabled),
@@ -482,6 +502,7 @@
 }
 
 .composer-create-options button:disabled,
+.composer-create-status-body > button:disabled,
 .composer-create-actions button:disabled,
 .composer-create-revision button:disabled {
   cursor: default;
@@ -666,9 +687,7 @@
 .composer-invocation-icon,
 .composer-invocation-clear {
   grid-area: 1 / 1;
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .composer-invocation-clear {
@@ -967,7 +986,8 @@
   line-height: 1.35;
 }
 
-.composer.has-attachment-error:not(.has-attachments) .composer-attachment-error {
+.composer.has-attachment-error:not(.has-attachments)
+  .composer-attachment-error {
   border-radius: 21px 21px 0 0;
   padding-top: 10px;
 }

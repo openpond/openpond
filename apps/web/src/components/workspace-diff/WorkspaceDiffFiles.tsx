@@ -7,6 +7,7 @@ export function WorkspaceDiffFiles({
   expandedFolderPaths,
   rootPath,
   repoFiles,
+  selectedPath,
   onOpenFile,
   onToggleFolder,
 }: {
@@ -14,6 +15,7 @@ export function WorkspaceDiffFiles({
   expandedFolderPaths: ReadonlySet<string>;
   rootPath?: string | null;
   repoFiles: string[];
+  selectedPath?: string | null;
   onOpenFile: (path: string) => void;
   onToggleFolder: (path: string) => void;
 }) {
@@ -36,6 +38,7 @@ export function WorkspaceDiffFiles({
         expandedFolderPaths={expandedFolderPaths}
         rootPath={normalizedRootPath}
         repoFiles={visibleRepoFiles}
+        selectedPath={selectedPath}
         onOpenFile={onOpenFile}
         onToggleFolder={onToggleFolder}
       />

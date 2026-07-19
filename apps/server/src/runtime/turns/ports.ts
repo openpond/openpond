@@ -3,7 +3,8 @@ import type {
   AppPreferences,
   ChatProvider,
   ConnectedAppConnectionLike,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
+  CreateImproveRunAction,
   ModelUsageRecord,
   OpenPondActionCatalogEntry,
   OpenPondApp,
@@ -41,7 +42,7 @@ import type { NativeModelToolResult } from "../../openpond/native-tool-calls.js"
 import type { WebSearchExecutor } from "../../openpond/web-search.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
-import type { CreatePipelinePlanner } from "../create-pipeline-planner.js";
+import type { CreateImprovePlanner } from "../create-pipeline-planner.js";
 import type { LocalCreatePipelineCheckInput, LocalCreatePipelineCheckResult } from "../local-create-pipeline.js";
 import type { HostedToolRolloutFlags } from "../hosted-turn/rollout.js";
 
@@ -103,6 +104,20 @@ export type TurnRepository = {
   getTurn(turnId: string): Promise<Turn | null>;
   insertTurn(turn: Turn): Promise<void>;
   updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
+  getCreateImproveRun(runId: string): Promise<CreateImproveRun | null>;
+  listCreateImproveRuns(query?: {
+    profileId?: string | null;
+    conversationId?: string | null;
+    targetKind?: CreateImproveRun["target"]["kind"] | null;
+    targetId?: string | null;
+    state?: CreateImproveRun["state"] | readonly CreateImproveRun["state"][] | null;
+    limit?: number;
+  }): Promise<CreateImproveRun[]>;
+  upsertCreateImproveRun(run: CreateImproveRun): Promise<CreateImproveRun>;
+  mutateCreateImproveRun(
+    action: CreateImproveRunAction,
+    updater: (run: CreateImproveRun) => CreateImproveRun,
+  ): Promise<{ run: CreateImproveRun; replayed: boolean }>;
   getApproval(approvalId: string): Promise<Approval | null>;
   upsertModelUsageRecord?(record: ModelUsageRecord): Promise<ModelUsageRecord>;
   listModelUsageRecords?(query?: {
@@ -237,6 +252,8 @@ export type TurnDispatcherPort = {
 export type TurnRunnerDependencies = {
   attachmentRootDir: string;
   store: TurnRepository;
+  resolveCreateImproveTaskset?: (tasksetId: string, revision: number, contentHash: string) => Promise<import("@openpond/contracts").Taskset | null>;
+  gradeCreateImproveTaskAttempt?: (input: { tasksetId: string; taskId: string; attempt: import("@openpond/contracts").TaskAttemptResult }) => Promise<import("@openpond/contracts").GradeResult>;
   upsertApproval: (approval: Approval) => Promise<void>;
   createSession?: (payload: unknown) => Promise<Session>;
   getSession: (sessionId: string) => Promise<Session>;
@@ -318,7 +335,7 @@ export type TurnRunnerDependencies = {
   streamLocalByokChatTurn?: ProviderRuntime["streamLocalByokChatTurn"];
   streamOpenPondHostedChatTurn?: ProviderRuntime["streamOpenPondHostedChatTurn"];
   runLocalCreatePipelineChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
-  planCreatePipeline?: CreatePipelinePlanner;
+  planCreateImprove?: CreateImprovePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;
   notifySubagentRunStateChanged?: (run: SubagentRun) => void;
@@ -334,8 +351,17 @@ export type TurnRunner = TurnDispatcherPort & {
   pauseSessionGoal(sessionId: string): Promise<unknown>;
   interruptAll(reason?: string): Promise<Turn[]>;
   close(): Promise<void>;
-  updateTurnCreatePipeline(sessionId: string, turnId: string, payload: unknown): Promise<Turn>;
-  resolveCreatePipelineApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
+  applyCreateImproveAction(runId: string, payload: unknown): Promise<CreateImproveRun>;
+  getCreateImproveRun(runId: string): Promise<CreateImproveRun | null>;
+  listCreateImproveRuns(query?: {
+    profileId?: string | null;
+    conversationId?: string | null;
+    targetKind?: CreateImproveRun["target"]["kind"] | null;
+    targetId?: string | null;
+    state?: CreateImproveRun["state"] | readonly CreateImproveRun["state"][] | null;
+    limit?: number;
+  }): Promise<CreateImproveRun[]>;
+  resolveCreateImproveApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
   resolveSubagentPatchApplyApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
   runSubagentLifecycleAction(runId: string, payload: unknown): Promise<SubagentLifecycleActionResponse>;
   recoverPendingSubagentCompletions(): Promise<number>;
@@ -357,5 +383,5 @@ export type ActiveTurn = {
 };
 
 export type CreatePipelineStatePort = {
-  snapshot: CreatePipelineSnapshot;
+  snapshot: CreateImproveRun;
 };

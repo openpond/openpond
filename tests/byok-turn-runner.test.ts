@@ -130,7 +130,7 @@ describe("BYOK turn runner dispatch", () => {
 
     expect(turn.status).toBe("completed");
     const toolNames = harness.streamInputs[0].tools.map((tool: any) => tool.function.name);
-    expect(toolNames).not.toContain("openpond_create_pipeline");
+    expect(toolNames).not.toContain("openpond_create_improve");
     expect(toolNames).not.toContain("openpond_goal_control");
     expect(toolNames).not.toContain("openpond_profile_skill_goal");
     expect(toolNames).toEqual(expect.arrayContaining(["resource_search", "resource_read"]));

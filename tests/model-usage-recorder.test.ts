@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ModelUsageRecord, Session, Turn } from "@openpond/contracts";
 import { startProviderRequestUsageRecorder } from "../apps/server/src/runtime/model-usage-recorder";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 describe("model usage recorder", () => {
   test("writes a started row and completes it with normalized provider usage", async () => {
@@ -127,14 +128,13 @@ describe("model usage recorder", () => {
     const recorder = await startProviderRequestUsageRecorder({
       session: usageSession(),
       turn: usageTurn({
-        createPipelineRequest: usageCreatePipelineRequest(),
-        createPipeline: { id: "create_pipeline_usage" } as any,
+        createImproveRun: usageCreateImproveRun(),
       }),
       provider: "openrouter",
       model: "test/model",
       requestId: "turn_usage:create-planner",
       requestOrdinal: 0,
-      requestKind: "create_pipeline_planner",
+      requestKind: "create_improve_planner",
       upsert: async (record) => {
         const index = rows.findIndex((candidate) => candidate.requestId === record.requestId);
         if (index === -1) rows.push(record);
@@ -149,15 +149,14 @@ describe("model usage recorder", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       requestId: "turn_usage:create-planner",
-      requestKind: "create_pipeline_planner",
+      requestKind: "create_improve_planner",
       visibility: "background",
       source: "provider_usage",
       totalTokens: 50,
       attribution: {
-        surface: "create_pipeline",
+        surface: "create_improve",
         workflowKind: "planner",
-        createPipelineRequestId: "create_request_usage",
-        createPipelineId: "create_pipeline_usage",
+        createImproveRunId: "create_improve_usage",
         commandName: "/create",
         commandSource: "model_tool",
       },
@@ -440,16 +439,22 @@ function usageTurn(patch: Partial<Turn> = {}): Turn {
     status: "in_progress",
     error: null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
     ...patch,
   };
 }
 
-function usageCreatePipelineRequest() {
-  return {
-    id: "create_request_usage",
-    command: "/create",
+function usageCreateImproveRun() {
+  return createImproveRunFixture({
+    id: "create_improve_usage",
+    scope: {
+      profileId: "default",
+      conversationId: "session_usage",
+      originTurnId: "turn_usage",
+      workItemId: null,
+      projectId: "project_usage",
+      targetProject: null,
+    },
     metadata: { source: "native_model_tool" },
-  } as any;
+  });
 }

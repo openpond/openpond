@@ -51,8 +51,8 @@ import {
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
-import { SqliteStoreCore } from "./store-core.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
+import { SqliteTrainingModelStore } from "./store-training-models.js";
 
 export type TrainingChatSearchDocument = {
   sessionId: string;
@@ -83,7 +83,7 @@ type TrainingChatSearchEvidenceRow = {
 };
 
 
-export class SqliteTrainingStore extends SqliteStoreCore {
+export class SqliteTrainingStore extends SqliteTrainingModelStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
     await this.ready;
     await this.writeQueue;
@@ -372,13 +372,35 @@ export class SqliteTrainingStore extends SqliteStoreCore {
     return this.getParsedPayload("SELECT payload FROM tasksets WHERE id = ?", [id], TasksetSchema.parse);
   }
 
+  async getTasksetRevision(id: string, revision: number, contentHash?: string | null): Promise<Taskset | null> {
+    const taskset = await this.getParsedPayload(
+      "SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND revision = ?",
+      [id, revision],
+      TasksetSchema.parse,
+    );
+    if (taskset && contentHash && taskset.contentHash !== contentHash) {
+      throw new Error(`Taskset ${id}@${revision} does not match the requested immutable content hash.`);
+    }
+    return taskset;
+  }
+
   async upsertTaskset(tasksetInput: Taskset): Promise<Taskset> {
     const taskset = TasksetSchema.parse(tasksetInput);
+    const existingRevision = await this.getTasksetRevision(taskset.id, taskset.revision);
+    if (existingRevision && existingRevision.contentHash !== taskset.contentHash) {
+      throw new Error(`Taskset ${taskset.id}@${taskset.revision} is immutable and already has another content hash.`);
+    }
     await this.upsertPayload(
       `INSERT INTO tasksets (id, profile_id, status, payload, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
       [taskset.id, taskset.profileId, taskset.status, JSON.stringify(taskset), taskset.createdAt, taskset.updatedAt],
+    );
+    await this.upsertPayload(
+      `INSERT INTO taskset_revisions (taskset_id, revision, content_hash, profile_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(taskset_id, revision) DO UPDATE SET status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [taskset.id, taskset.revision, taskset.contentHash, taskset.profileId, taskset.status, JSON.stringify(taskset), taskset.createdAt, taskset.updatedAt],
     );
     return taskset;
   }
@@ -395,6 +417,8 @@ export class SqliteTrainingStore extends SqliteStoreCore {
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
+        await this.run("DELETE FROM training_rollout_receipts WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM model_bindings WHERE model_artifact_lineage_id IN (SELECT id FROM model_artifact_lineage WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM training_job_events WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
         await this.run("DELETE FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM training_approvals WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?)", [id]);
@@ -405,6 +429,7 @@ export class SqliteTrainingStore extends SqliteStoreCore {
         await this.run("DELETE FROM task_creation_transcripts WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
         await this.run("DELETE FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?", [id]);
         await this.run("DELETE FROM tasksets WHERE id = ?", [id]);
+        await this.run("DELETE FROM taskset_revisions WHERE taskset_id = ?", [id]);
         await this.exec("COMMIT");
       } catch (error) {
         await this.exec("ROLLBACK").catch(() => undefined);
@@ -475,6 +500,10 @@ export class SqliteTrainingStore extends SqliteStoreCore {
       [result.id, result.attemptId, JSON.stringify(result), result.createdAt],
     );
     return result;
+  }
+
+  async deleteGradeResultsForAttempt(attemptId: string): Promise<void> {
+    await this.run("DELETE FROM grade_results WHERE attempt_id = ?", [attemptId]);
   }
 
   async listGradeResultsForTaskset(tasksetId: string): Promise<GradeResult[]> {
@@ -701,27 +730,6 @@ export class SqliteTrainingStore extends SqliteStoreCore {
 
   async getModelArtifactLineage(id: string): Promise<ModelArtifactLineage | null> {
     return this.getParsedPayload("SELECT payload FROM model_artifact_lineage WHERE id = ?", [id], ModelArtifactLineageSchema.parse);
-  }
-
-  private async upsertPayload(sql: string, params: unknown[]): Promise<void> {
-    await this.ready;
-    const write = this.writeQueue.then(() => this.run(sql, params));
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-  }
-
-  private async listParsedPayloads<T>(sql: string, params: unknown[], parse: (value: unknown) => T): Promise<T[]> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<PayloadRow>(sql, params);
-    return rows.map((row) => parse(JSON.parse(row.payload)));
-  }
-
-  private async getParsedPayload<T>(sql: string, params: unknown[], parse: (value: unknown) => T): Promise<T | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<PayloadRow>(sql, params);
-    return row ? parse(JSON.parse(row.payload)) : null;
   }
 
 }

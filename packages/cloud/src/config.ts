@@ -126,8 +126,6 @@ export type LocalOpenPondProfilePushStatus = {
   localHead?: string | null;
   hostedHead?: string | null;
   sourceRef?: string | null;
-  localGoalId?: string | null;
-  hostedGoalId?: string | null;
   hostedRunAgentId?: string | null;
   hostedRunId?: string | null;
   hostedRunAt?: string | null;
@@ -410,12 +408,6 @@ function sanitizeLocalOpenPondProfile(
         push.hostedRunStatus === "failed" ||
         push.hostedRunStatus === null
           ? { hostedRunStatus: push.hostedRunStatus }
-          : {}),
-        ...(typeof push.localGoalId === "string" || push.localGoalId === null
-          ? { localGoalId: push.localGoalId }
-          : {}),
-        ...(typeof push.hostedGoalId === "string" || push.hostedGoalId === null
-          ? { hostedGoalId: push.hostedGoalId }
           : {}),
         ...(typeof push.hostedRunAgentId === "string" || push.hostedRunAgentId === null
           ? { hostedRunAgentId: push.hostedRunAgentId }

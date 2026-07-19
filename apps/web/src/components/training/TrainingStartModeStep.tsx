@@ -1,6 +1,7 @@
-import { Search, SquarePen } from "../icons";
+import { Boxes, Search, SquarePen } from "../icons";
 
 export type NewModelMode = "automated" | "manual";
+export type NewModelSetup = NewModelMode | "existing_dataset";
 
 const MODES = [
   {
@@ -15,25 +16,42 @@ const MODES = [
     description: "Start from a capability you already want the model to learn.",
     icon: SquarePen,
   },
+  {
+    id: "existing_dataset" as const,
+    title: "Existing Dataset",
+    description: "Create the Model from a reviewed Dataset without changing its tasks, graders, or held-out Evals.",
+    icon: Boxes,
+  },
 ];
 
 export function TrainingStartModeStep({
   mode,
+  allowExistingDataset = false,
+  targetLabel = "model",
   onChange,
   onContinue,
 }: {
-  mode: NewModelMode | null;
-  onChange: (mode: NewModelMode) => void;
+  mode: NewModelSetup | null;
+  allowExistingDataset?: boolean;
+  targetLabel?: string;
+  onChange: (mode: NewModelSetup) => void;
   onContinue: () => void;
 }) {
+  const options = allowExistingDataset
+    ? MODES
+    : MODES.filter((option) => option.id !== "existing_dataset");
   return (
     <>
       <div className="training-run-step-heading">
-        <h3>How do you want to start?</h3>
-        <p>OpenPond will recommend the right intervention after it understands the work and evidence.</p>
+        <h3>Choose a setup</h3>
+        <p>Start from repeated work or define the capability yourself. OpenPond recommends the training method after reviewing the Dataset.</p>
       </div>
-      <div className="training-method-options training-start-mode-options" role="radiogroup" aria-label="How to start a new model">
-        {MODES.map((option) => {
+      <div
+        aria-label={`How to start a new ${targetLabel}`}
+        className="training-method-options training-start-mode-options"
+        role="radiogroup"
+      >
+        {options.map((option) => {
           const Icon = option.icon;
           const selected = option.id === mode;
           return (
@@ -46,8 +64,14 @@ export function TrainingStartModeStep({
               onClick={() => onChange(option.id)}
               onDoubleClick={onContinue}
             >
-              <Icon size={17} />
-              <span><strong>{option.title}</strong><small>{option.description}</small></span>
+              <span className="training-start-mode-icon" aria-hidden="true">
+                <Icon size={18} />
+              </span>
+              <span className="training-start-mode-copy">
+                <strong>{option.title}</strong>
+                <small>{option.description}</small>
+              </span>
+              <span className="training-choice-indicator" aria-hidden="true" />
             </button>
           );
         })}

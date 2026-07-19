@@ -77,7 +77,7 @@ function insightsRunMeta(prompt: InsightsRunPromptSummary, totalCount: number): 
 function evidenceSourceLabel(source: string): string {
   switch (source) {
     case "create_edit":
-      return "Create/edit";
+      return "Create/Improve";
     case "stuck_turn":
       return "Stuck turn";
     case "tool_failure":

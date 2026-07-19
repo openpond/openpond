@@ -90,7 +90,3 @@ export function tokenFilePath(): string {
 export function pnpmBinary(): string {
   return process.env.PNPM_BINARY || "pnpm";
 }
-
-export function nodeBinary(): string {
-  return process.env.OPENPOND_NODE_BINARY || process.env.NODE_BINARY || "node";
-}

@@ -86,12 +86,15 @@ export function SidebarCommunitySection(props: {
                 onClick={() => selectOrToggleCommunity(community, active, joined)}
               >
                 {community.imageUrl ? <img className="team-sidebar-avatar" src={community.imageUrl} alt="" /> : <span className="team-sidebar-avatar community-sidebar-avatar">{community.displayName.slice(0, 2).toUpperCase()}</span>}
-                <span className="team-sidebar-label">{community.displayName}</span>
-                {joined ? (
-                  <span className="community-sidebar-group-chevron" aria-hidden="true">
-                    {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                  </span>
-                ) : community.featuredAt ? <small>Featured</small> : <span />}
+                <span className="team-sidebar-group-title">
+                  <span className="team-sidebar-label">{community.displayName}</span>
+                  {joined ? (
+                    <span className="community-sidebar-group-chevron" aria-hidden="true">
+                      {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    </span>
+                  ) : null}
+                </span>
+                {!joined && community.featuredAt ? <small>Featured</small> : null}
               </button>
               {expanded ? (
                 <div className="community-sidebar-channels" id={`community-sidebar-channels-${community.id}`}>

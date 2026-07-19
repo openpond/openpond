@@ -20,7 +20,6 @@ export function Sidebar(props: SidebarProps) {
     setSelectedSessionId,
     setSidebarOpen,
     setSettingsSection,
-    setLabsTab,
     setView,
     view,
   } = props;
@@ -59,7 +58,6 @@ export function Sidebar(props: SidebarProps) {
         setSelectedAppId={setSelectedAppId}
         setSelectedProjectId={setSelectedProjectId}
         setSelectedSessionId={setSelectedSessionId}
-        setLabsTab={setLabsTab}
         setView={setView}
         view={view}
       />

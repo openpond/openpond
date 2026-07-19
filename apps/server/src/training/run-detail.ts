@@ -55,14 +55,33 @@ export async function trainingRunDetail(store: SqliteStore, jobId: string): Prom
     schemaVersion: "openpond.trainingRunDetail.v1",
     job,
     events,
-    stepMetrics: events.flatMap(stepMetricFromEvent),
+    stepMetrics: deduplicateStepMetrics(events.flatMap(stepMetricFromEvent)),
     evaluation,
     generatedAt: new Date().toISOString(),
   });
 }
 
+function deduplicateStepMetrics(
+  metrics: SftStepMetric[],
+): SftStepMetric[] {
+  const latestByStep = new Map<string, SftStepMetric>();
+  for (const metric of metrics) {
+    const key = `${metric.epoch ?? "none"}:${metric.step}`;
+    latestByStep.set(key, metric);
+  }
+  return [...latestByStep.values()].sort(
+    (left, right) =>
+      (left.epoch ?? 0) - (right.epoch ?? 0)
+      || left.step - right.step
+      || left.timestamp.localeCompare(right.timestamp),
+  );
+}
+
 function stepMetricFromEvent(event: TrainingJobEvent): SftStepMetric[] {
-  if (event.type !== "metric" || event.payload.metricKind !== "sft_step") return [];
+  if (
+    event.type !== "metric"
+    || !["sft_step", "training_step"].includes(String(event.payload.metricKind))
+  ) return [];
   const number = (key: string) => typeof event.payload[key] === "number" && Number.isFinite(event.payload[key]) ? event.payload[key] as number : null;
   const step = number("step");
   const maxSteps = number("maxSteps");
@@ -78,6 +97,9 @@ function stepMetricFromEvent(event: TrainingJobEvent): SftStepMetric[] {
     gradientNorm: number("gradientNorm"),
     entropy: number("entropy"),
     meanTokenAccuracy: number("meanTokenAccuracy"),
+    reward: number("reward"),
+    policyLoss: number("policyLoss"),
+    advantageLoss: number("advantageLoss"),
     inputTokensSeen: number("inputTokensSeen"),
     memoryBytes: number("memoryBytes"),
     elapsedSeconds: number("elapsedSeconds"),

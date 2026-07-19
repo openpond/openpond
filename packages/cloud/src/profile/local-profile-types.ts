@@ -26,6 +26,14 @@ export type OpenPondProfileSkill = {
   validationMessages: string[];
 };
 
+export type OpenPondProfileEval = {
+  id: string;
+  name: string;
+  path: string;
+  agentId: string | null;
+  sourcePath: string;
+};
+
 export type OpenPondProfileGitFileChange = {
   path: string;
   originalPath?: string | null;
@@ -129,8 +137,6 @@ export type OpenPondProfileHostedBinding = {
   lastPushedHostedHead: string | null;
   promotionStatus: string | null;
   hostedRunStatus: string | null;
-  localGoalId: string | null;
-  hostedGoalId: string | null;
   hostedRunAgentId: string | null;
   hostedRunId: string | null;
   hostedRunAt: string | null;
@@ -160,6 +166,7 @@ export type OpenPondProfileState = {
   manifestPath: string | null;
   agents: OpenPondProfileAgent[];
   skills: OpenPondProfileSkill[];
+  evals: OpenPondProfileEval[];
   git: OpenPondProfileGitState | null;
   catalog: OpenPondProfileCatalogState;
   skillCatalog: OpenPondProfileSkillCatalogState;

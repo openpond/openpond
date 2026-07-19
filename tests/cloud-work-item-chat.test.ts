@@ -5,18 +5,18 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
 import type {
-  CreatePipelineRequest,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
   LocalProject,
   UsageRequestAttribution,
 } from "@openpond/contracts";
 import {
-  assertCreatePipelineBackgroundApproved,
+  assertCreateImproveBackgroundApproved,
   createServerPayloads,
 } from "../apps/server/src/api/server-payloads";
 import { sandboxRequestPayload } from "../apps/server/src/openpond/sandboxes";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { runWorkspaceCommand } from "../apps/server/src/workspace/workspaces";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 const originalFetch = globalThis.fetch;
 const originalSandboxApiKey = process.env.OPENPOND_SANDBOX_API_KEY;
@@ -39,8 +39,8 @@ afterEach(async () => {
 });
 
 describe("Cloud work item chat", () => {
-  test("requires approved create pipeline snapshots before background mutation", () => {
-    const request = createPipelineRequest();
+  test("requires an approved Create/Improve run before background mutation", () => {
+    const request = createImproveRun();
     const pending = createPipelineSnapshot(request, {
       state: "awaiting_plan_approval",
       planStatus: "pending_approval",
@@ -51,32 +51,30 @@ describe("Cloud work item chat", () => {
     });
 
     expect(() =>
-      assertCreatePipelineBackgroundApproved({ request, snapshot: null }),
-    ).toThrow("approved create plan snapshot");
-    expect(() =>
-      assertCreatePipelineBackgroundApproved({ request, snapshot: pending }),
+      assertCreateImproveBackgroundApproved({ run: pending }),
     ).toThrow("cannot start before plan approval");
     expect(() =>
-      assertCreatePipelineBackgroundApproved({
-        request,
-        snapshot: {
+      assertCreateImproveBackgroundApproved({
+        run: {
           ...approved,
           approvalIds: [],
         },
       }),
     ).toThrow("approval id");
     expect(() =>
-      assertCreatePipelineBackgroundApproved({
-        request: { ...request, id: "create_request_other" },
-        snapshot: approved,
+      assertCreateImproveBackgroundApproved({
+        run: {
+          ...approved,
+          plan: approved.plan ? { ...approved.plan, runId: "create_improve_other" } : null,
+        },
       }),
-    ).toThrow("submitted request");
-    expect(() => assertCreatePipelineBackgroundApproved({ request, snapshot: approved })).not.toThrow();
-    expect(() => assertCreatePipelineBackgroundApproved({ request: null, snapshot: null })).not.toThrow();
+    ).toThrow("plan linked");
+    expect(() => assertCreateImproveBackgroundApproved({ run: approved })).not.toThrow();
+    expect(() => assertCreateImproveBackgroundApproved({ run: null })).not.toThrow();
   });
 
   test("rejects unapproved create pipeline background payloads before sandbox forwarding", async () => {
-    const request = createPipelineRequest();
+    const request = createImproveRun();
     const pending = createPipelineSnapshot(request, {
       state: "awaiting_plan_approval",
       planStatus: "pending_approval",
@@ -113,15 +111,14 @@ describe("Cloud work item chat", () => {
       payloads.handleCloudWorkItemBackgroundPayload("work_item_1", {
         teamId: "team_1",
         prompt: "Start",
-        createPipelineRequest: request,
-        createPipeline: pending,
+        createImproveRun: pending,
       }),
     ).rejects.toThrow("cannot start before plan approval");
     expect(forwarded).toBe(false);
   });
 
   test("rejects mismatched create pipeline metadata before Cloud message forwarding", async () => {
-    const request = createPipelineRequest();
+    const request = createImproveRun();
     const snapshot = createPipelineSnapshot(request, {
       state: "awaiting_plan_approval",
       planStatus: "pending_approval",
@@ -157,10 +154,12 @@ describe("Cloud work item chat", () => {
       payloads.sendCloudWorkItemMessagePayload("work_item_1", {
         teamId: "team_1",
         message: "Revise plan: focus on PR summaries",
-        createPipelineRequest: { ...request, id: "create_request_other" },
-        createPipeline: snapshot,
+        createImproveRun: {
+          ...snapshot,
+          plan: snapshot.plan ? { ...snapshot.plan, runId: "create_improve_other" } : null,
+        },
       }),
-    ).rejects.toThrow("snapshot for the submitted request");
+    ).rejects.toThrow("plan linked to the submitted run");
     expect(forwarded).toBe(false);
   });
 
@@ -355,7 +354,7 @@ describe("Cloud work item chat", () => {
     const storeDir = await mkdtemp(join(tmpdir(), "openpond-cloud-usage-linkage-store-"));
     tempRoots.push(storeDir);
     const store = new SqliteStore(storeDir);
-    const request = createPipelineRequest();
+    const request = createImproveRun();
     const approved = createPipelineSnapshot(request, {
       state: "applying_source",
       planStatus: "approved",
@@ -367,9 +366,9 @@ describe("Cloud work item chat", () => {
       commandSource: "prompt_parse",
     };
     const backgroundAttribution: UsageRequestAttribution = {
-      surface: "create_pipeline",
+      surface: "create_improve",
       workflowKind: "planner",
-      createPipelineRequestId: request.id,
+      createImproveRunId: request.id,
       commandName: "/create",
       commandSource: "api",
     };
@@ -512,22 +511,19 @@ describe("Cloud work item chat", () => {
         initialMessage: "/create Cloud support agent",
         sourceRef: "main",
         baseSha: "abc123",
-        createPipelineRequest: request,
-        createPipeline: approved,
+        createImproveRun: approved,
         usageAttribution: slashAttribution,
       });
       await payloads.sendCloudWorkItemMessagePayload("work_item_attributed", {
         teamId: "team_1",
         message: "Revise plan: narrow the workflow",
-        createPipelineRequest: request,
-        createPipeline: approved,
+        createImproveRun: approved,
         usageAttribution: backgroundAttribution,
       });
       await payloads.handleCloudWorkItemBackgroundPayload("work_item_attributed", {
         teamId: "team_1",
         prompt: "Apply approved create plan",
-        createPipelineRequest: request,
-        createPipeline: approved,
+        createImproveRun: approved,
         usageAttribution: backgroundAttribution,
         sourceRuntimeId: "runtime_hybrid_background",
         sourceSandboxId: "sandbox_hybrid_background",
@@ -540,7 +536,7 @@ describe("Cloud work item chat", () => {
       const hiddenLinkRequest = requests.find(
         (candidate) =>
           candidate.pathname === "/v1/work-items/work_item_attributed/messages" &&
-          (candidate.body.metadata as any)?.source === "openpond_app_cloud_create_pipeline_link",
+          (candidate.body.metadata as any)?.source === "openpond_app_cloud_create_improve_link",
       );
       expect((hiddenLinkRequest?.body.metadata as any)?.usageAttribution).toMatchObject(slashAttribution);
       const chatRequest = requests.find((candidate) => candidate.pathname === "/v1/work-items/work_item_attributed/chat");
@@ -551,7 +547,7 @@ describe("Cloud work item chat", () => {
       expect(backgroundRequest?.body.agentId).toBe("agent_hybrid_background");
       expect(backgroundRequest?.body.usageAttribution).toMatchObject(backgroundAttribution);
       expect((backgroundRequest?.body.payload as any)?.usageAttribution).toMatchObject(backgroundAttribution);
-      expect((backgroundRequest?.body.payload as any)?.createPipelineRequest).toMatchObject({
+      expect((backgroundRequest?.body.payload as any)?.createImproveRun).toMatchObject({
         id: request.id,
         command: request.command,
       });
@@ -679,14 +675,9 @@ describe("Cloud work item chat", () => {
   });
 });
 
-function createPipelineRequest(): CreatePipelineRequest {
-  const now = "2026-06-17T00:00:00.000Z";
-  return {
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id: "create_request_guard",
-    operation: "create",
-    surface: "hosted_create",
-    command: "/create",
+function createImproveRun(): CreateImproveRun {
+  return createImproveRunFixture({
+    id: "create_improve_guard",
     objective: "Create a release notes agent",
     adapter: {
       kind: "hosted",
@@ -701,7 +692,9 @@ function createPipelineRequest(): CreatePipelineRequest {
     },
     actor: { id: "user_1", kind: "user", label: "User" },
     scope: {
+      profileId: "default",
       conversationId: "conversation_1",
+      originTurnId: null,
       workItemId: "work_item_1",
       projectId: "project_1",
       targetProject: null,
@@ -712,16 +705,17 @@ function createPipelineRequest(): CreatePipelineRequest {
       attachments: [],
       apps: [],
       tools: [],
+      signalRefs: [],
+      evalRefs: [],
       targetRepoAssumptions: [],
     },
-    targetAgent: {
-      agentId: null,
-      displayName: null,
-      defaultActionKey: "chat",
+    target: {
+      kind: "agent",
+      id: "release-notes-agent",
+      displayName: "Release notes agent",
+      defaultActionKey: "release-notes-agent.chat",
     },
-    metadata: {},
-    createdAt: now,
-  };
+  });
 }
 
 function cloudWorkItem(overrides: Record<string, unknown> = {}) {
@@ -789,25 +783,23 @@ async function git(cwd: string, args: string[]) {
 }
 
 function createPipelineSnapshot(
-  request: CreatePipelineRequest,
+  request: CreateImproveRun,
   input: {
-    state: CreatePipelineSnapshot["state"];
-    planStatus: NonNullable<CreatePipelineSnapshot["plan"]>["status"];
+    state: CreateImproveRun["state"];
+    planStatus: NonNullable<CreateImproveRun["plan"]>["status"];
   },
-): CreatePipelineSnapshot {
+): CreateImproveRun {
   const now = "2026-06-17T00:00:00.000Z";
   const approvalId = "approval_create_plan";
-  return {
-    schemaVersion: "openpond.createPipeline.snapshot.v1",
-    id: "create_pipeline_guard",
-    goalId: "work_item_1",
+  return createImproveRunFixture({
+    ...request,
+    id: request.id,
+    revision: 1,
     state: input.state,
-    request,
     plan: {
-      schemaVersion: "openpond.createPipeline.plan.v1",
+      schemaVersion: "openpond.createImprove.plan.v1",
       id: "create_plan_guard",
-      goalId: "work_item_1",
-      requestId: request.id,
+      runId: request.id,
       status: input.planStatus,
       objective: request.objective,
       summary: "Create a source-backed profile agent.",
@@ -827,19 +819,8 @@ function createPipelineSnapshot(
       createdAt: now,
       updatedAt: now,
     },
-    workflowCapture: null,
     approvalIds: [approvalId],
-    questionIds: [],
-    checkRefs: [],
-    sourceRefs: [],
-    localGoalId: null,
-    localProfileCommit: null,
-    hostedGoalId: null,
-    hostedSourceCommit: null,
     hostedSourceRef: "main",
-    blockedReason: null,
-    metadata: {},
-    createdAt: now,
     updatedAt: now,
-  };
+  });
 }

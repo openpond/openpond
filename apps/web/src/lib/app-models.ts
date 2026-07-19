@@ -7,8 +7,7 @@ import type {
   CloudProject,
   CodexPermissionMode,
   CodexReasoningEffort,
-  CreatePipelineRequest,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
   LocalProject,
   OpenPondCommandAccessMode,
   PersonalizationSettings,
@@ -43,7 +42,6 @@ export type AppView =
   | "get-started"
   | "labs"
   | "settings";
-export type LabsTab = "profile" | "agents" | "extensions" | "models" | "evals" | "signals";
 export type SettingsSection =
   | "account"
   | "notifications"
@@ -205,8 +203,7 @@ export type ChatMessage = {
   statusTone?: "info" | "success" | "danger";
   actionRun?: ActionRunSummary;
   insightsRunPrompt?: InsightsRunPromptSummary;
-  createPipelineRequest?: CreatePipelineRequest | null;
-  createPipeline?: CreatePipelineSnapshot | null;
+  createImproveRun?: CreateImproveRun | null;
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;

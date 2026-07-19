@@ -56,7 +56,7 @@ import {
   threadDetailProjectionFromRow,
   type ThreadDetailProjection,
 } from "./store-codecs.js";
-import { SqliteTrainingStore } from "./store-training.js";
+import { SqliteCreateImproveStore } from "./store-create-improve.js";
 
 export { CURRENT_SQLITE_SCHEMA_VERSION } from "./store-schema.js";
 export type { ThreadDetailProjection } from "./store-codecs.js";
@@ -214,7 +214,7 @@ type RuntimeEventRecentWindow = {
   limit: number;
 };
 
-export class SqliteStore extends SqliteTrainingStore {
+export class SqliteStore extends SqliteCreateImproveStore {
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;

@@ -7,7 +7,7 @@ import {
   latestKnownActiveGoalRuntimeFromEvents,
   projectGoalRuntimeTo,
 } from "../lib/goal-runtime";
-import { latestCreatePipelineRuntimeFromEvents } from "../lib/create-pipeline-runtime";
+import { latestCreateImproveRuntimeFromEvents } from "../lib/create-pipeline-runtime";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
 import { SIDEBAR_SECTION_LIMIT } from "../lib/app-models";
@@ -223,7 +223,7 @@ export function useSidebarRuntimeState(input: {
             ? activeGoalRuntimeFromSessionMetadata(historySession.metadata)
             : null;
         const historyGoalRuntime =
-          latestCreatePipelineRuntimeFromEvents(historyEvents) ??
+          latestCreateImproveRuntimeFromEvents(historyEvents) ??
           latestGoalRuntimeFromEvents(historyEvents) ??
           (historySession?.status === "active"
             ? (latestKnownActiveGoalRuntimeFromEvents(historyEvents) ?? metadataGoalRuntime)
@@ -240,7 +240,7 @@ export function useSidebarRuntimeState(input: {
         next.set(selectedSessionId, goalRuntime);
       } else if (selectedSession?.status === "active" && codexHistoryEvents.length > 0) {
         const knownActiveGoalRuntime =
-          latestCreatePipelineRuntimeFromEvents(codexHistoryEvents) ??
+          latestCreateImproveRuntimeFromEvents(codexHistoryEvents) ??
           latestKnownActiveGoalRuntimeFromEvents(codexHistoryEvents) ??
           activeGoalRuntimeFromSessionMetadata(selectedSession.metadata);
         if (knownActiveGoalRuntime) {

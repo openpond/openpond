@@ -345,15 +345,15 @@ export function AccountSettingsSection({
               {activeMetaLabel}
             </small>
             {signedIn && showTeamControl ? (
-            <DropdownSelect
-              className="account-team-dropdown"
-              compact
-              disabled={teamDropdownDisabled}
-              label="Default team"
-              options={teamOptions}
-              value={teamDropdownValue}
-              onChange={(teamId) => void setDefaultTeamId(teamId)}
-            />
+              <DropdownSelect
+                className="account-team-dropdown"
+                compact
+                disabled={teamDropdownDisabled}
+                label="Default team"
+                options={teamOptions}
+                value={teamDropdownValue}
+                onChange={(teamId) => void setDefaultTeamId(teamId)}
+              />
             ) : null}
           </div>
         </div>

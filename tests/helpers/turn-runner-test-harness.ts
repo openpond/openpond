@@ -1,6 +1,7 @@
 import {
   emptyOpenPondProfileState,
   type Approval,
+  type CreateImproveRun,
   type ModelUsageRecord,
   type RuntimeEvent,
   type Session,
@@ -21,6 +22,7 @@ export type TurnRunnerTestState = {
   turns: Turn[];
   events: RuntimeEvent[];
   approvals: Approval[];
+  createImproveRuns: CreateImproveRun[];
   usageRecords: ModelUsageRecord[];
   subagentRuns: SubagentRun[];
   subagentMessages: SubagentMessage[];
@@ -38,6 +40,15 @@ export function withTurnRunnerTestStore<
     snapshot(): Promise<{ events: RuntimeEvent[]; turns: Turn[]; approvals?: Approval[] }>;
   },
 >(store: T): T & TurnRunnerTestDependencies["store"] {
+  const createImproveRuns = new Map<string, CreateImproveRun>();
+  const createImproveActionReceipts = new Map<string, CreateImproveRun>();
+  const readCreateImproveRun = async (runId: string): Promise<CreateImproveRun | null> => {
+    const persisted = createImproveRuns.get(runId);
+    if (persisted) return persisted;
+    return (await store.snapshot()).turns
+      .map((turn) => turn.createImproveRun)
+      .find((run) => run?.id === runId) ?? null;
+  };
   return {
     ...store,
     async runtimeEventsForSession(sessionId, query = {}) {
@@ -83,6 +94,34 @@ export function withTurnRunnerTestStore<
     },
     async countTurnsForSession(sessionId) {
       return (await store.snapshot()).turns.filter((turn) => turn.sessionId === sessionId).length;
+    },
+    async getCreateImproveRun(runId) {
+      return readCreateImproveRun(runId);
+    },
+    async listCreateImproveRuns(query = {}) {
+      const snapshotRuns = (await store.snapshot()).turns
+        .map((turn) => turn.createImproveRun)
+        .filter((run): run is CreateImproveRun => Boolean(run));
+      const runs = new Map(snapshotRuns.map((run) => [run.id, run]));
+      for (const run of createImproveRuns.values()) runs.set(run.id, run);
+      return filterCreateImproveRuns([...runs.values()], query);
+    },
+    async upsertCreateImproveRun(run) {
+      createImproveRuns.set(run.id, run);
+      return run;
+    },
+    async mutateCreateImproveRun(action, updater) {
+      const replay = createImproveActionReceipts.get(action.actionId);
+      if (replay) return { run: replay, replayed: true };
+      const current = await readCreateImproveRun(action.runId);
+      if (!current) throw new Error(`Create/Improve run not found: ${action.runId}`);
+      if (current.revision !== action.expectedRevision) {
+        throw new Error(`Create/Improve run revision changed: ${action.runId}`);
+      }
+      const next = updater(current);
+      createImproveRuns.set(next.id, next);
+      createImproveActionReceipts.set(action.actionId, next);
+      return { run: next, replayed: false };
     },
     async hasSubagentParentWakeTurn(sessionId, messageId) {
       return (await store.snapshot()).turns.some((turn) =>
@@ -132,6 +171,7 @@ export function createTurnRunnerTestHarness(options: {
   turns?: Turn[];
   events?: RuntimeEvent[];
   approvals?: Approval[];
+  createImproveRuns?: CreateImproveRun[];
   usageRecords?: ModelUsageRecord[];
   subagentRuns?: SubagentRun[];
   subagentMessages?: SubagentMessage[];
@@ -145,11 +185,16 @@ export function createTurnRunnerTestHarness(options: {
     turns: [...(options.turns ?? [])],
     events: [...(options.events ?? [])],
     approvals: [...(options.approvals ?? [])],
+    createImproveRuns: [...(options.createImproveRuns ?? [])],
     usageRecords: [...(options.usageRecords ?? [])],
     subagentRuns: [...(options.subagentRuns ?? [])],
     subagentMessages: [...(options.subagentMessages ?? [])],
     streamInputs: [],
   };
+  const readCreateImproveRun = (runId: string): CreateImproveRun | null =>
+    state.createImproveRuns.find((run) => run.id === runId)
+      ?? state.turns.map((turn) => turn.createImproveRun).find((run) => run?.id === runId)
+      ?? null;
 
   const defaultStore: TurnRunnerTestDependencies["store"] = {
     async runtimeEventsForSession(sessionId, query = {}) {
@@ -190,6 +235,33 @@ export function createTurnRunnerTestHarness(options: {
     },
     async countTurnsForSession(sessionId) {
       return state.turns.filter((turn) => turn.sessionId === sessionId).length;
+    },
+    async getCreateImproveRun(runId) {
+      return readCreateImproveRun(runId);
+    },
+    async listCreateImproveRuns(query = {}) {
+      const runs = new Map(
+        state.turns
+          .map((turn) => turn.createImproveRun)
+          .filter((run): run is CreateImproveRun => Boolean(run))
+          .map((run) => [run.id, run]),
+      );
+      for (const run of state.createImproveRuns) runs.set(run.id, run);
+      return filterCreateImproveRuns([...runs.values()], query);
+    },
+    async upsertCreateImproveRun(run) {
+      upsertById(state.createImproveRuns, run, (candidate) => candidate.id);
+      return run;
+    },
+    async mutateCreateImproveRun(action, updater) {
+      const current = readCreateImproveRun(action.runId);
+      if (!current) throw new Error(`Create/Improve run not found: ${action.runId}`);
+      if (current.revision !== action.expectedRevision) {
+        throw new Error(`Create/Improve run revision changed: ${action.runId}`);
+      }
+      const next = updater(current);
+      upsertById(state.createImproveRuns, next, (candidate) => candidate.id);
+      return { run: next, replayed: false };
     },
     async hasSubagentParentWakeTurn(sessionId, messageId) {
       return state.turns.some((turn) =>
@@ -375,6 +447,31 @@ function upsertById<T>(items: T[], next: T, id: (item: T) => string): void {
   const index = items.findIndex((candidate) => id(candidate) === id(next));
   if (index < 0) items.push(next);
   else items[index] = next;
+}
+
+function filterCreateImproveRuns(
+  runs: CreateImproveRun[],
+  query: {
+    profileId?: string | null;
+    conversationId?: string | null;
+    targetKind?: CreateImproveRun["target"]["kind"] | null;
+    targetId?: string | null;
+    state?: CreateImproveRun["state"] | readonly CreateImproveRun["state"][] | null;
+    limit?: number;
+  } = {},
+): CreateImproveRun[] {
+  const states = Array.isArray(query.state)
+    ? query.state
+    : query.state
+      ? [query.state]
+      : null;
+  return runs
+    .filter((run) => !query.profileId || run.scope.profileId === query.profileId)
+    .filter((run) => !query.conversationId || run.scope.conversationId === query.conversationId)
+    .filter((run) => !query.targetKind || run.target.kind === query.targetKind)
+    .filter((run) => !query.targetId || run.target.id === query.targetId)
+    .filter((run) => !states || states.includes(run.state))
+    .slice(0, query.limit ?? 250);
 }
 
 function requiredTurn(turns: Turn[], turnId: string): Turn {

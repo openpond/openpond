@@ -13,7 +13,7 @@ import type { RightChatPanel, RightPanelMode, ShowAppToast } from "../app/app-st
 import type { ComposerSubmitOptions } from "../components/chat/Composer";
 import type { WorkspaceDiffTabRequest } from "../components/workspace-diff/workspace-diff-panel-model";
 import type { ComposerSlashCommand } from "../lib/composer-slash-commands";
-import type { AppView, LabsTab } from "../lib/app-models";
+import type { AppView } from "../lib/app-models";
 import { normalizeChatModel } from "../lib/app-models";
 import { appendPendingUserChatMessage, type PendingChatUserMessage } from "../lib/pending-chat-messages";
 import { appendSubagentRightChatPanels, createRightChatPanel, newlyObservedSubagentSessions } from "../lib/right-chat-panels";
@@ -68,6 +68,7 @@ export function useRightChatPanels(input: {
   connection: ClientConnection | null;
   contextCompaction: AppPreferences["contextCompaction"];
   insights: RightChatInsights;
+  openLabSuggestions: () => void;
   locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   pendingChatUserMessages: Record<string, PendingChatUserMessage>;
@@ -88,7 +89,6 @@ export function useRightChatPanels(input: {
   setRightChatPanels: Dispatch<SetStateAction<RightChatPanel[]>>;
   setRightPanelMode: Dispatch<SetStateAction<RightPanelMode>>;
   setRightPanelTabRequest: Dispatch<SetStateAction<WorkspaceDiffTabRequest | null>>;
-  setLabsTab: Dispatch<SetStateAction<LabsTab>>;
   setView: Dispatch<SetStateAction<AppView>>;
   showChangesPanel: () => void;
   showToast: ShowAppToast;
@@ -104,6 +104,7 @@ export function useRightChatPanels(input: {
     connection,
     contextCompaction,
     insights,
+    openLabSuggestions,
     locallyActiveCodexHistorySessionIds,
     openPondCommandAccessMode,
     pendingChatUserMessages,
@@ -124,7 +125,6 @@ export function useRightChatPanels(input: {
     setRightChatPanels,
     setRightPanelMode,
     setRightPanelTabRequest,
-    setLabsTab,
     setView,
     showChangesPanel,
     showToast,
@@ -142,11 +142,15 @@ export function useRightChatPanels(input: {
     [showChangesPanel],
   );
   const openRightChatPanel = useCallback(
-    (session: Session | null = null) => {
+    (
+      session: Session | null = null,
+      options: { preserveView?: boolean; prompt?: string } = {},
+    ) => {
       const nextPanel = createRightChatPanel({
         sessionId: session?.id ?? null,
         provider: session?.provider ?? activeProvider,
         model: session?.modelRef?.modelId ?? activeModel,
+        prompt: options.prompt,
       });
       setRightChatPanels((current) => {
         if (session?.id && current.some((panel) => panel.sessionId === session.id)) return current;
@@ -154,7 +158,8 @@ export function useRightChatPanels(input: {
       });
       setDiffPanelOpen(true);
       setRightPanelMode("chat");
-      setView("chat");
+      if (!options.preserveView) setView("chat");
+      return nextPanel.id;
     },
     [activeModel, activeProvider, setDiffPanelOpen, setRightChatPanels, setRightPanelMode, setView],
   );
@@ -422,8 +427,7 @@ export function useRightChatPanels(input: {
       if (!panel) return false;
       const panelPromptForSubmit = options.promptOverride ?? panel.prompt;
       if (command?.id === "insights") {
-        setLabsTab("signals");
-        setView("labs");
+        openLabSuggestions();
         if (!options.preservePrompt) updateRightChatPrompt(panelId, "");
         const payload = await insights.runScan();
         const activeCount = payload?.summary?.activeCount ?? insights.summary?.activeCount ?? 0;
@@ -518,10 +522,10 @@ export function useRightChatPanels(input: {
       selectedSessionId,
       insights.runScan,
       insights.summary?.activeCount,
+      openLabSuggestions,
       openPondCommandAccessMode,
       sendPrompt,
       setRightChatPanels,
-      setLabsTab,
       setView,
       sidebarSessions,
       showToast,

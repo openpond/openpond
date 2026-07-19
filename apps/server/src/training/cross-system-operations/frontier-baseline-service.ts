@@ -37,6 +37,7 @@ export function createCrossSystemFrontierBaselineService(deps: {
 
   async function startRun(input: {
     profileId: string;
+    createImproveRunId?: string | null;
     localProjectId: string;
     worldSpecs: CrossSystemWorldSpec[];
     model: ChatModelRef;
@@ -52,6 +53,7 @@ export function createCrossSystemFrontierBaselineService(deps: {
       schemaVersion: "openpond.crossSystemFrontierBaselineRun.v1",
       id: `cso_frontier_run_${randomUUID()}`,
       profileId: input.profileId,
+      createImproveRunId: input.createImproveRunId ?? null,
       localProjectId: project.id,
       localProjectName: project.name,
       model: input.model,

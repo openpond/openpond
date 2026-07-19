@@ -134,7 +134,10 @@ describe("release workflow", () => {
     expect(ciWorkflow).not.toContain("setup-bun");
     expect(ciWorkflow).not.toMatch(/\bbun (?:install|run|x|test)\b/);
     expect(ciWorkflow).toMatch(
-      /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: apps/,
+      /name: verified-build-\$\{\{ github\.sha \}\}[\s\S]*?packages\/cloud\/dist/,
+    );
+    expect(ciWorkflow).toMatch(
+      /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: \./,
     );
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_CI_LONG_CLI_TESTS");
   });

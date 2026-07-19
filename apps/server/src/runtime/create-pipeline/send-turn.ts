@@ -1,81 +1,71 @@
 import type {
-  CreatePipelineRequest,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
   RuntimeEvent,
   Session,
   Turn,
 } from "@openpond/contracts";
-import { assertCreatePipelineSnapshotLinked } from "../../create-pipeline-guards.js";
 import { event } from "../../utils.js";
-import type { CreatePipelineRuntime } from "./runtime.js";
-import { createPipelineRuntimeEventStatus } from "./snapshots.js";
+import type { CreateImproveRuntime } from "./runtime.js";
+import {
+  createImproveRuntimeEventStatus,
+  shouldRunCreateImprovePlanner,
+} from "./snapshots.js";
 
-export function createCreatePipelineTurnHandler(deps: {
+export function createCreateImproveTurnHandler(deps: {
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
-  planCreatePipelineForTurn: CreatePipelineRuntime["planCreatePipelineForTurn"];
-  persistCreatePipelineSnapshot: CreatePipelineRuntime["persistCreatePipelineSnapshot"];
-  syncCreatePlanApproval: CreatePipelineRuntime["syncCreatePlanApproval"];
+  planCreateImproveForTurn: CreateImproveRuntime["planCreateImproveForTurn"];
+  persistCreateImproveRun: CreateImproveRuntime["persistCreateImproveRun"];
   completeTurn(sessionId: string, turnId: string, providerTurnId: string | null): Promise<Turn>;
 }) {
-  return async function handleCreatePipelineTurn(input: {
+  return async function handleCreateImproveTurn(input: {
     session: Session;
     turn: Turn;
-    request: CreatePipelineRequest;
-    snapshot?: CreatePipelineSnapshot | null;
+    run: CreateImproveRun;
     signal: AbortSignal;
   }): Promise<Turn> {
-    let snapshot = input.snapshot ?? null;
-    let plannedByServer = false;
-    if (!snapshot) {
+    let persistedTurn = await deps.persistCreateImproveRun({
+      session: input.session,
+      turnId: input.turn.id,
+      run: input.run,
+      source: "server",
+    });
+    let run = persistedTurn.createImproveRun ?? input.run;
+    if (shouldRunCreateImprovePlanner(run)) {
       await deps.appendRuntimeEvent(event({
         sessionId: input.session.id,
         turnId: input.turn.id,
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         source: "server",
         appId: input.session.appId,
         status: "pending",
-        output: "Create planner is preparing the plan.",
-        data: { createPipelineRequest: input.request, createPipeline: null },
+        output: "Create/Improve planner is preparing the plan.",
+        data: { createImproveRun: run },
       }));
-      snapshot = await deps.planCreatePipelineForTurn({
+      run = await deps.planCreateImproveForTurn({
         session: input.session,
-        turn: input.turn,
-        request: input.request,
-        previousSnapshot: null,
+        turn: persistedTurn,
+        run,
         signal: input.signal,
       });
-      plannedByServer = true;
-      await deps.persistCreatePipelineSnapshot({
+      persistedTurn = await deps.persistCreateImproveRun({
         session: input.session,
         turnId: input.turn.id,
-        request: input.request,
-        snapshot,
+        run,
         source: "server",
       });
     } else {
-      assertCreatePipelineSnapshotLinked({
-        actionLabel: "Create pipeline send turn",
-        request: input.request,
-        snapshot,
-      });
-    }
-    if (!plannedByServer) {
       await deps.appendRuntimeEvent(event({
         sessionId: input.session.id,
         turnId: input.turn.id,
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         source: "server",
         appId: input.session.appId,
-        status: createPipelineRuntimeEventStatus(snapshot),
-        output: snapshot.state === "awaiting_questions" ? "Create question ready." : "Create plan ready for review.",
-        data: { createPipelineRequest: input.request, createPipeline: snapshot },
+        status: createImproveRuntimeEventStatus(run),
+        output: run.state === "awaiting_questions"
+          ? "Create/Improve question ready."
+          : "Create/Improve plan ready for review.",
+        data: { createImproveRun: run },
       }));
-      await deps.syncCreatePlanApproval({
-        session: input.session,
-        turn: input.turn,
-        request: input.request,
-        snapshot,
-      });
     }
     await deps.appendRuntimeEvent(event({
       sessionId: input.session.id,
@@ -84,10 +74,10 @@ export function createCreatePipelineTurnHandler(deps: {
       source: "server",
       appId: input.session.appId,
       status: "completed",
-      output: snapshot.state === "awaiting_questions"
-        ? "Create pipeline paused for questions."
-        : "Create pipeline paused for plan review.",
+      output: run.state === "awaiting_questions"
+        ? "Create/Improve paused for questions."
+        : "Create/Improve paused for plan review.",
     }));
-    return deps.completeTurn(input.session.id, input.turn.id, null);
+    return deps.completeTurn(input.session.id, persistedTurn.id, null);
   };
 }

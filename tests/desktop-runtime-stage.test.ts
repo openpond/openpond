@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   artifactArchitectureLabel,
+  desktopPackageBudget,
   unpackedPackageCandidates,
 } from "../scripts/check-desktop-package-budgets";
 import { runtimeInventoryVerification } from "../scripts/desktop-runtime-inventory";
@@ -69,10 +70,12 @@ describe("desktop runtime staging", () => {
       files?: string[];
       extraResources?: Array<{ from?: string }>;
       npmRebuild?: boolean;
+      mac?: { identity?: string };
     };
 
     expect(config.directories?.app).toBe("apps/desktop/stage/app");
     expect(config.npmRebuild).toBe(false);
+    expect(config.mac?.identity).toBe("-");
     expect(config.files).toContain("!node_modules/**/*");
     expect(config.extraResources?.map((entry) => entry.from)).toContain("apps/desktop/stage/runtime");
     expect(config.extraResources).toContainEqual({ from: "LICENSE", to: "LICENSE.openpond.txt" });
@@ -88,6 +91,12 @@ describe("desktop runtime staging", () => {
     expect(artifactArchitectureLabel("linux", "x64")).toBe("x86_64");
     expect(artifactArchitectureLabel("linux", "arm64")).toBe("arm64");
     expect(artifactArchitectureLabel("darwin", "x64")).toBe("x64");
+  });
+
+  test("keeps Linux unpacked package budgets architecture-specific", () => {
+    expect(desktopPackageBudget("linux", "x64")?.maxUnpackedBytes).toBe(332 * 1024 * 1024);
+    expect(desktopPackageBudget("linux", "arm64")?.maxUnpackedBytes).toBe(334 * 1024 * 1024);
+    expect(desktopPackageBudget("darwin", "arm64")?.maxUnpackedBytes).toBe(400 * 1024 * 1024);
   });
 
   test("uses signature-aware verification only for Darwin executable runtime files", () => {

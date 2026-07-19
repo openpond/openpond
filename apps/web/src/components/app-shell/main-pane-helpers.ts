@@ -9,7 +9,7 @@ import type {
 import type { AppView, ChatMessage } from "../../lib/app-models";
 import type { ParsedComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
-import type { ComposerCreatePipelineRuntime } from "../chat/ComposerCreatePipelineStrip";
+import type { ComposerCreateImproveRuntime } from "../chat/ComposerCreateImproveStrip";
 
 const CHAT_AUTOSCROLL_THRESHOLD_PX = 72;
 export const CHAT_HISTORY_TOP_THRESHOLD_PX = 120;
@@ -129,16 +129,11 @@ export function easeInOutCubic(progress: number): number {
 
 export function latestCreatePipelineRuntime(
   messages: ChatMessage[],
-): Pick<ComposerCreatePipelineRuntime, "request" | "snapshot" | "turnId"> | null {
+): ComposerCreateImproveRuntime | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
-    if (!message.createPipelineRequest) continue;
-    if (message.createPipeline?.state === "cancelled") continue;
-    return {
-      turnId: message.turnId ?? null,
-      request: message.createPipelineRequest,
-      snapshot: message.createPipeline ?? null,
-    };
+    if (!message.createImproveRun || message.createImproveRun.state === "cancelled") continue;
+    return { run: message.createImproveRun };
   }
   return null;
 }
@@ -177,7 +172,7 @@ export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSl
   );
 }
 
-export function shouldRunCreatePipelineCommandLocally(input: {
+export function shouldRunCreateImproveCommandLocally(input: {
   command: ParsedComposerSlashCommand;
   profile: BootstrapPayload["profile"] | null | undefined;
   activeWorkspaceKind: WorkspaceKind | null;

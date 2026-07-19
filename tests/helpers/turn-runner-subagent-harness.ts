@@ -572,8 +572,7 @@ export function turnFixture(overrides: Partial<Turn> = {}): Turn {
     status: "completed",
     error: null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
     ...overrides,
   };
 }
@@ -611,8 +610,7 @@ export function usageRecord(patch: Partial<ModelUsageRecord>): ModelUsageRecord 
       goalId: "goal_1",
       subagentRunId: "run_child",
       subagentRoleId: "research",
-      createPipelineRequestId: null,
-      createPipelineId: null,
+      createImproveRunId: null,
       commandName: null,
       commandSource: null,
       appId: null,

@@ -8,6 +8,7 @@ export function WorkspaceFileTree({
   expandedFolderPaths,
   rootPath,
   repoFiles,
+  selectedPath,
   onOpenFile,
   onToggleFolder,
 }: {
@@ -15,6 +16,7 @@ export function WorkspaceFileTree({
   expandedFolderPaths: ReadonlySet<string>;
   rootPath?: string | null;
   repoFiles: string[];
+  selectedPath?: string | null;
   onOpenFile: (path: string) => void;
   onToggleFolder: (path: string) => void;
 }) {
@@ -35,6 +37,7 @@ export function WorkspaceFileTree({
             key={`${node.type}:${node.path}`}
             node={node}
             rootPath={rootPath}
+            selectedPath={selectedPath}
             onOpenFile={onOpenFile}
             onToggleFolder={onToggleFolder}
           />
@@ -50,6 +53,7 @@ function FileTreeNodeRow({
   expandedFolderPaths,
   node,
   rootPath,
+  selectedPath,
   onOpenFile,
   onToggleFolder,
 }: {
@@ -58,6 +62,7 @@ function FileTreeNodeRow({
   expandedFolderPaths: ReadonlySet<string>;
   node: FileTreeNode;
   rootPath?: string | null;
+  selectedPath?: string | null;
   onOpenFile: (path: string) => void;
   onToggleFolder: (path: string) => void;
 }) {
@@ -88,6 +93,7 @@ function FileTreeNodeRow({
               key={`${child.type}:${child.path}`}
               node={child}
               rootPath={rootPath}
+              selectedPath={selectedPath}
               onOpenFile={onOpenFile}
               onToggleFolder={onToggleFolder}
             />
@@ -98,7 +104,7 @@ function FileTreeNodeRow({
   return (
     <button
       type="button"
-      className={`workspace-file-tree-row file ${changed ? "changed" : ""}`}
+      className={`workspace-file-tree-row file ${changed ? "changed" : ""} ${selectedPath === resolvedPath ? "selected" : ""}`}
       style={{ paddingLeft: rowPaddingLeft }}
       onClick={() => onOpenFile(resolvedPath)}
     >

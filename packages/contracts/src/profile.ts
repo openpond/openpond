@@ -29,6 +29,14 @@ export const OpenPondProfileSkillSchema = z.object({
   validationMessages: z.array(z.string()),
 });
 
+export const OpenPondProfileEvalSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  agentId: z.string().nullable(),
+  sourcePath: z.string(),
+});
+
 export const OpenPondProfileGitFileChangeSchema = z.object({
   path: z.string(),
   originalPath: z.string().nullable().optional(),
@@ -193,8 +201,6 @@ export const OpenPondProfileHostedBindingSchema = z.object({
   lastPushedHostedHead: z.string().nullable(),
   promotionStatus: z.string().nullable().optional().default(null),
   hostedRunStatus: z.string().nullable().optional().default(null),
-  localGoalId: z.string().nullable().optional().default(null),
-  hostedGoalId: z.string().nullable().optional().default(null),
   hostedRunAgentId: z.string().nullable().optional().default(null),
   hostedRunId: z.string().nullable().optional().default(null),
   hostedRunAt: z.string().nullable().optional().default(null),
@@ -224,6 +230,7 @@ export const OpenPondProfileStateSchema = z.object({
   manifestPath: z.string().nullable(),
   agents: z.array(OpenPondProfileAgentSchema),
   skills: z.array(OpenPondProfileSkillSchema).optional().default([]),
+  evals: z.array(OpenPondProfileEvalSchema).optional().default([]),
   git: OpenPondProfileGitStateSchema.nullable(),
   catalog: OpenPondProfileCatalogStateSchema,
   skillCatalog: OpenPondProfileSkillCatalogStateSchema.optional().default({
@@ -245,6 +252,7 @@ export const OpenPondProfileStateSchema = z.object({
 export type LocalOpenPondProfileCheckStatus = z.infer<typeof LocalOpenPondProfileCheckStatusSchema>;
 export type OpenPondProfileAgent = z.infer<typeof OpenPondProfileAgentSchema>;
 export type OpenPondProfileSkill = z.infer<typeof OpenPondProfileSkillSchema>;
+export type OpenPondProfileEval = z.infer<typeof OpenPondProfileEvalSchema>;
 export type OpenPondProfileGitFileChange = z.infer<typeof OpenPondProfileGitFileChangeSchema>;
 export type OpenPondProfileGitState = z.infer<typeof OpenPondProfileGitStateSchema>;
 export type OpenPondProfileCatalogState = z.infer<typeof OpenPondProfileCatalogStateSchema>;
@@ -265,6 +273,7 @@ export function emptyOpenPondProfileState(): OpenPondProfileState {
     manifestPath: null,
     agents: [],
     skills: [],
+    evals: [],
     git: null,
     catalog: {
       actionCount: 0,

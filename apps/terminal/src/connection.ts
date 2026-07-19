@@ -16,7 +16,10 @@ let serverProcess: ChildProcessWithoutNullStreams | null = null;
 let stopServerPromise: Promise<void> | null = null;
 
 function tokenFilePath(): string {
-  return path.join(os.homedir(), ".openpond", "openpond-app", "token");
+  const appHome =
+    process.env.OPENPOND_APP_HOME ||
+    path.join(os.homedir(), ".openpond", "openpond-app");
+  return path.join(appHome, "token");
 }
 
 async function readToken(): Promise<string | null> {
@@ -61,18 +64,22 @@ function repoRoot(): string {
   return path.resolve(__dirname, "../../..");
 }
 
-async function startServer(onLog: (line: string) => void): Promise<string> {
+async function startServer(
+  requestedServer: string,
+  onLog: (line: string) => void,
+): Promise<string> {
   const root = repoRoot();
   const configuredRunner = process.env.OPENPOND_SERVER_RUNNER;
   const configuredArgs = parseConfiguredServerArgs(process.env.OPENPOND_SERVER_ARGS);
   const sourceMode = !configuredRunner && path.basename(__dirname) === "src";
   const serverEntry = path.join(root, "apps", "server", sourceMode ? "src/index.ts" : "dist/index.js");
   const command = configuredRunner ?? process.env.OPENPOND_NODE_BINARY ?? process.execPath;
-  const args = configuredRunner
+  const baseArgs = configuredRunner
     ? configuredArgs
     : sourceMode
       ? [createRequire(import.meta.url).resolve("tsx/cli"), serverEntry]
       : [serverEntry];
+  const args = [...baseArgs, ...serverListenArgs(requestedServer)];
   const child = spawn(command, args, {
     cwd: process.env.OPENPOND_SERVER_CWD || root,
     env: process.env,
@@ -127,6 +134,21 @@ async function startServer(onLog: (line: string) => void): Promise<string> {
   });
 }
 
+export function serverListenArgs(server: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(server);
+  } catch {
+    throw new Error(`Invalid OpenPond App server URL: ${server}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`OpenPond App server URL must use http or https: ${server}`);
+  }
+  const host = parsed.hostname.replace(/^\[|\]$/g, "");
+  const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+  return ["--host", host, "--port", port];
+}
+
 function parseConfiguredServerArgs(value: string | undefined): string[] {
   if (!value) return [];
   try {
@@ -146,7 +168,7 @@ export async function ensureServer(
   if (!(await health(server))) {
     if (options.noServerStart) throw new Error(`No server is listening at ${server}`);
     try {
-      server = await startServer(onLog);
+      server = await startServer(server, onLog);
     } catch (error) {
       await stopManagedServer();
       throw error;

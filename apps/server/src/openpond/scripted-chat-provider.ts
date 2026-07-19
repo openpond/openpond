@@ -80,6 +80,11 @@ export async function* streamScriptedOpenPondChatTurn(
 }
 
 function* streamTwoTurnChat(input: HostedChatTurnInput): Generator<HostedChatTurnDelta, void, unknown> {
+  if (isCreateImprovePlannerTurn(input.messages)) {
+    yield textDelta(scriptedCreateImprovePlannerDecision(input.messages));
+    yield finishDelta("stop");
+    return;
+  }
   if (isTasksetAuthoringTurn(input.messages)) {
     yield textDelta(scriptedTasksetAuthoringEnvelope(input.messages));
     yield finishDelta("stop");
@@ -92,6 +97,73 @@ function* streamTwoTurnChat(input: HostedChatTurnInput): Generator<HostedChatTur
   yield finishDelta("stop");
 }
 
+function isCreateImprovePlannerTurn(messages: HostedChatMessage[]): boolean {
+  return messages.some((message) =>
+    message.role === "system" &&
+    typeof message.content === "string" &&
+    message.content.includes("You are the OpenPond Create/Improve planner.")
+  );
+}
+
+function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): string {
+  const request = parseJsonRecord(latestUserText(messages) ?? "");
+  const run = record(request.run);
+  const objective = typeof run.objective === "string" && run.objective.trim()
+    ? run.objective.trim()
+    : "Create a useful Profile Agent.";
+  const target = record(run.target);
+  const targetId = typeof target.id === "string" && target.id.trim()
+    ? target.id.trim()
+    : scriptedAgentId(objective);
+  const targetName = targetId
+    .split(/[-_.]+/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");
+  return JSON.stringify({
+    schemaVersion: "openpond.createImprove.plannerDecision.v1",
+    decision: "plan",
+    plan: {
+      targetId,
+      targetName,
+      summary: `Create ${targetName} as a Profile Agent.`,
+      capturedContextSummary: "Lab-authored Agent objective.",
+      actionShape: {
+        mode: "chat",
+        label: "Chat",
+        detail: "Use the Agent through its default chat action.",
+        defaultActionKey: `${targetId}.chat`,
+        directActionHint: null,
+        artifactPolicy: "Persist Agent SDK traces and Eval receipts.",
+      },
+      defaultChatAction: {
+        key: `${targetId}.chat`,
+        label: "Chat",
+        required: true,
+      },
+      sourcePlan: [{
+        path: `agents/${targetId}`,
+        operation: "create",
+        reason: objective,
+      }],
+      requirements: [],
+      checks: [
+        { name: "Agent SDK validate", command: "pnpm agent:validate", required: true },
+        { name: "Agent SDK Eval", command: "pnpm agent:eval", required: true },
+      ],
+    },
+  });
+}
+
+function scriptedAgentId(objective: string): string {
+  return objective
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "created-agent";
+}
+
 function isTasksetAuthoringTurn(messages: HostedChatMessage[]): boolean {
   return messages.some((message) =>
     message.role === "system" &&
@@ -99,6 +171,20 @@ function isTasksetAuthoringTurn(messages: HostedChatMessage[]): boolean {
     message.content.includes("You are OpenPond Taskset Authoring.") &&
     message.content.includes("Follow the bundled Taskset Authoring skill below:")
   );
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> {
+  try {
+    return record(JSON.parse(value));
+  } catch {
+    return {};
+  }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function scriptedTasksetAuthoringEnvelope(messages: HostedChatMessage[]): string {

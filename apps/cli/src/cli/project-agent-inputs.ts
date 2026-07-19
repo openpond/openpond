@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
-  CreatePipelineRequestSchema,
-  type CreatePipelineRequest,
+  CreateImproveRunSchema,
+  type CreateImproveRun,
 } from "@openpond/contracts";
 import type {
   SandboxAgentEditWorkItemOpenInput,
@@ -303,7 +303,7 @@ export function buildAgentEditOpenInput(
     ...(initialMessage ? { initialMessage } : {}),
     ...(sourceRef ? { sourceRef } : {}),
     ...(baseSha ? { baseSha } : {}),
-    createPipelineRequest: buildAgentEditCreatePipelineRequest({
+    createImproveRun: buildAgentEditCreateImproveRun({
       agentId,
       teamId,
       projectId,
@@ -315,7 +315,7 @@ export function buildAgentEditOpenInput(
   };
 }
 
-function buildAgentEditCreatePipelineRequest(input: {
+function buildAgentEditCreateImproveRun(input: {
   agentId: string;
   teamId: string;
   projectId: string;
@@ -323,15 +323,17 @@ function buildAgentEditCreatePipelineRequest(input: {
   sourceRef: string | null;
   baseSha: string | null;
   activeProfile: string;
-}): CreatePipelineRequest {
+}): CreateImproveRun {
   const now = new Date().toISOString();
-  return CreatePipelineRequestSchema.parse({
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id: `create_request_${randomUUID()}`,
-    operation: "edit",
-    surface: "hosted_edit",
+  return CreateImproveRunSchema.parse({
+    schemaVersion: "openpond.createImprove.run.v1",
+    id: `create_improve_${randomUUID()}`,
+    revision: 0,
+    operation: "improve",
+    surface: "hosted_improve",
     command: "/edit",
     objective: input.objective,
+    state: "planning",
     adapter: {
       kind: "hosted",
       sourceAuthority: "hosted_profile",
@@ -349,7 +351,9 @@ function buildAgentEditCreatePipelineRequest(input: {
       label: null,
     },
     scope: {
+      profileId: input.activeProfile,
       conversationId: null,
+      originTurnId: null,
       workItemId: null,
       projectId: input.projectId,
       targetProject: {
@@ -366,18 +370,54 @@ function buildAgentEditCreatePipelineRequest(input: {
       attachments: [],
       apps: [],
       tools: [],
+      signalRefs: [],
+      evalRefs: [],
       targetRepoAssumptions: [`cloud project: ${input.projectId}`],
     },
-    targetAgent: {
-      agentId: input.agentId,
+    target: {
+      kind: "agent",
+      id: input.agentId,
       displayName: null,
       defaultActionKey: `${input.agentId}.chat`,
     },
+    plan: null,
+    workflowCapture: null,
+    executionPolicy: {
+      mode: "background",
+      pauseAllowed: true,
+      cancellationAllowed: true,
+    },
+    iterationPolicy: {
+      mode: "single",
+      maximumAttempts: 1,
+      currentAttempt: 0,
+    },
+    approvalIds: [],
+    questionIds: [],
+    questions: [],
+    candidates: [],
+    evaluationReceipts: [],
+    checkRefs: [],
+    sourceRefs: [],
+    externalExecutionRefs: [],
+    localProfileCommit: null,
+    hostedSourceCommit: input.baseSha,
+    hostedSourceRef: input.sourceRef,
+    releaseOutcome: {
+      status: "not_requested",
+      profileCommit: null,
+      profileTag: null,
+      releaseReceiptRef: null,
+      updatedAt: null,
+    },
+    blockedReason: null,
+    appliedActionIds: [],
     metadata: {
       source: "cli_agent_edit_open",
       selectedCommand: "/edit",
     },
     createdAt: now,
+    updatedAt: now,
   });
 }
 

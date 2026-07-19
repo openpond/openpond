@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { isolatedOpenPondEnvironment } from "../isolated-openpond-environment.js";
 import type { DesktopHarnessConnection } from "./types.js";
 import {
   CdpClient,
@@ -216,7 +217,7 @@ function launchDevElectron(input: {
       ...process.env,
       ELECTRON_ENABLE_LOGGING: "1",
       OPENPOND_HARNESS_SCRIPTED_MODELS: "1",
-      OPENPOND_APP_HOME: input.appHome,
+      ...isolatedOpenPondEnvironment(input.appHome),
       OPENPOND_SERVER_PORT: "0",
       OPENPOND_WEB_PORT: String(input.webPort),
       OPENPOND_WEB_URL: input.webUrl,
@@ -321,7 +322,7 @@ function launchPackagedElectron(input: {
       APPIMAGE_EXTRACT_AND_RUN: "1",
       ELECTRON_ENABLE_LOGGING: "1",
       OPENPOND_HARNESS_SCRIPTED_MODELS: "1",
-      OPENPOND_APP_HOME: input.appHome,
+      ...isolatedOpenPondEnvironment(input.appHome),
       OPENPOND_SERVER_PORT: "0",
     },
     detached: process.platform !== "win32",

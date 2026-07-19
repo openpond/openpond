@@ -15,11 +15,12 @@ import type { SqliteStore } from "../store/store.js";
 export const LOCAL_ADAPTER_PROVIDER_ID = "local-adapter" as const;
 
 export async function listLocalAdapterProviderModels(store: SqliteStore): Promise<ProviderModel[]> {
-  const [lineages, artifacts, jobs, plans] = await Promise.all([
+  const [lineages, artifacts, jobs, plans, bindings] = await Promise.all([
     store.listModelArtifactLineage(),
     store.listTrainingArtifacts(),
     store.listTrainingJobs(),
     store.listTrainingPlans(),
+    store.listModelBindings(),
   ]);
   const tasksets = (await Promise.all(
     [...new Set(lineages.map((lineage) => lineage.tasksetId))].map((tasksetId) => store.getTaskset(tasksetId)),
@@ -28,15 +29,20 @@ export async function listLocalAdapterProviderModels(store: SqliteStore): Promis
   const tasksetById = new Map(tasksets.map((taskset) => [taskset.id, taskset]));
   const jobById = new Map(jobs.map((job) => [job.id, job]));
   const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  const activeBindingsByLineage = new Map<string, string[]>();
+  for (const binding of bindings) {
+    if (binding.status !== "active") continue;
+    const refs = activeBindingsByLineage.get(binding.modelArtifactLineageId) ?? [];
+    refs.push(`${binding.role}:${binding.roleTargetId}`);
+    activeBindingsByLineage.set(binding.modelArtifactLineageId, refs);
+  }
 
-  const selectedTasksets = new Set<string>();
   return lineages
     .filter((lineage) => lineage.status === "imported")
-    .sort((left, right) => right.importedAt.localeCompare(left.importedAt))
-    .filter((lineage) => {
-      if (selectedTasksets.has(lineage.tasksetId)) return false;
-      selectedTasksets.add(lineage.tasksetId);
-      return true;
+    .sort((left, right) => {
+      const leftBound = activeBindingsByLineage.has(left.id) ? 1 : 0;
+      const rightBound = activeBindingsByLineage.has(right.id) ? 1 : 0;
+      return rightBound - leftBound || right.importedAt.localeCompare(left.importedAt);
     })
     .map((lineage) => {
       const artifact = artifactById.get(lineage.artifactId);
@@ -72,6 +78,7 @@ export async function listLocalAdapterProviderModels(store: SqliteStore): Promis
           chatConfiguration: lineage.chatConfiguration,
           trainingMethod: plan.recipe.method,
           toolContractHash: toolCalling ? CROSS_SYSTEM_TOOL_CONTRACT_HASH : null,
+          activeBindingRoles: activeBindingsByLineage.get(lineage.id) ?? [],
         },
       });
     })
@@ -83,9 +90,14 @@ export function withLocalAdapterProviderModels(
   models: ProviderModel[],
 ): ProviderSettings {
   const currentConfig = settings.providers[LOCAL_ADAPTER_PROVIDER_ID];
-  const defaultModel = models.some((model) => model.id === currentConfig?.defaultModel)
-    ? currentConfig?.defaultModel ?? null
-    : models[0]?.id ?? null;
+  const boundDefault = models.find((model) =>
+    Array.isArray(model.raw?.activeBindingRoles) &&
+    model.raw.activeBindingRoles.includes("chat_manual:default"),
+  )?.id ?? null;
+  const defaultModel = boundDefault ??
+    (models.some((model) => model.id === currentConfig?.defaultModel)
+      ? currentConfig?.defaultModel ?? null
+      : models[0]?.id ?? null);
   const config = ProviderConfigSchema.parse({
     ...currentConfig,
     enabled: true,

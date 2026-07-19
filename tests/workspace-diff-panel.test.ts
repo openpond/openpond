@@ -94,6 +94,58 @@ describe("Workspace diff panel", () => {
     expect(markup).not.toContain("Sync locally to show files");
   });
 
+  test("shows a scoped file tree beside the selected candidate diff", () => {
+    const candidateFile = diffFile(
+      "profiles/default/agents/researcher.md",
+      "@@ -1 +1 @@\n-old instructions\n+new instructions",
+    );
+    const markup = renderToStaticMarkup(
+      createElement(WorkspaceDiffPanel, {
+        appId: "candidate:run:candidate",
+        workspaceId: "candidate:run:candidate",
+        workspaceKind: "local_project",
+        connection: null,
+        diff: {
+          appId: "candidate:run:candidate",
+          repoPath: "",
+          initialized: true,
+          dirty: true,
+          filesChanged: 1,
+          additions: 1,
+          deletions: 1,
+          repoFiles: [candidateFile.path, "README.md"],
+          files: [candidateFile],
+          error: null,
+          updatedAt: "2026-07-16T00:00:00.000Z",
+        },
+        editorPreferences: null,
+        loading: false,
+        workspaceName: "Researcher change",
+        workspaceInitialized: true,
+        workspaceError: null,
+        expanded: false,
+        fileRootPath: "profiles/default/agents",
+        filesWithPreview: true,
+        readOnly: true,
+        viewState: {
+          activeTab: "files",
+          openFilePaths: [],
+          selectedPath: candidateFile.path,
+        },
+        onRefresh: noop,
+        onResizeStart: noop,
+        onToggleExpanded: noop,
+        onOpenBrowser: noop,
+        onOpenBrowserUrl: noop,
+      }),
+    );
+
+    expect(markup).toContain("workspace-diff-files-preview-layout");
+    expect(markup).toContain("researcher.md");
+    expect(markup).toContain("new instructions");
+    expect(markup).not.toContain(">README.md<");
+  });
+
   test("folds large real git hunk context instead of synthetic spacer truncation", async () => {
     const repoPath = await createTempDir("openpond-diff-panel-fold-");
     await git(repoPath, ["init"]);

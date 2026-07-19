@@ -5,11 +5,12 @@ export function createRightChatPanel(input: {
   sessionId: string | null;
   provider: RightChatPanel["provider"];
   model: string;
+  prompt?: string;
 }): RightChatPanel {
   return {
     id: `right-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sessionId: input.sessionId,
-    prompt: "",
+    prompt: input.prompt ?? "",
     provider: input.provider,
     model: input.model,
   };

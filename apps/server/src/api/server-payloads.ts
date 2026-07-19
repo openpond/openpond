@@ -57,7 +57,7 @@ import { emptyProfileState, initLocalProfileRepo, loadOpenPondProfileState } fro
 import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
 import {
-  assertCreatePipelineSnapshotLinked,
+  assertCreateImproveRunLinked,
 } from "../create-pipeline-guards.js";
 import { normalizeAppPreferences } from "../preferences.js";
 import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
@@ -123,7 +123,7 @@ import { createServerWorkspacePayloads } from "../workspace/server-workspace-pay
 import { loadWorkspaceStateAtPath, runWorkspaceCommand } from "../workspace/workspaces.js";
 import {
   hasObjectKey,
-  assertCreatePipelineBackgroundApproved,
+  assertCreateImproveBackgroundApproved,
   fetchCloudProjects,
   asRecord,
   nonEmptyRecord,
@@ -135,12 +135,11 @@ import {
   upsertInternalSandboxProject,
   cloudProjectFromSandboxRecord,
   cloudWorkItemTeamInput,
-  createPipelineMetadata,
+  createImproveMetadata,
   usageAttributionMetadata,
-  linkCreatePipelineToWorkItem,
-  attachCreatePipelineToWorkItem,
-  latestCreatePipelineFromTimeline,
-  latestCreatePipelineRequestFromTimeline,
+  linkCreateImproveRunToWorkItem,
+  attachCreateImproveRunToWorkItem,
+  latestCreateImproveRunFromTimeline,
   normalizeCloudWorkItem,
   normalizeRequiredCloudWorkItem,
   normalizeCloudWorkItemMessage,
@@ -152,7 +151,7 @@ import {
   latestRuntimeSessionSandboxId,
 } from "./server-payload-helpers.js";
 import { createCodexHistoryPayloads } from "./codex-history-payloads.js";
-export { assertCreatePipelineBackgroundApproved } from "./server-payload-helpers.js";
+export { assertCreateImproveBackgroundApproved } from "./server-payload-helpers.js";
 import { createProfilePayloads } from "./profile-payloads.js";
 import {
   LOCAL_ADAPTER_PROVIDER_ID,
@@ -1355,32 +1354,27 @@ export function createServerPayloads(deps: {
     const activity = asRecordArray(asRecord(activityResponse).activity)
       .map(normalizeCloudWorkItemActivity)
       .filter((item): item is CloudWorkItemActivity => Boolean(item));
-    const latestCreatePipeline = latestCreatePipelineFromTimeline(workItem, messages, activity);
-    const latestCreatePipelineRequest =
-      latestCreatePipeline?.request ??
-      latestCreatePipelineRequestFromTimeline(workItem, messages, activity) ??
-      workItem.createPipelineRequest ??
+    const latestCreateImproveRun =
+      latestCreateImproveRunFromTimeline(workItem, messages, activity) ??
+      workItem.createImproveRun ??
       null;
-    const workItemWithCreatePipeline = attachCreatePipelineToWorkItem(
+    const workItemWithCreateImproveRun = attachCreateImproveRunToWorkItem(
       workItem,
-      latestCreatePipelineRequest,
-      latestCreatePipeline,
+      latestCreateImproveRun,
     );
     return CloudWorkItemDetailSchema.parse({
-      workItem: workItemWithCreatePipeline,
+      workItem: workItemWithCreateImproveRun,
       messages,
       activity,
       runtimeSessions: [],
-      createPipelineRequest: workItemWithCreatePipeline.createPipelineRequest,
-      createPipeline: workItemWithCreatePipeline.createPipeline,
+      createImproveRun: latestCreateImproveRun,
     });
   }
 
   async function createCloudWorkItemPayload(payload: unknown): Promise<CloudWorkItemDetail> {
     const input = CreateCloudWorkItemRequestSchema.parse(payload);
     const {
-      createPipelineRequest,
-      createPipeline,
+      createImproveRun,
       localProjectId,
       localProjectName,
       localWorkspacePath,
@@ -1401,49 +1395,43 @@ export function createServerPayloads(deps: {
             ...(localProjectName ? { localProjectName } : {}),
             ...(localWorkspacePath ? { localWorkspacePath } : {}),
             ...usageAttributionMetadata(usageAttribution ?? null),
-            ...createPipelineMetadata({
-              request: createPipelineRequest ?? null,
-              snapshot: createPipeline ?? null,
-            }),
+            ...createImproveMetadata(createImproveRun ?? null),
           },
         },
       }),
     );
     const createdWorkItem = normalizeRequiredCloudWorkItem(response.workItem);
-    const linkedCreatePipeline = linkCreatePipelineToWorkItem({
+    const linkedCreateImproveRun = linkCreateImproveRunToWorkItem({
       workItem: createdWorkItem,
-      request: createPipelineRequest ?? null,
-      snapshot: createPipeline ?? null,
+      run: createImproveRun ?? null,
     });
-    if (linkedCreatePipeline.snapshot || linkedCreatePipeline.request) {
+    if (linkedCreateImproveRun) {
       await sandboxRequestPayload({
         type: "work_item_message_create",
         workItemId: createdWorkItem.id,
         payload: {
           teamId: input.teamId,
           role: "system",
-          body: "Create pipeline metadata linked to this work item.",
+          body: "Create/Improve run linked to this work item.",
           metadata: {
-            source: "openpond_app_cloud_create_pipeline_link",
+            source: "openpond_app_cloud_create_improve_link",
             hidden: true,
             ...usageAttributionMetadata(usageAttribution ?? null),
-            ...createPipelineMetadata(linkedCreatePipeline),
+            ...createImproveMetadata(linkedCreateImproveRun),
           },
         },
       });
     }
-    const workItem = attachCreatePipelineToWorkItem(
+    const workItem = attachCreateImproveRunToWorkItem(
       createdWorkItem,
-      linkedCreatePipeline.request,
-      linkedCreatePipeline.snapshot,
+      linkedCreateImproveRun,
     );
     return CloudWorkItemDetailSchema.parse({
       workItem,
       messages: [],
       activity: [],
       runtimeSessions: [],
-      createPipelineRequest: workItem.createPipelineRequest,
-      createPipeline: workItem.createPipeline,
+      createImproveRun: linkedCreateImproveRun,
     });
   }
 
@@ -1455,10 +1443,9 @@ export function createServerPayloads(deps: {
     userMessage: CloudWorkItemMessage;
   }> {
     const input = SendCloudWorkItemMessageRequestSchema.parse(payload);
-    assertCreatePipelineSnapshotLinked({
-      actionLabel: "Cloud work item message create pipeline metadata",
-      request: input.createPipelineRequest ?? null,
-      snapshot: input.createPipeline ?? null,
+    assertCreateImproveRunLinked({
+      actionLabel: "Cloud work item Create/Improve metadata",
+      run: input.createImproveRun ?? null,
     });
     const response = asRecord(
       await sandboxRequestPayload({
@@ -1470,10 +1457,7 @@ export function createServerPayloads(deps: {
           metadata: {
             source: "openpond_app_cloud_thread",
             ...usageAttributionMetadata(input.usageAttribution ?? null),
-            ...createPipelineMetadata({
-              request: input.createPipelineRequest ?? null,
-              snapshot: input.createPipeline ?? null,
-            }),
+            ...createImproveMetadata(input.createImproveRun ?? null),
           },
         },
       }),
@@ -1490,20 +1474,17 @@ export function createServerPayloads(deps: {
   ): Promise<unknown> {
     const input = CloudWorkItemBackgroundRequestSchema.parse(payload);
     const {
-      createPipelineRequest,
-      createPipeline,
+      createImproveRun,
       usageAttribution,
       payload: requestPayload,
       ...backgroundInput
     } = input;
-    assertCreatePipelineSnapshotLinked({
-      actionLabel: "Create pipeline background work",
-      request: createPipelineRequest ?? null,
-      snapshot: createPipeline ?? null,
+    assertCreateImproveRunLinked({
+      actionLabel: "Create/Improve background work",
+      run: createImproveRun ?? null,
     });
-    assertCreatePipelineBackgroundApproved({
-      request: createPipelineRequest ?? null,
-      snapshot: createPipeline ?? null,
+    assertCreateImproveBackgroundApproved({
+      run: createImproveRun ?? null,
     });
     return sandboxRequestPayload({
       type: "work_item_handle_background",
@@ -1516,10 +1497,7 @@ export function createServerPayloads(deps: {
           source: "openpond_app_cloud_thread",
           ...(requestPayload ?? {}),
           ...usageAttributionMetadata(usageAttribution ?? null),
-          ...createPipelineMetadata({
-            request: createPipelineRequest ?? null,
-            snapshot: createPipeline ?? null,
-          }),
+          ...createImproveMetadata(createImproveRun ?? null),
         },
       },
     });

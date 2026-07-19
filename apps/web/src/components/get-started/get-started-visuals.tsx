@@ -543,7 +543,7 @@ function SetupGateGraph() {
 function InsightsLoopGraph() {
   return (
     <div className="get-started-insights-loop">
-      <DiagramNode title="create_pipeline.updated" detail="runtime event stream" tone="source" />
+      <DiagramNode title="create_improve.updated" detail="runtime event stream" tone="source" />
       <Connector label="scan" />
       <DiagramNode title="detector" detail="waiting, blocked, failed" tone="gate" />
       <Connector label="persist" />

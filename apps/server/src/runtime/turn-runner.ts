@@ -45,9 +45,9 @@ import {
 import { createHostedToolLoopRuntime } from "./hosted-turn/tool-loop-runtime.js";
 import { createProfileSkillCatalogRuntime } from "./hosted-turn/profile-skill-catalog-runtime.js";
 import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog.js";
-import { createCreatePipelineRuntime } from "./create-pipeline/runtime.js";
-import { createCreatePipelineModelTool } from "./create-pipeline/model-tool.js";
-import { createCreatePipelineTurnHandler } from "./create-pipeline/send-turn.js";
+import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
+import { createCreateImproveModelTool } from "./create-pipeline/model-tool.js";
+import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
 import { KeyedRegistry } from "./turns/keyed-registry.js";
 import { createGoalSubagentLifecycle } from "./goals/subagent-lifecycle.js";
@@ -87,6 +87,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const {
     attachmentRootDir,
     store,
+    resolveCreateImproveTaskset,
+    gradeCreateImproveTaskAttempt,
     upsertApproval,
     createSession,
     getSession,
@@ -126,7 +128,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     streamLocalByokChatTurn,
     streamOpenPondHostedChatTurn = defaultStreamOpenPondHostedChatTurn,
     runLocalCreatePipelineChecks,
-    planCreatePipeline,
+    planCreateImprove,
     turnFollowUpQueue,
     subagentQueue,
     notifySubagentRunStateChanged,
@@ -223,41 +225,47 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const upsertSubagentRunAndNotify = subagentRepositoryRuntime.upsertRunAndNotify;
   const appendSubagentReceipt = subagentRepositoryRuntime.appendReceipt;
 
-  const createPipelineRuntime = createCreatePipelineRuntime({
+  const createImproveRuntime = createCreateImproveRuntime({
     getSession,
     getTurn: getStoredTurn,
     updateTurn: updateStoredTurn,
+    getCreateImproveRun: (runId) => store.getCreateImproveRun(runId),
+    listCreateImproveRuns: (query) => store.listCreateImproveRuns(query),
+    upsertCreateImproveRun: (run) => store.upsertCreateImproveRun(run),
+    mutateCreateImproveRun: (action, updater) => store.mutateCreateImproveRun(action, updater),
     getApproval: (approvalId) => store.getApproval(approvalId),
     upsertApproval,
     appendRuntimeEvent,
     ensureCodexRuntime,
     runLocalCreatePipelineChecks,
-    planCreatePipeline,
+    planCreateImprove,
     turnFollowUpQueue,
     streamLocalByokChatTurn,
     streamOpenPondHostedChatTurn,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
+    resolveTaskset: resolveCreateImproveTaskset,
+    gradeTaskAttempt: gradeCreateImproveTaskAttempt,
   });
   const {
-    persistCreatePipelinePlanningFailure,
-    persistCreatePipelineSnapshot,
-    planCreatePipelineForTurn,
-    resolveCreatePipelineApproval,
-    syncCreatePlanApproval,
-    updateTurnCreatePipeline,
-  } = createPipelineRuntime;
-  const startCreatePipelineFromModelTool = createCreatePipelineModelTool({
+    applyCreateImproveActionPayload,
+    getCreateImproveRun,
+    listCreateImproveRuns,
+    persistCreateImprovePlanningFailure,
+    persistCreateImproveRun,
+    planCreateImproveForTurn,
+    resolveCreateImproveApproval,
+  } = createImproveRuntime;
+  const startCreateImproveFromModelTool = createCreateImproveModelTool({
     getTurn: getStoredTurn,
     loadProfileState: loadOpenPondProfileState,
     appendRuntimeEvent,
-    planCreatePipelineForTurn,
-    persistCreatePipelineSnapshot,
+    planCreateImproveForTurn,
+    persistCreateImproveRun,
   });
-  const handleCreatePipelineTurn = createCreatePipelineTurnHandler({
+  const handleCreateImproveTurn = createCreateImproveTurnHandler({
     appendRuntimeEvent,
-    planCreatePipelineForTurn,
-    persistCreatePipelineSnapshot,
-    syncCreatePlanApproval,
+    planCreateImproveForTurn,
+    persistCreateImproveRun,
     completeTurn,
   });
   const {
@@ -553,7 +561,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   }) satisfies SubagentToolHandlers;
   const capabilityCatalogDefinitions = createCapabilityCatalogRuntime({
     handlers: {
-      startCreatePipeline: startCreatePipelineFromModelTool,
+      startCreateImprove: startCreateImproveFromModelTool,
       startGoalControl: startGoalControlFromModelTool,
       ...(executeProfileSkillGoal
         ? { startProfileSkillGoal: startProfileSkillGoalFromModelTool }
@@ -634,12 +642,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
 
     const startedAt = now();
     const effectiveUsageAttribution = input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
-    const createPipelineMetadata = {
+    const createImproveMetadata = {
       ...(input.metadata ? input.metadata : {}),
       ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution ? { usageAttribution: effectiveUsageAttribution } : {}),
-      ...(input.createPipelineRequest ? { createPipelineRequest: input.createPipelineRequest } : {}),
-      ...(input.createPipeline ? { createPipeline: input.createPipeline } : {}),
+      ...(input.createImproveRun ? { createImproveRun: input.createImproveRun } : {}),
     };
     const turn: Turn = {
       id: randomUUID(),
@@ -651,9 +658,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       completedAt: null,
       status: "in_progress",
       error: null,
-      metadata: createPipelineMetadata,
-      createPipelineRequest: input.createPipelineRequest ?? null,
-      createPipeline: input.createPipeline ?? null,
+      metadata: createImproveMetadata,
+      createImproveRun: input.createImproveRun ?? null,
     };
     await insertStoredTurn(turn);
     const initialCwd =
@@ -750,7 +756,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             cwd: initialCwd,
             provider: activeProvider,
             ...(turnModelRef ? { modelRef: turnModelRef } : {}),
-            ...createPipelineMetadata,
+            ...createImproveMetadata,
             ...(attachmentContexts.length > 0
               ? {
                   attachments: chatAttachmentSummaries(input.attachments, {
@@ -783,12 +789,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (profileSkillCommand) {
         return handleProfileSkillCommand({ session, turn, command: profileSkillCommand });
       }
-      if (input.createPipelineRequest) {
-        return await handleCreatePipelineTurn({
+      if (input.createImproveRun) {
+        return await handleCreateImproveTurn({
           session,
           turn,
-          request: input.createPipelineRequest,
-          snapshot: input.createPipeline,
+          run: input.createImproveRun,
           signal: controller.signal,
         });
       }
@@ -1065,11 +1070,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         return interruptTurn(session, turn.id, activeTurn.interruptionReason ?? "Stopped by user");
       }
       const message = error instanceof Error ? error.message : String(error);
-      if (input.createPipelineRequest) {
-        await persistCreatePipelinePlanningFailure({
+      if (input.createImproveRun) {
+        await persistCreateImprovePlanningFailure({
           session,
           turn,
-          request: input.createPipelineRequest,
+          run: input.createImproveRun,
           message,
         }).catch(() => undefined);
       }
@@ -1102,8 +1107,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     pauseSessionGoal,
     interruptAll: turnRunnerLifecycle.interruptAll,
     close: turnRunnerLifecycle.close,
-    updateTurnCreatePipeline,
-    resolveCreatePipelineApproval,
+    applyCreateImproveAction: applyCreateImproveActionPayload,
+    getCreateImproveRun,
+    listCreateImproveRuns,
+    resolveCreateImproveApproval,
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
     recoverPendingSubagentCompletions: recoverPendingCompletions,

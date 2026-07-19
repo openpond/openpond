@@ -1,6 +1,8 @@
 import { CROSS_SYSTEM_TOOL_CONTRACT_HASH, CROSS_SYSTEM_TOOL_CONTRACT_VERSION, type GeneratedTaskFile } from "@openpond/contracts";
 import type { CrossSystemTask, CrossSystemWorld } from "./types.js";
 
+const MAX_GENERATED_FILE_CHARACTERS = 240_000;
+
 export function crossSystemGeneratedTaskFiles(input: { worlds: CrossSystemWorld[]; tasks: CrossSystemTask[] }): GeneratedTaskFile[] {
   return [
     {
@@ -22,16 +24,16 @@ export function crossSystemGeneratedTaskFiles(input: { worlds: CrossSystemWorld[
       role: "environment",
       content: `${JSON.stringify({ schemaVersion: CROSS_SYSTEM_TOOL_CONTRACT_VERSION, toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH }, null, 2)}\n`,
     },
-    {
-      path: "environment/worlds.json",
-      role: "environment",
-      content: `${JSON.stringify(input.worlds, null, 2)}\n`,
-    },
-    {
-      path: "environment/tasks.json",
-      role: "environment",
-      content: `${JSON.stringify(input.tasks, null, 2)}\n`,
-    },
+    ...portableJsonCollection({
+      name: "worlds",
+      items: input.worlds,
+      itemId: (world) => world.id,
+    }),
+    ...portableJsonCollection({
+      name: "tasks",
+      items: input.tasks,
+      itemId: (task) => task.worldId,
+    }),
     {
       path: "graders/cross-system-verifier.ts",
       role: "verifier",
@@ -57,4 +59,55 @@ export function crossSystemGeneratedTaskFiles(input: { worlds: CrossSystemWorld[
       content: `${JSON.stringify({ toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH, labels: ["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"] }, null, 2)}\n`,
     },
   ];
+}
+
+function portableJsonCollection<T>(input: {
+  name: "worlds" | "tasks";
+  items: T[];
+  itemId: (item: T) => string;
+}): GeneratedTaskFile[] {
+  const combined = `${JSON.stringify(input.items, null, 2)}\n`;
+  if (combined.length <= MAX_GENERATED_FILE_CHARACTERS) {
+    return [{
+      path: `environment/${input.name}.json`,
+      role: "environment",
+      content: combined,
+    }];
+  }
+  const groups = new Map<string, T[]>();
+  for (const item of input.items) {
+    const key = safeSegment(input.itemId(item));
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  const files = [...groups.entries()].map(([key, items], index) => {
+    const content = `${JSON.stringify(items, null, 2)}\n`;
+    if (content.length > MAX_GENERATED_FILE_CHARACTERS) {
+      throw new Error(
+        `Cross-System ${input.name} shard ${key} exceeds the portable Taskset file limit.`,
+      );
+    }
+    return {
+      path: `environment/${input.name}/${String(index + 1).padStart(3, "0")}-${key}.json`,
+      role: "environment" as const,
+      content,
+    };
+  });
+  return [
+    {
+      path: `environment/${input.name}.json`,
+      role: "environment",
+      content: `${JSON.stringify({
+        schemaVersion: "openpond.crossSystemCollection.v1",
+        count: input.items.length,
+        files: files.map((file) => file.path),
+      }, null, 2)}\n`,
+    },
+    ...files,
+  ];
+}
+
+function safeSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 160);
 }

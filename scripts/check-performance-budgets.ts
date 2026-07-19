@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 const execFileAsync = promisify(execFile);
 
@@ -231,7 +232,7 @@ export async function measureServerStartup(input: {
     cwd: input.root,
     env: {
       ...process.env,
-      OPENPOND_APP_HOME: appHome,
+      ...isolatedOpenPondEnvironment(appHome),
       CODEX_HOME: codexHome,
     },
     stdio: ["ignore", "pipe", "pipe"],

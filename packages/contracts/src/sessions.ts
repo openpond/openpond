@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
-} from "./create-pipeline.js";
+import { CreateImproveRunSchema } from "./create-pipeline.js";
 import {
   ChatProviderSchema,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -12,12 +9,17 @@ import {
 import { ChatModelRefSchema } from "./providers.js";
 import { SubagentDelegationModeSchema, SubagentRoleIdSchema } from "./subagents.js";
 
+export const SystemSessionKindSchema = z.enum([
+  "openpond.insights",
+  "openpond.lab",
+]);
+
 export const SessionSchema = z.object({
   id: z.string(),
   provider: ChatProviderSchema,
   modelRef: ChatModelRefSchema.nullable().optional(),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
-  systemKind: z.enum(["openpond.insights"]).nullable().optional(),
+  systemKind: SystemSessionKindSchema.nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   parentSessionId: z.string().nullable().optional(),
   parentTurnId: z.string().nullable().optional(),
@@ -58,8 +60,7 @@ export const TurnSchema = z.object({
   status: z.enum(["in_progress", "completed", "failed", "interrupted"]),
   error: z.string().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
-  createPipelineRequest: CreatePipelineRequestSchema.nullable().optional().default(null),
-  createPipeline: CreatePipelineSnapshotSchema.nullable().optional().default(null),
+  createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
 });
 
 export type Turn = z.infer<typeof TurnSchema>;

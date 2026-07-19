@@ -133,25 +133,34 @@ describe("Task Creator pipeline", () => {
     expect(await store.listTrainingSources("default")).toHaveLength(1);
   }));
 
-  test("turns selected chats into an approved source-owned Taskset", async () => withTrainingStore(async ({ store, directory }) => {
+  test("turns selected chats into an approved managed Taskset", async () => withTrainingStore(async ({ store, directory }) => {
     const profileSource = path.join(directory, "profile");
+    const tasksetRoot = path.join(directory, "training", "tasksets");
     await mkdir(profileSource, { recursive: true });
     await seedConversation(store, { sessionId: "session_train", turnId: "turn_train", title: "Research workflow one", assistant: "Approved training response." });
     await seedConversation(store, { sessionId: "session_eval", turnId: "turn_eval", title: "Research workflow two", assistant: "Approved frozen response." });
-    const service = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill"), loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource, git: { head: "commit123" } } as any) });
+    const service = createTaskCreatorService({ store, tasksetRootDir: tasksetRoot, authoringSkillHash: contentHash("skill"), loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource, git: { head: "commit123" } } as any) });
     const first = await service.addSessionSource({ profileId: "default", sessionId: "session_train" });
     const second = await service.addSessionSource({ profileId: "default", sessionId: "session_eval" });
-    const creation = await service.start({ profileId: "default", sourceIds: [first.id, second.id], surface: "bulk_selection", mode: "defaults", objective: "Reproduce approved research updates." });
+    const creation = await service.start({
+      profileId: "default",
+      sourceIds: [first.id, second.id],
+      surface: "bulk_selection",
+      mode: "defaults",
+      objective: "Reproduce approved research updates.",
+      createImproveRunId: "create_improve_task_creator_pipeline",
+    });
     expect(creation.state).toBe("awaiting_materialization_approval");
     expect(await store.getTaskCreationTranscript(creation.id)).toMatchObject({ creationId: creation.id, messages: expect.any(Array) });
     expect(await store.getTaskDesignProposal(creation.id)).toMatchObject({ id: creation.proposal?.id, objective: creation.proposal?.objective });
     const ready = await service.approveMaterialization(creation.id, true);
     expect(ready.state).toBe("ready");
     const taskset = await store.getTaskset(ready.materializedTasksetId!);
+    expect(taskset?.createImproveRunId).toBe("create_improve_task_creator_pipeline");
     expect(taskset?.tasks.map((task) => task.split)).toEqual(["train", "frozen_eval"]);
     expect(new Set(taskset?.tasks.map((task) => task.clusterKey)).size).toBe(2);
     expect(taskset?.graderFixtures).toHaveLength(6);
-    const root = path.join(profileSource, "tasksets", taskset!.id);
+    const root = path.join(tasksetRoot, taskset!.id);
     await access(path.join(root, "taskset.json"));
     await access(path.join(root, "environment", "taskset.ts"));
     expect(await readFile(path.join(root, "fixtures", "grader-fixtures.json"), "utf8")).toContain("prompt_injection");

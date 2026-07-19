@@ -35,6 +35,7 @@ const compatibilityFiles = new Set([
   "apps/web/src/lib/chat-activity-summary.ts",
   "packages/cloud/src/profile/profile-git.ts",
   "packages/cloud/src/profile/profile-source-upload.ts",
+  "packages/cloud/src/profile/project-source-upload-bun-compat.ts",
   "packages/codex-provider/src/binary.ts",
   "packages/contracts/src/subagents.ts",
   "tests/openpond-command-access.test.ts",

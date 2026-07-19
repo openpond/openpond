@@ -6,8 +6,7 @@ import type {
   CloudProject,
   CodexPermissionMode,
   CodexReasoningEffort,
-  CreatePipelineRequest,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
   LocalProject,
   LocalProjectOpenPondLink,
   OpenPondCommandAccessMode,
@@ -41,13 +40,6 @@ import {
   type ConnectedAppMentionOption,
 } from "../lib/connected-app-mentions";
 import { resolveMentionedAction } from "../lib/action-mentions";
-import {
-  answerCreatePipelineQuestionSnapshot,
-  approveCreatePipelineSnapshot,
-  buildComposerCreatePipelineRequest,
-  cancelCreatePipelineSnapshot,
-  reviseCreatePipelineSnapshot,
-} from "../lib/create-pipeline-request";
 import {
   parseComposerDirectCommandPrompt,
   parseComposerSlashCommandPrompt,
@@ -917,10 +909,10 @@ export function useChatActions({
           throw preflightError;
         }
       }
-      const parsedCreatePipelineCommand = parsedSlashCommandForTurn;
-      const createPipelineRequest = parsedCreatePipelineCommand
-        ? buildComposerCreatePipelineRequest({
-            parsed: parsedCreatePipelineCommand,
+      const parsedCreateImproveCommand = parsedSlashCommandForTurn;
+      const createImproveRun = parsedCreateImproveCommand
+        ? (await import("../lib/create-pipeline-request")).buildComposerCreateImproveRun({
+            parsed: parsedCreateImproveCommand,
             prompt: value,
             payload: bootstrap,
             session,
@@ -929,7 +921,7 @@ export function useChatActions({
             apps: mentionedSandboxApp ? [mentionedSandboxApp] : [],
           })
         : null;
-      if (parsedCreatePipelineCommand?.command === "edit" && !createPipelineRequest) {
+      if (parsedCreateImproveCommand?.command === "edit" && !createImproveRun) {
         throw new Error("Select an agent-backed chat before using /edit.");
       }
       pendingUserMessage = createPendingUserChatMessage({
@@ -973,7 +965,7 @@ export function useChatActions({
         mentionedConnectedApps: mentionedConnectedApps.length > 0 ? mentionedConnectedApps : undefined,
         openPondActionCatalog:
           openPondActionCatalog.length > 0 ? openPondActionCatalog : undefined,
-        createPipelineRequest,
+        createImproveRun,
         usageAttribution: usageAttributionForTurn,
         ...turnModelPayload,
         ...codexTurnPermissions,
@@ -1088,106 +1080,127 @@ export function useChatActions({
     }
   }
 
-  async function persistCreatePipelineTurn(input: {
-    turnId: string;
-    request: CreatePipelineRequest;
-    snapshot: CreatePipelineSnapshot;
-  }): Promise<void> {
+  async function applyCreateImproveRunAction(
+    run: CreateImproveRun,
+    action:
+      | { type: "approve_plan" }
+      | { type: "cancel"; reason: string | null }
+      | { type: "revise_plan"; revision: string }
+      | { type: "answer_question"; questionId: string; value: string }
+      | { type: "pause" }
+      | { type: "resume" }
+      | { type: "open_pull_request"; candidateId: string }
+      | { type: "apply_candidate"; candidateId: string }
+      | { type: "reject_candidate"; candidateId: string; reason: string | null }
+      | { type: "reconcile_pull_request"; candidateId: string },
+  ): Promise<void> {
     if (!connection) {
       setError("OpenPond App server is not connected.");
       return;
     }
-    const sessionId = input.request.scope.conversationId;
-    if (!sessionId) {
-      setError("Create pipeline turn is missing its conversation scope.");
-      return;
-    }
     setError(null);
-    await api.updateTurnCreatePipeline(connection, sessionId, input.turnId, {
-      createPipelineRequest: input.request,
-      createPipeline: input.snapshot,
+    await api.applyCreateImproveAction(connection, run.id, {
+      ...action,
+      runId: run.id,
+      expectedRevision: run.revision,
+      actionId: `web:${action.type}:${crypto.randomUUID()}`,
     });
     const payload = await api.bootstrap(connection);
     applyBootstrapPayload(payload);
   }
 
-  async function approveCreatePipelineTurn(input: {
-    turnId: string;
-    request: CreatePipelineRequest;
-    snapshot: CreatePipelineSnapshot | null;
-  }): Promise<void> {
-    const base = requireCreatePipelineSnapshot(input.snapshot, "Create plan is not ready to approve yet.");
-    await persistCreatePipelineTurn({
-      turnId: input.turnId,
-      request: input.request,
-      snapshot: approveCreatePipelineSnapshot(base),
-    });
+  async function approveCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+    await applyCreateImproveRunAction(input.run, { type: "approve_plan" });
   }
 
-  async function cancelCreatePipelineTurn(input: {
-    turnId: string;
-    request: CreatePipelineRequest;
-    snapshot: CreatePipelineSnapshot | null;
-  }): Promise<void> {
-    const base = requireCreatePipelineSnapshot(input.snapshot, "Create workflow is not ready to cancel yet.");
-    await persistCreatePipelineTurn({
-      turnId: input.turnId,
-      request: input.request,
-      snapshot: cancelCreatePipelineSnapshot(base),
-    });
+  async function cancelCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+    await applyCreateImproveRunAction(input.run, { type: "cancel", reason: null });
   }
 
-  async function reviseCreatePipelineTurn(
-    input: {
-      turnId: string;
-      request: CreatePipelineRequest;
-      snapshot: CreatePipelineSnapshot | null;
-    },
+  async function reviseCreateImproveRun(
+    input: { run: CreateImproveRun },
     revision: string,
   ): Promise<void> {
-    const base = requireCreatePipelineSnapshot(input.snapshot, "Create plan is not ready to revise yet.");
-    await persistCreatePipelineTurn({
-      turnId: input.turnId,
-      request: input.request,
-      snapshot: reviseCreatePipelineSnapshot(base, revision),
-    });
+    await applyCreateImproveRunAction(input.run, { type: "revise_plan", revision });
   }
 
-  async function answerCreatePipelineQuestionTurn(
-    input: {
-      turnId: string;
-      request: CreatePipelineRequest;
-      snapshot: CreatePipelineSnapshot | null;
-    },
+  async function answerCreateImproveQuestion(
+    input: { run: CreateImproveRun },
     questionId: string,
     answerValue: string,
   ): Promise<void> {
-    const base = requireCreatePipelineSnapshot(input.snapshot, "Create question is not ready to answer yet.");
-    await persistCreatePipelineTurn({
-      turnId: input.turnId,
-      request: input.request,
-      snapshot: answerCreatePipelineQuestionSnapshot(base, questionId, answerValue),
+    await applyCreateImproveRunAction(input.run, {
+      type: "answer_question",
+      questionId,
+      value: answerValue,
+    });
+  }
+
+  async function pauseCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+    await applyCreateImproveRunAction(input.run, { type: "pause" });
+  }
+
+  async function resumeCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+    await applyCreateImproveRunAction(input.run, { type: "resume" });
+  }
+
+  async function openCreateImprovePullRequest(
+    input: { run: CreateImproveRun },
+    candidateId: string,
+  ): Promise<void> {
+    await applyCreateImproveRunAction(input.run, {
+      type: "open_pull_request",
+      candidateId,
+    });
+  }
+
+  async function applyCreateImproveCandidate(
+    input: { run: CreateImproveRun },
+    candidateId: string,
+  ): Promise<void> {
+    await applyCreateImproveRunAction(input.run, {
+      type: "apply_candidate",
+      candidateId,
+    });
+  }
+
+  async function rejectCreateImproveCandidate(
+    input: { run: CreateImproveRun },
+    candidateId: string,
+  ): Promise<void> {
+    await applyCreateImproveRunAction(input.run, {
+      type: "reject_candidate",
+      candidateId,
+      reason: null,
+    });
+  }
+
+  async function reconcileCreateImprovePullRequest(
+    input: { run: CreateImproveRun },
+    candidateId: string,
+  ): Promise<void> {
+    await applyCreateImproveRunAction(input.run, {
+      type: "reconcile_pull_request",
+      candidateId,
     });
   }
 
   return {
-    answerCreatePipelineQuestionTurn,
-    approveCreatePipelineTurn,
-    cancelCreatePipelineTurn,
+    answerCreateImproveQuestion,
+    approveCreateImproveRun,
+    applyCreateImproveCandidate,
+    cancelCreateImproveRun,
     changeDraftProvider,
-    reviseCreatePipelineTurn,
+    openCreateImprovePullRequest,
+    pauseCreateImproveRun,
+    reconcileCreateImprovePullRequest,
+    rejectCreateImproveCandidate,
+    resumeCreateImproveRun,
+    reviseCreateImproveRun,
     sendPrompt,
     pauseGoal,
     stopTurn,
   };
-}
-
-function requireCreatePipelineSnapshot(
-  snapshot: CreatePipelineSnapshot | null,
-  message: string,
-): CreatePipelineSnapshot {
-  if (!snapshot) throw new Error(message);
-  return snapshot;
 }
 
 export { resolveMentionedChatApp } from "../lib/chat-app-mentions";

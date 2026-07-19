@@ -11,6 +11,7 @@ import "../../styles/workspace/git-dialogs.css";
 import type {
   ChatAttachment,
   ChatProvider,
+  BootstrapPayload,
   CodexPermissionMode,
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
@@ -26,6 +27,11 @@ import type { ShowAppToast } from "../../app/app-state";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { WorkspaceTargetState } from "../../lib/workspace-location";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
+import {
+  isLocalTeamProfileAgentAction,
+  localTeamProfileAgentId,
+  teamChatActionCatalogWithProfileAgents,
+} from "../../lib/team-chat-profile-agents";
 import { mentionedTeamMemberIds } from "../../lib/team-chat-mentions";
 import {
   teamChatReplyAuthorLabel,
@@ -95,6 +101,9 @@ export type TeamChatViewProps = {
   currentUserId: string | null;
   members: TeamChatMember[];
   agents: SandboxActionCatalogEntry[];
+  profile: BootstrapPayload["profile"] | null;
+  teamId: string | null;
+  teamName: string | null;
   detail: TeamChatThreadDetail | null;
   aiThread: TeamChatHostedAiThread | null;
   agentConversation: TeamChatAgentConversation | null;
@@ -127,6 +136,9 @@ export type TeamChatViewProps = {
     selectedActionKey?: string | null;
     approvalId?: string | null;
   }) => Promise<boolean>;
+  onPublishProfileAgent: (
+    agentId: string,
+  ) => Promise<SandboxActionCatalogEntry>;
   onOpenAiThread: (conversationId: string) => Promise<void>;
   onOpenAgentConversation: (agentRunId: string) => Promise<void>;
   onCloseAiThread: () => void;
@@ -182,6 +194,15 @@ export function TeamChatView(props: TeamChatViewProps) {
     : "Team";
   const teamProvider = TEAM_CHAT_PROVIDER_IDS.has(props.provider) ? props.provider : "codex";
   const teamModel = teamProvider === props.provider ? props.model : "gpt-5.6-sol";
+  const teamActionCatalog = useMemo(
+    () =>
+      teamChatActionCatalogWithProfileAgents({
+        hostedActions: props.agents,
+        profile: props.profile,
+        teamId: props.teamId,
+      }),
+    [props.agents, props.profile, props.teamId],
+  );
   const lastMessageSequence = props.detail?.messages.at(-1)?.sequence ?? 0;
   useEffect(() => {
     if (!stickToLatestRef.current) return;
@@ -246,17 +267,38 @@ export function TeamChatView(props: TeamChatViewProps) {
       props.showToast("Team chat supports PNG, JPEG, WebP, and GIF images.", "error");
       return false;
     }
-    if (replyMessage && action) {
+    let resolvedAction = action;
+    if (replyMessage && resolvedAction) {
       props.showToast("Remove the agent action before replying to a message.", "error");
       return false;
     }
-    const approvalRisk = action?.approvalPolicy?.risk;
+    if (isLocalTeamProfileAgentAction(resolvedAction)) {
+      const profileAgentId = localTeamProfileAgentId(resolvedAction);
+      if (!profileAgentId) {
+        throw new Error("The selected profile agent is missing its profile id.");
+      }
+      const approved = await confirmAction({
+        title: `Publish ${resolvedAction.label ?? resolvedAction.name ?? "agent"} to Team?`,
+        body: `This will upload the committed agent source to ${
+          props.teamName ?? "this Team"
+        }, create its hosted runtime, and then send your message.`,
+        confirmLabel: "Publish and send",
+        tone: "default",
+      });
+      if (!approved) return false;
+      resolvedAction = await props.onPublishProfileAgent(profileAgentId);
+    }
+    const approvalRisk = resolvedAction?.approvalPolicy?.risk;
     let approvalId: string | null = null;
-    if (action?.approvalPolicy?.required && approvalRisk && approvalRisk !== "read") {
+    if (
+      resolvedAction?.approvalPolicy?.required &&
+      approvalRisk &&
+      approvalRisk !== "read"
+    ) {
       const destructive = approvalRisk === "destructive";
       const approved = await confirmAction({
         title: destructive ? "Approve destructive action?" : "Approve external write?",
-        body: `${action.label ?? action.name ?? "This agent action"} will use the workspace connection to ${
+        body: `${resolvedAction.label ?? resolvedAction.name ?? "This agent action"} will use the workspace connection to ${
           destructive ? "perform a destructive operation" : "write external data"
         }. Approve this run only?`,
         confirmLabel: destructive ? "Approve destructive action" : "Approve write",
@@ -291,7 +333,7 @@ export function TeamChatView(props: TeamChatViewProps) {
         mentionUserIds: mentionedTeamMemberIds(submittedPrompt, props.members),
         attachments,
         replyToMessage: submittedReply,
-        selectedActionKey: action?.id ?? null,
+        selectedActionKey: resolvedAction?.id ?? null,
         approvalId,
       });
       if (!sent) {
@@ -389,7 +431,7 @@ export function TeamChatView(props: TeamChatViewProps) {
             teamMentionMembers={props.members.filter(
               (member) => member.userId !== props.currentUserId,
             )}
-            actionCatalog={props.agents}
+            actionCatalog={teamActionCatalog}
             onTeamUseModelChange={setUseModel}
             prompt={prompt}
             contextWindowStatus={props.contextWindowStatus}

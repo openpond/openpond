@@ -77,6 +77,15 @@ export function latestRuntimeEventSequence(events: RuntimeEvent[]): number | nul
   return latest;
 }
 
+export function oldestRuntimeEventSequence(events: RuntimeEvent[]): number | null {
+  let oldest: number | null = null;
+  for (const event of events) {
+    if (event.sequence === undefined) continue;
+    if (oldest === null || event.sequence < oldest) oldest = event.sequence;
+  }
+  return oldest;
+}
+
 function newestTimestamp(events: RuntimeEvent[]): number | null {
   let newest: number | null = null;
   for (const event of events) {

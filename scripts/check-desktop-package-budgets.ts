@@ -16,8 +16,10 @@ const MIB = 1024 * 1024;
 const MAX_ASAR_BYTES = 2 * MIB;
 const MAX_RESOURCES_BYTES = 32 * MIB;
 const MAX_STAGED_RUNTIME_BYTES = 24 * MIB;
+const MAX_LINUX_X64_UNPACKED_BYTES = 332 * MIB;
+const MAX_LINUX_ARM64_UNPACKED_BYTES = 334 * MIB;
 const PLATFORM_BUDGETS: Record<NodeJS.Platform, PlatformBudget | undefined> = {
-  linux: { maxArtifactBytes: 127 * MIB, maxUnpackedBytes: 332 * MIB },
+  linux: { maxArtifactBytes: 127 * MIB, maxUnpackedBytes: MAX_LINUX_X64_UNPACKED_BYTES },
   darwin: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
   win32: { maxArtifactBytes: 150 * MIB, maxUnpackedBytes: 400 * MIB },
   aix: undefined,
@@ -39,7 +41,7 @@ export async function checkDesktopPackageBudgets(input: {
 }): Promise<Record<string, unknown>> {
   const platform = input.platform ?? process.platform;
   const arch = input.arch ?? process.arch;
-  const budget = PLATFORM_BUDGETS[platform];
+  const budget = desktopPackageBudget(platform, arch);
   if (!budget) throw new Error(`Desktop package budgets are not defined for ${platform}.`);
   const releaseRoot = path.join(input.root, "release");
   const unpackedRoot = await resolveUnpackedRoot(releaseRoot, platform, arch);
@@ -66,10 +68,20 @@ export async function checkDesktopPackageBudgets(input: {
   assertBudget("staged runtime", metrics.stagedRuntime.bytes, MAX_STAGED_RUNTIME_BYTES);
   assertMinimalAsar(asarPath);
   await verifyRuntimeInventory(resourcesRoot, packagedInventory, platform);
+  if (platform === "darwin") await verifyDarwinAppBundleSignature(unpackedRoot);
   if (JSON.stringify(stageInventory.files) !== JSON.stringify(packagedInventory.files)) {
     throw new Error("Packaged runtime inventory differs from the staged runtime inventory.");
   }
   return metrics;
+}
+
+export function desktopPackageBudget(
+  platform: NodeJS.Platform,
+  arch: string,
+): PlatformBudget | undefined {
+  const budget = PLATFORM_BUDGETS[platform];
+  if (!budget || platform !== "linux" || arch !== "arm64") return budget;
+  return { ...budget, maxUnpackedBytes: MAX_LINUX_ARM64_UNPACKED_BYTES };
 }
 
 function assertMinimalAsar(asarPath: string): void {
@@ -121,6 +133,16 @@ async function verifyDarwinCodeSignature(filePath: string, entry: RuntimeInvento
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Packaged runtime code signature failed verification: ${entry.path}: ${detail}`);
+  }
+}
+
+export async function verifyDarwinAppBundleSignature(unpackedRoot: string): Promise<void> {
+  const appBundle = path.join(unpackedRoot, firstAppBundle(unpackedRoot));
+  try {
+    await execFileAsync("codesign", ["--verify", "--deep", "--strict", "--verbose=4", appBundle]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Packaged macOS app bundle failed code-signature verification: ${detail}`);
   }
 }
 

@@ -51,6 +51,10 @@
       "import": "./dist/opchat-smoke.js",
       "types": "./dist/opchat-smoke.d.ts"
     },
+    "./process-runner": {
+      "import": "./dist/process-runner.js",
+      "types": "./dist/process-runner.d.ts"
+    },
     "./profile/*": {
       "import": "./dist/profile/*.js",
       "types": "./dist/profile/*.d.ts"

@@ -8,7 +8,13 @@ import {
   markOpenedTeamChatThreadRead,
 } from "../apps/web/src/hooks/useTeamChat";
 import { actionMentionMatchesForQuery } from "../apps/web/src/lib/action-mentions";
+import {
+  hostedTeamActionForProfileAgent,
+  teamChatActionCatalogWithProfileAgents,
+  teamProfileAgentPublicationError,
+} from "../apps/web/src/lib/team-chat-profile-agents";
 import { mentionedTeamMemberIds } from "../apps/web/src/lib/team-chat-mentions";
+import { emptyOpenPondProfileState } from "../packages/contracts/src";
 
 describe("desktop Team Chat agent continuation", () => {
   test("resolves known member tags without treating unknown text as a mention", () => {
@@ -91,6 +97,67 @@ describe("desktop Team Chat agent continuation", () => {
     ]);
   });
 
+  test("includes enabled local profile agents in the Team mention catalog", () => {
+    const profile = localProfile();
+    const actions = teamChatActionCatalogWithProfileAgents({
+      hostedActions: [],
+      profile,
+      teamId: "team_1",
+    });
+
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toMatchObject({
+      id: "local-profile:default:expense-review:chat",
+      name: "Expense Review",
+      label: "Expense Review",
+      description: "My Agent · Publishes to this Team on first use",
+      implementation: {
+        type: "local-profile-agent",
+        profileAgentId: "expense-review",
+        profileName: "default",
+      },
+    });
+    expect(actionMentionMatchesForQuery(actions, "expense")).toEqual(actions);
+  });
+
+  test("replaces the local mention candidate once its hosted action is available", () => {
+    const profile = localProfile();
+    const hostedAction = hostedExpenseReviewAction();
+    const actions = teamChatActionCatalogWithProfileAgents({
+      hostedActions: [hostedAction],
+      profile,
+      teamId: "team_1",
+    });
+
+    expect(actions).toEqual([hostedAction]);
+    expect(
+      hostedTeamActionForProfileAgent(actions, {
+        runtimeAgentId: "runtime_expense_review",
+        profileName: "default",
+        agentName: "Expense Review",
+      }),
+    ).toBe(hostedAction);
+  });
+
+  test("requires committed, setup-ready profile source before first-use publication", () => {
+    const profile = localProfile();
+    expect(
+      teamProfileAgentPublicationError(profile, "expense-review"),
+    ).toBeNull();
+
+    expect(
+      teamProfileAgentPublicationError(
+        {
+          ...profile,
+          git: profile.git ? { ...profile.git, dirty: true } : null,
+        },
+        "expense-review",
+      ),
+    ).toBe(
+      "Commit your profile changes before publishing Expense Review to Team.",
+    );
+  });
+
   test("submits the exact composer-selected action key", () => {
     expect(
       buildTeamChatSelectedActionRunInput({
@@ -146,3 +213,57 @@ describe("desktop Team Chat agent continuation", () => {
     });
   });
 });
+
+function localProfile() {
+  return {
+    ...emptyOpenPondProfileState(),
+    mode: "local" as const,
+    activeProfile: "default",
+    sourcePath: "/profiles/default",
+    agents: [
+      {
+        id: "expense-review",
+        name: "Expense Review",
+        path: "agents/expense-review",
+        enabled: true,
+      },
+    ],
+    git: {
+      isRepo: true,
+      branch: "main",
+      head: "source_sha",
+      shortHead: "source_s",
+      dirty: false,
+      upstream: "origin/main",
+      ahead: 0,
+      behind: 0,
+      remoteUrl: "https://example.com/profile.git",
+      files: [],
+      error: null,
+    },
+  };
+}
+
+function hostedExpenseReviewAction() {
+  return {
+    id: "profile_project:runtime_expense_review:chat",
+    name: "Expense Review",
+    label: "Expense Review · Chat",
+    description: "Review an expense.",
+    inputSchema: null,
+    setupRequirements: [],
+    implementation: {
+      type: "openpond-agent" as const,
+      agentId: "runtime_expense_review",
+      agentName: "Expense Review",
+      actionId: "chat",
+      profileProjectId: "profile_project",
+      profileName: "default",
+    },
+    invokesModel: true,
+    approvalPolicy: {
+      required: false,
+      risk: "write" as const,
+    },
+  };
+}

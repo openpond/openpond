@@ -163,7 +163,7 @@ export function InsightsView({
       {showActiveSection ? (
         <InsightRows
           title="Active"
-          emptyText="No active create/edit insights match the filters."
+          emptyText="No active Create/Improve insights match the filters."
           items={activeItems}
           paginationKey={observationPaginationKey}
           onPatchStatus={onPatchStatus}
@@ -200,7 +200,7 @@ const SEVERITY_FILTER_OPTIONS: Array<{ value: InsightSeverity | "all"; label: st
 
 const SOURCE_FILTER_OPTIONS: Array<{ value: InsightEvidenceSource | "all"; label: string }> = [
   { value: "all", label: "All" },
-  { value: "create_edit", label: "Create/edit" },
+  { value: "create_edit", label: "Create/Improve" },
   { value: "stuck_turn", label: "Stuck turns" },
   { value: "tool_failure", label: "Tools" },
   { value: "abandoned_goal", label: "Goals" },
@@ -537,7 +537,7 @@ function evidenceSourceLabel(source: InsightEvidenceSource): string {
   if (source === "user_correction") return "Corrections";
   if (source === "unresolved_conversation") return "Unresolved chat";
   if (source === "usage_anomaly") return "Usage";
-  return "Create/edit";
+  return "Create/Improve";
 }
 
 function payloadString(value: unknown): string | null {

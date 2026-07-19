@@ -11,6 +11,13 @@ const CLI_ROOT = path.join(REPO_ROOT, "apps", "cli");
 const pnpmBinary = process.env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
 const tsxBinary = path.join(REPO_ROOT, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 
+function isolatedCliEnv(homeDir: string): Record<string, string> {
+  return {
+    HOME: homeDir,
+    OPENPOND_APP_HOME: path.join(homeDir, ".openpond", "openpond-app"),
+  };
+}
+
 describe("CLI headless chat", () => {
   beforeAll(async () => {
     if (process.env.OPENPOND_TEST_REUSE_BUILD === "1") return;
@@ -21,7 +28,7 @@ describe("CLI headless chat", () => {
     if (build.code !== 0) {
       throw new Error(build.stderr || build.stdout || "CLI build failed");
     }
-  });
+  }, 130_000);
 
   test("source TypeScript entrypoint runs one noninteractive JSON turn through the terminal child", async () => {
     await expectCliHeadlessChat([
@@ -102,9 +109,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: tempRoot,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 10_000,
         },
       );
@@ -201,9 +206,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -266,9 +269,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -362,9 +363,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -437,9 +436,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -514,9 +511,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -571,9 +566,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -628,9 +621,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: taskDir,
-          env: {
-            HOME: homeDir,
-          },
+          env: isolatedCliEnv(homeDir),
           timeoutMs: 5_000,
         },
       );
@@ -671,9 +662,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: tempRoot,
-          env: {
-            HOME: path.join(tempRoot, "home"),
-          },
+          env: isolatedCliEnv(path.join(tempRoot, "home")),
           timeoutMs: 5_000,
         },
       );
@@ -705,9 +694,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: tempRoot,
-          env: {
-            HOME: path.join(tempRoot, "home"),
-          },
+          env: isolatedCliEnv(path.join(tempRoot, "home")),
           timeoutMs: 5_000,
         },
       );
@@ -754,9 +741,7 @@ describe("CLI headless chat", () => {
           ],
           {
             cwd: tempRoot,
-            env: {
-              HOME: path.join(tempRoot, "home"),
-            },
+            env: isolatedCliEnv(path.join(tempRoot, "home")),
             timeoutMs: 5_000,
           },
         );
@@ -789,9 +774,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: tempRoot,
-          env: {
-            HOME: path.join(tempRoot, "home"),
-          },
+          env: isolatedCliEnv(path.join(tempRoot, "home")),
           stdin: "Run this from stdin\n",
           timeoutMs: 5_000,
         },
@@ -824,9 +807,7 @@ describe("CLI headless chat", () => {
         ],
         {
           cwd: tempRoot,
-          env: {
-            HOME: path.join(tempRoot, "home"),
-          },
+          env: isolatedCliEnv(path.join(tempRoot, "home")),
           timeoutMs: 5_000,
         },
       );
@@ -903,9 +884,7 @@ async function expectCliHeadlessChat(
       ],
       {
         cwd: taskDir,
-        env: {
-          HOME: homeDir,
-        },
+        env: isolatedCliEnv(homeDir),
         stdin: inputMode === "stdin" || inputMode === "implicit-stdin" ? `${options.expectedPrompt}\n` : undefined,
         timeoutMs: 10_000,
       },
@@ -969,9 +948,7 @@ async function expectCliHeadlessTerminalState(options: {
       ],
       {
         cwd: taskDir,
-        env: {
-          HOME: homeDir,
-        },
+        env: isolatedCliEnv(homeDir),
         timeoutMs: 5_000,
       },
     );
