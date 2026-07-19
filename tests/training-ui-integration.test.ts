@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { TrainingView } from "../apps/web/src/components/training/TrainingView";
 import { TrainingTasksetDetail } from "../apps/web/src/components/training/TrainingTasksetDetail";
 import {
+  preserveBaseModelSelection,
   TrainingStartDialog,
   trainingRecipe,
 } from "../apps/web/src/components/training/TrainingStartDialog";
@@ -142,7 +143,7 @@ describe("Training UI", () => {
         trainingPath: { primaryMethod: "grpo", bootstrap: { method: "sft", purpose: "trajectory_bootstrap", demonstrationRefs: ["demo_train"], limitations: ["Bootstrap does not satisfy GRPO."] } },
       },
     });
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, { connection: null, taskset, destinations: [{ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "local_cpu_fixture", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [], maxDatasetBytes: null, environmentPlacements: ["local"], nonProduction: true, unavailableReason: null, checkedAt: "2026-07-13T00:00:00.000Z" }], initialMethod: "sft", busy: false, onClose: () => undefined, onPrepare: async () => null, onConfirmPrepared: async () => false, onStart: async () => true }));
+    const html = renderToStaticMarkup(createElement(TrainingStartDialog, { baseModelCandidates: [localFixtureCandidate()], connection: null, taskset, destinations: [{ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "local_cpu_fixture", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [], maxDatasetBytes: null, environmentPlacements: ["local"], nonProduction: true, unavailableReason: null, checkedAt: "2026-07-13T00:00:00.000Z" }], initialMethod: "sft", busy: false, onClose: () => undefined, onPrepare: async () => null, onConfirmPrepared: async () => false, onStart: async () => true }));
     expect(html).toContain('aria-label="Training method"');
     expect(html).toContain(">Supervised<");
     expect(html).toContain(">Reinforcement<");
@@ -198,7 +199,7 @@ describe("Training UI", () => {
     });
 
     expect(recommendedSequenceLength(longTaskset)).toBe(256);
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, { connection: null, taskset: longTaskset, destinations: [{ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "local_cpu_fixture", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [], maxDatasetBytes: null, environmentPlacements: ["local"], nonProduction: true, unavailableReason: null, checkedAt: "2026-07-13T00:00:00.000Z" }], busy: false, onClose: () => undefined, onPrepare: async () => null, onConfirmPrepared: async () => false, onStart: async () => true }));
+    const html = renderToStaticMarkup(createElement(TrainingStartDialog, { baseModelCandidates: [localFixtureCandidate()], connection: null, taskset: longTaskset, destinations: [{ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "local_cpu_fixture", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [], maxDatasetBytes: null, environmentPlacements: ["local"], nonProduction: true, unavailableReason: null, checkedAt: "2026-07-13T00:00:00.000Z" }], busy: false, onClose: () => undefined, onPrepare: async () => null, onConfirmPrepared: async () => false, onStart: async () => true }));
     expect(html).toContain("Sequence length");
     expect(html).toContain("Learning rate");
     expect(html).toContain('value="256"');
@@ -207,6 +208,7 @@ describe("Training UI", () => {
   test("shows an explicit bounded Fireworks export and spend approval", () => {
     const taskset = tasksetFixture({ ready: true });
     const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
+      baseModelCandidates: [managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft"])],
       connection: null,
       taskset,
       destinations: [{
@@ -255,6 +257,7 @@ describe("Training UI", () => {
       },
     });
     const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
+      baseModelCandidates: [managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft", "grpo"])],
       connection: null,
       taskset,
       destinations: [{
@@ -314,6 +317,10 @@ describe("Training UI", () => {
     );
 
     const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
+      baseModelCandidates: [
+        managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft", "grpo"]),
+        managedCandidate("accounts/fireworks/models/qwen3-8b", ["sft", "grpo"]),
+      ],
       connection: null,
       taskset,
       destinations: [{
@@ -338,7 +345,26 @@ describe("Training UI", () => {
       onConfirmPrepared: async () => false,
       onStart: async () => true,
     }));
-    expect(html).toContain("Qwen3 8B · Fireworks managed LoRA");
+    expect(html).toContain('value="managed_accounts/fireworks/models/qwen3-8b" selected="">Qwen3 8B · Fireworks');
+  });
+
+  test("preserves a compatible base model and clears an incompatible destination change", () => {
+    const candidate = managedCandidate(
+      "accounts/fireworks/models/qwen3-8b",
+      ["sft", "grpo"],
+    );
+    expect(preserveBaseModelSelection(
+      [candidate],
+      candidate.selectionKey,
+      "fireworks",
+      "grpo",
+    )).toBe(candidate.selectionKey);
+    expect(preserveBaseModelSelection(
+      [candidate],
+      candidate.selectionKey,
+      "local_cpu_fixture",
+      "sft",
+    )).toBe("");
   });
 
   test("uses a full transformer LoRA target set for real SmolLM adapters", async () => {
@@ -595,5 +621,65 @@ describe("Training UI", () => {
     expect(boundedReceipts).not.toContain("rollout_00");
   });
 });
+
+function localFixtureCandidate() {
+  return {
+    schemaVersion: "openpond.baseModelCandidate.v1" as const,
+    selectionKey: "local_fixture",
+    label: "Tiny CPU correctness fixture",
+    sourceLabel: "This machine",
+    preference: {
+      schemaVersion: "openpond.baseModelPreference.v1" as const,
+      modelId: "openpond/tiny-cpu-gpt2-fixture",
+      revision: "architecture-v2-seed-17-context-512",
+      tokenizerRevision: "wordlevel-v1",
+      chatTemplateHash: "fixture00000000",
+      modelAssetId: null,
+      source: "builtin" as const,
+    },
+    available: true,
+    nonProduction: true,
+    unavailableReason: null,
+    methods: ["sft" as const],
+    executionOptions: [{
+      destinationId: "local_cpu_fixture" as const,
+      available: true,
+      methods: ["sft" as const],
+      parameterizations: ["lora" as const],
+      nonProduction: true,
+      unavailableReason: null,
+    }],
+  };
+}
+
+function managedCandidate(modelId: string, methods: Array<"sft" | "grpo">) {
+  return {
+    schemaVersion: "openpond.baseModelCandidate.v1" as const,
+    selectionKey: `managed_${modelId}`,
+    label: modelId.includes("0p6b") ? "Qwen3 0.6B" : "Qwen3 8B",
+    sourceLabel: "Fireworks",
+    preference: {
+      schemaVersion: "openpond.baseModelPreference.v1" as const,
+      modelId,
+      revision: null,
+      tokenizerRevision: null,
+      chatTemplateHash: null,
+      modelAssetId: null,
+      source: "managed" as const,
+    },
+    available: true,
+    nonProduction: false,
+    unavailableReason: null,
+    methods,
+    executionOptions: [{
+      destinationId: "fireworks" as const,
+      available: true,
+      methods,
+      parameterizations: ["lora" as const],
+      nonProduction: false,
+      unavailableReason: null,
+    }],
+  };
+}
 
 function actionStubs() { return new Proxy({}, { get: () => async () => null }); }

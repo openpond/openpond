@@ -496,6 +496,16 @@ export function conciseWorkproductName(
   return words.slice(0, WORKPRODUCT_NAME_MAX_WORDS).join(" ");
 }
 
+export const BaseModelPreferenceSchema = z.object({
+  schemaVersion: z.literal("openpond.baseModelPreference.v1"),
+  modelId: IdSchema,
+  revision: z.string().trim().min(1).max(256).nullable(),
+  tokenizerRevision: z.string().trim().min(1).max(256).nullable(),
+  chatTemplateHash: z.string().trim().min(8).max(256).nullable(),
+  modelAssetId: NullableIdSchema,
+  source: z.enum(["managed", "local", "builtin"]),
+});
+
 export const TaskCreationRequestSchema = z.object({
   schemaVersion: z.literal("openpond.taskCreationRequest.v1"),
   id: IdSchema,
@@ -507,6 +517,7 @@ export const TaskCreationRequestSchema = z.object({
   objective: z.string().trim().min(1).max(20_000).nullable(),
   methodHint: z.enum(["sft", "dpo", "grpo"]).nullable().default(null),
   preferredBaseModelId: IdSchema.nullable().default(null),
+  preferredBaseModel: BaseModelPreferenceSchema.nullable().default(null),
   sourceIds: z.array(IdSchema).max(100_000),
   candidateId: NullableIdSchema,
   analysisModel: ChatModelRefSchema.nullable(),
@@ -585,5 +596,6 @@ export type AuthoringRepair = z.infer<typeof AuthoringRepairSchema>;
 export type Taskset = z.infer<typeof TasksetSchema>;
 export type TaskDesignProposal = z.infer<typeof TaskDesignProposalSchema>;
 export type TaskCreationTranscript = z.infer<typeof TaskCreationTranscriptSchema>;
+export type BaseModelPreference = z.infer<typeof BaseModelPreferenceSchema>;
 export type TaskCreationRequest = z.infer<typeof TaskCreationRequestSchema>;
 export type TaskCreationSnapshot = z.infer<typeof TaskCreationSnapshotSchema>;

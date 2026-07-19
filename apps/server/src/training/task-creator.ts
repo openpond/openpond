@@ -19,6 +19,7 @@ import {
   type TaskCreationSnapshot,
   type TaskCreationSurface,
   type AuthoringRepair,
+  type BaseModelPreference,
   type TaskDataRecord,
   type TaskDesignProposal,
   type Taskset,
@@ -164,6 +165,7 @@ export function createTaskCreatorService(deps: {
     objective?: string | null;
     methodHint?: TaskCreationRequest["methodHint"];
     preferredBaseModelId?: string | null;
+    preferredBaseModel?: BaseModelPreference | null;
     candidateId?: string | null;
     analysisModel?: ChatModelRef | null;
     analysisReasoningEffort?: CodexReasoningEffort | null;
@@ -185,6 +187,7 @@ export function createTaskCreatorService(deps: {
       objective: input.objective?.trim() || null,
       methodHint: input.methodHint ?? null,
       preferredBaseModelId: input.preferredBaseModelId ?? null,
+      preferredBaseModel: input.preferredBaseModel ?? null,
       sourceIds: input.sourceIds,
       candidateId: input.candidateId ?? null,
       analysisModel: input.analysisModel ?? null,

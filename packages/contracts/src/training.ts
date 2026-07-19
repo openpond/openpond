@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { BaselineReportSchema, GraderAuditReportSchema, TaskCreationSnapshotSchema, TasksetSchema, TrainingSourceRefSchema } from "./tasksets.js";
+import {
+  BaseModelPreferenceSchema,
+  BaselineReportSchema,
+  GraderAuditReportSchema,
+  TaskCreationSnapshotSchema,
+  TasksetSchema,
+  TrainingSourceRefSchema,
+} from "./tasksets.js";
 import { TaskCandidateSchema, TaskMinerConfigSchema, TaskMinerRunSchema } from "./task-mining.js";
 import { CrossSystemFrontierBaselineRunSchema } from "./cross-system-frontier-baseline.js";
 import {
@@ -114,6 +121,28 @@ export const TrainingDestinationCapabilitiesSchema = z.object({
   nonProduction: z.boolean(),
   unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
   checkedAt: TimestampSchema,
+});
+
+export const BaseModelExecutionOptionSchema = z.object({
+  destinationId: TrainingDestinationIdSchema,
+  available: z.boolean(),
+  methods: z.array(TrainingMethodSchema),
+  parameterizations: z.array(TrainingParameterizationSchema),
+  nonProduction: z.boolean(),
+  unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
+});
+
+export const BaseModelCandidateSchema = z.object({
+  schemaVersion: z.literal("openpond.baseModelCandidate.v1"),
+  selectionKey: IdSchema,
+  label: z.string().trim().min(1).max(500),
+  sourceLabel: z.string().trim().min(1).max(500),
+  preference: BaseModelPreferenceSchema,
+  available: z.boolean(),
+  nonProduction: z.boolean(),
+  unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
+  methods: z.array(TrainingMethodSchema),
+  executionOptions: z.array(BaseModelExecutionOptionSchema).min(1),
 });
 
 export const TrainingCompatibilityIssueSchema = z.object({
@@ -519,6 +548,7 @@ export const TrainingStateResponseSchema = z.object({
   modelBindings: z.array(ModelBindingSchema).default([]),
   servingSessions: z.array(FireworksModelServingSessionSchema).default([]),
   destinations: z.array(TrainingDestinationCapabilitiesSchema),
+  baseModelCandidates: z.array(BaseModelCandidateSchema).default([]),
   credentialRefs: z.array(TrainingCredentialRefSchema),
   generatedAt: TimestampSchema,
 });
@@ -530,6 +560,8 @@ export type RftRecipe = z.infer<typeof RftRecipeSchema>;
 export type SftTrainingRecord = z.infer<typeof SftTrainingRecordSchema>;
 export type TrainingRecipe = z.infer<typeof TrainingRecipeSchema>;
 export type TrainingDestinationCapabilities = z.infer<typeof TrainingDestinationCapabilitiesSchema>;
+export type BaseModelExecutionOption = z.infer<typeof BaseModelExecutionOptionSchema>;
+export type BaseModelCandidate = z.infer<typeof BaseModelCandidateSchema>;
 export type TrainingCompatibilityReport = z.infer<typeof TrainingCompatibilityReportSchema>;
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 export type TrainingBundleManifest = z.infer<typeof TrainingBundleManifestSchema>;

@@ -73,6 +73,17 @@ describe("shared surface stylesheet ownership", () => {
     expect(sharedCss).toContain(".training-run-dialog .training-start-mode-options");
     expect(sharedCss).toContain(".training-base-model-options");
     expect(sharedCss).not.toContain(".training-base-model-card");
+    expect(sharedCss).toContain(
+      ".training-method-options>button.selected{border-color:var(--border);background:transparent}",
+    );
+    expect(sharedCss).toContain(
+      ".training-existing-dataset-list>button.selected{border-color:var(--border);background:transparent}",
+    );
+    expect(sharedCss).toContain(".selected>.training-choice-indicator");
+    expect(sharedCss).not.toContain(
+      "button.selected{\n  border-color:color-mix(in srgb,var(--cyan)",
+    );
+    expect(sharedCss).not.toContain(".selected>.training-start-mode-icon");
     expect(sharedCss).toContain(".training-run-dialog.training-run-workflow-step");
     expect(sharedCss).toContain("height:auto");
   });

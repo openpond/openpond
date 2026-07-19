@@ -1,4 +1,5 @@
 import {
+  BaseModelPreferenceSchema,
   ChatModelRefSchema,
   CodexReasoningEffortSchema,
   nextCreateImproveRunRevision,
@@ -7,6 +8,7 @@ import {
   TaskMinerConfigSchema,
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
+  type BaseModelPreference,
   type ChatModelRef,
   type CrossSystemWorldSpec,
   type TaskCreationRequest,
@@ -35,6 +37,7 @@ import {
   createTasksetRef,
 } from "./create-improve-taskset-lineage.js";
 import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
+import { legacyBaseModelPreference } from "./base-model-candidates.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -101,16 +104,22 @@ export function createTrainingApi(deps: {
     if (action === "remove_source") { await deps.store.deleteTrainingSource(requiredString(input.sourceId, "sourceId")); return { removed: true }; }
     if (action === "delete_taskset") return deps.training.deleteTaskset(requiredString(input.tasksetId, "tasksetId"));
     if (action === "create_model_from_taskset") {
+      const preferredBaseModel = requiredBaseModelPreference(
+        input.preferredBaseModel,
+        input.preferredBaseModelId,
+      );
       return createModelFromTaskset({
         profileId: requiredString(input.profileId, "profileId"),
         tasksetId: requiredString(input.tasksetId, "tasksetId"),
-        preferredBaseModelId: requiredString(
-          input.preferredBaseModelId,
-          "preferredBaseModelId",
-        ),
+        preferredBaseModelId: preferredBaseModel.modelId,
+        preferredBaseModel,
       });
     }
     if (action === "start_creation") {
+      const preferredBaseModel = nullableBaseModelPreference(
+        input.preferredBaseModel,
+        input.preferredBaseModelId,
+      );
       return startModelCreation({
         profileId: requiredString(input.profileId, "profileId"),
         sourceIds: stringArray(input.sourceIds),
@@ -120,7 +129,8 @@ export function createTrainingApi(deps: {
         resourceIntent: input.resourceIntent === "dataset" ? "dataset" : "workproduct",
         objective: string(input.objective),
         methodHint: trainingMethodHint(input.methodHint),
-        preferredBaseModelId: string(input.preferredBaseModelId),
+        preferredBaseModelId: preferredBaseModel?.modelId ?? null,
+        preferredBaseModel,
         candidateId: string(input.candidateId),
         analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null,
         analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null,
@@ -328,6 +338,7 @@ export function createTrainingApi(deps: {
       targetIntent: input.targetIntent,
       resourceIntent: input.resourceIntent,
       preferredBaseModelId: input.preferredBaseModelId,
+      preferredBaseModel: input.preferredBaseModel,
     });
     const existingRun = input.createImproveRunId
       ? await deps.store.getCreateImproveRun(input.createImproveRunId)
@@ -348,6 +359,7 @@ export function createTrainingApi(deps: {
           metadata: {
             ...existingRun.metadata,
             preferredBaseModelId: input.preferredBaseModelId ?? null,
+            preferredBaseModel: input.preferredBaseModel ?? null,
           },
           updatedAt: freshRun.updatedAt,
         })
@@ -370,6 +382,7 @@ export function createTrainingApi(deps: {
     profileId: string;
     tasksetId: string;
     preferredBaseModelId: string;
+    preferredBaseModel: BaseModelPreference;
   }) {
     const taskset = await deps.store.getTaskset(input.tasksetId);
     if (!taskset) throw new Error("Dataset not found.");
@@ -388,8 +401,12 @@ export function createTrainingApi(deps: {
         run.tasksetRef.contentHash === taskset.contentHash,
     );
     if (existing) {
+      const preferenceChanged =
+        existing.metadata.preferredBaseModelId !== input.preferredBaseModelId
+        || JSON.stringify(existing.metadata.preferredBaseModel ?? null)
+          !== JSON.stringify(input.preferredBaseModel);
       if (
-        existing.metadata.preferredBaseModelId !== input.preferredBaseModelId &&
+        preferenceChanged &&
         existing.target.kind === "model" &&
         !existing.target.trainingPlanId &&
         !existing.target.trainingJobId &&
@@ -400,6 +417,7 @@ export function createTrainingApi(deps: {
           metadata: {
             ...existing.metadata,
             preferredBaseModelId: input.preferredBaseModelId,
+            preferredBaseModel: input.preferredBaseModel,
           },
           updatedAt: new Date().toISOString(),
         });
@@ -411,6 +429,7 @@ export function createTrainingApi(deps: {
       profileId: input.profileId,
       taskset,
       preferredBaseModelId: input.preferredBaseModelId,
+      preferredBaseModel: input.preferredBaseModel,
     });
     return deps.store.upsertCreateImproveRun(run);
   }
@@ -446,6 +465,7 @@ export function createTrainingApi(deps: {
         targetIntent,
         resourceIntent: creation.request.resourceIntent,
         preferredBaseModelId: creation.request.preferredBaseModelId,
+        preferredBaseModel: creation.request.preferredBaseModel,
         timestamp,
       });
       await deps.store.upsertCreateImproveRun({
@@ -485,6 +505,17 @@ export function createTrainingApi(deps: {
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function requiredString(value: unknown, name: string): string { const parsed = string(value); if (!parsed) throw new Error(`${name} is required.`); return parsed; }
+function nullableBaseModelPreference(value: unknown, legacyId: unknown): BaseModelPreference | null {
+  const parsed = BaseModelPreferenceSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const modelId = string(legacyId);
+  return modelId ? legacyBaseModelPreference(modelId) : null;
+}
+function requiredBaseModelPreference(value: unknown, legacyId: unknown): BaseModelPreference {
+  const preference = nullableBaseModelPreference(value, legacyId);
+  if (!preference) throw new Error("preferredBaseModel is required.");
+  return preference;
+}
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []; }
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }

@@ -38,25 +38,60 @@ describe("New model flow", () => {
   });
 
   test("presents base models as choices instead of a form dropdown", () => {
+    const managed = baseModelCandidate({
+      key: "managed",
+      modelId: "accounts/fireworks/models/qwen3-8b",
+      label: "Qwen3 8B",
+      source: "managed",
+      sourceLabel: "Fireworks",
+    });
+    const local = baseModelCandidate({
+      key: "local",
+      modelId: "HuggingFaceTB/SmolLM2-135M-Instruct",
+      label: "SmolLM2 135M Instruct",
+      source: "local",
+      sourceLabel: "Hugging Face · This machine",
+      nonProduction: true,
+    });
+    const unavailable = baseModelCandidate({
+      key: "cuda",
+      modelId: "local/cuda-model",
+      label: "Local CUDA model",
+      source: "local",
+      sourceLabel: "This machine",
+      available: false,
+      unavailableReason: "CUDA worker conformance is missing.",
+    });
     const html = renderToStaticMarkup(
       <TrainingBaseModelStep
-        modelIds={[
-          "accounts/fireworks/models/qwen3-0p6b",
-          "accounts/fireworks/models/qwen3-8b",
-        ]}
-        value="accounts/fireworks/models/qwen3-8b"
+        busy={false}
+        candidates={[managed, local, unavailable]}
+        value="local"
         onChange={() => undefined}
         onContinue={() => undefined}
+        onManage={() => undefined}
+        onScan={() => undefined}
       />,
     );
 
     expect(html).toContain('role="radiogroup"');
     expect(html).toContain('aria-label="Available base models"');
-    expect(html).toContain("Qwen3 0.6B");
+    expect(html).toContain('aria-label="Starting-weight choices"');
+    expect(html).toContain("training-base-model-scroll");
     expect(html).toContain("Qwen3 8B");
+    expect(html).toContain("SmolLM2 135M Instruct");
+    expect(html).toContain("Managed");
+    expect(html).toContain("This machine");
+    expect(html).toContain("CUDA worker conformance is missing.");
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("Fireworks");
     expect(html).toContain("LoRA");
+    expect(html).toContain("Non-production");
+    expect(html).toContain("Manage local models");
+    expect(html).toContain("Scan this machine");
+    expect(html).toContain("training-base-model-actions");
+    expect(html).not.toContain("Only verified trainable weights");
+    expect(html).not.toContain("training-base-model-toolbar");
     expect(html).not.toContain("<select");
   });
 
@@ -284,6 +319,46 @@ describe("New model flow", () => {
     expect(shouldRevealMinerCandidates("recommendation", succeeded)).toBe(false);
   });
 });
+
+function baseModelCandidate(input: {
+  key: string;
+  modelId: string;
+  label: string;
+  source: "managed" | "local" | "builtin";
+  sourceLabel: string;
+  available?: boolean;
+  nonProduction?: boolean;
+  unavailableReason?: string | null;
+}) {
+  const available = input.available ?? true;
+  return {
+    schemaVersion: "openpond.baseModelCandidate.v1" as const,
+    selectionKey: input.key,
+    label: input.label,
+    sourceLabel: input.sourceLabel,
+    preference: {
+      schemaVersion: "openpond.baseModelPreference.v1" as const,
+      modelId: input.modelId,
+      revision: input.source === "local" ? "revision" : null,
+      tokenizerRevision: input.source === "local" ? "tokenizer" : null,
+      chatTemplateHash: input.source === "local" ? "template1" : null,
+      modelAssetId: input.source === "local" ? `asset_${input.key}` : null,
+      source: input.source,
+    },
+    available,
+    nonProduction: input.nonProduction ?? false,
+    unavailableReason: input.unavailableReason ?? null,
+    methods: ["sft" as const],
+    executionOptions: [{
+      destinationId: input.source === "managed" ? "fireworks" as const : "local_cpu_fixture" as const,
+      available,
+      methods: ["sft" as const],
+      parameterizations: ["lora" as const],
+      nonProduction: input.nonProduction ?? false,
+      unavailableReason: input.unavailableReason ?? null,
+    }],
+  };
+}
 
 function minerConfig() {
   return { schemaVersion: "openpond.taskMinerConfig.v1" as const, enabled: true, localOnly: true, observationWindowDays: 30, minimumRecurrence: 3, clustering: "hybrid_deterministic_first" as const, consentRequired: true };

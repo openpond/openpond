@@ -1,4 +1,5 @@
 import type {
+  BaseModelPreference,
   CreateImproveCandidate,
   CreateImproveRun,
   OpenPondProfileEval,
@@ -6,6 +7,7 @@ import type {
   Taskset,
   TrainingStateResponse,
 } from "@openpond/contracts";
+import { BaseModelPreferenceSchema } from "@openpond/contracts";
 
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
@@ -28,9 +30,27 @@ type WorkproductDetailTab =
   | "configuration";
 
 export function preferredBaseModelId(runs: CreateImproveRun[]): string | null {
+  return preferredBaseModel(runs)?.modelId ?? null;
+}
+
+export function preferredBaseModel(runs: CreateImproveRun[]): BaseModelPreference | null {
   for (const run of runs) {
+    const parsed = BaseModelPreferenceSchema.safeParse(
+      run.metadata.preferredBaseModel,
+    );
+    if (parsed.success) return parsed.data;
     const value = run.metadata.preferredBaseModelId;
-    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "string" && value.trim()) {
+      return {
+        schemaVersion: "openpond.baseModelPreference.v1",
+        modelId: value.trim(),
+        revision: null,
+        tokenizerRevision: null,
+        chatTemplateHash: null,
+        modelAssetId: null,
+        source: "managed",
+      };
+    }
   }
   return null;
 }

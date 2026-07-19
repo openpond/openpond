@@ -6,6 +6,7 @@ import { ModelStoragePicker } from "./ModelStoragePicker";
 export function ComputeSettingsSection({
   state,
   busy,
+  title = "Compute",
   onScan,
   onSave,
   onDownloadSmolLm2,
@@ -13,6 +14,7 @@ export function ComputeSettingsSection({
 }: {
   state: ComputeStateResponse | null;
   busy: "load" | "scan" | "save" | null;
+  title?: string;
   onScan: () => Promise<void>;
   onSave: (modelStorePath: string | null, defaultDeviceIds: string[]) => Promise<boolean>;
   onDownloadSmolLm2: () => Promise<void>;
@@ -37,7 +39,7 @@ export function ComputeSettingsSection({
   return (
     <section className="account-settings compute-settings">
       <div className="compute-title-row">
-        <h1>Compute</h1>
+        <h1>{title}</h1>
         <button className="settings-icon-button" type="button" title="Scan compute" aria-label="Scan compute" disabled={busy !== null} onClick={() => void onScan()}>
           <RefreshCw size={15} className={busy === "scan" ? "settings-spin" : undefined} />
         </button>

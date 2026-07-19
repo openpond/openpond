@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  type BaseModelCandidate,
+  type BaseModelPreference,
   type ComputeStateResponse,
   type ModelAsset,
   type Taskset,
@@ -29,24 +31,26 @@ export type TrainingStartApproval = {
 };
 
 export function TrainingStartDialog({
+  baseModelCandidates,
   connection,
   taskset,
   modelId = null,
   destinations,
   initialMethod,
-  preferredBaseModelId = null,
+  preferredBaseModel = null,
   busy,
   onClose,
   onStart,
   onPrepare,
   onConfirmPrepared,
 }: {
+  baseModelCandidates: BaseModelCandidate[];
   connection: ClientConnection | null;
   taskset: Taskset;
   modelId?: string | null;
   destinations: TrainingDestinationCapabilities[];
   initialMethod?: "sft" | "grpo";
-  preferredBaseModelId?: string | null;
+  preferredBaseModel?: BaseModelPreference | null;
   busy: boolean;
   onClose: () => void;
   onStart: (
@@ -71,26 +75,32 @@ export function TrainingStartDialog({
   const requestedInitialMethod = initialMethod && methodOptions.includes(initialMethod)
     ? initialMethod
     : primaryMethod === "grpo" ? "grpo" : "sft";
+  const preferredCandidate = candidateForPreference(
+    baseModelCandidates,
+    preferredBaseModel,
+  );
+  const preferredOption = preferredCandidate?.executionOptions.find((option) =>
+    option.available && option.methods.includes(requestedInitialMethod)) ?? null;
   const primaryFireworks = destinations.find((destination) =>
     destination.destinationId === "fireworks" &&
     destination.available &&
     destination.methods.includes(requestedInitialMethod));
-  const initialDestination = primaryFireworks?.destinationId
+  const initialDestination = preferredOption?.destinationId
+    ?? primaryFireworks?.destinationId
     ?? destinations.find((destination) => destination.destinationId === "local_cpu_fixture" && destination.available)?.destinationId
     ?? destinations.find((destination) => destination.available && destination.destinationId !== "export")?.destinationId
     ?? "local_cpu_fixture";
   const [destinationId, setDestinationId] = useState<TrainingDestinationId>(initialDestination);
   const [compute, setCompute] = useState<ComputeStateResponse | null>(null);
-  const fireworksModelAllowlist = destinations.find((destination) =>
-    destination.destinationId === "fireworks")?.modelAllowlist ?? [];
-  const initialFireworksModel = preferredBaseModelId
-    && fireworksModelAllowlist.includes(preferredBaseModelId)
-    ? preferredBaseModelId
-    : preferredFireworksModel(fireworksModelAllowlist);
-  const [baseModelId, setBaseModelId] = useState(
-    initialDestination === "fireworks"
-      ? initialFireworksModel
-      : "openpond/tiny-cpu-gpt2-fixture",
+  const initialCandidate = preferredOption
+    ? preferredCandidate
+    : defaultCandidateForDestination(
+      baseModelCandidates,
+      initialDestination,
+      requestedInitialMethod,
+    );
+  const [baseModelKey, setBaseModelKey] = useState(
+    initialCandidate?.selectionKey ?? "",
   );
   const [deviceId, setDeviceId] = useState("automatic");
   const [maxSteps, setMaxSteps] = useState(() =>
@@ -102,7 +112,8 @@ export function TrainingStartDialog({
     initialDestination === "fireworks" ? FIREWORKS_MAXIMUM_SEQUENCE_LENGTH : undefined,
   ));
   const [rank, setRank] = useState(initialDestination === "fireworks" ? 8 : 2);
-  const [learningRate, setLearningRate] = useState(() => defaultLearningRate(baseModelId));
+  const [learningRate, setLearningRate] = useState(() =>
+    defaultLearningRate(initialCandidate?.preference.modelId ?? ""));
   const [exportApproved, setExportApproved] = useState(false);
   const [maximumCostUsd, setMaximumCostUsd] = useState(FIREWORKS_CONSERVATIVE_ESTIMATE_USD);
   const [retentionDays, setRetentionDays] = useState(7);
@@ -119,7 +130,21 @@ export function TrainingStartDialog({
   const evaluationExamples = taskset.tasks.filter((task) => task.split === "frozen_eval").length;
   const selectableDevices = useMemo(() => compute?.inventory?.devices.filter((device) => device.available) ?? [], [compute?.inventory?.devices]);
   const trainableModels = useMemo(() => compute?.inventory?.models.filter((model) => model.trainingCompatible && model.modelId && model.revision && model.tokenizerRevision && model.chatTemplateHash) ?? [], [compute?.inventory?.models]);
-  const selectedModel = trainableModels.find((model) => model.modelId === baseModelId) ?? null;
+  const compatibleBaseModels = useMemo(
+    () => baseModelCandidates.filter((candidate) =>
+      candidate.executionOptions.some((option) =>
+        option.destinationId === destinationId && option.methods.includes(method))),
+    [baseModelCandidates, destinationId, method],
+  );
+  const selectedBaseModel = compatibleBaseModels.find((candidate) =>
+    candidate.selectionKey === baseModelKey) ?? null;
+  const selectedExecutionOption = selectedBaseModel?.executionOptions.find((option) =>
+    option.destinationId === destinationId && option.methods.includes(method)) ?? null;
+  const baseModelId = selectedBaseModel?.preference.modelId ?? "";
+  const selectedModel = selectedBaseModel?.preference.modelAssetId
+    ? trainableModels.find((model) =>
+        model.id === selectedBaseModel.preference.modelAssetId) ?? null
+    : trainableModels.find((model) => model.modelId === baseModelId) ?? null;
   const isFireworks = destinationId === "fireworks";
   const approvalReady = !isFireworks || (
     exportApproved &&
@@ -138,12 +163,20 @@ export function TrainingStartDialog({
     destination?.available &&
     destination.methods.includes(method as never) &&
     tasksetMethodCompatible &&
+    selectedExecutionOption?.available &&
+    (selectedBaseModel?.preference.source !== "local" || Boolean(selectedModel)) &&
     approvalReady,
   );
   const incompatibility = !taskset.readiness?.ready
     ? "The Taskset must pass environment, grader, and data readiness before training."
     : !executableMethod
       ? `${method.toUpperCase()} is the primary recommendation but no compatible execution backend is available here.${bootstrap ? " Choose the optional SFT trajectory bootstrap to run the local precursor." : ""}`
+      : !selectedBaseModel
+        ? `Choose starting weights compatible with ${destinationLabel(destinationId)} and ${method.toUpperCase()}.`
+        : !selectedExecutionOption?.available
+          ? selectedExecutionOption?.unavailableReason ?? "The selected base model cannot run on this compute destination."
+          : selectedBaseModel.preference.source === "local" && !selectedModel
+            ? "The selected local model is no longer present in the verified compute inventory. Scan Compute and select it again."
       : !destination?.methods.includes(method as never)
         ? `${destinationLabel(destinationId)} does not execute ${method.toUpperCase()}.`
       : destination?.unavailableReason
@@ -190,14 +223,9 @@ export function TrainingStartDialog({
       if (!active) return;
       setCompute(state);
       setDeviceId(state.settings.defaultDeviceIds[0] ?? "automatic");
-      const smol = state.inventory?.models.find((model) => model.modelId === "HuggingFaceTB/SmolLM2-135M-Instruct" && model.trainingCompatible);
-      if (destinationId !== "fireworks" && smol?.modelId) {
-        setBaseModelId(smol.modelId);
-        setLearningRate(defaultLearningRate(smol.modelId));
-      }
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [connection, destinationId]);
+  }, [connection]);
 
   async function start() {
     if (!compatible) return;
@@ -214,14 +242,13 @@ export function TrainingStartDialog({
 
   function selectDestination(next: TrainingDestinationId) {
     setDestinationId(next);
+    setBaseModelKey((current) => preserveBaseModelSelection(
+      baseModelCandidates,
+      current,
+      next,
+      method,
+    ));
     if (next === "fireworks") {
-      const allowlist = destinations.find((candidate) =>
-        candidate.destinationId === "fireworks")?.modelAllowlist ?? [];
-      const modelId = preferredBaseModelId && allowlist.includes(preferredBaseModelId)
-        ? preferredBaseModelId
-        : preferredFireworksModel(allowlist);
-      setBaseModelId(modelId);
-      setLearningRate(defaultLearningRate(modelId));
       setRank(8);
       if (method === "grpo") {
         setMaxSteps(Math.min(
@@ -235,8 +262,6 @@ export function TrainingStartDialog({
       ));
       return;
     }
-    setBaseModelId("openpond/tiny-cpu-gpt2-fixture");
-    setLearningRate(defaultLearningRate("openpond/tiny-cpu-gpt2-fixture"));
     setRank(2);
     setSequenceLength(recommendedSequenceLength(taskset));
   }
@@ -244,6 +269,12 @@ export function TrainingStartDialog({
   function selectMethod(next: "sft" | "grpo") {
     setMethod(next);
     setPrepared(null);
+    setBaseModelKey((current) => preserveBaseModelSelection(
+      baseModelCandidates,
+      current,
+      destinationId,
+      next,
+    ));
     if (next === "grpo") {
       setMaxSteps(Math.min(
         10,
@@ -282,7 +313,7 @@ export function TrainingStartDialog({
         ))}
       </div>
       <div className="training-start-fields">
-        <label><span>Base model</span><select value={baseModelId} disabled={busy} onChange={(event) => { const modelId = event.target.value; setBaseModelId(modelId); setLearningRate(defaultLearningRate(modelId)); }}>{isFireworks ? (destination?.modelAllowlist.length ? destination.modelAllowlist : [FIREWORKS_DEFAULT_MODEL]).map((modelId) => <option key={modelId} value={modelId}>{modelLabel(modelId)}</option>) : <><option value="openpond/tiny-cpu-gpt2-fixture">Tiny CPU correctness fixture</option>{trainableModels.map((model) => <option key={model.id} value={model.modelId ?? model.id}>{model.name} · {formatBytes(model.sizeBytes)}</option>)}</>}</select></label>
+        <label><span>Base model</span><select value={baseModelKey} disabled={busy} onChange={(event) => { const key = event.target.value; const candidate = baseModelCandidates.find((item) => item.selectionKey === key); setBaseModelKey(key); setLearningRate(defaultLearningRate(candidate?.preference.modelId ?? "")); }}><option value="" disabled>Choose compatible starting weights</option>{compatibleBaseModels.map((candidate) => { const option = candidate.executionOptions.find((item) => item.destinationId === destinationId && item.methods.includes(method)); return <option key={candidate.selectionKey} value={candidate.selectionKey} disabled={!option?.available}>{candidate.label} · {candidate.sourceLabel}{option?.available ? "" : ` — ${option?.unavailableReason ?? "Unavailable"}`}</option>; })}</select></label>
         <label><span>Compute</span><select value={destinationId} disabled={busy} onChange={(event) => selectDestination(event.target.value as TrainingDestinationId)}>{destinations.filter((item) => !["custom", "runpod_byoc", "export"].includes(item.destinationId)).map((item) => <option value={item.destinationId} key={item.destinationId} disabled={!item.available}>{destinationLabel(item.destinationId)}{item.available ? "" : ` — ${item.unavailableReason ?? "Unavailable"}`}</option>)}</select></label>
         <label><span>Device</span><select value={deviceId} disabled={busy || destinationId !== "local_cpu_fixture"} onChange={(event) => setDeviceId(event.target.value)}><option value="automatic">Automatic</option>{selectableDevices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}</select></label>
       </div>
@@ -356,6 +387,21 @@ export function trainingRecipe(input: { method: string; taskset: Taskset; destin
   if (!input.model?.modelId || !input.model.revision || !input.model.tokenizerRevision || !input.model.chatTemplateHash) return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: "openpond/tiny-cpu-gpt2-fixture", revision: "architecture-v2-seed-17-context-512", tokenizerRevision: "wordlevel-v1", chatTemplateHash: "fixture00000000" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0, targetModules: ["c_attn"] }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 } };
   return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: input.model.modelId, revision: input.model.revision, tokenizerRevision: input.model.tokenizerRevision, chatTemplateHash: input.model.chatTemplateHash }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0.05, targetModules: SMOLLM2_LORA_TARGET_MODULES }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 8_000_000_000, wallTimeMs: 900_000 } };
 }
+
+export function preserveBaseModelSelection(
+  candidates: BaseModelCandidate[],
+  currentSelectionKey: string,
+  destinationId: TrainingDestinationId,
+  method: "sft" | "grpo",
+): string {
+  const current = candidates.find((candidate) =>
+    candidate.selectionKey === currentSelectionKey);
+  return current?.executionOptions.some((option) =>
+    option.destinationId === destinationId && option.methods.includes(method))
+    ? currentSelectionKey
+    : "";
+}
+
 function defaultLearningRate(modelId: string): number { return modelId === "openpond/tiny-cpu-gpt2-fixture" ? 0.01 : 0.0002; }
 function tasksetMethod(taskset: Taskset) { const authored = taskset.metadata.trainingMethod; if (typeof authored === "string" && authored !== "none") return authored; return taskset.readiness?.recommendedMethod && taskset.readiness.recommendedMethod !== "none" ? taskset.readiness.recommendedMethod : "sft"; }
 function selectableMethods(taskset: Taskset): Array<"sft" | "grpo"> {
@@ -371,10 +417,38 @@ function selectableMethods(taskset: Taskset): Array<"sft" | "grpo"> {
   return ordered.length ? ordered : ["sft"];
 }
 function destinationLabel(destination: string) { const labels: Record<string, string> = { export: "Export only", local_cpu_fixture: "Local CPU", local_cuda: "Local NVIDIA GPU", local_mlx: "Apple Silicon", ssh_gpu: "SSH GPU", prime_hosted: "Prime hosted", fireworks: "Fireworks", openpond_managed: "OpenPond managed" }; return labels[destination] ?? destination.replaceAll("_", " "); }
-function preferredFireworksModel(modelAllowlist: string[]): string {
-  return modelAllowlist.includes(FIREWORKS_DEFAULT_MODEL)
-    ? FIREWORKS_DEFAULT_MODEL
-    : modelAllowlist[0] ?? FIREWORKS_DEFAULT_MODEL;
+function candidateForPreference(
+  candidates: BaseModelCandidate[],
+  preference: BaseModelPreference | null,
+): BaseModelCandidate | null {
+  if (!preference) return null;
+  return candidates.find((candidate) =>
+    candidate.preference.modelId === preference.modelId
+    && candidate.preference.source === preference.source
+    && candidate.preference.revision === preference.revision
+    && candidate.preference.modelAssetId === preference.modelAssetId)
+    ?? candidates.find((candidate) =>
+      candidate.preference.modelId === preference.modelId)
+    ?? null;
+}
+
+function defaultCandidateForDestination(
+  candidates: BaseModelCandidate[],
+  destinationId: TrainingDestinationId,
+  method: "sft" | "grpo",
+): BaseModelCandidate | null {
+  const compatible = candidates.filter((candidate) =>
+    candidate.executionOptions.some((option) =>
+      option.destinationId === destinationId
+      && option.available
+      && option.methods.includes(method)));
+  if (destinationId === "fireworks") {
+    return compatible.find((candidate) =>
+      candidate.preference.modelId === FIREWORKS_DEFAULT_MODEL)
+      ?? compatible[0]
+      ?? null;
+  }
+  return compatible[0] ?? null;
 }
 
 function modelLabel(modelId: string) {
