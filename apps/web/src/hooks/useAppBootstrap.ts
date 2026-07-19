@@ -12,7 +12,7 @@ import type {
 } from "@openpond/contracts";
 import { api, resolveConnection, type ClientConnection, type PreferencesPayload } from "../api";
 import { normalizePreferences, parseProjectSelection, projectSelectionKey } from "../lib/app-models";
-import { latestReadyLocalCreatePipelineProfileRefreshKey } from "../lib/create-pipeline-profile-refresh";
+import { latestReadyLocalCreateImproveProfileRefreshKey } from "../lib/create-pipeline-profile-refresh";
 import {
   codexPreferencesWithLocalOverrides,
   storedCodexPreferenceSyncPatch,
@@ -560,7 +560,7 @@ export function useAppBootstrap(params: {
       profileRefreshCreatePipelineKeyRef.current = null;
       return;
     }
-    const refreshKey = latestReadyLocalCreatePipelineProfileRefreshKey(events);
+    const refreshKey = latestReadyLocalCreateImproveProfileRefreshKey(events);
     if (!refreshKey || profileRefreshCreatePipelineKeyRef.current === refreshKey) return;
     profileRefreshCreatePipelineKeyRef.current = refreshKey;
     void api

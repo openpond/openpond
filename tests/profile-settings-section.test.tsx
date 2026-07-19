@@ -92,8 +92,6 @@ function profilePayload(): BootstrapPayload {
         lastPushedHostedHead: "f33a352dfbce0f5f93e29f29df2dde0258b69ed8",
         promotionStatus: "uploaded",
         hostedRunStatus: "passed",
-        localGoalId: null,
-        hostedGoalId: null,
         hostedRunAgentId: null,
         hostedRunId: null,
         hostedRunAt: null,
@@ -170,6 +168,25 @@ function profilePayload(): BootstrapPayload {
 }
 
 describe("ProfileSettingsSection", () => {
+  test("can render only the Profile Git controls for the Lab home", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProfileSettingsSection, {
+        section: "controls",
+        payload: profilePayload(),
+        connection: null,
+        onPayload: noop,
+        onError: noop,
+      }),
+    );
+
+    expect(html).toContain(">Commit<");
+    expect(html).toContain(">Sync<");
+    expect(html).toContain(">Repo<");
+    expect(html).toContain("Profile ready.");
+    expect(html).not.toContain("Profile agents table");
+    expect(html).not.toContain(">Skills<");
+  });
+
   test("renders compact profile controls and a bordered agent table without duplicate metrics", () => {
     const html = renderToStaticMarkup(
       createElement(ProfileSettingsSection, {
@@ -181,6 +198,8 @@ describe("ProfileSettingsSection", () => {
     );
 
     expect(html).toContain('class="profile-hosted-status"');
+    expect(html).toContain('class="profile-local-status ready"');
+    expect(html).toContain("Profile ready.");
     expect(html).toContain("uploaded f33a352dfb");
     expect(html).toContain('<table class="profile-agent-table" aria-label="Profile agents table">');
     expect(html).toContain('<th scope="col">Agent</th>');

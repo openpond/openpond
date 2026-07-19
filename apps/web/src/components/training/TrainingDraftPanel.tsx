@@ -1,6 +1,7 @@
 import type { useTraining } from "../../hooks/useTraining";
 import { ChartColumnStacked, Maximize2, Minimize2 } from "../icons";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import "../../styles/training/training.css";
 
 export function TrainingDraftPanel({ training, sessionId, expanded, onOpenTraining, onResizeStart, onToggleExpanded }: { training: ReturnType<typeof useTraining>; sessionId: string | null; expanded: boolean; onOpenTraining: () => void; onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void; onToggleExpanded: () => void }) {
   const sources = training.payload?.sources.filter((source) => source.sessionId === sessionId) ?? [];

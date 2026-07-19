@@ -1,4 +1,4 @@
-import type { CreatePipelineSnapshot } from "@openpond/contracts";
+import type { CreateImproveRun } from "@openpond/contracts";
 
 export type GoalKind =
   | "general_code_goal"
@@ -254,7 +254,7 @@ export type GoalState = {
   questions: GoalQuestion[];
   answers: GoalAnswer[];
   approvals: GoalApproval[];
-  createPipeline?: CreatePipelineSnapshot;
+  createImproveRun?: CreateImproveRun;
   events: GoalEvent[];
   createdAt: string;
   updatedAt: string;

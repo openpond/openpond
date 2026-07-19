@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   Approval,
   ChatAttachment,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
   OpenPondApp,
   RuntimeEvent,
   Session,
@@ -12,13 +12,13 @@ import type {
 
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
 import { ApprovalRequestCard } from "../apps/web/src/components/chat/ApprovalRequestCard";
-import { ComposerCreatePipelineStrip } from "../apps/web/src/components/chat/ComposerCreatePipelineStrip";
+import { ComposerCreateImproveStrip } from "../apps/web/src/components/chat/ComposerCreateImproveStrip";
 import { GoalDetailsView } from "../apps/web/src/components/goal/GoalDetailsView";
 import { WorkspaceDiffTabs } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanelChrome";
 import {
   sandboxIdFromWorkspaceName,
   shouldSubmitComposerSlashCommandToChat,
-  shouldRunCreatePipelineCommandLocally,
+  shouldRunCreateImproveCommandLocally,
 } from "../apps/web/src/components/app-shell/main-pane-helpers";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import {
@@ -31,19 +31,22 @@ import {
 } from "../apps/web/src/lib/composer-slash-commands";
 import { buildSubmitIssueSlashPrompt } from "../apps/web/src/lib/submit-issue-command";
 import {
-  approveCreatePipelineSnapshot,
-  buildComposerCreatePipelineRequest,
-  buildHostedCloudWorkCreatePipelineRequest,
-  buildInitialCreatePipelineSnapshot,
-  cancelCreatePipelineSnapshot,
-  reviseCreatePipelineSnapshot,
+  approveCreateImproveRun,
+  buildComposerCreateImproveRun,
+  buildHostedCloudWorkCreateImproveRun,
+  buildInitialCreateImproveRun,
+  buildLabAgentCreateImproveRun,
+  buildLabAgentImproveRun,
+  cancelCreateImproveRun,
+  reviseCreateImproveRun,
 } from "../apps/web/src/lib/create-pipeline-request";
 import {
   buildOpenPondAppActionRunInput,
   buildOpenPondAgentRunInput,
   buildOpenPondProfileActionRunInput,
 } from "../apps/web/src/lib/openpond-action-run";
-import { latestReadyLocalCreatePipelineProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
+import { latestReadyLocalCreateImproveProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import {
   buildSidebarProjectPathIndex,
   isSidebarCloudWorkSession,
@@ -225,7 +228,7 @@ describe("OpenPond App action channel", () => {
   test("builds create pipeline envelopes from composer slash commands", () => {
     const parsed = parseComposerSlashCommandPrompt("/create summarize files");
     expect(parsed).not.toBeNull();
-    const request = buildComposerCreatePipelineRequest({
+    const request = buildComposerCreateImproveRun({
       parsed: parsed!,
       prompt: "/create summarize files",
       payload: {
@@ -353,7 +356,7 @@ describe("OpenPond App action channel", () => {
         sideEffects: ["action completed"],
       },
     ]);
-    const snapshot = buildInitialCreatePipelineSnapshot(request!);
+    const snapshot = buildInitialCreateImproveRun(request!);
     expect(snapshot.workflowCapture?.profileActions).toEqual(["github.search_pull_requests"]);
     expect(snapshot.workflowCapture?.externalProviders).toEqual(["GitHub", "github"]);
     expect(snapshot.workflowCapture?.sideEffects).toEqual(["action completed"]);
@@ -383,7 +386,7 @@ describe("OpenPond App action channel", () => {
 
     const parsedEdit = parseComposerSlashCommandPrompt("/edit tighten responses");
     expect(parsedEdit).not.toBeNull();
-    expect(buildComposerCreatePipelineRequest({
+    expect(buildComposerCreateImproveRun({
       parsed: parsedEdit!,
       prompt: "/edit tighten responses",
       payload: {
@@ -403,7 +406,7 @@ describe("OpenPond App action channel", () => {
       session: session({ appId: null, appName: null }),
     })).toBeNull();
 
-    const editRequest = buildComposerCreatePipelineRequest({
+    const editRequest = buildComposerCreateImproveRun({
       parsed: parsedEdit!,
       prompt: "/edit tighten responses",
       payload: {
@@ -422,15 +425,134 @@ describe("OpenPond App action channel", () => {
       } as BootstrapPayload,
       session: session({ appId: "agent_1", appName: "Agent One" }),
     });
-    expect(editRequest?.operation).toBe("edit");
-    expect(editRequest?.targetAgent.agentId).toBe("agent_1");
-    expect(editRequest?.targetAgent.defaultActionKey).toBe("agent_1.chat");
+    expect(editRequest?.operation).toBe("improve");
+    expect(editRequest?.target).toMatchObject({
+      kind: "agent",
+      id: "agent_1",
+      defaultActionKey: "agent_1.chat",
+    });
+
+    const evalBackedEdit = buildComposerCreateImproveRun({
+      parsed: parseComposerSlashCommandPrompt(
+        '/edit --agent agent_1 --eval "agent/evals/reply.eval.ts" tighten responses',
+      )!,
+      prompt: '/edit --agent agent_1 --eval "agent/evals/reply.eval.ts" tighten responses',
+      payload: {
+        account: {
+          activeProfile: { handle: "sam" },
+          label: "Sam",
+        },
+        preferences: { defaultTeamId: "team_1" },
+        profile: {
+          mode: "local",
+          activeProfile: "default",
+          repoPath: "/profiles/default-repo",
+          sourcePath: "/profiles/default-repo/profiles/default",
+          git: { head: "abc123" },
+        },
+      } as BootstrapPayload,
+      session: session({ appId: "agent_1", appName: "Agent One" }),
+    });
+    expect(evalBackedEdit?.objective).toBe("tighten responses");
+    expect(evalBackedEdit?.context.evalRefs).toEqual(["agent/evals/reply.eval.ts"]);
+  });
+
+  test("builds a Lab Agent run on a hidden Lab execution session", () => {
+    const labSession = session({
+      id: "session_lab_agent",
+      workspaceKind: "local_project",
+      workspaceId: "profile_default",
+      workspaceName: "Default Profile",
+      systemKind: "openpond.lab",
+      hiddenFromDefaultSidebar: true,
+      cwd: "/profiles/default-repo",
+    });
+    const run = buildLabAgentCreateImproveRun({
+      objective: "Review release changes and draft concise notes.",
+      payload: {
+        account: {
+          activeProfile: { handle: "sam" },
+          label: "Sam",
+        },
+        preferences: { defaultTeamId: "team_1" },
+        profile: {
+          mode: "local",
+          activeProfile: "default",
+          repoPath: "/profiles/default-repo",
+          sourcePath: "/profiles/default-repo/profiles/default",
+          git: { head: "abc123" },
+        },
+      } as BootstrapPayload,
+      session: labSession,
+    });
+
+    expect(run).toMatchObject({
+      operation: "create",
+      surface: "lab_create",
+      command: "lab_create",
+      scope: {
+        conversationId: "session_lab_agent",
+        profileId: "default",
+      },
+      target: {
+        kind: "agent",
+        id: "review-release-changes-and-draft-concise-notes",
+      },
+      metadata: {
+        source: "lab_agent_create",
+        hiddenExecutionSession: true,
+      },
+    });
+  });
+
+  test("builds a Lab Agent improvement run from a plain outcome statement", () => {
+    const labSession = session({
+      id: "session_lab_agent_improve",
+      systemKind: "openpond.lab",
+      hiddenFromDefaultSidebar: true,
+      cwd: "/profiles/default-repo",
+    });
+    const run = buildLabAgentImproveRun({
+      agentId: "default",
+      agentName: "default",
+      objective: "I think my agent can be better at finding the right files.",
+      payload: {
+        account: {
+          activeProfile: { handle: "sam" },
+          label: "Sam",
+        },
+        preferences: { defaultTeamId: "team_1" },
+        profile: {
+          mode: "local",
+          activeProfile: "default",
+          repoPath: "/profiles/default-repo",
+          sourcePath: "/profiles/default-repo/profiles/default",
+          git: { head: "abc123" },
+        },
+      } as BootstrapPayload,
+      session: labSession,
+    });
+
+    expect(run).toMatchObject({
+      operation: "improve",
+      surface: "lab_improve",
+      command: "lab_improve",
+      objective: "I think my agent can be better at finding the right files.",
+      target: {
+        kind: "agent",
+        id: "default",
+      },
+      metadata: {
+        source: "lab_agent_improve",
+        hiddenExecutionSession: true,
+      },
+    });
   });
 
   test("does not synthesize support-specific create questions from the objective", () => {
     const parsed = parseComposerSlashCommandPrompt("/create Help me keep track of open customer support items.");
     expect(parsed).not.toBeNull();
-    const request = buildComposerCreatePipelineRequest({
+    const request = buildComposerCreateImproveRun({
       parsed: parsed!,
       prompt: "/create Help me keep track of open customer support items.",
       payload: {
@@ -453,7 +575,7 @@ describe("OpenPond App action channel", () => {
       apps: [],
     });
     expect(request).not.toBeNull();
-    const snapshot = buildInitialCreatePipelineSnapshot(request!);
+    const snapshot = buildInitialCreateImproveRun(request!);
 
     expect(snapshot.state).toBe("awaiting_plan_approval");
     expect(snapshot.plan?.approvalId).toBeTruthy();
@@ -461,18 +583,16 @@ describe("OpenPond App action channel", () => {
     expect(snapshot.questions).toEqual([]);
 
     const planHtml = renderToStaticMarkup(
-      createElement(ComposerCreatePipelineStrip, {
+      createElement(ComposerCreateImproveStrip, {
         runtime: {
-          turnId: "turn_1",
-          request: request!,
-          snapshot,
+          run: snapshot,
           onApprove: async () => undefined,
           onCancel: async () => undefined,
           onRevise: async () => undefined,
         },
       }),
     );
-    expect(planHtml).toContain("Create plan");
+    expect(planHtml).toContain(">Plan<");
     expect(planHtml).toContain("Chat only");
     expect(planHtml).toContain("Confirm plan");
     expect(planHtml).not.toContain("Details");
@@ -491,22 +611,20 @@ describe("OpenPond App action channel", () => {
       ],
     };
     const readyHtml = renderToStaticMarkup(
-      createElement(ComposerCreatePipelineStrip, {
+      createElement(ComposerCreateImproveStrip, {
         runtime: {
-          turnId: "turn_1",
-          request: request!,
-          snapshot: ready,
+          run: ready,
         },
       }),
     );
-    expect(readyHtml).toContain("Ready locally");
+    expect(readyHtml).toContain(">Ready<");
     expect(readyHtml).toContain("Chat only");
     expect(readyHtml).toContain("profiles/default/agents/help-me-keep-track-of-open-customer-support-item");
     expect(readyHtml).toContain("2 check refs");
     expect(readyHtml).toContain(".openpond/agent-inspect.json");
     expect(readyHtml).toContain(".openpond/eval-results.json");
 
-    const detailsSnapshot: CreatePipelineSnapshot = {
+    const detailsSnapshot: CreateImproveRun = {
       ...ready,
       plan: {
         ...ready.plan!,
@@ -524,15 +642,13 @@ describe("OpenPond App action channel", () => {
     const detailsHtml = renderToStaticMarkup(
       createElement(GoalDetailsView, {
         createRuntime: {
-          turnId: "turn_1",
-          request: request!,
-          snapshot: detailsSnapshot,
+          run: detailsSnapshot,
         },
         goalRuntime: null,
       }),
     );
-    expect(detailsHtml).toContain("Create Plan Details");
-    expect(detailsHtml).toContain("Create State");
+    expect(detailsHtml).toContain("Create/Improve Details");
+    expect(detailsHtml).toContain("Current Work");
     expect(detailsHtml).toContain("Help me keep track of open customer support items.");
     expect(detailsHtml).toContain("Action Shape");
     expect(detailsHtml).toContain("Chat only");
@@ -672,7 +788,7 @@ describe("OpenPond App action channel", () => {
     } as BootstrapPayload["profile"];
 
     expect(
-      shouldRunCreatePipelineCommandLocally({
+      shouldRunCreateImproveCommandLocally({
         command: createCommand!,
         profile: localProfile,
         activeWorkspaceKind: "local_project",
@@ -680,7 +796,7 @@ describe("OpenPond App action channel", () => {
       }),
     ).toBe(true);
     expect(
-      shouldRunCreatePipelineCommandLocally({
+      shouldRunCreateImproveCommandLocally({
         command: createCommand!,
         profile: localProfile,
         activeWorkspaceKind: null,
@@ -688,7 +804,7 @@ describe("OpenPond App action channel", () => {
       }),
     ).toBe(true);
     expect(
-      shouldRunCreatePipelineCommandLocally({
+      shouldRunCreateImproveCommandLocally({
         command: createCommand!,
         profile: localProfile,
         activeWorkspaceKind: "sandbox",
@@ -696,7 +812,7 @@ describe("OpenPond App action channel", () => {
       }),
     ).toBe(false);
     expect(
-      shouldRunCreatePipelineCommandLocally({
+      shouldRunCreateImproveCommandLocally({
         command: createCommand!,
         profile: localProfile,
         activeWorkspaceKind: "local_project",
@@ -704,7 +820,7 @@ describe("OpenPond App action channel", () => {
       }),
     ).toBe(false);
     expect(
-      shouldRunCreatePipelineCommandLocally({
+      shouldRunCreateImproveCommandLocally({
         command: createCommand!,
         profile: {
           mode: "hosted",
@@ -716,7 +832,7 @@ describe("OpenPond App action channel", () => {
       }),
     ).toBe(false);
     expect(
-      shouldRunCreatePipelineCommandLocally({
+      shouldRunCreateImproveCommandLocally({
         command: goalCommand!,
         profile: localProfile,
         activeWorkspaceKind: "local_project",
@@ -778,7 +894,7 @@ describe("OpenPond App action channel", () => {
         },
       },
     } as BootstrapPayload;
-    const request = buildHostedCloudWorkCreatePipelineRequest({
+    const request = buildHostedCloudWorkCreateImproveRun({
       command: "create",
       objective: "Create a hosted release notes agent",
       payload,
@@ -791,22 +907,22 @@ describe("OpenPond App action channel", () => {
     expect(request?.adapter.sourceAuthority).toBe("hosted_profile");
     expect(request?.adapter.sourceRef).toBe("profile-main");
     expect(request?.scope.targetProject?.name).toBe("Cloud Project");
-    const snapshot = buildInitialCreatePipelineSnapshot(request!);
+    const snapshot = buildInitialCreateImproveRun(request!);
     expect(snapshot.state).toBe("awaiting_plan_approval");
     expect(snapshot.plan?.status).toBe("pending_approval");
     expect(snapshot.plan?.approvalId).toBeTruthy();
     expect(snapshot.approvalIds).toEqual([snapshot.plan?.approvalId]);
     expect(snapshot.plan?.sourcePlan.map((item) => item.path)).toContain(
-      "agents/create-a-hosted-release-notes-agent",
+      `agents/${snapshot.target.id}`,
     );
     expect(snapshot.workflowCapture?.targetRepoAssumptions).toEqual([
       "cloud project: openpond/cloud-project",
     ]);
-    const approved = approveCreatePipelineSnapshot(snapshot);
+    const approved = approveCreateImproveRun(snapshot);
     expect(approved.state).toBe("applying_source");
     expect(approved.plan?.status).toBe("approved");
-    expect(reviseCreatePipelineSnapshot(approved, "Change after approval")).toEqual(approved);
-    const revised = reviseCreatePipelineSnapshot(snapshot, "Prefer concise bullet summaries.");
+    expect(reviseCreateImproveRun(approved, "Change after approval")).toEqual(approved);
+    const revised = reviseCreateImproveRun(snapshot, "Prefer concise bullet summaries.");
     expect(revised.state).toBe("awaiting_plan_approval");
     expect(revised.plan?.status).toBe("pending_approval");
     expect(revised.plan?.id).not.toBe(snapshot.plan?.id);
@@ -814,12 +930,12 @@ describe("OpenPond App action channel", () => {
     expect(revised.plan?.approvalId).toBe(snapshot.plan?.approvalId);
     expect(revised.approvalIds).toEqual(snapshot.approvalIds);
     expect(revised.plan?.summary).toContain("Prefer concise bullet summaries.");
-    const cancelled = cancelCreatePipelineSnapshot(snapshot);
-    expect(cancelled.state).toBe("blocked");
+    const cancelled = cancelCreateImproveRun(snapshot);
+    expect(cancelled.state).toBe("cancelled");
     expect(cancelled.plan?.status).toBe("cancelled");
     expect(cancelled.blockedReason).toContain("Cancelled");
 
-    expect(buildHostedCloudWorkCreatePipelineRequest({
+    expect(buildHostedCloudWorkCreateImproveRun({
       command: "edit",
       objective: "Tighten hosted release notes",
       payload,
@@ -827,7 +943,7 @@ describe("OpenPond App action channel", () => {
       source: "cloud_work_home",
     })).toBeNull();
 
-    const editRequest = buildHostedCloudWorkCreatePipelineRequest({
+    const editRequest = buildHostedCloudWorkCreateImproveRun({
       command: "edit",
       objective: "Tighten hosted release notes",
       payload,
@@ -852,9 +968,12 @@ describe("OpenPond App action channel", () => {
       },
       source: "cloud_work_thread",
     });
-    expect(editRequest?.surface).toBe("hosted_edit");
-    expect(editRequest?.targetAgent.agentId).toBe("agent_1");
-    expect(editRequest?.targetAgent.defaultActionKey).toBe("agent_1.chat");
+    expect(editRequest?.surface).toBe("hosted_improve");
+    expect(editRequest?.target).toMatchObject({
+      kind: "agent",
+      id: "agent_1",
+      defaultActionKey: "agent_1.chat",
+    });
   });
 
   test("discovers flat project actions from composer slash input", () => {
@@ -899,58 +1018,66 @@ describe("OpenPond App action channel", () => {
       id: "event_blocked",
       sessionId: "session_1",
       turnId: "turn_1",
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source: "server",
       status: "failed",
       data: {
-        createPipelineRequest: { adapter: { kind: "local" } },
-        createPipeline: {
-          id: "create_pipeline_blocked",
+        createImproveRun: createImproveRunFixture({
+          id: "create_improve_blocked",
           state: "blocked",
-        },
+        }),
       },
     });
     const ignoredHosted = runtimeEvent({
       id: "event_hosted",
       sessionId: "session_1",
       turnId: "turn_1",
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source: "server",
       status: "completed",
       data: {
-        createPipelineRequest: { adapter: { kind: "hosted" } },
-        createPipeline: {
-          id: "create_pipeline_hosted",
+        createImproveRun: createImproveRunFixture({
+          id: "create_improve_hosted",
           state: "ready_local",
-        },
+          adapter: {
+            kind: "hosted",
+            sourceAuthority: "hosted_profile",
+            teamId: "team_1",
+            projectId: "project_1",
+            activeProfile: "default",
+            sourceRef: "main",
+            baseSha: null,
+            workItemId: null,
+            confirmationPolicy: "always_require_plan_approval",
+          },
+        }),
       },
     });
     const readyLocal = runtimeEvent({
       id: "event_ready",
       sessionId: "session_2",
       turnId: "turn_2",
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source: "server",
       status: "completed",
       data: {
-        createPipelineRequest: { adapter: { kind: "local" } },
-        createPipeline: {
-          id: "create_pipeline_ready",
+        createImproveRun: createImproveRunFixture({
+          id: "create_improve_ready",
           state: "ready_local",
-        },
+        }),
       },
     });
 
     expect(
-      latestReadyLocalCreatePipelineProfileRefreshKey([ignoredBlocked, ignoredHosted]),
+      latestReadyLocalCreateImproveProfileRefreshKey([ignoredBlocked, ignoredHosted]),
     ).toBeNull();
     expect(
-      latestReadyLocalCreatePipelineProfileRefreshKey([
+      latestReadyLocalCreateImproveProfileRefreshKey([
         ignoredBlocked,
         readyLocal,
         ignoredHosted,
       ]),
-    ).toBe("session_2:turn_2:create_pipeline_ready");
+    ).toBe("session_2:turn_2:create_improve_ready");
   });
 
   test("builds direct action run payloads with selected slash metadata", () => {
@@ -1228,7 +1355,7 @@ describe("OpenPond App action channel", () => {
 
   test("renders create pipeline receipts in chat messages without duplicate approval controls", () => {
     const parsed = parseComposerSlashCommandPrompt("/create release notes agent");
-    const request = buildComposerCreatePipelineRequest({
+    const request = buildComposerCreateImproveRun({
       parsed: parsed!,
       prompt: "/create release notes agent",
       payload: {
@@ -1307,13 +1434,15 @@ describe("OpenPond App action channel", () => {
           mode: "chat_and_direct_actions",
           label: "Chat plus direct action",
           detail: "Expose a default chat route and a repeatable direct action when the generated source has a tool-like run.",
-          defaultActionKey: request!.targetAgent.defaultActionKey ?? "chat",
+          defaultActionKey: request!.target.kind === "agent"
+            ? request!.target.defaultActionKey ?? "chat"
+            : "chat",
           directActionHint: "Create a direct action only for the repeatable tool-like behavior.",
           artifactPolicy: "Persist trace and run summary; declare output artifacts when the direct action produces files.",
         } as const,
       },
     };
-    const snapshot = buildInitialCreatePipelineSnapshot(requestWithActionShape);
+    const snapshot = buildInitialCreateImproveRun(requestWithActionShape);
     expect(snapshot.plan?.approvalId).toBeTruthy();
     expect(snapshot.approvalIds).toEqual([snapshot.plan?.approvalId]);
     const html = renderToStaticMarkup(
@@ -1323,15 +1452,14 @@ describe("OpenPond App action channel", () => {
           role: "assistant",
           timestamp,
           turnId: "turn_1",
-          createPipelineRequest: requestWithActionShape,
-          createPipeline: snapshot,
+          createImproveRun: snapshot,
         },
       }),
     );
 
-    expect(html).toContain("Create status");
-    expect(html).toContain("Create plan ready");
-    expect(html).toContain("Create a source-backed profile agent");
+    expect(html).toContain("Create or improve status");
+    expect(html).toContain("Plan ready");
+    expect(html).toContain("Create agent for: release notes agent");
     expect(html).toContain("Chat plus direct action");
     expect(html).toContain("agents/release-notes-agent");
     expect(html).toContain("4 checks");

@@ -3,11 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
   type Approval,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -23,6 +19,7 @@ import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import { withTurnRunnerTestStore } from "./helpers/turn-runner-test-harness";
 import { createWorkspaceSessionWorkflows } from "../apps/server/src/workspace/server-workspace-session-workflows";
 import type { SqliteStore } from "../apps/server/src/store/store";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 const tempDirs: string[] = [];
 
@@ -191,10 +188,35 @@ describe("server work queues", () => {
       workspaceId: "project-1",
       cwd: repoPath,
     });
-    const request = localCreatePipelineRequest({ repoPath, sourcePath });
+    const createImproveRun = createImproveRunFixture({
+      id: "create_improve_local_queue",
+      state: "awaiting_plan_approval",
+      adapter: {
+        kind: "local",
+        sourceAuthority: "local_profile",
+        activeProfile: "default",
+        repoPath,
+        sourcePath,
+        localHead: null,
+        confirmationPolicy: "always_require_plan_approval",
+      },
+      scope: {
+        profileId: "default",
+        conversationId: "session-1",
+        originTurnId: "turn-1",
+        workItemId: null,
+        projectId: null,
+        targetProject: null,
+      },
+      target: {
+        kind: "agent",
+        id: "support-helper",
+        displayName: "Support Helper",
+        defaultActionKey: "support-helper.chat",
+      },
+    });
     const turn = baseTurn({
-      createPipelineRequest: request,
-      createPipeline: localCreatePipelineSnapshot(request, "awaiting_plan_approval", "pending_approval"),
+      createImproveRun,
     });
     const turns = [turn];
     const runner = createTurnRunner({
@@ -264,24 +286,26 @@ describe("server work queues", () => {
       maxRepeatedInvalidToolRequests: 1,
     });
 
-    await runner.updateTurnCreatePipeline("session-1", "turn-1", {
-      createPipelineRequest: request,
-      createPipeline: localCreatePipelineSnapshot(request, "applying_source", "approved"),
+    await runner.applyCreateImproveAction(createImproveRun.id, {
+      runId: createImproveRun.id,
+      expectedRevision: createImproveRun.revision,
+      actionId: "approve_create_improve_local_queue",
+      type: "approve_plan",
     });
 
     expect(queue.pendingReceipts()).toHaveLength(1);
-    expect(turns[0]?.createPipeline?.state).toBe("applying_source");
+    expect(turns[0]?.createImproveRun?.state).toBe("applying_source");
 
     await queue.drain();
 
     expect(queue.receipts()[0]).toMatchObject({
       queueId: "turn-follow-up",
-      label: "Apply approved local Create pipeline",
+      label: "Apply approved agent Create/Improve run",
       status: "completed",
     });
-    expect(turns[0]?.createPipeline?.state).toBe("blocked");
-    expect(turns[0]?.createPipeline?.blockedReason).toBe("intentional queued local create failure");
-    expect(events.some((event) => event.name === "create_pipeline.updated" && event.source === "server")).toBe(true);
+    expect(turns[0]?.createImproveRun?.state).toBe("blocked");
+    expect(turns[0]?.createImproveRun?.blockedReason).toBe("intentional queued local create failure");
+    expect(events.some((event) => event.name === "create_improve.updated" && event.source === "server")).toBe(true);
   });
 });
 
@@ -329,114 +353,9 @@ function baseTurn(patch: Partial<Turn> = {}): Turn {
     status: "completed",
     error: null,
     metadata: {},
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
     ...patch,
   };
-}
-
-function localCreatePipelineRequest(input: {
-  repoPath: string;
-  sourcePath: string;
-}): CreatePipelineRequest {
-  return CreatePipelineRequestSchema.parse({
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id: "create_request_local_queue",
-    operation: "create",
-    surface: "direct_prompt_create",
-    command: "/create",
-    objective: "Create a support helper agent",
-    adapter: {
-      kind: "local",
-      sourceAuthority: "local_profile",
-      activeProfile: "default",
-      repoPath: input.repoPath,
-      sourcePath: input.sourcePath,
-      localHead: null,
-      confirmationPolicy: "always_require_plan_approval",
-    },
-    actor: { id: "user-1", kind: "user", label: "User" },
-    scope: {
-      conversationId: "session-1",
-      workItemId: null,
-      projectId: null,
-      targetProject: null,
-    },
-    context: {
-      messageIds: [],
-      conversationExcerpts: [],
-      attachments: [],
-      apps: [],
-      tools: [],
-      targetRepoAssumptions: [],
-    },
-    targetAgent: {
-      agentId: "support-helper",
-      displayName: "Support Helper",
-      defaultActionKey: "chat",
-    },
-    metadata: {},
-    createdAt: "2026-07-01T10:00:00.000Z",
-  });
-}
-
-function localCreatePipelineSnapshot(
-  request: CreatePipelineRequest,
-  state: CreatePipelineSnapshot["state"],
-  planStatus: NonNullable<CreatePipelineSnapshot["plan"]>["status"],
-): CreatePipelineSnapshot {
-  return CreatePipelineSnapshotSchema.parse({
-    schemaVersion: "openpond.createPipeline.snapshot.v1",
-    id: "create_pipeline_local_queue",
-    goalId: "goal-local-queue",
-    state,
-    request,
-    plan: {
-      schemaVersion: "openpond.createPipeline.plan.v1",
-      id: "create_plan_local_queue",
-      goalId: "goal-local-queue",
-      requestId: request.id,
-      status: planStatus,
-      objective: request.objective,
-      summary: "Create a support helper profile agent.",
-      capturedContextSummary: "Direct prompt create.",
-      defaultChatAction: {
-        key: "chat",
-        label: "Chat",
-        required: true,
-      },
-      sourcePlan: [
-        {
-          path: "agents/support-helper/agent/agent.ts",
-          operation: "create",
-          reason: "Implement the support helper action.",
-        },
-      ],
-      requirements: [],
-      checks: [],
-      approvalId: "approval-create-plan-local-queue",
-      approvedAt: planStatus === "approved" ? "2026-07-01T10:00:02.000Z" : null,
-      editedFromPlanId: null,
-      metadata: {},
-      createdAt: "2026-07-01T10:00:00.000Z",
-      updatedAt: "2026-07-01T10:00:00.000Z",
-    },
-    workflowCapture: null,
-    approvalIds: ["approval-create-plan-local-queue"],
-    questionIds: [],
-    questions: [],
-    checkRefs: [],
-    sourceRefs: [],
-    localGoalId: null,
-    localProfileCommit: null,
-    hostedGoalId: null,
-    hostedSourceCommit: null,
-    hostedSourceRef: null,
-    blockedReason: null,
-    metadata: {},
-    createdAt: "2026-07-01T10:00:00.000Z",
-    updatedAt: "2026-07-01T10:00:00.000Z",
-  });
 }
 
 function diffSummary(input: {

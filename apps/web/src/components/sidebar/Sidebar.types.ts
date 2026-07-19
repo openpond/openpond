@@ -14,7 +14,6 @@ import type {
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
   AppView,
-  LabsTab,
   PinnedSidebarItem,
   SettingsSection,
   SidebarDragItem,
@@ -28,7 +27,6 @@ import type { OpenPondOrganization } from "../../lib/organization-types";
 
 export type SidebarProps = {
   view: AppView;
-  labsTab: LabsTab;
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
@@ -82,7 +80,6 @@ export type SidebarProps = {
   onSidebarResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
   setSidebarOpen: Dispatch<SetStateAction<boolean>>;
   setView: Dispatch<SetStateAction<AppView>>;
-  setLabsTab: Dispatch<SetStateAction<LabsTab>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;

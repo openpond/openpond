@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
-} from "./create-pipeline.js";
+import { CreateImproveRunSchema } from "./create-pipeline.js";
 
 import {
   SandboxTemplateManifestSchema,
@@ -261,8 +258,7 @@ export const CloudWorkItemSchema = z.object({
   updatedAt: z.string(),
   archivedAt: z.string().nullable().optional().default(null),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
-  createPipelineRequest: CreatePipelineRequestSchema.nullable().optional().default(null),
-  createPipeline: CreatePipelineSnapshotSchema.nullable().optional().default(null),
+  createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
 });
 
 export type CloudWorkItem = z.infer<typeof CloudWorkItemSchema>;
@@ -318,8 +314,7 @@ export const CloudWorkItemDetailSchema = z.object({
   messages: z.array(CloudWorkItemMessageSchema).default([]),
   activity: z.array(CloudWorkItemActivitySchema).default([]),
   runtimeSessions: z.array(CloudWorkItemRuntimeSessionSchema).default([]),
-  createPipelineRequest: CreatePipelineRequestSchema.nullable().optional().default(null),
-  createPipeline: CreatePipelineSnapshotSchema.nullable().optional().default(null),
+  createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
 });
 
 export type CloudWorkItemDetail = z.infer<typeof CloudWorkItemDetailSchema>;

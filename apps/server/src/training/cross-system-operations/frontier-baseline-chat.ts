@@ -55,8 +55,7 @@ export async function createFrontierBaselineChatSource(input: {
       taskId: input.task.id,
       worldId: input.task.worldId,
     },
-    createPipelineRequest: null,
-    createPipeline: null,
+    createImproveRun: null,
   };
   await input.store.insertTurn(turn);
   await input.appendRuntimeEvent(event({

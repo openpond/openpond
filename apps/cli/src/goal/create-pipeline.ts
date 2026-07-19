@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  CreatePipelinePlanSchema,
-  CreatePipelineSnapshotSchema,
-  WorkflowCaptureArtifactSchema,
-  createPipelineActionShapeFromMetadata,
-  inferCreatePipelineActionShape,
-  type CreatePipelineCommand,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
-  type CreatePipelineSurface,
+  CreateImprovePlanSchema,
+  CreateImproveRunSchema,
+  CreateImproveWorkflowCaptureSchema,
+  createImproveActionShapeFromMetadata,
+  inferCreateImproveActionShape,
+  nextCreateImproveRunRevision,
+  type CreateImproveCommand,
+  type CreateImproveRun,
+  type CreateImproveSurface,
 } from "@openpond/contracts";
 
 import type { GoalApproval, GoalKind, GoalState } from "./types";
@@ -23,8 +23,8 @@ type LocalProfileInput = {
 
 type CreatePipelineInput = {
   goal: GoalState;
-  command: CreatePipelineCommand;
-  surface: CreatePipelineSurface;
+  command: CreateImproveCommand;
+  surface: CreateImproveSurface;
   profile?: LocalProfileInput | null;
   actorId?: string | null;
 };
@@ -34,21 +34,28 @@ export function shouldCreatePipelineForGoal(kind: GoalKind): boolean {
 }
 
 export function createInitialCreatePipeline(input: CreatePipelineInput): {
-  snapshot: CreatePipelineSnapshot;
+  snapshot: CreateImproveRun;
   approval: GoalApproval;
 } {
   const now = new Date().toISOString();
-  const requestId = `create_request_${randomUUID()}`;
+  const runId = `create_improve_${randomUUID()}`;
   const planId = `create_plan_${randomUUID()}`;
   const approvalId = `approval_${randomUUID()}`;
-  const operation = input.goal.kind === "update_agent" ? "edit" : "create";
+  const operation = input.goal.kind === "update_agent" ? "improve" : "create";
   const createAgentId = input.goal.agentId ?? slugFromObjective(input.goal.objective);
   const sourceRoot = sourceRootPathForAgent(
-    operation === "edit" && input.goal.agentId ? input.goal.agentId : createAgentId,
+    operation === "improve" && input.goal.agentId ? input.goal.agentId : createAgentId,
   );
-  const request: CreatePipelineRequest = {
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id: requestId,
+  const target = {
+    kind: "agent" as const,
+    id: input.goal.agentId ?? createAgentId,
+    displayName: null,
+    defaultActionKey: input.goal.agentId ? `${input.goal.agentId}.chat` : `${createAgentId}.chat`,
+  };
+  const draft = CreateImproveRunSchema.parse({
+    schemaVersion: "openpond.createImprove.run.v1",
+    id: runId,
+    revision: 0,
     operation,
     surface: input.surface,
     command: input.command,
@@ -68,7 +75,9 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
       label: null,
     },
     scope: {
+      profileId: input.profile?.activeProfile ?? "default",
       conversationId: input.goal.conversationId,
+      originTurnId: null,
       workItemId: input.goal.workItemId,
       projectId: input.goal.projectId,
       targetProject: input.goal.projectId
@@ -87,13 +96,44 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
       attachments: [],
       apps: [],
       tools: [],
+      signalRefs: [],
+      evalRefs: [],
       targetRepoAssumptions: [],
     },
-    targetAgent: {
-      agentId: input.goal.agentId,
-      displayName: null,
-      defaultActionKey: input.goal.agentId ? `${input.goal.agentId}.chat` : "chat",
+    target,
+    state: "planning",
+    plan: null,
+    workflowCapture: null,
+    executionPolicy: {
+      mode: "background",
+      pauseAllowed: true,
+      cancellationAllowed: true,
     },
+    iterationPolicy: {
+      mode: "single",
+      maximumAttempts: 1,
+      currentAttempt: 0,
+    },
+    approvalIds: [],
+    questionIds: [],
+    questions: [],
+    candidates: [],
+    evaluationReceipts: [],
+    checkRefs: [],
+    sourceRefs: [],
+    externalExecutionRefs: [],
+    localProfileCommit: input.profile?.localHead ?? null,
+    hostedSourceCommit: null,
+    hostedSourceRef: null,
+    releaseOutcome: {
+      status: "not_requested",
+      profileCommit: null,
+      profileTag: null,
+      releaseReceiptRef: null,
+      updatedAt: null,
+    },
+    blockedReason: null,
+    appliedActionIds: [],
     metadata: {
       goalKind: input.goal.kind,
       promptPack: input.goal.promptPack,
@@ -103,23 +143,22 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
         "Local questions, answers, approvals, events, create plans, and workflow capture are stored under the configured local Goal storage root.",
     },
     createdAt: now,
-  };
-  const parsedRequest = request;
-  const actionShape = inferCreatePipelineActionShape(parsedRequest);
-  const actionShapeDecisionSource = createPipelineActionShapeFromMetadata(
-    parsedRequest.metadata,
+    updatedAt: now,
+  });
+  const actionShape = inferCreateImproveActionShape(draft);
+  const actionShapeDecisionSource = createImproveActionShapeFromMetadata(
+    draft.metadata,
   )
     ? "request_metadata"
     : "default_chat_fallback";
-  const plan = CreatePipelinePlanSchema.parse({
-    schemaVersion: "openpond.createPipeline.plan.v1",
+  const plan = CreateImprovePlanSchema.parse({
+    schemaVersion: "openpond.createImprove.plan.v1",
     id: planId,
-    goalId: input.goal.id,
-    requestId,
+    runId,
     status: "pending_approval",
     objective: input.goal.objective,
     summary:
-      operation === "edit"
+      operation === "improve"
         ? "Edit the selected source-backed OpenPond profile agent after this plan is approved."
         : "Create a source-backed OpenPond profile agent after this plan is approved.",
     capturedContextSummary:
@@ -134,9 +173,9 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
     sourcePlan: [
       {
         path: sourceRoot,
-        operation: operation === "edit" ? "update" : "create",
+        operation: operation === "improve" ? "update" : "create",
         reason:
-          operation === "edit"
+          operation === "improve"
             ? "Revise the selected profile agent source while preserving the default chat route."
             : "Implement the new profile agent source without overwriting existing profile agents.",
       },
@@ -191,11 +230,10 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
     createdAt: now,
     updatedAt: now,
   });
-  const workflowCapture = WorkflowCaptureArtifactSchema.parse({
-    schemaVersion: "openpond.createPipeline.workflowCapture.v1",
+  const workflowCapture = CreateImproveWorkflowCaptureSchema.parse({
+    schemaVersion: "openpond.createImprove.workflowCapture.v1",
     id: `workflow_capture_${randomUUID()}`,
-    goalId: input.goal.id,
-    requestId,
+    runId,
     command: input.command,
     objective: input.goal.objective,
     conversationExcerpts: [],
@@ -218,38 +256,25 @@ export function createInitialCreatePipeline(input: CreatePipelineInput): {
     },
     createdAt: now,
   });
-  const snapshot = CreatePipelineSnapshotSchema.parse({
-    schemaVersion: "openpond.createPipeline.snapshot.v1",
-    id: `create_pipeline_${randomUUID()}`,
-    goalId: input.goal.id,
+  const snapshot = CreateImproveRunSchema.parse({
+    ...draft,
     state: "awaiting_plan_approval",
-    request: parsedRequest,
     plan,
     workflowCapture,
     approvalIds: [approvalId],
-    checkRefs: [],
-    sourceRefs: [],
-    localGoalId: input.goal.id,
-    localProfileCommit: input.profile?.localHead ?? null,
-    hostedGoalId: null,
-    hostedSourceCommit: null,
-    hostedSourceRef: null,
-    blockedReason: null,
-    metadata: {},
-    createdAt: now,
+    revision: 1,
     updatedAt: now,
   });
   const approval: GoalApproval = {
     id: approvalId,
     goalId: input.goal.id,
     kind: "create_plan",
-    title: operation === "edit" ? "Approve agent edit plan" : "Approve agent create plan",
+    title: operation === "improve" ? "Approve agent improvement plan" : "Approve agent create plan",
     reason:
       "OpenPond requires plan approval before mutating durable profile agent source.",
     payload: {
-      requestId,
       planId,
-      pipelineId: snapshot.id,
+      runId: snapshot.id,
       objective: input.goal.objective,
       defaultActionKey: plan.defaultChatAction.key,
       sourcePlan: plan.sourcePlan,
@@ -295,34 +320,34 @@ function normalizeAgentId(value: string): string {
   return normalized || "created-agent";
 }
 
-export function approveCreatePipelinePlan(
+export function approveCreateImprovePlan(
   goal: GoalState,
   approvalId: string,
 ): GoalState {
-  return decideCreatePipelinePlan(goal, approvalId, "approved");
+  return decideCreateImprovePlan(goal, approvalId, "approved");
 }
 
-export function rejectCreatePipelinePlan(
-  goal: GoalState,
-  approvalId: string,
-  decisionNote?: string | null,
-): GoalState {
-  return decideCreatePipelinePlan(goal, approvalId, "rejected", decisionNote);
-}
-
-export function cancelCreatePipelinePlan(
+export function rejectCreateImprovePlan(
   goal: GoalState,
   approvalId: string,
   decisionNote?: string | null,
 ): GoalState {
-  return decideCreatePipelinePlan(goal, approvalId, "cancelled", decisionNote);
+  return decideCreateImprovePlan(goal, approvalId, "rejected", decisionNote);
 }
 
-export function reviseCreatePipelinePlan(
+export function cancelCreateImprovePlan(
+  goal: GoalState,
+  approvalId: string,
+  decisionNote?: string | null,
+): GoalState {
+  return decideCreateImprovePlan(goal, approvalId, "cancelled", decisionNote);
+}
+
+export function reviseCreateImprovePlan(
   goal: GoalState,
   input: { revision: string },
 ): GoalState {
-  const pipeline = goal.createPipeline;
+  const pipeline = goal.createImproveRun;
   if (!pipeline?.plan) {
     throw new Error("goal has no create plan to edit");
   }
@@ -335,7 +360,7 @@ export function reviseCreatePipelinePlan(
   }
   const now = new Date().toISOString();
   const previousPlan = pipeline.plan;
-  const nextPlan = CreatePipelinePlanSchema.parse({
+  const nextPlan = CreateImprovePlanSchema.parse({
     ...previousPlan,
     id: `create_plan_${randomUUID()}`,
     status: "pending_approval",
@@ -381,8 +406,7 @@ export function reviseCreatePipelinePlan(
     ...goal,
     status: "awaiting_approval",
     approvals,
-    createPipeline: CreatePipelineSnapshotSchema.parse({
-      ...pipeline,
+    createImproveRun: nextCreateImproveRunRevision(pipeline, {
       state: "awaiting_plan_approval",
       plan: nextPlan,
       blockedReason: null,
@@ -396,13 +420,13 @@ export function reviseCreatePipelinePlan(
   };
 }
 
-function decideCreatePipelinePlan(
+function decideCreateImprovePlan(
   goal: GoalState,
   approvalId: string,
   decision: "approved" | "rejected" | "cancelled",
   decisionNote?: string | null,
 ): GoalState {
-  const pipeline = goal.createPipeline;
+  const pipeline = goal.createImproveRun;
   if (!pipeline?.plan || pipeline.plan.approvalId !== approvalId) return goal;
   const now = new Date().toISOString();
   const nextState =
@@ -413,8 +437,7 @@ function decideCreatePipelinePlan(
         : "blocked";
   return {
     ...goal,
-    createPipeline: CreatePipelineSnapshotSchema.parse({
-      ...pipeline,
+    createImproveRun: nextCreateImproveRunRevision(pipeline, {
       state: nextState,
       plan: {
         ...pipeline.plan,

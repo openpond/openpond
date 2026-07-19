@@ -1,7 +1,7 @@
 import {
   DEFAULT_CODEX_CHAT_MODEL,
-  CreatePipelineSnapshotSchema,
-  type CreatePipelineSnapshot,
+  nextCreateImproveRunRevision,
+  type CreateImproveRun,
   type RuntimeEvent,
   type SendTurnRequest,
   type Session,
@@ -30,7 +30,7 @@ type CodexTurnInput = Pick<
   "approvalPolicy" | "sandbox" | "model" | "codexPermissionMode" | "codexReasoningEffort"
 >;
 
-type LocalCreatePipelineApplyOptions = {
+export type LocalCreatePipelineApplyOptions = {
   session?: Session;
   turn?: Turn;
   ensureCodexRuntime?: (
@@ -39,7 +39,7 @@ type LocalCreatePipelineApplyOptions = {
   ) => Promise<RuntimeCodexSession>;
   appendRuntimeEvent?: (runtimeEvent: RuntimeEvent) => Promise<void>;
   setProviderTurnId?: (providerTurnId: string) => Promise<void>;
-  onSnapshot?: (snapshot: CreatePipelineSnapshot) => Promise<void>;
+  onSnapshot?: (snapshot: CreateImproveRun) => Promise<void>;
   model?: string | null;
   codexReasoningEffort?: CodexTurnInput["codexReasoningEffort"];
   runChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
@@ -47,8 +47,9 @@ type LocalCreatePipelineApplyOptions = {
 };
 
 export type LocalCreatePipelineCheckInput = {
-  snapshot: CreatePipelineSnapshot;
+  snapshot: CreateImproveRun;
   target: LocalCreatePipelineTarget;
+  requireEvalPass?: boolean;
 };
 
 export type LocalCreatePipelineCheckResult = {
@@ -56,7 +57,7 @@ export type LocalCreatePipelineCheckResult = {
   metadata?: Record<string, unknown>;
 };
 
-type LocalCreatePipelineTarget = {
+export type LocalCreatePipelineTarget = {
   activeProfile: string;
   agentId: string;
   defaultAction: string;
@@ -68,13 +69,13 @@ type LocalCreatePipelineTarget = {
   sourceRootRelativePath: string;
 };
 
-export async function applyApprovedLocalCreatePipelineSnapshot(
-  snapshot: CreatePipelineSnapshot,
+export async function applyApprovedLocalCreateImproveRun(
+  snapshot: CreateImproveRun,
   options: LocalCreatePipelineApplyOptions = {},
-): Promise<CreatePipelineSnapshot> {
+): Promise<CreateImproveRun> {
   if (!shouldApplyLocalCreatePipeline(snapshot)) return snapshot;
   const now = options.now ?? (() => new Date().toISOString());
-  const adapter = snapshot.request.adapter;
+  const adapter = snapshot.adapter;
   if (adapter.kind !== "local") return snapshot;
   if (
     !options.session ||
@@ -91,8 +92,8 @@ export async function applyApprovedLocalCreatePipelineSnapshot(
         sourcePath: adapter.sourcePath ?? null,
         repoPath: adapter.repoPath ?? null,
         activeProfile: adapter.activeProfile ?? null,
-        operation: snapshot.request.operation,
-        requestedAgentId: snapshot.request.targetAgent.agentId ?? null,
+        operation: snapshot.operation,
+        requestedAgentId: snapshot.target.kind === "agent" ? snapshot.target.id : null,
       },
     });
   }
@@ -148,6 +149,34 @@ export async function applyApprovedLocalCreatePipelineSnapshot(
         target,
       },
     },
+    candidates: [
+      {
+        id: agentCandidateId(snapshot.id),
+        target: {
+          kind: "agent",
+          id: target.agentId,
+          displayName: snapshot.target.displayName,
+          defaultActionKey: target.defaultAction,
+        },
+        status: "checking",
+        git: null,
+        parentCandidateId: null,
+        tasksetRef: snapshot.tasksetRef,
+        authoringModelRef: options.model ?? null,
+        allowedPaths: snapshot.plan?.sourcePlan.map((item) => item.path) ?? [],
+        sourceRefs: [
+          target.sourceRootRelativePath,
+          path.join(target.profileRelativePath, "settings", "profile.yaml"),
+          "openpond-profile.json",
+        ],
+        artifactRefs: [],
+        checkRefs: [],
+        evaluationReceiptRefs: [],
+        createdAt: snapshot.createdAt,
+        updatedAt: now(),
+        metadata: { sourceAuthority: snapshot.adapter.sourceAuthority },
+      },
+    ],
   });
   await options.onSnapshot?.(runningChecks);
 
@@ -156,11 +185,56 @@ export async function applyApprovedLocalCreatePipelineSnapshot(
       snapshot: runningChecks,
       target,
     });
+    const completedAt = now();
+    const candidateId = agentCandidateId(snapshot.id);
+    const evaluationReceiptId = `agent_eval_${snapshot.id}`;
     return transitionCreatePipeline(runningChecks, {
       state: "ready_local",
-      now: now(),
+      now: completedAt,
       blockedReason: null,
       checkRefs: checkResult.checkRefs,
+      candidates: runningChecks.candidates.map((candidate) =>
+        candidate.id === candidateId
+          ? {
+              ...candidate,
+              status: "accepted",
+              checkRefs: mergeRefs(candidate.checkRefs, checkResult.checkRefs),
+              evaluationReceiptRefs: mergeRefs(
+                candidate.evaluationReceiptRefs,
+                [evaluationReceiptId],
+              ),
+              updatedAt: completedAt,
+            }
+          : candidate,
+      ),
+      evaluationReceipts: [
+        ...runningChecks.evaluationReceipts.filter((receipt) => receipt.id !== evaluationReceiptId),
+        {
+          id: evaluationReceiptId,
+          candidateId,
+          target: {
+            kind: "agent",
+            id: target.agentId,
+            displayName: snapshot.target.displayName,
+            defaultActionKey: target.defaultAction,
+          },
+          evaluatorKind: "agent_sdk",
+          subject: "candidate",
+          sourceCommit: snapshot.adapter.kind === "local" ? snapshot.adapter.localHead : null,
+          sourceBranch: null,
+          tasksetId: snapshot.tasksetRef?.id ?? null,
+          tasksetHash: snapshot.tasksetRef?.contentHash ?? null,
+          taskAttemptRefs: checkResult.checkRefs.filter((ref) => ref.includes("eval")),
+          status: "passed",
+          publishGate: "passed",
+          summaryCounts: null,
+          evalRefs: checkResult.checkRefs.filter((ref) => ref.includes("eval")),
+          artifactRefs: checkResult.checkRefs,
+          summary: checkSummary(checkResult.metadata),
+          createdAt: completedAt,
+          metadata: checkResult.metadata ?? {},
+        },
+      ],
       metadata: {
         localCreatePipeline: {
           status: "ready_local",
@@ -181,32 +255,36 @@ export async function applyApprovedLocalCreatePipelineSnapshot(
   }
 }
 
-export function shouldApplyLocalCreatePipeline(snapshot: CreatePipelineSnapshot): boolean {
+export function shouldApplyLocalCreatePipeline(snapshot: CreateImproveRun): boolean {
   return Boolean(
     snapshot.state === "applying_source" &&
       snapshot.plan?.status === "approved" &&
-      snapshot.request.adapter.kind === "local",
+      snapshot.adapter.kind === "local" &&
+      snapshot.target.kind === "agent",
   );
 }
 
 function transitionCreatePipeline(
-  snapshot: CreatePipelineSnapshot,
+  snapshot: CreateImproveRun,
   input: {
-    state: CreatePipelineSnapshot["state"];
+    state: CreateImproveRun["state"];
     now: string;
     blockedReason?: string | null;
     checkRefs?: string[];
     sourceRefs?: string[];
+    candidates?: CreateImproveRun["candidates"];
+    evaluationReceipts?: CreateImproveRun["evaluationReceipts"];
     metadata?: Record<string, unknown>;
   },
-): CreatePipelineSnapshot {
-  return CreatePipelineSnapshotSchema.parse({
-    ...snapshot,
+): CreateImproveRun {
+  return nextCreateImproveRunRevision(snapshot, {
     state: input.state,
     blockedReason:
       input.blockedReason === undefined ? snapshot.blockedReason : input.blockedReason,
     checkRefs: mergeRefs(snapshot.checkRefs, input.checkRefs ?? []),
     sourceRefs: mergeRefs(snapshot.sourceRefs, input.sourceRefs ?? []),
+    candidates: input.candidates ?? snapshot.candidates,
+    evaluationReceipts: input.evaluationReceipts ?? snapshot.evaluationReceipts,
     metadata: {
       ...snapshot.metadata,
       ...(input.metadata ?? {}),
@@ -216,13 +294,13 @@ function transitionCreatePipeline(
 }
 
 function blockLocalCreatePipeline(
-  snapshot: CreatePipelineSnapshot,
+  snapshot: CreateImproveRun,
   input: {
     now: string;
     reason: string;
     metadata?: Record<string, unknown>;
   },
-): CreatePipelineSnapshot {
+): CreateImproveRun {
   return transitionCreatePipeline(snapshot, {
     state: "blocked",
     now: input.now,
@@ -240,9 +318,22 @@ function mergeRefs(existing: string[], next: string[]): string[] {
   return Array.from(new Set([...existing, ...next].filter(Boolean)));
 }
 
-function resolveLocalCreatePipelineTarget(snapshot: CreatePipelineSnapshot): LocalCreatePipelineTarget {
-  const adapter = snapshot.request.adapter;
-  if (adapter.kind !== "local") throw new Error("Create pipeline target must use the local adapter.");
+function agentCandidateId(runId: string): string {
+  return `agent_candidate_${runId}`;
+}
+
+function checkSummary(metadata: Record<string, unknown> | undefined): string {
+  const evaluation = asRecord(metadata?.eval);
+  const total = typeof evaluation?.total === "number" ? evaluation.total : null;
+  return total === null
+    ? "Agent SDK checks and deterministic Evals passed."
+    : `${total} Agent SDK Eval${total === 1 ? "" : "s"} passed.`;
+}
+
+export function resolveLocalCreatePipelineTarget(snapshot: CreateImproveRun): LocalCreatePipelineTarget {
+  const adapter = snapshot.adapter;
+  if (adapter.kind !== "local") throw new Error("Create/Improve target must use the local adapter.");
+  if (snapshot.target.kind !== "agent") throw new Error("Local agent source application requires an Agent target.");
   const sourcePath = adapter.sourcePath?.trim();
   const repoPath = adapter.repoPath?.trim();
   if (!sourcePath) throw new Error("Local Create approval is missing a profile source path.");
@@ -251,14 +342,14 @@ function resolveLocalCreatePipelineTarget(snapshot: CreatePipelineSnapshot): Loc
   const resolvedSourcePath = path.resolve(sourcePath);
   const resolvedRepoPath = path.resolve(repoPath);
   const agentId =
-    normalizeAgentId(snapshot.request.targetAgent.agentId) ??
+    normalizeAgentId(snapshot.target.id) ??
     agentIdFromSourcePlan(snapshot) ??
-    slugFromObjective(snapshot.request.objective);
+    slugFromObjective(snapshot.objective);
   const defaultAction = sourceActionIdForAgent(
     normalizeActionId(snapshot.plan?.defaultChatAction.key) ?? "chat",
     agentId,
   );
-  const sourceRoot = snapshot.request.operation === "edit" && agentId === "default"
+  const sourceRoot = snapshot.operation === "improve" && agentId === "default"
     ? resolvedSourcePath
     : path.join(resolvedSourcePath, "agents", agentId);
   return {
@@ -274,8 +365,8 @@ function resolveLocalCreatePipelineTarget(snapshot: CreatePipelineSnapshot): Loc
   };
 }
 
-async function runModelBackedLocalCreateSourceApplication(input: {
-  snapshot: CreatePipelineSnapshot;
+export async function runModelBackedLocalCreateSourceApplication(input: {
+  snapshot: CreateImproveRun;
   session: Session;
   turn: Turn;
   target: LocalCreatePipelineTarget;
@@ -295,14 +386,14 @@ async function runModelBackedLocalCreateSourceApplication(input: {
     event({
       sessionId: input.session.id,
       turnId: input.turn.id,
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source: "server",
       appId: input.session.appId,
       status: "started",
-      output: `Applying approved Create plan with Codex in ${input.target.sourceRootRelativePath}.`,
+      output: `Applying approved ${input.snapshot.operation === "improve" ? "Improve" : "Create"} plan with Codex in ${input.target.sourceRootRelativePath}.`,
       data: {
         phase: "source_apply_started",
-        pipelineId: input.snapshot.id,
+        runId: input.snapshot.id,
         target: input.target,
       },
     }),
@@ -344,14 +435,14 @@ async function runModelBackedLocalCreateSourceApplication(input: {
       event({
         sessionId: input.session.id,
         turnId: input.turn.id,
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         source: "server",
         appId: input.session.appId,
         status: "started",
         output: `Codex source application ${recoveryReason}; checking for completed generated source before blocking.`,
         data: {
           phase: "source_apply_recovery_started",
-          pipelineId: input.snapshot.id,
+          runId: input.snapshot.id,
           providerTurnId: providerTurn.turnId,
           reason: recoveryReason,
           target: input.target,
@@ -364,14 +455,14 @@ async function runModelBackedLocalCreateSourceApplication(input: {
       event({
         sessionId: input.session.id,
         turnId: input.turn.id,
-        name: "create_pipeline.updated",
+        name: "create_improve.updated",
         source: "server",
         appId: input.session.appId,
         status: "completed",
-        output: `Recovered completed Create source after Codex source application ${recoveryReason} for ${input.target.agentId}; running local checks.`,
+        output: `Recovered completed ${input.snapshot.operation === "improve" ? "Improve" : "Create"} source after Codex source application ${recoveryReason} for ${input.target.agentId}; running local checks.`,
         data: {
           phase: "source_apply_recovered",
-          pipelineId: input.snapshot.id,
+          runId: input.snapshot.id,
           providerTurnId: providerTurn.turnId,
           reason: recoveryReason,
           target: input.target,
@@ -383,14 +474,14 @@ async function runModelBackedLocalCreateSourceApplication(input: {
     event({
       sessionId: input.session.id,
       turnId: input.turn.id,
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source: "provider",
       appId: input.session.appId,
       status: "completed",
-      output: `Codex completed approved Create source application for ${input.target.agentId}.`,
+      output: `Codex completed approved ${input.snapshot.operation === "improve" ? "Improve" : "Create"} source application for ${input.target.agentId}.`,
       data: {
         phase: "source_apply_completed",
-        pipelineId: input.snapshot.id,
+        runId: input.snapshot.id,
         providerTurnId: providerTurn.turnId,
         target: input.target,
       },
@@ -450,7 +541,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runLocalCreatePipelineChecks(
+export async function runLocalCreatePipelineChecks(
   input: LocalCreatePipelineCheckInput,
 ): Promise<LocalCreatePipelineCheckResult> {
   await assertLocalCreateSourceLayout(input.target);
@@ -477,7 +568,7 @@ async function runLocalCreatePipelineChecks(
         "--json",
         "--input",
         JSON.stringify({
-          prompt: input.snapshot.request.objective,
+          prompt: input.snapshot.objective,
           channel: "openpond_chat",
         }),
       ],
@@ -488,7 +579,17 @@ async function runLocalCreatePipelineChecks(
       cwd: input.target.sourceRoot,
       command: command.command,
       args: command.args,
+      ...(command.command === "eval" && input.requireEvalPass === false
+        ? { throwOnFailure: false }
+        : {}),
     });
+    if (result.code !== 0 && !(command.command === "eval" && input.requireEvalPass === false)) {
+      throw new Error(
+        result.stderr.trim() ||
+          result.stdout.trim() ||
+          `${command.command} failed with exit code ${result.code ?? "unknown"}`,
+      );
+    }
     const parsedStdout = parseJsonOutput(result.stdout);
     const traceArtifactRef = traceRefFromCommandResult(parsedStdout);
     if (traceArtifactRef) {
@@ -501,7 +602,7 @@ async function runLocalCreatePipelineChecks(
       stderr: result.stderr.trim().slice(0, 4000),
     };
   }
-  await assertGeneratedSdkArtifacts(input.target);
+  await assertGeneratedSdkArtifacts(input.target, input.requireEvalPass !== false);
   return {
     checkRefs: [...checkRefs],
     metadata: checkMetadata,
@@ -538,13 +639,18 @@ async function assertLocalCreateSourceLayout(target: LocalCreatePipelineTarget):
   if (!profileYaml.includes(`id: ${target.agentId}`) && !profileYaml.includes(`id: "${target.agentId}"`)) {
     throw new Error(`settings/profile.yaml does not register generated agent ${target.agentId}.`);
   }
-  const expectedPath = `agents/${target.agentId}`;
-  if (!profileYaml.includes(expectedPath)) {
-    throw new Error(`settings/profile.yaml does not point ${target.agentId} at ${expectedPath}.`);
+  const expectedPaths = target.agentId === "default"
+    ? ["agent/agent.ts", "agent"]
+    : [`agents/${target.agentId}`];
+  if (!expectedPaths.some((expectedPath) => profileYaml.includes(expectedPath))) {
+    throw new Error(`settings/profile.yaml does not point ${target.agentId} at ${expectedPaths[0]}.`);
   }
 }
 
-async function assertGeneratedSdkArtifacts(target: LocalCreatePipelineTarget): Promise<void> {
+async function assertGeneratedSdkArtifacts(
+  target: LocalCreatePipelineTarget,
+  requireEvalPass = true,
+): Promise<void> {
   const registryPath = path.join(target.sourceRoot, ".openpond", "action-registry.json");
   const evalResultsPath = path.join(target.sourceRoot, ".openpond", "eval-results.json");
   if (!existsSync(registryPath)) {
@@ -607,17 +713,17 @@ async function assertGeneratedSdkArtifacts(target: LocalCreatePipelineTarget): P
   if (typeof evalResults.summary?.total !== "number" || evalResults.summary.total < 1) {
     throw new Error("Generated source must define at least one deterministic SDK eval.");
   }
-  if (evalResults.summary.failed !== 0) {
+  if (requireEvalPass && evalResults.summary.failed !== 0) {
     throw new Error("Generated source evals did not all pass.");
   }
 }
 
 function localCreatePipelinePrompt(
-  snapshot: CreatePipelineSnapshot,
+  snapshot: CreateImproveRun,
   target: LocalCreatePipelineTarget,
 ): string {
   return [
-    "Apply this already-approved OpenPond Create plan by editing the local profile repo source.",
+    `Apply this already-approved OpenPond ${snapshot.operation === "improve" ? "Improve" : "Create"} plan by editing the local profile repo source.`,
     "",
     "This is the source-materialization step, not another plan review. Make the file changes, inspect the existing profile shape first, and leave the repo with a valid openpond-agent-sdk source project.",
     "",
@@ -647,7 +753,7 @@ function localCreatePipelinePrompt(
     "Approved Create request and plan:",
     JSON.stringify(
       {
-        request: snapshot.request,
+        run: snapshot,
         plan: snapshot.plan,
         questions: snapshot.questions,
         workflowCapture: snapshot.workflowCapture,
@@ -714,7 +820,7 @@ function summaryFromCommandResult(commandName: string, value: unknown): Record<s
   return null;
 }
 
-function agentIdFromSourcePlan(snapshot: CreatePipelineSnapshot): string | null {
+function agentIdFromSourcePlan(snapshot: CreateImproveRun): string | null {
   for (const entry of snapshot.plan?.sourcePlan ?? []) {
     const match = /^agents\/([^/]+)/.exec(entry.path);
     const normalized = normalizeAgentId(match?.[1]);

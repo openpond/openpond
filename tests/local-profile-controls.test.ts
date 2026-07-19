@@ -23,12 +23,20 @@ import {
   loadLocalProfileRepo,
   mergeActiveLocalProfileConfig,
   mergeProfileRepoManifestEntry,
+  renameActiveProfileAgent,
   runProfileCheck,
   runProfileSdkCommand,
 } from "../packages/cloud/src/profile/local-profile";
 import { executeProfileSkillGoalRequest } from "../packages/cloud/src/profile/profile-skill-goal-executor";
-import { runProfileSkillCommandFromPrompt, runProfileSkillGoalCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
-import { PROFILE_SKILL_MAX_CHARS, loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
+import {
+  runProfileSkillCommandFromPrompt,
+  runProfileSkillGoalCommand,
+} from "../packages/cloud/src/profile/profile-skill-mutations";
+import {
+  PROFILE_SKILL_MAX_CHARS,
+  loadProfileSkills,
+  readProfileSkill,
+} from "../packages/cloud/src/profile/profile-skills";
 
 describe("local profile control invariants", () => {
   test("repeat init preserves enabled agents on an existing profile manifest entry", () => {
@@ -38,14 +46,63 @@ describe("local profile control invariants", () => {
           path: "profiles/default",
           defaultAgent: "default",
           enabledAgents: ["default", "phase5-reporter"],
+          agentNames: { "phase5-reporter": "Phase 5 Reporter" },
         },
-        "profiles/default",
-      ),
+        "profiles/default"
+      )
     ).toEqual({
       path: "profiles/default",
       defaultAgent: "default",
       enabledAgents: ["default", "phase5-reporter"],
+      agentNames: { "phase5-reporter": "Phase 5 Reporter" },
     });
+  });
+
+  test("renames an active profile Agent without changing its stable ID", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-agent-name-")
+    );
+    const originalConfig = await loadGlobalConfig();
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      await initLocalProfileRepo({ repoPath, profile: "default" });
+
+      const renamed = await renameActiveProfileAgent(
+        "default",
+        "Research Assistant"
+      );
+      expect(renamed.agents).toContainEqual(
+        expect.objectContaining({
+          id: "default",
+          name: "Research Assistant",
+        })
+      );
+
+      const manifestPath = path.join(repoPath, "openpond-profile.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+        profiles: Record<string, { agentNames?: Record<string, string> }>;
+      };
+      expect(manifest.profiles.default?.agentNames).toEqual({
+        default: "Research Assistant",
+      });
+
+      const reset = await renameActiveProfileAgent("default", "default");
+      expect(reset.agents).toContainEqual(
+        expect.objectContaining({
+          id: "default",
+          name: "default",
+        })
+      );
+      const resetManifest = JSON.parse(
+        await readFile(manifestPath, "utf8")
+      ) as {
+        profiles: Record<string, { agentNames?: Record<string, string> }>;
+      };
+      expect(resetManifest.profiles.default?.agentNames).toBeUndefined();
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   test("repeat init enables the existing default agent when enabledAgents is missing", () => {
@@ -55,8 +112,8 @@ describe("local profile control invariants", () => {
           path: "profiles/support",
           defaultAgent: "support",
         },
-        "profiles/support",
-      ),
+        "profiles/support"
+      )
     ).toEqual({
       path: "profiles/support",
       defaultAgent: "support",
@@ -145,7 +202,9 @@ describe("local profile control invariants", () => {
         sourceCommitSha: "5287f494a394f2d3e265382cafb7b8b10d7d4b05",
         manifestHash: "manifest_hash_123",
         setupGateStatus: "ready",
-        setupRequirementRefs: ["action_catalog:agent_123.chat:integration:fixtures"],
+        setupRequirementRefs: [
+          "action_catalog:agent_123.chat:integration:fixtures",
+        ],
         traceArtifactRefs: ["artifacts/trace.jsonl"],
       },
     };
@@ -160,8 +219,8 @@ describe("local profile control invariants", () => {
           lastPush,
         },
         "/workspace/profile-repo",
-        "default",
-      ),
+        "default"
+      )
     ).toEqual({
       repoPath: "/workspace/profile-repo",
       profile: "default",
@@ -185,8 +244,8 @@ describe("local profile control invariants", () => {
           },
         },
         "/workspace/profile-repo",
-        "support",
-      ),
+        "support"
+      )
     ).toEqual({
       repoPath: "/workspace/profile-repo",
       profile: "support",
@@ -296,10 +355,14 @@ describe("local profile control invariants", () => {
   });
 
   test("discovers profile skills from profile-native skills directory", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skills-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-skills-")
+    );
     try {
       const sourcePath = path.join(tempRoot, "profiles", "default");
-      await mkdir(path.join(sourcePath, "skills", "release-notes"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "release-notes"), {
+        recursive: true,
+      });
       await writeFile(
         path.join(sourcePath, "skills", "release-notes", "SKILL.md"),
         [
@@ -311,7 +374,7 @@ describe("local profile control invariants", () => {
           "Write concise release notes grouped by user-facing capability.",
           "",
         ].join("\n"),
-        "utf8",
+        "utf8"
       );
 
       const result = await loadProfileSkills(sourcePath);
@@ -331,7 +394,12 @@ describe("local profile control invariants", () => {
       });
       expect(result.skills[0]?.sourceHash).toMatch(/^[a-f0-9]{64}$/);
 
-      await expect(readProfileSkill({ profileSourcePath: sourcePath, name: "release-notes" })).resolves.toMatchObject({
+      await expect(
+        readProfileSkill({
+          profileSourcePath: sourcePath,
+          name: "release-notes",
+        })
+      ).resolves.toMatchObject({
         name: "release-notes",
         body: "Write concise release notes grouped by user-facing capability.",
         path: "skills/release-notes/SKILL.md",
@@ -342,10 +410,15 @@ describe("local profile control invariants", () => {
   });
 
   test("marks unsupported profile skill files invalid", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-invalid-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-skill-invalid-")
+    );
     try {
       const sourcePath = path.join(tempRoot, "profiles", "default");
-      await mkdir(path.join(sourcePath, "skills", "release-notes", "references"), { recursive: true });
+      await mkdir(
+        path.join(sourcePath, "skills", "release-notes", "references"),
+        { recursive: true }
+      );
       await writeFile(
         path.join(sourcePath, "skills", "release-notes", "SKILL.md"),
         [
@@ -357,7 +430,7 @@ describe("local profile control invariants", () => {
           "Write release notes.",
           "",
         ].join("\n"),
-        "utf8",
+        "utf8"
       );
 
       const result = await loadProfileSkills(sourcePath);
@@ -366,31 +439,47 @@ describe("local profile control invariants", () => {
         enabled: false,
         validationStatus: "error",
       });
-      expect(result.skills[0]?.validationMessages.join("\n")).toContain("unsupported entry: references");
+      expect(result.skills[0]?.validationMessages.join("\n")).toContain(
+        "unsupported entry: references"
+      );
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
 
   test("validates profile skill parser edge cases", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-edges-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-skill-edges-")
+    );
     try {
       const sourcePath = path.join(tempRoot, "profiles", "default");
-      await mkdir(path.join(sourcePath, "skills", "missing-frontmatter"), { recursive: true });
-      await mkdir(path.join(sourcePath, "skills", "malformed-frontmatter"), { recursive: true });
-      await mkdir(path.join(sourcePath, "skills", "oversized"), { recursive: true });
-      await mkdir(path.join(sourcePath, "skills", "bad-name"), { recursive: true });
-      await mkdir(path.join(sourcePath, "skills", "duplicate-one"), { recursive: true });
-      await mkdir(path.join(sourcePath, "skills", "duplicate-two"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "missing-frontmatter"), {
+        recursive: true,
+      });
+      await mkdir(path.join(sourcePath, "skills", "malformed-frontmatter"), {
+        recursive: true,
+      });
+      await mkdir(path.join(sourcePath, "skills", "oversized"), {
+        recursive: true,
+      });
+      await mkdir(path.join(sourcePath, "skills", "bad-name"), {
+        recursive: true,
+      });
+      await mkdir(path.join(sourcePath, "skills", "duplicate-one"), {
+        recursive: true,
+      });
+      await mkdir(path.join(sourcePath, "skills", "duplicate-two"), {
+        recursive: true,
+      });
       await writeFile(
         path.join(sourcePath, "skills", "missing-frontmatter", "SKILL.md"),
         "No frontmatter here.\n",
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(sourcePath, "skills", "malformed-frontmatter", "SKILL.md"),
         "---\nname: [unterminated\ndescription: Broken YAML\n---\n\nBroken.\n",
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(sourcePath, "skills", "oversized", "SKILL.md"),
@@ -403,48 +492,75 @@ describe("local profile control invariants", () => {
           "x".repeat(PROFILE_SKILL_MAX_CHARS),
           "",
         ].join("\n"),
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(sourcePath, "skills", "bad-name", "SKILL.md"),
         "---\nname: Bad Name\ndescription: Invalid name.\n---\n\nInvalid.\n",
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(sourcePath, "skills", "duplicate-one", "SKILL.md"),
         "---\nname: duplicate-skill\ndescription: Duplicate one.\n---\n\nOne.\n",
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(sourcePath, "skills", "duplicate-two", "SKILL.md"),
         "---\nname: duplicate-skill\ndescription: Duplicate two.\n---\n\nTwo.\n",
-        "utf8",
+        "utf8"
       );
 
       const result = await loadProfileSkills(sourcePath);
-      const messagesByPath = new Map(result.skills.map((skill) => [skill.path, skill.validationMessages.join("\n")]));
+      const messagesByPath = new Map(
+        result.skills.map((skill) => [
+          skill.path,
+          skill.validationMessages.join("\n"),
+        ])
+      );
 
-      expect(messagesByPath.get("skills/missing-frontmatter/SKILL.md")).toContain("must start with YAML frontmatter");
-      expect(messagesByPath.get("skills/malformed-frontmatter/SKILL.md")).toContain("frontmatter is invalid YAML");
-      expect(messagesByPath.get("skills/oversized/SKILL.md")).toContain(`exceeds the limit of ${PROFILE_SKILL_MAX_CHARS}`);
-      expect(messagesByPath.get("skills/bad-name/SKILL.md")).toContain("Skill name must be lowercase kebab-case.");
-      expect(messagesByPath.get("skills/bad-name/SKILL.md")).toContain("Skill name must match its directory name");
-      expect(messagesByPath.get("skills/duplicate-one/SKILL.md")).toContain("Duplicate skill name: duplicate-skill");
-      expect(messagesByPath.get("skills/duplicate-two/SKILL.md")).toContain("Duplicate skill name: duplicate-skill");
-      expect(result.skills.every((skill) => skill.validationStatus === "error" && !skill.enabled)).toBe(true);
+      expect(
+        messagesByPath.get("skills/missing-frontmatter/SKILL.md")
+      ).toContain("must start with YAML frontmatter");
+      expect(
+        messagesByPath.get("skills/malformed-frontmatter/SKILL.md")
+      ).toContain("frontmatter is invalid YAML");
+      expect(messagesByPath.get("skills/oversized/SKILL.md")).toContain(
+        `exceeds the limit of ${PROFILE_SKILL_MAX_CHARS}`
+      );
+      expect(messagesByPath.get("skills/bad-name/SKILL.md")).toContain(
+        "Skill name must be lowercase kebab-case."
+      );
+      expect(messagesByPath.get("skills/bad-name/SKILL.md")).toContain(
+        "Skill name must match its directory name"
+      );
+      expect(messagesByPath.get("skills/duplicate-one/SKILL.md")).toContain(
+        "Duplicate skill name: duplicate-skill"
+      );
+      expect(messagesByPath.get("skills/duplicate-two/SKILL.md")).toContain(
+        "Duplicate skill name: duplicate-skill"
+      );
+      expect(
+        result.skills.every(
+          (skill) => skill.validationStatus === "error" && !skill.enabled
+        )
+      ).toBe(true);
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
 
   test("profile state includes skills and skill diff changes", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-state-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-skill-state-")
+    );
     const originalConfig = await loadGlobalConfig();
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
       await initLocalProfileRepo({ repoPath, profile: "default" });
       const sourcePath = path.join(repoPath, "profiles", "default");
-      await mkdir(path.join(sourcePath, "skills", "release-notes"), { recursive: true });
+      await mkdir(path.join(sourcePath, "skills", "release-notes"), {
+        recursive: true,
+      });
       await writeFile(
         path.join(sourcePath, "skills", "release-notes", "SKILL.md"),
         [
@@ -456,7 +572,7 @@ describe("local profile control invariants", () => {
           "Write concise release notes grouped by user-facing capability.",
           "",
         ].join("\n"),
-        "utf8",
+        "utf8"
       );
 
       const state = await loadLocalProfileRepo(repoPath, "default");
@@ -478,13 +594,58 @@ describe("local profile control invariants", () => {
     }
   });
 
-  test("profile skill command lists skills and routes create/edit through goals", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-command-"));
+  test("profile state discovers Agent Eval source for Lab reuse", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-eval-state-")
+    );
     const originalConfig = await loadGlobalConfig();
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
       await initLocalProfileRepo({ repoPath, profile: "default" });
-      const skillPath = path.join(repoPath, "profiles", "default", "skills", "release-notes", "SKILL.md");
+      const evalPath = path.join(
+        repoPath,
+        "profiles",
+        "default",
+        "agent",
+        "evals",
+        "reply-quality.eval.ts"
+      );
+      await mkdir(path.dirname(evalPath), { recursive: true });
+      await writeFile(evalPath, "export const evalDefinition = {};\n", "utf8");
+
+      const state = await loadLocalProfileRepo(repoPath, "default");
+
+      expect(state.evals).toEqual([
+        {
+          id: "agent/evals/reply-quality.eval.ts",
+          name: "reply-quality",
+          path: "agent/evals/reply-quality.eval.ts",
+          agentId: "default",
+          sourcePath: evalPath,
+        },
+      ]);
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("profile skill command lists skills and routes create/edit through goals", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-skill-command-")
+    );
+    const originalConfig = await loadGlobalConfig();
+    try {
+      const repoPath = path.join(tempRoot, "profile-repo");
+      await initLocalProfileRepo({ repoPath, profile: "default" });
+      const skillPath = path.join(
+        repoPath,
+        "profiles",
+        "default",
+        "skills",
+        "release-notes",
+        "SKILL.md"
+      );
       await mkdir(path.dirname(skillPath), { recursive: true });
       await writeFile(
         skillPath,
@@ -497,11 +658,11 @@ describe("local profile control invariants", () => {
           "Draft concise release notes.",
           "",
         ].join("\n"),
-        "utf8",
+        "utf8"
       );
 
       const created = await runProfileSkillCommandFromPrompt(
-        "/skill create support-handoff-summaries: Draft support handoff summaries.",
+        "/skill create support-handoff-summaries: Draft support handoff summaries."
       );
       expect(created).toMatchObject({
         handled: false,
@@ -511,14 +672,19 @@ describe("local profile control invariants", () => {
           kind: "profile_skill_create",
           operation: "create",
           targetSkillName: "support-handoff-summaries",
-          targetSkillPath: "profiles/default/skills/support-handoff-summaries/SKILL.md",
+          targetSkillPath:
+            "profiles/default/skills/support-handoff-summaries/SKILL.md",
         },
       });
-      expect(created?.prompt).toContain("Goal: Create a profile-backed skill named support-handoff-summaries");
-      expect(created?.prompt).toContain("Keep the skill package single-file: only SKILL.md.");
+      expect(created?.prompt).toContain(
+        "Goal: Create a profile-backed skill named support-handoff-summaries"
+      );
+      expect(created?.prompt).toContain(
+        "Keep the skill package single-file: only SKILL.md."
+      );
 
       const namedFlag = await runProfileSkillCommandFromPrompt(
-        "/skill create --name docker-cleanup clear Docker caches safely",
+        "/skill create --name docker-cleanup clear Docker caches safely"
       );
       expect(namedFlag).toMatchObject({
         handled: false,
@@ -534,7 +700,7 @@ describe("local profile control invariants", () => {
       });
 
       const plainLanguage = await runProfileSkillCommandFromPrompt(
-        "/skill create a skill that cleans up docker build cache and unused images",
+        "/skill create a skill that cleans up docker build cache and unused images"
       );
       expect(plainLanguage).toMatchObject({
         handled: false,
@@ -545,7 +711,8 @@ describe("local profile control invariants", () => {
           requestedName: null,
           targetSkillName: null,
           targetSkillPath: null,
-          userObjective: "a skill that cleans up docker build cache and unused images",
+          userObjective:
+            "a skill that cleans up docker build cache and unused images",
         },
       });
 
@@ -557,7 +724,7 @@ describe("local profile control invariants", () => {
       expect(list?.message).toContain("release-notes");
 
       const updated = await runProfileSkillCommandFromPrompt(
-        "/skill edit release-notes Include QA verification notes when requested.",
+        "/skill edit release-notes Include QA verification notes when requested."
       );
       expect(updated).toMatchObject({
         handled: false,
@@ -573,15 +740,17 @@ describe("local profile control invariants", () => {
           name: "release-notes",
         },
       });
-      await expect(readFile(skillPath, "utf8")).resolves.not.toContain("Include QA verification notes when requested.");
+      await expect(readFile(skillPath, "utf8")).resolves.not.toContain(
+        "Include QA verification notes when requested."
+      );
 
       const natural = await runProfileSkillCommandFromPrompt(
-        "create a skill that helps write launch checklists",
+        "create a skill that helps write launch checklists"
       );
       expect(natural).toBeNull();
 
       const createMe = await runProfileSkillCommandFromPrompt(
-        "create me a skill to do support handoff summaries",
+        "create me a skill to do support handoff summaries"
       );
       expect(createMe).toBeNull();
 
@@ -600,14 +769,18 @@ describe("local profile control invariants", () => {
           operation: "create",
           source: "model_tool",
           targetSkillName: "onboarding-checklists",
-          targetSkillPath: "profiles/default/skills/onboarding-checklists/SKILL.md",
+          targetSkillPath:
+            "profiles/default/skills/onboarding-checklists/SKILL.md",
         },
       });
-      expect(structured?.prompt).toContain("Keep the skill package single-file: only SKILL.md.");
+      expect(structured?.prompt).toContain(
+        "Keep the skill package single-file: only SKILL.md."
+      );
 
       const inferredName = await runProfileSkillGoalCommand({
         operation: "create",
-        objective: "Docker Cleanup CommandsThese are the exact commands run each time to clear Docker build cache and unused images while leaving containers and volumes alone.docker system dfdocker builder prune -af | tail -n 1docker image prune -af | tail -n 1docker system dfNotes:docker builder prune -af clears build cache.docker image prune -af removes unused images.These commands do not remove Docker volumes.These commands do not stop or remove running containers.",
+        objective:
+          "Docker Cleanup CommandsThese are the exact commands run each time to clear Docker build cache and unused images while leaving containers and volumes alone.docker system dfdocker builder prune -af | tail -n 1docker image prune -af | tail -n 1docker system dfNotes:docker builder prune -af clears build cache.docker image prune -af removes unused images.These commands do not remove Docker volumes.These commands do not stop or remove running containers.",
         source: "model_tool",
       });
       expect(inferredName).toMatchObject({
@@ -623,8 +796,12 @@ describe("local profile control invariants", () => {
           targetSkillPath: null,
         },
       });
-      expect(inferredName?.prompt).toContain("Choose a concise lowercase kebab-case skill name");
-      expect(inferredName?.prompt).toContain("profiles/default/skills/<skill-name>/SKILL.md");
+      expect(inferredName?.prompt).toContain(
+        "Choose a concise lowercase kebab-case skill name"
+      );
+      expect(inferredName?.prompt).toContain(
+        "profiles/default/skills/<skill-name>/SKILL.md"
+      );
       const executed = await executeProfileSkillGoalRequest(inferredName.goal);
       expect(executed).toMatchObject({
         skillName: "docker-cleanup",
@@ -638,21 +815,34 @@ describe("local profile control invariants", () => {
         },
       });
       const dockerSkill = await readFile(
-        path.join(repoPath, "profiles", "default", "skills", "docker-cleanup", "SKILL.md"),
-        "utf8",
+        path.join(
+          repoPath,
+          "profiles",
+          "default",
+          "skills",
+          "docker-cleanup",
+          "SKILL.md"
+        ),
+        "utf8"
       );
       expect(dockerSkill).toContain("docker system df");
       expect(dockerSkill).toContain("docker builder prune -af | tail -n 1");
       expect(dockerSkill).toContain("docker image prune -af | tail -n 1");
-      const dockerCommandBlock = /```bash\n([\s\S]*?)\n```/.exec(dockerSkill)?.[1].split("\n");
+      const dockerCommandBlock = /```bash\n([\s\S]*?)\n```/
+        .exec(dockerSkill)?.[1]
+        .split("\n");
       expect(dockerCommandBlock).toEqual([
         "docker system df",
         "docker builder prune -af | tail -n 1",
         "docker image prune -af | tail -n 1",
         "docker system df",
       ]);
-      expect(dockerSkill).toContain("These commands do not remove Docker volumes.");
-      expect(dockerSkill).toContain("These commands do not stop or remove running containers.");
+      expect(dockerSkill).toContain(
+        "These commands do not remove Docker volumes."
+      );
+      expect(dockerSkill).toContain(
+        "These commands do not stop or remove running containers."
+      );
 
       const structuredEdit = await runProfileSkillGoalCommand({
         operation: "edit",
@@ -682,7 +872,7 @@ describe("local profile control invariants", () => {
           objective: "Draft release notes.",
           skillName: "release-notes",
           source: "model_tool",
-        }),
+        })
       ).rejects.toThrow("Profile skill release-notes already exists.");
 
       await expect(
@@ -690,7 +880,7 @@ describe("local profile control invariants", () => {
           operation: "edit",
           objective: "Tighten the skill instructions.",
           source: "model_tool",
-        }),
+        })
       ).rejects.toThrow("Profile skill edit requires skillName.");
 
       await expect(
@@ -699,7 +889,7 @@ describe("local profile control invariants", () => {
           objective: "Tighten the skill instructions.",
           skillName: "missing-skill",
           source: "model_tool",
-        }),
+        })
       ).rejects.toThrow("Profile skill not found: missing-skill");
 
       await expect(
@@ -707,25 +897,34 @@ describe("local profile control invariants", () => {
           operation: "create",
           objective: "   ",
           source: "model_tool",
-        }),
+        })
       ).rejects.toThrow("Describe what the skill should help with.");
 
       const oversized = await runProfileSkillGoalCommand({
         operation: "create",
-        objective: `Oversized skill ${"details ".repeat(PROFILE_SKILL_MAX_CHARS)}`,
+        objective: `Oversized skill ${"details ".repeat(
+          PROFILE_SKILL_MAX_CHARS
+        )}`,
         source: "model_tool",
       });
-      await expect(executeProfileSkillGoalRequest(oversized.goal)).rejects.toThrow("validation failed");
+      await expect(
+        executeProfileSkillGoalRequest(oversized.goal)
+      ).rejects.toThrow("validation failed");
 
       await expect(
-        runProfileSkillGoalCommand({
-          operation: "create",
-          objective: "Draft onboarding checklists.",
-          source: "model_tool",
-        }, {
-          loadProfileState: async () => emptyOpenPondProfileState(),
-        }),
-      ).rejects.toThrow("Profile skill creation requires an active local OpenPond profile.");
+        runProfileSkillGoalCommand(
+          {
+            operation: "create",
+            objective: "Draft onboarding checklists.",
+            source: "model_tool",
+          },
+          {
+            loadProfileState: async () => emptyOpenPondProfileState(),
+          }
+        )
+      ).rejects.toThrow(
+        "Profile skill creation requires an active local OpenPond profile."
+      );
     } finally {
       await saveConfig(originalConfig);
       await rm(tempRoot, { recursive: true, force: true });
@@ -887,7 +1086,9 @@ describe("local profile control invariants", () => {
         },
       ],
     });
-    expect(gate.requirements.map((requirement) => requirement.label)).toEqual(["CHAT_TOKEN"]);
+    expect(gate.requirements.map((requirement) => requirement.label)).toEqual([
+      "CHAT_TOKEN",
+    ]);
   });
 
   test("profile setup gate treats required ready rows as non-blocking", () => {
@@ -977,7 +1178,9 @@ describe("local profile control invariants", () => {
   });
 
   test("profile catalog hydrates action setup requirements from source-upload metadata sidecar", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-sidecar-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-sidecar-")
+    );
     const originalConfig = await loadGlobalConfig();
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -999,9 +1202,9 @@ describe("local profile control invariants", () => {
             },
           },
           null,
-          2,
+          2
         ),
-        "utf8",
+        "utf8"
       );
       const actionPayload = {
         schema: "openpond.agent.actionRegistry.v1",
@@ -1016,12 +1219,12 @@ describe("local profile control invariants", () => {
       await writeFile(
         path.join(agentPath, ".openpond", "agent-manifest.json"),
         JSON.stringify(actionPayload, null, 2),
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(agentPath, ".openpond", "action-registry.json"),
         JSON.stringify(actionPayload, null, 2),
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(agentPath, ".openpond", "source-upload-metadata.json"),
@@ -1040,13 +1243,15 @@ describe("local profile control invariants", () => {
             ],
           },
           null,
-          2,
+          2
         ),
-        "utf8",
+        "utf8"
       );
 
       const state = await loadLocalProfileRepo(repoPath, "default");
-      const action = state.actionCatalog.find((entry) => entry.id === "check-pdf-converter-license");
+      const action = state.actionCatalog.find(
+        (entry) => entry.id === "check-pdf-converter-license"
+      );
       expect(action?.setupRequirements).toMatchObject([
         {
           source: "source_upload_metadata",
@@ -1078,7 +1283,9 @@ describe("local profile control invariants", () => {
   });
 
   test("profile run fails before SDK execution when required setup is unresolved", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-gate-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-gate-")
+    );
     const originalConfig = await loadGlobalConfig();
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -1100,9 +1307,9 @@ describe("local profile control invariants", () => {
             },
           },
           null,
-          2,
+          2
         ),
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(agentPath, ".openpond", "agent-manifest.json"),
@@ -1126,9 +1333,9 @@ describe("local profile control invariants", () => {
             ],
           },
           null,
-          2,
+          2
         ),
-        "utf8",
+        "utf8"
       );
       await writeFile(
         path.join(agentPath, ".openpond", "action-registry.json"),
@@ -1152,9 +1359,9 @@ describe("local profile control invariants", () => {
             ],
           },
           null,
-          2,
+          2
         ),
-        "utf8",
+        "utf8"
       );
 
       const state = await loadLocalProfileRepo(repoPath, "default");
@@ -1168,7 +1375,11 @@ describe("local profile control invariants", () => {
       try {
         await runProfileSdkCommand({
           command: "run",
-          args: ["chat", "--input", JSON.stringify({ prompt: "hello", channel: "openpond_chat" })],
+          args: [
+            "chat",
+            "--input",
+            JSON.stringify({ prompt: "hello", channel: "openpond_chat" }),
+          ],
         });
       } catch (error) {
         thrown = error;
@@ -1204,7 +1415,9 @@ describe("local profile control invariants", () => {
   });
 
   test("profile check validates every enabled profile agent source", async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-check-all-"));
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-profile-check-all-")
+    );
     const originalConfig = await loadGlobalConfig();
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -1217,7 +1430,7 @@ describe("local profile control invariants", () => {
       await writeFile(
         path.join(invalidAgentPath, "agent.ts"),
         "export const invalidEnabledAgent = true;\n",
-        "utf8",
+        "utf8"
       );
 
       const manifestPath = path.join(repoPath, "openpond-profile.json");
@@ -1225,7 +1438,11 @@ describe("local profile control invariants", () => {
         profiles: Record<string, { enabledAgents?: string[] }>;
       };
       manifest.profiles.default.enabledAgents = ["default", invalidAgentId];
-      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8"
+      );
       await writeFile(
         path.join(sourcePath, "settings", "profile.yaml"),
         [
@@ -1240,7 +1457,7 @@ describe("local profile control invariants", () => {
           "    enabled: true",
           "",
         ].join("\n"),
-        "utf8",
+        "utf8"
       );
 
       const state = await loadLocalProfileRepo(repoPath, "default");
@@ -1257,10 +1474,14 @@ describe("local profile control invariants", () => {
 
       expect(thrown).toBeInstanceOf(Error);
       if (!(thrown instanceof Error)) {
-        throw new Error("expected profile check to fail for the invalid enabled source");
+        throw new Error(
+          "expected profile check to fail for the invalid enabled source"
+        );
       }
       expect(thrown.message).toContain(`enabled agent ${invalidAgentId}`);
-      expect(thrown.message).toContain("agent/agent.ts or openpond.yaml is required");
+      expect(thrown.message).toContain(
+        "agent/agent.ts or openpond.yaml is required"
+      );
     } finally {
       await saveConfig(originalConfig);
       await rm(tempRoot, { recursive: true, force: true });

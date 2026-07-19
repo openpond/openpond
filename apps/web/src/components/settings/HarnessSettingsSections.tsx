@@ -740,7 +740,7 @@ const INSIGHTS_EVIDENCE_SOURCE_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { key: "createEdit", label: "Create/edit", description: "Waiting, blocked, or failed create/edit flows." },
+  { key: "createEdit", label: "Create/Improve", description: "Waiting, blocked, or failed Create/Improve runs." },
   { key: "stuckTurns", label: "Stuck turns", description: "Failed or long-running active turns." },
   { key: "toolFailures", label: "Tool failures", description: "Repeated tool or action failures." },
   { key: "abandonedGoals", label: "Abandoned goals", description: "Goal loops left active too long." },

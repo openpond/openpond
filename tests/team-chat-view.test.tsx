@@ -268,6 +268,9 @@ function baseProps(): TeamChatViewProps {
     currentUserId: "user_1",
     members: [],
     agents: [],
+    profile: null,
+    teamId: "team_1",
+    teamName: "OpenPond",
     detail: null,
     aiThread: null,
     agentConversation: null,
@@ -299,6 +302,9 @@ function baseProps(): TeamChatViewProps {
     onOpenPondCommandAccessModeChange: noop,
     onOpenProviderSettings: noop,
     onSendMessage: noopBoolean,
+    onPublishProfileAgent: async () => {
+      throw new Error("Unexpected profile agent publication");
+    },
     onOpenAiThread: noopAsync,
     onOpenAgentConversation: noopAsync,
     onCloseAiThread: noop,

@@ -110,6 +110,7 @@
     "@openpond/contracts": "workspace:*",
     "@openpond/logging": "workspace:*",
     "@openpond/runtime": "workspace:*",
+    "@openpond/taskset-sdk": "workspace:*",
     "@types/node": "24.13.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

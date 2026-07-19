@@ -32,6 +32,11 @@ describe("shared surface stylesheet ownership", () => {
     expect(dialogCss).toContain(".git-dialog {");
   });
 
+  test("loads dialog styles with Profile controls outside Settings", async () => {
+    const component = await source("apps/web/src/components/settings/ProfileSettingsSection.tsx");
+    expect(component).toContain('import "../../styles/workspace/git-dialogs.css"');
+  });
+
   test("loads Team row styles with the eagerly rendered sidebar", async () => {
     const [component, sidebarCss, featureCss] = await Promise.all([
       source("apps/web/src/components/sidebar/SidebarTeamSection.tsx"),

@@ -1,5 +1,6 @@
 export * from "./baseline.js";
 export * from "./bootstrap-dataset.js";
+export * from "./expert-bootstrap-service.js";
 export * from "./chat-tool-runtime.js";
 export * from "./fixture-baseline-sources.js";
 export * from "./frontier-baseline.js";
@@ -9,6 +10,7 @@ export * from "./frontier-baseline-service.js";
 export * from "./environment.js";
 export * from "./python-sandbox.js";
 export * from "./taskset-files.js";
+export * from "./task-context.js";
 export * from "./types.js";
 export * from "./verifier.js";
 export * from "./world-generator.js";

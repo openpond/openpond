@@ -6,6 +6,14 @@ import type { PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store-schema.js";
 import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
+import {
+  createCreateImproveRunTables,
+  createFireworksModelServingSessionTables,
+  createTasksetRevisionTables,
+  createTrainingReceiptAndModelBindingTables,
+  deduplicateFireworksMetricArtifacts,
+} from "./store-continuous-improvement-schema.js";
+import { SQLITE_MIGRATIONS } from "./store-migrations.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
@@ -24,13 +32,10 @@ type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
 type TableInfoRow = { name: string };
 
+const SQLITE_OPEN_RETRY_DELAYS_MS = [0, 100, 250, 500] as const;
+
 export type SqliteStoreCoreOptions = {
   logger?: Logger;
-};
-
-type Migration = {
-  version: number;
-  run: (store: SqliteStoreCore) => Promise<void>;
 };
 
 export class SqliteStoreCore {
@@ -118,13 +123,7 @@ export class SqliteStoreCore {
   }
 
   protected async openDatabaseWithRecovery(storeDir: string): Promise<void> {
-    try {
-      this.db = await this.openDatabase(this.storePath);
-    } catch (error) {
-      this.logger?.error("sqlite open failed; moving database files aside", { storePath: this.storePath, error });
-      await this.moveDatabaseFilesAside(storeDir, "open-failed");
-      this.db = await this.openDatabase(this.storePath);
-    }
+    this.db = await this.openDatabaseWithRetry();
 
     try {
       await this.configureDatabase();
@@ -135,6 +134,26 @@ export class SqliteStoreCore {
       await this.moveDatabaseFilesAside(storeDir, "quick-check-failed");
       this.db = await this.openDatabase(this.storePath);
     }
+  }
+
+  protected async openDatabaseWithRetry(): Promise<OpenPondSqliteConnection> {
+    let lastError: unknown = null;
+    for (const delayMs of SQLITE_OPEN_RETRY_DELAYS_MS) {
+      if (delayMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      }
+      try {
+        return await this.openDatabase(this.storePath);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    this.logger?.error("sqlite open failed; preserving database files", {
+      storePath: this.storePath,
+      attempts: SQLITE_OPEN_RETRY_DELAYS_MS.length,
+      error: lastError,
+    });
+    throw lastError;
   }
 
   protected async backupDatabaseFiles(storeDir: string, label: string): Promise<void> {
@@ -458,6 +477,10 @@ export class SqliteStoreCore {
     }
   }
 
+  async createCreateImproveRunTables(): Promise<void> {
+    await createCreateImproveRunTables((sql) => this.exec(sql));
+  }
+
   async createTrainingTables(): Promise<void> {
     await this.exec(`
       CREATE TABLE IF NOT EXISTS training_sources (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, session_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -467,6 +490,8 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS task_creation_profile_updated_idx ON task_creation_snapshots(profile_id, updated_at DESC);
       CREATE TABLE IF NOT EXISTS tasksets (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS tasksets_profile_status_updated_idx ON tasksets(profile_id, status, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS taskset_revisions (taskset_id TEXT NOT NULL, revision INTEGER NOT NULL, content_hash TEXT NOT NULL, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(taskset_id, revision));
+      CREATE UNIQUE INDEX IF NOT EXISTS taskset_revisions_hash_idx ON taskset_revisions(taskset_id, content_hash);
       CREATE TABLE IF NOT EXISTS task_candidates (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE UNIQUE INDEX IF NOT EXISTS task_candidates_profile_fingerprint_idx ON task_candidates(profile_id, fingerprint);
       CREATE INDEX IF NOT EXISTS task_candidates_profile_status_updated_idx ON task_candidates(profile_id, status, updated_at DESC);
@@ -498,6 +523,22 @@ export class SqliteStoreCore {
       CREATE UNIQUE INDEX IF NOT EXISTS model_lineage_artifact_idx ON model_artifact_lineage(artifact_id);
       CREATE INDEX IF NOT EXISTS model_lineage_taskset_idx ON model_artifact_lineage(taskset_id, created_at DESC);
     `);
+  }
+
+  async createTasksetRevisionTables(): Promise<void> {
+    await createTasksetRevisionTables((sql) => this.exec(sql));
+  }
+
+  async createTrainingReceiptAndModelBindingTables(): Promise<void> {
+    await createTrainingReceiptAndModelBindingTables((sql) => this.exec(sql));
+  }
+
+  async createFireworksModelServingSessionTables(): Promise<void> {
+    await createFireworksModelServingSessionTables((sql) => this.exec(sql));
+  }
+
+  async deduplicateFireworksMetricArtifacts(): Promise<void> {
+    await deduplicateFireworksMetricArtifacts((sql) => this.exec(sql));
   }
 
   async createTaskCreationProjectionTables(): Promise<void> {
@@ -875,78 +916,3 @@ export class SqliteStoreCore {
     return this.db;
   }
 }
-
-const SQLITE_MIGRATIONS: Migration[] = [
-  {
-    version: 1,
-    run: (store) => store.createSchema(),
-  },
-  {
-    version: 2,
-    run: (store) => store.createHotQueryIndexes(),
-  },
-  {
-    version: 3,
-    run: (store) => store.createReadModelTables(),
-  },
-  {
-    version: 4,
-    run: (store) => store.createInsightTables(),
-  },
-  {
-    version: 5,
-    run: (store) => store.createInsightRunLinkColumns(),
-  },
-  {
-    version: 6,
-    run: (store) => store.createInsightRunLinkColumns(),
-  },
-  {
-    version: 7,
-    run: (store) => store.createModelUsageTables(),
-  },
-  {
-    version: 8,
-    run: (store) => store.createLocalAgentScheduleTables(),
-  },
-  {
-    version: 9,
-    run: (store) => store.createSubagentTables(),
-  },
-  {
-    version: 10,
-    run: (store) => store.createOpenPondThreadGoalTable(),
-  },
-  {
-    version: 11,
-    run: (store) => store.createTrainingTables(),
-  },
-  {
-    version: 12,
-    run: (store) => store.createTaskCreationProjectionTables(),
-  },
-  {
-    version: 13,
-    run: (store) => store.createGraderAuditTables(),
-  },
-  {
-    version: 14,
-    run: (store) => store.createTaskAttemptArtifactTables(),
-  },
-  {
-    version: 15,
-    run: (store) => store.createTrainingChatSearchTables(),
-  },
-  {
-    version: 16,
-    run: (store) => store.resetTrainingChatSearchForProgressiveIndexing(),
-  },
-  {
-    version: 17,
-    run: (store) => store.createTaskMinerRunTables(),
-  },
-  {
-    version: 18,
-    run: (store) => store.createCrossSystemFrontierBaselineRunTables(),
-  },
-];

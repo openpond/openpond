@@ -15,6 +15,9 @@ const TimestampSchema = z.string().trim().min(1);
 
 export const CrossSystemSplitSchema = z.enum(["train", "validation", "frozen_eval"]);
 export const CrossSystemDifficultySchema = z.enum(["easy", "medium", "hard"]);
+export const CrossSystemScenarioProfileSchema = z.enum([
+  "renewal_risk_v2",
+]);
 export const CrossSystemTaskFamilySchema = z.enum([
   "renewal_exposure",
   "collections_prioritization",
@@ -27,7 +30,21 @@ export const CrossSystemWorldSpecSchema = z.object({
   seed: z.number().int().nonnegative(),
   split: CrossSystemSplitSchema,
   difficulty: CrossSystemDifficultySchema,
+  scenarioProfile: CrossSystemScenarioProfileSchema.optional(),
 });
+
+export const DEFAULT_CROSS_SYSTEM_WORLD_SPECS = [
+  { seed: 301, split: "train", difficulty: "easy" },
+  { seed: 302, split: "train", difficulty: "medium" },
+  { seed: 303, split: "train", difficulty: "hard" },
+  { seed: 304, split: "train", difficulty: "easy" },
+  { seed: 305, split: "train", difficulty: "medium" },
+  { seed: 306, split: "train", difficulty: "hard" },
+  { seed: 401, split: "validation", difficulty: "medium" },
+  { seed: 402, split: "validation", difficulty: "hard" },
+  { seed: 501, split: "frozen_eval", difficulty: "medium" },
+  { seed: 502, split: "frozen_eval", difficulty: "hard" },
+] as const satisfies readonly CrossSystemWorldSpec[];
 
 const SuccessSummarySchema = z.record(
   z.string(),
@@ -73,6 +90,7 @@ export const CrossSystemFrontierBaselineRunSchema = z.object({
   schemaVersion: z.literal("openpond.crossSystemFrontierBaselineRun.v1"),
   id: IdSchema,
   profileId: IdSchema,
+  createImproveRunId: IdSchema.nullable().default(null),
   localProjectId: IdSchema,
   localProjectName: z.string().trim().min(1).max(500),
   model: ChatModelRefSchema,
@@ -112,6 +130,7 @@ export const CrossSystemFrontierBaselineRunSchema = z.object({
 
 export type CrossSystemSplit = z.infer<typeof CrossSystemSplitSchema>;
 export type CrossSystemDifficulty = z.infer<typeof CrossSystemDifficultySchema>;
+export type CrossSystemScenarioProfile = z.infer<typeof CrossSystemScenarioProfileSchema>;
 export type CrossSystemTaskFamily = z.infer<typeof CrossSystemTaskFamilySchema>;
 export type CrossSystemWorldSpec = z.infer<typeof CrossSystemWorldSpecSchema>;
 export type CrossSystemBaselineReport = z.infer<typeof CrossSystemBaselineReportSchema>;

@@ -20,7 +20,7 @@ export async function runOpenPondEditCommand(options: CliOptions, rest: string[]
     rest,
     kind: "update_agent",
     command: "/edit",
-    surface: "direct_prompt_edit",
+    surface: "direct_prompt_improve",
     usage: 'usage: edit "<profile agent change>" [--agent-id <id>] [--run]',
   });
 }
@@ -30,7 +30,7 @@ async function runOpenPondAgentPipelineCommand(params: {
   rest: string[];
   kind: "create_agent" | "update_agent";
   command: "openpond extend" | "/edit";
-  surface: "local_extend" | "direct_prompt_edit";
+  surface: "local_extend" | "direct_prompt_improve";
   usage: string;
 }): Promise<void> {
   const { options, rest } = params;
@@ -58,7 +58,7 @@ async function runOpenPondAgentPipelineCommand(params: {
     options: goalOptions,
     objective,
     kind: params.kind,
-    createPipeline: {
+    createImprove: {
       command: params.command,
       surface: params.surface,
       profile: {

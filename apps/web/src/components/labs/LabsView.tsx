@@ -1,95 +1,159 @@
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
-import type { LabsTab } from "../../lib/app-models";
-import { Plus } from "../icons";
-import "../../styles/labs/labs.css";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-export const LABS_TABS: ReadonlyArray<{ id: LabsTab; label: string }> = [
-  { id: "profile", label: "Profile" },
-  { id: "signals", label: "Signals" },
-  { id: "evals", label: "Evals" },
-  { id: "models", label: "Models" },
-  { id: "agents", label: "Agents" },
-  { id: "extensions", label: "Extensions" },
-];
+import {
+  BookOpenText,
+  Bot,
+  Boxes,
+  ChartColumnStacked,
+  Plug,
+  Plus,
+} from "../icons";
+import "../../styles/labs/labs.css";
+import "../../styles/labs/labs-detail.css";
+
+export type LabPrimaryTab = "workproducts" | "datasets" | "suggestions";
 
 export function LabsView({
   activeTab,
   children,
-  onNewModel,
+  suggestionCount,
+  showHeader = true,
   onTabChange,
-  profileHasUncommittedChanges = false,
+  onCreateAgent,
+  onCreateDataset,
+  onCreateModel,
 }: {
-  activeTab: LabsTab;
+  activeTab: LabPrimaryTab;
   children: ReactNode;
-  onNewModel: () => void;
-  onTabChange: (tab: LabsTab) => void;
-  profileHasUncommittedChanges?: boolean;
+  suggestionCount: number;
+  showHeader?: boolean;
+  onTabChange: (tab: LabPrimaryTab) => void;
+  onCreateAgent: () => void;
+  onCreateDataset: () => void;
+  onCreateModel: () => void;
 }) {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const createRef = useRef<HTMLDivElement | null>(null);
 
-  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const lastIndex = LABS_TABS.length - 1;
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? lastIndex
-        : event.key === "ArrowLeft"
-          ? (index - 1 + LABS_TABS.length) % LABS_TABS.length
-          : (index + 1) % LABS_TABS.length;
-    const nextTab = LABS_TABS[nextIndex];
-    if (!nextTab) return;
-    onTabChange(nextTab.id);
-    tabRefs.current[nextIndex]?.focus();
-  }
+  useEffect(() => {
+    if (!createOpen) return undefined;
+    function close(event: PointerEvent) {
+      if (!createRef.current?.contains(event.target as Node)) setCreateOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setCreateOpen(false);
+    }
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [createOpen]);
 
   return (
     <section className="labs-route" aria-label="Lab">
-      <header className="labs-header">
-        <nav className="labs-tabs" role="tablist" aria-label="Lab sections">
-          {LABS_TABS.map((tab, index) => (
+      {showHeader ? <header className="labs-header">
+        <div className="labs-header-navigation">
+          <nav className="labs-primary-tabs" role="tablist" aria-label="Lab sections">
             <button
-              aria-controls="labs-active-panel"
-              aria-selected={activeTab === tab.id}
-              className={activeTab === tab.id ? "active" : undefined}
-              id={`labs-tab-${tab.id}`}
-              key={tab.id}
-              ref={(node) => { tabRefs.current[index] = node; }}
+              aria-selected={activeTab === "workproducts"}
+              className={activeTab === "workproducts" ? "active" : undefined}
               role="tab"
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              title={tab.id === "profile" && profileHasUncommittedChanges
-                ? "Profile has local changes that are not committed"
-                : undefined}
               type="button"
-              onClick={() => onTabChange(tab.id)}
-              onKeyDown={(event) => handleTabKeyDown(event, index)}
+              onClick={() => onTabChange("workproducts")}
             >
-              <span className="labs-tab-label">
-                {tab.label}
-                {tab.id === "profile" && profileHasUncommittedChanges ? (
-                  <span
-                    aria-hidden="true"
-                    className="labs-profile-change-dot"
-                  />
-                ) : null}
-              </span>
+              Home
             </button>
-          ))}
-        </nav>
-        <button className="labs-new-model-button" type="button" onClick={onNewModel}>
-          <Plus size={14} />
-          <span>New model</span>
-        </button>
-      </header>
-      <div
-        aria-labelledby={`labs-tab-${activeTab}`}
-        className="labs-panel"
-        id="labs-active-panel"
-        role="tabpanel"
-      >
-        {children}
-      </div>
+            <button
+              aria-selected={activeTab === "datasets"}
+              className={activeTab === "datasets" ? "active" : undefined}
+              role="tab"
+              type="button"
+              onClick={() => onTabChange("datasets")}
+            >
+              Datasets
+            </button>
+            <button
+              aria-selected={activeTab === "suggestions"}
+              className={activeTab === "suggestions" ? "active" : undefined}
+              role="tab"
+              type="button"
+              onClick={() => onTabChange("suggestions")}
+            >
+              Suggestions
+              {suggestionCount > 0 ? <span>{suggestionCount}</span> : null}
+            </button>
+          </nav>
+        </div>
+        <div className="labs-header-actions">
+          <div className="labs-create-anchor" ref={createRef}>
+            <button
+              className="labs-create-button"
+              type="button"
+              aria-expanded={createOpen}
+              aria-haspopup="menu"
+              aria-label="Create workproduct"
+              title="Create workproduct"
+              onClick={() => setCreateOpen((open) => !open)}
+            >
+              <Plus size={15} />
+            </button>
+            {createOpen ? (
+              <div className="labs-create-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onCreateAgent();
+                  }}
+                >
+                  <Bot size={15} />
+                  <span><strong>New agent</strong><small>Describe the agent in the shared Create flow.</small></span>
+                </button>
+                <button disabled type="button" role="menuitem">
+                  <BookOpenText size={15} />
+                  <span>
+                    <strong>New skill</strong>
+                    <small>Coming soon</small>
+                  </span>
+                </button>
+                <button disabled type="button" role="menuitem">
+                  <Plug size={15} />
+                  <span>
+                    <strong>New extension</strong>
+                    <small>Coming soon</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onCreateModel();
+                  }}
+                >
+                  <ChartColumnStacked size={15} />
+                  <span><strong>New model</strong><small>Build the data and Evals, then choose training.</small></span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onCreateDataset();
+                  }}
+                >
+                  <Boxes size={15} />
+                  <span><strong>New Dataset</strong><small>Create a reusable Taskset without creating a Model.</small></span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </header> : null}
+      <div className="labs-panel">{children}</div>
     </section>
   );
 }

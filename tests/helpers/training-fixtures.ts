@@ -81,7 +81,7 @@ export async function seedConversation(store: SqliteStore, input: { sessionId?: 
   const sessionId = input.sessionId ?? "session_training";
   const turnId = input.turnId ?? "turn_training";
   const session: Session = { id: sessionId, provider: "openpond", modelRef: null, title: input.title ?? "Research and update product", appId: null, appName: null, workspaceId: null, workspaceName: null, localProjectId: null, cloudProjectId: null, cloudTeamId: null, cwd: "/tmp/openpond", codexThreadId: null, createdAt: FIXED_TIME, updatedAt: FIXED_TIME, status: "idle", pinned: false, archived: false, order: 0 };
-  const turn: Turn = { id: turnId, sessionId, providerTurnId: null, modelRef: { providerId: "openpond", modelId: "openpond-chat" }, prompt: input.prompt ?? "Research this topic and update the product.", startedAt: FIXED_TIME, completedAt: FIXED_TIME, status: "completed", error: null, metadata: {}, createPipelineRequest: null, createPipeline: null };
+  const turn: Turn = { id: turnId, sessionId, providerTurnId: null, modelRef: { providerId: "openpond", modelId: "openpond-chat" }, prompt: input.prompt ?? "Research this topic and update the product.", startedAt: FIXED_TIME, completedAt: FIXED_TIME, status: "completed", error: null, metadata: {}, createImproveRun: null };
   const event: RuntimeEvent = { id: `event_${turnId}`, sessionId, turnId, name: "assistant.delta", timestamp: FIXED_TIME, source: "provider", status: "running", output: input.assistant ?? "Completed the research and product update." };
   await store.mutate((data) => { data.sessions.push(session); data.turns.push(turn); data.events.push(event); });
   return { session, turn, event };

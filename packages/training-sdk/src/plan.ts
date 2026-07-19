@@ -1,16 +1,16 @@
 import {
   TrainingPlanSchema,
-  type SftRecipe,
   type Taskset,
   type TrainingDestinationId,
   type TrainingPlan,
+  type TrainingRecipe,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 
 export function createTrainingPlan(input: {
   taskset: Taskset;
   destinationId: TrainingDestinationId;
-  recipe: SftRecipe;
+  recipe: TrainingRecipe;
   exportApproved?: boolean;
   retentionDays?: number | null;
   region?: string | null;

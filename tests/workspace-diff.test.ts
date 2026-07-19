@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { AppPreferencesSchema, localPathWorkspaceId, type BootstrapPayload, type WorkspaceDiffSummary } from "@openpond/contracts";
 import {
   clearWorkspaceDiffCacheForTests,
+  loadGitCommitDiffAtPath,
   loadWorkspaceDiffAtPath,
   loadWorkspaceFileAtPath,
   loadWorkspaceImageFileAtPath,
@@ -53,6 +54,42 @@ function diffSummary(files: WorkspaceDiffSummary["files"]): WorkspaceDiffSummary
 }
 
 describe("workspace diff", () => {
+  test("loads a reviewed commit range with file patches and head content", async () => {
+    const repoPath = await createTempDir("openpond-candidate-diff-");
+    await git(repoPath, ["init", "-b", "main"]);
+    await git(repoPath, ["config", "user.email", "test@example.local"]);
+    await git(repoPath, ["config", "user.name", "Test User"]);
+    await mkdir(path.join(repoPath, "src"), { recursive: true });
+    await writeFile(path.join(repoPath, "src", "agent.ts"), "export const behavior = 'base';\n", "utf8");
+    await git(repoPath, ["add", "-A"]);
+    await git(repoPath, ["commit", "-m", "base"]);
+    const base = String((await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoPath })).stdout).trim();
+    await writeFile(path.join(repoPath, "src", "agent.ts"), "export const behavior = 'candidate';\n", "utf8");
+    await git(repoPath, ["add", "-A"]);
+    await git(repoPath, ["commit", "-m", "candidate"]);
+    const head = String((await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoPath })).stdout).trim();
+
+    const summary = await loadGitCommitDiffAtPath(
+      repoPath,
+      "candidate:run:candidate",
+      base,
+      head,
+    );
+
+    expect(summary).toMatchObject({
+      appId: "candidate:run:candidate",
+      filesChanged: 1,
+      additions: 1,
+      deletions: 1,
+    });
+    expect(summary.files[0]).toMatchObject({
+      path: "src/agent.ts",
+      status: "modified",
+      content: "export const behavior = 'candidate';\n",
+    });
+    expect(summary.files[0]?.patch).toContain("export const behavior = 'candidate';");
+  });
+
   test("limits per-file diff work while preserving result order", async () => {
     let active = 0;
     let maxActive = 0;

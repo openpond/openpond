@@ -846,7 +846,7 @@ function requestKindLabel(kind: string): string {
   if (kind === "chat_turn") return "Chat turn";
   if (kind === "tool_loop") return "Tool loop";
   if (kind === "slash_command") return "Slash command";
-  if (kind === "create_pipeline_planner") return "Create planner";
+  if (kind === "create_improve_planner") return "Create/Improve planner";
   if (kind === "context_compaction") return "Compaction";
   if (kind === "insights_scan") return "Insight scan";
   if (kind === "insights_question") return "Insight question";

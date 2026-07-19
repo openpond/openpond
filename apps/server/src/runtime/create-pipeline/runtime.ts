@@ -1,174 +1,183 @@
 import {
+  ApplyCreateImproveRunActionRequestSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
   ResolveApprovalRequestSchema,
-  UpdateTurnCreatePipelineRequestSchema,
+  nextCreateImproveRunRevision,
   type Approval,
   type ChatModelRef,
   type ChatProvider,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  type CreateImproveRun,
+  type CreateImproveRunAction,
   type ModelUsageRecord,
   type RuntimeEvent,
   type Session,
+  type GradeResult,
+  type TaskAttemptResult,
+  type Taskset,
   type Turn,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
 import {
-  assertCreatePipelineMutationApproved,
-  assertCreatePipelineSnapshotLinked,
-  isCreatePipelineMutationState,
+  assertCreateImproveMutationApproved,
+  assertCreateImproveRunLinked,
+  isCreateImproveMutationState,
 } from "../../create-pipeline-guards.js";
 import { isOpenAiCompatibleProviderId } from "../../openpond/openai-compatible-provider.js";
 import { event } from "../../utils.js";
 import type { BackgroundWorkerQueue, BackgroundWorkReceipt } from "../background-worker-queue.js";
 import {
-  createBlockedCreatePipelinePlannerSnapshot,
-  runModelBackedCreatePipelinePlanner,
-  type CreatePipelinePlanner,
+  createBlockedCreateImprovePlannerRun,
+  runModelBackedCreateImprovePlanner,
+  type CreateImprovePlanner,
 } from "../create-pipeline-planner.js";
-import {
-  applyApprovedLocalCreatePipelineSnapshot,
-  type LocalCreatePipelineCheckInput,
-  type LocalCreatePipelineCheckResult,
+import type {
+  LocalCreatePipelineCheckInput,
+  LocalCreatePipelineCheckResult,
 } from "../local-create-pipeline.js";
 import { startProviderRequestUsageRecorder } from "../model-usage-recorder.js";
 import { KeyedRegistry } from "../turns/keyed-registry.js";
 import type { HostedToolLoopDelta, TurnRunnerDependencies } from "../turns/ports.js";
 import {
+  applyCreateImproveRunAction,
   approvalStatusForPlan,
-  createPipelineBackgroundFailureSnapshot,
-  createPipelineRuntimeEventStatus,
-  createPlanApproval,
-  createPlanDecisionSnapshot,
-  createPlanExecutionSnapshotForApprovedAdapter,
-  shouldRunCreatePipelinePlanner,
+  createImproveBackgroundFailureRun,
+  createImprovePlanApproval,
+  createImproveRuntimeEventStatus,
+  createPlanExecutionRunForApprovedAdapter,
+  shouldRunCreateImprovePlanner,
+  withCreateImproveRun,
 } from "./snapshots.js";
+import { createImproveTargetAdapter } from "./target-adapters.js";
+import {
+  executeAgentImprovementReleaseAction,
+  isAgentImprovementReleaseAction,
+} from "./agent-improvement-release.js";
 
-export type CreatePipelineRuntime = ReturnType<typeof createCreatePipelineRuntime>;
+export type CreateImproveRuntime = ReturnType<typeof createCreateImproveRuntime>;
 
-export function createCreatePipelineRuntime(deps: {
+export function createCreateImproveRuntime(deps: {
   getSession(sessionId: string): Promise<Session>;
   getTurn(turnId: string): Promise<Turn | null>;
   updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
+  getCreateImproveRun(runId: string): Promise<CreateImproveRun | null>;
+  listCreateImproveRuns(query?: {
+    profileId?: string | null;
+    conversationId?: string | null;
+    targetKind?: CreateImproveRun["target"]["kind"] | null;
+    targetId?: string | null;
+    state?: CreateImproveRun["state"] | readonly CreateImproveRun["state"][] | null;
+    limit?: number;
+  }): Promise<CreateImproveRun[]>;
+  upsertCreateImproveRun(run: CreateImproveRun): Promise<CreateImproveRun>;
+  mutateCreateImproveRun(
+    action: CreateImproveRunAction,
+    updater: (run: CreateImproveRun) => CreateImproveRun,
+  ): Promise<{ run: CreateImproveRun; replayed: boolean }>;
   getApproval(approvalId: string): Promise<Approval | null>;
   upsertApproval(approval: Approval): Promise<void>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   ensureCodexRuntime: TurnRunnerDependencies["ensureCodexRuntime"];
   runLocalCreatePipelineChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
-  planCreatePipeline?: CreatePipelinePlanner;
+  planCreateImprove?: CreateImprovePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   streamLocalByokChatTurn?: (input: {
     providerId: ChatProvider;
     modelId?: string | null;
-    messages: Parameters<typeof runModelBackedCreatePipelinePlanner>[0]["stream"] extends (messages: infer M) => unknown ? M : never;
+    messages: Parameters<typeof runModelBackedCreateImprovePlanner>[0]["stream"] extends (messages: infer M) => unknown ? M : never;
     requestId: string;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   upsertModelUsageRecord(record: ModelUsageRecord): Promise<void>;
+  resolveTaskset?: (tasksetId: string, revision: number, contentHash: string) => Promise<Taskset | null>;
+  gradeTaskAttempt?: (input: { tasksetId: string; taskId: string; attempt: TaskAttemptResult }) => Promise<GradeResult>;
 }) {
-  const applyJobs = new KeyedRegistry<BackgroundWorkReceipt>("create pipeline apply job");
-  const streamOpenPondHostedChatTurn = deps.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn;
+  const applyJobs = new KeyedRegistry<BackgroundWorkReceipt>("create/improve apply job");
+  const streamOpenPondHostedChatTurn = deps.streamOpenPondHostedChatTurn
+    ?? defaultStreamOpenPondHostedChatTurn;
 
-  async function updateTurnCreatePipeline(sessionId: string, turnId: string, payload: unknown): Promise<Turn> {
-    const input = UpdateTurnCreatePipelineRequestSchema.parse(payload);
-    const session = await deps.getSession(sessionId);
-    const requestedRequest = input.createPipelineRequest ?? input.createPipeline.request ?? null;
-    assertCreatePipelineSnapshotLinked({
-      actionLabel: "Create pipeline turn update",
-      request: requestedRequest,
-      snapshot: input.createPipeline,
-    });
-    const existingTurn = await deps.getTurn(turnId);
-    if (!existingTurn || existingTurn.sessionId !== sessionId) throw new Error("Turn not found");
-    let nextSnapshot = input.createPipeline;
-    if (shouldRunCreatePipelinePlanner(nextSnapshot)) {
-      await deps.appendRuntimeEvent(event({
-        sessionId,
-        turnId,
-        name: "create_pipeline.updated",
-        source: "server",
-        appId: session.appId,
-        status: "pending",
-        output: "Create planner is preparing the plan.",
-        data: { createPipelineRequest: requestedRequest, createPipeline: nextSnapshot },
-      }));
-      nextSnapshot = await planCreatePipelineForTurn({
+  async function applyCreateImproveActionPayload(
+    routeRunId: string,
+    payload: unknown,
+  ): Promise<CreateImproveRun> {
+    const action = ApplyCreateImproveRunActionRequestSchema.parse(payload);
+    if (action.runId !== routeRunId) {
+      throw new Error("Create/Improve action route does not match the submitted run.");
+    }
+    const mutation = await deps.mutateCreateImproveRun(
+      action,
+      (current) => applyCreateImproveRunAction(current, action),
+    );
+    let run = mutation.replayed
+      ? await deps.getCreateImproveRun(action.runId) ?? mutation.run
+      : mutation.run;
+    const turn = await turnForRun(run);
+    const session = await deps.getSession(run.scope.conversationId ?? turn.sessionId);
+
+    if (!mutation.replayed && shouldRunCreateImprovePlanner(run)) {
+      run = await planCreateImproveForTurn({
         session,
-        turn: existingTurn,
-        request: requestedRequest ?? nextSnapshot.request,
-        previousSnapshot: nextSnapshot,
+        turn,
+        run,
         signal: new AbortController().signal,
       });
     }
-    let queueApply = false;
-    if (isCreatePipelineMutationState(nextSnapshot.state)) {
-      assertCreatePipelineMutationApproved({
-        actionLabel: "Create pipeline turn update",
-        request: requestedRequest,
-        snapshot: nextSnapshot,
-      });
-      nextSnapshot = createPlanExecutionSnapshotForApprovedAdapter(nextSnapshot, session);
-      queueApply = shouldApplyLocalCreatePipelineAsync(nextSnapshot);
+    if (!mutation.replayed && isCreateImproveMutationState(run.state)) {
+      assertCreateImproveMutationApproved({ actionLabel: "Create/Improve action", run });
+      run = createPlanExecutionRunForApprovedAdapter(run, session);
     }
-    const result = await deps.updateTurn(turnId, (current) => {
-      if (current.sessionId !== sessionId) throw new Error("Turn not found");
-      if (current.createPipelineRequest?.id && requestedRequest?.id && current.createPipelineRequest.id !== requestedRequest.id) {
-        throw new Error("Create pipeline turn update cannot change the original request.");
-      }
-      return withCreatePipeline(current, requestedRequest, nextSnapshot);
-    });
-    if (!result) throw new Error("Turn not found");
-    await appendSnapshotEvent(session, result, nextSnapshot, "ui_button");
-    await syncCreatePlanApproval({ session, turn: result, request: result.createPipelineRequest ?? requestedRequest, snapshot: result.createPipeline });
-    if (queueApply && result.createPipeline) {
-      queueLocalCreatePipelineApply({ session, turn: result, request: result.createPipelineRequest ?? requestedRequest, snapshot: result.createPipeline });
+    await persistCreateImproveRun({ session, turnId: turn.id, run, source: "ui_button" });
+    if (!mutation.replayed && isAgentImprovementReleaseAction(action)) {
+      queueAgentImprovementReleaseAction({ session, turn, run, action });
+    } else if (!mutation.replayed && shouldExecuteTarget(run)) {
+      queueCreateImproveExecution({ session, turn, run });
     }
-    return result;
+    return await deps.getCreateImproveRun(run.id) ?? run;
   }
 
-  async function resolveCreatePipelineApproval(approvalId: string, payload: unknown): Promise<Approval | null> {
+  async function resolveCreateImproveApproval(
+    approvalId: string,
+    payload: unknown,
+  ): Promise<Approval | null> {
     const input = ResolveApprovalRequestSchema.parse(payload);
     const approval = await deps.getApproval(approvalId);
     if (!approval || approval.kind !== "create_plan") return null;
     if (approval.status !== "pending") throw new Error("Approval not found or already resolved");
     const turn = approval.turnId ? await deps.getTurn(approval.turnId) : null;
-    if (!turn?.createPipeline) throw new Error("Create plan approval is missing its create pipeline turn.");
-    const session = await deps.getSession(approval.sessionId);
-    const decided = createPlanDecisionSnapshot(turn.createPipeline, input.decision);
-    const snapshot = createPlanExecutionSnapshotForApprovedAdapter(decided, session);
-    const queueApply = shouldApplyLocalCreatePipelineAsync(snapshot);
-    const result = await deps.updateTurn(turn.id, (current) => {
-      if (current.sessionId !== approval.sessionId) throw new Error("Turn not found");
-      return withCreatePipeline(current, current.createPipelineRequest ?? snapshot.request, snapshot);
+    const run = turn?.createImproveRun
+      ?? (approval.providerRequestId ? await deps.getCreateImproveRun(String(approval.providerRequestId)) : null);
+    if (!turn || !run) throw new Error("Create/Improve approval is missing its run.");
+    const type = input.decision === "accept" || input.decision === "acceptForSession"
+      ? "approve_plan"
+      : input.decision === "cancel"
+        ? "cancel"
+        : "cancel";
+    await applyCreateImproveActionPayload(run.id, {
+      type,
+      runId: run.id,
+      expectedRevision: run.revision,
+      actionId: `approval:${approvalId}:${input.decision}`,
+      ...(type === "cancel"
+        ? { reason: input.decision === "cancel" ? "Plan review cancelled." : "Plan review declined." }
+        : {}),
     });
-    if (!result) throw new Error("Turn not found");
-    assertCreatePipelineSnapshotLinked({ actionLabel: "Create plan approval resolution", request: result.createPipelineRequest ?? snapshot.request, snapshot });
-    if (isCreatePipelineMutationState(snapshot.state)) {
-      assertCreatePipelineMutationApproved({ actionLabel: "Create plan approval resolution", request: result.createPipelineRequest ?? snapshot.request, snapshot });
-    }
-    await appendSnapshotEvent(session, result, snapshot, "ui_button");
-    const resolved = await syncCreatePlanApproval({ session, turn: result, request: result.createPipelineRequest ?? snapshot.request, snapshot });
-    if (queueApply) queueLocalCreatePipelineApply({ session, turn: result, request: result.createPipelineRequest ?? snapshot.request, snapshot });
-    return resolved;
+    return deps.getApproval(approvalId);
   }
 
-  async function syncCreatePlanApproval(input: {
+  async function syncCreateImprovePlanApproval(input: {
     session: Session;
     turn: Turn;
-    request?: CreatePipelineRequest | null;
-    snapshot?: CreatePipelineSnapshot | null;
+    run?: CreateImproveRun | null;
   }): Promise<Approval | null> {
-    const snapshot = input.snapshot;
-    const plan = snapshot?.plan ?? null;
-    if (!snapshot || !plan?.approvalId) return null;
+    const run = input.run;
+    const plan = run?.plan ?? null;
+    if (!run || !plan?.approvalId) return null;
     const existing = await deps.getApproval(plan.approvalId);
-    const approval = createPlanApproval({
+    const approval = createImprovePlanApproval({
       existing,
       session: input.session,
       turn: input.turn,
-      request: input.request ?? snapshot.request,
-      snapshot,
+      run,
       status: approvalStatusForPlan(plan.status),
     });
     await deps.upsertApproval(approval);
@@ -193,37 +202,43 @@ export function createCreatePipelineRuntime(deps: {
         source: "server",
         action: "create_plan",
         appId: input.session.appId,
-        status: approval.status === "accepted" || approval.status === "accepted_for_session" ? "completed" : "failed",
+        status: approval.status === "accepted" || approval.status === "accepted_for_session"
+          ? "completed"
+          : "failed",
         output: approval.title,
-        data: { approvalId: approval.id, status: approval.status },
+        data: { approvalId: approval.id, runId: run.id, status: approval.status },
       }));
     }
     return approval;
   }
 
-  function queueLocalCreatePipelineApply(input: {
+  function queueCreateImproveExecution(input: {
     session: Session;
     turn: Turn;
-    request?: CreatePipelineRequest | null;
-    snapshot: CreatePipelineSnapshot;
+    run: CreateImproveRun;
   }): void {
-    const key = `${input.session.id}:${input.turn.id}:${input.snapshot.id}`;
+    const key = `${input.run.id}:${input.run.revision}`;
     if (applyJobs.has(key)) return;
     const receipt = deps.turnFollowUpQueue.enqueue(
       {
-        label: "Apply approved local Create pipeline",
-        metadata: { key, sessionId: input.session.id, turnId: input.turn.id, pipelineId: input.snapshot.id },
+        label: `Apply approved ${input.run.target.kind} Create/Improve run`,
+        metadata: {
+          key,
+          sessionId: input.session.id,
+          turnId: input.turn.id,
+          runId: input.run.id,
+          revision: input.run.revision,
+        },
       },
       async () => {
         try {
-          await runQueuedLocalCreatePipelineApply(input);
+          await runQueuedCreateImproveExecution(input);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          await persistCreatePipelineSnapshot({
+          await persistCreateImproveRun({
             session: input.session,
             turnId: input.turn.id,
-            request: input.request ?? input.snapshot.request,
-            snapshot: createPipelineBackgroundFailureSnapshot(input.snapshot, message),
+            run: createImproveBackgroundFailureRun(input.run, message),
             source: "server",
           });
         } finally {
@@ -234,91 +249,165 @@ export function createCreatePipelineRuntime(deps: {
     applyJobs.set(key, receipt);
   }
 
-  async function runQueuedLocalCreatePipelineApply(input: {
+  function queueAgentImprovementReleaseAction(input: {
     session: Session;
     turn: Turn;
-    request?: CreatePipelineRequest | null;
-    snapshot: CreatePipelineSnapshot;
+    run: CreateImproveRun;
+    action: Extract<
+      CreateImproveRunAction,
+      { type: "apply_candidate" | "open_pull_request" | "reject_candidate" | "reconcile_pull_request" }
+    >;
+  }): void {
+    const key = `release:${input.run.id}:${input.run.revision}:${input.action.type}`;
+    if (applyJobs.has(key)) return;
+    const receipt = deps.turnFollowUpQueue.enqueue(
+      {
+        label: `${input.action.type.replaceAll("_", " ")} for Agent improvement`,
+        metadata: {
+          key,
+          sessionId: input.session.id,
+          turnId: input.turn.id,
+          runId: input.run.id,
+          revision: input.run.revision,
+          action: input.action.type,
+        },
+      },
+      async () => {
+        try {
+          const latestRun = await deps.getCreateImproveRun(input.run.id) ?? input.run;
+          const result = await executeAgentImprovementReleaseAction({
+            run: latestRun,
+            action: input.action,
+            resolveTaskset: deps.resolveTaskset,
+            gradeTaskAttempt: deps.gradeTaskAttempt,
+          });
+          await persistCreateImproveRun({
+            session: input.session,
+            turnId: input.turn.id,
+            run: result,
+            source: "server",
+          });
+        } finally {
+          applyJobs.delete(key);
+        }
+      },
+    );
+    applyJobs.set(key, receipt);
+  }
+
+  async function runQueuedCreateImproveExecution(input: {
+    session: Session;
+    turn: Turn;
+    run: CreateImproveRun;
   }): Promise<void> {
     const latestTurn = await deps.getTurn(input.turn.id) ?? input.turn;
-    const snapshot = await applyApprovedLocalCreatePipelineSnapshot(input.snapshot, {
+    const latestRun = await deps.getCreateImproveRun(input.run.id) ?? input.run;
+    const adapter = createImproveTargetAdapter(latestRun.target);
+    if (!adapter.canExecute(latestRun)) return;
+    const result = adapter.normalizeResult(await adapter.execute(latestRun, {
       session: input.session,
       turn: latestTurn,
       ensureCodexRuntime: deps.ensureCodexRuntime,
       appendRuntimeEvent: deps.appendRuntimeEvent,
-      setProviderTurnId: (providerTurnId) => setTurnProviderTurnId(input.session.id, input.turn.id, providerTurnId),
-      onSnapshot: async (next) => {
-        await persistCreatePipelineSnapshot({ session: input.session, turnId: input.turn.id, request: input.request ?? next.request, snapshot: next, source: "server" });
+      setProviderTurnId: (providerTurnId) =>
+        setTurnProviderTurnId(input.session.id, input.turn.id, providerTurnId),
+      onRun: async (run) => {
+        await persistCreateImproveRun({
+          session: input.session,
+          turnId: input.turn.id,
+          run,
+          source: "server",
+        });
       },
-      model: input.session.provider === "codex" ? input.session.modelRef?.modelId ?? null : null,
+      model: input.session.provider === "codex"
+        ? input.session.modelRef?.modelId ?? null
+        : null,
       runChecks: deps.runLocalCreatePipelineChecks,
+      resolveTaskset: deps.resolveTaskset,
+      gradeTaskAttempt: deps.gradeTaskAttempt,
+    }));
+    await persistCreateImproveRun({
+      session: input.session,
+      turnId: input.turn.id,
+      run: result,
+      source: "server",
     });
-    await persistCreatePipelineSnapshot({ session: input.session, turnId: input.turn.id, request: input.request ?? snapshot.request, snapshot, source: "server" });
   }
 
-  async function planCreatePipelineForTurn(input: {
+  async function planCreateImproveForTurn(input: {
     session: Session;
     turn: Turn;
-    request: CreatePipelineRequest;
-    previousSnapshot?: CreatePipelineSnapshot | null;
+    run: CreateImproveRun;
     signal: AbortSignal;
-  }): Promise<CreatePipelineSnapshot> {
-    if (deps.planCreatePipeline) {
-      return deps.planCreatePipeline({
-        request: input.request,
-        previousSnapshot: input.previousSnapshot ?? null,
+  }): Promise<CreateImproveRun> {
+    if (deps.planCreateImprove) {
+      return deps.planCreateImprove({
+        run: input.run,
         modelRef: input.turn.modelRef,
-        requestId: `${input.turn.id}:create-planner`,
+        requestId: `${input.turn.id}:create-improve-planner`,
         signal: input.signal,
       });
     }
     const providerId = input.turn.modelRef?.providerId ?? input.session.provider;
-    const modelId = input.turn.modelRef?.modelId ?? (providerId === "openpond" ? DEFAULT_OPENPOND_CHAT_MODEL : null);
+    const modelId = input.turn.modelRef?.modelId
+      ?? (providerId === "openpond" ? DEFAULT_OPENPOND_CHAT_MODEL : null);
     if (providerId === "openpond") {
       const model = modelId || DEFAULT_OPENPOND_CHAT_MODEL;
       return runRecordedPlanner({
         ...input,
-        previousSnapshot: input.previousSnapshot ?? null,
         provider: providerId,
         model,
         modelRef: { providerId, modelId: model },
-        requestId: `${input.turn.id}:create-planner`,
+        requestId: `${input.turn.id}:create-improve-planner`,
         stream: async function* (messages) {
-          for await (const delta of streamOpenPondHostedChatTurn({ model, messages, requestId: `${input.turn.id}:create-planner`, signal: input.signal })) {
-            if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
+          for await (const delta of streamOpenPondHostedChatTurn({
+            model,
+            messages,
+            requestId: `${input.turn.id}:create-improve-planner`,
+            signal: input.signal,
+          })) {
+            if (delta.type === "text_delta" && delta.text) {
+              yield { text: delta.text, raw: delta.raw };
+            }
             if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
           }
         },
       });
     }
     if (isOpenAiCompatibleProviderId(providerId) && deps.streamLocalByokChatTurn) {
-      if (!modelId) throw new Error(`Create planner requires a selected model for provider ${providerId}.`);
+      if (!modelId) {
+        throw new Error(`Create/Improve planner requires a selected model for provider ${providerId}.`);
+      }
       return runRecordedPlanner({
         ...input,
-        previousSnapshot: input.previousSnapshot ?? null,
         provider: providerId,
         model: modelId,
         modelRef: { providerId, modelId },
-        requestId: `${input.turn.id}:create-planner`,
-        stream: (messages) => deps.streamLocalByokChatTurn!({ providerId, modelId, messages, requestId: `${input.turn.id}:create-planner`, signal: input.signal }),
+        requestId: `${input.turn.id}:create-improve-planner`,
+        stream: (messages) => deps.streamLocalByokChatTurn!({
+          providerId,
+          modelId,
+          messages,
+          requestId: `${input.turn.id}:create-improve-planner`,
+          signal: input.signal,
+        }),
       });
     }
-    throw new Error("Create planner requires OpenPond Chat or a configured OpenAI-compatible provider.");
+    throw new Error("Create/Improve planner requires OpenPond Chat or a configured OpenAI-compatible provider.");
   }
 
   async function runRecordedPlanner(input: {
     session: Session;
     turn: Turn;
-    request: CreatePipelineRequest;
-    previousSnapshot: CreatePipelineSnapshot | null;
+    run: CreateImproveRun;
     provider: ChatProvider;
     model: string;
     modelRef: ChatModelRef;
     requestId: string;
     signal: AbortSignal;
-    stream: Parameters<typeof runModelBackedCreatePipelinePlanner>[0]["stream"];
-  }): Promise<CreatePipelineSnapshot> {
-    const usageTurn = withCreatePipeline(input.turn, input.request, input.previousSnapshot);
+    stream: Parameters<typeof runModelBackedCreateImprovePlanner>[0]["stream"];
+  }): Promise<CreateImproveRun> {
+    const usageTurn = withCreateImproveRun(input.turn, input.run);
     const recorder = await startProviderRequestUsageRecorder({
       session: input.session,
       turn: usageTurn,
@@ -326,13 +415,12 @@ export function createCreatePipelineRuntime(deps: {
       model: input.model,
       requestId: input.requestId,
       requestOrdinal: 0,
-      requestKind: "create_pipeline_planner",
+      requestKind: "create_improve_planner",
       upsert: deps.upsertModelUsageRecord,
     });
     try {
-      const snapshot = await runModelBackedCreatePipelinePlanner({
-        request: input.request,
-        previousSnapshot: input.previousSnapshot,
+      const run = await runModelBackedCreateImprovePlanner({
+        run: input.run,
         modelRef: input.modelRef,
         requestId: input.requestId,
         signal: input.signal,
@@ -343,93 +431,117 @@ export function createCreatePipelineRuntime(deps: {
           }
         },
       });
-      usageTurn.createPipeline = snapshot;
+      usageTurn.createImproveRun = run;
       await recorder.complete();
-      return snapshot;
+      return run;
     } catch (error) {
-      await recorder.fail(error, input.signal.aborted || (error instanceof Error && error.name === "AbortError") ? "interrupted" : "failed");
+      await recorder.fail(
+        error,
+        input.signal.aborted || (error instanceof Error && error.name === "AbortError")
+          ? "interrupted"
+          : "failed",
+      );
       throw error;
     }
   }
 
-  async function persistCreatePipelinePlanningFailure(input: {
+  async function persistCreateImprovePlanningFailure(input: {
     session: Session;
     turn: Turn;
-    request: CreatePipelineRequest;
+    run: CreateImproveRun;
     message: string;
   }): Promise<Turn | null> {
-    const current = await deps.getTurn(input.turn.id);
-    const existing = current?.createPipeline ?? input.turn.createPipeline ?? null;
-    if (existing && existing.state !== "planning") return current;
-    return persistCreatePipelineSnapshot({
+    const current = await deps.getCreateImproveRun(input.run.id)
+      ?? input.turn.createImproveRun
+      ?? input.run;
+    if (current.state !== "planning") return deps.getTurn(input.turn.id);
+    return persistCreateImproveRun({
       session: input.session,
       turnId: input.turn.id,
-      request: input.request,
-      snapshot: createBlockedCreatePipelinePlannerSnapshot({
-        request: input.request,
-        previousSnapshot: existing,
-        modelRef: current?.modelRef ?? input.turn.modelRef,
-        reason: `Create planner failed: ${input.message}`,
+      run: createBlockedCreateImprovePlannerRun({
+        run: current,
+        modelRef: input.turn.modelRef,
+        reason: `Create/Improve planner failed: ${input.message}`,
       }),
       source: "server",
     });
   }
 
-  async function persistCreatePipelineSnapshot(input: {
+  async function persistCreateImproveRun(input: {
     session: Session;
     turnId: string;
-    request?: CreatePipelineRequest | null;
-    snapshot: CreatePipelineSnapshot;
+    run: CreateImproveRun;
     source: RuntimeEvent["source"];
   }): Promise<Turn> {
+    assertCreateImproveRunLinked({ actionLabel: "Persist Create/Improve run", run: input.run });
+    const run = input.run.scope.originTurnId
+      ? input.run
+      : nextCreateImproveRunRevision(input.run, {
+          scope: { ...input.run.scope, originTurnId: input.turnId },
+          updatedAt: new Date().toISOString(),
+        });
+    await deps.upsertCreateImproveRun(run);
     const result = await deps.updateTurn(input.turnId, (current) => {
       if (current.sessionId !== input.session.id) throw new Error("Turn not found");
-      return withCreatePipeline(current, input.request ?? current.createPipelineRequest ?? input.snapshot.request, input.snapshot);
+      return withCreateImproveRun(current, run);
     });
     if (!result) throw new Error("Turn not found");
-    await appendSnapshotEvent(input.session, result, input.snapshot, input.source);
-    await syncCreatePlanApproval({ session: input.session, turn: result, request: result.createPipelineRequest ?? input.request ?? input.snapshot.request, snapshot: input.snapshot });
+    await appendRunEvent(input.session, result, run, input.source);
+    await syncCreateImprovePlanApproval({ session: input.session, turn: result, run });
     return result;
   }
 
-  async function appendSnapshotEvent(session: Session, turn: Turn, snapshot: CreatePipelineSnapshot, source: RuntimeEvent["source"]): Promise<void> {
+  async function appendRunEvent(
+    session: Session,
+    turn: Turn,
+    run: CreateImproveRun,
+    source: RuntimeEvent["source"],
+  ): Promise<void> {
     await deps.appendRuntimeEvent(event({
       sessionId: session.id,
       turnId: turn.id,
-      name: "create_pipeline.updated",
+      name: "create_improve.updated",
       source,
       appId: session.appId,
-      status: createPipelineRuntimeEventStatus(snapshot),
-      output: snapshot.blockedReason ?? snapshot.plan?.summary ?? snapshot.state,
-      data: { createPipelineRequest: turn.createPipelineRequest, createPipeline: snapshot },
+      status: createImproveRuntimeEventStatus(run),
+      output: run.blockedReason ?? run.plan?.summary ?? run.state,
+      data: { createImproveRun: run },
     }));
   }
 
-  function withCreatePipeline(turn: Turn, request: CreatePipelineRequest | null, snapshot: CreatePipelineSnapshot | null): Turn {
-    return {
-      ...turn,
-      metadata: { ...(turn.metadata ?? {}), createPipelineRequest: request, createPipeline: snapshot },
-      createPipelineRequest: request,
-      createPipeline: snapshot,
-    };
+  function shouldExecuteTarget(run: CreateImproveRun): boolean {
+    return createImproveTargetAdapter(run.target).canExecute(run);
   }
 
-  function shouldApplyLocalCreatePipelineAsync(snapshot: CreatePipelineSnapshot): boolean {
-    return snapshot.state === "applying_source" && snapshot.plan?.status === "approved" && snapshot.request.adapter.kind === "local";
+  async function turnForRun(run: CreateImproveRun): Promise<Turn> {
+    const turnId = run.scope.originTurnId;
+    if (!turnId) throw new Error(`Create/Improve run ${run.id} is not linked to a turn.`);
+    const turn = await deps.getTurn(turnId);
+    if (!turn) throw new Error(`Create/Improve turn not found: ${turnId}`);
+    return turn;
   }
 
-  async function setTurnProviderTurnId(sessionId: string, turnId: string, providerTurnId: string): Promise<void> {
-    await deps.updateTurn(turnId, (current) => current.sessionId === sessionId ? { ...current, providerTurnId } : current);
+  async function setTurnProviderTurnId(
+    sessionId: string,
+    turnId: string,
+    providerTurnId: string,
+  ): Promise<void> {
+    await deps.updateTurn(
+      turnId,
+      (current) => current.sessionId === sessionId ? { ...current, providerTurnId } : current,
+    );
   }
 
   return {
+    applyCreateImproveActionPayload,
     assertNoLeakedApplyJobs: () => applyJobs.assertEmpty(),
-    persistCreatePipelinePlanningFailure,
-    persistCreatePipelineSnapshot,
-    planCreatePipelineForTurn,
-    queueLocalCreatePipelineApply,
-    resolveCreatePipelineApproval,
-    syncCreatePlanApproval,
-    updateTurnCreatePipeline,
+    getCreateImproveRun: deps.getCreateImproveRun,
+    listCreateImproveRuns: deps.listCreateImproveRuns,
+    persistCreateImprovePlanningFailure,
+    persistCreateImproveRun,
+    planCreateImproveForTurn,
+    queueCreateImproveExecution,
+    resolveCreateImproveApproval,
+    syncCreateImprovePlanApproval,
   };
 }

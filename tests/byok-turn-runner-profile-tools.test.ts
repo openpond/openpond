@@ -774,7 +774,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect(streamInputs).toHaveLength(2);
     expect(streamInputs[0].toolChoice).toBe("auto");
     expect(streamInputs[0].tools.map((tool: any) => tool.function.name)).toEqual([
-      "openpond_create_pipeline",
+      "openpond_create_improve",
       "openpond_goal_control",
       "resource_search",
       "resource_read",
@@ -876,7 +876,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
       expect(harness.sessions.get("session_1")?.cwd).toBe(repoPath);
       expect(harness.streamInputs).toHaveLength(2);
       expect(harness.streamInputs[0].tools.map((tool: any) => tool.function.name)).toEqual(
-        expect.arrayContaining(["openpond_create_pipeline", "openpond_profile_skill_goal"]),
+        expect.arrayContaining(["openpond_create_improve", "openpond_profile_skill_goal"]),
       );
       expect(harness.streamInputs[1].messages).toContainEqual(
         expect.objectContaining({
@@ -1392,10 +1392,10 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect(harness.streamInputs).toHaveLength(2);
     for (const streamInput of harness.streamInputs) {
       expect(streamInput.tools.map((tool: any) => tool.function.name)).toEqual(
-        expect.arrayContaining(["openpond_create_pipeline", "openpond_goal_control"]),
+        expect.arrayContaining(["openpond_create_improve", "openpond_goal_control"]),
       );
     }
-    expect(harness.events.some((event) => event.name === "create_pipeline.updated")).toBe(false);
+    expect(harness.events.some((event) => event.name === "create_improve.updated")).toBe(false);
     expect(harness.events.some(
       (event) => event.name === "diagnostic" && (event.data as any)?.kind === "profile_skill_command",
     )).toBe(false);

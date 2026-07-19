@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
+  CreateImproveRunActionSchema,
+  CreateImproveRunSchema,
 } from "./create-pipeline.js";
 import {
   DEFAULT_CHAT_PROVIDER,
@@ -18,7 +18,7 @@ import {
   WorkspaceEditorPreferencesSchema,
   WorkspaceKindSchema,
 } from "./settings.js";
-import type { Session } from "./sessions.js";
+import { SystemSessionKindSchema, type Session } from "./sessions.js";
 import {
   SubagentDelegationModeSchema,
   SubagentPreferencesSchema,
@@ -115,7 +115,7 @@ export const CreateSessionRequestSchema = z.object({
   provider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   modelRef: ChatModelRefSchema.optional(),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
-  systemKind: z.enum(["openpond.insights"]).nullable().optional(),
+  systemKind: SystemSessionKindSchema.nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   parentSessionId: z.string().trim().min(1).max(200).nullable().optional(),
   parentTurnId: z.string().trim().min(1).max(200).nullable().optional(),
@@ -182,8 +182,7 @@ export const CreateCloudWorkItemRequestSchema = z.object({
     .enum(["queue_cloud", "cloud_workspace", "cloud_home"])
     .optional()
     .nullable(),
-  createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
-  createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  createImproveRun: CreateImproveRunSchema.optional().nullable(),
   usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
 });
 
@@ -192,8 +191,7 @@ export type CreateCloudWorkItemRequest = z.infer<typeof CreateCloudWorkItemReque
 export const SendCloudWorkItemMessageRequestSchema = z.object({
   teamId: z.string().trim().min(1),
   message: z.string().trim().min(1).max(200_000),
-  createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
-  createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  createImproveRun: CreateImproveRunSchema.optional().nullable(),
   usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
 });
 
@@ -244,8 +242,7 @@ export const CloudWorkItemBackgroundRequestSchema = z.object({
     })
     .optional()
     .nullable(),
-  createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
-  createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  createImproveRun: CreateImproveRunSchema.optional().nullable(),
   usageAttribution: UsageRequestAttributionSchema.optional().nullable(),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
@@ -312,8 +309,7 @@ export const SendTurnRequestSchema = z.object({
   mentionedConnectedApps: z.array(MentionedConnectedAppRefSchema).max(8).optional(),
   openPondActionCatalog: z.array(OpenPondActionCatalogEntrySchema).max(100).optional(),
   attachments: z.array(ChatAttachmentSchema).max(CHAT_ATTACHMENT_LIMITS.maxAttachments).optional(),
-  createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
-  createPipeline: CreatePipelineSnapshotSchema.optional().nullable(),
+  createImproveRun: CreateImproveRunSchema.optional().nullable(),
   approvalPolicy: z.enum(["untrusted", "on-failure", "on-request", "never"]).default("on-request"),
   sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).default("workspace-write"),
   codexPermissionMode: CodexPermissionModeSchema.default("default"),
@@ -332,13 +328,10 @@ export type RecordPreflightTurnFailureRequest = z.infer<
   typeof RecordPreflightTurnFailureRequestSchema
 >;
 
-export const UpdateTurnCreatePipelineRequestSchema = z.object({
-  createPipelineRequest: CreatePipelineRequestSchema.optional().nullable(),
-  createPipeline: CreatePipelineSnapshotSchema,
-});
+export const ApplyCreateImproveRunActionRequestSchema = CreateImproveRunActionSchema;
 
-export type UpdateTurnCreatePipelineRequest = z.infer<
-  typeof UpdateTurnCreatePipelineRequestSchema
+export type ApplyCreateImproveRunActionRequest = z.infer<
+  typeof ApplyCreateImproveRunActionRequestSchema
 >;
 
 export const CompactSessionRequestSchema = z.object({

@@ -1,4 +1,5 @@
 import {
+  lazy,
   Suspense,
   useEffect,
   useCallback,
@@ -40,7 +41,12 @@ import type {
   TerminalScope,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
-import { normalizePreferences, type AppView, type ChatMessage, type LabsTab } from "../../lib/app-models";
+import {
+  modelRefForTurn,
+  normalizePreferences,
+  type AppView,
+  type ChatMessage,
+} from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
@@ -50,8 +56,8 @@ import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import { type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
 import { DraftBoundComposer } from "../chat/DraftBoundComposer";
 import { TrainingModelChatHandoffBar } from "../chat/TrainingModelChatHandoffBar";
-import type { ComposerCreatePipelineRuntime } from "../chat/ComposerCreatePipelineStrip";
-import type { CreatePipelineReviewActionInput } from "../chat/create-pipeline-types";
+import type { ComposerCreateImproveRuntime } from "../chat/ComposerCreateImproveStrip";
+import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 import type { RightPanelMode, ShowAppToast } from "../../app/app-state";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
@@ -78,8 +84,6 @@ import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
-import { TrainingDraftPanel } from "../training/TrainingDraftPanel";
-import { TrainingCreationPanel, TrainingStatusReceipt } from "../training/TrainingCreationPanel";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/TrainingView";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
@@ -93,6 +97,8 @@ import type {
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
 import type { CommunityViewProps } from "../community/CommunityView";
 import type { useTraining } from "../../hooks/useTraining";
+import type { LabDetailLocation } from "../labs/lab-detail-navigation";
+import { useLabCandidateReview } from "../../hooks/useLabCandidateReview";
 import {
   CHAT_HISTORY_TOP_THRESHOLD_PX,
   CHAT_USER_MESSAGE_SCROLL_OFFSET_PX,
@@ -109,12 +115,13 @@ import {
   nextUserMessageTarget,
   promptForAppSlashCommand,
   sandboxIdFromWorkspaceName,
-  shouldRunCreatePipelineCommandLocally,
+  shouldRunCreateImproveCommandLocally,
   shouldSubmitComposerSlashCommandToChat,
   usageAttributionForComposerSlashCommand,
   userMessageNavigationState,
   type UserMessageNavigationState,
 } from "./main-pane-helpers";
+
 import {
   AppsView,
   BrowserSidebar,
@@ -128,10 +135,24 @@ import {
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
 
+const TrainingDraftPanel = lazy(() =>
+  import("../training/TrainingDraftPanel").then((module) => ({
+    default: module.TrainingDraftPanel,
+  })),
+);
+const TrainingCreationPanel = lazy(() =>
+  import("../training/TrainingCreationPanel").then((module) => ({
+    default: module.TrainingCreationPanel,
+  })),
+);
+const TrainingStatusReceipt = lazy(() =>
+  import("../training/TrainingCreationPanel").then((module) => ({
+    default: module.TrainingStatusReceipt,
+  })),
+);
+
 type MainPaneProps = {
   view: AppView;
-  labsTab: LabsTab;
-  setLabsTab: (tab: LabsTab) => void;
   teamChat: TeamChatViewProps;
   community: CommunityViewProps;
   bootstrap: BootstrapPayload | null;
@@ -143,6 +164,9 @@ type MainPaneProps = {
   selectedSessionId: string | null;
   composerDraftStore: ComposerDraftStore;
   mainComposerFocusRequestId: number;
+  labCloseDetailRequestId: number;
+  labCloseDetailKind: LabDetailLocation["kind"] | null;
+  labSuggestionsRequestId: number;
   steerAutoDispatchBlocked: boolean;
   steerAutoDispatchReady: boolean;
   mentionApps: OpenPondApp[];
@@ -237,15 +261,33 @@ type MainPaneProps = {
     approvalId: string,
     decision: ResolveApprovalRequest["decision"],
   ) => Promise<void>;
-  answerCreatePipelineQuestionTurn: (
-    input: CreatePipelineReviewActionInput,
+  answerCreateImproveQuestion: (
+    input: CreateImproveReviewActionInput,
     questionId: string,
     answerValue: string,
   ) => Promise<void>;
-  approveCreatePipelineTurn: (input: CreatePipelineReviewActionInput) => Promise<void>;
-  cancelCreatePipelineTurn: (input: CreatePipelineReviewActionInput) => Promise<void>;
-  reviseCreatePipelineTurn: (
-    input: CreatePipelineReviewActionInput,
+  approveCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  applyCreateImproveCandidate: (
+    input: CreateImproveReviewActionInput,
+    candidateId: string,
+  ) => Promise<void>;
+  cancelCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  openCreateImprovePullRequest: (
+    input: CreateImproveReviewActionInput,
+    candidateId: string,
+  ) => Promise<void>;
+  pauseCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  reconcileCreateImprovePullRequest: (
+    input: CreateImproveReviewActionInput,
+    candidateId: string,
+  ) => Promise<void>;
+  rejectCreateImproveCandidate: (
+    input: CreateImproveReviewActionInput,
+    candidateId: string,
+  ) => Promise<void>;
+  resumeCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  reviseCreateImproveRun: (
+    input: CreateImproveReviewActionInput,
     revision: string,
   ) => Promise<void>;
   setMentionedAppId: (appId: string | null) => void;
@@ -267,6 +309,9 @@ type MainPaneProps = {
   onShowFilesPanel: () => void;
   onShowRightChatPanel: () => void;
   onAddRightChat: () => void;
+  onOpenRightChatForSession: (sessionId: string) => void;
+  onOpenLabSuggestions: () => void;
+  onLabDetailOpenChange: (location: LabDetailLocation | null) => void;
   onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
   onCloseRightChatPanel: (panelId: string) => void;
   onRightChatModelChange: (panelId: string, model: string) => void;
@@ -295,8 +340,6 @@ type MainPaneProps = {
 
 export function MainPane({
   view,
-  labsTab,
-  setLabsTab,
   teamChat,
   community,
   bootstrap,
@@ -308,6 +351,9 @@ export function MainPane({
   selectedSessionId,
   composerDraftStore,
   mainComposerFocusRequestId,
+  labCloseDetailRequestId,
+  labCloseDetailKind,
+  labSuggestionsRequestId,
   steerAutoDispatchBlocked,
   steerAutoDispatchReady,
   mentionApps,
@@ -399,10 +445,16 @@ export function MainPane({
   changeOpenPondCommandAccessMode,
   changeSubagentDelegationMode,
   resolveApproval,
-  answerCreatePipelineQuestionTurn,
-  approveCreatePipelineTurn,
-  cancelCreatePipelineTurn,
-  reviseCreatePipelineTurn,
+  answerCreateImproveQuestion,
+  approveCreateImproveRun,
+  applyCreateImproveCandidate,
+  cancelCreateImproveRun,
+  openCreateImprovePullRequest,
+  pauseCreateImproveRun,
+  reconcileCreateImprovePullRequest,
+  rejectCreateImproveCandidate,
+  resumeCreateImproveRun,
+  reviseCreateImproveRun,
   setMentionedAppId,
   showToast,
   sendPrompt,
@@ -416,6 +468,9 @@ export function MainPane({
   onShowFilesPanel,
   onShowRightChatPanel,
   onAddRightChat,
+  onOpenRightChatForSession,
+  onOpenLabSuggestions,
+  onLabDetailOpenChange,
   onTerminalTabsChange,
   onCloseRightChatPanel,
   onRightChatModelChange,
@@ -457,12 +512,151 @@ export function MainPane({
   const [trainingLaunchRequest, setTrainingLaunchRequest] = useState<TrainingLaunchRequest | null>(null);
   const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<string | null>(null);
   const [selectedTrainingJobId, setSelectedTrainingJobId] = useState<string | null>(null);
+  const [requestedComposerAction, setRequestedComposerAction] = useState<{
+    actionId: string;
+    requestId: number;
+  } | null>(null);
   const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
+  const labCandidateReview = useLabCandidateReview(connection);
+  const handleLabCandidateReviewChange = useCallback((input: {
+    run: CreateImproveReviewActionInput["run"];
+    candidate: CreateImproveReviewActionInput["run"]["candidates"][number];
+    fileRootPath: string | null;
+    initialPath: string | null;
+  } | null) => {
+    if (!input) {
+      labCandidateReview.activate(null);
+      return;
+    }
+    labCandidateReview.activate({
+      runId: input.run.id,
+      candidateId: input.candidate.id,
+      title: input.run.objective,
+      fileRootPath: input.fileRootPath,
+      initialPath: input.initialPath,
+    });
+  }, [labCandidateReview.activate]);
+  const handleOpenLabCandidateFiles = useCallback(() => {
+    if (labCandidateReview.selection?.initialPath) {
+      labCandidateReview.openFile(labCandidateReview.selection.initialPath);
+    }
+    onShowDiffPanel();
+  }, [labCandidateReview.openFile, labCandidateReview.selection?.initialPath, onShowDiffPanel]);
   const appPreferences = useMemo(
     () => normalizePreferences(bootstrap?.preferences),
     [bootstrap?.preferences],
   );
   const trainingPreferences = appPreferences.training;
+  const runAgentChangeFromLab = useCallback(async (input: {
+    agentId?: string;
+    agentName?: string | null;
+    objective: string;
+    operation: "create" | "improve";
+    authoringRunId?: string | null;
+  }) => {
+    if (!connection || !bootstrap) throw new Error("OpenPond is still connecting.");
+    const profile = bootstrap.profile;
+    if (profile.mode !== "local" || !profile.repoPath) {
+      throw new Error("A local Git-backed Profile is required to change an Agent.");
+    }
+    const modelRef = modelRefForTurn(
+      activeProvider,
+      activeModel,
+      bootstrap.providers,
+    );
+    if (!modelRef) throw new Error("Choose a model before changing an Agent.");
+    const createImproveRequestPromise = import("../../lib/create-pipeline-request");
+    const session = await api.createSession(connection, {
+      provider: modelRef.providerId,
+      modelRef,
+      systemKind: "openpond.lab",
+      hiddenFromDefaultSidebar: true,
+      title: `${input.operation === "create" ? "New" : "Improve"} Agent · ${input.objective.slice(0, 80)}`,
+      cwd: profile.repoPath,
+      metadata: {
+        source: input.operation === "create" ? "lab_agent_create" : "lab_agent_improve",
+        profileId: profile.activeProfile ?? "default",
+        targetAgentId: input.agentId ?? null,
+      },
+    });
+    const authoringRun = input.authoringRunId
+      ? await api.getCreateImproveRun(connection, input.authoringRunId)
+      : null;
+    const {
+      buildLabAgentCreateImproveRun,
+      buildLabAgentImproveRun,
+      continueLabAgentRunFromTaskset,
+    } = await createImproveRequestPromise;
+    const run = authoringRun
+      ? continueLabAgentRunFromTaskset({
+          authoringRun,
+          agentId: input.agentId,
+          agentName: input.agentName,
+          objective: input.objective,
+          payload: bootstrap,
+          session,
+          operation: input.operation,
+        })
+      : input.operation === "create"
+        ? buildLabAgentCreateImproveRun({
+          objective: input.objective,
+          payload: bootstrap,
+          session,
+        })
+        : buildLabAgentImproveRun({
+            agentId: input.agentId ?? "",
+            agentName: input.agentName,
+            objective: input.objective,
+            payload: bootstrap,
+            session,
+          });
+    if (!run) throw new Error(
+      input.operation === "create"
+        ? "Describe what the Agent should do."
+        : "Describe what the Agent could do better.",
+    );
+    const turn = await api.sendTurn(connection, session.id, {
+      prompt: input.objective,
+      model: modelRef.modelId,
+      modelRef,
+      createImproveRun: run,
+      approvalPolicy: "never",
+      sandbox: "workspace-write",
+      codexPermissionMode: modelRef.providerId === "codex" ? codexPermissionMode : "default",
+      codexReasoningEffort,
+    });
+    if (turn.status === "failed") {
+      throw new Error(turn.error ?? "OpenPond could not start the Agent improvement.");
+    }
+    const planned = turn.createImproveRun
+      ?? await api.getCreateImproveRun(connection, run.id);
+    if (!planned) throw new Error("The Agent plan was not created.");
+    onPayload(await api.bootstrap(connection));
+    return planned;
+  }, [
+    activeModel,
+    activeProvider,
+    bootstrap,
+    codexPermissionMode,
+    codexReasoningEffort,
+    connection,
+    onPayload,
+  ]);
+  const createAgentFromLab = useCallback(
+    (objective: string, authoringRunId?: string | null) => runAgentChangeFromLab({ objective, operation: "create", authoringRunId }),
+    [runAgentChangeFromLab],
+  );
+  const improveAgentFromLab = useCallback(
+    (agentId: string, objective: string, agentName?: string | null, authoringRunId?: string | null) =>
+      runAgentChangeFromLab({
+        agentId,
+        agentName,
+        objective,
+        operation: "improve",
+        authoringRunId,
+      }),
+    [runAgentChangeFromLab],
+  );
   const updateInsightsEnabled = useCallback(async (enabled: boolean) => {
     if (!connection || !bootstrap || insightsPreferenceSaving) return;
     setInsightsPreferenceSaving(true);
@@ -483,11 +677,11 @@ export function MainPane({
       ? selectedTrainingTasksetId
       : tasksets[0]?.id ?? null;
   }, [selectedTrainingTasksetId, training.payload?.tasksets]);
-  const trainingTasksetRootPath = view === "labs" && (labsTab === "models" || labsTab === "evals") && activeTrainingTasksetId
+  const trainingTasksetRootPath = view === "labs" && activeTrainingTasksetId
     ? `profiles/${bootstrap?.profile.activeProfile ?? "default"}/tasksets/${activeTrainingTasksetId}`
     : null;
   const trainingSidebarSummary = useMemo<TrainingSidebarSummary | null>(() => {
-    if (view !== "labs" || labsTab !== "models" || !activeTrainingTasksetId || !training.payload) return null;
+    if (view !== "labs" || !activeTrainingTasksetId || !training.payload) return null;
     const taskset = training.payload.tasksets.find((item) => item.id === activeTrainingTasksetId);
     if (!taskset) return null;
     const plans = training.payload.plans.filter((plan) => plan.tasksetId === taskset.id);
@@ -498,7 +692,7 @@ export function MainPane({
     const lineage = job ? training.payload.models.find((item) => item.jobId === job.id) ?? null : null;
     const artifacts = job ? training.payload.artifacts.filter((item) => item.jobId === job.id) : [];
     return { taskset, plan, job, lineage, artifacts };
-  }, [activeTrainingTasksetId, labsTab, selectedTrainingJobId, training.payload, view]);
+  }, [activeTrainingTasksetId, selectedTrainingJobId, training.payload, view]);
   const selectedTrainingCreation = useMemo(
     () => trainingCreationForSession(training.payload, selectedSessionId),
     [selectedSessionId, training.payload],
@@ -509,6 +703,7 @@ export function MainPane({
   );
   const latestCreateRuntime = useMemo(() => latestCreatePipelineRuntime(chatMessages), [chatMessages]);
   const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime) || Boolean(subagentRuntime);
+  const showLabCandidateDiffPanel = view === "labs" && Boolean(labCandidateReview.selection);
   const showCloudDiffPanel =
     view === "cloud" &&
     diffPanelOpen &&
@@ -562,12 +757,15 @@ export function MainPane({
     setRightSidebarSourceOverride(null);
   }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, showCloudDiffPanel, workspaceTarget.value]);
   const showDiffPanel =
-    (showLocalDiffPanel || showCloudDiffPanel || showChatSandboxDiffPanel) &&
+    (showLabCandidateDiffPanel || showLocalDiffPanel || showCloudDiffPanel || showChatSandboxDiffPanel) &&
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
   const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
-    view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length > 0;
+    (view === "chat" || view === "labs") &&
+    diffPanelOpen &&
+    rightPanelMode === "chat" &&
+    rightChatPanels.length > 0;
   const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
@@ -617,25 +815,45 @@ export function MainPane({
             handoff={trainingChatHandoff}
             onDismiss={onTrainingChatHandoffDismiss}
             onSelectTask={onTrainingChatTaskSelect}
+            servingSession={(training.payload?.servingSessions ?? [])
+              .filter((session) =>
+                session.modelArtifactLineageId === trainingChatHandoff.model.modelId)
+              .sort((left, right) =>
+                right.updatedAt.localeCompare(left.updatedAt))[0] ?? null}
+            onStopServing={(sessionId) => {
+              void training.actions.stopModelServing(sessionId);
+            }}
           />
         )
       : null;
-  const createPipelineRuntime = useMemo<ComposerCreatePipelineRuntime | null>(() => {
+  const createImproveRuntime = useMemo<ComposerCreateImproveRuntime | null>(() => {
     return latestCreateRuntime
       ? {
           ...latestCreateRuntime,
-          onAnswerQuestion: answerCreatePipelineQuestionTurn,
-          onApprove: approveCreatePipelineTurn,
-          onCancel: cancelCreatePipelineTurn,
-          onRevise: reviseCreatePipelineTurn,
+          onAnswerQuestion: answerCreateImproveQuestion,
+          onApprove: approveCreateImproveRun,
+          onApplyCandidate: applyCreateImproveCandidate,
+          onCancel: cancelCreateImproveRun,
+          onOpenPullRequest: openCreateImprovePullRequest,
+          onPause: pauseCreateImproveRun,
+          onReconcilePullRequest: reconcileCreateImprovePullRequest,
+          onRejectCandidate: rejectCreateImproveCandidate,
+          onResume: resumeCreateImproveRun,
+          onRevise: reviseCreateImproveRun,
         }
       : null;
   }, [
-    answerCreatePipelineQuestionTurn,
-    approveCreatePipelineTurn,
-    cancelCreatePipelineTurn,
+    answerCreateImproveQuestion,
+    approveCreateImproveRun,
+    applyCreateImproveCandidate,
+    cancelCreateImproveRun,
     latestCreateRuntime,
-    reviseCreatePipelineTurn,
+    openCreateImprovePullRequest,
+    pauseCreateImproveRun,
+    reconcileCreateImprovePullRequest,
+    rejectCreateImproveCandidate,
+    resumeCreateImproveRun,
+    reviseCreateImproveRun,
   ]);
   const viewClass =
     view === "team"
@@ -683,13 +901,11 @@ export function MainPane({
               if (sessionId) {
                 onOpenInsightsSession(sessionId);
               } else {
-                setLabsTab("signals");
-                setView("labs");
+                onOpenLabSuggestions();
               }
               return true;
             }
-            setLabsTab("signals");
-            setView("labs");
+            onOpenLabSuggestions();
             const payload = await onRunInsightsScan({ trigger: "slash_command" });
             if (payload && typeof payload === "object" && "summary" in payload) {
               const summary = payload.summary as { activeCount?: number; highestActiveSeverity?: string | null };
@@ -707,13 +923,11 @@ export function MainPane({
             if (!selectedSessionId) {
               clearMainPrompt();
               setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [] });
-              setLabsTab("models");
               setView("labs");
               return true;
             }
             clearMainPrompt();
             setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [selectedSessionId] });
-            setLabsTab("models");
             setView("labs");
             return true;
           }
@@ -740,7 +954,7 @@ export function MainPane({
           }
           if (
             shouldSubmitComposerSlashCommandToChat(command) ||
-            shouldRunCreatePipelineCommandLocally({
+            shouldRunCreateImproveCommandLocally({
               command,
               profile: bootstrap?.profile,
               activeWorkspaceKind,
@@ -781,13 +995,13 @@ export function MainPane({
       bootstrap?.profile,
       connectedAppMentions,
       onAskInsightsQuestion,
+      onOpenLabSuggestions,
       onOpenInsightsSession,
       onCreateCloudWork,
       onRunInsightsScan,
       composerDraftStore,
       sendPrompt,
       selectedSessionId,
-      setLabsTab,
       setMentionedAppId,
       setView,
       showToast,
@@ -1221,28 +1435,37 @@ export function MainPane({
     [cancelScheduledChatBottomScroll, cancelSmoothChatScroll],
   );
   const workspaceStatusLoading = workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
+  const candidateSidebarId = labCandidateReview.selection
+    ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
+    : null;
   const diffPanel = showDiffPanel ? (
     <WorkspaceDiffPanel
-      appId={rightSidebarUsesSandbox ? null : activeWorkspaceAppId}
-      workspaceId={rightSidebarUsesSandbox ? rightSidebarSandboxId : activeWorkspaceAppId}
-      workspaceKind={rightSidebarUsesSandbox ? null : "local_project"}
+      appId={showLabCandidateDiffPanel ? candidateSidebarId : rightSidebarUsesSandbox ? null : activeWorkspaceAppId}
+      workspaceId={showLabCandidateDiffPanel ? candidateSidebarId : rightSidebarUsesSandbox ? rightSidebarSandboxId : activeWorkspaceAppId}
+      workspaceKind={showLabCandidateDiffPanel ? "local_project" : rightSidebarUsesSandbox ? null : "local_project"}
       connection={connection}
       runtimeEvents={runtimeEvents}
-      diff={rightSidebarUsesSandbox ? null : workspaceDiff}
-      fileRootPath={rightSidebarUsesSandbox ? null : trainingTasksetRootPath}
+      diff={showLabCandidateDiffPanel ? labCandidateReview.diff : rightSidebarUsesSandbox ? null : workspaceDiff}
+      fileRootPath={showLabCandidateDiffPanel
+        ? labCandidateReview.selection?.fileRootPath ?? null
+        : rightSidebarUsesSandbox
+          ? null
+          : trainingTasksetRootPath}
+      filesWithPreview={showLabCandidateDiffPanel}
       editorPreferences={bootstrap?.preferences.editor ?? null}
-      loading={rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
-      openFileRequest={openDiffFileRequest}
+      loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
+      openFileRequest={showLabCandidateDiffPanel ? labCandidateReview.openFileRequest : openDiffFileRequest}
+      readOnly={showLabCandidateDiffPanel}
       sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
-      sourceSwitcher={rightSidebarSourceSwitcher}
+      sourceSwitcher={showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher}
       tabRequest={rightPanelTabRequest}
       viewState={workspaceDiffPanelViewState}
-      workspaceName={rightSidebarUsesSandbox ? selectedCloudWorkItem?.title ?? "Sandbox" : workspaceName}
-      workspaceInitialized={rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
-      workspaceError={rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
+      workspaceName={showLabCandidateDiffPanel ? labCandidateReview.selection?.title ?? "Change" : rightSidebarUsesSandbox ? selectedCloudWorkItem?.title ?? "Sandbox" : workspaceName}
+      workspaceInitialized={showLabCandidateDiffPanel ? true : rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
+      workspaceError={showLabCandidateDiffPanel ? labCandidateReview.error : rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
-      onRefresh={(options) => void refreshWorkspaceDiff(options)}
+      onRefresh={(options) => void (showLabCandidateDiffPanel ? labCandidateReview.refresh(options) : refreshWorkspaceDiff(options))}
       onToggleExpanded={onToggleDiffPanelExpanded}
       onOpenBrowser={onShowBrowserPanel}
       onOpenBrowserUrl={handleOpenBrowserLink}
@@ -1252,13 +1475,7 @@ export function MainPane({
       onSelectSideChat={() => onShowRightChatPanel()}
       goalDetails={{
         active: rightPanelMode === "goal",
-        createRuntime: createPipelineRuntime
-          ? {
-              request: createPipelineRuntime.request,
-              snapshot: createPipelineRuntime.snapshot,
-              turnId: createPipelineRuntime.turnId,
-            }
-          : null,
+        createRuntime: createImproveRuntime,
         goalRuntime,
         subagentRuntime,
       }}
@@ -1338,7 +1555,7 @@ export function MainPane({
     <RightSidebarHomePanel
       expanded={diffPanelExpanded}
       terminalOpen={terminalOpen}
-      sideChatAvailable={view === "chat"}
+      sideChatAvailable={view === "chat" || view === "labs"}
       onOpenBrowser={onShowBrowserPanel}
       onOpenFiles={onShowFilesPanel}
       onOpenReview={onShowDiffPanel}
@@ -1351,14 +1568,16 @@ export function MainPane({
     />
   ) : null;
   const trainingDraftPanel = showTrainingDraftPanel ? (
-    <TrainingDraftPanel
-      training={training}
-      sessionId={selectedSessionId}
-      expanded={diffPanelExpanded}
-      onOpenTraining={() => { setLabsTab("models"); setView("labs"); }}
-      onResizeStart={onDiffPanelResizeStart}
-      onToggleExpanded={onToggleDiffPanelExpanded}
-    />
+    <Suspense fallback={null}>
+      <TrainingDraftPanel
+        training={training}
+        sessionId={selectedSessionId}
+        expanded={diffPanelExpanded}
+        onOpenTraining={() => setView("labs")}
+        onResizeStart={onDiffPanelResizeStart}
+        onToggleExpanded={onToggleDiffPanelExpanded}
+      />
+    </Suspense>
   ) : null;
   const rightPanel =
     teamAgentConversationPanel ??
@@ -1443,7 +1662,7 @@ export function MainPane({
             onOpenApps={() => setView("apps")}
             onOpenChat={() => setView("chat")}
             onOpenCloud={() => setView("cloud")}
-            onOpenProfile={() => { setLabsTab("profile"); setView("labs"); }}
+            onOpenProfile={() => setView("labs")}
           />
         </Suspense>
       ) : view === "labs" ? (
@@ -1453,12 +1672,39 @@ export function MainPane({
           <>
             <Suspense fallback={null}>
               <LabsRoute
-                activeTab={labsTab}
+                closeDetailRequestId={labCloseDetailRequestId}
+                closeDetailKind={labCloseDetailKind}
+                openSuggestionsRequestId={labSuggestionsRequestId}
                 onNewModel={() => {
-                  setLabsTab("models");
                   setTrainingLaunchRequest({ id: Date.now(), objective: null, initialSessionIds: [] });
                 }}
-                onTabChange={setLabsTab}
+                onUseAgent={(actionId) => {
+                  composerDraftStore.set("");
+                  setRequestedComposerAction({ actionId, requestId: Date.now() });
+                  setMentionedAppId(null);
+                  setView("chat");
+                }}
+                onCreateAgent={createAgentFromLab}
+                onImproveAgent={improveAgentFromLab}
+                onDetailOpenChange={onLabDetailOpenChange}
+                onOpenRunConversation={onOpenRightChatForSession}
+                onAnswerQuestion={answerCreateImproveQuestion}
+                onApplyCandidate={applyCreateImproveCandidate}
+                onApprove={approveCreateImproveRun}
+                onCancel={cancelCreateImproveRun}
+                candidateReview={{
+                  diff: labCandidateReview.diff,
+                  error: labCandidateReview.error,
+                  loading: labCandidateReview.loading,
+                }}
+                onCandidateReviewChange={handleLabCandidateReviewChange}
+                onOpenPullRequest={openCreateImprovePullRequest}
+                onOpenCandidateFiles={handleOpenLabCandidateFiles}
+                onPause={pauseCreateImproveRun}
+                onReconcilePullRequest={reconcileCreateImprovePullRequest}
+                onRejectCandidate={rejectCreateImproveCandidate}
+                onResume={resumeCreateImproveRun}
+                onRevise={reviseCreateImproveRun}
                 profileView={{
                   payload: bootstrap,
                   connection,
@@ -1557,16 +1803,22 @@ export function MainPane({
                   />
                 ),
               )}
-              {selectedTrainingCreation ? <TrainingStatusReceipt creation={selectedTrainingCreation} /> : null}
+              {selectedTrainingCreation ? (
+                <Suspense fallback={null}>
+                  <TrainingStatusReceipt creation={selectedTrainingCreation} />
+                </Suspense>
+              ) : null}
             </section>
             <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`} ref={composerStackRef}>
               {selectedTrainingCreation ? (
-                <TrainingCreationPanel
-                  compact
-                  creation={selectedTrainingCreation}
-                  training={training}
-                  onOpenTraining={() => { setLabsTab("models"); setView("labs"); }}
-                />
+                <Suspense fallback={null}>
+                  <TrainingCreationPanel
+                    compact
+                    creation={selectedTrainingCreation}
+                    training={training}
+                    onOpenTraining={() => setView("labs")}
+                  />
+                </Suspense>
               ) : null}
               {trainingChatHandoffBar}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
@@ -1618,7 +1870,7 @@ export function MainPane({
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
                 subagentRuntime={subagentRuntime}
-                createPipelineRuntime={createPipelineRuntime}
+                createImproveRuntime={createImproveRuntime}
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
@@ -1631,6 +1883,7 @@ export function MainPane({
                 model={activeModel}
                 projectTarget={projectTarget}
                 actionCatalog={actionCatalog}
+                requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
@@ -1686,7 +1939,7 @@ export function MainPane({
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
                 subagentRuntime={subagentRuntime}
-                createPipelineRuntime={createPipelineRuntime}
+                createImproveRuntime={createImproveRuntime}
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
@@ -1698,6 +1951,7 @@ export function MainPane({
                 model={activeModel}
                 projectTarget={projectTarget}
                 actionCatalog={actionCatalog}
+                requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}

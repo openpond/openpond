@@ -12,7 +12,7 @@ describe("Task authoring provenance", () => {
     await seedConversation(store, { sessionId: "session_training", turnId: "turn_training", title: "Approved training behavior" });
     await seedConversation(store, { sessionId: "session_evaluation", turnId: "turn_evaluation", title: "Independent evaluation behavior" });
     const skill = "# versioned authoring skill";
-    const service = createTaskCreatorService({ store, authoringSkillHash: contentHash(skill), loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource, git: { head: "abc123" } } as any) });
+    const service = createTaskCreatorService({ store, tasksetRootDir: path.join(directory, "training", "tasksets"), authoringSkillHash: contentHash(skill), loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource, git: { head: "abc123" } } as any) });
     const train = await service.addSessionSource({ profileId: "default", sessionId: "session_training" });
     const evaluation = await service.addSessionSource({ profileId: "default", sessionId: "session_evaluation" });
     const creation = await service.start({ profileId: "default", sourceIds: [train.id, evaluation.id], surface: "session_menu", mode: "defaults", objective: "Create task." });

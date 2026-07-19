@@ -61,9 +61,11 @@ export function SidebarTeamSection({
             onClick={() => setTeamExpanded((value) => !value)}
           >
             <span className="team-sidebar-avatar fallback">{initials(teamLabel)}</span>
-            <span className="team-sidebar-label">{teamLabel}</span>
-            <span className="team-sidebar-group-chevron" aria-hidden="true">
-              {teamExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <span className="team-sidebar-group-title">
+              <span className="team-sidebar-label">{teamLabel}</span>
+              <span className="team-sidebar-group-chevron" aria-hidden="true">
+                {teamExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              </span>
             </span>
           </button>
           {teamExpanded ? (

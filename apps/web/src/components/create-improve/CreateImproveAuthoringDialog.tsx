@@ -4,7 +4,7 @@ import type {
   ChatModelRef,
   ChatProvider,
   CodexReasoningEffort,
-  CrossSystemFrontierBaselineRun,
+  CreateImproveRun,
   LocalProject,
   ProviderSettings,
   Session,
@@ -12,59 +12,94 @@ import type {
   TaskCreationSnapshot,
   TaskMinerConfig,
   TaskMinerRun,
+  Taskset,
   TrainingChatSearchEntry,
   TrainingSourceRef,
 } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
 import { normalizeChatModel } from "../../lib/app-models";
 import { ArrowLeft, Loader2, X } from "../icons";
-import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "./training-flow";
-import { TrainingAutomaticCandidatesStep } from "./TrainingAutomaticCandidatesStep";
-import { TrainingAutomaticScopeStep } from "./TrainingAutomaticScopeStep";
-import { TrainingManualGoalStep } from "./TrainingManualGoalStep";
-import { TrainingRunReviewStep } from "./TrainingRunReviewStep";
-import { TrainingSourceStep } from "./TrainingSourceStep";
-import { TrainingStartModeStep } from "./TrainingStartModeStep";
+import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "../training/training-flow";
+import { TrainingAutomaticCandidatesStep } from "../training/TrainingAutomaticCandidatesStep";
+import { TrainingAutomaticScopeStep } from "../training/TrainingAutomaticScopeStep";
+import { TrainingBaseModelStep } from "../training/TrainingBaseModelStep";
+import { TrainingDatasetStep } from "../training/TrainingDatasetStep";
+import { TrainingRunReviewStep } from "../training/TrainingRunReviewStep";
+import { TrainingSourceStep } from "../training/TrainingSourceStep";
+import {
+  TrainingStartModeStep,
+  type NewModelMode,
+  type NewModelSetup,
+} from "../training/TrainingStartModeStep";
 
 type TrainingController = ReturnType<typeof useTraining>;
-type NewModelMode = "automated" | "manual";
 const CHAT_SEARCH_PAGE_SIZE = 20;
+const DEFAULT_FIREWORKS_BASE_MODEL = "accounts/fireworks/models/qwen3-8b";
 
-export function TrainingRunDialog({
+export type CreateImproveAuthoringTarget = TaskCreationSnapshot["request"]["targetIntent"];
+
+export function CreateImproveAuthoringDialog({
   defaultModel,
+  initialCreation = null,
   initialObjective,
   initialSessionIds = [],
   onClose,
+  onModelCreatedFromTaskset,
   onTasksetCreated,
   preferences,
   providerSettings,
   reasoningEffort,
-  localProjects = [],
+  resourceIntent = "workproduct",
   sessions,
   sources,
   training,
+  targetIntent = { kind: "model", id: null, displayName: null, operation: "create" },
 }: {
   defaultModel: ChatModelRef;
+  initialCreation?: TaskCreationSnapshot | null;
   initialObjective: string | null;
   initialSessionIds?: string[];
   onClose: () => void;
-  onTasksetCreated: (creation: TaskCreationSnapshot) => void;
+  onModelCreatedFromTaskset?: (
+    taskset: Taskset,
+    run: CreateImproveRun,
+  ) => void | Promise<void>;
+  onTasksetCreated: (creation: TaskCreationSnapshot) => void | Promise<void>;
   preferences: AppPreferences["training"];
   providerSettings: ProviderSettings | null;
   reasoningEffort: CodexReasoningEffort;
+  resourceIntent?: TaskCreationSnapshot["request"]["resourceIntent"];
   localProjects?: LocalProject[];
   sessions: Session[];
   sources: TrainingSourceRef[];
   training: TrainingController;
+  targetIntent?: CreateImproveAuthoringTarget;
 }) {
   const initialAuthoringModel = trainingAuthoringModel(preferences, defaultModel);
-  const [step, setStep] = useState<NewModelStep>("start");
-  const [mode, setMode] = useState<NewModelMode | null>(null);
-  const [objective, setObjective] = useState(initialObjective ?? "");
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
-  const [authoringProvider, setAuthoringProvider] = useState<ChatProvider>(initialAuthoringModel.providerId);
-  const [authoringModel, setAuthoringModel] = useState(initialAuthoringModel.modelId);
-  const [authoringReasoningEffort, setAuthoringReasoningEffort] = useState(reasoningEffort);
+  const restoredSessionIds = sources
+    .filter((source) => initialCreation?.request.sourceIds.includes(source.id))
+    .map((source) => source.sessionId);
+  const [step, setStep] = useState<NewModelStep>(() => initialCreationStep(initialCreation));
+  const [setup, setSetup] = useState<NewModelSetup | null>(
+    initialCreation?.request.entryMode ?? null,
+  );
+  const mode: NewModelMode | null =
+    setup === "automated" || setup === "manual" ? setup : null;
+  const [objective, setObjective] = useState(initialCreation?.request.objective ?? initialObjective ?? "");
+  const [preferredBaseModelId, setPreferredBaseModelId] = useState(
+    initialCreation?.request.preferredBaseModelId ?? DEFAULT_FIREWORKS_BASE_MODEL,
+  );
+  const [selectedExistingTasksetId, setSelectedExistingTasksetId] = useState<string | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(initialCreation?.request.candidateId ?? null);
+  const [authoringProvider, setAuthoringProvider] = useState<ChatProvider>(
+    initialCreation?.request.analysisModel?.providerId ?? initialAuthoringModel.providerId,
+  );
+  const [authoringModel, setAuthoringModel] = useState(
+    initialCreation?.request.analysisModel?.modelId ?? initialAuthoringModel.modelId,
+  );
+  const [authoringReasoningEffort, setAuthoringReasoningEffort] = useState(
+    initialCreation?.request.analysisReasoningEffort ?? reasoningEffort,
+  );
   const [search, setSearch] = useState("");
   const [searchEntries, setSearchEntries] = useState<TrainingChatSearchEntry[]>([]);
   const [searchTotal, setSearchTotal] = useState(0);
@@ -76,20 +111,52 @@ export function TrainingRunDialog({
   const [totalIndexChats, setTotalIndexChats] = useState(0);
   const [searchRefreshNonce, setSearchRefreshNonce] = useState(0);
   const searchRequestRef = useRef(0);
-  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(() => new Set(initialSessionIds));
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
+    () => new Set([...initialSessionIds, ...restoredSessionIds]),
+  );
   const [estimatesBySessionId, setEstimatesBySessionId] = useState<Record<string, { messageCount: number; estimatedTokens: number }>>({});
-  const [creation, setCreation] = useState<TaskCreationSnapshot | null>(null);
+  const [creation, setCreation] = useState<TaskCreationSnapshot | null>(initialCreation);
   const [evidenceChanged, setEvidenceChanged] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [authoringError, setAuthoringError] = useState<string | null>(null);
   const [preparingScan, setPreparingScan] = useState(false);
-  const [frontierBaselineRunId, setFrontierBaselineRunId] = useState<string | null>(null);
   const [activeMinerRunId, setActiveMinerRunId] = useState<string | null>(null);
   const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
   const [minerConfig, setMinerConfig] = useState<TaskMinerConfig>(() => training.payload?.minerConfig ?? defaultMinerConfig());
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  const eligibleSessions = useMemo(() => sessions.filter((session) => !session.systemKind && !session.hiddenFromDefaultSidebar && session.status !== "active"), [sessions]);
+  const generatedBaselineSessionIds = useMemo(
+    () => new Set(
+      sources
+        .filter(
+          (source) => {
+            const workflowSignature = source.metadata.workflowSignature;
+            return (
+              source.metadata.frontierBaseline === true
+              || workflowSignature === "cross-system-operations"
+              || (
+                typeof workflowSignature === "string"
+                && workflowSignature.startsWith("baseline:")
+              )
+              || Boolean(source.metadata.crossSystemOperations)
+            );
+          },
+        )
+        .map((source) => source.sessionId),
+    ),
+    [sources],
+  );
+  const eligibleSessions = useMemo(
+    () => sessions.filter(
+      (session) =>
+        !session.systemKind
+        && !session.hiddenFromDefaultSidebar
+        && session.status !== "active"
+        && !generatedBaselineSessionIds.has(session.id),
+    ),
+    [generatedBaselineSessionIds, sessions],
+  );
   const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const sourceBySession = useMemo(() => new Map(sources.map((source) => [source.sessionId, source])), [sources]);
   const chatSearchCandidates = useMemo(() => eligibleSessions.slice(0, 500).map((session) => ({ sessionId: session.id, title: session.title, updatedAt: session.updatedAt })), [eligibleSessions]);
@@ -108,22 +175,28 @@ export function TrainingRunDialog({
     [estimatesBySessionId, searchEntries, selectedEntries],
   );
   const activeMinerRun = useMemo(() => training.payload?.minerRuns.find((run) => run.id === activeMinerRunId) ?? null, [activeMinerRunId, training.payload?.minerRuns]);
-  const crossSystemProject = useMemo(
-    () => localProjects.find((project) => isCrossSystemProject(project) && project.agentSdk?.detected) ?? null,
-    [localProjects],
-  );
-  const frontierBaselineRun = useMemo<CrossSystemFrontierBaselineRun | null>(() => {
-    const runs = training.payload?.frontierBaselineRuns ?? [];
-    return runs.find((run) => run.id === frontierBaselineRunId)
-      ?? runs.find((run) => ["queued", "running", "cancelling"].includes(run.status))
-      ?? runs[0]
-      ?? null;
-  }, [frontierBaselineRunId, training.payload?.frontierBaselineRuns]);
-  const frontierBaselineRunning = Boolean(frontierBaselineRun && ["queued", "running", "cancelling"].includes(frontierBaselineRun.status));
   const scanning = preparingScan || Boolean(activeMinerRun && ["queued", "running", "cancelling"].includes(activeMinerRun.status));
   const busy = analyzing || preparingScan || Boolean(training.busyAction);
+  const usesBaseModelStep = resourceIntent === "workproduct" && targetIntent.kind === "model";
+  const baseModelIds = useMemo(() => {
+    const fireworks = training.payload?.destinations.find(
+      (destination) => destination.destinationId === "fireworks",
+    );
+    return fireworks?.modelAllowlist.length
+      ? fireworks.modelAllowlist
+      : [DEFAULT_FIREWORKS_BASE_MODEL];
+  }, [training.payload?.destinations]);
 
-  useEffect(() => setObjective(initialObjective ?? ""), [initialObjective]);
+  useEffect(
+    () => setObjective(initialCreation?.request.objective ?? initialObjective ?? ""),
+    [initialCreation?.id, initialObjective],
+  );
+
+  useEffect(() => {
+    if (!baseModelIds.includes(preferredBaseModelId)) {
+      setPreferredBaseModelId(baseModelIds[0] ?? DEFAULT_FIREWORKS_BASE_MODEL);
+    }
+  }, [baseModelIds, preferredBaseModelId]);
 
   useEffect(() => {
     if (step !== "automatic_scope" || activeMinerRunId) return;
@@ -260,14 +333,54 @@ export function TrainingRunDialog({
   const selectedEstimate = useMemo(() => aggregateEstimate([...selectedSessionIds], estimatesBySessionId), [estimatesBySessionId, selectedSessionIds]);
   const scanEstimate = useMemo(() => aggregateEstimate(eligibleSessions.map((session) => session.id), estimatesBySessionId), [eligibleSessions, estimatesBySessionId]);
 
-  function selectMode(nextMode: NewModelMode) {
-    if (nextMode !== mode && mode !== null) setEvidenceChanged(true);
-    setMode(nextMode);
+  function selectMode(nextMode: NewModelSetup) {
+    if (nextMode !== setup && setup !== null) setEvidenceChanged(true);
+    setSetup(nextMode);
   }
 
   function continueFromStart() {
+    if (usesBaseModelStep) {
+      setStep("base_model");
+      return;
+    }
+    continueFromBaseModel();
+  }
+
+  function continueFromBaseModel() {
+    if (setup === "existing_dataset") {
+      setStep("existing_dataset");
+      return;
+    }
     if (mode === "automated") setStep("automatic_scope");
-    if (mode === "manual") setStep("manual_goal");
+    if (mode === "manual") setStep("evidence");
+  }
+
+  async function createModelFromExistingTaskset() {
+    if (!selectedExistingTasksetId || !onModelCreatedFromTaskset) return;
+    setAnalyzing(true);
+    setAuthoringError(null);
+    try {
+      const run = await training.actions.createModelFromTaskset(
+        selectedExistingTasksetId,
+        preferredBaseModelId,
+      );
+      if (!run) {
+        throw new Error(
+          training.error ?? "OpenPond could not create the Model from this Dataset.",
+        );
+      }
+      const taskset = training.payload?.tasksets.find(
+        (candidate) => candidate.id === selectedExistingTasksetId,
+      );
+      if (!taskset) {
+        throw new Error("The selected Dataset could not be reloaded.");
+      }
+      await onModelCreatedFromTaskset(taskset, run);
+    } catch (error) {
+      setAuthoringError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   function changeObjective(value: string) {
@@ -317,7 +430,14 @@ export function TrainingRunDialog({
       const existing = sourceBySession.get(sessionId);
       existing ? selected.push(existing) : missingSessionIds.push(sessionId);
     }
-    if (missingSessionIds.length) selected.push(...await training.actions.addSources(missingSessionIds) ?? []);
+    if (missingSessionIds.length) {
+      const added = await training.actions.addSources(missingSessionIds);
+      if (!added) throw new Error("OpenPond could not attach the selected evidence. Review the training error and try again.");
+      selected.push(...added);
+    }
+    if (selected.length !== selectedSessionIds.size) {
+      throw new Error("Some selected evidence could not be resolved. Reselect the chats before continuing.");
+    }
     return selected;
   }
 
@@ -334,21 +454,6 @@ export function TrainingRunDialog({
     } finally {
       setPreparingScan(false);
     }
-  }
-
-  async function runFrontierBaseline() {
-    if (!crossSystemProject) return;
-    const run = await training.actions.runCrossSystemFrontierBaseline(
-      crossSystemProject.id,
-      { providerId: authoringProvider, modelId: authoringModel },
-      authoringReasoningEffort,
-    );
-    if (run) setFrontierBaselineRunId(run.id);
-  }
-
-  async function cancelFrontierBaseline() {
-    if (!frontierBaselineRun || !frontierBaselineRunning) return;
-    await training.actions.cancelCrossSystemFrontierBaseline(frontierBaselineRun.id);
   }
 
   async function cancelScan() {
@@ -368,9 +473,18 @@ export function TrainingRunDialog({
 
   async function analyze() {
     setAnalyzing(true);
+    setAuthoringError(null);
     try {
       const selectedSources = await ensureSelectedSources();
-      if (creation && evidenceChanged && !["cancelled", "failed", "ready"].includes(creation.state)) {
+      const reusableDraftRunId = creation?.request.sourceIds.length === 0
+        ? creation.request.createImproveRunId
+        : null;
+      if (
+        creation
+        && !reusableDraftRunId
+        && evidenceChanged
+        && !["cancelled", "failed", "ready"].includes(creation.state)
+      ) {
         const staleCreation = creation;
         await training.actions.cancelCreation(staleCreation.id);
       }
@@ -378,16 +492,22 @@ export function TrainingRunDialog({
         surface: mode === "automated" ? "task_candidate" : "training_page",
         mode: "defaults",
         entryMode: mode ?? "manual",
+        resourceIntent,
         objective: objective.trim() || undefined,
         methodHint: null,
+        preferredBaseModelId: usesBaseModelStep ? preferredBaseModelId : null,
         candidateId: selectedCandidateId,
         analysisModel: { providerId: authoringProvider, modelId: authoringModel },
         analysisReasoningEffort: authoringReasoningEffort,
+        createImproveRunId: reusableDraftRunId,
+        targetIntent,
       });
-      if (!next) return;
+      if (!next) throw new Error("OpenPond could not start Taskset authoring.");
       setCreation(next);
       setEvidenceChanged(false);
       if (next.state !== "awaiting_disclosure_approval") setStep("recommendation");
+    } catch (error) {
+      setAuthoringError(error instanceof Error ? error.message : String(error));
     } finally {
       setAnalyzing(false);
     }
@@ -406,6 +526,24 @@ export function TrainingRunDialog({
     }
   }
 
+  async function retryAuthoring() {
+    if (!creation || creation.state !== "failed") return;
+    setAnalyzing(true);
+    setAuthoringError(null);
+    try {
+      const next = await training.actions.retryCreation(creation.id);
+      if (!next) {
+        throw new Error(training.error ?? "OpenPond could not retry Taskset authoring.");
+      }
+      setCreation(next);
+      setStep("recommendation");
+    } catch (error) {
+      setAuthoringError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   async function declineDisclosure() {
     if (creation?.state === "awaiting_disclosure_approval") await training.actions.approveDisclosure(creation.id, false);
     setCreation(null);
@@ -413,29 +551,35 @@ export function TrainingRunDialog({
   }
 
   function goBack() {
-    if (step === "automatic_scope") setStep("start");
+    if (step === "base_model") setStep("start");
+    else if (step === "existing_dataset") setStep("base_model");
+    else if (step === "automatic_scope") setStep(usesBaseModelStep ? "base_model" : "start");
     else if (step === "automatic_candidates") setStep("automatic_scope");
-    else if (step === "manual_goal") setStep("start");
     else if (step === "evidence") {
       if (creation?.state === "awaiting_disclosure_approval") void declineDisclosure();
-      setStep(mode === "automated" ? "automatic_candidates" : "manual_goal");
+      setStep(mode === "automated"
+        ? "automatic_candidates"
+        : usesBaseModelStep ? "base_model" : "start");
     } else if (step === "recommendation") setStep("evidence");
   }
 
   async function closeDialog() {
     const activeCreation = creation;
-    const hasMaterialChanges = step !== "start" || Boolean(objective.trim()) || selectedSessionIds.size > 0 || Boolean(activeCreation);
-    if (hasMaterialChanges && !window.confirm("Close New model? The current selections will be discarded and any active authoring operation will be cancelled.")) return;
     if (activeCreation && !["cancelled", "failed", "ready"].includes(activeCreation.state)) await training.actions.cancelCreation(activeCreation.id);
     onClose();
   }
 
   async function createTaskset() {
     if (!creation || creation.state !== "awaiting_materialization_approval") return;
-    const next = await training.actions.materialize(creation.id, true);
-    if (!next) return;
-    setCreation(next);
-    if (next.state === "ready") onTasksetCreated(next);
+    setAuthoringError(null);
+    try {
+      const next = await training.actions.materialize(creation.id, true);
+      if (!next) throw new Error("OpenPond could not materialize the approved Taskset.");
+      setCreation(next);
+      if (next.state === "ready") await onTasksetCreated(next);
+    } catch (error) {
+      setAuthoringError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return (
@@ -445,41 +589,59 @@ export function TrainingRunDialog({
         className={`training-dialog training-run-dialog ${step === "start" ? "training-run-start-step" : "training-run-workflow-step"}`}
         role="dialog"
         aria-modal="true"
-        aria-label="New model"
+        aria-label={dialogTitle(targetIntent, resourceIntent)}
         onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); void closeDialog(); } }}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="training-dialog-header">
           <div className="training-run-dialog-title">
             {step !== "start" ? <button data-autofocus type="button" aria-label={backLabel(step)} onClick={goBack}><ArrowLeft size={16} /></button> : null}
-            <h2>{step === "recommendation" ? "Recommendation" : "New model"}</h2>
+            <h2>{step === "recommendation" ? reviewTitle(targetIntent, resourceIntent) : dialogTitle(targetIntent, resourceIntent)}</h2>
           </div>
           <button type="button" aria-label="Close" onClick={() => void closeDialog()}><X size={16} /></button>
         </div>
 
         {step === "start" ? (
-          <TrainingStartModeStep mode={mode} onChange={selectMode} onContinue={continueFromStart} />
+          <TrainingStartModeStep
+            allowExistingDataset={usesBaseModelStep && Boolean(onModelCreatedFromTaskset)}
+            mode={setup}
+            targetLabel={targetLabel(targetIntent, resourceIntent)}
+            onChange={selectMode}
+            onContinue={continueFromStart}
+          />
+        ) : step === "base_model" ? (
+          <TrainingBaseModelStep
+            modelIds={baseModelIds}
+            value={preferredBaseModelId}
+            onChange={setPreferredBaseModelId}
+            onContinue={continueFromBaseModel}
+          />
+        ) : step === "existing_dataset" ? (
+          <TrainingDatasetStep
+            busy={busy}
+            selectedTasksetId={selectedExistingTasksetId}
+            state={training.payload}
+            onChange={setSelectedExistingTasksetId}
+            onCreate={() => void createModelFromExistingTaskset()}
+          />
         ) : step === "automatic_scope" ? (
           <TrainingAutomaticScopeStep
+            chatPreview={eligibleSessions.slice(0, 6).map((session) => ({
+              id: session.id,
+              title: session.title,
+              updatedAt: session.updatedAt,
+            }))}
             chatCount={eligibleSessions.length}
             config={minerConfig}
             estimate={scanEstimate}
-            frontierBaselineRun={frontierBaselineRun}
-            frontierBaselineModel={`${authoringProvider} · ${authoringModel}`}
-            frontierBaselineRunning={frontierBaselineRunning}
-            frontierBaselineProject={crossSystemProject?.name ?? null}
             onCancel={() => void cancelScan()}
             onConfigChange={setMinerConfig}
-            onRunFrontierBaseline={() => void runFrontierBaseline()}
-            onCancelFrontierBaseline={() => void cancelFrontierBaseline()}
             onScan={() => void scanForCandidates()}
             run={activeMinerRun}
             scanning={scanning}
           />
         ) : step === "automatic_candidates" ? (
           <TrainingAutomaticCandidatesStep candidates={scanCandidates} onRescan={() => { setActiveMinerRunId(null); setStep("automatic_scope"); }} onSelect={selectCandidate} />
-        ) : step === "manual_goal" ? (
-          <TrainingManualGoalStep objective={objective} onChange={changeObjective} onContinue={() => setStep("evidence")} />
         ) : step === "evidence" && mode ? (
           <TrainingSourceStep
             authoringModel={authoringModel}
@@ -491,6 +653,7 @@ export function TrainingRunDialog({
             matchingSessionCount={searchTotal}
             mode={mode}
             objective={objective}
+            onObjectiveChange={changeObjective}
             onAnalyze={() => void analyze()}
             onApproveDisclosure={() => void approveDisclosure()}
             onAuthoringModelChange={changeAuthoringModel}
@@ -514,6 +677,7 @@ export function TrainingRunDialog({
             selectedEntries={selectedEntries}
             selectedEstimate={selectedEstimate}
             selectedSessionIds={selectedSessionIds}
+            targetLabel={targetLabel(targetIntent, resourceIntent)}
             visibleSessions={searchEntries}
           />
         ) : step === "recommendation" && creation?.proposal ? (
@@ -526,20 +690,107 @@ export function TrainingRunDialog({
             onCreationChange={setCreation}
             sources={sources}
             training={training}
+            createLabel={resourceIntent === "dataset"
+              ? "Create Dataset"
+              : targetIntent.kind === "model" ? "Create model" : undefined}
+            editDataLabel={resourceIntent === "dataset"
+              ? "Edit sources"
+              : targetIntent.kind === "model" ? "Edit Dataset" : undefined}
+            resourceIntent={resourceIntent}
           />
         ) : step === "recommendation" && creation?.state === "awaiting_questions" ? (
           <div className="training-evidence-required">
             <div className="training-dialog-scroll-body"><div className="training-run-step-heading"><h3>More evidence is needed</h3><p>{creation.blockingQuestions[0]?.prompt ?? creation.blockedReason ?? "Add supporting evidence before authoring continues."}</p></div></div>
-            <div className="training-dialog-actions"><button className="training-button" type="button" onClick={() => setStep("evidence")}>Add chats</button></div>
+            <div className="training-dialog-actions">
+              <button className="training-button" type="button" onClick={() => setStep("evidence")}>
+                {resourceIntent === "dataset"
+                  ? "Edit sources"
+                  : targetIntent.kind === "model" ? "Edit Dataset" : "Add chats"}
+              </button>
+            </div>
+          </div>
+        ) : step === "recommendation" && creation?.state === "failed" ? (
+          <div className="training-evidence-required">
+            <div className="training-dialog-scroll-body">
+              <div className="training-run-step-heading">
+                <h3>Analysis failed</h3>
+                <p>{authoringFailureCopy(creation.blockedReason)}</p>
+              </div>
+              {objective ? (
+                <div className="training-evidence-objective">
+                  <span>Capability</span>
+                  <strong>{objective}</strong>
+                </div>
+              ) : null}
+              <p className="training-empty">
+                Retry keeps the exact approved evidence, model, and disclosure receipt. Change evidence starts a new review if the selection is too large or no longer representative.
+              </p>
+            </div>
+            <div className="training-dialog-actions">
+              <button className="training-button secondary" type="button" disabled={busy} onClick={() => setStep("evidence")}>Change evidence</button>
+              <button className="training-button" type="button" disabled={busy} onClick={() => void retryAuthoring()}>
+                {analyzing ? <Loader2 className="spin" size={14} /> : null}
+                Retry approved evidence
+              </button>
+            </div>
           </div>
         ) : (
           <div className="training-recommendation-loading">
             {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>Preparing the recommendation…</p></>}
           </div>
         )}
+        {authoringError ? <div className="training-banner error" role="alert">{authoringError}</div> : null}
       </section>
     </div>
   );
+}
+
+function initialCreationStep(creation: TaskCreationSnapshot | null): NewModelStep {
+  if (!creation) return "start";
+  if (creation.state === "awaiting_disclosure_approval") return "evidence";
+  return "recommendation";
+}
+
+function authoringFailureCopy(reason: string | null): string {
+  if (!reason) return "The authoring model did not return a proposal.";
+  if (reason.trim().toLowerCase() === "terminated") {
+    return "OpenPond Chat closed the Taskset authoring stream before a proposal was returned. No Taskset was created.";
+  }
+  return reason;
+}
+
+function dialogTitle(
+  target: CreateImproveAuthoringTarget,
+  resourceIntent: TaskCreationSnapshot["request"]["resourceIntent"],
+): string {
+  if (resourceIntent === "dataset") return "New Dataset";
+  if (target.kind === "agent") {
+    return target.operation === "improve"
+      ? `Improve ${target.displayName ?? "agent"}`
+      : "New agent";
+  }
+  if (target.kind === "model") return "New model";
+  return "New change";
+}
+
+function targetLabel(
+  target: CreateImproveAuthoringTarget,
+  resourceIntent: TaskCreationSnapshot["request"]["resourceIntent"],
+): string {
+  if (resourceIntent === "dataset") return "dataset";
+  if (target.kind === "agent") return "agent";
+  if (target.kind === "model") return "model";
+  return "workproduct";
+}
+
+function reviewTitle(
+  target: CreateImproveAuthoringTarget,
+  resourceIntent: TaskCreationSnapshot["request"]["resourceIntent"],
+): string {
+  if (resourceIntent === "dataset") return "Review Dataset";
+  if (target.kind === "model") return "Review model";
+  if (target.kind === "agent") return target.operation === "improve" ? "Review agent change" : "Review agent";
+  return "Review change";
 }
 
 function aggregateEstimate(sessionIds: string[], estimates: Record<string, { messageCount: number; estimatedTokens: number }>) {
@@ -557,11 +808,12 @@ function aggregateEstimate(sessionIds: string[], estimates: Record<string, { mes
 }
 
 function backLabel(step: NewModelStep): string {
+  if (step === "base_model") return "Back to setup";
+  if (step === "existing_dataset") return "Back to base model";
   if (step === "automatic_scope") return "Back to start mode";
   if (step === "automatic_candidates") return "Back to scan scope";
-  if (step === "manual_goal") return "Back to start mode";
-  if (step === "evidence") return "Back to capability";
-  return "Back to evidence";
+  if (step === "evidence") return "Back to start mode";
+  return "Back to Dataset";
 }
 
 function defaultMinerConfig(): TaskMinerConfig {
@@ -574,9 +826,4 @@ function defaultMinerConfig(): TaskMinerConfig {
     clustering: "hybrid_deterministic_first",
     consentRequired: true,
   };
-}
-
-function isCrossSystemProject(project: Pick<LocalProject, "name" | "workspacePath">): boolean {
-  return [project.name, project.workspacePath.split(/[\\/]/).at(-1) ?? ""]
-    .some((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "") === "crosssystemoperations");
 }

@@ -209,7 +209,7 @@ function modelUsageVisibility(
   if (session.systemKind) return "system";
   if (
     requestKind === "context_compaction" ||
-    requestKind === "create_pipeline_planner" ||
+    requestKind === "create_improve_planner" ||
     requestKind === "goal_control" ||
     requestKind === "subagent" ||
     requestKind === "insights_scan" ||
@@ -238,8 +238,7 @@ function modelUsageAttribution(input: {
     goalId: requestAttribution?.goalId ?? goalIdFromTurn(input.turn),
     subagentRunId: requestAttribution?.subagentRunId ?? null,
     subagentRoleId: requestAttribution?.subagentRoleId ?? null,
-    createPipelineRequestId: requestAttribution?.createPipelineRequestId ?? input.turn?.createPipelineRequest?.id ?? null,
-    createPipelineId: requestAttribution?.createPipelineId ?? input.turn?.createPipeline?.id ?? null,
+    createImproveRunId: requestAttribution?.createImproveRunId ?? input.turn?.createImproveRun?.id ?? null,
     commandName,
     commandSource: requestAttribution?.commandSource ?? commandSourceFromTurn(input.turn, commandName),
     appId: input.session.appId,
@@ -258,7 +257,7 @@ function usageSurface(
   if (session.systemKind === "openpond.insights" || requestKind === "insights_scan" || requestKind === "insights_question") {
     return "insights";
   }
-  if (requestKind === "create_pipeline_planner") return "create_pipeline";
+  if (requestKind === "create_improve_planner") return "create_improve";
   if (requestKind === "context_compaction") return "compaction";
   if (requestKind === "subagent") return "goal";
   if (requestKind === "goal_control") return "goal";
@@ -270,7 +269,7 @@ function usageWorkflowKind(
   requestOrdinal: number,
   commandName: string | null,
 ): ModelUsageAttribution["workflowKind"] {
-  if (requestKind === "create_pipeline_planner") return "planner";
+  if (requestKind === "create_improve_planner") return "planner";
   if (requestKind === "context_compaction") return "summary";
   if (requestKind === "insights_scan" || requestKind === "insights_question") return "scan";
   if (requestKind === "subagent") return "subagent";
@@ -292,7 +291,7 @@ function commandNameFromTurn(turn: Turn | null): string | null {
   if (typeof attributedCommand === "string" && attributedCommand.trim()) {
     return attributedCommand.trim();
   }
-  const command = turn.createPipelineRequest?.command;
+  const command = turn.createImproveRun?.command;
   return typeof command === "string" && command.trim().startsWith("/")
     ? command.trim()
     : null;
@@ -302,7 +301,7 @@ function commandSourceFromTurn(
   turn: Turn | null,
   commandName: string | null,
 ): ModelUsageAttribution["commandSource"] {
-  const requestSource = turn?.createPipelineRequest?.metadata?.source;
+  const requestSource = turn?.createImproveRun?.metadata?.source;
   if (requestSource === "native_model_tool") return "model_tool";
   return commandName ? "prompt_parse" : null;
 }

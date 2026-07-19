@@ -79,11 +79,13 @@ describe("frontier-model Task Creator chat", () => {
 
   test("authors a stable behavior with independent evaluation and materializes its executable files", async () => withTrainingStore(async ({ store, directory }) => {
     const profileSource = path.join(directory, "profile");
+    const tasksetRootDir = path.join(directory, "training", "tasksets");
     await mkdir(profileSource, { recursive: true });
     await seedConversation(store, { sessionId: "session_brief_train", turnId: "turn_brief_train", title: "Weekly launch brief", prompt: "Turn these approved notes into our weekly launch brief.", assistant: "Launch brief with the approved structure." });
     await seedConversation(store, { sessionId: "session_brief_eval", turnId: "turn_brief_eval", title: "Monthly launch brief", prompt: "Turn these approved notes into our monthly launch brief.", assistant: "Independent launch brief with the approved structure." });
     const service = createTaskCreatorService({
       store,
+      tasksetRootDir,
       authoringSkillHash: contentHash("skill"),
       loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource, git: { head: "commit123" } } as any),
       authorProposal: async ({ evidence }) => {
@@ -130,7 +132,7 @@ describe("frontier-model Task Creator chat", () => {
     const taskset = await store.getTaskset(ready.materializedTasksetId!);
     expect(taskset?.name).toBe("Launch brief specialist");
     expect(taskset?.tasks.map((task) => task.split)).toEqual(["train", "frozen_eval"]);
-    const tasksetRoot = path.join(profileSource, "tasksets", taskset!.id);
+    const tasksetRoot = path.join(tasksetRootDir, taskset!.id);
     await access(path.join(tasksetRoot, "taskset.json"));
     await access(path.join(tasksetRoot, "environment", "taskset.ts"));
     await access(path.join(tasksetRoot, "fixtures", "grader-fixtures.json"));
@@ -138,11 +140,13 @@ describe("frontier-model Task Creator chat", () => {
 
   test("materializes a provider-neutral GRPO Taskset without relabeling its SFT bootstrap", async () => withTrainingStore(async ({ store, directory }) => {
     const profileSource = path.join(directory, "profile-grpo");
+    const tasksetRootDir = path.join(directory, "training", "tasksets");
     await mkdir(profileSource, { recursive: true });
     await seedConversation(store, { sessionId: "session_ops_train", turnId: "turn_ops_train", title: "Cross-system renewal risk", prompt: "Find renewal risk.", assistant: "ANSWER: {\"accounts\":[\"acct_1\"]}" });
     await seedConversation(store, { sessionId: "session_ops_eval", turnId: "turn_ops_eval", title: "Cross-system collection risk", prompt: "Find collection risk.", assistant: "ANSWER: {\"accounts\":[\"acct_2\"]}" });
     const service = createTaskCreatorService({
       store,
+      tasksetRootDir,
       authoringSkillHash: contentHash("skill"),
       loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: profileSource } as any),
       authorProposal: async ({ evidence }) => {

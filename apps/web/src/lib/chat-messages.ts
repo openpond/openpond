@@ -1,10 +1,8 @@
 import {
   ChatAttachmentSummarySchema,
-  CreatePipelineRequestSchema,
-  CreatePipelineSnapshotSchema,
+  CreateImproveRunSchema,
   WorkspaceDiffSummarySchema,
-  type CreatePipelineRequest,
-  type CreatePipelineSnapshot,
+  type CreateImproveRun,
   type RuntimeEvent,
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
@@ -66,40 +64,37 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           timestamp: item.timestamp,
           turnId: item.turnId,
         });
-        const createPipeline = extractCreatePipeline(item.args);
-        if (createPipeline.request) {
+        const createImproveRun = extractCreateImproveRun(item.args);
+        if (createImproveRun) {
           messages.push({
-            id: `${item.id}:create-pipeline`,
+            id: `${item.id}:create-improve`,
             role: "assistant",
             timestamp: item.timestamp,
             turnId: item.turnId,
-            createPipelineRequest: createPipeline.request,
-            createPipeline: createPipeline.snapshot,
+            createImproveRun,
           });
         }
       }
       continue;
     }
 
-    if (item.name === "create_pipeline.updated") {
-      const createPipeline = extractCreatePipeline(item.data);
-      if (!createPipeline.request) continue;
+    if (item.name === "create_improve.updated") {
+      const createImproveRun = extractCreateImproveRun(item.data);
+      if (!createImproveRun) continue;
       const existing = findLast(
         messages,
-        (candidate) => candidate.turnId === item.turnId && Boolean(candidate.createPipelineRequest),
+        (candidate) => candidate.turnId === item.turnId && Boolean(candidate.createImproveRun),
       );
       if (existing) {
-        existing.createPipelineRequest = createPipeline.request;
-        existing.createPipeline = createPipeline.snapshot;
+        existing.createImproveRun = createImproveRun;
         existing.timestamp = item.timestamp;
       } else {
         messages.push({
-          id: `${item.id}:create-pipeline`,
+          id: `${item.id}:create-improve`,
           role: "assistant",
           timestamp: item.timestamp,
           turnId: item.turnId,
-          createPipelineRequest: createPipeline.request,
-          createPipeline: createPipeline.snapshot,
+          createImproveRun,
         });
       }
       continue;
@@ -109,7 +104,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       const content = item.output ?? "";
       if (!content) continue;
       const previous = messages[messages.length - 1];
-      if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createPipelineRequest) {
+      if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createImproveRun) {
         previous.content = `${previous.content ?? ""}${content}`;
         previous.timestamp = item.timestamp;
         previous.sources = mergeChatSources(
@@ -270,24 +265,11 @@ function extractAttachments(value: unknown): ChatMessage["attachments"] {
   return parsed.success && parsed.data.length > 0 ? parsed.data : undefined;
 }
 
-function extractCreatePipeline(value: unknown): {
-  request: CreatePipelineRequest | null;
-  snapshot: CreatePipelineSnapshot | null;
-} {
+function extractCreateImproveRun(value: unknown): CreateImproveRun | null {
   const record = asRecord(value);
-  if (!record) return { request: null, snapshot: null };
-  const snapshot = CreatePipelineSnapshotSchema.safeParse(record.createPipeline);
-  const request = CreatePipelineRequestSchema.safeParse(record.createPipelineRequest);
-  if (snapshot.success) {
-    return {
-      request: request.success ? request.data : snapshot.data.request,
-      snapshot: snapshot.data,
-    };
-  }
-  return {
-    request: request.success ? request.data : null,
-    snapshot: null,
-  };
+  if (!record) return null;
+  const parsed = CreateImproveRunSchema.safeParse(record.createImproveRun);
+  return parsed.success ? parsed.data : null;
 }
 
 export function relativeAge(value: string | null | undefined): string {

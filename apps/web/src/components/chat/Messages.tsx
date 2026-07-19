@@ -16,7 +16,7 @@ import {
 } from "./MessageActionRunCard";
 import { ActivityGroup } from "./MessageActivityGroup";
 import { ChangeSummaryCard } from "./MessageChangeSummary";
-import { CreatePipelineStatusReceipt } from "./CreatePipelineStatusReceipt";
+import { CreateImproveStatusReceipt } from "./CreatePipelineStatusReceipt";
 import { InsightsRunPromptCard } from "./MessageInsightsRunPrompt";
 
 type MessageRowProps = {
@@ -169,12 +169,7 @@ export const MessageRow = memo(function MessageRow({
           onOpenFileInSidebar={onOpenFileInSidebar}
         />
       )}
-      {message.createPipelineRequest && (
-        <CreatePipelineStatusReceipt
-          request={message.createPipelineRequest}
-          snapshot={message.createPipeline ?? null}
-        />
-      )}
+      {message.createImproveRun ? <CreateImproveStatusReceipt run={message.createImproveRun} /> : null}
       {showFooter && (
         <div className="assistant-message-footer">
           {timestampLabel && (
@@ -263,8 +258,7 @@ function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): bool
     previous.actionRun === next.actionRun &&
     previous.insightsRunPrompt === next.insightsRunPrompt &&
     previous.changeSummary === next.changeSummary &&
-    previous.createPipelineRequest === next.createPipelineRequest &&
-    previous.createPipeline === next.createPipeline
+    previous.createImproveRun === next.createImproveRun
   );
 }
 

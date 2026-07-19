@@ -44,9 +44,24 @@
 }
 
 .community-sidebar-group-chevron {
+  flex: 0 0 auto;
   display: inline-grid;
+  width: 12px;
+  height: 16px;
   place-items: center;
   color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.community-sidebar-group-chevron svg {
+  display: block;
+}
+
+.community-sidebar-community:hover .community-sidebar-group-chevron,
+.community-sidebar-community:focus-visible .community-sidebar-group-chevron,
+.community-sidebar-community:focus-within .community-sidebar-group-chevron {
+  opacity: 1;
 }
 
 .community-sidebar-channels {

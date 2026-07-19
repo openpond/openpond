@@ -5,13 +5,12 @@ import type { OpenPondApp } from "@openpond/contracts";
 
 import { SidebarNavigation } from "../apps/web/src/components/sidebar/SidebarNavigation";
 import type { SidebarSectionMenuId } from "../apps/web/src/app/app-state";
-import type { AppView, LabsTab } from "../apps/web/src/lib/app-models";
+import type { AppView } from "../apps/web/src/lib/app-models";
 
 const noopDispatch = (() => undefined) as Dispatch<SetStateAction<never>>;
 
 function renderSidebarNavigation(view: AppView): string {
   const setView = ((_value: SetStateAction<AppView>) => undefined) as Dispatch<SetStateAction<AppView>>;
-  const setLabsTab = ((_value: SetStateAction<LabsTab>) => undefined) as Dispatch<SetStateAction<LabsTab>>;
   return renderToStaticMarkup(
     createElement(SidebarNavigation, {
       beginNewChat: (_app?: OpenPondApp | null) => undefined,
@@ -19,7 +18,6 @@ function renderSidebarNavigation(view: AppView): string {
       setSelectedAppId: noopDispatch as Dispatch<SetStateAction<string | null>>,
       setSelectedProjectId: noopDispatch as Dispatch<SetStateAction<string | null>>,
       setSelectedSessionId: noopDispatch as Dispatch<SetStateAction<string | null>>,
-      setLabsTab,
       setView,
       view,
     }),

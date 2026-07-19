@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
 import type { SftStepMetric, TrainingRunDetail } from "@openpond/contracts";
 
-type MetricKey = "loss" | "learningRate" | "gradientNorm" | "meanTokenAccuracy" | "entropy" | "memoryBytes";
+type MetricKey = "loss" | "reward" | "policyLoss" | "advantageLoss" | "learningRate" | "gradientNorm" | "meanTokenAccuracy" | "entropy" | "memoryBytes";
 const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) => string }> = [
   { key: "loss", label: "Loss", format: compactNumber },
+  { key: "reward", label: "Reward", format: compactNumber },
+  { key: "policyLoss", label: "Policy loss", format: compactNumber },
+  { key: "advantageLoss", label: "Advantage loss", format: compactNumber },
   { key: "learningRate", label: "Learning rate", format: scientificNumber },
   { key: "gradientNorm", label: "Gradient norm", format: compactNumber },
   { key: "meanTokenAccuracy", label: "Token accuracy", format: percent },
@@ -12,23 +15,48 @@ const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) =>
 ];
 
 export function TrainingRunMetrics({ detail, loading, error }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null }) {
-  const available = useMemo(() => METRICS.filter((metric) => detail?.stepMetrics.some((point) => point[metric.key] != null)), [detail?.stepMetrics]);
+  const stepMetrics = useMemo(
+    () => uniqueStepMetrics(detail?.stepMetrics ?? []),
+    [detail?.stepMetrics],
+  );
+  const available = useMemo(
+    () => METRICS.filter((metric) => stepMetrics.some((point) => point[metric.key] != null)),
+    [stepMetrics],
+  );
   const [requestedMetric, setRequestedMetric] = useState<MetricKey>("loss");
   const active = available.find((metric) => metric.key === requestedMetric) ?? available[0] ?? METRICS[0]!;
-  const points = detail?.stepMetrics.flatMap((point) => point[active.key] == null ? [] : [{ step: point.step, value: point[active.key] as number }]) ?? [];
+  const points = stepMetrics.flatMap((point) => point[active.key] == null ? [] : [{ step: point.step, value: point[active.key] as number }]);
   const summary = detail ? finalSummary(detail) : {};
 
   if (loading && !detail) return <div className="training-run-placeholder">Loading training metrics…</div>;
   if (error && !detail) return <div className="training-run-placeholder error">{error}</div>;
   if (!detail) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
+  const rft = detail.job.metadata.trainingMethod === "grpo";
+  const rewardValues = stepMetrics.flatMap((metric) => metric.reward == null ? [] : [metric.reward]);
+  const lossValues = stepMetrics.flatMap((metric) => metric.loss == null ? [] : [metric.loss]);
 
   return (
     <div className="training-run-metrics">
       <div className="training-metric-summary">
-        <MetricFact label="Steps" value={summary.steps ?? lastStep(detail.stepMetrics)} />
-        <MetricFact label="Final loss" value={summary.trainLoss == null ? null : compactNumber(summary.trainLoss)} />
-        <MetricFact label="Peak memory" value={peakMemory(detail.stepMetrics)} />
-        <MetricFact label="Adapter parameters" value={summary.adapterParameterCount == null ? null : summary.adapterParameterCount.toLocaleString()} />
+        <MetricFact
+          label={rft ? "Optimizer updates" : "Steps"}
+          value={rft
+            ? optimizerUpdates(detail, stepMetrics)
+            : summary.steps ?? lastStep(stepMetrics)}
+        />
+        {rft ? (
+          <>
+            <MetricFact label="Latest reward" value={rewardValues.length ? compactNumber(rewardValues.at(-1)!) : null} />
+            <MetricFact label="Best reward" value={rewardValues.length ? compactNumber(Math.max(...rewardValues)) : null} />
+            <MetricFact label="Recorded points" value={rewardValues.length || null} />
+          </>
+        ) : (
+          <>
+            <MetricFact label="Final loss" value={summary.trainLoss == null ? lossValues.at(-1) == null ? null : compactNumber(lossValues.at(-1)!) : compactNumber(summary.trainLoss)} />
+            <MetricFact label="Peak memory" value={peakMemory(detail.stepMetrics)} />
+            <MetricFact label="Adapter parameters" value={summary.adapterParameterCount == null ? null : summary.adapterParameterCount.toLocaleString()} />
+          </>
+        )}
       </div>
       {available.length ? (
         <>
@@ -90,6 +118,24 @@ function finalSummary(detail: TrainingRunDetail): Record<string, number> {
 function lastStep(metrics: SftStepMetric[]): string | null {
   const last = metrics.at(-1);
   return last ? `${last.step} of ${last.maxSteps}` : null;
+}
+
+function optimizerUpdates(
+  detail: TrainingRunDetail,
+  metrics: SftStepMetric[],
+): number | null {
+  const observed = detail.job.metadata.optimizerUpdatesObserved;
+  const recorded = typeof observed === "number" && Number.isFinite(observed)
+    ? observed
+    : 0;
+  const lastStep = metrics.at(-1)?.step ?? 0;
+  return Math.max(recorded, lastStep) || null;
+}
+
+function uniqueStepMetrics(metrics: SftStepMetric[]): SftStepMetric[] {
+  const latestByStep = new Map<number, SftStepMetric>();
+  for (const metric of metrics) latestByStep.set(metric.step, metric);
+  return [...latestByStep.values()].sort((left, right) => left.step - right.step);
 }
 
 function peakMemory(metrics: SftStepMetric[]): string | null {

@@ -432,8 +432,7 @@ export type SandboxAgentEditWorkItemOpenInput = {
   initialMessage?: string | null;
   sourceRef?: string | null;
   baseSha?: string | null;
-  createPipelineRequest?: Record<string, unknown> | null;
-  createPipeline?: Record<string, unknown> | null;
+  createImproveRun?: Record<string, unknown> | null;
 };
 
 export type SandboxAgentEditWorkItemOpenResult = {

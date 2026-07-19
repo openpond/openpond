@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CreatePipelineSnapshotSchema } from "@openpond/contracts";
+import { CreateImproveRunSchema } from "@openpond/contracts";
 
 import type { GoalStateAdapter } from "./adapter";
 import { serializeGoalEventRecord } from "../events";
@@ -21,7 +21,7 @@ const GOAL_STATE_FILE = "state.json";
 const GOAL_EVENTS_FILE = "events.jsonl";
 const GOAL_QUESTIONS_FILE = "questions.json";
 const GOAL_RESULT_FILE = "result.json";
-const CREATE_PIPELINE_FILE = "create-pipeline.json";
+const CREATE_IMPROVE_RUN_FILE = "create-improve-run.json";
 const CREATE_PLAN_FILE = "create-plan.json";
 const WORKFLOW_CAPTURE_FILE = "workflow-capture.json";
 
@@ -82,12 +82,12 @@ export class LocalGoalStateAdapter implements GoalStateAdapter {
   ): Promise<GoalState> {
     const goal = await this.requireGoal(goalId);
     const now = new Date().toISOString();
-    const createPipeline = goal.createPipeline
-      ? CreatePipelineSnapshotSchema.parse({
-          ...goal.createPipeline,
-          state: question.required ? "awaiting_questions" : goal.createPipeline.state,
+    const createImproveRun = goal.createImproveRun
+      ? CreateImproveRunSchema.parse({
+          ...goal.createImproveRun,
+          state: question.required ? "awaiting_questions" : goal.createImproveRun.state,
           questionIds: Array.from(
-            new Set([...(goal.createPipeline.questionIds ?? []), question.id]),
+            new Set([...(goal.createImproveRun.questionIds ?? []), question.id]),
           ),
           updatedAt: now,
         })
@@ -96,7 +96,7 @@ export class LocalGoalStateAdapter implements GoalStateAdapter {
       ...goal,
       status: question.required ? "awaiting_user_input" : goal.status,
       questions: [...goal.questions, question],
-      ...(createPipeline ? { createPipeline } : {}),
+      ...(createImproveRun ? { createImproveRun } : {}),
       updatedAt: now,
     };
     await this.write(next);
@@ -118,16 +118,16 @@ export class LocalGoalStateAdapter implements GoalStateAdapter {
     const hasOpenRequiredQuestion = questions.some(
       (question) => question.required && !question.answeredAt
     );
-    const createPipeline =
-      goal.createPipeline && goal.createPipeline.state === "awaiting_questions" && !hasOpenRequiredQuestion
-        ? CreatePipelineSnapshotSchema.parse({
-            ...goal.createPipeline,
-            state: goal.createPipeline.plan?.status === "pending_approval"
+    const createImproveRun =
+      goal.createImproveRun && goal.createImproveRun.state === "awaiting_questions" && !hasOpenRequiredQuestion
+        ? CreateImproveRunSchema.parse({
+            ...goal.createImproveRun,
+            state: goal.createImproveRun.plan?.status === "pending_approval"
               ? "awaiting_plan_approval"
               : "planning",
             updatedAt: now,
           })
-        : goal.createPipeline;
+        : goal.createImproveRun;
     const next = {
       ...goal,
       status:
@@ -136,7 +136,7 @@ export class LocalGoalStateAdapter implements GoalStateAdapter {
           : goal.status,
       questions,
       answers: [...goal.answers, params.answer],
-      ...(createPipeline ? { createPipeline } : {}),
+      ...(createImproveRun ? { createImproveRun } : {}),
       updatedAt: now,
     };
     await this.write(next);
@@ -183,8 +183,8 @@ export class LocalGoalStateAdapter implements GoalStateAdapter {
     return join(this.goalDir(goalId), GOAL_RESULT_FILE);
   }
 
-  private createPipelinePath(goalId: string): string {
-    return join(this.goalDir(goalId), CREATE_PIPELINE_FILE);
+  private createImproveRunPath(goalId: string): string {
+    return join(this.goalDir(goalId), CREATE_IMPROVE_RUN_FILE);
   }
 
   private createPlanPath(goalId: string): string {
@@ -219,23 +219,23 @@ export class LocalGoalStateAdapter implements GoalStateAdapter {
       `${JSON.stringify(questionSnapshot, null, 2)}\n`,
       "utf-8"
     );
-    if (goal.createPipeline) {
+    if (goal.createImproveRun) {
       await writeFile(
-        this.createPipelinePath(goal.id),
-        `${JSON.stringify(goal.createPipeline, null, 2)}\n`,
+        this.createImproveRunPath(goal.id),
+        `${JSON.stringify(goal.createImproveRun, null, 2)}\n`,
         "utf-8"
       );
-      if (goal.createPipeline.plan) {
+      if (goal.createImproveRun.plan) {
         await writeFile(
           this.createPlanPath(goal.id),
-          `${JSON.stringify(goal.createPipeline.plan, null, 2)}\n`,
+          `${JSON.stringify(goal.createImproveRun.plan, null, 2)}\n`,
           "utf-8"
         );
       }
-      if (goal.createPipeline.workflowCapture) {
+      if (goal.createImproveRun.workflowCapture) {
         await writeFile(
           this.workflowCapturePath(goal.id),
-          `${JSON.stringify(goal.createPipeline.workflowCapture, null, 2)}\n`,
+          `${JSON.stringify(goal.createImproveRun.workflowCapture, null, 2)}\n`,
           "utf-8"
         );
       }

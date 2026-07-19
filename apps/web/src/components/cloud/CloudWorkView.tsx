@@ -5,10 +5,9 @@ import type {
   CloudWorkItem,
   CloudWorkItemDetail,
   CloudWorkItemMessage,
-  CreatePipelineRequest,
-  CreatePipelineSnapshot,
+  CreateImproveRun,
 } from "@openpond/contracts";
-import { createPipelineActionShapeFromMetadata } from "@openpond/contracts";
+import { createImproveActionShapeFromMetadata } from "@openpond/contracts";
 import {
   ArrowLeft,
   ArrowUp,
@@ -84,24 +83,24 @@ function projectLabel(projectsById: Map<string, CloudProject>, projectId: string
 }
 
 function firstMessage(messages: CloudWorkItemMessage[]): CloudWorkItemMessage | null {
-  const visibleMessages = messages.filter((message) => !isHiddenCreatePipelineMessage(message));
+  const visibleMessages = messages.filter((message) => !isHiddenCreateImproveMessage(message));
   return visibleMessages.find((message) => message.role === "user") ?? visibleMessages[0] ?? null;
 }
 
-function isHiddenCreatePipelineMessage(message: CloudWorkItemMessage): boolean {
+function isHiddenCreateImproveMessage(message: CloudWorkItemMessage): boolean {
   return (
-    message.metadata.source === "openpond_app_cloud_create_pipeline_link" ||
+    message.metadata.source === "openpond_app_cloud_create_improve_link" ||
     message.metadata.hidden === true
   );
 }
 
-function requestAdapterLabel(request: CreatePipelineRequest): string {
+function requestAdapterLabel(request: CreateImproveRun): string {
   if (request.adapter.kind === "local") return "Local profile";
   if (request.adapter.kind === "promote_local_to_hosted") return "Local to hosted";
   return "Hosted profile";
 }
 
-function planChecks(snapshot: CreatePipelineSnapshot | null): Array<{ name: string; command: string }> {
+function planChecks(snapshot: CreateImproveRun | null): Array<{ name: string; command: string }> {
   return snapshot?.plan?.checks?.length
     ? snapshot.plan.checks.map((check) => ({ name: check.name, command: check.command }))
     : [
@@ -112,7 +111,7 @@ function planChecks(snapshot: CreatePipelineSnapshot | null): Array<{ name: stri
       ];
 }
 
-function planRequirements(snapshot: CreatePipelineSnapshot | null): Array<{ name: string; detail: string }> {
+function planRequirements(snapshot: CreateImproveRun | null): Array<{ name: string; detail: string }> {
   return snapshot?.plan?.requirements?.map((requirement) => ({
     name: requirement.name,
     detail: [requirement.kind.replace(/_/g, " "), requirement.status, requirement.detail]
@@ -121,7 +120,7 @@ function planRequirements(snapshot: CreatePipelineSnapshot | null): Array<{ name
   })) ?? [];
 }
 
-function workflowEvidence(snapshot: CreatePipelineSnapshot | null): Array<{ name: string; detail: string }> {
+function workflowEvidence(snapshot: CreateImproveRun | null): Array<{ name: string; detail: string }> {
   const capture = snapshot?.workflowCapture;
   if (!capture) return [];
   return [
@@ -137,16 +136,18 @@ function workflowEvidence(snapshot: CreatePipelineSnapshot | null): Array<{ name
   );
 }
 
-function sourcePlan(request: CreatePipelineRequest, snapshot: CreatePipelineSnapshot | null) {
-  if (snapshot?.plan?.sourcePlan?.length) return snapshot.plan.sourcePlan;
-  const operation = request.operation === "edit" ? "update" : "create";
+function sourcePlan(run: CreateImproveRun) {
+  if (run.plan?.sourcePlan?.length) return run.plan.sourcePlan;
+  const operation = run.operation === "improve" ? "update" : "create";
   const agentId =
-    request.targetAgent.agentId ?? createPipelineAgentIdFromObjective(request.objective);
+    run.target.kind === "agent"
+      ? run.target.id ?? createPipelineAgentIdFromObjective(run.objective)
+      : createPipelineAgentIdFromObjective(run.objective);
   return [
     {
       path: createPipelineSourceRootPathForAgent(agentId),
       operation,
-      reason: request.objective,
+      reason: run.objective,
     },
     {
       path: "settings/profile.yaml",
@@ -242,28 +243,26 @@ function cloudWorkBoundaryChips(
 }
 
 function CloudCreatePlanReview({
-  request,
-  snapshot,
+  run,
   actionBusy,
   onApprove,
   onEdit,
   onCancel,
 }: {
-  request: CreatePipelineRequest;
-  snapshot: CreatePipelineSnapshot | null;
+  run: CreateImproveRun;
   actionBusy: boolean;
   onApprove: () => void;
   onEdit: () => void;
   onCancel: () => void;
 }) {
-  const state = snapshot?.state ?? "awaiting_plan_approval";
-  const plan = snapshot?.plan ?? null;
-  const checks = planChecks(snapshot);
-  const requirements = planRequirements(snapshot);
-  const evidence = workflowEvidence(snapshot);
-  const files = sourcePlan(request, snapshot);
-  const actionShape = createPipelineActionShapeFromMetadata(plan?.metadata);
-  const targetProject = request.scope.targetProject?.name ?? request.scope.targetProject?.id ?? "Profile source";
+  const state = run.state;
+  const plan = run.plan;
+  const checks = planChecks(run);
+  const requirements = planRequirements(run);
+  const evidence = workflowEvidence(run);
+  const files = sourcePlan(run);
+  const actionShape = createImproveActionShapeFromMetadata(plan?.metadata);
+  const targetProject = run.scope.targetProject?.name ?? run.scope.targetProject?.id ?? "Profile source";
   const canApprove =
     Boolean(plan) &&
     state === "awaiting_plan_approval" &&
@@ -278,13 +277,13 @@ function CloudCreatePlanReview({
         <FileText size={16} />
         <div>
           <span>Agent plan review</span>
-          <small>{request.operation} / {requestAdapterLabel(request)} / {state.replace(/_/g, " ")}</small>
+          <small>{run.operation} / {requestAdapterLabel(run)} / {state.replace(/_/g, " ")}</small>
         </div>
       </div>
       <div className="cloud-create-plan-copy">
         <section>
           <span>Objective</span>
-          <p>{request.objective}</p>
+          <p>{run.objective}</p>
         </section>
         <section>
           <span>Target</span>
@@ -295,28 +294,28 @@ function CloudCreatePlanReview({
             <span>Captured context</span>
             <p>{plan.capturedContextSummary}</p>
           </section>
-        ) : request.context.targetRepoAssumptions.length ? (
+        ) : run.context.targetRepoAssumptions.length ? (
           <section>
             <span>Captured context</span>
-            <p>{request.context.targetRepoAssumptions.join("; ")}</p>
+            <p>{run.context.targetRepoAssumptions.join("; ")}</p>
           </section>
         ) : null}
-        {request.context.attachments.length ? (
+        {run.context.attachments.length ? (
           <section>
             <span>Inputs</span>
-            <p>{request.context.attachments.map((attachment) => attachment.name).join(", ")}</p>
+            <p>{run.context.attachments.map((attachment) => attachment.name).join(", ")}</p>
           </section>
         ) : null}
-        {request.context.apps.length ? (
+        {run.context.apps.length ? (
           <section>
             <span>Apps</span>
-            <p>{request.context.apps.map((app) => app.name).join(", ")}</p>
+            <p>{run.context.apps.map((app) => app.name).join(", ")}</p>
           </section>
         ) : null}
-        {request.context.tools.length ? (
+        {run.context.tools.length ? (
           <section>
             <span>Tools</span>
-            <p>{request.context.tools.map((tool) => tool.name).join(", ")}</p>
+            <p>{run.context.tools.map((tool) => tool.name).join(", ")}</p>
           </section>
         ) : null}
         {actionShape ? (
@@ -541,13 +540,9 @@ export function CloudWorkView({
   if (selectedWorkItem) {
     const messages = detail?.messages ?? [];
     const activity = detail?.activity ?? [];
-    const createPipelineRequest =
-      detail?.createPipelineRequest ??
-      selectedWorkItem.createPipelineRequest ??
-      null;
-    const createPipeline =
-      detail?.createPipeline ??
-      selectedWorkItem.createPipeline ??
+    const createImproveRun =
+      detail?.createImproveRun ??
+      selectedWorkItem.createImproveRun ??
       null;
     const initialMessage = firstMessage(messages);
     const initialMessageBody = initialMessage?.body ?? selectedWorkItem.title;
@@ -595,10 +590,9 @@ export function CloudWorkView({
               onApplyLocalPatch={onApplyLocalPatch}
               onShowFiles={onShowFiles}
             />
-            {createPipelineRequest ? (
+            {createImproveRun ? (
               <CloudCreatePlanReview
-                request={createPipelineRequest}
-                snapshot={createPipeline}
+                run={createImproveRun}
                 actionBusy={actionBusy}
                 onApprove={() => void onHandleBackground(null)}
                 onEdit={startPlanEdit}
@@ -607,7 +601,7 @@ export function CloudWorkView({
             ) : null}
             {messages
               .filter((message) => message.id !== initialMessage?.id)
-              .filter((message) => !isHiddenCreatePipelineMessage(message))
+              .filter((message) => !isHiddenCreateImproveMessage(message))
               .map((message) => (
                 <article key={message.id} className={`cloud-message ${message.role}`}>
                   <p>{message.body}</p>

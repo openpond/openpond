@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { createPipelineActionShapeFromMetadata } from "@openpond/contracts";
+import { createImproveActionShapeFromMetadata } from "@openpond/contracts";
 
 import {
   createGoalState,
@@ -12,10 +12,10 @@ import {
 } from "./config";
 import {
   createInitialCreatePipeline,
-  approveCreatePipelinePlan,
-  cancelCreatePipelinePlan,
-  rejectCreatePipelinePlan,
-  reviseCreatePipelinePlan,
+  approveCreateImprovePlan,
+  cancelCreateImprovePlan,
+  rejectCreateImprovePlan,
+  reviseCreateImprovePlan,
   shouldCreatePipelineForGoal,
 } from "./create-pipeline";
 import { createGoalEvent } from "./events";
@@ -163,11 +163,11 @@ export async function createLocalGoal(params: {
   options: Record<string, string | boolean>;
   objective: string;
   kind: GoalKind;
-  createPipeline?: {
+  createImprove?: {
     command?: "/create" | "/edit" | "openpond extend";
     surface?:
       | "direct_prompt_create"
-      | "direct_prompt_edit"
+      | "direct_prompt_improve"
       | "local_extend";
     profile?: {
       activeProfile?: string | null;
@@ -195,18 +195,18 @@ export async function createLocalGoal(params: {
   );
   if (shouldCreatePipelineForGoal(params.kind)) {
     const command =
-      params.createPipeline?.command ??
+      params.createImprove?.command ??
       (params.kind === "update_agent" ? "/edit" : "/create");
     const surface =
-      params.createPipeline?.surface ??
+      params.createImprove?.surface ??
       (params.kind === "update_agent"
-        ? "direct_prompt_edit"
+        ? "direct_prompt_improve"
         : "direct_prompt_create");
     const { snapshot, approval } = createInitialCreatePipeline({
       goal: state,
       command,
       surface,
-      profile: params.createPipeline?.profile ?? {
+      profile: params.createImprove?.profile ?? {
         activeProfile: optionString(params.options, "profile") || null,
         repoPath: null,
         sourcePath: local.workspace,
@@ -217,18 +217,17 @@ export async function createLocalGoal(params: {
       ...state,
       status: "awaiting_approval",
       approvals: [approval],
-      createPipeline: snapshot,
+      createImproveRun: snapshot,
       events: [
         ...state.events,
         createGoalEvent({
           goalId: state.id,
           kind: "create_pipeline.created",
-          summary: "Create pipeline initialized",
+          summary: "Create/Improve run initialized",
           payload: {
-            pipelineId: snapshot.id,
-            requestId: snapshot.request.id,
+            runId: snapshot.id,
             state: snapshot.state,
-            sourceAuthority: snapshot.request.adapter.sourceAuthority,
+            sourceAuthority: snapshot.adapter.sourceAuthority,
           },
         }),
         createGoalEvent({
@@ -256,7 +255,7 @@ export async function createLocalGoal(params: {
           payload: {
             kind: approval.kind,
             reason: approval.reason,
-            requestId: snapshot.request.id,
+            runId: snapshot.id,
             planId: snapshot.plan?.id ?? null,
           },
         }),
@@ -266,7 +265,7 @@ export async function createLocalGoal(params: {
   await local.adapter.create(state);
   console.log(`Goal created: ${state.id}`);
   console.log(`State: ${goalStateDisplayPath({ storageRoot: local.storageRoot, goalId: state.id, fileName: "state.json" })}`);
-  if (state.createPipeline?.plan) {
+  if (state.createImproveRun?.plan) {
     console.log(`Plan: ${goalStateDisplayPath({ storageRoot: local.storageRoot, goalId: state.id, fileName: "create-plan.json" })}`);
     console.log(`Approval required: openpond goal approve ${state.id}`);
   }
@@ -488,11 +487,11 @@ async function applyGoalLifecycle(params: {
     };
     if (pendingApproval?.kind === "create_plan") {
       if (params.action === "approve") {
-        decidedGoal = approveCreatePipelinePlan(decidedGoal, pendingApproval.id);
+        decidedGoal = approveCreateImprovePlan(decidedGoal, pendingApproval.id);
       } else if (params.action === "reject") {
-        decidedGoal = rejectCreatePipelinePlan(decidedGoal, pendingApproval.id, note);
+        decidedGoal = rejectCreateImprovePlan(decidedGoal, pendingApproval.id, note);
       } else {
-        decidedGoal = cancelCreatePipelinePlan(decidedGoal, pendingApproval.id, note);
+        decidedGoal = cancelCreateImprovePlan(decidedGoal, pendingApproval.id, note);
       }
     }
     await local.adapter.update(decidedGoal);
@@ -531,7 +530,7 @@ async function applyGoalLifecycle(params: {
                 ? "Create plan rejected"
                 : "Create plan cancelled",
           payload: {
-            fromState: goal.createPipeline?.state ?? null,
+            fromState: goal.createImproveRun?.state ?? null,
             toState,
             approvalId: pendingApproval.id,
           },
@@ -578,8 +577,8 @@ async function editGoalPlan(params: {
   const local = await localGoalPaths(params.options);
   const goal = await local.adapter.get(params.goalId);
   if (!goal) throw new Error(`goal not found: ${params.goalId}`);
-  const previousPlanId = goal.createPipeline?.plan?.id ?? null;
-  const revised = reviseCreatePipelinePlan(goal, { revision: params.revision });
+  const previousPlanId = goal.createImproveRun?.plan?.id ?? null;
+  const revised = reviseCreateImprovePlan(goal, { revision: params.revision });
   await local.adapter.update(revised);
   await local.adapter.appendEvent(
     goal.id,
@@ -589,38 +588,38 @@ async function editGoalPlan(params: {
       summary: "Create plan revised before source mutation",
       payload: {
         previousPlanId,
-        planId: revised.createPipeline?.plan?.id ?? null,
+        planId: revised.createImproveRun?.plan?.id ?? null,
         revision: params.revision,
       },
     })
   );
   if (hasFlag(params.options, "json")) {
-    console.log(JSON.stringify(revised.createPipeline, null, 2));
+    console.log(JSON.stringify(revised.createImproveRun, null, 2));
     return;
   }
   console.log(`Goal ${params.goalId} plan revised`);
-  console.log(`Plan: ${revised.createPipeline?.plan?.id ?? "unknown"}`);
+  console.log(`Plan: ${revised.createImproveRun?.plan?.id ?? "unknown"}`);
 }
 
 function printCreatePipeline(goal: GoalState | null, json = false): void {
-  if (!goal?.createPipeline) {
+  if (!goal?.createImproveRun) {
     if (json) {
       console.log(JSON.stringify(null, null, 2));
       return;
     }
-    console.log(`Goal ${goal?.id ?? "unknown"} has no create pipeline.`);
+    console.log(`Goal ${goal?.id ?? "unknown"} has no Create/Improve run.`);
     return;
   }
-  const pipeline = goal.createPipeline;
+  const pipeline = goal.createImproveRun;
   const plan = pipeline.plan;
   if (json) {
     console.log(JSON.stringify(pipeline, null, 2));
     return;
   }
   console.log(`Goal: ${goal.id}`);
-  console.log(`Pipeline: ${pipeline.state}`);
-  console.log(`Request: ${pipeline.request.command} ${pipeline.request.operation}`);
-  console.log(`Objective: ${pipeline.request.objective}`);
+  console.log(`Create/Improve: ${pipeline.state}`);
+  console.log(`Request: ${pipeline.command} ${pipeline.operation}`);
+  console.log(`Objective: ${pipeline.objective}`);
   if (!plan) return;
   console.log("");
   console.log(`Plan: ${plan.status}`);
@@ -631,7 +630,7 @@ function printCreatePipeline(goal: GoalState | null, json = false): void {
   console.log("");
   console.log("Default chat action:");
   console.log(`  ${plan.defaultChatAction.key ?? "none"}`);
-  const actionShape = createPipelineActionShapeFromMetadata(plan.metadata);
+  const actionShape = createImproveActionShapeFromMetadata(plan.metadata);
   if (actionShape) {
     console.log("");
     console.log("Action shape:");

@@ -1,8 +1,14 @@
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
-import os from "node:os";
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -12,6 +18,7 @@ import {
   type LocalOpenPondProfileConfig,
   type LocalOpenPondProfilePushStatus,
 } from "../config.js";
+import { openPondConfigDirectory } from "../private-json-file.js";
 import {
   emptyProfileCatalogState,
   emptyProfileDiffSummary,
@@ -22,6 +29,7 @@ import {
   type OpenPondProfileAgent,
   type OpenPondProfileCatalogState,
   type OpenPondProfileDiffSummary,
+  type OpenPondProfileEval,
   type OpenPondProfileGitFileChange,
   type OpenPondProfileGitState,
   type OpenPondProfileHostedBinding,
@@ -56,6 +64,7 @@ export type ProfileRepoManifest = {
       path: string;
       defaultAgent?: string;
       enabledAgents?: string[];
+      agentNames?: Record<string, string>;
     }
   >;
 };
@@ -65,6 +74,7 @@ export type {
   OpenPondProfileAgent,
   OpenPondProfileCatalogState,
   OpenPondProfileDiffSummary,
+  OpenPondProfileEval,
   OpenPondProfileGitFileChange,
   OpenPondProfileGitState,
   OpenPondProfileHostedBinding,
@@ -106,7 +116,7 @@ export type InitLocalProfileInput = {
 
 export function mergeProfileRepoManifestEntry(
   existing: ProfileRepoManifest["profiles"][string] | undefined,
-  profilePath: string,
+  profilePath: string
 ): ProfileRepoManifest["profiles"][string] {
   const defaultAgent = existing?.defaultAgent ?? DEFAULT_PROFILE_AGENT;
   const enabledAgents =
@@ -124,7 +134,7 @@ export function mergeProfileRepoManifestEntry(
 export function mergeActiveLocalProfileConfig(
   existing: LocalOpenPondProfileConfig | undefined,
   repoPath: string,
-  profile: string,
+  profile: string
 ): LocalOpenPondProfileConfig {
   const next: LocalOpenPondProfileConfig = {
     repoPath,
@@ -132,7 +142,10 @@ export function mergeActiveLocalProfileConfig(
     mode: "local",
   };
   if (!existing) return next;
-  if (path.resolve(existing.repoPath) !== path.resolve(repoPath) || existing.profile !== profile) {
+  if (
+    path.resolve(existing.repoPath) !== path.resolve(repoPath) ||
+    existing.profile !== profile
+  ) {
     return next;
   }
   return {
@@ -155,10 +168,12 @@ type ProfileCheckCommand = Exclude<RunProfileCommandInput["command"], "run">;
 const require = createRequire(import.meta.url);
 
 export function defaultLocalProfileRepoPath(): string {
-  return path.join(os.homedir(), ".openpond", "profiles", "default-repo");
+  return path.join(openPondConfigDirectory(), "profiles", "default-repo");
 }
 
-export function emptyProfileState(error: string | null = null): OpenPondProfileState {
+export function emptyProfileState(
+  error: string | null = null
+): OpenPondProfileState {
   return {
     mode: "none",
     repoPath: null,
@@ -167,6 +182,7 @@ export function emptyProfileState(error: string | null = null): OpenPondProfileS
     manifestPath: null,
     agents: [],
     skills: [],
+    evals: [],
     git: null,
     catalog: emptyProfileCatalogState(error),
     skillCatalog: emptyProfileSkillCatalogState(error),
@@ -181,38 +197,96 @@ export function emptyProfileState(error: string | null = null): OpenPondProfileS
   };
 }
 
-export async function initLocalProfileRepo(input: InitLocalProfileInput = {}): Promise<OpenPondProfileState> {
-  const repoPath = path.resolve(input.repoPath ?? defaultLocalProfileRepoPath());
+export async function initLocalProfileRepo(
+  input: InitLocalProfileInput = {}
+): Promise<OpenPondProfileState> {
+  const repoPath = path.resolve(
+    input.repoPath ?? defaultLocalProfileRepoPath()
+  );
   const profile = normalizeProfileName(input.profile);
   const profilePath = path.join("profiles", profile);
   const profileSourcePath = path.join(repoPath, profilePath);
 
   await mkdir(repoPath, { recursive: true });
-  const manifest = await readProfileManifest(repoPath).catch(() => defaultProfileManifest(profile, profilePath));
+  const manifest = await readProfileManifest(repoPath).catch(() =>
+    defaultProfileManifest(profile, profilePath)
+  );
   manifest.defaultProfile = manifest.defaultProfile || profile;
-  manifest.profiles[profile] = mergeProfileRepoManifestEntry(manifest.profiles[profile], profilePath);
+  manifest.profiles[profile] = mergeProfileRepoManifestEntry(
+    manifest.profiles[profile],
+    profilePath
+  );
 
-  await ensureProfileSource(profileSourcePath, input.template ?? "blank-agent", Boolean(input.force));
+  await ensureProfileSource(
+    profileSourcePath,
+    input.template ?? "blank-agent",
+    Boolean(input.force)
+  );
   await ensureProfileDependencies(profileSourcePath);
   await ensureProfileScaffoldFiles(repoPath, profileSourcePath, profile);
   await writeProfileManifest(repoPath, manifest);
   await ensureProfileGitRepo(repoPath);
   const currentConfig = (await loadGlobalConfig()).openpondProfile;
   await saveGlobalConfig({
-    openpondProfile: mergeActiveLocalProfileConfig(currentConfig, repoPath, profile),
+    openpondProfile: mergeActiveLocalProfileConfig(
+      currentConfig,
+      repoPath,
+      profile
+    ),
   });
   return loadOpenPondProfileState();
 }
 
-export async function loadLocalProfileRepo(repoPathInput: string, profileInput?: string): Promise<OpenPondProfileState> {
+export async function loadLocalProfileRepo(
+  repoPathInput: string,
+  profileInput?: string
+): Promise<OpenPondProfileState> {
   const repoPath = path.resolve(repoPathInput);
   const manifest = await readProfileManifest(repoPath);
   const profile = normalizeProfileName(profileInput ?? manifest.defaultProfile);
   profileSourcePath(manifest, repoPath, profile);
   const currentConfig = (await loadGlobalConfig()).openpondProfile;
   await saveGlobalConfig({
-    openpondProfile: mergeActiveLocalProfileConfig(currentConfig, repoPath, profile),
+    openpondProfile: mergeActiveLocalProfileConfig(
+      currentConfig,
+      repoPath,
+      profile
+    ),
   });
+  return loadOpenPondProfileState();
+}
+
+export async function renameActiveProfileAgent(
+  agentIdInput: string,
+  nameInput: string
+): Promise<OpenPondProfileState> {
+  const agentId = agentIdInput.trim();
+  const name = normalizeAgentDisplayName(nameInput);
+  if (!agentId) throw new Error("Agent ID is required.");
+
+  const config = await loadGlobalConfig();
+  const active = config.openpondProfile;
+  if (!active) throw new Error("No active local Profile.");
+
+  const manifest = await readProfileManifest(active.repoPath);
+  const profileConfig = manifest.profiles[active.profile];
+  if (!profileConfig) {
+    throw new Error(`Profile "${active.profile}" was not found.`);
+  }
+  const defaultAgent = profileConfig.defaultAgent ?? DEFAULT_PROFILE_AGENT;
+  const enabledAgents = profileConfig.enabledAgents ?? [defaultAgent];
+  if (!enabledAgents.includes(agentId)) {
+    throw new Error(
+      `Agent "${agentId}" was not found in Profile "${active.profile}".`
+    );
+  }
+
+  const agentNames = { ...(profileConfig.agentNames ?? {}) };
+  if (name === agentId) delete agentNames[agentId];
+  else agentNames[agentId] = name;
+  if (Object.keys(agentNames).length) profileConfig.agentNames = agentNames;
+  else delete profileConfig.agentNames;
+  await writeProfileManifest(active.repoPath, manifest);
   return loadOpenPondProfileState();
 }
 
@@ -222,19 +296,23 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
   if (!active) return emptyProfileState();
   try {
     const manifest = await readProfileManifest(active.repoPath);
-    const sourcePath = profileSourcePath(manifest, active.repoPath, active.profile);
+    const sourcePath = profileSourcePath(
+      manifest,
+      active.repoPath,
+      active.profile
+    );
     const agents = await listProfileAgents(manifest, active.profile);
-    const [git, catalogResult, skillResult] = await Promise.all([
+    const catalogSources = profileCatalogSources({
+      manifest,
+      profile: active.profile,
+      profileSourcePath: sourcePath,
+      agents,
+    });
+    const [git, catalogResult, skillResult, evals] = await Promise.all([
       loadProfileGitState(active.repoPath),
-      loadProfileActionCatalogForSources(
-        profileCatalogSources({
-          manifest,
-          profile: active.profile,
-          profileSourcePath: sourcePath,
-          agents,
-        }),
-      ),
+      loadProfileActionCatalogForSources(catalogSources),
       loadProfileSkills(sourcePath),
+      loadProfileEvals(sourcePath, catalogSources),
     ]);
     const hosted = hostedBindingFromConfig(active);
     const diff = summarizeProfileDiff(git, active.profile);
@@ -260,6 +338,7 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
       manifestPath: path.join(active.repoPath, PROFILE_REPO_MANIFEST),
       agents,
       skills: skillResult.skills,
+      evals,
       git,
       catalog: catalogResult.catalog,
       skillCatalog: skillResult.skillCatalog,
@@ -283,6 +362,7 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
       manifestPath: path.join(active.repoPath, PROFILE_REPO_MANIFEST),
       agents: [],
       skills: [],
+      evals: [],
       git,
       catalog: emptyProfileCatalogState(errorMessage),
       skillCatalog: emptyProfileSkillCatalogState(errorMessage),
@@ -304,15 +384,20 @@ export async function requireActiveLocalProfile(): Promise<{
 }> {
   const config = (await loadGlobalConfig()).openpondProfile;
   if (!config) {
-    throw new Error("No active OpenPond profile. Run `openpond init` or `openpond profile load --path <dir>`.");
+    throw new Error(
+      "No active OpenPond profile. Run `openpond init` or `openpond profile load --path <dir>`."
+    );
   }
   const state = await loadOpenPondProfileState();
   if (state.error) throw new Error(state.error);
-  if (!state.sourcePath) throw new Error("Active OpenPond profile has no source path.");
+  if (!state.sourcePath)
+    throw new Error("Active OpenPond profile has no source path.");
   return { config, state };
 }
 
-export async function runProfileSdkCommand(input: RunProfileCommandInput): Promise<{
+export async function runProfileSdkCommand(
+  input: RunProfileCommandInput
+): Promise<{
   code: number | null;
   stdout: string;
   stderr: string;
@@ -321,14 +406,21 @@ export async function runProfileSdkCommand(input: RunProfileCommandInput): Promi
   const requestedRunArgs = input.command === "run" ? input.args ?? [] : [];
   const selectedAction =
     input.command === "run"
-      ? active.state.actionCatalog.find((action) => action.id === requestedRunArgs[0])
+      ? active.state.actionCatalog.find(
+          (action) => action.id === requestedRunArgs[0]
+        )
       : null;
   const cwd = path.resolve(
-    input.cwd ?? selectedAction?.sourcePath ?? active.state.sourcePath!,
+    input.cwd ?? selectedAction?.sourcePath ?? active.state.sourcePath!
   );
-  const runArgs = input.command === "run"
-    ? runCommandArgs(cwd, input.args ?? [], selectedAction?.sourceActionId ?? null)
-    : null;
+  const runArgs =
+    input.command === "run"
+      ? runCommandArgs(
+          cwd,
+          input.args ?? [],
+          selectedAction?.sourceActionId ?? null
+        )
+      : null;
   if (input.command === "run" && runArgs) {
     const actionId = runArgs[0]!;
     const catalog =
@@ -344,12 +436,15 @@ export async function runProfileSdkCommand(input: RunProfileCommandInput): Promi
         actionCatalog: catalog.actionCatalog,
         sourceSetupRequirements: catalog.sourceSetupRequirements,
         actionId,
-      }),
+      })
     );
   }
   const result = await runAgentSdkProjectCommand({
     command: input.command,
-    args: input.command === "run" ? (runArgs ?? runCommandArgs(cwd, input.args ?? [])) : input.args,
+    args:
+      input.command === "run"
+        ? runArgs ?? runCommandArgs(cwd, input.args ?? [])
+        : input.args,
     cwd,
     inherit: input.inherit,
     throwOnFailure: false,
@@ -357,15 +452,20 @@ export async function runProfileSdkCommand(input: RunProfileCommandInput): Promi
   await saveProfileCheckStatus(input.command, result.code);
   if (result.code !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim();
-    throw new Error(detail || `${input.command} failed with exit code ${result.code ?? "unknown"}`);
+    throw new Error(
+      detail ||
+        `${input.command} failed with exit code ${result.code ?? "unknown"}`
+    );
   }
   return result;
 }
 
-export async function runAgentSdkProjectCommand(input: RunProfileCommandInput & {
-  cwd: string;
-  throwOnFailure?: boolean;
-}): Promise<{
+export async function runAgentSdkProjectCommand(
+  input: RunProfileCommandInput & {
+    cwd: string;
+    throwOnFailure?: boolean;
+  }
+): Promise<{
   code: number | null;
   stdout: string;
   stderr: string;
@@ -387,12 +487,19 @@ export async function runAgentSdkProjectCommand(input: RunProfileCommandInput & 
   });
   if (input.throwOnFailure !== false && result.code !== 0) {
     const detail = commandFailureDetail(result, input.command);
-    throw new Error(detail || `${input.command} failed with exit code ${result.code ?? "unknown"}`);
+    throw new Error(
+      detail ||
+        `${input.command} failed with exit code ${result.code ?? "unknown"}`
+    );
   }
   return result;
 }
 
-function runCommandArgs(cwd: string, args: string[], sourceActionId: string | null = null): string[] {
+function runCommandArgs(
+  cwd: string,
+  args: string[],
+  sourceActionId: string | null = null
+): string[] {
   const [actionName, ...rest] = args;
   if (!actionName || actionName.startsWith("--")) {
     throw new Error("run requires an action name");
@@ -414,8 +521,15 @@ export async function runProfileCheck(kind: string | undefined): Promise<void> {
     agents: active.state.agents,
   });
   for (const command of checks) {
-    if (command !== "inspect" && command !== "build" && command !== "validate" && command !== "eval") {
-      throw new Error("check kind must be one of inspect, build, validate, eval, all");
+    if (
+      command !== "inspect" &&
+      command !== "build" &&
+      command !== "validate" &&
+      command !== "eval"
+    ) {
+      throw new Error(
+        "check kind must be one of inspect, build, validate, eval, all"
+      );
     }
     for (const source of sources) {
       await runProfileCheckForSource({
@@ -434,12 +548,18 @@ async function runProfileCheckForSource(input: {
   profileSourcePath: string;
   sourceCount: number;
 }): Promise<void> {
-  const args = input.command === "inspect" || input.command === "validate" || input.command === "eval"
-    ? ["--json"]
-    : [];
+  const args =
+    input.command === "inspect" ||
+    input.command === "validate" ||
+    input.command === "eval"
+      ? ["--json"]
+      : [];
   if (input.sourceCount > 1) {
-    const label = path.relative(input.profileSourcePath, input.source.sourcePath) || ".";
-    console.log(`\n[profile:${input.source.agentId}] ${input.command} ${label}`);
+    const label =
+      path.relative(input.profileSourcePath, input.source.sourcePath) || ".";
+    console.log(
+      `\n[profile:${input.source.agentId}] ${input.command} ${label}`
+    );
   }
   const result = await runAgentSdkProjectCommand({
     command: input.command,
@@ -456,8 +576,9 @@ async function runProfileCheckForSource(input: {
     throw new Error(
       [
         `Profile check failed for enabled agent ${input.source.agentId} at ${input.source.sourcePath}.`,
-        detail || `${input.command} failed with exit code ${result.code ?? "unknown"}`,
-      ].join("\n"),
+        detail ||
+          `${input.command} failed with exit code ${result.code ?? "unknown"}`,
+      ].join("\n")
     );
   }
 }
@@ -474,7 +595,10 @@ export async function commitActiveProfileChanges(message?: string): Promise<{
   }
   const result = await commitProfileChanges(
     active.state.repoPath,
-    message?.trim() || `Update OpenPond profile ${active.state.activeProfile ?? DEFAULT_LOCAL_PROFILE}`,
+    message?.trim() ||
+      `Update OpenPond profile ${
+        active.state.activeProfile ?? DEFAULT_LOCAL_PROFILE
+      }`
   );
   return {
     committed: result.committed,
@@ -484,7 +608,9 @@ export async function commitActiveProfileChanges(message?: string): Promise<{
   };
 }
 
-export async function saveProfilePushStatus(status: LocalOpenPondProfilePushStatus): Promise<void> {
+export async function saveProfilePushStatus(
+  status: LocalOpenPondProfilePushStatus
+): Promise<void> {
   const config = (await loadGlobalConfig()).openpondProfile;
   if (!config) return;
   await saveGlobalConfig({
@@ -516,7 +642,11 @@ async function saveProfileCheckStatus(
   });
 }
 
-async function ensureProfileSource(profileSourcePath: string, template: string, force: boolean): Promise<void> {
+async function ensureProfileSource(
+  profileSourcePath: string,
+  template: string,
+  force: boolean
+): Promise<void> {
   await mkdir(profileSourcePath, { recursive: true });
   const entries = await readdir(profileSourcePath);
   if (entries.length > 0 && !force) return;
@@ -533,9 +663,23 @@ async function ensureProfileSource(profileSourcePath: string, template: string, 
   await rewriteTemplateSdkDependency(profileSourcePath, sdkRoot);
 }
 
-async function ensureProfileScaffoldFiles(repoPath: string, profileSourcePath: string, profile: string): Promise<void> {
+async function ensureProfileScaffoldFiles(
+  repoPath: string,
+  profileSourcePath: string,
+  profile: string
+): Promise<void> {
   await mkdir(path.join(repoPath, "profiles"), { recursive: true });
-  for (const dir of ["agents", "skills", "actions", "extensions", "prompts", "goals", "evals", "settings", "traces"]) {
+  for (const dir of [
+    "agents",
+    "skills",
+    "actions",
+    "extensions",
+    "prompts",
+    "goals",
+    "evals",
+    "settings",
+    "traces",
+  ]) {
     await mkdir(path.join(profileSourcePath, dir), { recursive: true });
   }
   const profileManifestPath = path.join(profileSourcePath, PROFILE_MANIFEST);
@@ -551,27 +695,42 @@ async function ensureProfileScaffoldFiles(repoPath: string, profileSourcePath: s
         "    enabled: true",
         "",
       ].join("\n"),
-      "utf8",
+      "utf8"
     );
   }
   const lockPath = path.join(profileSourcePath, "openpond.lock");
   if (!existsSync(lockPath)) {
-    await writeFile(lockPath, "# OpenPond profile lockfile placeholder\n", "utf8");
+    await writeFile(
+      lockPath,
+      "# OpenPond profile lockfile placeholder\n",
+      "utf8"
+    );
   }
 }
 
-async function rewriteTemplateSdkDependency(profileSourcePath: string, sdkRoot: string): Promise<void> {
+async function rewriteTemplateSdkDependency(
+  profileSourcePath: string,
+  sdkRoot: string
+): Promise<void> {
   const packageJsonPath = path.join(profileSourcePath, "package.json");
   const raw = await readFile(packageJsonPath, "utf8");
-  const packageJson = JSON.parse(raw) as { dependencies?: Record<string, string> };
+  const packageJson = JSON.parse(raw) as {
+    dependencies?: Record<string, string>;
+  };
   packageJson.dependencies = {
     ...(packageJson.dependencies ?? {}),
     "openpond-agent-sdk": `file:${sdkRoot}`,
   };
-  await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+  await writeFile(
+    packageJsonPath,
+    `${JSON.stringify(packageJson, null, 2)}\n`,
+    "utf8"
+  );
 }
 
-async function ensureProfileDependencies(profileSourcePath: string): Promise<void> {
+async function ensureProfileDependencies(
+  profileSourcePath: string
+): Promise<void> {
   if (!existsSync(path.join(profileSourcePath, "package.json"))) return;
   const sdkRoot = resolveAgentSdkRoot();
   await ensureAgentSdkBuilt(sdkRoot);
@@ -584,32 +743,45 @@ async function ensureProfileDependencies(profileSourcePath: string): Promise<voi
 }
 
 async function ensureAgentSdkBuilt(sdkRoot: string): Promise<void> {
-  if (existsSync(path.join(sdkRoot, "dist", "cli.js")) && existsSync(path.join(sdkRoot, "dist", "primitives", "index.js"))) {
+  if (
+    existsSync(path.join(sdkRoot, "dist", "cli.js")) &&
+    existsSync(path.join(sdkRoot, "dist", "primitives", "index.js"))
+  ) {
     return;
   }
   const buildScript = path.join(sdkRoot, "scripts", "build.ts");
   if (!existsSync(buildScript)) {
-    throw new Error(`Resolved openpond-agent-sdk at ${sdkRoot}, but built SDK files are missing.`);
+    throw new Error(
+      `Resolved openpond-agent-sdk at ${sdkRoot}, but built SDK files are missing.`
+    );
   }
   const result = await spawnCommand(
     process.execPath,
     [resolveTsxCli(sdkRoot), buildScript],
-    { cwd: sdkRoot },
+    { cwd: sdkRoot }
   );
   if (result.code !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim();
-    throw new Error(detail || `openpond-agent-sdk build failed with exit code ${result.code ?? "unknown"}`);
+    throw new Error(
+      detail ||
+        `openpond-agent-sdk build failed with exit code ${
+          result.code ?? "unknown"
+        }`
+    );
   }
 }
 
-async function listProfileAgents(manifest: ProfileRepoManifest, profile: string): Promise<OpenPondProfileAgent[]> {
+async function listProfileAgents(
+  manifest: ProfileRepoManifest,
+  profile: string
+): Promise<OpenPondProfileAgent[]> {
   const profileConfig = manifest.profiles[profile];
   if (!profileConfig) return [];
   const defaultAgent = profileConfig.defaultAgent ?? DEFAULT_PROFILE_AGENT;
   const enabled = new Set(profileConfig.enabledAgents ?? [defaultAgent]);
   return Array.from(enabled).map((id) => ({
     id,
-    name: id,
+    name: profileConfig.agentNames?.[id]?.trim() || id,
     path: id === DEFAULT_PROFILE_AGENT ? "agent/agent.ts" : `agents/${id}`,
     enabled: true,
   }));
@@ -621,16 +793,20 @@ function profileCatalogSources(input: {
   profileSourcePath: string;
   agents: OpenPondProfileAgent[];
 }) {
-  const defaultAgent = input.manifest.profiles[input.profile]?.defaultAgent ?? DEFAULT_PROFILE_AGENT;
+  const defaultAgent =
+    input.manifest.profiles[input.profile]?.defaultAgent ??
+    DEFAULT_PROFILE_AGENT;
   const agents =
     input.agents.length > 0
       ? input.agents
-      : [{
-          id: DEFAULT_PROFILE_AGENT,
-          name: DEFAULT_PROFILE_AGENT,
-          path: "agent/agent.ts",
-          enabled: true,
-        }];
+      : [
+          {
+            id: DEFAULT_PROFILE_AGENT,
+            name: DEFAULT_PROFILE_AGENT,
+            path: "agent/agent.ts",
+            enabled: true,
+          },
+        ];
   return agents.map((agent) => ({
     agentId: agent.id,
     sourcePath:
@@ -641,7 +817,69 @@ function profileCatalogSources(input: {
   }));
 }
 
-function hostedBindingFromConfig(config: LocalOpenPondProfileConfig): OpenPondProfileHostedBinding | null {
+async function loadProfileEvals(
+  profileSourcePath: string,
+  sources: ReturnType<typeof profileCatalogSources>
+): Promise<OpenPondProfileEval[]> {
+  const evals = new Map<string, OpenPondProfileEval>();
+  const roots = [
+    {
+      root: path.join(profileSourcePath, "evals"),
+      agentId: null as string | null,
+    },
+    ...sources.flatMap((source) => [
+      {
+        root: path.join(source.sourcePath, "agent", "evals"),
+        agentId: source.agentId,
+      },
+      { root: path.join(source.sourcePath, "evals"), agentId: source.agentId },
+    ]),
+  ];
+  for (const entry of roots) {
+    for (const sourcePath of await listEvalSourceFiles(entry.root)) {
+      const relativePath = path
+        .relative(profileSourcePath, sourcePath)
+        .split(path.sep)
+        .join("/");
+      if (evals.has(relativePath)) continue;
+      evals.set(relativePath, {
+        id: relativePath,
+        name: path
+          .basename(sourcePath)
+          .replace(/\.eval\.[^.]+$/i, "")
+          .replace(/\.[^.]+$/i, ""),
+        path: relativePath,
+        agentId: entry.agentId,
+        sourcePath,
+      });
+    }
+  }
+  return [...evals.values()].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name) || left.path.localeCompare(right.path)
+  );
+}
+
+async function listEvalSourceFiles(root: string): Promise<string[]> {
+  if (!existsSync(root)) return [];
+  const files: string[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const sourcePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listEvalSourceFiles(sourcePath)));
+    } else if (
+      entry.isFile() &&
+      /\.eval\.(?:[cm]?[jt]sx?)$/i.test(entry.name)
+    ) {
+      files.push(sourcePath);
+    }
+  }
+  return files;
+}
+
+function hostedBindingFromConfig(
+  config: LocalOpenPondProfileConfig
+): OpenPondProfileHostedBinding | null {
   const push = config.lastPush;
   if (!push) return null;
   return {
@@ -654,8 +892,6 @@ function hostedBindingFromConfig(config: LocalOpenPondProfileConfig): OpenPondPr
     lastPushedHostedHead: push.hostedHead ?? null,
     promotionStatus: push.promotionStatus ?? null,
     hostedRunStatus: push.hostedRunStatus ?? null,
-    localGoalId: push.localGoalId ?? null,
-    hostedGoalId: push.hostedGoalId ?? null,
     hostedRunAgentId: push.hostedRunAgentId ?? null,
     hostedRunId: push.hostedRunId ?? null,
     hostedRunAt: push.hostedRunAt ?? null,
@@ -687,7 +923,7 @@ function summarizeProfileState(input: {
       input.lastCheck.sourceHead &&
       input.lastCheck.sourceHead === input.git.head &&
       !input.git.dirty &&
-      !input.catalog.stale,
+      !input.catalog.stale
   );
   const checkStaleReason = profileCheckStaleReason({
     catalog: input.catalog,
@@ -768,10 +1004,13 @@ function profileCheckStaleReason(input: {
   lastCheck: LocalOpenPondProfileCheckStatus | null;
 }): string | null {
   if (input.catalog.error) return `Catalog error: ${input.catalog.error}`;
-  if (input.catalog.stale) return "Action catalog artifacts are missing or stale.";
+  if (input.catalog.stale)
+    return "Action catalog artifacts are missing or stale.";
   if (!input.lastCheck) return "Profile checks have not run.";
-  if (input.lastCheck.status !== "passed") return `Last ${input.lastCheck.command} check failed.`;
-  if (!input.lastCheck.sourceHead) return "Last check did not record a source head.";
+  if (input.lastCheck.status !== "passed")
+    return `Last ${input.lastCheck.command} check failed.`;
+  if (!input.lastCheck.sourceHead)
+    return "Last check did not record a source head.";
   if (input.git.head && input.lastCheck.sourceHead !== input.git.head) {
     return "Profile source changed since the last check.";
   }
@@ -781,18 +1020,33 @@ function profileCheckStaleReason(input: {
 
 function profileDirtyMessage(diff: OpenPondProfileDiffSummary): string {
   const parts: string[] = [];
-  if (diff.changedAgents.length > 0) parts.push(`${diff.changedAgents.length} changed agent(s)`);
-  if (diff.newAgents.length > 0) parts.push(`${diff.newAgents.length} new agent(s)`);
-  if (diff.deletedAgents.length > 0) parts.push(`${diff.deletedAgents.length} deleted agent(s)`);
-  if (diff.changedSkills.length > 0) parts.push(`${diff.changedSkills.length} changed skill(s)`);
-  if (diff.changedActions.length > 0) parts.push(`${diff.changedActions.length} changed action(s)`);
-  if (diff.changedExtensions.length > 0) parts.push(`${diff.changedExtensions.length} changed extension(s)`);
-  if (diff.setupChanges.length > 0) parts.push(`${diff.setupChanges.length} setup change(s)`);
-  if (diff.envRequirementChanges.length > 0) parts.push(`${diff.envRequirementChanges.length} env requirement change(s)`);
-  return parts.length > 0 ? `Profile has ${parts.join(", ")}.` : "Profile has uncommitted source changes.";
+  if (diff.changedAgents.length > 0)
+    parts.push(`${diff.changedAgents.length} changed agent(s)`);
+  if (diff.newAgents.length > 0)
+    parts.push(`${diff.newAgents.length} new agent(s)`);
+  if (diff.deletedAgents.length > 0)
+    parts.push(`${diff.deletedAgents.length} deleted agent(s)`);
+  if (diff.changedSkills.length > 0)
+    parts.push(`${diff.changedSkills.length} changed skill(s)`);
+  if (diff.changedActions.length > 0)
+    parts.push(`${diff.changedActions.length} changed action(s)`);
+  if (diff.changedExtensions.length > 0)
+    parts.push(`${diff.changedExtensions.length} changed extension(s)`);
+  if (diff.setupChanges.length > 0)
+    parts.push(`${diff.setupChanges.length} setup change(s)`);
+  if (diff.envRequirementChanges.length > 0)
+    parts.push(
+      `${diff.envRequirementChanges.length} env requirement change(s)`
+    );
+  return parts.length > 0
+    ? `Profile has ${parts.join(", ")}.`
+    : "Profile has uncommitted source changes.";
 }
 
-function summarizeProfileDiff(git: OpenPondProfileGitState, profile: string): OpenPondProfileDiffSummary {
+function summarizeProfileDiff(
+  git: OpenPondProfileGitState,
+  profile: string
+): OpenPondProfileDiffSummary {
   const diff = emptyProfileDiffSummary();
   diff.files = git.files;
   const profileRoot = `profiles/${profile}/`;
@@ -812,7 +1066,7 @@ function summarizeProfileDiff(git: OpenPondProfileGitState, profile: string): Op
 function classifyProfileFileChange(
   diff: OpenPondProfileDiffSummary,
   file: OpenPondProfileGitFileChange,
-  relativePath: string,
+  relativePath: string
 ): void {
   const firstSegment = relativePath.split("/")[0] ?? "";
   if (firstSegment === "agent") {
@@ -825,7 +1079,10 @@ function classifyProfileFileChange(
   } else if (firstSegment === "actions") {
     addUnique(diff.changedActions, relativePath.split("/")[1] ?? relativePath);
   } else if (firstSegment === "extensions") {
-    addUnique(diff.changedExtensions, relativePath.split("/")[1] ?? relativePath);
+    addUnique(
+      diff.changedExtensions,
+      relativePath.split("/")[1] ?? relativePath
+    );
   } else if (
     firstSegment === "settings" ||
     relativePath === "package.json" ||
@@ -846,7 +1103,7 @@ function classifyProfileFileChange(
 function addAgentChange(
   diff: OpenPondProfileDiffSummary,
   agentId: string,
-  category: OpenPondProfileGitFileChange["category"],
+  category: OpenPondProfileGitFileChange["category"]
 ): void {
   if (category === "added" || category === "untracked") {
     addUnique(diff.newAgents, agentId);
@@ -868,12 +1125,28 @@ function normalizeProfileName(value: string | undefined | null): string {
   const trimmed = value?.trim();
   if (!trimmed) return DEFAULT_LOCAL_PROFILE;
   if (!/^[a-zA-Z0-9._-]+$/.test(trimmed)) {
-    throw new Error("profile name may only contain letters, numbers, dots, underscores, and hyphens");
+    throw new Error(
+      "profile name may only contain letters, numbers, dots, underscores, and hyphens"
+    );
   }
   return trimmed;
 }
 
-function defaultProfileManifest(profile: string, profilePath: string): ProfileRepoManifest {
+function normalizeAgentDisplayName(value: string): string {
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("Agent name is required.");
+  if (name.length > 80)
+    throw new Error("Agent name must be 80 characters or fewer.");
+  if (/[\u0000-\u001f\u007f]/.test(name)) {
+    throw new Error("Agent name cannot contain control characters.");
+  }
+  return name;
+}
+
+function defaultProfileManifest(
+  profile: string,
+  profilePath: string
+): ProfileRepoManifest {
   return {
     schema: "openpond.profileRepo.v1",
     defaultProfile: profile,
@@ -887,24 +1160,48 @@ function defaultProfileManifest(profile: string, profilePath: string): ProfileRe
   };
 }
 
-async function readProfileManifest(repoPath: string): Promise<ProfileRepoManifest> {
+async function readProfileManifest(
+  repoPath: string
+): Promise<ProfileRepoManifest> {
   const manifestPath = path.join(repoPath, PROFILE_REPO_MANIFEST);
   const raw = await readFile(manifestPath, "utf8");
   const parsed = JSON.parse(raw) as ProfileRepoManifest;
-  if (parsed.schema !== "openpond.profileRepo.v1" || !parsed.profiles || typeof parsed.profiles !== "object") {
-    throw new Error(`${manifestPath} is not an OpenPond profile repo manifest.`);
+  if (
+    parsed.schema !== "openpond.profileRepo.v1" ||
+    !parsed.profiles ||
+    typeof parsed.profiles !== "object"
+  ) {
+    throw new Error(
+      `${manifestPath} is not an OpenPond profile repo manifest.`
+    );
   }
   return parsed;
 }
 
-async function writeProfileManifest(repoPath: string, manifest: ProfileRepoManifest): Promise<void> {
-  await writeFile(path.join(repoPath, PROFILE_REPO_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+async function writeProfileManifest(
+  repoPath: string,
+  manifest: ProfileRepoManifest
+): Promise<void> {
+  await writeFile(
+    path.join(repoPath, PROFILE_REPO_MANIFEST),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8"
+  );
 }
 
-function profileSourcePath(manifest: ProfileRepoManifest, repoPath: string, profile: string): string {
+function profileSourcePath(
+  manifest: ProfileRepoManifest,
+  repoPath: string,
+  profile: string
+): string {
   const profileConfig = manifest.profiles[profile];
   if (!profileConfig) {
-    throw new Error(`Profile "${profile}" was not found in ${path.join(repoPath, PROFILE_REPO_MANIFEST)}.`);
+    throw new Error(
+      `Profile "${profile}" was not found in ${path.join(
+        repoPath,
+        PROFILE_REPO_MANIFEST
+      )}.`
+    );
   }
   const sourcePath = path.resolve(repoPath, profileConfig.path);
   if (!existsSync(sourcePath)) {
@@ -921,16 +1218,22 @@ function resolveAgentSdkRoot(): string {
 function resolveAgentSdkCliLaunch(): { command: string; args: string[] } {
   const sdkRoot = resolveAgentSdkRoot();
   const distCli = path.join(sdkRoot, "dist", "cli.js");
-  if (existsSync(distCli)) return { command: process.execPath, args: [distCli] };
+  if (existsSync(distCli))
+    return { command: process.execPath, args: [distCli] };
   const sourceCli = path.join(sdkRoot, "src", "cli.ts");
   if (existsSync(sourceCli)) {
-    return { command: process.execPath, args: [resolveTsxCli(sdkRoot), sourceCli] };
+    return {
+      command: process.execPath,
+      args: [resolveTsxCli(sdkRoot), sourceCli],
+    };
   }
   throw new Error(`openpond-agent CLI was not found under ${sdkRoot}`);
 }
 
 function resolveTsxCli(packageRoot: string): string {
-  return createRequire(path.join(packageRoot, "package.json")).resolve("tsx/cli");
+  return createRequire(path.join(packageRoot, "package.json")).resolve(
+    "tsx/cli"
+  );
 }
 
 async function spawnCommand(
@@ -941,7 +1244,7 @@ async function spawnCommand(
     inherit?: boolean;
     timeoutMs?: number;
     maxOutputBytes?: number;
-  } = {},
+  } = {}
 ): Promise<{
   code: number | null;
   stdout: string;
@@ -962,25 +1265,37 @@ async function spawnCommand(
     let timedOut = false;
     const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
     const maxOutputBytes = options.maxOutputBytes ?? 2 * 1024 * 1024;
-    const timeout = timeoutMs > 0
-      ? setTimeout(() => {
-          timedOut = true;
-          proc.kill("SIGTERM");
-        }, timeoutMs)
-      : null;
-    const forceKill = timeoutMs > 0
-      ? setTimeout(() => {
-          if (timedOut && proc.exitCode === null) proc.kill("SIGKILL");
-        }, timeoutMs + 5000)
-      : null;
+    const timeout =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            proc.kill("SIGTERM");
+          }, timeoutMs)
+        : null;
+    const forceKill =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            if (timedOut && proc.exitCode === null) proc.kill("SIGKILL");
+          }, timeoutMs + 5000)
+        : null;
     if (!options.inherit) {
       proc.stdout?.on("data", (chunk) => {
-        const next = appendBoundedOutput(stdout, String(chunk), maxOutputBytes, stdoutTruncated);
+        const next = appendBoundedOutput(
+          stdout,
+          String(chunk),
+          maxOutputBytes,
+          stdoutTruncated
+        );
         stdout = next.text;
         stdoutTruncated = next.truncated;
       });
       proc.stderr?.on("data", (chunk) => {
-        const next = appendBoundedOutput(stderr, String(chunk), maxOutputBytes, stderrTruncated);
+        const next = appendBoundedOutput(
+          stderr,
+          String(chunk),
+          maxOutputBytes,
+          stderrTruncated
+        );
         stderr = next.text;
         stderrTruncated = next.truncated;
       });
@@ -995,7 +1310,14 @@ async function spawnCommand(
     });
     proc.on("close", (code) => {
       clearTimers();
-      resolve({ code, stdout, stderr, timedOut, stdoutTruncated, stderrTruncated });
+      resolve({
+        code,
+        stdout,
+        stderr,
+        timedOut,
+        stdoutTruncated,
+        stderrTruncated,
+      });
     });
   });
 }
@@ -1004,14 +1326,16 @@ function appendBoundedOutput(
   current: string,
   chunk: string,
   maxBytes: number,
-  alreadyTruncated: boolean,
+  alreadyTruncated: boolean
 ): { text: string; truncated: boolean } {
   if (alreadyTruncated) return { text: current, truncated: true };
   const combined = `${current}${chunk}`;
   if (Buffer.byteLength(combined, "utf8") <= maxBytes) {
     return { text: combined, truncated: false };
   }
-  const text = `${Buffer.from(combined).subarray(0, Math.max(0, maxBytes)).toString("utf8")}\n[truncated after ${maxBytes} bytes]\n`;
+  const text = `${Buffer.from(combined)
+    .subarray(0, Math.max(0, maxBytes))
+    .toString("utf8")}\n[truncated after ${maxBytes} bytes]\n`;
   return { text, truncated: true };
 }
 
@@ -1023,7 +1347,7 @@ function commandFailureDetail(
     stdoutTruncated?: boolean;
     stderrTruncated?: boolean;
   },
-  command: string,
+  command: string
 ): string {
   const detail = result.stderr.trim() || result.stdout.trim();
   const notes = [

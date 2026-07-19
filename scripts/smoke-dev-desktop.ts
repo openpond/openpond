@@ -10,6 +10,7 @@ import {
   trackDesktopHarnessProcess,
   type ProcessHandle,
 } from "./desktop-harness/launch";
+import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 type DevtoolsTarget = {
   type?: string;
@@ -428,7 +429,7 @@ function launchDevElectron(input: {
     env: {
       ...process.env,
       ELECTRON_ENABLE_LOGGING: "1",
-      OPENPOND_APP_HOME: input.appHome,
+      ...isolatedOpenPondEnvironment(input.appHome),
       OPENPOND_SERVER_PORT: "0",
       OPENPOND_WEB_PORT: String(input.webPort),
       OPENPOND_WEB_URL: input.webUrl,

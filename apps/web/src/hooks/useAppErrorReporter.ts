@@ -23,6 +23,7 @@ export function useAppErrorReporter({
       options: Pick<
         AppToast,
         | "actionLabel"
+        | "actionIcon"
         | "onAction"
         | "persistent"
         | "dismissible"
@@ -62,10 +63,11 @@ export function useAppErrorReporter({
         return;
       }
 
-      errorToastIdRef.current = showToast(next, "error", {
-        actionLabel: "Settings",
+      errorToastIdRef.current = showToast(appErrorToastMessage(next), "error", {
+        actionLabel: "Open diagnostics settings",
+        actionIcon: "settings",
         onAction: openDiagnosticsSettings,
-        persistent: true,
+        dismissible: true,
       });
       const connection = connectionRef.current;
       if (!connection) return;
@@ -90,4 +92,8 @@ export function useAppErrorReporter({
   }, [appDispatch, error]);
 
   return { connectionRef, setError, showToast };
+}
+
+export function appErrorToastMessage(message: string): string {
+  return message === "Failed to fetch" ? "Couldn’t connect to OpenPond." : message;
 }

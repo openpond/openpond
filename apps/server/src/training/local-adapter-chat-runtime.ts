@@ -135,7 +135,8 @@ async function resolveRuntimeTarget(
   modelId: string | null | undefined,
 ): Promise<RuntimeTarget> {
   if (!modelId) throw new Error("Select an imported local model before chatting.");
-  const lineage = await deps.store.getModelArtifactLineage(modelId);
+  const lineageId = await resolveModelLineageIdForRuntime(deps.store, modelId);
+  const lineage = await deps.store.getModelArtifactLineage(lineageId);
   if (!lineage || lineage.status !== "imported") throw new Error("The selected local model is not an imported adapter.");
   const [artifact, job] = await Promise.all([
     deps.store.getTrainingArtifact(lineage.artifactId),
@@ -167,6 +168,34 @@ async function resolveRuntimeTarget(
     configuration: lineage.chatConfiguration,
     toolCalling: Boolean(taskset && supportsCrossSystemToolCalling(taskset)),
   };
+}
+
+export async function resolveModelLineageIdForRuntime(
+  store: SqliteStore,
+  modelId: string,
+): Promise<string> {
+  if (!modelId.startsWith("binding:")) return modelId;
+  const [, profileId, role, ...targetParts] = modelId.split(":");
+  const roleTargetId = decodeURIComponent(targetParts.join(":"));
+  if (!profileId) throw new Error("The requested Model binding Profile is invalid.");
+  if (
+    role !== "chat_manual" &&
+    role !== "agent" &&
+    role !== "extension" &&
+    role !== "authoring_optimizer"
+  ) {
+    throw new Error("The requested Model binding role is invalid.");
+  }
+  if (!roleTargetId) throw new Error("The requested Model binding target is invalid.");
+  const binding = await store.getActiveModelBinding({
+    profileId,
+    role,
+    roleTargetId,
+  });
+  if (!binding) {
+    throw new Error(`No active ${role} Model binding exists for ${roleTargetId}.`);
+  }
+  return binding.modelArtifactLineageId;
 }
 
 class LocalAdapterWorker {

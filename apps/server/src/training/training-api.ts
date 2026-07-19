@@ -1,6 +1,7 @@
 import {
   ChatModelRefSchema,
   CodexReasoningEffortSchema,
+  nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
   TaskMinerConfigSchema,
@@ -9,6 +10,7 @@ import {
   type ChatModelRef,
   type CrossSystemWorldSpec,
   type TaskCreationRequest,
+  type TaskCreationSnapshot,
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskCreatorService } from "./task-creator.js";
@@ -19,11 +21,26 @@ import type { createTrainingChatSearchService } from "./training-chat-search.js"
 import { trainingRunDetail } from "./run-detail.js";
 import { scriptedOpenPondModelsEnabled } from "../openpond/scripted-chat-provider.js";
 import { recordFixtureBaselineSources } from "./cross-system-operations/index.js";
+import {
+  advanceUnexecutedModelRunTasksetRef,
+  createExistingTasksetModelCreateImproveRun,
+  createTasksetAuthoringCreateImproveRun,
+  createModelTrainingCreateImproveRun,
+  failTasksetAuthoringCreateImproveRun,
+  syncTasksetAuthoringCreateImproveRun,
+} from "./model-create-improve.js";
+import { attachModelTargetRefs } from "../runtime/create-pipeline/target-adapters.js";
+import {
+  createEvidenceSnapshot,
+  createTasksetRef,
+} from "./create-improve-taskset-lineage.js";
+import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
 type Evaluation = ReturnType<typeof createTaskEvaluationService>;
 type Training = ReturnType<typeof createTrainingService>;
+type StartedTrainingResult = Awaited<ReturnType<Training["start"]>>;
 type TrainingChatSearch = ReturnType<typeof createTrainingChatSearchService>;
 
 export function createTrainingApi(deps: {
@@ -36,6 +53,7 @@ export function createTrainingApi(deps: {
   frontierBaseline: {
     startRun: (input: {
       profileId: string;
+      createImproveRunId?: string | null;
       localProjectId: string;
       worldSpecs: CrossSystemWorldSpec[];
       model: ChatModelRef;
@@ -61,6 +79,7 @@ export function createTrainingApi(deps: {
     if (action === "run_cross_system_frontier_baseline") {
       return deps.frontierBaseline.startRun({
         profileId: requiredString(input.profileId, "profileId"),
+        createImproveRunId: string(input.createImproveRunId),
         localProjectId: requiredString(input.localProjectId, "localProjectId"),
         worldSpecs: crossSystemWorldSpecs(input.worldSpecs),
         model: ChatModelRefSchema.parse(input.model),
@@ -81,17 +100,45 @@ export function createTrainingApi(deps: {
     }
     if (action === "remove_source") { await deps.store.deleteTrainingSource(requiredString(input.sourceId, "sourceId")); return { removed: true }; }
     if (action === "delete_taskset") return deps.training.deleteTaskset(requiredString(input.tasksetId, "tasksetId"));
-    if (action === "start_creation") return deps.taskCreator.start({ profileId: requiredString(input.profileId, "profileId"), sourceIds: stringArray(input.sourceIds), surface: creationSurface(input.surface), mode: input.mode === "customize" ? "customize" : "defaults", entryMode: input.entryMode === "automated" ? "automated" : "manual", objective: string(input.objective), methodHint: trainingMethodHint(input.methodHint), candidateId: string(input.candidateId), analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
-    if (action === "approve_disclosure") return deps.taskCreator.approveDisclosure(requiredString(input.creationId, "creationId"), input.approved === true);
-    if (action === "answer_questions") return deps.taskCreator.answerQuestions(requiredString(input.creationId, "creationId"), stringRecord(input.answers));
+    if (action === "create_model_from_taskset") {
+      return createModelFromTaskset({
+        profileId: requiredString(input.profileId, "profileId"),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        preferredBaseModelId: requiredString(
+          input.preferredBaseModelId,
+          "preferredBaseModelId",
+        ),
+      });
+    }
+    if (action === "start_creation") {
+      return startModelCreation({
+        profileId: requiredString(input.profileId, "profileId"),
+        sourceIds: stringArray(input.sourceIds),
+        surface: creationSurface(input.surface),
+        mode: input.mode === "customize" ? "customize" : "defaults",
+        entryMode: input.entryMode === "automated" ? "automated" : "manual",
+        resourceIntent: input.resourceIntent === "dataset" ? "dataset" : "workproduct",
+        objective: string(input.objective),
+        methodHint: trainingMethodHint(input.methodHint),
+        preferredBaseModelId: string(input.preferredBaseModelId),
+        candidateId: string(input.candidateId),
+        analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null,
+        analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null,
+        createImproveRunId: string(input.createImproveRunId),
+        targetIntent: tasksetTargetIntent(input.targetIntent),
+      });
+    }
+    if (action === "approve_disclosure") return syncCreation(await deps.taskCreator.approveDisclosure(requiredString(input.creationId, "creationId"), input.approved === true));
+    if (action === "retry_creation") return retryModelCreation(requiredString(input.creationId, "creationId"));
+    if (action === "answer_questions") return syncCreation(await deps.taskCreator.answerQuestions(requiredString(input.creationId, "creationId"), stringRecord(input.answers)));
     if (action === "approve_materialization") {
       const creation = await deps.taskCreator.approveMaterialization(requiredString(input.creationId, "creationId"), input.approved === true);
       if (creation.state === "ready" && creation.materializedTasksetId) await deps.evaluation.readiness(creation.materializedTasksetId);
-      return creation;
+      return syncCreation(creation);
     }
-    if (action === "chat_creation") return deps.taskCreator.chat(requiredString(input.creationId, "creationId"), requiredString(input.message, "message"));
-    if (action === "rename_creation") return deps.taskCreator.rename(requiredString(input.creationId, "creationId"), requiredString(input.name, "name"));
-    if (action === "cancel_creation") return deps.taskCreator.cancel(requiredString(input.creationId, "creationId"));
+    if (action === "chat_creation") return syncCreation(await deps.taskCreator.chat(requiredString(input.creationId, "creationId"), requiredString(input.message, "message")));
+    if (action === "rename_creation") return syncCreation(await deps.taskCreator.rename(requiredString(input.creationId, "creationId"), requiredString(input.name, "name")));
+    if (action === "cancel_creation") return syncCreation(await deps.taskCreator.cancel(requiredString(input.creationId, "creationId")));
     if (action === "run_miner") return deps.taskMiner.startRun(RunTaskMinerRequestSchema.parse(input));
     if (action === "cancel_miner_run") return deps.taskMiner.cancelRun(requiredString(input.runId, "runId"));
     if (action === "configure_miner") return deps.taskMiner.updateConfig(requiredString(input.profileId, "profileId"), TaskMinerConfigSchema.parse(input.config));
@@ -101,28 +148,153 @@ export function createTrainingApi(deps: {
       if (!candidate) throw new Error("Task Candidate not found.");
       const sourceIds = [...new Set(candidate.evidence.flatMap((item) => item.sourceRefIds))];
       await deps.taskMiner.patch(candidate.id, { status: "creating" });
-      return deps.taskCreator.start({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
+      return startModelCreation({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
     }
     if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
     if (action === "baseline") return deps.evaluation.baseline({ tasksetId: requiredString(input.tasksetId, "tasksetId"), models: modelRefs(input.models), seeds: numberArray(input.seeds), attemptsPerTask: number(input.attemptsPerTask) });
+    if (action === "regrade_baseline") return deps.evaluation.regradeBaseline({ tasksetId: requiredString(input.tasksetId, "tasksetId"), baselineReportId: requiredString(input.baselineReportId, "baselineReportId") });
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
     if (action === "readiness") return deps.evaluation.readiness(requiredString(input.tasksetId, "tasksetId"));
-    if (action === "create_plan") return deps.training.createPlan({ tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "preview_expert_bootstrap") return deps.training.previewExpertBootstrap(requiredString(input.tasksetId, "tasksetId"));
+    if (action === "approve_expert_bootstrap") return deps.training.approveExpertBootstrap({
+      tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      previewHash: requiredString(input.previewHash, "previewHash"),
+    });
+    if (action === "create_plan") return deps.training.createPlan({ modelId: string(input.modelId), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
     if (action === "build_bundle") return deps.training.buildBundle(requiredString(input.planId, "planId"));
     if (action === "approve_training") return deps.training.approve({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), approvedBy: string(input.approvedBy) ?? undefined, maximumCostUsd: nullableNumber(input.maximumCostUsd) });
     if (action === "launch") return deps.training.launch({ planId: requiredString(input.planId, "planId"), approvalId: requiredString(input.approvalId, "approvalId") });
-    if (action === "start") return deps.training.start({ tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd) });
+    if (action === "prepare_start") return deps.training.prepareStart({
+      modelId: string(input.modelId),
+      tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      destinationId: TrainingDestinationIdSchema.parse(input.destinationId),
+      recipe: input.recipe,
+      exportApproved: input.exportApproved === true,
+      retentionDays: nullableNumber(input.retentionDays),
+      region: string(input.region),
+    });
+    if (action === "start_prepared") {
+      const result = await deps.training.startPrepared({
+        planId: requiredString(input.planId, "planId"),
+        bundleId: requiredString(input.bundleId, "bundleId"),
+        maximumCostUsd: nullableNumber(input.maximumCostUsd),
+      });
+      return linkStartedTraining(result);
+    }
+    if (action === "start") {
+      const result = await deps.training.start({ modelId: string(input.modelId), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+      return linkStartedTraining(result);
+    }
     if (action === "import_artifact") return deps.training.importExternal({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), artifactDirectory: requiredString(input.artifactDirectory, "artifactDirectory") });
     if (action === "export_bundle") return deps.training.exportBundle(requiredString(input.bundleId, "bundleId"));
     if (action === "artifact_download") return deps.training.artifactDownload(requiredString(input.artifactId, "artifactId"));
+    if (action === "model_package_download") return deps.training.modelPackageDownload(requiredString(input.modelId, "modelId"));
+    if (action === "start_model_serving") return deps.training.startModelServing({
+      profileId: requiredString(input.profileId, "profileId"),
+      modelId: requiredString(input.modelId, "modelId"),
+    });
+    if (action === "stop_model_serving") return deps.training.stopModelServing(
+      requiredString(input.servingSessionId, "servingSessionId"),
+      "user",
+    );
     if (action === "reject_model") return deps.training.rejectModel({ modelId: requiredString(input.modelId, "modelId"), reason: requiredString(input.reason, "reason") });
+    if (action === "bind_model") return deps.training.bindModel({
+      profileId: requiredString(input.profileId, "profileId"),
+      modelId: requiredString(input.modelId, "modelId"),
+      role: requiredString(input.role, "role") as never,
+      roleTargetId: requiredString(input.roleTargetId, "roleTargetId"),
+      promotedBy: string(input.promotedBy) ?? undefined,
+    });
+    if (action === "rollback_model_binding") return deps.training.rollbackModelBinding({
+      bindingId: requiredString(input.bindingId, "bindingId"),
+      rolledBackBy: string(input.rolledBackBy) ?? undefined,
+    });
     if (action === "update_model_configuration") return deps.training.updateModelConfiguration({ modelId: requiredString(input.modelId, "modelId"), configuration: record(input.configuration) });
-    if (action === "cancel_job") return deps.training.registry.get("local_cpu_fixture").cancel(requiredString(input.jobId, "jobId"));
+    if (action === "set_model_pinned") return deps.training.setModelPinned({
+      modelId: requiredString(input.modelId, "modelId"),
+      pinned: input.pinned === true,
+    });
+    if (action === "cancel_job") return deps.training.cancelJob(requiredString(input.jobId, "jobId"));
+    if (action === "evaluate_job") return deps.training.evaluateJob(requiredString(input.jobId, "jobId"));
     if (action === "save_credential") return deps.training.saveCredential({ destinationId: requiredString(input.destinationId, "destinationId"), value: requiredString(input.value, "value") });
     if (action === "job_events") return deps.store.listTrainingJobEvents(requiredString(input.jobId, "jobId"));
     if (action === "run_detail") return trainingRunDetail(deps.store, requiredString(input.jobId, "jobId"));
     throw new Error(`Unknown training action ${action}.`);
+  }
+
+  async function linkStartedTraining(result: StartedTrainingResult) {
+    const taskset = await deps.store.getTaskset(result.plan.tasksetId);
+    if (!taskset) return result;
+    const linkedRuns = await deps.store.listCreateImproveRuns({
+      profileId: taskset.profileId,
+      targetKind: "model",
+      limit: 100,
+    });
+    const stableModelId = result.plan.modelId;
+    const exactRun = linkedRuns.find((candidate) =>
+      (!stableModelId || candidate.target.id === stableModelId)
+      &&
+      candidate.tasksetRef?.id === taskset.id
+      && candidate.tasksetRef.revision === taskset.revision
+      && candidate.tasksetRef.contentHash === taskset.contentHash
+      && candidate.target.kind === "model"
+      && !candidate.target.trainingPlanId
+      && !candidate.target.trainingJobId
+      && !candidate.target.artifactId
+      && candidate.externalExecutionRefs.length === 0
+      && candidate.evaluationReceipts.length === 0) ?? null;
+    const unexecutedPriorRun = linkedRuns.find((candidate) =>
+      (!stableModelId || candidate.target.id === stableModelId)
+      &&
+      candidate.tasksetRef?.id === taskset.id
+      && candidate.target.kind === "model"
+      && !candidate.target.trainingPlanId
+      && !candidate.target.trainingJobId
+      && !candidate.target.artifactId
+      && candidate.externalExecutionRefs.length === 0
+      && candidate.evaluationReceipts.length === 0) ?? null;
+    const linkedRun = exactRun
+      ?? (unexecutedPriorRun
+        ? advanceUnexecutedModelRunTasksetRef(unexecutedPriorRun, taskset)
+        : null);
+    let run;
+    if (linkedRun?.tasksetRef) {
+      run = attachModelTargetRefs({
+        run: linkedRun,
+        tasksetId: taskset.id,
+        trainingPlanId: result.plan.id,
+        trainingJobId: result.job.id,
+      });
+    } else {
+      const sources = (await Promise.all(
+        taskset.sourceRefs.map((source) => deps.store.getTrainingSource(source.id)),
+      )).filter((source): source is NonNullable<typeof source> => Boolean(source));
+      const timestamp = new Date().toISOString();
+      const evidenceSnapshot = createEvidenceSnapshot({
+        objective: taskset.objective,
+        sources,
+        timestamp,
+      });
+      run = createModelTrainingCreateImproveRun({
+        profileId: taskset.profileId,
+        modelId: stableModelId,
+        tasksetId: result.plan.tasksetId,
+        displayName: linkedRuns.find(
+          (candidate) => candidate.target.id === stableModelId,
+        )?.target.displayName ?? taskset.name,
+        trainingPlanId: result.plan.id,
+        trainingJobId: result.job.id,
+        tasksetRef: createTasksetRef({
+          taskset,
+          evidenceSnapshotIds: [evidenceSnapshot.id],
+          approvedAt: timestamp,
+        }),
+        evidenceSnapshots: [evidenceSnapshot],
+      });
+    }
+    await deps.store.upsertCreateImproveRun(run);
+    return { ...result, createImproveRunId: run.id };
   }
 
   async function state(profileId: string) {
@@ -134,12 +306,179 @@ export function createTrainingApi(deps: {
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listCrossSystemFrontierBaselineRuns(profileId),
-      deps.training.state(),
+      deps.training.state(profileId),
     ]);
+    await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const baselineReports = (await Promise.all(tasksets.map((taskset) => deps.store.listBaselineReports(taskset.id)))).flat();
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
     return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, baselineReports, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, ...execution, generatedAt: new Date().toISOString() };
   }
+
+  async function startModelCreation(
+    input: Parameters<TaskCreator["start"]>[0],
+  ) {
+    const sources = (await Promise.all(
+      input.sourceIds.map((sourceId) => deps.store.getTrainingSource(sourceId)),
+    )).filter((source): source is NonNullable<typeof source> => Boolean(source));
+    const freshRun = createTasksetAuthoringCreateImproveRun({
+      profileId: input.profileId,
+      objective: input.objective ?? null,
+      sourceIds: input.sourceIds,
+      sources,
+      targetIntent: input.targetIntent,
+      resourceIntent: input.resourceIntent,
+      preferredBaseModelId: input.preferredBaseModelId,
+    });
+    const existingRun = input.createImproveRunId
+      ? await deps.store.getCreateImproveRun(input.createImproveRunId)
+      : null;
+    if (input.createImproveRunId && !existingRun) {
+      throw new Error(`Create/Improve run ${input.createImproveRunId} was not found.`);
+    }
+    if (existingRun && existingRun.scope.profileId !== input.profileId) {
+      throw new Error("Create/Improve run profile does not match Taskset authoring.");
+    }
+    const run = existingRun
+      ? nextCreateImproveRunRevision(existingRun, {
+          objective: freshRun.objective,
+          target: freshRun.target,
+          evidenceSnapshots: freshRun.evidenceSnapshots,
+          sourceRefs: freshRun.sourceRefs,
+          blockedReason: null,
+          metadata: {
+            ...existingRun.metadata,
+            preferredBaseModelId: input.preferredBaseModelId ?? null,
+          },
+          updatedAt: freshRun.updatedAt,
+        })
+      : freshRun;
+    await deps.store.upsertCreateImproveRun(run);
+    try {
+      const creation = await deps.taskCreator.start({
+        ...input,
+        createImproveRunId: run.id,
+      });
+      await syncTasksetAuthoringCreateImproveRun(deps.store, creation);
+      return creation;
+    } catch (error) {
+      await failTasksetAuthoringCreateImproveRun(deps.store, run, error);
+      throw error;
+    }
+  }
+
+  async function createModelFromTaskset(input: {
+    profileId: string;
+    tasksetId: string;
+    preferredBaseModelId: string;
+  }) {
+    const taskset = await deps.store.getTaskset(input.tasksetId);
+    if (!taskset) throw new Error("Dataset not found.");
+    if (taskset.profileId !== input.profileId) {
+      throw new Error("Dataset profile does not match the active Profile.");
+    }
+    const linkedRuns = await deps.store.listCreateImproveRuns({
+      profileId: input.profileId,
+      targetKind: "model",
+      limit: 250,
+    });
+    const existing = linkedRuns.find(
+      (run) =>
+        run.tasksetRef?.id === taskset.id &&
+        run.tasksetRef.revision === taskset.revision &&
+        run.tasksetRef.contentHash === taskset.contentHash,
+    );
+    if (existing) {
+      if (
+        existing.metadata.preferredBaseModelId !== input.preferredBaseModelId &&
+        existing.target.kind === "model" &&
+        !existing.target.trainingPlanId &&
+        !existing.target.trainingJobId &&
+        !existing.target.artifactId &&
+        existing.externalExecutionRefs.length === 0
+      ) {
+        const updated = nextCreateImproveRunRevision(existing, {
+          metadata: {
+            ...existing.metadata,
+            preferredBaseModelId: input.preferredBaseModelId,
+          },
+          updatedAt: new Date().toISOString(),
+        });
+        return deps.store.upsertCreateImproveRun(updated);
+      }
+      return existing;
+    }
+    const run = createExistingTasksetModelCreateImproveRun({
+      profileId: input.profileId,
+      taskset,
+      preferredBaseModelId: input.preferredBaseModelId,
+    });
+    return deps.store.upsertCreateImproveRun(run);
+  }
+
+  async function retryModelCreation(id: string): Promise<TaskCreationSnapshot> {
+    let creation = await deps.store.getTaskCreationSnapshot(id);
+    if (!creation) throw new Error("Task creation not found.");
+    if (creation.state !== "failed") {
+      return syncCreation(await deps.taskCreator.retry(id));
+    }
+    const priorRun = creation.request.createImproveRunId
+      ? await deps.store.getCreateImproveRun(creation.request.createImproveRunId)
+      : null;
+    if (priorRun?.state === "failed") {
+      const sources = (await Promise.all(
+        creation.request.sourceIds.map((sourceId) => deps.store.getTrainingSource(sourceId)),
+      )).filter((source): source is NonNullable<typeof source> => Boolean(source));
+      const stableTargetId = priorRun.target.kind === "unselected"
+        ? creation.request.targetIntent.id
+        : priorRun.target.id ?? priorRun.id;
+      const targetIntent = {
+        ...creation.request.targetIntent,
+        id: stableTargetId,
+        displayName: priorRun.target.displayName
+          ?? creation.request.targetIntent.displayName,
+      };
+      const timestamp = new Date().toISOString();
+      const retryRun = createTasksetAuthoringCreateImproveRun({
+        profileId: creation.request.profileId,
+        objective: creation.request.objective,
+        sourceIds: creation.request.sourceIds,
+        sources,
+        targetIntent,
+        resourceIntent: creation.request.resourceIntent,
+        preferredBaseModelId: creation.request.preferredBaseModelId,
+        timestamp,
+      });
+      await deps.store.upsertCreateImproveRun({
+        ...retryRun,
+        iterationPolicy: {
+          mode: "bounded",
+          maximumAttempts: Math.min(20, priorRun.iterationPolicy.maximumAttempts + 1),
+          currentAttempt: Math.min(20, priorRun.iterationPolicy.currentAttempt + 1),
+        },
+        metadata: {
+          ...retryRun.metadata,
+          retryOfRunId: priorRun.id,
+          retryOfTaskCreationId: creation.id,
+        },
+      });
+      creation = await deps.store.upsertTaskCreationSnapshot({
+        ...creation,
+        request: {
+          ...creation.request,
+          createImproveRunId: retryRun.id,
+          targetIntent,
+        },
+        updatedAt: timestamp,
+      });
+    }
+    return syncCreation(await deps.taskCreator.retry(creation.id));
+  }
+
+  async function syncCreation(creation: TaskCreationSnapshot): Promise<TaskCreationSnapshot> {
+    await syncTasksetAuthoringCreateImproveRun(deps.store, creation);
+    return creation;
+  }
+
   return { request, state };
 }
 
@@ -154,6 +493,16 @@ function nullableNumber(value: unknown): number | null { return typeof value ===
 function numberArray(value: unknown): number[] { return Array.isArray(value) ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item)) : []; }
 function modelRefs(value: unknown): ChatModelRef[] { if (!Array.isArray(value) || !value.length) throw new Error("At least one baseline model is required."); return value.map((item) => ChatModelRefSchema.parse(item)); }
 function trainingMethodHint(value: unknown): TaskCreationRequest["methodHint"] { return value === "sft" || value === "dpo" || value === "grpo" ? value : null; }
+function tasksetTargetIntent(value: unknown): TaskCreationRequest["targetIntent"] {
+  const candidate = record(value);
+  const kind = candidate.kind;
+  return {
+    kind: kind === "agent" || kind === "skill" || kind === "extension" || kind === "model" || kind === "configuration" ? kind : null,
+    id: string(candidate.id),
+    displayName: string(candidate.displayName),
+    operation: candidate.operation === "improve" ? "improve" : "create",
+  };
+}
 function creationSurface(value: unknown) { return value === "session_menu" || value === "bulk_selection" || value === "training_page" || value === "task_candidate" ? value : "slash_train"; }
 function crossSystemWorldSpecs(value: unknown): CrossSystemWorldSpec[] {
   if (!Array.isArray(value)) throw new Error("worldSpecs must be an array.");

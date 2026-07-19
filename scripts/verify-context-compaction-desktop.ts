@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ChatProvider, RuntimeEvent, Session } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store.js";
+import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 type ProviderProofTarget = "openpond" | "zai";
 
@@ -637,7 +638,7 @@ function launchDevElectron(input: {
     env: {
       ...process.env,
       ELECTRON_ENABLE_LOGGING: "1",
-      OPENPOND_APP_HOME: input.appHome,
+      ...isolatedOpenPondEnvironment(input.appHome),
       OPENPOND_SERVER_PORT: "0",
       OPENPOND_WEB_PORT: String(input.webPort),
       OPENPOND_WEB_URL: input.webUrl,

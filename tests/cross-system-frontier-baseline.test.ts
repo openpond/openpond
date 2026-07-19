@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
-import type { CrossSystemFrontierBaselineRun, Session } from "../packages/contracts/src";
+import {
+  DEFAULT_CROSS_SYSTEM_WORLD_SPECS,
+  type CrossSystemFrontierBaselineRun,
+  type Session,
+} from "../packages/contracts/src";
 import type { CrossSystemFrontierModelStream } from "../apps/server/src/training/cross-system-operations";
 import {
   createCrossSystemFrontierBaselineService,
@@ -9,10 +13,26 @@ import {
   generateCrossSystemWorld,
   recordFrontierBaselineSources,
   runFrontierCrossSystemBaseline,
+  selectCrossSystemRepresentativeTasks,
 } from "../apps/server/src/training/cross-system-operations";
 import { FIXED_TIME, seedConversation, sourceFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("Cross-System Operations frontier baseline", () => {
+  test("uses realistic disjoint synthetic worlds with 30 train and 20 held-out tasks", () => {
+    const worlds = DEFAULT_CROSS_SYSTEM_WORLD_SPECS.map(generateCrossSystemWorld);
+    const tasks = selectCrossSystemRepresentativeTasks(
+      worlds,
+      worlds.flatMap(generateCrossSystemTasks),
+    );
+    expect(tasks.filter((task) => task.split === "train")).toHaveLength(30);
+    expect(tasks.filter((task) => task.split === "validation")).toHaveLength(10);
+    expect(tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
+    expect(new Set(worlds.map((world) => world.namespace)).size).toBe(
+      DEFAULT_CROSS_SYSTEM_WORLD_SPECS.length,
+    );
+    expect(new Set(tasks.map((task) => task.phrasingVariant)).size).toBe(3);
+  });
+
   test("runs the selected provider through the real bounded tool loop", async () => {
     const world = generateCrossSystemWorld({ seed: 901, split: "train", difficulty: "easy" });
     const tasks = generateCrossSystemTasks(world);
@@ -47,13 +67,187 @@ describe("Cross-System Operations frontier baseline", () => {
     expect(baseline.results.every((result) => result.outcome === "correct")).toBe(true);
   });
 
+  test("repairs one invalid public answer envelope without exposing the expected answer", async () => {
+    const world = generateCrossSystemWorld({
+      seed: 903,
+      split: "validation",
+      difficulty: "easy",
+    });
+    const task = generateCrossSystemTasks(world)
+      .find((candidate) => candidate.phrasingVariant === 0)!;
+    const repairInstructions: string[] = [];
+    let calls = 0;
+    const baseline = await runFrontierCrossSystemBaseline({
+      worlds: [world],
+      tasks: [task],
+      model: { providerId: "openpond", modelId: "frontier-test" },
+      reasoningEffort: null,
+      stream: async function* ({ messages }) {
+        calls += 1;
+        if (calls > 1) {
+          repairInstructions.push(messages.at(-1)?.content ?? "");
+        }
+        if (calls === 1) {
+          yield {
+            text: `Here is the result.\nANSWER: ${JSON.stringify(task.expectedAnswer)}`,
+          };
+          return;
+        }
+        yield { text: `ANSWER: ${JSON.stringify(task.expectedAnswer)}` };
+      },
+    });
+
+    expect(calls).toBe(2);
+    expect(baseline.results[0]).toMatchObject({
+      outcome: "correct",
+      exactAnswer: true,
+    });
+    expect(baseline.trajectories[0]?.metadata).toMatchObject({
+      formatRepairAttempts: 1,
+    });
+    expect(baseline.trajectories[0]?.steps.map((step) => step.kind)).toEqual([
+      "model",
+      "final",
+    ]);
+    expect(repairInstructions[0]).toContain("public response contract");
+    expect(repairInstructions[0]).not.toContain(JSON.stringify(task.expectedAnswer));
+  });
+
+  test("nudges for missing tools before reserving a tool-free final-answer repair", async () => {
+    const world = generateCrossSystemWorld({
+      seed: 904,
+      split: "validation",
+      difficulty: "easy",
+    });
+    const task = generateCrossSystemTasks(world)
+      .find((candidate) => candidate.family === "renewal_exposure")!;
+    const requests: Array<{
+      tools: number;
+      toolChoice: string;
+      lastMessage: string;
+    }> = [];
+    let call = 0;
+    const baseline = await runFrontierCrossSystemBaseline({
+      worlds: [world],
+      tasks: [task],
+      model: { providerId: "openpond", modelId: "frontier-test" },
+      reasoningEffort: null,
+      stream: async function* ({ messages, tools, toolChoice }) {
+        requests.push({
+          tools: tools.length,
+          toolChoice: String(toolChoice),
+          lastMessage: messages.at(-1)?.content ?? "",
+        });
+        call += 1;
+        if (call === 1) {
+          yield { text: "<think>I should inspect the systems.</think>" };
+          return;
+        }
+        if (call === 2) {
+          for (const [index, name] of task.queryPlan.map((item) => item.tool).entries()) {
+            yield {
+              toolCalls: [{
+                index,
+                id: `call_${name}`,
+                type: "function",
+                function: {
+                  name,
+                  arguments: JSON.stringify(name === "search_crm"
+                    ? { query: "*", fields: ["account_id"], cursor: null, limit: 50 }
+                    : name === "query_billing"
+                      ? { account_ids: world.accounts.map((item) => item.accountId), date_range: { from: "2025-01-01", to: "2026-12-31" }, status: ["overdue"], cursor: null, limit: 50 }
+                      : name === "search_support"
+                        ? { account_ids: world.accounts.map((item) => item.accountId), severity: ["P1"], state: ["new", "investigating", "waiting_customer"], cursor: null, limit: 50 }
+                        : { code: "_result = {'joined': True}" }),
+                },
+              }],
+            };
+          }
+          return;
+        }
+        if (call === 3) {
+          yield { text: JSON.stringify(task.expectedAnswer) };
+          return;
+        }
+        yield { text: `ANSWER: ${JSON.stringify(task.expectedAnswer)}` };
+      },
+    });
+
+    expect(requests).toHaveLength(4);
+    expect(requests[1]).toMatchObject({
+      tools: 4,
+      toolChoice: "auto",
+    });
+    expect(requests[1]?.lastMessage).toContain("remaining required evidence");
+    expect(requests[3]).toMatchObject({
+      tools: 0,
+      toolChoice: "none",
+    });
+    expect(requests[3]?.lastMessage).toContain("public response contract");
+    expect(baseline.results[0]).toMatchObject({
+      outcome: "correct",
+      exactAnswer: true,
+    });
+    expect(baseline.trajectories[0]?.metadata).toMatchObject({
+      toolNudgeAttempts: 1,
+      formatRepairAttempts: 1,
+    });
+  });
+
+  test("retries infrastructure-only failures once without retrying policy verdicts", async () => {
+    const world = generateCrossSystemWorld({ seed: 905, split: "train", difficulty: "easy" });
+    const tasks = generateCrossSystemTasks(world);
+    const selectedTasks = selectCrossSystemRepresentativeTasks([world], tasks);
+    const policyFailurePrompt = selectedTasks[1]!.prompt;
+    const expectedByPrompt = new Map(tasks.map((task) => [
+      task.prompt,
+      task.prompt === policyFailurePrompt ? {} : task.expectedAnswer,
+    ]));
+    let streamCalls = 0;
+    const baseline = await runFrontierCrossSystemBaseline({
+      worlds: [world],
+      tasks,
+      model: { providerId: "openpond", modelId: "frontier-test" },
+      reasoningEffort: null,
+      stream: async function* ({ messages }) {
+        streamCalls += 1;
+        if (streamCalls === 1) throw new Error("terminated");
+        const prompt = messages.find((message) => message.role === "user")?.content ?? "";
+        yield { text: `ANSWER: ${JSON.stringify(expectedByPrompt.get(prompt))}` };
+      },
+    });
+
+    expect(streamCalls).toBe(6);
+    expect(baseline.results.map((result) => result.outcome)).toEqual([
+      "correct",
+      "incorrect",
+      "correct",
+      "correct",
+      "correct",
+    ]);
+    expect(baseline.trajectories[0]?.metadata).toMatchObject({
+      baseline: "frontier",
+      infrastructureRetryAttempt: 1,
+      priorInfrastructureErrors: ["terminated"],
+    });
+    expect(baseline.trajectories.slice(1).every((trajectory) =>
+      trajectory.metadata.infrastructureRetryAttempt === 0
+      && Array.isArray(trajectory.metadata.priorInfrastructureErrors)
+      && trajectory.metadata.priorInfrastructureErrors.length === 0
+    )).toBe(true);
+  });
+
   test("persists frontier evidence separately from the harness fixture and approves only correct traces", async () => withTrainingStore(async ({ store }) => {
     const specs = [
       { seed: 911, split: "train" as const, difficulty: "easy" as const },
       { seed: 912, split: "validation" as const, difficulty: "medium" as const },
       { seed: 913, split: "frozen_eval" as const, difficulty: "hard" as const },
     ];
-    const tasks = specs.flatMap((spec) => generateCrossSystemTasks(generateCrossSystemWorld(spec))).filter((task) => task.phrasingVariant === 0);
+    const worlds = specs.map(generateCrossSystemWorld);
+    const tasks = selectCrossSystemRepresentativeTasks(
+      worlds,
+      worlds.flatMap(generateCrossSystemTasks),
+    );
     const expectedByPrompt = new Map(tasks.map((task, index) => [task.prompt, index % 3 === 0 ? task.expectedAnswer : {}]));
     const stream: CrossSystemFrontierModelStream = async function* ({ messages }) {
       const prompt = messages.find((message) => message.role === "user")?.content ?? "";
@@ -195,6 +389,16 @@ describe("Cross-System Operations frontier baseline", () => {
       expect(cancelled.progress.completedTasks).toBe(1);
       expect(cancelled.progress.outcomes.cancelled).toBe(1);
       expect(cancelled.sourceIds).toHaveLength(1);
+      expect(await store.getTrainingSource(cancelled.sourceIds[0]!)).toMatchObject({
+        metadata: {
+          frontierBaseline: true,
+          crossSystemOperations: {
+            outcome: "cancelled",
+            approved: false,
+            bootstrapMessages: null,
+          },
+        },
+      });
     } finally {
       await service.close();
     }
@@ -210,8 +414,11 @@ function worldSpecs(seed: number) {
 }
 
 function expectedAnswers(specs: ReturnType<typeof worldSpecs>): Array<Record<string, unknown>> {
-  return specs.flatMap((spec) => generateCrossSystemTasks(generateCrossSystemWorld(spec)))
-    .filter((task) => task.phrasingVariant === 0)
+  const worlds = specs.map(generateCrossSystemWorld);
+  return selectCrossSystemRepresentativeTasks(
+    worlds,
+    worlds.flatMap(generateCrossSystemTasks),
+  )
     .map((task) => task.expectedAnswer);
 }
 

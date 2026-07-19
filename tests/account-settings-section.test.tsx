@@ -70,10 +70,15 @@ function payload(account: AccountState): BootstrapPayload {
   } as unknown as BootstrapPayload;
 }
 
-function renderAccountSettings(account: AccountState): string {
+function renderAccountSettings(
+  account: AccountState,
+  profile: BootstrapPayload["profile"] | null = null,
+): string {
+  const bootstrap = payload(account);
+  bootstrap.profile = profile ?? bootstrap.profile;
   return renderToStaticMarkup(
     createElement(AccountSettingsSection, {
-      payload: payload(account),
+      payload: bootstrap,
       connection: null,
       apiKey: "",
       saving: false,
@@ -161,6 +166,13 @@ describe("AccountSettingsSection", () => {
     const html = renderAccountSettings(accountState());
 
     expect(html).toContain('aria-label="Refresh accounts and team data"');
+  });
+
+  test("keeps the account summary focused on account and team selection", () => {
+    const html = renderAccountSettings(accountState());
+
+    expect(html).not.toContain("account-profile-status");
+    expect(html).not.toContain("No local Profile loaded");
   });
 
   test("does not render endpoint URLs in the account row", () => {

@@ -2,6 +2,7 @@ import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  type CrossSystemScenarioProfile,
 } from "@openpond/contracts";
 import type {
   CrossSystemAccount,
@@ -45,6 +46,7 @@ export function generateCrossSystemWorld(input: {
   seed: number;
   split: CrossSystemSplit;
   difficulty: CrossSystemDifficulty;
+  scenarioProfile?: CrossSystemScenarioProfile;
 }): CrossSystemWorld {
   const namespace = `${input.split.replace("frozen_eval", "eval")}_${Math.abs(input.seed)}`;
   const random = mulberry32(hashSeed(input.seed, input.split, input.difficulty));
@@ -60,6 +62,14 @@ export function generateCrossSystemWorld(input: {
   const invoices = buildInvoices(accounts, namespace, input.difficulty);
   const payments = buildPayments(accounts, invoices, namespace, input.difficulty);
   const supportCases = buildSupportCases(accounts, namespace, input.difficulty);
+  if (input.scenarioProfile === "renewal_risk_v2") {
+    applyRenewalRiskProfile({
+      seed: input.seed,
+      accounts,
+      invoices,
+      supportCases,
+    });
+  }
   const base = {
     schemaVersion: CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
     generatorVersion: CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
@@ -78,6 +88,57 @@ export function generateCrossSystemWorld(input: {
     supportCases,
   };
   return { ...base, groundTruth: groundTruth(base) };
+}
+
+function applyRenewalRiskProfile(input: {
+  seed: number;
+  accounts: CrossSystemAccount[];
+  invoices: CrossSystemInvoice[];
+  supportCases: CrossSystemSupportCase[];
+}): void {
+  const candidateIndexes = [0, 1, 2, 3].filter(
+    (index) =>
+      input.accounts[index]
+      && input.invoices.some((invoice) => invoice.accountId === input.accounts[index]!.accountId)
+      && input.supportCases.some((supportCase) => supportCase.accountId === input.accounts[index]!.accountId),
+  );
+  const rotation = Math.abs(input.seed) % candidateIndexes.length;
+  const rotated = [
+    ...candidateIndexes.slice(rotation),
+    ...candidateIndexes.slice(0, rotation),
+  ];
+  const eligible = new Set(rotated.slice(0, 1 + Math.abs(input.seed) % 3));
+
+  for (const index of candidateIndexes) {
+    const account = input.accounts[index]!;
+    const invoice = input.invoices.find((item) => item.accountId === account.accountId)!;
+    const supportCase = input.supportCases.find((item) => item.accountId === account.accountId)!;
+    const overdueUsdCents =
+      1_100_000 + Math.abs(input.seed * 37 + index * 11) % 31 * 100_000;
+
+    account.renewalDate = dateOffset(5 + Math.abs(input.seed + index * 7) % 24);
+    Object.assign(invoice, {
+      currency: "USD",
+      amountCents: overdueUsdCents,
+      status: "overdue",
+      dueDate: dateOffset(-(10 + Math.abs(input.seed + index) % 45)),
+    });
+    Object.assign(supportCase, {
+      severity: "P1",
+      state: index % 2 === 0 ? "investigating" : "new",
+      resolvedAt: null,
+    });
+
+    if (eligible.has(index)) continue;
+    const failedCondition = Math.abs(input.seed + index) % 3;
+    if (failedCondition === 0) {
+      account.renewalDate = dateOffset(35 + Math.abs(input.seed + index) % 40);
+    } else if (failedCondition === 1) {
+      invoice.amountCents = 900_000;
+    } else {
+      supportCase.severity = "P2";
+    }
+  }
 }
 
 export function generateCrossSystemTasks(world: CrossSystemWorld): CrossSystemTask[] {
@@ -289,7 +350,7 @@ function groundTruth(world: Omit<CrossSystemWorld, "groundTruth">): Record<Cross
     }).sort((left, right) => left.invoice_id.localeCompare(right.invoice_id));
   return {
     renewal_exposure: truth(
-      ["search_crm", "query_billing", "search_support"],
+      ["search_crm", "query_billing", "search_support", "run_python"],
       { account_ids: renewalIds, total_overdue_usd_cents: renewalIds.reduce((sum, id) => sum + (overdueByAccount.get(id) ?? 0), 0) },
       renewalIds,
     ),
@@ -310,7 +371,14 @@ function truth(tools: Array<"search_crm" | "query_billing" | "search_support" | 
 
 function promptsFor(family: CrossSystemTaskFamily, world: CrossSystemWorld): string[] {
   const date = world.referenceDate;
-  const suffix = `Use the synthetic snapshot dated ${date}. Return only ANSWER: followed by the exact JSON object.`;
+  const responseShapes: Record<CrossSystemTaskFamily, string> = {
+    renewal_exposure: '{"account_ids":["string"],"total_overdue_usd_cents":0}',
+    collections_prioritization: '{"accounts":[{"account_id":"string","overdue_usd_cents":0,"recent_payment_usd_cents":0}]}',
+    invoice_reconciliation: '{"matches":[{"payment_id":"string","invoice_id":"string","account_id":"string"}]}',
+    sla_escalation: '{"violations":[{"case_id":"string","account_id":"string","policy":"response|resolution"}]}',
+    contract_billing_mismatch: '{"mismatches":[{"invoice_id":"string","account_id":"string","expected_usd_cents":0,"actual_usd_cents":0,"expected_term_months":0,"billed_term_months":0}]}',
+  };
+  const suffix = `Use the synthetic snapshot dated ${date}. Return only ANSWER: followed by one JSON object matching this exact shape, with no extra fields: ${responseShapes[family]}`;
   const prompts: Record<CrossSystemTaskFamily, string[]> = {
     renewal_exposure: [
       "Which customers renewing in the next 30 days have more than $10,000 overdue and at least one unresolved P1 support case? Return account_ids and total_overdue_usd_cents.",

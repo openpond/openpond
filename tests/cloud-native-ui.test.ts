@@ -6,7 +6,7 @@ import type {
   CloudProject,
   CloudWorkItem,
   CloudWorkItemDetail,
-  CreatePipelineRequest,
+  CreateImproveRun,
   LocalProject,
   Session,
 } from "@openpond/contracts";
@@ -16,7 +16,8 @@ import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import { CloudSetupDialog } from "../apps/web/src/components/workspace/CloudSetupDialog";
 import { cloudWorkItemBackgroundTarget } from "../apps/web/src/hooks/useCloudWorkItems";
 import { useSidebarData, visibleSidebarProjectRows } from "../apps/web/src/hooks/useSidebarData";
-import { buildInitialCreatePipelineSnapshot } from "../apps/web/src/lib/create-pipeline-request";
+import { buildInitialCreateImproveRun } from "../apps/web/src/lib/create-pipeline-request";
+import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import {
   nextSidebarChatVisibleCount,
@@ -168,13 +169,9 @@ function cloudWorkItemDetail(workItem: CloudWorkItem): CloudWorkItemDetail {
   };
 }
 
-function hostedCreatePipelineRequest(overrides: Partial<CreatePipelineRequest> = {}): CreatePipelineRequest {
-  return {
-    schemaVersion: "openpond.createPipeline.request.v1",
-    id: "create_request_cloud",
-    operation: "create",
-    surface: "hosted_create",
-    command: "/create",
+function hostedCreateImproveRun(overrides: Partial<CreateImproveRun> = {}): CreateImproveRun {
+  const base = createImproveRunFixture({
+    id: "create_improve_cloud",
     objective: "Create a hosted release notes agent",
     adapter: {
       kind: "hosted",
@@ -189,7 +186,9 @@ function hostedCreatePipelineRequest(overrides: Partial<CreatePipelineRequest> =
     },
     actor: { id: "sam", kind: "user", label: "Sam" },
     scope: {
+      profileId: "default",
       conversationId: "conversation_1",
+      originTurnId: null,
       workItemId: null,
       projectId: "cloud_project_1",
       targetProject: {
@@ -200,23 +199,25 @@ function hostedCreatePipelineRequest(overrides: Partial<CreatePipelineRequest> =
         baseSha: null,
       },
     },
+    target: {
+      kind: "agent",
+      id: "release-notes-agent",
+      displayName: "Release notes agent",
+      defaultActionKey: "release-notes-agent.chat",
+    },
     context: {
       messageIds: [],
       conversationExcerpts: [],
       attachments: [],
       apps: [],
       tools: [],
+      signalRefs: [],
+      evalRefs: [],
       targetRepoAssumptions: ["cloud project: openpond/cloud-repo"],
     },
-    targetAgent: {
-      agentId: null,
-      displayName: null,
-      defaultActionKey: "chat",
-    },
     metadata: { source: "cloud_work_home" },
-    createdAt: NOW,
-    ...overrides,
-  };
+  });
+  return { ...base, ...overrides };
 }
 
 function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
@@ -958,7 +959,7 @@ describe("Cloud native UI", () => {
   });
 
   test("renders hosted create pipeline plan review in Cloud thread", () => {
-    const createPipelineRequest = hostedCreatePipelineRequest({
+    const proposedRun = hostedCreateImproveRun({
       metadata: {
         source: "cloud_work_home",
         actionShape: {
@@ -1001,14 +1002,13 @@ describe("Cloud native UI", () => {
         targetRepoAssumptions: ["cloud project: openpond/cloud-repo"],
       },
     });
-    const createPipeline = buildInitialCreatePipelineSnapshot(createPipelineRequest);
-    expect(createPipeline.plan?.approvalId).toBeTruthy();
-    expect(createPipeline.approvalIds).toEqual([createPipeline.plan?.approvalId]);
+    const createImproveRun = buildInitialCreateImproveRun(proposedRun);
+    expect(createImproveRun.plan?.approvalId).toBeTruthy();
+    expect(createImproveRun.approvalIds).toEqual([createImproveRun.plan?.approvalId]);
     const workItem = cloudWorkItem({
       status: "backlog",
-      title: createPipelineRequest.objective,
-      createPipelineRequest,
-      createPipeline,
+      title: proposedRun.objective,
+      createImproveRun,
     });
     const baseDetail = cloudWorkItemDetail(workItem);
     const detail = {
@@ -1025,14 +1025,13 @@ describe("Cloud native UI", () => {
           createdByUserId: null,
           createdAt: NOW,
           metadata: {
-            source: "openpond_app_cloud_create_pipeline_link",
+            source: "openpond_app_cloud_create_improve_link",
             hidden: true,
           },
         },
         ...baseDetail.messages,
       ],
-      createPipelineRequest,
-      createPipeline,
+      createImproveRun,
     };
     const markup = renderToStaticMarkup(
       createElement(CloudWorkView, {
@@ -1064,7 +1063,7 @@ describe("Cloud native UI", () => {
     expect(markup).toContain("Hosted profile");
     expect(markup).toContain("Action shape");
     expect(markup).toContain("Chat plus direct action");
-    expect(markup).toContain("agents/create-a-hosted-release-notes-agent");
+    expect(markup).toContain("agents/release-notes-agent");
     expect(markup).not.toContain("agent/agent.ts");
     expect(markup).toContain("release-notes.txt");
     expect(markup).toContain("GitHub");

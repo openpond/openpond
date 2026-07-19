@@ -8,8 +8,14 @@ import { TrainingModelConfiguration } from "./TrainingModelConfiguration";
 import { TrainingRunEvaluation } from "./TrainingRunEvaluation";
 import { TrainingRunMetrics } from "./TrainingRunMetrics";
 import { TrainingStartDialog } from "./TrainingStartDialog";
-import { artifactsForJob, destinationLabel, formatDateTime, formatDuration, jobsForTaskset, modelName, planForJob, statusLabel, tasksetMethod, trainingRunMethodLabel } from "./training-model-data";
+import { artifactsForJob, destinationLabel, formatDateTime, formatDuration, jobsForTaskset, modelName, planForJob, statusLabel, tasksetMethod, trainingMethodLabel, trainingRunMethodLabel } from "./training-model-data";
 import { useTrainingRunDetail } from "./useTrainingRunDetail";
+import { DetailSection } from "./DetailSection";
+import {
+  TrainingModelComparisons,
+  TrainingRolloutReceipts,
+} from "./TrainingModelEvidence";
+import { TrainingModelPromotion } from "./TrainingModelPromotion";
 
 type TrainingController = ReturnType<typeof useTraining>;
 
@@ -52,6 +58,8 @@ export function TrainingModelDetail({
   const canStart = !selectedJob || ["succeeded", "failed", "cancelled"].includes(selectedJob.status);
   const trainingPath = taskset.readiness?.trainingPath ?? null;
   const selectedRunLabel = trainingRunMethodLabel(taskset, plan);
+  const rolloutReceipts = state?.rolloutReceipts.filter((receipt) =>
+    receipt.jobId === selectedJob?.id) ?? [];
 
   useEffect(() => { onSelectedJobIdChange(selectedJob?.id ?? null); }, [onSelectedJobIdChange, selectedJob?.id]);
   useEffect(() => () => onSelectedJobIdChange(null), [onSelectedJobIdChange]);
@@ -75,15 +83,19 @@ export function TrainingModelDetail({
       {tab === "summary" ? (
         <div className="training-detail-sections">
           <DetailSection title="Taskset" actions={<><button className="training-button secondary" type="button" onClick={onOpenTasksetFiles}>Open files</button>{!taskset.readiness?.ready ? <button className="training-text-button" type="button" onClick={onOpenTaskset}>Review Taskset</button> : null}</>}>
-            <div className="training-taskset-facts"><span><strong>{approvedTrainingExamples}</strong> training examples</span><span><strong>{evaluationExamples}</strong> test examples</span><span><strong>{taskset.sourceRefs.length}</strong> chats</span><span><strong>{method.toUpperCase()}</strong> primary recommendation</span>{selectedJob ? <span><strong>{selectedRunLabel}</strong> selected run</span> : null}</div>
+            <div className="training-taskset-facts"><span><strong>{approvedTrainingExamples}</strong> training examples</span><span><strong>{evaluationExamples}</strong> test examples</span><span><strong>{taskset.sourceRefs.length}</strong> dataset sources</span><span><strong>{trainingMethodLabel(method)}</strong> primary recommendation</span>{selectedJob ? <span><strong>{selectedRunLabel}</strong> selected run</span> : null}</div>
           </DetailSection>
 
           {trainingPath ? <DetailSection title="Training path">
             <div className="training-path-stages">
-              <div><strong>Primary · {trainingPath.primaryMethod.toUpperCase()}</strong><span>{stageCompatibility(trainingPath.primaryMethod, state?.destinations ?? [])}</span></div>
+              <div><strong>Primary · {trainingMethodLabel(trainingPath.primaryMethod)}</strong><span>{stageCompatibility(trainingPath.primaryMethod, state?.destinations ?? [])}</span></div>
               {trainingPath.bootstrap ? <div><strong>Optional precursor · SFT trajectory bootstrap</strong><span>{stageCompatibility("sft", state?.destinations ?? [])}</span><small>{trainingPath.bootstrap.demonstrationRefs.length} approved trajectories · {trainingPath.bootstrap.limitations.join(" ")}</small></div> : null}
             </div>
           </DetailSection> : null}
+
+          <DetailSection title="Model comparison">
+            <TrainingModelComparisons taskset={taskset} state={state} />
+          </DetailSection>
 
           <DetailSection title="Training runs" actions={canStart ? <button className="training-button" type="button" disabled={!taskset.readiness?.ready || Boolean(training.busyAction)} onClick={() => setStartOpen(true)}>Start training</button> : null}>
             {jobs.length ? <div className="training-table-wrap"><table className="training-data-table training-runs-table"><thead><tr><th>Run</th><th>Method</th><th>Compute</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody>{jobs.map((job) => {
@@ -95,8 +107,11 @@ export function TrainingModelDetail({
           {selectedJob ? <>
             <DetailSection title="Training metrics"><TrainingRunMetrics detail={detail.detail} loading={detail.loading} error={detail.error}/></DetailSection>
             <DetailSection title="Evaluation"><TrainingRunEvaluation detail={detail.detail} loading={detail.loading}/></DetailSection>
-            <DetailSection title="Result" actions={lineage && adapter ? <button className="training-button secondary" type="button" onClick={() => void training.actions.downloadArtifact(adapter.id)}><Download size={14}/>Download adapter</button> : null}>
-              <div className="training-result-summary"><strong>{lineage ? `${selectedRunLabel} adapter ready` : selectedJob.status === "succeeded" ? "Collecting adapter" : "No adapter created"}</strong>{adapter ? <span>{adapter.baseModelId} with LoRA</span> : null}{plan?.recipe.method === "sft" && method !== "sft" ? <span>Supervised bootstrap only; verifier reward was not optimized.</span> : null}{lineage ? <span>Frozen evaluation {lineage.frozenEvaluationArtifactId ? "completed" : "not recorded"}</span> : null}</div>
+            <DetailSection title="Result" actions={lineage && adapter ? <button className="training-button secondary" type="button" onClick={() => void training.actions.downloadModelPackage(lineage.id)}><Download size={14}/>Download LoRA package</button> : null}>
+              <div className="training-result-summary"><strong>{lineage ? `${selectedRunLabel} adapter ready` : selectedJob.status === "succeeded" ? "Collecting adapter" : "No adapter created"}</strong>{adapter ? <span>{adapter.baseModelId} with LoRA</span> : null}{plan?.recipe.method === "sft" && method !== "sft" ? <span>Supervised bootstrap only; verifier reward was not optimized.</span> : null}{plan?.recipe.method === "grpo" ? <span>{Number(selectedJob.metadata.optimizerUpdatesObserved ?? 0)} optimizer updates observed in the provider receipt.</span> : null}{lineage ? <span>Frozen evaluation {lineage.frozenEvaluationArtifactId ? "completed" : "not recorded"} · promotion {lineage.promotable ? "eligible" : "blocked"}</span> : null}</div>
+            </DetailSection>
+            <DetailSection title="Promotion & bindings">
+              <TrainingModelPromotion lineage={lineage} state={state} training={training} onToast={onToast} />
             </DetailSection>
           </> : null}
         </div>
@@ -105,10 +120,12 @@ export function TrainingModelDetail({
           <DetailSection title="Training recipe">
             {plan?.recipe.method === "sft" ? <dl className="training-configuration-list">
               <Config label="Method" value={plan.recipe.method.toUpperCase()}/><Config label="Base model" value={plan.recipe.baseModel.id}/><Config label="Revision" value={plan.recipe.baseModel.revision}/><Config label="Compute" value={destinationLabel(plan.destinationId)}/><Config label="LoRA rank" value={String(plan.recipe.lora.rank)}/><Config label="Learning rate" value={String(plan.recipe.optimizer.learningRate)}/><Config label="Maximum steps" value={String(plan.recipe.optimizer.maxSteps)}/><Config label="Batch size" value={String(plan.recipe.optimizer.batchSize)}/><Config label="Gradient accumulation" value={String(plan.recipe.optimizer.gradientAccumulationSteps)}/><Config label="Sequence length" value={String(plan.recipe.dataset.maxSequenceLength)}/><Config label="Seed" value={String(plan.recipe.optimizer.seed)}/>
+            </dl> : plan?.recipe.method === "grpo" ? <dl className="training-configuration-list">
+              <Config label="Method" value="RFT"/><Config label="Loss method" value="GRPO"/><Config label="Base model" value={plan.recipe.baseModel.id}/><Config label="Revision" value={plan.recipe.baseModel.revision}/><Config label="Compute" value={destinationLabel(plan.destinationId)}/><Config label="LoRA rank" value={String(plan.recipe.lora.rank)}/><Config label="Rollouts per prompt" value={String(plan.recipe.rollout.groupSize)}/><Config label="Rollout concurrency" value={String(plan.recipe.rollout.concurrency)}/><Config label="Maximum turns" value={String(plan.recipe.rollout.maxTurns)}/><Config label="Maximum output" value={String(plan.recipe.rollout.maxOutputTokens)}/><Config label="Learning rate" value={String(plan.recipe.optimizer.learningRate)}/><Config label="Prompts per update" value={String(plan.recipe.optimizer.maxSteps)}/><Config label="Reward environment" value={`${plan.recipe.reward.environmentId}@${plan.recipe.reward.environmentVersion}`}/><Config label="Tool contract" value={plan.recipe.reward.toolContractHash}/>
             </dl> : <div className="training-run-placeholder">No run configuration yet.</div>}
           </DetailSection>
           <DetailSection title="Lineage">
-            {lineage ? <dl className="training-configuration-list"><Config label="Taskset hash" value={lineage.tasksetHash}/><Config label="Grader hash" value={lineage.graderHash}/><Config label="Plan hash" value={lineage.planHash}/><Config label="Bundle hash" value={lineage.bundleHash}/><Config label="Recipe hash" value={lineage.recipeHash}/><Config label="Worker" value={lineage.workerVersion}/><Config label="Trainer" value={lineage.trainerVersion}/></dl> : <div className="training-run-placeholder">Lineage is created with a verified adapter.</div>}
+            {lineage ? <dl className="training-configuration-list"><Config label="Taskset hash" value={lineage.tasksetHash}/><Config label="Grader hash" value={lineage.graderHash}/><Config label="Plan hash" value={lineage.planHash}/><Config label="Prepared data hash" value={lineage.bundleHash}/><Config label="Recipe hash" value={lineage.recipeHash}/><Config label="Worker" value={lineage.workerVersion}/><Config label="Trainer" value={lineage.trainerVersion}/></dl> : <div className="training-run-placeholder">Lineage is created with a verified adapter.</div>}
           </DetailSection>
           <DetailSection title="Artifacts">
             {artifacts.length ? <div className="training-artifact-list">{artifacts.map((artifact) => <div key={artifact.id}><span>{artifact.kind}</span><code>{String(artifact.metadata.relativePath ?? artifact.path)}</code><strong>{formatBytes(artifact.sizeBytes)}</strong></div>)}</div> : <div className="training-run-placeholder">No artifacts yet.</div>}
@@ -116,6 +133,9 @@ export function TrainingModelDetail({
           <DetailSection title="Event log">
             {detail.detail?.events.length ? <div className="training-event-log">{detail.detail.events.map((event) => <div key={event.id}><time>{new Date(event.timestamp).toLocaleTimeString()}</time><strong>{statusLabel(event.type)}</strong><code>{eventSummary(event.payload)}</code></div>)}</div> : <div className="training-run-placeholder">No worker events yet.</div>}
           </DetailSection>
+          {plan?.recipe.method === "grpo" ? <DetailSection title="Rollout receipts">
+            <TrainingRolloutReceipts receipts={rolloutReceipts} />
+          </DetailSection> : null}
         </div>
       ) : tab === "configuration" ? (
         <div className="training-detail-sections">
@@ -133,14 +153,33 @@ export function TrainingModelDetail({
         </div>
       )}
 
-      {startOpen ? <TrainingStartDialog connection={connection} taskset={taskset} destinations={state?.destinations ?? []} busy={training.busyAction === "start-training"} onClose={() => setStartOpen(false)} onStart={async (destinationId: TrainingDestinationId, recipe) => Boolean(await training.actions.startTraining({ tasksetId: taskset.id, destinationId, recipe, exportApproved: true, maximumCostUsd: destinationId === "local_cpu_fixture" ? 0 : null }))}/> : null}
+      {startOpen ? <TrainingStartDialog
+        connection={connection}
+        taskset={taskset}
+        destinations={state?.destinations ?? []}
+        busy={["prepare-training", "start-prepared-training", "start-training"].includes(training.busyAction ?? "")}
+        onClose={() => setStartOpen(false)}
+        onPrepare={(destinationId, recipe, approval) => training.actions.prepareTraining({
+          tasksetId: taskset.id,
+          destinationId,
+          recipe,
+          exportApproved: approval.exportApproved,
+          retentionDays: approval.retentionDays,
+          region: approval.region,
+        })}
+        onConfirmPrepared={async (prepared, maximumCostUsd) => Boolean(
+          await training.actions.startPreparedTraining({
+            planId: prepared.plan.id,
+            bundleId: prepared.bundle.id,
+            maximumCostUsd,
+          }),
+        )}
+        onStart={async (destinationId: TrainingDestinationId, recipe, approval) => Boolean(await training.actions.startTraining({ tasksetId: taskset.id, destinationId, recipe, ...approval }))}
+      /> : null}
     </div>
   );
 }
 
-function DetailSection({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }) {
-  return <section className="training-detail-section"><div className="training-detail-section-heading"><h2>{title}</h2>{actions ? <div>{actions}</div> : null}</div><div className="training-detail-section-panel">{children}</div></section>;
-}
 function Config({ label, value }: { label: string; value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }
 function shortId(value: string) { return value.replace(/^training_job_/, "").slice(0, 12); }
 function formatBytes(value: number) { if (value < 1024) return `${value} B`; if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`; return `${(value / (1024 ** 2)).toFixed(1)} MB`; }
