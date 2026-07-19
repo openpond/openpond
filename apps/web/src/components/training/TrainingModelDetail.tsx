@@ -154,6 +154,7 @@ export function TrainingModelDetail({
       )}
 
       {startOpen ? <TrainingStartDialog
+        baseModelCandidates={state?.baseModelCandidates ?? []}
         connection={connection}
         taskset={taskset}
         destinations={state?.destinations ?? []}
