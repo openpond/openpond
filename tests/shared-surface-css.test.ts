@@ -54,8 +54,9 @@ describe("shared surface stylesheet ownership", () => {
   });
 
   test("loads shared table and dialog styles with the Lab surface", async () => {
-    const [component, sharedCss] = await Promise.all([
+    const [component, dialog, sharedCss] = await Promise.all([
       source("apps/web/src/components/labs/LabsView.tsx"),
+      source("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx"),
       source("apps/web/src/styles/training/training.css"),
     ]);
 
@@ -67,9 +68,11 @@ describe("shared surface stylesheet ownership", () => {
     expect(sharedCss).toContain(".training-data-table");
     expect(sharedCss).toContain(".training-dialog-backdrop");
     expect(sharedCss).toContain(".training-dialog");
-    expect(sharedCss).toContain(".training-run-dialog-title>button");
+    expect(dialog.match(/className="training-icon-button"/g)).toHaveLength(2);
+    expect(sharedCss).toContain(".training-icon-button");
     expect(sharedCss).toContain(".training-run-dialog .training-start-mode-options");
     expect(sharedCss).toContain(".training-base-model-options");
+    expect(sharedCss).not.toContain(".training-base-model-card");
     expect(sharedCss).toContain(".training-run-dialog.training-run-workflow-step");
     expect(sharedCss).toContain("height:auto");
   });

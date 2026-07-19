@@ -597,6 +597,7 @@ export function CreateImproveAuthoringDialog({
           <div className="training-run-dialog-title">
             {step !== "start" ? (
               <button
+                className="training-icon-button"
                 data-autofocus
                 type="button"
                 aria-label={backLabel(step, usesBaseModelStep, mode)}
@@ -607,7 +608,7 @@ export function CreateImproveAuthoringDialog({
             ) : null}
             <h2>{step === "recommendation" ? reviewTitle(targetIntent, resourceIntent) : dialogTitle(targetIntent, resourceIntent)}</h2>
           </div>
-          <button type="button" aria-label="Close" onClick={() => void closeDialog()}><X size={16} /></button>
+          <button className="training-icon-button" type="button" aria-label="Close" onClick={() => void closeDialog()}><X size={16} /></button>
         </div>
 
         {step === "start" ? (

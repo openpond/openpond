@@ -19,7 +19,7 @@ export function TrainingBaseModelStep({
       </div>
       <div
         aria-label="Available base models"
-        className="training-base-model-options"
+        className="training-method-options training-base-model-options"
         role="radiogroup"
       >
         {modelIds.map((modelId, index) => {
