@@ -8,6 +8,7 @@ import {
   Plug,
   Plus,
 } from "../icons";
+import "../../styles/training/training.css";
 import "../../styles/labs/labs.css";
 import "../../styles/labs/labs-detail.css";
 
