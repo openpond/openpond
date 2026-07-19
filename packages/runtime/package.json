@@ -1,6 +1,6 @@
 {
   "name": "@openpond/runtime",
-  "version": "0.0.32",
+  "version": "0.0.33",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "private": true,
