@@ -8,6 +8,7 @@ import {
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentFinalResultSummary, SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { CircleAlert, FileText } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export type GoalDetailsCreateRuntime = {
   run: CreateImproveRun;
@@ -331,6 +332,7 @@ function SubagentDetails({
 }) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  useErrorToast(actionError);
   const runLifecycleAction = async (runId: string, action: SubagentLifecycleAction) => {
     if (!onRunSubagentLifecycleAction) return;
     const key = `${runId}:${action}`;
@@ -411,12 +413,6 @@ function SubagentDetails({
             </li>
           ))}
         </ul>
-        {actionError ? (
-          <div className="goal-details-alert">
-            <CircleAlert size={15} />
-            <span>{actionError}</span>
-          </div>
-        ) : null}
       </DetailSection>
       {runtime.finalResults.length > 0 ? <SubagentFinalResultDetails results={runtime.finalResults} /> : null}
       {runtime.taskGraph.nodes.length > 0 ? <SubagentTaskGraphDetails runtime={runtime} /> : null}

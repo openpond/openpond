@@ -7,7 +7,6 @@ export function CommunityRulesDialog(props: {
   rules: CommunityRuleVersion;
   mode: "join" | "reaccept" | "review";
   busy: boolean;
-  error: string | null;
   onAccept: () => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -72,7 +71,6 @@ export function CommunityRulesDialog(props: {
           <button type="button" aria-label="Close rules" onClick={props.onClose}><X size={16} /></button>
         </header>
         <div className="community-rules-body"><MarkdownText content={props.rules.bodyMarkdown} /></div>
-        {props.error ? <div className="community-state error" role="alert">{props.error}</div> : null}
         <footer>
           {requiresAction ? (
             <label className="community-rules-acceptance">

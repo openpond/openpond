@@ -33,6 +33,12 @@ describe("AppToast", () => {
 
   test("replaces the browser fetch failure with a useful connection message", () => {
     expect(appErrorToastMessage("Failed to fetch")).toBe("Couldn’t connect to OpenPond.");
+    expect(appErrorToastMessage("Error: Failed to fetch")).toBe("Couldn’t connect to OpenPond.");
+    expect(appErrorToastMessage("TypeError: Failed to fetch")).toBe("Couldn’t connect to OpenPond.");
+    expect(appErrorToastMessage("NetworkError when attempting to fetch resource.")).toBe(
+      "Couldn’t connect to OpenPond.",
+    );
+    expect(appErrorToastMessage("Load failed")).toBe("Couldn’t connect to OpenPond.");
     expect(appErrorToastMessage("Something specific failed")).toBe("Something specific failed");
   });
 });

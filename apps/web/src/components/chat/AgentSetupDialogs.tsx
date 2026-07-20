@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { OPENPOND_MANIFEST_FILE_NAME } from "@openpond/contracts";
 import type { SandboxProjectSourceType } from "../../lib/sandbox-types";
 import { starterManifestPreview } from "./workspace-environment-helpers";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export type ProjectAgentDialogKind = "config" | "connect" | "sync" | "agent" | "run";
 
@@ -226,6 +227,7 @@ function AgentSetupDialogFrame({
   title: string;
   onClose: () => void;
 }) {
+  useErrorToast(error);
   return (
     <div className="agent-setup-dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="agent-setup-dialog" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
@@ -235,7 +237,6 @@ function AgentSetupDialogFrame({
             Close
           </button>
         </header>
-        {error ? <div className="agent-setup-error">{error}</div> : null}
         <div className="agent-setup-fields">{children}</div>
       </section>
     </div>

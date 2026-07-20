@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 import { Bot, X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export function LabAgentRenameDialog({
   agentId,
@@ -16,6 +17,7 @@ export function LabAgentRenameDialog({
   const [name, setName] = useState(currentName);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useErrorToast(error);
   const normalizedName = name.trim().replace(/\s+/g, " ");
   const unchanged = normalizedName === currentName.trim().replace(/\s+/g, " ");
 
@@ -93,11 +95,6 @@ export function LabAgentRenameDialog({
             <span>Agent ID</span>
             <code>{agentId}</code>
           </div>
-          {error ? (
-            <p className="labs-rename-error" role="alert">
-              {error}
-            </p>
-          ) : null}
           <footer>
             <button disabled={busy} type="button" onClick={onClose}>
               Cancel

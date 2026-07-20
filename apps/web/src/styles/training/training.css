@@ -218,14 +218,10 @@
   border-radius:50%;
 }
 .selected>.training-choice-indicator{
-  border-color:var(--cyan);
-}
-.selected>.training-choice-indicator::after{
-  width:7px;
-  height:7px;
-  border-radius:50%;
+  width:15px;
+  height:15px;
+  border:0;
   background:var(--cyan);
-  content:"";
 }
 .training-base-model-options{
   grid-template-columns:repeat(auto-fit,minmax(240px,1fr));

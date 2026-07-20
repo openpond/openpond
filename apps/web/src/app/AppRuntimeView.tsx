@@ -8,6 +8,7 @@ import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
+import { AppToastProvider } from "./AppToastContext";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -76,32 +77,34 @@ if (!startup.ready) {
 
   if (view === "settings") {
     return (
-      <AppSettingsController
-        settings={{
-          payload: bootstrap,
-          connection,
-          diagnostics: diagnosticEvents,
-          initialSection: settingsSection,
-          onPayload: applyBootstrapPayload,
-          onError: setError,
-          onToast: showToast,
-          onOpenSourceSession: openSessionInChat,
-          teamChatCurrentUserId: teamChat.currentUserId,
-          teamChatEnabled: teamChatTeamId !== null,
-          teamChatNotificationMode: teamChat.notificationMode,
-          teamChatThreads: teamChat.threads,
-          onTeamChatNotificationModeChange: teamChat.setNotificationMode,
-          onTeamChatThreadMuteChange: teamChat.setThreadMuted,
-          onBack: () => {
-            setView("chat");
-            setSidebarOpen(true);
-          },
-        }}
-        toast={{
-          toast,
-          onDismiss: () => appDispatch({ type: "field", key: "toast", value: null }),
-        }}
-      />
+      <AppToastProvider showToast={showToast}>
+        <AppSettingsController
+          settings={{
+            payload: bootstrap,
+            connection,
+            diagnostics: diagnosticEvents,
+            initialSection: settingsSection,
+            onPayload: applyBootstrapPayload,
+            onError: setError,
+            onToast: showToast,
+            onOpenSourceSession: openSessionInChat,
+            teamChatCurrentUserId: teamChat.currentUserId,
+            teamChatEnabled: teamChatTeamId !== null,
+            teamChatNotificationMode: teamChat.notificationMode,
+            teamChatThreads: teamChat.threads,
+            onTeamChatNotificationModeChange: teamChat.setNotificationMode,
+            onTeamChatThreadMuteChange: teamChat.setThreadMuted,
+            onBack: () => {
+              setView("chat");
+              setSidebarOpen(true);
+            },
+          }}
+          toast={{
+            toast,
+            onDismiss: () => appDispatch({ type: "field", key: "toast", value: null }),
+          }}
+        />
+      </AppToastProvider>
     );
   }
 
@@ -155,7 +158,8 @@ if (!startup.ready) {
   const selectedChatHistoryLoading = Boolean(selectedChatHistoryLoadState?.loading);
 
   return (
-    <AppShellController
+    <AppToastProvider showToast={showToast}>
+      <AppShellController
       className={appShellClassName}
       style={appShellStyle}
       sidebar={{
@@ -511,6 +515,10 @@ if (!startup.ready) {
           setSettingsSection("providers");
           setView("settings");
         },
+        onOpenComputeSettings: () => {
+          setSettingsSection("compute");
+          setView("settings");
+        },
         changeDraftProvider,
         changeProjectTarget,
         changeWorkspaceTarget,
@@ -595,6 +603,7 @@ if (!startup.ready) {
         toast,
         onDismiss: () => appDispatch({ type: "field", key: "toast", value: null }),
       }}
-    />
+      />
+    </AppToastProvider>
   );
 }

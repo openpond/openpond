@@ -7,6 +7,7 @@ import "../../styles/settings/compute-settings.css";
 import { ComputeSettingsSection } from "../settings/ComputeSettingsSection";
 import { useComputeSettings } from "../settings/useComputeSettings";
 import { X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export function TrainingComputeDialog({
   connection,
@@ -18,6 +19,7 @@ export function TrainingComputeDialog({
   onClose: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  useErrorToast(error);
   const compute = useComputeSettings({
     connection,
     enabled: true,
@@ -70,11 +72,6 @@ export function TrainingComputeDialog({
           </button>
         </div>
         <div className="training-dialog-scroll-body">
-          {error ? (
-            <div className="training-banner training-dialog-error" role="alert">
-              {error}
-            </div>
-          ) : null}
           <ComputeSettingsSection
             busy={compute.busy}
             state={compute.state}
