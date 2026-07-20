@@ -1,28 +1,19 @@
 import {
   SubagentProgressSchema,
   SubagentRunSchema,
+  type AppPreferences,
   type RuntimeEvent,
   type Session,
   type SubagentLifecycleActionResponse,
+  type SubagentRoleSettings,
   type SubagentRun,
   type Turn,
 } from "@openpond/contracts";
 import type { ModelToolExecutionContext } from "../../openpond/model-tool-registry.js";
-import type {
-  OpenPondGoalControlAction,
-  OpenPondGoalControlGoal,
-} from "../../openpond/goal-control.js";
-import {
-  subagentRunAccepted,
-  subagentRunDismissed,
-  subagentRunResolvedForGoal,
-} from "../subagents/policies-and-prompts.js";
+import type { OpenPondGoalControlAction } from "../../openpond/goal-control.js";
 import { now, textFromUnknown } from "../../utils.js";
-import {
-  recordFromUnknown,
-  stringFromRecord,
-  uniqueNonEmptyStrings,
-} from "../turns/value-utils.js";
+import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
+import type { SubagentTurnPermissions } from "../subagents/continuation-runtime.js";
 
 type AppendSubagentReceipt = (input: {
   parentSession: Session;
@@ -57,330 +48,154 @@ export function createGoalSubagentLifecycle(deps: {
   appendSubagentReceipt: AppendSubagentReceipt;
   getSession(sessionId: string): Promise<Session>;
   updateSession(sessionId: string, patch: Record<string, unknown>): Promise<Session>;
+  loadAppPreferences(): Promise<AppPreferences>;
+  subagentChildTurnPermissions(
+    parent: SubagentTurnPermissions,
+    role: SubagentRoleSettings,
+  ): SubagentTurnPermissions;
+  runSubagentChildTurn(input: {
+    run: SubagentRun;
+    role: SubagentRoleSettings;
+    childSession: Session;
+    parentSession: Session;
+    parentTurnId: string;
+    contextPack: string | null;
+    childTurnPermissions: SubagentTurnPermissions;
+    initialPrompt?: string | null;
+  }): Promise<void>;
+  enqueueSubagentResume: BackgroundWorkerQueue["enqueue"];
 }) {
-  const subagentToolsAvailable = deps.subagentToolsAvailable;
-  const requireSubagentDeps = deps.requireSubagentDeps;
-  const interruptSessionTurn = deps.interruptSessionTurn;
-  const cleanupSubagentRun = deps.cleanupSubagentRun;
-  const appendSubagentReceipt = deps.appendSubagentReceipt;
-  const getSession = deps.getSession;
-  const updateSession = deps.updateSession;
-  async function assertGoalSubagentsResolvedForCompletion(input: {
-    context: ModelToolExecutionContext;
-    goalId: string;
-    action: string;
-  }): Promise<void> {
-    if (input.action !== "complete" || !subagentToolsAvailable()) return;
-    const deps = requireSubagentDeps();
-    const runs = await deps.listRuns({
-      parentSessionId: input.context.session.id,
-      parentGoalId: input.goalId,
-      limit: 1000,
-    });
-    const unresolved = runs.filter((run) => run.required && !subagentRunResolvedForGoal(run));
-    if (unresolved.length === 0) return;
-    const details = unresolved.slice(0, 8).map((run) => `${run.roleId} ${run.status} (${run.id})`).join(", ");
-    const hidden = unresolved.length > 8 ? `, +${unresolved.length - 8} more` : "";
-    throw new Error(
-      `Cannot complete goal ${input.goalId} while required subagents are unresolved: ${details}${hidden}. Join, resume, or explicitly resolve those child runs first.`,
-    );
+  async function runsForGoal(parentSessionId: string, goalId: string): Promise<SubagentRun[]> {
+    if (!deps.subagentToolsAvailable()) return [];
+    return deps.requireSubagentDeps().listRuns({ parentSessionId, parentGoalId: goalId, limit: 1000 });
   }
 
   async function markGoalSubagentsNeedsResume(input: {
     context: ModelToolExecutionContext;
     goalId: string;
-    action: string;
-  }): Promise<number> {
-    if (input.action !== "resume" || !subagentToolsAvailable()) return 0;
-    const deps = requireSubagentDeps();
-    const runs = await deps.listRuns({
-      parentSessionId: input.context.session.id,
-      parentGoalId: input.goalId,
-      status: ["queued", "running"],
-      limit: 1000,
-    });
-    let updatedCount = 0;
-    for (const run of runs) {
-      const blocker = "Goal resumed; this child conversation needs resume before its required subagent work can finish.";
-      const updated = SubagentRunSchema.parse({
-        ...run,
-        status: "needs_resume",
-        report: {
-          ...(run.report ?? {}),
-          summary: run.report?.summary || "Subagent needs resume after parent goal resumed.",
-          blockers: uniqueNonEmptyStrings([...(run.report?.blockers ?? []), blocker]),
-          followUpNeeded: true,
-        },
-        metadata: {
-          ...run.metadata,
-          needsResumeAt: now(),
-          needsResumeReason: "parent_goal_resumed",
-        },
-      });
-      await deps.upsertRun(updated);
-      await appendSubagentReceipt({
-        parentSession: input.context.session,
-        parentTurnId: input.context.turnId,
-        run: updated,
-        eventName: "subagent.blocked",
-        status: "pending",
-        output: `${updated.roleId} subagent needs resume after parent goal resumed.`,
-      });
-      updatedCount += 1;
-    }
-    return updatedCount;
-  }
-
-  async function markGoalSubagentsSuperseded(input: {
-    context: ModelToolExecutionContext;
     action: OpenPondGoalControlAction;
-    previousGoal: Record<string, unknown> | null;
-    supersededByGoal: OpenPondGoalControlGoal;
   }): Promise<number> {
-    if (input.action !== "restart" || !subagentToolsAvailable()) return 0;
-    const previousGoal = recordFromUnknown(input.previousGoal);
-    const previousGoalId = stringFromRecord(previousGoal ?? {}, "id");
-    if (!previousGoalId) return 0;
-    const deps = requireSubagentDeps();
-    const runs = await deps.listRuns({
-      parentSessionId: input.context.session.id,
-      parentGoalId: previousGoalId,
-      limit: 1000,
-    });
-    const reason = `Parent goal ${previousGoalId} restarted; this child run was superseded.`;
-    let supersededCount = 0;
-    for (const run of runs) {
-      if (run.status === "superseded") continue;
-      const supersededAt = now();
-      let interruptResult: Record<string, unknown> | null = null;
-      if (run.childSessionId && subagentRunMayStillBeWorking(run)) {
-        try {
-          const interrupted = await interruptSessionTurn(run.childSessionId);
-          interruptResult = {
-            status: interrupted.status,
-            turnId: interrupted.id,
-          };
-        } catch (error) {
-          interruptResult = {
-            status: "not_active",
-            error: textFromUnknown(error) || "No active child turn to interrupt.",
-          };
+    if (input.action !== "pause" && input.action !== "resume") return 0;
+    if (!deps.subagentToolsAvailable()) return 0;
+    const runtime = deps.requireSubagentDeps();
+    if (input.action === "pause") {
+      const runs = (await runsForGoal(input.context.session.id, input.goalId))
+        .filter((run) => run.status === "queued" || run.status === "running");
+      for (const run of runs) {
+        if (run.status === "running" && run.childSessionId) {
+          await deps.interruptSessionTurn(run.childSessionId, "Parent goal paused.").catch(() => undefined);
         }
+        const updated = SubagentRunSchema.parse({
+          ...run,
+          status: "needs_resume",
+          completedAt: null,
+          error: null,
+          progress: SubagentProgressSchema.parse({
+            ...run.progress,
+            latestMeaningfulActivity: "Paused with the parent goal.",
+            updatedAt: now(),
+          }),
+        });
+        await runtime.upsertRun(updated);
+        await deps.appendSubagentReceipt({
+          parentSession: input.context.session,
+          parentTurnId: input.context.turnId,
+          run: updated,
+          eventName: "subagent.progress",
+          status: "pending",
+          output: `${run.roleId} child paused with the parent goal.`,
+        });
       }
-      const updated = SubagentRunSchema.parse({
+      return runs.length;
+    }
+
+    const preferences = await deps.loadAppPreferences();
+    const runs = (await runsForGoal(input.context.session.id, input.goalId))
+      .filter((run) => run.status === "needs_resume" && run.childSessionId);
+    let queuedCount = 0;
+    for (const run of runs) {
+      const role = preferences.subagents.roles.find((candidate) => candidate.id === run.roleId);
+      if (!role?.enabled || !run.childSessionId) continue;
+      const childSession = await deps.getSession(run.childSessionId).catch(() => null);
+      if (!childSession) continue;
+      const queued = SubagentRunSchema.parse({
         ...run,
-        status: "superseded",
-        completedAt: supersededAt,
-        updatedAt: supersededAt,
+        status: "queued",
+        completedAt: null,
         error: null,
         progress: SubagentProgressSchema.parse({
           ...run.progress,
-          phase: "report",
-          latestMeaningfulActivity: "Parent goal restarted; child run superseded.",
+          latestMeaningfulActivity: "Queued to resume with the parent goal.",
           currentBlocker: null,
-          updatedAt: supersededAt,
+          updatedAt: now(),
         }),
-        report: {
-          ...(run.report ?? {}),
-          summary: run.report?.summary || "Subagent superseded by parent goal restart.",
-          followUpNeeded: false,
-        },
-        metadata: {
-          ...(run.metadata ?? {}),
-          superseded: {
-            status: "superseded",
-            reason,
-            supersededAt,
-            previousStatus: run.status,
-            previousGoalId,
-            supersededByGoalId: input.supersededByGoal.id,
-            requestedBySessionId: input.context.session.id,
-            requestedByTurnId: input.context.turnId,
-            interruptResult,
-          },
-        },
       });
-      await deps.upsertRun(updated);
-      await appendSubagentReceipt({
-        parentSession: input.context.session,
-        parentTurnId: input.context.turnId,
-        run: updated,
-        eventName: "subagent.superseded",
-        status: "completed",
-        output: `${updated.roleId} subagent superseded by restarted parent goal.`,
-      });
-      supersededCount += 1;
+      await runtime.upsertRun(queued);
+      deps.enqueueSubagentResume(
+        {
+          label: `Resume ${role.id}: ${run.objective.slice(0, 80)}`,
+          metadata: { runId: run.id, childSessionId: childSession.id, parentSessionId: input.context.session.id },
+        },
+        () => deps.runSubagentChildTurn({
+          run: queued,
+          role,
+          childSession,
+          parentSession: input.context.session,
+          parentTurnId: input.context.turnId,
+          contextPack: typeof run.metadata?.context === "string" ? run.metadata.context : null,
+          childTurnPermissions: deps.subagentChildTurnPermissions(input.context.turnPermissions, role),
+          initialPrompt: "Continue the assignment from where you stopped.",
+        }),
+      );
+      queuedCount += 1;
     }
-    return supersededCount;
+    return queuedCount;
   }
 
   async function applyGoalLifecycleToSubagents(input: {
     context: ModelToolExecutionContext;
     goalId: string;
     action: OpenPondGoalControlAction;
-  }): Promise<{ cancelledCount: number; cleanedCount: number; archivedCount: number }> {
-    if (!subagentToolsAvailable() || (input.action !== "stop" && input.action !== "complete")) {
-      return { cancelledCount: 0, cleanedCount: 0, archivedCount: 0 };
-    }
-    const deps = requireSubagentDeps();
-    const runs = await deps.listRuns({
-      parentSessionId: input.context.session.id,
-      parentGoalId: input.goalId,
-      limit: 1000,
-    });
-    let cancelledCount = 0;
-    let cleanedCount = 0;
-    let archivedCount = 0;
-    for (const run of runs) {
-      if (input.action === "stop") {
-        if (subagentRunAccepted(run) || subagentRunDismissed(run)) {
-          const cleanup = await cleanupSubagentRun({
-            run,
-            parentSession: input.context.session,
-            parentTurnId: input.context.turnId,
-            reason: subagentRunDismissed(run) ? "goal_stopped_dismissed" : "goal_stopped",
-            policy: "auto_after_acceptance",
-          });
-          const archived = await archiveSubagentChildSession({
-            parentSession: input.context.session,
-            parentTurnId: input.context.turnId,
-            run: cleanup.run,
-            reason: "goal_stopped",
-            policy: "goal_stopped",
-          });
-          cleanedCount += 1;
-          if (archived.archived) archivedCount += 1;
-          continue;
-        }
-        if (subagentRunTerminalForGoalLifecycle(run)) continue;
-        const cancelled = await cancelSubagentRunForGoalLifecycle({
-          context: input.context,
-          run,
-          reason: `Parent goal ${input.goalId} stopped.`,
-        });
-        const archived = await archiveSubagentChildSession({
-          parentSession: input.context.session,
-          parentTurnId: input.context.turnId,
-          run: cancelled,
-          reason: "goal_stopped",
-          policy: "goal_stopped",
-        });
-        cancelledCount += 1;
-        cleanedCount += 1;
-        if (archived.archived) archivedCount += 1;
-        continue;
+  }): Promise<Record<string, number>> {
+    const result = { cancelledCount: 0, cleanedCount: 0, archivedCount: 0 };
+    if (!["complete", "stop", "restart"].includes(input.action)) return result;
+    if (!deps.subagentToolsAvailable()) return result;
+    const runtime = deps.requireSubagentDeps();
+    const active = (await runsForGoal(input.context.session.id, input.goalId))
+      .filter((run) => run.status === "queued" || run.status === "running" || run.status === "needs_resume");
+    for (const run of active) {
+      if (run.childSessionId) {
+        await deps.interruptSessionTurn(run.childSessionId, `Parent goal ${input.action}.`).catch(() => undefined);
       }
-      if (subagentRunAccepted(run) || subagentRunDismissed(run)) {
-        const cleanup = await cleanupSubagentRun({
-          run,
-          parentSession: input.context.session,
-          parentTurnId: input.context.turnId,
-          reason: subagentRunDismissed(run) ? "goal_completed_dismissed" : "goal_completed",
-          policy: "auto_after_acceptance",
-        });
-        const archived = await archiveSubagentChildSession({
-          parentSession: input.context.session,
-          parentTurnId: input.context.turnId,
-          run: cleanup.run,
-          reason: "goal_completed",
-          policy: "goal_completed",
-        });
-        cleanedCount += 1;
-        if (archived.archived) archivedCount += 1;
-        continue;
-      }
-      if (!run.required && !subagentRunTerminalForGoalLifecycle(run)) {
-        const cancelled = await cancelSubagentRunForGoalLifecycle({
-          context: input.context,
-          run,
-          reason: `Parent goal ${input.goalId} completed before optional subagent finished.`,
-        });
-        const archived = await archiveSubagentChildSession({
-          parentSession: input.context.session,
-          parentTurnId: input.context.turnId,
-          run: cancelled,
-          reason: "goal_completed_optional_cancel",
-          policy: "goal_completed",
-        });
-        cancelledCount += 1;
-        cleanedCount += 1;
-        if (archived.archived) archivedCount += 1;
-      }
-    }
-    return { cancelledCount, cleanedCount, archivedCount };
-  }
-
-  async function cancelSubagentRunForGoalLifecycle(input: {
-    context: ModelToolExecutionContext;
-    run: SubagentRun;
-    reason: string;
-  }): Promise<SubagentRun> {
-    const deps = requireSubagentDeps();
-    const cancelledAt = now();
-    let interruptResult: Record<string, unknown> | null = null;
-    if (input.run.childSessionId) {
-      try {
-        const interrupted = await interruptSessionTurn(input.run.childSessionId);
-        interruptResult = {
-          status: interrupted.status,
-          turnId: interrupted.id,
-        };
-      } catch (error) {
-        interruptResult = {
-          status: "not_active",
-          error: textFromUnknown(error) || "No active child turn to interrupt.",
-        };
-      }
-    }
-    let nextRun = SubagentRunSchema.parse({
-      ...input.run,
-      status: "cancelled",
-      completedAt: cancelledAt,
-      error: input.reason,
-      report: {
-        ...(input.run.report ?? {}),
-        summary: input.run.report?.summary || "Subagent cancelled by parent goal lifecycle.",
-        blockers: uniqueNonEmptyStrings([...(input.run.report?.blockers ?? []), input.reason]),
-        followUpNeeded: false,
-      },
-      metadata: {
-        ...(input.run.metadata ?? {}),
-        goalLifecycle: {
-          action: "cancelled_by_parent_goal",
-          reason: input.reason,
-          cancelledAt,
-          interruptResult,
+      const reason = `Child cancelled because parent goal was ${input.action}.`;
+      const cancelled = SubagentRunSchema.parse({
+        ...run,
+        status: "cancelled",
+        completedAt: now(),
+        error: reason,
+        report: {
+          ...(run.report ?? {}),
+          summary: run.report?.summary || reason,
+          blockers: run.report?.blockers ?? [],
+          followUpNeeded: false,
         },
-      },
-    });
-    await deps.upsertRun(nextRun);
-    const cleanup = await cleanupSubagentRun({
-      run: nextRun,
-      parentSession: input.context.session,
-      parentTurnId: input.context.turnId,
-      reason: "goal_lifecycle_cancel",
-      policy: "cancel_requested",
-    });
-    nextRun = SubagentRunSchema.parse({
-      ...cleanup.run,
-      metadata: {
-        ...(cleanup.run.metadata ?? {}),
-        goalLifecycle: {
-          ...(recordFromUnknown(cleanup.run.metadata?.goalLifecycle) ?? {}),
-          workspaceCleanup: cleanup.workspaceCleanup,
+        metadata: {
+          ...(run.metadata ?? {}),
+          goalLifecycle: { action: "cancelled_by_parent_goal", goalAction: input.action, at: now() },
         },
-      },
-    });
-    await deps.upsertRun(nextRun);
-    await appendSubagentReceipt({
-      parentSession: input.context.session,
-      parentTurnId: input.context.turnId,
-      run: nextRun,
-      eventName: "subagent.cancelled",
-      status: "completed",
-      output: `${nextRun.roleId} subagent cancelled by parent goal lifecycle.`,
-    });
-    return nextRun;
+      });
+      await runtime.upsertRun(cancelled);
+      await deps.appendSubagentReceipt({
+        parentSession: input.context.session,
+        parentTurnId: input.context.turnId,
+        run: cancelled,
+        eventName: "subagent.cancelled",
+        status: "failed",
+        output: reason,
+      });
+      result.cancelledCount += 1;
+    }
+    return result;
   }
 
   async function archiveSubagentChildSession(input: {
@@ -388,102 +203,39 @@ export function createGoalSubagentLifecycle(deps: {
     parentTurnId?: string | null;
     run: SubagentRun;
     reason: string;
-    policy: "goal_completed" | "goal_stopped" | "manual_archive";
-  }): Promise<{ run: SubagentRun; sessionArchive: Record<string, unknown>; archived: boolean }> {
+    policy: string;
+  }): Promise<{ run: SubagentRun; sessionArchive: Record<string, unknown> }> {
+    const runtime = deps.requireSubagentDeps();
     if (!input.run.childSessionId) {
-      return {
-        run: input.run,
-        sessionArchive: {
-          status: "skipped",
-          reason: "childSessionId missing",
-          evidenceRetention: input.run.evidenceRetention,
-        },
-        archived: false,
-      };
+      return { run: input.run, sessionArchive: { status: "missing_child_session" } };
     }
-
-    const deps = requireSubagentDeps();
-    const archivedAt = now();
     let sessionArchive: Record<string, unknown>;
     try {
-      const childSession = await getSession(input.run.childSessionId);
-      if (childSession.archived) {
-        sessionArchive = {
-          status: "already_archived",
-          sessionId: childSession.id,
-          archivedAt,
-          reason: input.reason,
-          policy: input.policy,
-          evidenceRetention: input.run.evidenceRetention,
-        };
-      } else {
-        const updatedSession = await updateSession(childSession.id, {
-          archived: true,
-          hiddenFromDefaultSidebar: true,
-          status: childSession.status === "active" ? "idle" : childSession.status,
-          metadata: {
-            ...(childSession.metadata ?? {}),
-            subagentArchive: {
-              status: "archived",
-              archivedAt,
-              reason: input.reason,
-              policy: input.policy,
-              parentSessionId: input.run.parentSessionId,
-              parentGoalId: input.run.parentGoalId ?? null,
-              runId: input.run.id,
-              roleId: input.run.roleId,
-              evidenceRetention: input.run.evidenceRetention,
-            },
-          },
-        });
-        sessionArchive = {
-          status: "archived",
-          sessionId: updatedSession.id,
-          archivedAt,
-          reason: input.reason,
-          policy: input.policy,
-          hiddenFromDefaultSidebar: updatedSession.hiddenFromDefaultSidebar === true,
-          previousStatus: childSession.status,
-          evidenceRetention: input.run.evidenceRetention,
-        };
-      }
+      const child = await deps.getSession(input.run.childSessionId);
+      if (!child.archived) await deps.updateSession(child.id, { archived: true });
+      sessionArchive = { status: child.archived ? "already_archived" : "archived", archivedAt: now() };
     } catch (error) {
-      sessionArchive = {
-        status: "failed",
-        sessionId: input.run.childSessionId,
-        failedAt: archivedAt,
-        reason: input.reason,
-        policy: input.policy,
-        error: textFromUnknown(error) || "Failed to archive child session.",
-        evidenceRetention: input.run.evidenceRetention,
-      };
+      sessionArchive = { status: "failed", error: textFromUnknown(error) || "Failed to archive child conversation." };
     }
-
-    const nextRun = SubagentRunSchema.parse({
+    const updated = SubagentRunSchema.parse({
       ...input.run,
       metadata: {
         ...(input.run.metadata ?? {}),
-        childSessionArchive: {
-          ...sessionArchive,
-          evidenceRetention: input.run.evidenceRetention,
-        },
+        childSessionArchive: { ...sessionArchive, reason: input.reason, policy: input.policy },
       },
     });
-    await deps.upsertRun(nextRun);
-    const status = stringFromRecord(sessionArchive, "status");
-    await appendSubagentReceipt({
+    await runtime.upsertRun(updated);
+    await deps.appendSubagentReceipt({
       parentSession: input.parentSession,
-      parentTurnId: input.parentTurnId ?? null,
-      run: nextRun,
+      parentTurnId: input.parentTurnId,
+      run: updated,
       eventName: "subagent.archived",
-      status: status === "failed" ? "failed" : "completed",
-      output: subagentArchiveOutput(nextRun, sessionArchive),
+      status: sessionArchive.status === "failed" ? "failed" : "completed",
+      output: sessionArchive.status === "failed"
+        ? `Failed to archive ${updated.roleId} child conversation.`
+        : `Archived ${updated.roleId} child conversation.`,
     });
-    return {
-      run: nextRun,
-      sessionArchive,
-      archived: status === "archived" || status === "already_archived",
-    };
+    return { run: updated, sessionArchive };
   }
 
   function subagentLifecycleActionNextStep(
@@ -491,54 +243,15 @@ export function createGoalSubagentLifecycle(deps: {
     workspaceCleanup: Record<string, unknown> | null,
     sessionArchive: Record<string, unknown> | null,
   ): string {
-    const cleanupStatus = workspaceCleanup ? stringFromRecord(workspaceCleanup, "status") ?? "unknown" : null;
-    const archiveStatus = sessionArchive ? stringFromRecord(sessionArchive, "status") ?? "unknown" : null;
-    if (action === "cleanup") {
-      if (cleanupStatus === "removed" || cleanupStatus === "deleted") return "Subagent workspace cleanup completed.";
-      if (cleanupStatus === "retained") return "Subagent workspace retained for inspection.";
-      if (cleanupStatus === "failed") return "Subagent workspace cleanup failed.";
-      return "Subagent workspace cleanup recorded.";
-    }
-    if (action === "archive") {
-      if (archiveStatus === "archived" || archiveStatus === "already_archived") return "Subagent child session archived.";
-      if (archiveStatus === "failed") return "Subagent child session archive failed.";
-      return "Subagent child session archive recorded.";
-    }
-    return `Subagent lifecycle action completed. Cleanup: ${cleanupStatus ?? "not_requested"}. Archive: ${archiveStatus ?? "not_requested"}.`;
+    if (action === "cleanup") return workspaceCleanup ? "Child workspace cleanup finished." : "No child workspace cleanup was needed.";
+    if (action === "archive") return sessionArchive ? "Child conversation archive finished." : "No child conversation was available to archive.";
+    return "Child workspace cleanup and conversation archive finished.";
   }
-
-  function subagentArchiveOutput(run: SubagentRun, sessionArchive: Record<string, unknown>): string {
-    const status = stringFromRecord(sessionArchive, "status") ?? "unknown";
-    if (status === "archived") return `${run.roleId} child session archived.`;
-    if (status === "already_archived") return `${run.roleId} child session was already archived.`;
-    if (status === "failed") return `${run.roleId} child session archive failed.`;
-    return `${run.roleId} child session archive ${status}.`;
-  }
-
-  function subagentRunTerminalForGoalLifecycle(run: SubagentRun): boolean {
-    return run.status === "cancelled" ||
-      run.status === "failed" ||
-      run.status === "failed_with_artifacts" ||
-      run.status === "superseded";
-  }
-
-  function subagentRunMayStillBeWorking(run: SubagentRun): boolean {
-    return run.status === "queued" ||
-      run.status === "running" ||
-      run.status === "blocked" ||
-      run.status === "submitted_for_review" ||
-      run.status === "needs_revision" ||
-      run.status === "needs_user_input" ||
-      run.status === "needs_resume";
-  }
-
 
   return {
     applyGoalLifecycleToSubagents,
     archiveSubagentChildSession,
-    assertGoalSubagentsResolvedForCompletion,
     markGoalSubagentsNeedsResume,
-    markGoalSubagentsSuperseded,
     subagentLifecycleActionNextStep,
   };
 }

@@ -66,10 +66,6 @@ export function useDefaultsSettings({
   const [subagentsMaxConcurrentRunsPerWorkspaceTarget, setSubagentsMaxConcurrentRunsPerWorkspaceTarget] = useState(
     preferences.subagents.maxConcurrentRunsPerWorkspaceTarget,
   );
-  const [subagentsMaxTokens, setSubagentsMaxTokens] = useState<number | null>(preferences.subagents.maxTokens);
-  const [subagentsHeartbeatIntervalSeconds, setSubagentsHeartbeatIntervalSeconds] = useState(
-    preferences.subagents.heartbeatIntervalSeconds,
-  );
   const [saving, setSaving] = useState(false);
   const subagentsDefaultModelRef = subagentsUseDefaultModel
     ? null
@@ -81,8 +77,6 @@ export function useDefaultsSettings({
     subagentsMaxConcurrentRuns !== preferences.subagents.maxConcurrentRuns ||
     subagentsMaxConcurrentRunsPerProvider !== preferences.subagents.maxConcurrentRunsPerProvider ||
     subagentsMaxConcurrentRunsPerWorkspaceTarget !== preferences.subagents.maxConcurrentRunsPerWorkspaceTarget ||
-    subagentsMaxTokens !== preferences.subagents.maxTokens ||
-    subagentsHeartbeatIntervalSeconds !== preferences.subagents.heartbeatIntervalSeconds ||
     JSON.stringify(subagentRoles) !== JSON.stringify(preferences.subagents.roles);
 
   useEffect(() => {
@@ -105,8 +99,6 @@ export function useDefaultsSettings({
     setSubagentsMaxConcurrentRuns(preferences.subagents.maxConcurrentRuns);
     setSubagentsMaxConcurrentRunsPerProvider(preferences.subagents.maxConcurrentRunsPerProvider);
     setSubagentsMaxConcurrentRunsPerWorkspaceTarget(preferences.subagents.maxConcurrentRunsPerWorkspaceTarget);
-    setSubagentsMaxTokens(preferences.subagents.maxTokens);
-    setSubagentsHeartbeatIntervalSeconds(preferences.subagents.heartbeatIntervalSeconds);
   }, [
     preferences.defaultChatProvider,
     preferences.defaultChatModel,
@@ -203,20 +195,6 @@ export function useDefaultsSettings({
     }));
   }
 
-  function setSubagentRoleMaxTurns(roleId: string, value: number | null) {
-    updateSubagentRole(roleId, (role) => ({
-      ...role,
-      maxTurns: value === null ? null : clampInteger(value, 1, 100),
-    }));
-  }
-
-  function setSubagentRoleMaxTokens(roleId: string, value: number | null) {
-    updateSubagentRole(roleId, (role) => ({
-      ...role,
-      maxTokens: value === null ? null : clampInteger(value, 1, 10_000_000),
-    }));
-  }
-
   async function chooseDefaultProjectDirectory() {
     let folderPath: string | null = null;
     if (window.openpond?.selectFolder) {
@@ -266,8 +244,6 @@ export function useDefaultsSettings({
             maxConcurrentRunsPerWorkspaceTarget: subagentsMaxConcurrentRunsPerWorkspaceTarget === null
               ? null
               : clampInteger(subagentsMaxConcurrentRunsPerWorkspaceTarget, 1, 32),
-            maxTokens: subagentsMaxTokens === null ? null : clampInteger(subagentsMaxTokens, 1, 50_000_000),
-            heartbeatIntervalSeconds: clampInteger(subagentsHeartbeatIntervalSeconds, 10, 3600),
           },
         })
       );
@@ -298,8 +274,6 @@ export function useDefaultsSettings({
     subagentsMaxConcurrentRuns,
     subagentsMaxConcurrentRunsPerProvider,
     subagentsMaxConcurrentRunsPerWorkspaceTarget,
-    subagentsMaxTokens,
-    subagentsHeartbeatIntervalSeconds,
     subagentsDirty,
     saving,
     chooseDefaultProjectDirectory,
@@ -326,15 +300,10 @@ export function useDefaultsSettings({
       setSubagentsMaxConcurrentRunsPerProvider(value === null ? null : clampInteger(value, 1, 32)),
     setSubagentsMaxConcurrentRunsPerWorkspaceTarget: (value: number | null) =>
       setSubagentsMaxConcurrentRunsPerWorkspaceTarget(value === null ? null : clampInteger(value, 1, 32)),
-    setSubagentsMaxTokens: (value: number | null) => setSubagentsMaxTokens(value),
-    setSubagentsHeartbeatIntervalSeconds: (value: number) =>
-      setSubagentsHeartbeatIntervalSeconds(clampInteger(value, 10, 3600)),
     setSubagentRoleBackground,
     setSubagentRoleEnabled,
     setSubagentRoleIsolationMode,
     setSubagentRoleMaxConcurrentRuns,
-    setSubagentRoleMaxTokens,
-    setSubagentRoleMaxTurns,
     setSubagentRoleModel,
     setSubagentRolePeerMessages,
     setSubagentRoleToolPolicy,

@@ -4,15 +4,12 @@ import {
   DEFAULT_OPENPOND_CHAT_MODEL,
   LocalModelChatConfigurationSchema,
   SendTurnRequestSchema,
-  SubagentExplorationSteeringPolicySchema,
-  type AppPreferences,
   type ChatModelRef,
   type ChatProvider,
   type LocalModelChatConfiguration,
   type OpenPondActionCatalogEntry,
   type RuntimeEvent,
   type Session,
-  type SubagentExplorationSteeringPolicy,
   type SubagentRoleSettings,
   type Turn,
 } from "@openpond/contracts";
@@ -71,6 +68,7 @@ import {
 } from "./subagents/continuation-runtime.js";
 import { createSubagentMessagingRuntime } from "./subagents/messaging-runtime.js";
 import { createSubagentChildTurnRuntime } from "./subagents/child-turn-runtime.js";
+import { createSubagentCompletionRuntime } from "./subagents/completion-runtime.js";
 import { createSubagentToolRuntime } from "./subagents/tool-runtime.js";
 import type { GoalSubagentPort, SubagentLifecycleControl, SubagentToolHandlers, SubagentTurnHooks } from "./subagents/facets.js";
 import { createSubagentRepositoryRuntime } from "./subagents/repository-runtime.js";
@@ -163,16 +161,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
 
   function browserControlAvailable(session: Session): boolean {
     return browserToolExecutor?.available({ sessionId: session.id, conversationId: session.id }) ?? false;
-  }
-
-  async function subagentExplorationSteeringPolicyForSession(
-    session: Session,
-    preferences?: AppPreferences,
-  ): Promise<SubagentExplorationSteeringPolicy> {
-    if (!session.subagentRoleId) return SubagentExplorationSteeringPolicySchema.parse({});
-    const resolvedPreferences = preferences ?? await loadAppPreferences();
-    const role = resolvedPreferences.subagents.roles.find((candidate) => candidate.id === session.subagentRoleId);
-    return role?.explorationSteering ?? SubagentExplorationSteeringPolicySchema.parse({});
   }
 
   function actionCatalogInstructionModeForProvider(
@@ -340,7 +328,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     nativeToolsEnabledForProvider,
     createNativeModelToolDefinitions,
     profileSkillInstructionModeForProvider,
-    subagentExplorationSteeringPolicyForSession,
     subagentToolsAvailable,
     runtimeEventsForSession: (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
     getSession,
@@ -371,21 +358,19 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     requireSubagentPersistence: () => ({ upsertRun: requireSubagentDeps().upsertRun }),
   }) satisfies SubagentLifecycleControl;
   const {
-    assertSubagentBudgetAvailable,
     finalizeSubagentContinuationTurn,
     markSubagentContinuationRunning,
     prepareSubagentContinuationTurn,
-    refreshSubagentRuntimeDerivedProgress,
     subagentChildTurnPermissions,
     subagentRuntimeDerivedProgress,
     subagentUsageAttribution,
-    subagentUsageBudgetForParent,
     subagentUsageTotalsForRun,
     turnPermissionsFromSendTurnInput,
   } = createSubagentContinuationRuntime({
     requireSubagentDeps,
-    runtimeEventsForSession: (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
-    countTurnsForSession: (sessionId) => store.countTurnsForSession(sessionId),
+    runtimeEventsForSession: store.persistedRuntimeEventsForSession
+      ? (sessionId, query) => store.persistedRuntimeEventsForSession!(sessionId, query)
+      : (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
     latestAssistantTextForSession: (sessionId) => store.latestAssistantTextForSession(sessionId),
     loadAppPreferences,
     getTurn: getStoredTurn,
@@ -393,19 +378,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendSubagentReceipt,
   }) satisfies SubagentTurnHooks;
   const {
-    appendSubagentReviewCorrectionMessage,
+    queueSubagentFollowupMessage,
     sendSubagentMessageFromModelTool,
     withSubagentInterruptWakeMetadata,
   } = createSubagentMessagingRuntime({
     requireSubagentDeps,
     currentGoal: (sessionId) => store.currentOpenPondThreadGoal(sessionId),
-    hasParentWakeTurn: (sessionId, messageId) => store.hasSubagentParentWakeTurn(sessionId, messageId),
-    countParentWakeTurns: (sessionId, fromRunId) => store.countSubagentParentWakeTurns(sessionId, fromRunId),
     getSession,
+    latestTurnForSession: (sessionId) => store.latestPersistedTurnForSession(sessionId),
     appendRuntimeEvent,
     appendSubagentReceipt,
-    turnFollowUpQueue,
-    parentWakeJobs: subagentParentWakeJobs,
     getActiveTurn: (sessionId) => {
       const active = activeTurns.get(sessionId);
       return active ? { sessionId, turn: { id: active.turn.id } } : null;
@@ -414,6 +396,25 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const current = activeTurns.get(active.sessionId);
       if (!current) throw new Error(`No active turn for session ${active.sessionId}`);
       return interruptActiveTurn(current, reason);
+    },
+  });
+  const { notifyParentOfSubagentCompletion, recoverPendingCompletions } = createSubagentCompletionRuntime({
+    appendMessage: (message) => requireSubagentDeps().appendMessage(message),
+    listMessages: store.listSubagentMessages
+      ? (input) => store.listSubagentMessages!(input)
+      : async () => [],
+    getRun: (runId) => requireSubagentDeps().getRun(runId),
+    listRuns: (input) => requireSubagentDeps().listRuns(input),
+    upsertRun: upsertSubagentRunAndNotify,
+    getSession,
+    hasParentWakeTurn: (sessionId, messageId) => store.hasSubagentParentWakeTurn(sessionId, messageId),
+    appendRuntimeEvent,
+    currentGoal: (sessionId) => store.currentOpenPondThreadGoal(sessionId),
+    turnFollowUpQueue,
+    parentWakeJobs: subagentParentWakeJobs,
+    getActiveTurn: (sessionId) => {
+      const active = activeTurns.get(sessionId);
+      return active ? { sessionId, turn: { id: active.turn.id } } : null;
     },
     sendTurn,
   });
@@ -433,9 +434,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     requireSubagentDeps,
     sendTurn,
     getTurn: getStoredTurn,
+    getPersistedRun: store.getPersistedSubagentRun
+      ? (runId) => store.getPersistedSubagentRun!(runId)
+      : (runId) => requireSubagentDeps().getRun(runId),
+    upsertPersistedRun: store.upsertPersistedSubagentRun
+      ? (run) => store.upsertPersistedSubagentRun!(run)
+      : (run) => store.upsertSubagentRun!(run),
+    notifyRunStateChanged: notifySubagentRunStateChanged,
+    latestTurnForSession: (sessionId) => store.latestPersistedTurnForSession(sessionId),
     latestAssistantTextForSession: (sessionId) => store.latestAssistantTextForSession(sessionId),
     appendSubagentReceipt,
-    refreshSubagentRuntimeDerivedProgress,
     subagentRuntimeDerivedProgress,
     subagentUsageAttribution,
     subagentUsageTotalsForRun,
@@ -444,13 +452,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendWorkspaceDiffEvent,
     uniqueSubagentRefs,
     withSubagentInterruptWakeMetadata,
+    notifyParentOfSubagentCompletion,
   });
   const {
     applyGoalLifecycleToSubagents,
     archiveSubagentChildSession,
-    assertGoalSubagentsResolvedForCompletion,
     markGoalSubagentsNeedsResume,
-    markGoalSubagentsSuperseded,
     subagentLifecycleActionNextStep,
   } = createGoalSubagentLifecycle({
     subagentToolsAvailable,
@@ -460,6 +467,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendSubagentReceipt,
     getSession,
     updateSession,
+    loadAppPreferences,
+    subagentChildTurnPermissions,
+    runSubagentChildTurn,
+    enqueueSubagentResume: (descriptor, work) => requireSubagentDeps().queue.enqueue(descriptor, work),
   }) satisfies GoalSubagentPort;
   const { startGoalControlFromModelTool } = createGoalControlRuntime({
     enableGoalContinuations,
@@ -479,16 +490,53 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     sendTurn,
     activeInProgressTurn,
     findInProgressTurn,
-    assertGoalSubagentsResolvedForCompletion,
     markGoalSubagentsNeedsResume,
     applyGoalLifecycleToSubagents,
-    markGoalSubagentsSuperseded,
   });
+  async function pauseSessionGoal(sessionId: string): Promise<unknown> {
+    const session = await getSession(sessionId);
+    const currentTurn = (await activeInProgressTurn(sessionId)) ?? (await findInProgressTurn(sessionId));
+    const eventTurn = currentTurn ?? await store.latestTurnForSession(sessionId);
+    const request = {
+      action: "pause" as const,
+      reason: "User paused the goal from the composer.",
+    };
+    const controller = new AbortController();
+    const result = await startGoalControlFromModelTool({
+      session,
+      turnId: eventTurn?.id ?? `goal_control_${randomUUID()}`,
+      turnPermissions: {
+        sandbox: "read-only",
+        codexPermissionMode: "auto-review",
+        approvalPolicy: "never",
+      },
+      provider: session.provider,
+      model: session.modelRef?.modelId ?? DEFAULT_OPENPOND_CHAT_MODEL,
+      callId: `goal_control_${randomUUID()}`,
+      args: request,
+      signal: controller.signal,
+      workspaceDiffBaseline: null,
+      mentionedApps: [],
+      userPrompt: "Pause the active goal.",
+      turnMetadata: eventTurn?.metadata ?? {},
+    }, request);
+    // Persist the paused goal and interrupt its active children before interrupting
+    // the parent turn. This closes the race where a lifecycle wake starts the
+    // next child between an interrupt and the goal status update.
+    await interruptSessionTurn(sessionId, "Goal paused by user").catch((error) => {
+      if (
+        error instanceof Error &&
+        (error.message === "No active turn to stop." || error.message === "Turn not found")
+      ) return;
+      throw error;
+    });
+    return result;
+  }
   const {
     cancelSubagentFromModelTool,
     cleanupExpiredRetainedSubagentWorkspace,
     joinSubagentFromModelTool,
-    reviewSubagentFromModelTool,
+    followupSubagentFromModelTool,
     runSubagentLifecycleAction,
     startSubagentFromModelTool,
     statusSubagentsFromModelTool,
@@ -500,8 +548,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendSubagentReceipt,
     subagentWorkspaceTargetKeyForSession,
     subagentWorkspaceTargetKeyFromRun,
-    subagentUsageBudgetForParent,
-    assertSubagentBudgetAvailable,
     subagentChildTurnPermissions,
     prepareSubagentWorkspaceIsolation,
     runSubagentChildTurn,
@@ -509,7 +555,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentRoleLabel,
     interruptSessionTurn,
     cleanupSubagentRun,
-    appendSubagentReviewCorrectionMessage,
+    queueSubagentFollowupMessage,
     archiveSubagentChildSession,
     subagentLifecycleActionNextStep,
   }) satisfies SubagentToolHandlers;
@@ -524,7 +570,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       statusSubagents: statusSubagentsFromModelTool,
       joinSubagent: joinSubagentFromModelTool,
       cancelSubagent: cancelSubagentFromModelTool,
-      reviewSubagent: reviewSubagentFromModelTool,
+      followupSubagent: followupSubagentFromModelTool,
       sendSubagentMessage: sendSubagentMessageFromModelTool,
     },
     subagentToolsAvailable,
@@ -1058,6 +1104,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     sendTurn,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),
     interruptSessionTurn,
+    pauseSessionGoal,
     interruptAll: turnRunnerLifecycle.interruptAll,
     close: turnRunnerLifecycle.close,
     applyCreateImproveAction: applyCreateImproveActionPayload,
@@ -1066,6 +1113,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     resolveCreateImproveApproval,
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
+    recoverPendingSubagentCompletions: recoverPendingCompletions,
     cleanupExpiredRetainedSubagentWorkspace,
   };
 }

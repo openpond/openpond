@@ -233,17 +233,11 @@ function activityLabel(item: RuntimeEvent): string {
   if (item.name === "turn.interrupted") return "Turn aborted";
   if (item.name === "subagent.started") return item.status === "started" ? "Subagent running" : "Started subagent";
   if (item.name === "subagent.reported") return "Subagent reported";
-  if (item.name === "subagent.submitted") return "Subagent submitted";
-  if (item.name === "subagent.accepted") return "Subagent accepted";
-  if (item.name === "subagent.needs_revision") return "Subagent needs revision";
   if (item.name === "subagent.progress") return "Subagent progress";
   if (item.name === "subagent.completed") return "Subagent completed";
   if (item.name === "subagent.failed") return "Subagent failed";
-  if (item.name === "subagent.blocked") return "Subagent blocked";
-  if (item.name === "subagent.stale") return "Subagent stale";
   if (item.name === "subagent.workspace_retained") return "Subagent workspace retained";
   if (item.name === "subagent.archived") return "Subagent archived";
-  if (item.name === "subagent.superseded") return "Subagent superseded";
   if (item.name === "subagent.message") return "Subagent message";
   if (isViewImageEvent(item) && item.name === "tool.started") return "Reading image";
   if (isViewImageEvent(item) && item.name === "tool.completed") return "Read image";

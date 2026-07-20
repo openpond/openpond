@@ -330,6 +330,7 @@ const title =
     resumeCreateImproveRun,
     reviseCreateImproveRun,
     sendPrompt,
+    pauseGoal,
     stopTurn,
   } = useChatActions({
     applyBootstrapPayload,
@@ -708,7 +709,7 @@ const title =
     subagentDelegationDefaultMode, subagentDelegationMode, subagentDelegationAvailable, changeSubagentDelegationMode, answerCreateImproveQuestion,
     applyCreateImproveCandidate, approveCreateImproveRun, cancelCreateImproveRun, changeDraftProvider, openCreateImprovePullRequest,
     reconcileCreateImprovePullRequest, rejectCreateImproveCandidate, pauseCreateImproveRun, resumeCreateImproveRun, reviseCreateImproveRun,
-    sendPrompt, stopTurn, archiveSession, restoreSession, renameSession,
+    sendPrompt, pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
     toggleProjectPinned, toggleSessionPinned, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
     openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,

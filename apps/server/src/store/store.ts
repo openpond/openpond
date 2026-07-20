@@ -35,6 +35,7 @@ import { normalizeSidebarAppPreference } from "../preferences.js";
 import { sanitizeRuntimeEvent } from "../runtime/runtime-event-sanitizer.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
+import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
   openPondThreadGoalMutationFromEvent,
   isTerminalOpenPondGoalStatus,
@@ -177,11 +178,6 @@ type SubagentMessageRow = PayloadRow & {
 const NON_TERMINAL_SUBAGENT_STATUSES: readonly SubagentRun["status"][] = [
   "queued",
   "running",
-  "blocked",
-  "submitted_for_review",
-  "needs_revision",
-  "needs_user_input",
-  "failed_with_artifacts",
   "needs_resume",
 ];
 
@@ -219,7 +215,6 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteStore extends SqliteCreateImproveStore {
-
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;
@@ -279,6 +274,88 @@ export class SqliteStore extends SqliteCreateImproveStore {
         )
       : null;
     return row ? JSON.parse(row.payload) as Turn : null;
+  }
+
+  async latestPersistedTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null> {
+    await this.ready;
+    // Managed-child completion polling must be able to observe a committed
+    // terminal turn even while provider cleanup has a later write queued. This
+    // intentionally skips the general read-after-write barrier; callers use it
+    // only as a durable lifecycle signal and continue normal serialized writes
+    // for the resulting run transition.
+    const sql = status
+      ? "SELECT payload FROM turns WHERE session_id = ? AND status = ? ORDER BY sort_index DESC LIMIT 1"
+      : "SELECT payload FROM turns WHERE session_id = ? ORDER BY sort_index DESC LIMIT 1";
+    const row = await this.persistedLifecycleRow<PayloadRow>(
+      sql,
+      status ? [sessionId, status] : [sessionId],
+    );
+    return row ? JSON.parse(row.payload) as Turn : null;
+  }
+
+  async getPersistedSubagentRun(id: string): Promise<SubagentRun | null> {
+    await this.ready;
+    const row = await this.persistedLifecycleRow<SubagentRunRow>(
+      "SELECT * FROM subagent_runs WHERE id = ?",
+      [id],
+    );
+    return row ? subagentRunFromRow(row) : null;
+  }
+
+  async upsertPersistedSubagentRun(run: SubagentRun): Promise<SubagentRun> {
+    await this.ready;
+    const parsed = SubagentRunSchema.parse(run);
+    const updatedAt = now();
+    const database = openNodeSqliteConnection(this.storePath);
+    try {
+      database.run(
+        `INSERT INTO subagent_runs (
+           id,
+           parent_session_id,
+           parent_turn_id,
+           parent_goal_id,
+           child_session_id,
+           role_id,
+           status,
+           payload,
+           created_at,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id)
+         DO UPDATE SET
+           parent_session_id = excluded.parent_session_id,
+           parent_turn_id = excluded.parent_turn_id,
+           parent_goal_id = excluded.parent_goal_id,
+           child_session_id = excluded.child_session_id,
+           role_id = excluded.role_id,
+           status = excluded.status,
+           payload = excluded.payload,
+           updated_at = excluded.updated_at`,
+        subagentRunParams(parsed, updatedAt),
+      );
+    } finally {
+      database.close();
+    }
+    return parsed;
+  }
+
+  private async persistedLifecycleRow<Row>(sql: string, params: unknown[]): Promise<Row | null> {
+    const database = openNodeSqliteConnection(this.storePath);
+    try {
+      return database.get<Row>(sql, params);
+    } finally {
+      database.close();
+    }
+  }
+
+  private async persistedLifecycleRows<Row>(sql: string, params: unknown[]): Promise<Row[]> {
+    const database = openNodeSqliteConnection(this.storePath);
+    try {
+      return database.all<Row>(sql, params);
+    } finally {
+      database.close();
+    }
   }
 
   async turnsForSession(sessionId: string, limit = 50): Promise<Turn[]> {
@@ -430,6 +507,39 @@ export class SqliteStore extends SqliteCreateImproveStore {
       : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
     if (limit !== null) params.push(limit);
     const rows = await this.all<EventPagePayloadRow>(
+      `SELECT sequence, payload FROM events
+       WHERE ${where.join(" AND ")}
+       ORDER BY sequence ASC
+       ${limit === null ? "" : "LIMIT ?"}`,
+      params,
+    );
+    return rows.map((row) => runtimeEventWithSequence(row.payload, row.sequence));
+  }
+
+  async persistedRuntimeEventsForSession(
+    sessionId: string,
+    query: {
+      afterSequence?: number | null;
+      names?: readonly RuntimeEvent["name"][];
+      limit?: number | null;
+    } = {},
+  ): Promise<RuntimeEvent[]> {
+    await this.ready;
+    const where = ["session_id = ?"];
+    const params: unknown[] = [sessionId];
+    if (query.afterSequence !== undefined && query.afterSequence !== null) {
+      where.push("sequence > ?");
+      params.push(Math.max(0, Math.trunc(query.afterSequence)));
+    }
+    if (query.names && query.names.length > 0) {
+      where.push(`name IN (${query.names.map(() => "?").join(", ")})`);
+      params.push(...query.names);
+    }
+    const limit = query.limit === undefined || query.limit === null
+      ? null
+      : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
+    if (limit !== null) params.push(limit);
+    const rows = await this.persistedLifecycleRows<EventPagePayloadRow>(
       `SELECT sequence, payload FROM events
        WHERE ${where.join(" AND ")}
        ORDER BY sequence ASC
@@ -1086,7 +1196,11 @@ export class SqliteStore extends SqliteCreateImproveStore {
     });
     this.writeQueue = write.catch(() => undefined);
     await write;
-    return (await this.getSubagentRun(parsed.id)) ?? parsed;
+    // The upsert already committed the exact parsed payload. Returning it
+    // directly avoids joining writes that were queued afterward; one of those
+    // writes may itself depend on this lifecycle transition and otherwise form
+    // a queue cycle during child finalization.
+    return parsed;
   }
 
   async recordRetainedWorkspaceExpiryWarning(
@@ -1448,9 +1562,9 @@ export class SqliteStore extends SqliteCreateImproveStore {
           turn.completedAt ?? turn.startedAt,
         ],
       );
+      this.data.turns.push(turn);
       await this.rebuildLatestTurnProjectionForSession(turn.sessionId);
       await this.rebuildThreadDetailProjectionForSession(turn.sessionId);
-      this.data.turns.push(turn);
     });
     this.writeQueue = write.catch(() => undefined);
     await write;
@@ -1475,11 +1589,15 @@ export class SqliteStore extends SqliteCreateImproveStore {
           turnId,
         ],
       );
+      // The canonical turn row is committed at this point. Publish it to the
+      // in-memory lifecycle view before rebuilding secondary projections so a
+      // managed child can observe terminal completion without waiting for
+      // unrelated provider cleanup or projection work.
+      this.data.turns[index] = updated;
       await this.rebuildLatestTurnProjectionForSession(previousSessionId);
       if (updated.sessionId !== previousSessionId) await this.rebuildLatestTurnProjectionForSession(updated.sessionId);
       await this.rebuildThreadDetailProjectionForSession(previousSessionId);
       if (updated.sessionId !== previousSessionId) await this.rebuildThreadDetailProjectionForSession(updated.sessionId);
-      this.data.turns[index] = updated;
     });
     this.writeQueue = write.catch(() => undefined);
     await write;

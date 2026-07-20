@@ -87,6 +87,11 @@ export function withTurnRunnerTestStore<
         turn.sessionId === sessionId && (!status || turn.status === status)
       ) ?? null;
     },
+    async latestPersistedTurnForSession(sessionId, status) {
+      return (await store.snapshot()).turns.findLast((turn) =>
+        turn.sessionId === sessionId && (!status || turn.status === status)
+      ) ?? null;
+    },
     async countTurnsForSession(sessionId) {
       return (await store.snapshot()).turns.filter((turn) => turn.sessionId === sessionId).length;
     },
@@ -223,6 +228,11 @@ export function createTurnRunnerTestHarness(options: {
         turn.sessionId === sessionId && (!status || turn.status === status)
       ) ?? null;
     },
+    async latestPersistedTurnForSession(sessionId, status) {
+      return state.turns.findLast((turn) =>
+        turn.sessionId === sessionId && (!status || turn.status === status)
+      ) ?? null;
+    },
     async countTurnsForSession(sessionId) {
       return state.turns.filter((turn) => turn.sessionId === sessionId).length;
     },
@@ -299,7 +309,7 @@ export function createTurnRunnerTestHarness(options: {
     },
     async listActiveSubagentRuns() {
       return state.subagentRuns.filter((run) =>
-        ["pending", "running", "submitted_for_review", "needs_revision", "needs_resume"].includes(run.status),
+        ["queued", "running", "needs_resume"].includes(run.status),
       );
     },
     async listStaleSubagentRuns() {

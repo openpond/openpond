@@ -4,6 +4,7 @@ import {
   activeGoalRuntimeFromSessionMetadata,
   latestGoalRuntimeFromEvents,
   latestKnownActiveGoalRuntimeFromEvents,
+  projectGoalRuntimeTo,
 } from "../apps/web/src/lib/goal-runtime";
 
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
@@ -38,6 +39,98 @@ describe("goal runtime projection", () => {
     expect(status?.timeLabel).toBe("2m");
     expect(status?.detail).toBe("Active · 1.3k / 10k tokens");
     expect(status?.objective).toBe("Ship sidebar polish");
+  });
+
+  test("projects active OpenPond elapsed time from later runtime activity", () => {
+    const goalEvent = runtimeEvent({
+      id: "goal_elapsed",
+      name: "diagnostic",
+      data: {
+        kind: "thread_goal",
+        provider: "openpond",
+        goal: {
+          objective: "Keep the runtime clock honest",
+          status: "running",
+          createdAt: "2026-05-29T00:00:00.000Z",
+          timeUsedSeconds: 0,
+        },
+      },
+    });
+    const laterActivity = {
+      ...runtimeEvent({
+        id: "subagent_progress",
+        name: "subagent.progress",
+      }),
+      timestamp: "2026-05-29T00:02:05.000Z",
+    };
+
+    const status = latestGoalRuntimeFromEvents([goalEvent, laterActivity]);
+
+    expect(status?.actionLabel).toBe("Pursuing goal");
+    expect(status?.timeUsedSeconds).toBe(125);
+    expect(status?.timeLabel).toBe("2m");
+  });
+
+  test("keeps projecting an active goal after the latest runtime event", () => {
+    const status = latestGoalRuntimeFromEvents([
+      {
+        ...runtimeEvent({
+          id: "goal_live_elapsed",
+          name: "diagnostic",
+          data: {
+            kind: "thread_goal",
+            provider: "openpond",
+            goal: {
+              objective: "Keep ticking without provider events",
+              status: "running",
+              activeSinceAt: "2026-05-29T00:00:00.000Z",
+              timeUsedSeconds: 30,
+            },
+          },
+        }),
+        timestamp: "2026-05-29T00:01:00.000Z",
+      },
+    ]);
+
+    const projected = projectGoalRuntimeTo(status, "2026-05-29T00:02:05.000Z");
+
+    expect(status?.timeUsedSeconds).toBe(90);
+    expect(projected).toMatchObject({
+      timeUsedSeconds: 155,
+      timeLabel: "2m",
+      label: "Goal 2m",
+      observedAt: "2026-05-29T00:02:05.000Z",
+    });
+    expect(projected?.tooltip).toContain("Goal runtime: 2 minutes.");
+  });
+
+  test("adds only the current active segment after a paused goal resumes", () => {
+    const resumedGoal = runtimeEvent({
+      id: "goal_resumed_elapsed",
+      name: "diagnostic",
+      data: {
+        kind: "thread_goal",
+        provider: "openpond",
+        goal: {
+          objective: "Resume without counting paused time",
+          status: "running",
+          createdAt: "2026-05-29T00:00:00.000Z",
+          activeSinceAt: "2026-05-29T00:05:00.000Z",
+          timeUsedSeconds: 60,
+        },
+      },
+    });
+    const laterActivity = {
+      ...runtimeEvent({
+        id: "resumed_progress",
+        name: "subagent.progress",
+      }),
+      timestamp: "2026-05-29T00:05:30.000Z",
+    };
+
+    const status = latestGoalRuntimeFromEvents([resumedGoal, laterActivity]);
+
+    expect(status?.timeUsedSeconds).toBe(90);
   });
 
   test("labels completed goals as achieved", () => {

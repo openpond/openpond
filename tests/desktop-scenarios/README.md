@@ -12,7 +12,7 @@ Implemented scenarios:
 - `subagent-heartbeat-stale.ts`: required/optional stale policy proof with required parent wake and optional attention-only receipt.
 - `subagent-visible-lifecycle.ts`: deterministic parent/child subagent lifecycle with parent activity rows, child-session linkage, and screenshot proof.
 - `subagent-running-state.ts`: delayed child run with visible sidebar/activity running state and submitted-for-review proof.
-- `subagent-handoff-parent-wake.ts`: child-to-parent handoff receipt, queued parent wake metadata, and child linkage proof.
+- `subagent-handoff-parent-wake.ts`: child-to-parent handoff receipt, deferred-until-submission parent wake metadata, and child linkage proof.
 - `subagent-watch-submission-wake.ts`: submitted-for-review child packet, watcher-queued parent lifecycle wake, and compact child result proof.
 - `subagent-review-revision-loop.ts`: parent/reviewer needs-revision decision, delivered child correction, revised child packet, and final accept proof.
 - `subagent-bounded-worker-contract.ts`: copy-on-write coding child proof with structured worker brief, repeated search steering evidence, isolated write, validation command, submitted-for-review status, and patch handoff.

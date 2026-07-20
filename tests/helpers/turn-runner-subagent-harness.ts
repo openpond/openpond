@@ -28,6 +28,7 @@ export function createSubagentHarness(input: {
   initialEvents?: RuntimeEvent[];
   initialTurns?: Turn[];
   initialRuns?: SubagentRun[];
+  initialMessages?: SubagentMessage[];
   initialUsageRecords?: ModelUsageRecord[];
   sessionOverrides?: Partial<Session>;
   applyWorkspaceWrites?: boolean;
@@ -39,6 +40,11 @@ export function createSubagentHarness(input: {
   usageBySessionId?: Record<string, unknown>;
   textBySessionId?: Record<string, string[]>;
   forceStoredChildTurnFailureAfterComplete?: string;
+  stallManagedChildDispatchAfterPersistedComplete?: boolean;
+  stallChildGetTurnAfterPersistedComplete?: boolean;
+  stallLatestPersistedChildTurnAfterComplete?: boolean;
+  returnManagedChildDispatchBeforePersistedCompleteMs?: number;
+  interruptTurnErrorForSessionId?: string;
   onStreamInput?: (
     streamInput: any,
     context: {
@@ -82,6 +88,7 @@ export function createSubagentHarness(input: {
     blockedReason: string | null;
   }>;
   maxHostedWorkspaceToolRounds?: number;
+  notifySubagentRunStateChanged?: (run: SubagentRun) => void;
   disableDefaultToolCall?: boolean;
   enableWebSearchTool?: boolean;
   integrationConnections?: ConnectedAppConnectionLike[];
@@ -104,7 +111,7 @@ export function createSubagentHarness(input: {
   const events: RuntimeEvent[] = [...(input.initialEvents ?? [])];
   const approvals: Approval[] = [];
   const runs: SubagentRun[] = [...(input.initialRuns ?? [])];
-  const messages: SubagentMessage[] = [];
+  const messages: SubagentMessage[] = [...(input.initialMessages ?? [])];
   const usageRecords: ModelUsageRecord[] = [...(input.initialUsageRecords ?? [])];
   const workspaceRequests: Array<{ sessionId: string; request: any }> = [];
   const sandboxForkRequests: Array<{
@@ -131,7 +138,28 @@ export function createSubagentHarness(input: {
         return { events, turns };
       },
       async getTurn(turnId) {
-        return turns.find((turn) => turn.id === turnId) ?? null;
+        const turn = turns.find((candidate) => candidate.id === turnId) ?? null;
+        if (
+          turn?.status === "completed" &&
+          sessions.get(turn.sessionId)?.subagentRunId &&
+          input.stallChildGetTurnAfterPersistedComplete
+        ) {
+          await new Promise<never>(() => undefined);
+        }
+        return turn;
+      },
+      async latestPersistedTurnForSession(sessionId, status) {
+        const latest = turns
+          .filter((turn) => turn.sessionId === sessionId && (!status || turn.status === status))
+          .sort((left, right) => right.sortIndex - left.sortIndex)[0] ?? null;
+        if (
+          latest?.status === "completed" &&
+          sessions.get(sessionId)?.subagentRunId &&
+          input.stallLatestPersistedChildTurnAfterComplete
+        ) {
+          await new Promise<never>(() => undefined);
+        }
+        return latest;
       },
       async insertTurn(turn) {
         turns.push(turn);
@@ -252,6 +280,21 @@ export function createSubagentHarness(input: {
       const turn = turns.find((candidate) => candidate.id === turnId);
       if (!turn) throw new Error("turn not found");
       const session = sessions.get(sessionId);
+      if (
+        session?.subagentRunId &&
+        input.returnManagedChildDispatchBeforePersistedCompleteMs !== undefined
+      ) {
+        const early = { ...turn };
+        setTimeout(() => {
+          Object.assign(turn, {
+            providerTurnId,
+            completedAt: "2026-07-07T10:00:01.000Z",
+            status: "completed",
+          });
+          sessions.set(sessionId, { ...session, status: "idle" });
+        }, input.returnManagedChildDispatchBeforePersistedCompleteMs);
+        return early;
+      }
       Object.assign(turn, {
         providerTurnId,
         completedAt: "2026-07-07T10:00:01.000Z",
@@ -267,6 +310,9 @@ export function createSubagentHarness(input: {
         });
         sessions.set(sessionId, { ...session, status: "failed" });
       }
+      if (session?.subagentRunId && input.stallManagedChildDispatchAfterPersistedComplete) {
+        await new Promise<never>(() => undefined);
+      }
       return completed;
     },
     failTurn: async (_session, turnId, message) => {
@@ -275,7 +321,8 @@ export function createSubagentHarness(input: {
       Object.assign(turn, { status: "failed", error: message });
       return turn;
     },
-    interruptTurn: async (_session, turnId) => {
+    interruptTurn: async (session, turnId) => {
+      if (session.id === input.interruptTurnErrorForSessionId) throw new Error("Turn not found");
       const turn = turns.find((candidate) => candidate.id === turnId);
       if (!turn) throw new Error("turn not found");
       Object.assign(turn, { status: "interrupted" });
@@ -448,6 +495,7 @@ export function createSubagentHarness(input: {
     },
     turnFollowUpQueue,
     subagentQueue,
+    notifySubagentRunStateChanged: input.notifySubagentRunStateChanged,
     enableGoalContinuations: false,
     maxHostedWorkspaceToolRounds: input.maxHostedWorkspaceToolRounds ?? 3,
     maxRepeatedInvalidToolRequests: 2,
@@ -469,71 +517,6 @@ export function createSubagentHarness(input: {
     subagentQueue,
     turnFollowUpQueue,
   };
-}
-
-type SubagentRunListQuery = {
-  parentSessionId?: string | null;
-  parentGoalId?: string | null;
-  childSessionId?: string | null;
-  status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
-  limit?: number;
-};
-
-const WATCHER_INTEGRATION_ACTIVE_STATUSES: readonly SubagentRun["status"][] = [
-  "queued",
-  "running",
-  "blocked",
-  "submitted_for_review",
-  "needs_revision",
-  "needs_user_input",
-  "failed_with_artifacts",
-  "needs_resume",
-];
-
-export function subagentWatcherStoreForHarness(harness: ReturnType<typeof createSubagentHarness>) {
-  return {
-    listSubagentRuns: async (query: SubagentRunListQuery = {}) => listHarnessSubagentRuns(harness.runs, query),
-    listActiveSubagentRuns: async (query: SubagentRunListQuery = {}) =>
-      listHarnessSubagentRuns(harness.runs, {
-        ...query,
-        status: query.status ?? WATCHER_INTEGRATION_ACTIVE_STATUSES,
-      }),
-    listStaleSubagentRuns: async (
-      query: SubagentRunListQuery & { olderThanMs: number; nowIso?: string | null },
-    ) => {
-      const nowMs = Date.parse(query.nowIso ?? new Date().toISOString());
-      return listHarnessSubagentRuns(harness.runs, {
-        ...query,
-        status: query.status ?? WATCHER_INTEGRATION_ACTIVE_STATUSES,
-      }).filter((run) => nowMs - subagentRunUpdatedAtMs(run) >= query.olderThanMs);
-    },
-    turnsForSession: async (sessionId: string, limit = 100) =>
-      harness.turns.filter((turn) => turn.sessionId === sessionId).slice(-limit),
-  };
-}
-
-function listHarnessSubagentRuns(runs: SubagentRun[], query: SubagentRunListQuery = {}): SubagentRun[] {
-  const statuses = query.status
-    ? new Set(Array.isArray(query.status) ? query.status : [query.status])
-    : null;
-  return runs.filter((run) => {
-    if (query.parentSessionId !== undefined && query.parentSessionId !== null && run.parentSessionId !== query.parentSessionId) {
-      return false;
-    }
-    if (query.parentGoalId !== undefined && (run.parentGoalId ?? null) !== (query.parentGoalId ?? null)) {
-      return false;
-    }
-    if (query.childSessionId !== undefined && query.childSessionId !== null && run.childSessionId !== query.childSessionId) {
-      return false;
-    }
-    if (statuses && !statuses.has(run.status)) return false;
-    return true;
-  }).slice(0, query.limit ?? 1000);
-}
-
-function subagentRunUpdatedAtMs(run: SubagentRun): number {
-  const parsed = Date.parse(run.updatedAt ?? run.completedAt ?? run.startedAt ?? run.createdAt);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function git(cwd: string, args: string[]): void {

@@ -85,10 +85,19 @@ export type TurnRepository = {
       limit?: number | null;
     },
   ): Promise<RuntimeEvent[]>;
+  persistedRuntimeEventsForSession?(
+    sessionId: string,
+    query?: {
+      afterSequence?: number | null;
+      names?: readonly RuntimeEvent["name"][];
+      limit?: number | null;
+    },
+  ): Promise<RuntimeEvent[]>;
   latestAssistantTextForSession(sessionId: string): Promise<string | null>;
   currentOpenPondThreadGoal(sessionId: string): Promise<Record<string, unknown> | null>;
   openPondThreadGoalById(sessionId: string, goalId: string): Promise<Record<string, unknown> | null>;
   latestTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null>;
+  latestPersistedTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null>;
   countTurnsForSession(sessionId: string): Promise<number>;
   hasSubagentParentWakeTurn(sessionId: string, messageId: string): Promise<boolean>;
   countSubagentParentWakeTurns(sessionId: string, fromRunId: string): Promise<number>;
@@ -121,7 +130,9 @@ export type TurnRepository = {
     limit?: number;
   }): Promise<ModelUsageRecord[]>;
   upsertSubagentRun?(run: SubagentRun): Promise<SubagentRun>;
+  upsertPersistedSubagentRun?(run: SubagentRun): Promise<SubagentRun>;
   getSubagentRun?(runId: string): Promise<SubagentRun | null>;
+  getPersistedSubagentRun?(runId: string): Promise<SubagentRun | null>;
   listSubagentRuns?(query?: SubagentRunQuery): Promise<SubagentRun[]>;
   listActiveSubagentRuns?(query?: SubagentRunQuery): Promise<SubagentRun[]>;
   listStaleSubagentRuns?(query: SubagentRunQuery & {
@@ -337,6 +348,7 @@ export type TurnRunnerDependencies = {
 export type TurnRunner = TurnDispatcherPort & {
   isSessionTurnActive(sessionId: string): boolean;
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
+  pauseSessionGoal(sessionId: string): Promise<unknown>;
   interruptAll(reason?: string): Promise<Turn[]>;
   close(): Promise<void>;
   applyCreateImproveAction(runId: string, payload: unknown): Promise<CreateImproveRun>;
@@ -352,6 +364,7 @@ export type TurnRunner = TurnDispatcherPort & {
   resolveCreateImproveApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
   resolveSubagentPatchApplyApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
   runSubagentLifecycleAction(runId: string, payload: unknown): Promise<SubagentLifecycleActionResponse>;
+  recoverPendingSubagentCompletions(): Promise<number>;
   cleanupExpiredRetainedSubagentWorkspace(
     runId: string,
     payload?: unknown,

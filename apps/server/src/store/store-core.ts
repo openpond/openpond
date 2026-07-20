@@ -13,9 +13,13 @@ import {
   createTrainingReceiptAndModelBindingTables,
   deduplicateFireworksMetricArtifacts,
 } from "./store-continuous-improvement-schema.js";
-import { SQLITE_MIGRATIONS } from "./store-migrations.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
+import {
+  isConfirmedSqliteCorruption,
+  retrySqliteHealthCheck,
+  SqliteIntegrityError,
+} from "./sqlite/sqlite-health.js";
 import {
   isTerminalOpenPondGoalStatus,
   openPondThreadGoalMutationFromEvent,
@@ -27,6 +31,11 @@ import {
   type ThreadDetailProjection,
   type ThreadDetailProjectionRow,
 } from "./store-codecs.js";
+import { SQLITE_MIGRATIONS } from "./store-migrations.js";
+import {
+  resetLegacySubagentRuntimeEvents as resetLegacySubagentRuntimeEventsMigration,
+  resetLegacySubagentTransportState as resetLegacySubagentTransportStateMigration,
+} from "./store-subagent-migrations.js";
 
 type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
@@ -67,8 +76,6 @@ export class SqliteStoreCore {
     await fs.mkdir(storeDir, { recursive: true });
     const hadDatabase = await this.fileExists(this.storePath);
     await this.openDatabaseWithRecovery(storeDir);
-    await this.configureDatabase();
-    await this.assertHealthyDatabase();
     await this.runMigrations(storeDir, hadDatabase);
     this.data = await readStoreData({
       allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
@@ -87,8 +94,22 @@ export class SqliteStoreCore {
     const rows = await this.all<QuickCheckRow>("PRAGMA quick_check");
     const failures = rows.map((row) => row.quick_check).filter((value) => value !== "ok");
     if (failures.length > 0) {
-      throw new Error(`SQLite quick_check failed: ${failures.join("; ")}`);
+      throw new SqliteIntegrityError(`SQLite quick_check failed: ${failures.join("; ")}`);
     }
+  }
+
+  protected async assertHealthyDatabaseWithRetry(): Promise<void> {
+    await retrySqliteHealthCheck({
+      check: () => this.assertHealthyDatabase(),
+      onRetry: ({ attempt, retryDelayMs, error }) => {
+        this.logger?.warn("sqlite health check temporarily unavailable; retrying", {
+          storePath: this.storePath,
+          attempt,
+          retryDelayMs,
+          error,
+        });
+      },
+    });
   }
 
   protected async runMigrations(storeDir: string, hadDatabase: boolean): Promise<void> {
@@ -123,16 +144,44 @@ export class SqliteStoreCore {
   }
 
   protected async openDatabaseWithRecovery(storeDir: string): Promise<void> {
-    this.db = await this.openDatabaseWithRetry();
+    try {
+      this.db = await this.openDatabaseWithRetry();
+    } catch (error) {
+      if (!isConfirmedSqliteCorruption(error)) {
+        this.logger?.error("sqlite open failed without confirmed corruption; preserving database files", {
+          storePath: this.storePath,
+          error,
+        });
+        throw error;
+      }
+      this.logger?.error("sqlite open confirmed corruption; moving database files aside", {
+        storePath: this.storePath,
+        error,
+      });
+      await this.moveDatabaseFilesAside(storeDir, "open-failed");
+      this.db = await this.openDatabaseWithRetry();
+    }
 
     try {
       await this.configureDatabase();
-      await this.assertHealthyDatabase();
+      await this.assertHealthyDatabaseWithRetry();
     } catch (error) {
-      this.logger?.error("sqlite health check failed; moving database files aside", { storePath: this.storePath, error });
       await this.closeDatabaseHandle();
+      if (!isConfirmedSqliteCorruption(error)) {
+        this.logger?.error("sqlite health check failed without confirmed corruption; preserving database files", {
+          storePath: this.storePath,
+          error,
+        });
+        throw error;
+      }
+      this.logger?.error("sqlite health check confirmed corruption; moving database files aside", {
+        storePath: this.storePath,
+        error,
+      });
       await this.moveDatabaseFilesAside(storeDir, "quick-check-failed");
-      this.db = await this.openDatabase(this.storePath);
+      this.db = await this.openDatabaseWithRetry();
+      await this.configureDatabase();
+      await this.assertHealthyDatabaseWithRetry();
     }
   }
 
@@ -437,6 +486,17 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS subagent_messages_receiver_created_idx
         ON subagent_messages(to_run_id, to_role, created_at);
     `);
+  }
+
+  async resetLegacySubagentTransportState(): Promise<void> {
+    await resetLegacySubagentTransportStateMigration((sql) => this.exec(sql));
+  }
+
+  async resetLegacySubagentRuntimeEvents(): Promise<void> {
+    await resetLegacySubagentRuntimeEventsMigration(
+      (sql, params) => this.run(sql, params),
+      () => this.rebuildReadModels(),
+    );
   }
 
   async createOpenPondThreadGoalTable(): Promise<void> {

@@ -171,6 +171,7 @@ export type ComposerProps = {
     options?: ComposerSubmitOptions,
   ) => Promise<boolean>;
   onStop: () => Promise<boolean | void> | boolean | void;
+  onPauseGoal?: () => Promise<boolean | void> | boolean | void;
 };
 
 export type ComposerSubmitOptions = {
@@ -375,6 +376,7 @@ export function Composer({
   showToast,
   onSubmit,
   onStop,
+  onPauseGoal,
 }: ComposerProps) {
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
@@ -884,7 +886,7 @@ export function Composer({
   async function stopCurrentTurn() {
     const scopeKey = submissionScopeKey;
     suppressNextAutoDispatchScopeKeysRef.current.add(scopeKey);
-    const stopped = await onStop();
+    const stopped = await (activeGoalRuntime && onPauseGoal ? onPauseGoal() : onStop());
     if (stopped === false) suppressNextAutoDispatchScopeKeysRef.current.delete(scopeKey);
     return stopped;
   }

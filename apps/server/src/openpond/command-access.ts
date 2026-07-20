@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { parse as parseShellCommand } from "shell-quote";
 import {
@@ -349,17 +349,20 @@ function runShellCommand(input: {
     let stdout = "";
     let stderr = "";
     let truncated = false;
+    let forceKillTimer: NodeJS.Timeout | null = null;
     const shellCommand = pipefailLocalShellCommand(input.command);
     const child = spawn(shellCommand.command, {
       cwd: input.cwd,
       shell: shellCommand.shell,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     });
     const finish = (result: OpenPondCommandRunResult) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
       input.signal?.removeEventListener("abort", abort);
       resolve(result);
     };
@@ -370,7 +373,7 @@ function runShellCommand(input: {
       if (stdout.length + stderr.length >= MAX_COMMAND_OUTPUT_CHARS) truncated = true;
     };
     const abort = () => {
-      child.kill("SIGTERM");
+      terminateShellProcessTree(child, "SIGTERM");
       finish({
         ok: false,
         command: input.command,
@@ -383,10 +386,15 @@ function runShellCommand(input: {
         truncated,
         blockedReason: "Command was interrupted.",
       });
+      // finish() resolves the interrupted tool call immediately; keep the
+      // escalation timer alive independently in case a descendant ignores
+      // SIGTERM and still owns the command pipes.
+      scheduleShellProcessTreeKill(child);
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
+      terminateShellProcessTree(child, "SIGTERM");
+      forceKillTimer = scheduleShellProcessTreeKill(child);
     }, input.timeoutSeconds * 1000);
     input.signal?.addEventListener("abort", abort, { once: true });
     child.stdout?.on("data", (chunk: Buffer) => appendOutput("stdout", chunk));
@@ -420,6 +428,25 @@ function runShellCommand(input: {
       });
     });
   });
+}
+
+function terminateShellProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid && process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child below if the process group already exited
+      // or could not be created by this platform/runtime.
+    }
+  }
+  child.kill(signal);
+}
+
+function scheduleShellProcessTreeKill(child: ChildProcess): NodeJS.Timeout {
+  const timer = setTimeout(() => terminateShellProcessTree(child, "SIGKILL"), 1_000);
+  timer.unref();
+  return timer;
 }
 
 function appendLimited(current: string, chunk: string): string {

@@ -17,11 +17,7 @@ import type {
 } from "../../openpond/capability-tool-registry.js";
 import type { ModelToolExecutionContext } from "../../openpond/model-tool-registry.js";
 import { event, now, textFromUnknown } from "../../utils.js";
-import type { BackgroundWorkerQueue, BackgroundWorkReceipt } from "../background-worker-queue.js";
-import type { KeyedRegistry } from "../turns/keyed-registry.js";
 import { recordFromUnknown, stringFromRecord } from "../turns/value-utils.js";
-
-const SUBAGENT_PARENT_WAKE_MAX_CHAIN = 4;
 
 type AppendSubagentReceipt = (input: {
   parentSession: Session;
@@ -38,6 +34,17 @@ type ActiveTurnInfo = {
   turn: { id: string };
 };
 
+export function subagentActiveTurnIsDurablyTerminal(
+  active: ActiveTurnInfo | null,
+  durableTurn: Turn | null,
+): boolean {
+  return Boolean(
+    active &&
+    durableTurn?.id === active.turn.id &&
+    durableTurn.status !== "in_progress",
+  );
+}
+
 export function createSubagentMessagingRuntime(deps: {
   requireSubagentDeps(): {
     getRun(runId: string): Promise<SubagentRun | null>;
@@ -51,24 +58,18 @@ export function createSubagentMessagingRuntime(deps: {
     appendMessage(message: SubagentMessage): Promise<unknown>;
   };
   currentGoal(sessionId: string): Promise<unknown>;
-  hasParentWakeTurn(parentSessionId: string, messageId: string): Promise<boolean>;
-  countParentWakeTurns(parentSessionId: string, fromRunId: string): Promise<number>;
   getSession(sessionId: string): Promise<Session>;
+  latestTurnForSession(sessionId: string): Promise<Turn | null>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   appendSubagentReceipt: AppendSubagentReceipt;
-  turnFollowUpQueue: BackgroundWorkerQueue;
-  parentWakeJobs: KeyedRegistry<BackgroundWorkReceipt>;
   getActiveTurn(sessionId: string): ActiveTurnInfo | null;
   interruptActiveTurn(active: ActiveTurnInfo, reason: string): Promise<Turn>;
-  sendTurn(sessionId: string, payload: unknown): Promise<Turn>;
 }) {
   const requireSubagentDeps = deps.requireSubagentDeps;
   const getSession = deps.getSession;
+  const latestTurnForSession = deps.latestTurnForSession;
   const appendRuntimeEvent = deps.appendRuntimeEvent;
   const appendSubagentReceipt = deps.appendSubagentReceipt;
-  const turnFollowUpQueue = deps.turnFollowUpQueue;
-  const subagentParentWakeJobs = deps.parentWakeJobs;
-  const sendTurn = deps.sendTurn;
   const interruptActiveTurn = deps.interruptActiveTurn;
   const activeTurns = {
     has: (sessionId: string) => Boolean(deps.getActiveTurn(sessionId)),
@@ -76,8 +77,6 @@ export function createSubagentMessagingRuntime(deps: {
   };
   const store = {
     currentOpenPondThreadGoal: async (sessionId: string) => recordFromUnknown(await deps.currentGoal(sessionId)),
-    hasSubagentParentWakeTurn: deps.hasParentWakeTurn,
-    countSubagentParentWakeTurns: deps.countParentWakeTurns,
   };
   async function sendSubagentMessageFromModelTool(
     context: ModelToolExecutionContext,
@@ -146,7 +145,6 @@ export function createSubagentMessagingRuntime(deps: {
       }).delivery!;
       message = { ...message, delivery };
     }
-    delivery = await maybeWakeParentForSubagentMessage(context, message, delivery);
     message = SubagentMessageSchema.parse({ ...message, delivery });
     await deps.appendMessage(message);
     await appendRuntimeEvent(
@@ -191,6 +189,47 @@ export function createSubagentMessagingRuntime(deps: {
     };
   }
 
+  async function queueSubagentFollowupMessage(input: {
+    context: ModelToolExecutionContext;
+    run: SubagentRun;
+    body: string;
+  }): Promise<void> {
+    const runtime = requireSubagentDeps();
+    const delivery = SubagentMessageDeliverySchema.parse({
+      status: input.run.childSessionId ? "delivered" : "undelivered",
+      deliveredRunIds: input.run.childSessionId ? [input.run.id] : [],
+      acknowledgedRunIds: input.run.childSessionId ? [input.run.id] : [],
+      reason: input.run.childSessionId ? null : "The child run has no child conversation.",
+    });
+    const message = SubagentMessageSchema.parse({
+      id: randomUUID(),
+      parentGoalId: input.run.parentGoalId,
+      fromRunId: input.context.session.subagentRunId ?? `parent:${input.context.session.id}`,
+      toRunId: input.run.id,
+      toRole: input.run.roleId,
+      kind: "status",
+      priority: "normal",
+      body: input.body,
+      refs: [],
+      delivery,
+      createdAt: now(),
+    });
+    if (input.run.childSessionId) {
+      await deliverSubagentMessageToReceivers(input.context, message, [input.run]);
+    }
+    await runtime.appendMessage(message);
+    await appendRuntimeEvent(event({
+      sessionId: input.context.session.id,
+      turnId: input.context.turnId,
+      name: "subagent.message",
+      source: "provider",
+      appId: input.context.session.appId,
+      status: delivery.status === "delivered" ? "completed" : "failed",
+      output: "Follow-up task sent to child conversation.",
+      data: { message, delivery, deliveredRunIds: delivery.deliveredRunIds, modelRef: input.run.modelRef },
+    }));
+  }
+
   function subagentMessageParentDeliveryTarget(
     session: Session,
     input: OpenPondSubagentMessageToolInput,
@@ -202,148 +241,6 @@ export function createSubagentMessagingRuntime(deps: {
     if (toRunId === session.parentSessionId) return session.parentSessionId;
     if (toRole === "parent") return session.parentSessionId;
     return null;
-  }
-
-  async function maybeWakeParentForSubagentMessage(
-    context: ModelToolExecutionContext,
-    message: SubagentMessage,
-    delivery: SubagentMessageDelivery,
-  ): Promise<SubagentMessageDelivery> {
-    const parentSessionId = delivery.deliveredParentSessionId ?? null;
-    if (!parentSessionId || !context.session.subagentRunId || context.session.parentSessionId !== parentSessionId) {
-      return delivery;
-    }
-
-    let nextDelivery = SubagentMessageDeliverySchema.parse({
-      ...delivery,
-      wakeRequestedParentSessionId: parentSessionId,
-      wakeParentReason: "child_to_parent_handoff",
-    });
-
-    if (activeTurns.has(parentSessionId)) {
-      return SubagentMessageDeliverySchema.parse({
-        ...nextDelivery,
-        wakeDeferredParentSessionId: parentSessionId,
-        wakeParentReason: "parent_turn_active",
-      });
-    }
-
-    if (
-      subagentParentWakeJobs.has(message.id) ||
-      await store.hasSubagentParentWakeTurn(parentSessionId, message.id)
-    ) {
-      return SubagentMessageDeliverySchema.parse({
-        ...nextDelivery,
-        wakeQueuedParentSessionId: parentSessionId,
-        wakeParentReason: "parent_wake_already_queued",
-      });
-    }
-
-    const chainCount = await store.countSubagentParentWakeTurns(parentSessionId, message.fromRunId);
-    if (chainCount >= SUBAGENT_PARENT_WAKE_MAX_CHAIN) {
-      return SubagentMessageDeliverySchema.parse({
-        ...nextDelivery,
-        wakeDeferredParentSessionId: parentSessionId,
-        wakeParentReason: `parent_wake_loop_limit:${SUBAGENT_PARENT_WAKE_MAX_CHAIN}`,
-      });
-    }
-
-    const parentSession = await getSession(parentSessionId).catch(() => null);
-    if (!parentSession) {
-      return SubagentMessageDeliverySchema.parse({
-        ...nextDelivery,
-        wakeDeferredParentSessionId: parentSessionId,
-        wakeParentReason: "parent_session_missing",
-      });
-    }
-
-    const requestedAt = now();
-    const receipt = turnFollowUpQueue.enqueue(
-      {
-        label: `Subagent handoff from ${context.session.subagentRoleId ?? context.session.subagentRunId}`,
-        metadata: {
-          messageId: message.id,
-          parentSessionId,
-          childSessionId: context.session.id,
-          fromRunId: message.fromRunId,
-          kind: message.kind,
-        },
-      },
-      async () => {
-        try {
-          await sendTurn(parentSessionId, {
-            prompt: subagentParentWakePrompt({
-              parentSession,
-              childSession: context.session,
-              message,
-            }),
-            metadata: {
-              subagentParentWake: {
-                messageId: message.id,
-                parentGoalId: message.parentGoalId,
-                fromRunId: message.fromRunId,
-                childSessionId: context.session.id,
-                childRoleId: context.session.subagentRoleId ?? null,
-                kind: message.kind,
-                requestedAt,
-              },
-            },
-          });
-        } catch (error) {
-          await appendRuntimeEvent(
-            event({
-              sessionId: parentSessionId,
-              name: "diagnostic",
-              source: "server",
-              appId: parentSession.appId,
-              status: "failed",
-              output: textFromUnknown(error) || "Failed to wake parent for subagent handoff.",
-              data: {
-                kind: "subagent_parent_wake_failed",
-                messageId: message.id,
-                fromRunId: message.fromRunId,
-                childSessionId: context.session.id,
-              },
-            }),
-          ).catch(() => undefined);
-        } finally {
-          subagentParentWakeJobs.delete(message.id);
-        }
-      },
-    );
-    subagentParentWakeJobs.set(message.id, receipt);
-    nextDelivery = SubagentMessageDeliverySchema.parse({
-      ...nextDelivery,
-      wakeQueuedParentSessionId: parentSessionId,
-      wakeParentReason: "parent_wake_queued",
-    });
-    return nextDelivery;
-  }
-
-  function subagentParentWakePrompt(input: {
-    parentSession: Session;
-    childSession: Session;
-    message: SubagentMessage;
-  }): string {
-    const role = input.childSession.subagentRoleId ?? "subagent";
-    const refs = input.message.refs.length
-      ? input.message.refs.slice(0, 8).map((ref) => `- ${ref.kind}:${ref.id} (${ref.label})`).join("\n")
-      : "None.";
-    return [
-      `A ${role} subagent sent a ${input.message.kind} handoff to this main chat.`,
-      "",
-      `Child run: ${input.message.fromRunId}`,
-      `Child conversation: ${input.childSession.id}`,
-      input.message.parentGoalId ? `Goal: ${input.message.parentGoalId}` : null,
-      "",
-      "Message:",
-      input.message.body,
-      "",
-      "Refs:",
-      refs,
-      "",
-      "Decide the next step as the main agent. You may respond to the user, update the goal, message the child back with openpond_subagent_send_message, route work to another child, join/cancel a child, or continue without action. Do not poll for routine lifecycle status unless a fresh diagnostic snapshot is actually needed.",
-    ].filter(Boolean).join("\n");
   }
 
   async function resolveSubagentMessageRecipients(
@@ -417,7 +314,17 @@ export function createSubagentMessagingRuntime(deps: {
     for (const recipient of recipients) {
       if (!recipient.childSessionId) continue;
       requestedRunIds.push(recipient.id);
-      const active = activeTurns.get(recipient.childSessionId);
+      let active = activeTurns.get(recipient.childSessionId);
+      if (active) {
+        const durableTurn = await latestTurnForSession(recipient.childSessionId).catch(() => null);
+        if (subagentActiveTurnIsDurablyTerminal(active, durableTurn)) {
+          // A managed child can persist its terminal turn before provider
+          // dispatch cleanup removes the in-memory active-turn entry. Do not
+          // interrupt that stale entry: doing so races the child's automatic
+          // handoff promotion and can strand a completed run as `running`.
+          active = null;
+        }
+      }
       const activeTurnId = active?.turn.id ?? null;
       const requestedAt = now();
       let wakeStatus = active ? "interrupting" : "deferred";
@@ -533,106 +440,9 @@ export function createSubagentMessagingRuntime(deps: {
   }
 
 
-  async function appendSubagentReviewCorrectionMessage(input: {
-    context: ModelToolExecutionContext;
-    run: SubagentRun;
-    summary: string | null;
-    issues: string[];
-    requiredCorrections: string[];
-    priority: SubagentMessagePriority;
-  }): Promise<SubagentMessage | null> {
-    const deps = requireSubagentDeps();
-    const delivered = Boolean(input.run.childSessionId);
-    let delivery: SubagentMessageDelivery = {
-      status: delivered ? "delivered" : "undelivered",
-      deliveredRunIds: delivered ? [input.run.id] : [],
-      acknowledgedRunIds: delivered ? [input.run.id] : [],
-      deliveredParentSessionId: null,
-      acknowledgedParentSessionId: null,
-      wakeRequestedParentSessionId: null,
-      wakeQueuedParentSessionId: null,
-      wakeDeferredParentSessionId: null,
-      wakeParentReason: null,
-      wakeRequestedRunIds: [],
-      wakeInterruptedRunIds: [],
-      wakeDeferredRunIds: [],
-      reason: delivered ? null : "The reviewed child run has no child session for correction delivery.",
-    };
-    let message = SubagentMessageSchema.parse({
-      id: randomUUID(),
-      parentGoalId: input.run.parentGoalId,
-      fromRunId: input.context.session.subagentRunId ?? `parent:${input.context.session.id}`,
-      toRunId: input.run.id,
-      toRole: input.run.roleId,
-      kind: "status",
-      priority: input.priority,
-      body: subagentReviewCorrectionBody(input),
-      refs: [],
-      delivery,
-      createdAt: now(),
-    });
-    if (delivered) {
-      await deliverSubagentMessageToReceivers(input.context, message, [input.run]);
-    }
-    const wake = input.priority === "interrupt"
-      ? await wakeInterruptPrioritySubagentRuns(input.context, message, [input.run])
-      : null;
-    if (wake) {
-      delivery = SubagentMessageSchema.parse({
-        ...message,
-        delivery: {
-          ...delivery,
-          wakeRequestedRunIds: wake.requestedRunIds,
-          wakeInterruptedRunIds: wake.interruptedRunIds,
-          wakeDeferredRunIds: wake.deferredRunIds,
-        },
-      }).delivery!;
-      message = { ...message, delivery };
-    }
-    message = SubagentMessageSchema.parse({ ...message, delivery });
-    await deps.appendMessage(message);
-    await appendRuntimeEvent(
-      event({
-        sessionId: input.context.session.id,
-        turnId: input.context.turnId,
-        name: "subagent.message",
-        source: "provider",
-        appId: input.context.session.appId,
-        status: delivery.status === "delivered" ? "completed" : "pending",
-        output: input.priority === "interrupt"
-          ? "Interrupt subagent review correction sent."
-          : "Subagent review correction sent.",
-        data: {
-          message,
-          delivery,
-          deliveredRunIds: delivery.deliveredRunIds,
-          modelRef: input.run.modelRef,
-        },
-      }),
-    );
-    return message;
-  }
-
-  function subagentReviewCorrectionBody(input: {
-    summary: string | null;
-    issues: string[];
-    requiredCorrections: string[];
-  }): string {
-    return [
-      "Review decision: needs_revision.",
-      input.summary ? `Summary: ${input.summary}` : null,
-      input.issues.length ? `Issues:\n${input.issues.map((issue) => `- ${issue}`).join("\n")}` : null,
-      input.requiredCorrections.length
-        ? `Required corrections:\n${input.requiredCorrections.map((correction) => `- ${correction}`).join("\n")}`
-        : null,
-      "Revise the submission, run relevant validation, and submit a new review packet.",
-    ].filter(Boolean).join("\n\n");
-  }
-
-
   return {
-    appendSubagentReviewCorrectionMessage,
     deliverSubagentMessageToReceivers,
+    queueSubagentFollowupMessage,
     sendSubagentMessageFromModelTool,
     wakeInterruptPrioritySubagentRuns,
     withSubagentInterruptWakeMetadata,

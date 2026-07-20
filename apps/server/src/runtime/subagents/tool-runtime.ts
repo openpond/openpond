@@ -2,22 +2,19 @@ import { randomUUID } from "node:crypto";
 import {
   SubagentLifecycleActionRequestSchema,
   SubagentProgressSchema,
-  SubagentReviewStateSchema,
   SubagentRunSchema,
   type AppPreferences,
   type RuntimeEvent,
   type Session,
   type SubagentLifecycleActionResponse,
-  type SubagentMessage,
   type SubagentRoleSettings,
   type SubagentRun,
-  type SubagentWorkerBrief,
   type Turn,
 } from "@openpond/contracts";
 import type {
   OpenPondSubagentCancelToolInput,
   OpenPondSubagentJoinToolInput,
-  OpenPondSubagentReviewToolInput,
+  OpenPondSubagentFollowupToolInput,
   OpenPondSubagentStartToolInput,
   OpenPondSubagentStatusToolInput,
   OpenPondSubagentStatusToolResult,
@@ -27,10 +24,6 @@ import type { ModelToolExecutionContext } from "../../openpond/model-tool-regist
 import {
   assertSubagentRunAccessible,
   subagentChildSystemContext,
-  subagentDismissable,
-  subagentReviewable,
-  subagentRunAccepted,
-  subagentWorkerBriefForStart,
 } from "./policies-and-prompts.js";
 import type { SubagentTurnPermissions } from "./continuation-runtime.js";
 import { now, textFromUnknown } from "../../utils.js";
@@ -81,15 +74,6 @@ export function createSubagentToolRuntime(deps: {
   appendSubagentReceipt: AppendSubagentReceipt;
   subagentWorkspaceTargetKeyForSession(session: Session): Promise<string>;
   subagentWorkspaceTargetKeyFromRun(run: SubagentRun): string | null;
-  subagentUsageBudgetForParent(input: {
-    parentSessionId: string;
-    roleId: string;
-    preferences: AppPreferences;
-  }): Promise<{ totalTokens: number; roleTokens: number; totalMaxTokens: number | null; roleMaxTokens: number | null }>;
-  assertSubagentBudgetAvailable(input: {
-    budget: { totalTokens: number; roleTokens: number; totalMaxTokens: number | null; roleMaxTokens: number | null };
-    role: SubagentRoleSettings;
-  }): void;
   subagentChildTurnPermissions(
     parent: SubagentTurnPermissions,
     role: SubagentRoleSettings,
@@ -106,8 +90,8 @@ export function createSubagentToolRuntime(deps: {
     parentSession: Session;
     parentTurnId: string;
     contextPack: string | null;
-    workerBrief: SubagentWorkerBrief;
     childTurnPermissions: SubagentTurnPermissions;
+    initialPrompt?: string | null;
   }): Promise<void>;
   subagentToolResultFromRun(run: SubagentRun, nextStep: string): OpenPondSubagentToolResult;
   subagentRoleLabel(role: SubagentRoleSettings): string;
@@ -119,14 +103,11 @@ export function createSubagentToolRuntime(deps: {
     reason: string;
     policy: "auto_after_acceptance" | "cancel_requested" | "manual_cleanup" | "retention_expired";
   }): Promise<{ run: SubagentRun; workspaceCleanup: Record<string, unknown> }>;
-  appendSubagentReviewCorrectionMessage(input: {
+  queueSubagentFollowupMessage(input: {
     context: ModelToolExecutionContext;
     run: SubagentRun;
-    summary: string | null;
-    issues: string[];
-    requiredCorrections: string[];
-    priority: "normal" | "interrupt";
-  }): Promise<SubagentMessage | null>;
+    body: string;
+  }): Promise<void>;
   archiveSubagentChildSession(input: {
     parentSession: Session;
     parentTurnId?: string | null;
@@ -140,6 +121,8 @@ export function createSubagentToolRuntime(deps: {
     sessionArchive: Record<string, unknown> | null,
   ): string;
 }) {
+  const SUBAGENT_JOIN_WAIT_MS = 60_000;
+  const SUBAGENT_JOIN_POLL_MS = 250;
   const workspaceWriteStartReservations = new Set<string>();
   const requireSubagentDeps = deps.requireSubagentDeps;
   const loadAppPreferences = deps.loadAppPreferences;
@@ -147,8 +130,6 @@ export function createSubagentToolRuntime(deps: {
   const appendSubagentReceipt = deps.appendSubagentReceipt;
   const subagentWorkspaceTargetKeyForSession = deps.subagentWorkspaceTargetKeyForSession;
   const subagentWorkspaceTargetKeyFromRun = deps.subagentWorkspaceTargetKeyFromRun;
-  const subagentUsageBudgetForParent = deps.subagentUsageBudgetForParent;
-  const assertSubagentBudgetAvailable = deps.assertSubagentBudgetAvailable;
   const subagentChildTurnPermissions = deps.subagentChildTurnPermissions;
   const prepareSubagentWorkspaceIsolation = deps.prepareSubagentWorkspaceIsolation;
   const runSubagentChildTurn = deps.runSubagentChildTurn;
@@ -156,7 +137,7 @@ export function createSubagentToolRuntime(deps: {
   const subagentRoleLabel = deps.subagentRoleLabel;
   const interruptSessionTurn = deps.interruptSessionTurn;
   const cleanupSubagentRun = deps.cleanupSubagentRun;
-  const appendSubagentReviewCorrectionMessage = deps.appendSubagentReviewCorrectionMessage;
+  const queueSubagentFollowupMessage = deps.queueSubagentFollowupMessage;
   const archiveSubagentChildSession = deps.archiveSubagentChildSession;
   const subagentLifecycleActionNextStep = deps.subagentLifecycleActionNextStep;
   const store = {
@@ -226,16 +207,14 @@ export function createSubagentToolRuntime(deps: {
         );
       }
     }
-    const parentGoalId = stringFromRecord(
-      (await store.currentOpenPondThreadGoal(context.session.id)) ?? {},
-      "id",
-    );
-    const budget = await subagentUsageBudgetForParent({
-      parentSessionId: context.session.id,
-      roleId: role.id,
-      preferences,
-    });
-    assertSubagentBudgetAvailable({ budget, role });
+    const parentGoal = (await store.currentOpenPondThreadGoal(context.session.id)) ?? {};
+    const parentGoalId = stringFromRecord(parentGoal, "id");
+    const parentGoalStatus = stringFromRecord(parentGoal, "status");
+    if (parentGoalId && parentGoalStatus !== "running") {
+      throw new Error(
+        `Cannot start a subagent for goal ${parentGoalId} while it is ${parentGoalStatus ?? "not running"}. Resume the goal first.`,
+      );
+    }
     const runId = randomUUID();
     const createdAt = now();
     const childTurnPermissions = subagentChildTurnPermissions(context.turnPermissions, role);
@@ -245,17 +224,12 @@ export function createSubagentToolRuntime(deps: {
       runId,
     });
     const childSessionWorkspace = isolation.sessionWorkspace ?? {};
-    const workerBrief = subagentWorkerBriefForStart({
-      role,
-      objective: input.objective,
-      provided: input.workerBrief ?? null,
-    });
+    const contextPack = input.context ?? null;
     const childSystemContext = subagentChildSystemContext({
       role,
       objective: input.objective,
       parentSession: context.session,
-      contextPack: input.context ?? null,
-      workerBrief,
+      contextPack,
     });
     const childSessionMetadata = {
       ...(recordFromUnknown(childSessionWorkspace.metadata) ?? {}),
@@ -269,7 +243,6 @@ export function createSubagentToolRuntime(deps: {
         requestedIsolationMode: role.isolationMode,
         effectiveIsolationMode: isolation.effectiveIsolationMode,
         workspace: isolation.workspace,
-        workerBrief,
         systemContext: childSystemContext,
       },
     };
@@ -309,19 +282,14 @@ export function createSubagentToolRuntime(deps: {
       toolPolicy: role.toolPolicy,
       background: role.background,
       peerMessages: role.peerMessages,
-      status: isolationBlocker ? "blocked" : "queued",
-      required: input.required ?? true,
-      workerBrief,
+      status: isolationBlocker ? "failed" : "queued",
       progress: SubagentProgressSchema.parse({
         phase: isolationBlocker ? "report" : "orient",
         currentBlocker: isolationBlocker,
         latestMeaningfulActivity: isolationBlocker
-          ? "Subagent blocked before execution because isolation is unavailable."
-          : "Subagent run created with a structured worker brief.",
+          ? "Child failed before execution because isolation is unavailable."
+          : "Child run created.",
         updatedAt: createdAt,
-      }),
-      review: SubagentReviewStateSchema.parse({
-        status: "pending",
       }),
       createdAt,
       startedAt: null,
@@ -329,22 +297,14 @@ export function createSubagentToolRuntime(deps: {
       error: isolationBlocker,
       report: isolationBlocker
         ? {
-            summary: "Subagent blocked before execution because write-capable child isolation is not available yet.",
+            summary: "Child could not start because write-capable isolation is unavailable.",
             blockers: [isolationBlocker],
             followUpNeeded: true,
           }
         : null,
       metadata: {
-        context: input.context ?? null,
-        workerBrief,
+        context: contextPack,
         childTurnPermissions,
-        tokenBudget: {
-          totalMaxTokens: preferences.subagents.maxTokens,
-          roleMaxTokens: role.maxTokens,
-          roleMaxTurns: role.maxTurns,
-          totalTokensUsedBeforeStart: budget.totalTokens,
-          roleTokensUsedBeforeStart: budget.roleTokens,
-        },
         concurrency: {
           providerId: modelRef.providerId,
           providerMaxConcurrentRuns: providerLimit,
@@ -360,10 +320,10 @@ export function createSubagentToolRuntime(deps: {
       parentTurnId: context.turnId,
       run,
       childSession,
-      eventName: isolationBlocker ? "subagent.blocked" : "subagent.started",
+      eventName: isolationBlocker ? "subagent.failed" : "subagent.started",
       status: isolationBlocker ? "failed" : "pending",
       output: isolationBlocker
-        ? `Subagent ${role.id} blocked: ${isolationBlocker}`
+        ? `Child ${role.id} failed to start: ${isolationBlocker}`
         : `Started ${role.id} subagent.`,
     });
     if (!isolationBlocker && role.background) {
@@ -378,15 +338,14 @@ export function createSubagentToolRuntime(deps: {
           childSession,
           parentSession: context.session,
           parentTurnId: context.turnId,
-          contextPack: input.context ?? null,
-          workerBrief,
+          contextPack,
           childTurnPermissions,
         }),
       );
     }
     return subagentToolResultFromRun(run, isolationBlocker
       ? "Open the child conversation or wait for workspace isolation support before retrying write-capable work."
-      : "Subagent queued in the background. This start call does not wait for completion; continue parent work and use pushed receipts, or call openpond_subagent_join only when an explicit blocking/diagnostic check is needed.");
+      : "Subagent queued in its own child conversation. Continue useful parent work or wait for its completion notification.");
     } finally {
       if (writeCapable) workspaceWriteStartReservations.delete(workspaceTargetKey);
     }
@@ -418,14 +377,37 @@ export function createSubagentToolRuntime(deps: {
     input: OpenPondSubagentJoinToolInput,
   ): Promise<OpenPondSubagentToolResult> {
     const deps = requireSubagentDeps();
-    const run = await deps.getRun(input.runId);
+    let run = await deps.getRun(input.runId);
     if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
     assertSubagentRunAccessible(context.session, run);
-    return subagentToolResultFromRun(run, subagentRunAccepted(run)
-      ? "Subagent accepted; use its report and child conversation as evidence."
-      : run.status === "submitted_for_review"
-        ? "Subagent submitted a review packet; parent/reviewer should evaluate before treating it as accepted."
-        : "Subagent has not been accepted yet; continue parent work, review the packet, or check again later.");
+    const deadline = Date.now() + SUBAGENT_JOIN_WAIT_MS;
+    while ((run.status === "queued" || run.status === "running") && Date.now() < deadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, SUBAGENT_JOIN_POLL_MS));
+      run = (await deps.getRun(input.runId)) ?? run;
+    }
+    if (run.status !== "queued" && run.status !== "running") {
+      run = SubagentRunSchema.parse({
+        ...run,
+        metadata: {
+          ...(run.metadata ?? {}),
+          completionConsumedByParent: {
+            at: now(),
+            parentSessionId: context.session.id,
+            parentTurnId: context.turnId,
+            childCompletedAt: run.completedAt,
+          },
+        },
+      });
+      await deps.upsertRun(run);
+    }
+    return subagentToolResultFromRun(
+      run,
+      run.status === "completed"
+        ? "Child completed; use its final result or inspect the child conversation."
+        : run.status === "queued" || run.status === "running"
+          ? "Child is still running after the wait window. End this turn and let its automatic completion notification continue the parent; do not poll, sleep, or interrupt it for status."
+          : `Child ended with status ${run.status}; inspect its result before deciding the next action.`,
+    );
   }
 
   async function cancelSubagentFromModelTool(
@@ -436,8 +418,8 @@ export function createSubagentToolRuntime(deps: {
     const run = await deps.getRun(input.runId);
     if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
     assertSubagentRunAccessible(context.session, run);
-    if (subagentRunAccepted(run)) {
-      return subagentToolResultFromRun(run, "Subagent already accepted; no cancellation was applied.");
+    if (run.status === "completed") {
+      return subagentToolResultFromRun(run, "Subagent already completed; no cancellation was applied.");
     }
     if (run.status === "cancelled") {
       return subagentToolResultFromRun(run, "Subagent was already cancelled.");
@@ -527,139 +509,73 @@ export function createSubagentToolRuntime(deps: {
     );
   }
 
-  async function reviewSubagentFromModelTool(
+  async function followupSubagentFromModelTool(
     context: ModelToolExecutionContext,
-    input: OpenPondSubagentReviewToolInput,
+    input: OpenPondSubagentFollowupToolInput,
   ): Promise<OpenPondSubagentToolResult> {
-    const deps = requireSubagentDeps();
-    const run = await deps.getRun(input.runId);
+    const runtime = requireSubagentDeps();
+    const run = await runtime.getRun(input.runId);
     if (!run) throw new Error(`Subagent run ${input.runId} was not found.`);
     assertSubagentRunAccessible(context.session, run);
-    if (context.session.id === run.childSessionId || context.session.subagentRunId === run.id) {
-      throw new Error("Child subagents cannot review their own submission.");
-    }
-    const dismissed = input.decision === "dismiss";
-    if (dismissed) {
-      if (!subagentDismissable(run)) {
-        throw new Error(`Subagent run ${run.id} is ${run.status}; only blocked, failed, or cancelled runs can be dismissed.`);
-      }
-    } else if (!subagentReviewable(run)) {
-      throw new Error(`Subagent run ${run.id} is ${run.status}; only submitted or revision-state runs can be reviewed.`);
+    if (!run.childSessionId) throw new Error(`Subagent run ${run.id} has no child conversation.`);
+    if (run.status === "cancelled") {
+      throw new Error(`Subagent run ${run.id} is ${run.status} and cannot receive a follow-up.`);
     }
 
-    const decidedAt = now();
-    const summary = input.summary?.trim() || run.report?.summary || run.review.summary || null;
-    const issues = uniqueNonEmptyStrings([...(run.review.issues ?? []), ...(input.issues ?? [])]);
-    const requiredCorrections = input.decision === "needs_revision"
-      ? uniqueNonEmptyStrings([
-          ...(run.review.requiredCorrections ?? []),
-          ...(input.requiredCorrections ?? []),
-          ...((input.requiredCorrections?.length ?? 0) === 0 && (input.issues?.length ?? 0) === 0
-            ? ["Revise the submitted work and submit a new review packet before acceptance."]
-            : []),
-        ])
-      : run.review.requiredCorrections;
-    const accepted = input.decision === "accept";
-    const needsRevision = input.decision === "needs_revision";
-    const needsUserInput = input.decision === "needs_user_input";
-    const latestMeaningfulActivity = accepted
-      ? "Parent/reviewer accepted the child review packet."
-      : needsRevision
-        ? "Parent/reviewer requested child revision."
-        : dismissed
-          ? "Parent/reviewer dismissed the child run after acknowledgement."
-          : "Parent/reviewer requested user input before accepting the child review packet.";
-    let nextRun = SubagentRunSchema.parse({
-      ...run,
-      status: accepted ? "accepted" : needsRevision ? "needs_revision" : needsUserInput ? "needs_user_input" : run.status,
-      completedAt: accepted ? decidedAt : dismissed ? run.completedAt ?? decidedAt : null,
-      report: run.report
-        ? {
-            ...run.report,
-            followUpNeeded: !accepted && !dismissed,
-          }
-        : run.report,
-      progress: SubagentProgressSchema.parse({
-        ...(run.progress ?? {}),
-        latestMeaningfulActivity,
-        currentBlocker: needsUserInput ? summary ?? latestMeaningfulActivity : null,
-        updatedAt: decidedAt,
-      }),
-      review: SubagentReviewStateSchema.parse({
-        ...(run.review ?? {}),
-        status: accepted ? "accepted" : needsRevision ? "needs_revision" : needsUserInput ? "needs_user_input" : "dismissed",
-        decidedAt,
-        reviewerSessionId: context.session.id,
-        summary,
-        issues,
-        requiredCorrections,
-        humanReviewRecommended: !accepted && !dismissed,
-      }),
-      metadata: {
-        ...(run.metadata ?? {}),
-        reviewDecision: {
-          decision: input.decision,
-          decidedAt,
-          reviewerSessionId: context.session.id,
-          reviewerRunId: context.session.subagentRunId ?? null,
-          messageChild: needsRevision ? input.messageChild !== false : false,
-        },
-      },
-    });
-    await deps.upsertRun(nextRun);
-
-    let correctionMessage: SubagentMessage | null = null;
-    if (needsRevision && input.messageChild !== false) {
-      correctionMessage = await appendSubagentReviewCorrectionMessage({
-        context,
-        run: nextRun,
-        summary,
-        issues,
-        requiredCorrections,
-        priority: input.priority ?? "interrupt",
-      });
+    await queueSubagentFollowupMessage({ context, run, body: input.message });
+    if (run.status === "queued" || run.status === "running") {
+      return subagentToolResultFromRun(
+        run,
+        "Follow-up delivered to the running child and will be read at the next safe model boundary.",
+      );
     }
 
+    const preferences = await loadAppPreferences();
+    const role = preferences.subagents.roles.find((candidate) => candidate.id === run.roleId);
+    if (!role?.enabled) throw new Error(`Subagent role ${run.roleId} is not enabled.`);
+    const childSession = await getSession(run.childSessionId);
     const parentSession = run.parentSessionId === context.session.id
       ? context.session
-      : await getSession(run.parentSessionId).catch(() => context.session);
-    await appendSubagentReceipt({
-      parentSession,
-      parentTurnId: run.parentTurnId ?? context.turnId,
-      run: nextRun,
-      eventName: accepted ? "subagent.accepted" : dismissed ? "subagent.dismissed" : "subagent.needs_revision",
-      status: accepted || dismissed ? "completed" : "failed",
-      output: accepted
-        ? `${run.roleId} subagent review packet accepted.`
-        : dismissed
-          ? `${run.roleId} subagent run dismissed after parent acknowledgement.`
-        : needsRevision
-          ? `${run.roleId} subagent needs revision.`
-          : `${run.roleId} subagent needs user input before acceptance.`,
+      : await getSession(run.parentSessionId);
+    const queuedAt = now();
+    const queued = SubagentRunSchema.parse({
+      ...run,
+      status: "queued",
+      completedAt: null,
+      error: null,
+      report: null,
+      progress: SubagentProgressSchema.parse({
+        ...run.progress,
+        phase: "orient",
+        latestMeaningfulActivity: "Follow-up task queued in the existing child conversation.",
+        currentBlocker: null,
+        updatedAt: queuedAt,
+      }),
+      metadata: {
+        ...run.metadata,
+        completionConsumedByParent: null,
+        followup: { queuedAt, requestedBySessionId: context.session.id, requestedByTurnId: context.turnId },
+      },
     });
-    if (accepted) {
-      const cleanup = await cleanupSubagentRun({
-        run: nextRun,
+    await runtime.upsertRun(queued);
+    const childTurnPermissions = subagentChildTurnPermissions(context.turnPermissions, role);
+    runtime.queue.enqueue(
+      {
+        label: `${role.id} follow-up: ${input.message.slice(0, 72)}`,
+        metadata: { runId: run.id, childSessionId: childSession.id, parentSessionId: parentSession.id, followup: true },
+      },
+      () => runSubagentChildTurn({
+        run: queued,
+        role,
+        childSession,
         parentSession,
-        parentTurnId: run.parentTurnId ?? context.turnId,
-        reason: "accepted_review",
-        policy: "auto_after_acceptance",
-      });
-      nextRun = cleanup.run;
-    }
-
-    return subagentToolResultFromRun(
-      nextRun,
-      accepted
-        ? "Subagent accepted; use its report and child conversation as evidence."
-        : dismissed
-          ? "Subagent dismissed after explicit parent acknowledgement; it will not count as accepted work."
-        : needsRevision
-          ? correctionMessage
-            ? "Subagent marked needs_revision and corrective message delivered to the child."
-            : "Subagent marked needs_revision; corrective message was not delivered."
-          : "Subagent marked needs_user_input; ask the user for the missing decision before accepting.",
+        parentTurnId: context.turnId,
+        contextPack: typeof run.metadata?.context === "string" ? run.metadata.context : null,
+        childTurnPermissions,
+        initialPrompt: input.message,
+      }),
     );
+    return subagentToolResultFromRun(queued, "Follow-up turn queued in the existing child conversation.");
   }
 
   async function runSubagentLifecycleAction(
@@ -740,8 +656,8 @@ export function createSubagentToolRuntime(deps: {
   return {
     cancelSubagentFromModelTool,
     cleanupExpiredRetainedSubagentWorkspace,
+    followupSubagentFromModelTool,
     joinSubagentFromModelTool,
-    reviewSubagentFromModelTool,
     runSubagentLifecycleAction,
     startSubagentFromModelTool,
     statusSubagentsFromModelTool,

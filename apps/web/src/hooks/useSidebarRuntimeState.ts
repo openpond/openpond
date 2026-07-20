@@ -5,6 +5,7 @@ import {
   activeGoalRuntimeFromSessionMetadata,
   latestGoalRuntimeFromEvents,
   latestKnownActiveGoalRuntimeFromEvents,
+  projectGoalRuntimeTo,
 } from "../lib/goal-runtime";
 import { latestCreateImproveRuntimeFromEvents } from "../lib/create-pipeline-runtime";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
@@ -19,6 +20,7 @@ import {
   codexHistoryPayloadWithLiveStatus,
   subscribeCodexHistoryLiveRefresh,
 } from "../lib/codex-history-live-refresh";
+import { useGoalRuntimeClock } from "./useGoalRuntimeClock";
 
 export function useSidebarRuntimeState(input: {
   codexHistoryEvents: RuntimeEvent[];
@@ -206,7 +208,7 @@ export function useSidebarRuntimeState(input: {
     () => new Map(sidebarSessions.map((session) => [session.id, session])),
     [sidebarSessions],
   );
-  const sidebarGoalRuntimeBySessionId = useMemo(() => {
+  const baseSidebarGoalRuntimeBySessionId = useMemo(() => {
     const next = new Map(runtimeIndexes.latestGoalRuntimeBySessionId);
     for (const session of sidebarSessions) {
       const metadataGoalRuntime =
@@ -263,6 +265,25 @@ export function useSidebarRuntimeState(input: {
     sidebarSessionById,
     sidebarSessions,
   ]);
+  const hasLiveGoalRuntime = useMemo(
+    () => [...baseSidebarGoalRuntimeBySessionId.values()].some(
+      (runtime) => runtime.tone === "active" && Boolean(runtime.observedAt),
+    ),
+    [baseSidebarGoalRuntimeBySessionId],
+  );
+  const goalRuntimeObservedAt = useGoalRuntimeClock(hasLiveGoalRuntime);
+  const sidebarGoalRuntimeBySessionId = useMemo(() => {
+    if (!hasLiveGoalRuntime) return baseSidebarGoalRuntimeBySessionId;
+    return new Map(
+      [...baseSidebarGoalRuntimeBySessionId].map(([sessionId, runtime]) => [
+        sessionId,
+        projectGoalRuntimeTo(runtime, goalRuntimeObservedAt) ?? runtime,
+      ]),
+    );
+  }, [baseSidebarGoalRuntimeBySessionId, goalRuntimeObservedAt, hasLiveGoalRuntime]);
+  const liveGoalRuntime = selectedSessionId
+    ? (sidebarGoalRuntimeBySessionId.get(selectedSessionId) ?? goalRuntime)
+    : goalRuntime;
   const sidebarSubagentRuntimeBySessionId = useMemo(() => {
     const next = new Map(runtimeIndexes.latestSubagentRuntimeBySessionId);
     if (selectedSessionId) {
@@ -275,7 +296,7 @@ export function useSidebarRuntimeState(input: {
     return next;
   }, [runtimeIndexes.latestSubagentRuntimeBySessionId, selectedSessionId, subagentRuntime]);
   const { runningSessionIds, selectedSessionRunning } = useRunningSessionState({
-    goalRuntime,
+    goalRuntime: liveGoalRuntime,
     goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
     runtimeIndexes,
     selectedSession,
@@ -293,6 +314,7 @@ export function useSidebarRuntimeState(input: {
     Boolean(pendingApproval) || selectedTurnCompletionState === "blocked";
 
   return {
+    goalRuntime: liveGoalRuntime,
     runningSessionIds,
     selectedSessionRunning,
     selectedSteerAutoDispatchBlocked,

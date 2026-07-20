@@ -570,7 +570,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     sessionEvents,
     chatMessages,
     contextUsage,
-    goalRuntime,
+    goalRuntime: indexedGoalRuntime,
     subagentRuntime,
   } = useSidebarData({
     localProjects: bootstrap?.localProjects ?? [],
@@ -620,6 +620,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
   }, [activeTerminalScope]);
   const terminalSummaries = useMemo(() => terminalScopeSummaries(terminalTabs), [terminalTabs]);
   const {
+    goalRuntime,
     runningSessionIds,
     selectedSessionRunning,
     selectedSteerAutoDispatchBlocked,
@@ -631,7 +632,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     codexHistorySessions,
     connection,
     expandedProjectIds,
-    goalRuntime,
+    goalRuntime: indexedGoalRuntime,
     locallyActiveCodexHistorySessionIds,
     pendingApproval,
     pinnedSessions,

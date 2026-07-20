@@ -1,6 +1,5 @@
 import {
   SubagentProgressSchema,
-  SubagentReviewStateSchema,
   SubagentRunSchema,
   type RuntimeEvent,
   type Session,
@@ -8,24 +7,24 @@ import {
   type SubagentRef,
   type SubagentRoleSettings,
   type SubagentRun,
-  type SubagentWorkerBrief,
   type Turn,
   type UsageRequestAttribution,
 } from "@openpond/contracts";
 import {
   subagentChildPrompt,
-  subagentReviewPacketQuality,
-  subagentReviewRoutingRecommendation,
 } from "./policies-and-prompts.js";
 import type { SubagentTurnPermissions } from "./continuation-runtime.js";
+import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
 import { now, textFromUnknown } from "../../utils.js";
 import {
   recordFromUnknown,
   stringFromRecord,
+  truncateForModelAside,
   uniqueNonEmptyStrings,
 } from "../turns/value-utils.js";
 
 const SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES = 3;
+const SUBAGENT_REPORT_SUMMARY_MAX_CHARS = 20_000;
 
 type AppendSubagentReceipt = (input: {
   parentSession: Session;
@@ -50,18 +49,22 @@ export function createSubagentChildTurnRuntime(deps: {
   requireSubagentDeps(): {
     getRun(runId: string): Promise<SubagentRun | null>;
     upsertRun(run: SubagentRun): Promise<unknown>;
+    listRuns(input: {
+      parentSessionId?: string;
+      parentGoalId?: string;
+      status?: SubagentRun["status"][];
+      limit?: number;
+    }): Promise<SubagentRun[]>;
+    queue: BackgroundWorkerQueue;
   };
   sendTurn(sessionId: string, payload: unknown): Promise<Turn>;
   getTurn(turnId: string): Promise<Turn | null>;
+  getPersistedRun(runId: string): Promise<SubagentRun | null>;
+  upsertPersistedRun(run: SubagentRun): Promise<SubagentRun>;
+  notifyRunStateChanged?: ((run: SubagentRun) => void) | null;
+  latestTurnForSession(sessionId: string): Promise<Turn | null>;
   latestAssistantTextForSession(sessionId: string): Promise<string | null>;
   appendSubagentReceipt: AppendSubagentReceipt;
-  refreshSubagentRuntimeDerivedProgress(input: {
-    run: SubagentRun;
-    childSessionId: string;
-    phase?: SubagentProgress["phase"] | null;
-    latestMeaningfulActivity?: string | null;
-    currentBlocker?: string | null;
-  }): Promise<SubagentRun>;
   subagentRuntimeDerivedProgress(input: {
     run: SubagentRun;
     childSessionId: string;
@@ -84,12 +87,23 @@ export function createSubagentChildTurnRuntime(deps: {
     metadata: Record<string, unknown> | undefined,
     wake: Record<string, unknown>,
   ): Record<string, unknown>;
+  notifyParentOfSubagentCompletion(input: {
+    run: SubagentRun;
+    parentSession: Session;
+    childSession: Session;
+    childTurnId: string;
+    body: string;
+    refs?: SubagentRef[];
+  }): Promise<unknown>;
 }) {
   const requireSubagentDeps = deps.requireSubagentDeps;
   const sendTurn = deps.sendTurn;
   const getStoredTurn = deps.getTurn;
+  const getPersistedRun = deps.getPersistedRun;
+  const upsertPersistedRun = deps.upsertPersistedRun;
+  const notifyRunStateChanged = deps.notifyRunStateChanged;
+  const latestTurnForSession = deps.latestTurnForSession;
   const appendSubagentReceipt = deps.appendSubagentReceipt;
-  const refreshSubagentRuntimeDerivedProgress = deps.refreshSubagentRuntimeDerivedProgress;
   const subagentRuntimeDerivedProgress = deps.subagentRuntimeDerivedProgress;
   const subagentUsageAttribution = deps.subagentUsageAttribution;
   const subagentUsageTotalsForRun = deps.subagentUsageTotalsForRun;
@@ -98,6 +112,7 @@ export function createSubagentChildTurnRuntime(deps: {
   const appendWorkspaceDiffEvent = deps.appendWorkspaceDiffEvent;
   const uniqueSubagentRefs = deps.uniqueSubagentRefs;
   const withSubagentInterruptWakeMetadata = deps.withSubagentInterruptWakeMetadata;
+  const notifyParentOfSubagentCompletion = deps.notifyParentOfSubagentCompletion;
   const store = { latestAssistantTextForSession: deps.latestAssistantTextForSession };
   const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   async function runSubagentChildTurn(input: {
@@ -107,12 +122,15 @@ export function createSubagentChildTurnRuntime(deps: {
     parentSession: Session;
     parentTurnId: string;
     contextPack: string | null;
-    workerBrief: SubagentWorkerBrief;
     childTurnPermissions: SubagentTurnPermissions;
+    initialPrompt?: string | null;
   }): Promise<void> {
     const deps = requireSubagentDeps();
     const latestBeforeStart = await deps.getRun(input.run.id);
-    if (latestBeforeStart?.status === "cancelled") return;
+    // A queued child can be paused or cancelled while its
+    // background job is waiting. Never let that stale job overwrite the
+    // lifecycle decision by forcing the run back to running.
+    if (latestBeforeStart && latestBeforeStart.status !== "queued") return;
     const startedAt = now();
     let run = SubagentRunSchema.parse({
       ...(latestBeforeStart ?? input.run),
@@ -143,15 +161,15 @@ export function createSubagentChildTurnRuntime(deps: {
       status: "pending",
       output: `${run.roleId} subagent is working in child conversation ${run.childSessionId ?? "unknown"}.`,
     });
+    let lastChildTurnId = `failed_${run.id}`;
     try {
-      let childPrompt = subagentChildPrompt({
+      let childPrompt = input.initialPrompt?.trim() || subagentChildPrompt({
         objective: input.run.objective,
         contextPack: input.contextPack,
-        workerBrief: input.workerBrief,
       });
       let wakeResumeCount = 0;
       while (true) {
-        const childTurn = await sendTurn(input.childSession.id, {
+        const childTurn = await sendManagedSubagentTurn(input.childSession.id, input.run.id, {
           prompt: childPrompt,
           modelRef: input.run.modelRef ?? undefined,
           metadata: {
@@ -170,13 +188,10 @@ export function createSubagentChildTurnRuntime(deps: {
           codexReasoningEffort: input.childTurnPermissions.codexReasoningEffort,
         });
         const finalizedChildTurn = await finalizedSubagentChildTurn(childTurn);
-        const latestAfterChild = await deps.getRun(run.id);
+        lastChildTurnId = finalizedChildTurn.id;
+        const latestAfterChild = await getPersistedRun(run.id);
         if (latestAfterChild?.status === "cancelled") return;
         run = latestAfterChild ?? run;
-        run = await refreshSubagentRuntimeDerivedProgress({
-          run,
-          childSessionId: input.childSession.id,
-        });
         if (finalizedChildTurn.status === "interrupted") {
           const wake = subagentInterruptWakeForTurn(run, finalizedChildTurn.id);
           if (wake && wakeResumeCount < SUBAGENT_INTERRUPT_WAKE_MAX_RESUMES) {
@@ -208,115 +223,69 @@ export function createSubagentChildTurnRuntime(deps: {
         }
         break;
       }
-      const submittedAt = now();
-      const summary = await store.latestAssistantTextForSession(input.childSession.id);
+      const completedAt = now();
+      const assistantSummary = await store.latestAssistantTextForSession(input.childSession.id);
       const usage = await subagentUsageTotalsForRun(input.run.id);
-      const workspaceHandoff = await captureSubagentWorkspaceHandoff(run);
-      const derivedProgress = await subagentRuntimeDerivedProgress({
+      const observedProgress = await subagentRuntimeDerivedProgress({
         run,
         childSessionId: input.childSession.id,
-        phase: "submitted",
-        latestMeaningfulActivity: "Child submitted a final report for parent review.",
-        currentBlocker: null,
+        phase: "report",
+        latestMeaningfulActivity: "Child conversation completed.",
       });
-      const handoffChangedFiles = uniqueNonEmptyStrings([
-        ...(derivedProgress.changedFiles ?? []),
+      const workspaceHandoff = await captureSubagentWorkspaceHandoff(run);
+      const changedFiles = uniqueNonEmptyStrings([
+        ...observedProgress.changedFiles,
         ...(workspaceHandoff?.changedFiles ?? []),
       ]);
-      const submittedReport = {
-        summary: summary || "Child conversation completed.",
-        findings: [],
-        artifacts: workspaceHandoff?.artifacts ?? [],
-        patchRef: workspaceHandoff?.patchRef ?? null,
-        diffRef: workspaceHandoff?.diffRef ?? null,
-        testsRun: [],
-        blockers: [],
-        confidence: null,
-        followUpNeeded: workspaceHandoff?.changed ?? false,
-      };
-      const submittedProgress = SubagentProgressSchema.parse({
-        ...derivedProgress,
-        phase: "submitted",
-        changedFiles: handoffChangedFiles,
-        patchRefs: uniqueSubagentRefs([
-          ...(derivedProgress.patchRefs ?? []),
-          workspaceHandoff?.patchRef ?? null,
-          workspaceHandoff?.diffRef ?? null,
-        ]),
-        latestMeaningfulActivity: "Child submitted a final report for parent review.",
-        currentBlocker: derivedProgress.currentBlocker,
-        updatedAt: submittedAt,
-      });
-      const packetQuality = subagentReviewPacketQuality({
-        run,
-        finalSummary: summary,
-        report: submittedReport,
-        progress: submittedProgress,
-      });
-      const submittedReviewReport: NonNullable<SubagentRun["report"]> = {
-        ...submittedReport,
-        confidence: packetQuality.status === "weak" ? "low" : submittedReport.confidence,
-        followUpNeeded: submittedReport.followUpNeeded || packetQuality.status !== "reviewable",
-      };
-      const reviewRouting = subagentReviewRoutingRecommendation({
-        run,
-        reviewRoutingPolicy: input.role.reviewRouting,
-        packetQuality,
-        report: submittedReviewReport,
-        progress: submittedProgress,
-      });
-      const packetIncomplete = packetQuality.status === "incomplete";
-      const packetBlocker = packetQuality.issues[0] ?? "Child review packet is incomplete.";
+      let patchApplyError: string | null = null;
       run = SubagentRunSchema.parse({
         ...run,
-        status: packetIncomplete ? "blocked" : "submitted_for_review",
-        completedAt: packetIncomplete ? submittedAt : null,
-        error: packetIncomplete ? packetBlocker : null,
+        status: "completed",
+        completedAt,
+        error: null,
         report: {
-          ...submittedReviewReport,
-          blockers: packetIncomplete
-            ? uniqueNonEmptyStrings([...submittedReviewReport.blockers, ...packetQuality.issues])
-            : submittedReviewReport.blockers,
+          summary: truncateForModelAside(
+            assistantSummary || "Child conversation completed.",
+            SUBAGENT_REPORT_SUMMARY_MAX_CHARS,
+          ),
+          findings: [],
+          artifacts: workspaceHandoff?.artifacts ?? [],
+          patchRef: workspaceHandoff?.patchRef ?? null,
+          diffRef: workspaceHandoff?.diffRef ?? null,
+          testsRun: observedProgress.validationAttempts.map((attempt) => attempt.command),
+          blockers: [],
+          confidence: null,
+          followUpNeeded: false,
         },
         progress: SubagentProgressSchema.parse({
-          ...submittedProgress,
-          phase: packetIncomplete ? "report" : submittedProgress.phase,
-          latestMeaningfulActivity: packetIncomplete
-            ? "Child finished without a reviewable final report."
-            : submittedProgress.latestMeaningfulActivity,
-          currentBlocker: packetIncomplete ? packetBlocker : submittedProgress.currentBlocker,
-        }),
-        review: SubagentReviewStateSchema.parse({
-          ...(run.review ?? {}),
-          status: packetIncomplete ? "needs_user_input" : "submitted_for_review",
-          submittedAt,
-          summary: summary || submittedReport.summary,
-          issues: packetIncomplete
-            ? uniqueNonEmptyStrings([...(run.review?.issues ?? []), ...packetQuality.issues])
-            : run.review?.issues ?? [],
-          humanReviewRecommended: packetQuality.status !== "reviewable",
-          ...reviewRouting,
-          packetQuality,
+          ...observedProgress,
+          phase: "report",
+          changedFiles,
+          patchRefs: uniqueSubagentRefs([
+            ...observedProgress.patchRefs,
+            workspaceHandoff?.patchRef ?? null,
+            workspaceHandoff?.diffRef ?? null,
+          ]),
+          latestMeaningfulActivity: "Child conversation completed.",
+          currentBlocker: null,
+          updatedAt: completedAt,
         }),
         metadata: {
-          ...(run.metadata ?? {}),
+          ...run.metadata,
           usage,
           ...(workspaceHandoff ? { workspaceHandoff: workspaceHandoff.metadata } : {}),
         },
       });
-      let patchApplyError: string | null = null;
-      if (workspaceHandoff?.changed && !packetIncomplete && workspaceHandoff.metadata.patchPath) {
+      await upsertPersistedRun(run);
+      if (workspaceHandoff?.changed && workspaceHandoff.metadata.patchPath) {
         try {
           const applyResult = await applySubagentPatch(run);
           if (applyResult) {
             run = SubagentRunSchema.parse({
               ...run,
               metadata: {
-                ...(run.metadata ?? {}),
-                workspaceHandoff: {
-                  ...workspaceHandoff.metadata,
-                  applyResult,
-                },
+                ...run.metadata,
+                workspaceHandoff: { ...workspaceHandoff.metadata, applyResult },
               },
             });
             await appendWorkspaceDiffEvent(input.parentSession, input.parentTurnId).catch(() => undefined);
@@ -325,57 +294,51 @@ export function createSubagentChildTurnRuntime(deps: {
           patchApplyError = textFromUnknown(error) || "Unable to apply the isolated child patch.";
           run = SubagentRunSchema.parse({
             ...run,
-            status: "needs_revision",
+            status: "failed",
             error: patchApplyError,
+            report: {
+              ...run.report,
+              blockers: [patchApplyError],
+              followUpNeeded: true,
+            },
             progress: SubagentProgressSchema.parse({
               ...run.progress,
-              latestMeaningfulActivity: "Child patch could not be integrated automatically.",
+              latestMeaningfulActivity: "Child completed, but its isolated patch could not be integrated.",
               currentBlocker: patchApplyError,
               updatedAt: now(),
-            }),
-            review: SubagentReviewStateSchema.parse({
-              ...run.review,
-              status: "needs_revision",
-              issues: uniqueNonEmptyStrings([...(run.review.issues ?? []), patchApplyError]),
-              requiredCorrections: uniqueNonEmptyStrings([
-                ...(run.review.requiredCorrections ?? []),
-                "Reconcile the child changes with the current shared workspace and resubmit.",
-              ]),
-              humanReviewRecommended: false,
             }),
           });
         }
       }
-      await deps.upsertRun(run);
-      if (workspaceHandoff?.changed && !packetIncomplete) {
-        await appendSubagentReceipt({
-          parentSession: input.parentSession,
-          parentTurnId: input.parentTurnId,
-          run,
-          eventName: "subagent.reported",
-          status: patchApplyError ? "failed" : "completed",
-          output: patchApplyError
-            ? `${run.roleId} subagent patch needs revision: ${patchApplyError}`
-            : workspaceHandoff.metadata.patchPath
-              ? `${run.roleId} subagent patch applied automatically to the shared workspace.`
-              : `${run.roleId} subagent produced isolated workspace changes for parent review.`,
-        });
-      }
+      await upsertPersistedRun(run);
       await appendSubagentReceipt({
         parentSession: input.parentSession,
         parentTurnId: input.parentTurnId,
         run,
-        eventName: packetIncomplete ? "subagent.blocked" : patchApplyError ? "subagent.needs_revision" : "subagent.submitted",
-        status: packetIncomplete || patchApplyError ? "failed" : "pending",
-        output: packetIncomplete
-          ? `${run.roleId} subagent submitted an incomplete review packet: ${packetBlocker}`
-          : patchApplyError
-            ? `${run.roleId} subagent needs revision after automatic integration failed.`
-          : `${run.roleId} subagent submitted a review packet.`,
+        eventName: patchApplyError ? "subagent.failed" : "subagent.completed",
+        status: patchApplyError ? "failed" : "completed",
+        output: patchApplyError
+          ? `${run.roleId} child completed but integration failed: ${patchApplyError}`
+          : `${run.roleId} child completed.`,
       });
+      await notifyParentOfSubagentCompletion({
+        run,
+        parentSession: input.parentSession,
+        childSession: input.childSession,
+        childTurnId: lastChildTurnId,
+        body: patchApplyError
+          ? `${run.report?.summary ?? "Child completed."}\n\nIntegration error: ${patchApplyError}`
+          : run.report?.summary ?? "Child conversation completed.",
+        refs: uniqueSubagentRefs([
+          ...(run.report?.artifacts ?? []),
+          run.report?.patchRef ?? null,
+          run.report?.diffRef ?? null,
+        ]),
+      });
+      notifyRunStateChanged?.(run);
     } catch (error) {
-      const latestAfterError = await deps.getRun(run.id).catch(() => null);
-      if (latestAfterError?.status === "cancelled") return;
+      const latestAfterError = await getPersistedRun(run.id).catch(() => null);
+      if (latestAfterError && latestAfterError.status !== "running") return;
       const message = textFromUnknown(error) || "Subagent failed.";
       const failedAt = now();
       const workspaceHandoff = await captureSubagentWorkspaceHandoff(run).catch(() => null);
@@ -390,7 +353,6 @@ export function createSubagentChildTurnRuntime(deps: {
         currentBlocker: message,
       });
       const validationAttempts = derivedProgress.validationAttempts ?? [];
-      const lastValidationAttempt = validationAttempts.at(-1) ?? null;
       const failureBlockers = uniqueNonEmptyStrings([
         message,
         ...(derivedProgress.currentBlocker ? [derivedProgress.currentBlocker] : []),
@@ -399,19 +361,6 @@ export function createSubagentChildTurnRuntime(deps: {
         ...(derivedProgress.changedFiles ?? []),
         ...(workspaceHandoff?.changedFiles ?? []),
       ]);
-      const failureHandoff = {
-        status: failedWithArtifacts ? "recoverable_artifacts" : "failed_without_artifacts",
-        capturedAt: failedAt,
-        error: message,
-        confidence: "low",
-        changedFiles: handoffChangedFiles,
-        patchRef: workspaceHandoff?.patchRef ?? null,
-        diffRef: workspaceHandoff?.diffRef ?? null,
-        artifacts: workspaceHandoff?.artifacts ?? [],
-        validationAttempts,
-        lastValidationAttempt,
-        blockers: failureBlockers,
-      };
       const failureReport: NonNullable<SubagentRun["report"]> = {
         summary: failedWithArtifacts
           ? "Child conversation failed after producing recoverable artifacts."
@@ -440,41 +389,19 @@ export function createSubagentChildTurnRuntime(deps: {
         currentBlocker: message,
         updatedAt: failedAt,
       });
-      const failureReviewRouting = failedWithArtifacts
-        ? subagentReviewRoutingRecommendation({
-            run,
-            reviewRoutingPolicy: input.role.reviewRouting,
-            packetQuality: run.review.packetQuality,
-            report: failureReport,
-            progress: failureProgress,
-            providerFailureAfterChanges: handoffChangedFiles.length > 0,
-          })
-        : null;
       run = SubagentRunSchema.parse({
         ...run,
-        status: failedWithArtifacts ? "failed_with_artifacts" : "failed",
+        status: "failed",
         completedAt: failedAt,
         error: message,
         report: failureReport,
         progress: failureProgress,
-        review: failedWithArtifacts
-          ? SubagentReviewStateSchema.parse({
-              ...(run.review ?? {}),
-              status: "failed_with_artifacts",
-              submittedAt: failedAt,
-              summary: "Child failed after producing recoverable artifacts.",
-              issues: failureBlockers,
-              humanReviewRecommended: true,
-              ...(failureReviewRouting ?? {}),
-            })
-          : run.review,
         metadata: {
           ...(run.metadata ?? {}),
           ...(workspaceHandoff ? { workspaceHandoff: workspaceHandoff.metadata } : {}),
-          failureHandoff,
         },
       });
-      await deps.upsertRun(run);
+      await upsertPersistedRun(run);
       await appendSubagentReceipt({
         parentSession: input.parentSession,
         parentTurnId: input.parentTurnId,
@@ -485,10 +412,86 @@ export function createSubagentChildTurnRuntime(deps: {
           ? `${run.roleId} subagent failed after producing recoverable artifacts: ${message}`
           : `${run.roleId} subagent failed: ${message}`,
       });
+      await notifyParentOfSubagentCompletion({
+        run,
+        parentSession: input.parentSession,
+        childSession: input.childSession,
+        childTurnId: lastChildTurnId,
+        body: `${failureReport.summary}\n\nError: ${message}`,
+        refs: uniqueSubagentRefs([
+          ...failureReport.artifacts,
+          failureReport.patchRef,
+          failureReport.diffRef,
+        ]),
+      });
+      notifyRunStateChanged?.(run);
     }
   }
 
+  async function sendManagedSubagentTurn(
+    childSessionId: string,
+    runId: string,
+    payload: Parameters<typeof sendTurn>[1],
+  ): Promise<Turn> {
+    const priorTurn = await latestTurnForSession(childSessionId);
+    return await new Promise<Turn>((resolve, reject) => {
+      let settled = false;
+      let dispatchedTurnId: string | null = null;
+
+      const settleWithTurn = (turn: Turn) => {
+        if (settled || turn.status === "in_progress") return false;
+        settled = true;
+        resolve(turn);
+        return true;
+      };
+      const fail = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+
+      // A hosted dispatch may resolve before its durable turn is terminal, or
+      // remain pending after SQLite has committed the terminal row. Whichever
+      // source observes a terminal current turn first resolves this one gate.
+      // Resolve directly from the provider callback instead of relying on a
+      // later polling iteration to observe shared callback state.
+      void sendTurn(childSessionId, payload).then(
+        (turn) => {
+          dispatchedTurnId = turn.id;
+          settleWithTurn(turn);
+        },
+        fail,
+      );
+
+      const pollDurableTurn = async () => {
+        while (!settled) {
+          const latest = await latestTurnForSession(childSessionId);
+          if (settled) return;
+          const belongsToCurrentDispatch = Boolean(
+            latest &&
+            latest.metadata?.subagentRunId === runId &&
+            (latest.id !== priorTurn?.id || latest.id === dispatchedTurnId),
+          );
+          if (latest && belongsToCurrentDispatch && settleWithTurn(latest)) return;
+          await delay(250);
+        }
+      };
+      void pollDurableTurn().catch(fail);
+    });
+  }
+
   async function finalizedSubagentChildTurn(turn: Turn): Promise<Turn> {
+    // The provider callback can resolve with a terminal snapshot just before a
+    // more authoritative failure is committed. Read through the short-lived
+    // persisted lifecycle connection once; unlike the general store read, this
+    // does not join a later provider-cleanup write and cannot recreate the
+    // finalization deadlock.
+    const persisted = await Promise.race([
+      latestTurnForSession(turn.sessionId),
+      delay(25).then(() => null),
+    ]);
+    if (persisted?.id === turn.id && persisted.status !== "in_progress") return persisted;
+    if (turn.status !== "in_progress") return turn;
     let latest = (await getStoredTurn(turn.id)) ?? turn;
     if (latest.status !== "in_progress") return latest;
     for (let attempt = 0; attempt < 200; attempt += 1) {

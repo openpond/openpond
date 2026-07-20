@@ -341,40 +341,6 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Subagent running");
   });
 
-  test("projects stale subagent receipts as attention activities", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_started",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: { prompt: "watch stale child work" },
-      }),
-      runtimeEvent({
-        id: "subagent_stale",
-        name: "subagent.stale",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        status: "pending",
-        output: "research required subagent is stale and blocking attention.",
-        data: {
-          run: {
-            childSessionId: "session_child",
-            roleId: "research",
-            status: "running",
-          },
-          stale: {
-            policy: "required_blocker",
-          },
-        },
-      }),
-    ]);
-
-    const activities = messages[1]?.activities ?? [];
-    expect(activities.map((activity) => activity.label)).toEqual(["Subagent stale"]);
-    expect(activityGroupSummary(activities)).toBe("Subagent stale");
-  });
-
   test("renders assistant reasoning as first-class text separate from tools and answer content", () => {
     const messages = buildChatMessages([
       runtimeEvent({

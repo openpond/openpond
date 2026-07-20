@@ -1,5 +1,5 @@
 import { useCallback, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import type { CloudProject, CloudWorkItem, LocalProject, Session, SubagentRun, WorkspaceState } from "@openpond/contracts";
+import type { CloudProject, CloudWorkItem, LocalProject, Session, WorkspaceState } from "@openpond/contracts";
 import {
   Archive,
   ArchiveRestore,
@@ -422,26 +422,15 @@ function SidebarSessionRunningPopover({
 }
 
 function subagentPopoverDetail(runtime: SubagentRuntimeStatus): string {
-  const failedCount = subagentSidebarStatusCount(runtime, ["failed", "failed_with_artifacts"]);
-  const cancelledCount = subagentSidebarStatusCount(runtime, ["cancelled"]);
   const parts = [
     runtime.activeCount > 0 ? `${runtime.activeCount} active` : null,
-    runtime.blockedCount > 0 ? `${runtime.blockedCount} blocked` : null,
-    failedCount > 0 ? `${failedCount} failed` : null,
-    cancelledCount > 0 ? `${cancelledCount} cancelled` : null,
-    runtime.unresolvedCount > 0 ? `${runtime.unresolvedCount} unresolved` : null,
+    runtime.completedCount > 0 ? `${runtime.completedCount} completed` : null,
+    runtime.failedCount > 0 ? `${runtime.failedCount} failed` : null,
+    runtime.cancelledCount > 0 ? `${runtime.cancelledCount} cancelled` : null,
+    runtime.needsResumeCount > 0 ? `${runtime.needsResumeCount} paused` : null,
     runtime.terminalCount > 0 ? `${runtime.terminalCount} terminal` : null,
-    runtime.archivedCount > 0 ? `${runtime.archivedCount} archived` : null,
   ].filter(Boolean);
   return parts.join(" · ") || "Subagent receipts available";
-}
-
-function subagentSidebarStatusCount(
-  runtime: SubagentRuntimeStatus,
-  statuses: readonly SubagentRun["status"][],
-): number {
-  const statusSet = new Set(statuses);
-  return runtime.runs.filter((run) => statusSet.has(run.status)).length;
 }
 
 function clampGoalObjectiveLines(value: string, maxLines: number): string {

@@ -578,7 +578,7 @@ export function createCodexBridge(deps: {
     const blocker = `Waiting for approval: ${approval.title}`;
     const run = SubagentRunSchema.parse({
       ...context.run,
-      status: "blocked",
+      status: "running",
       error: blocker,
       report: {
         ...(context.run.report ?? {}),
@@ -596,7 +596,7 @@ export function createCodexBridge(deps: {
       event({
         sessionId: context.childSession.parentSessionId ?? context.run.parentSessionId,
         turnId: context.childSession.parentTurnId ?? context.run.parentTurnId ?? approval.turnId ?? undefined,
-        name: "subagent.blocked",
+        name: "subagent.progress",
         source: "server",
         action: approval.kind,
         appId: context.childSession.appId,
@@ -624,7 +624,7 @@ export function createCodexBridge(deps: {
     delete (metadata as Record<string, unknown>).pendingApproval;
     const run = SubagentRunSchema.parse({
       ...context.run,
-      status: accepted ? "running" : "blocked",
+      status: "running",
       error: accepted ? null : `Approval ${approval.status}: ${approval.title}`,
       report: accepted
         ? clearApprovalOnlyReport(context.run.report)
@@ -644,7 +644,7 @@ export function createCodexBridge(deps: {
       event({
         sessionId: context.childSession.parentSessionId ?? context.run.parentSessionId,
         turnId: context.childSession.parentTurnId ?? context.run.parentTurnId ?? approval.turnId ?? undefined,
-        name: accepted ? "subagent.started" : "subagent.blocked",
+        name: accepted ? "subagent.started" : "subagent.progress",
         source: "server",
         action: approval.kind,
         appId: context.childSession.appId,

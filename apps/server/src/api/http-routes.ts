@@ -260,6 +260,7 @@ function normalizeRoutePath(pathValue: string): string {
     [/^\/v1\/create-improve-runs\/[^/]+\/actions$/, "/v1/create-improve-runs/:runId/actions"],
     [/^\/v1\/create-improve-runs\/[^/]+$/, "/v1/create-improve-runs/:runId"],
     [/^\/v1\/sessions\/[^/]+\/turns\/interrupt$/, "/v1/sessions/:sessionId/turns/interrupt"],
+    [/^\/v1\/sessions\/[^/]+\/goals\/pause$/, "/v1/sessions/:sessionId/goals/pause"],
     [/^\/v1\/sessions\/[^/]+\/compact$/, "/v1/sessions/:sessionId/compact"],
     [/^\/v1\/sessions\/[^/]+\/workspace-tools$/, "/v1/sessions/:sessionId/workspace-tools"],
     [/^\/v1\/subagents\/[^/]+\/lifecycle$/, "/v1/subagents/:runId/lifecycle"],

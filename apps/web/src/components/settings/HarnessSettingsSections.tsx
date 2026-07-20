@@ -60,8 +60,6 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   subagentsMaxConcurrentRuns: number;
   subagentsMaxConcurrentRunsPerProvider: number | null;
   subagentsMaxConcurrentRunsPerWorkspaceTarget: number | null;
-  subagentsMaxTokens: number | null;
-  subagentsHeartbeatIntervalSeconds: number;
   providers: ProviderSettings | null;
   changeSubagentsProvider: (provider: ChatProvider) => void;
   setSubagentsEnabled: (value: boolean) => void;
@@ -71,13 +69,9 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   setSubagentsMaxConcurrentRuns: (value: number) => void;
   setSubagentsMaxConcurrentRunsPerProvider: (value: number | null) => void;
   setSubagentsMaxConcurrentRunsPerWorkspaceTarget: (value: number | null) => void;
-  setSubagentsMaxTokens: (value: number | null) => void;
-  setSubagentsHeartbeatIntervalSeconds: (value: number) => void;
   setSubagentRoleEnabled: (roleId: string, enabled: boolean) => void;
   setSubagentRoleIsolationMode: (roleId: string, isolationMode: SubagentIsolationMode) => void;
   setSubagentRoleMaxConcurrentRuns: (roleId: string, value: number) => void;
-  setSubagentRoleMaxTokens: (roleId: string, value: number | null) => void;
-  setSubagentRoleMaxTurns: (roleId: string, value: number | null) => void;
   setSubagentRoleModel: (roleId: string, model: string) => void;
   setSubagentRolePeerMessages: (roleId: string, peerMessages: SubagentPeerMessages) => void;
   setSubagentRoleToolPolicy: (roleId: string, toolPolicy: SubagentToolPolicy) => void;
@@ -321,8 +315,6 @@ export function SubagentsSettingsSection({
   subagentsMaxConcurrentRuns,
   subagentsMaxConcurrentRunsPerProvider,
   subagentsMaxConcurrentRunsPerWorkspaceTarget,
-  subagentsMaxTokens,
-  subagentsHeartbeatIntervalSeconds,
   preferences,
   providers,
   saving,
@@ -335,13 +327,9 @@ export function SubagentsSettingsSection({
   setSubagentsMaxConcurrentRuns,
   setSubagentsMaxConcurrentRunsPerProvider,
   setSubagentsMaxConcurrentRunsPerWorkspaceTarget,
-  setSubagentsMaxTokens,
-  setSubagentsHeartbeatIntervalSeconds,
   setSubagentRoleEnabled,
   setSubagentRoleIsolationMode,
   setSubagentRoleMaxConcurrentRuns,
-  setSubagentRoleMaxTokens,
-  setSubagentRoleMaxTurns,
   setSubagentRoleModel,
   setSubagentRolePeerMessages,
   setSubagentRoleToolPolicy,
@@ -366,8 +354,6 @@ export function SubagentsSettingsSection({
       maxConcurrentRuns: subagentsMaxConcurrentRuns,
       maxConcurrentRunsPerProvider: subagentsMaxConcurrentRunsPerProvider,
       maxConcurrentRunsPerWorkspaceTarget: subagentsMaxConcurrentRunsPerWorkspaceTarget,
-      maxTokens: subagentsMaxTokens,
-      heartbeatIntervalSeconds: subagentsHeartbeatIntervalSeconds,
     },
     preferences,
   );
@@ -568,30 +554,6 @@ export function SubagentsSettingsSection({
                       onChange={(event) => setSubagentRoleMaxConcurrentRuns(role.id, numberOrDefault(event.target.value, 1))}
                     />
                   </label>
-                  <label className="settings-select-field">
-                    <span>Turn cap</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={role.maxTurns ?? ""}
-                      placeholder="No cap"
-                      disabled={roleDisabled}
-                      onChange={(event) => setSubagentRoleMaxTurns(role.id, nullableNumber(event.target.value))}
-                    />
-                  </label>
-                  <label className="settings-select-field">
-                    <span>Token cap</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10_000_000}
-                      value={role.maxTokens ?? ""}
-                      placeholder="No cap"
-                      disabled={roleDisabled}
-                      onChange={(event) => setSubagentRoleMaxTokens(role.id, nullableNumber(event.target.value))}
-                    />
-                  </label>
                 </div>
               </section>
             );
@@ -602,7 +564,7 @@ export function SubagentsSettingsSection({
           <div className="subagent-settings-card-header">
             <div>
               <span>Limits</span>
-              <small>Controls child worker concurrency and background status checks.</small>
+              <small>Controls child worker concurrency.</small>
             </div>
           </div>
           <div className="subagent-field-grid four">
@@ -640,30 +602,6 @@ export function SubagentsSettingsSection({
                 disabled={saving || !subagentsEnabled}
                 onChange={(event) => setSubagentsMaxConcurrentRunsPerWorkspaceTarget(nullableNumber(event.target.value))}
               />
-            </label>
-            <label className="settings-select-field">
-              <span>Total token cap</span>
-              <input
-                type="number"
-                min={1}
-                max={50_000_000}
-                value={subagentsMaxTokens ?? ""}
-                placeholder="No cap"
-                disabled={saving || !subagentsEnabled}
-                onChange={(event) => setSubagentsMaxTokens(nullableNumber(event.target.value))}
-              />
-            </label>
-            <label className="settings-select-field">
-              <span>Background check seconds</span>
-              <input
-                type="number"
-                min={10}
-                max={3600}
-                value={subagentsHeartbeatIntervalSeconds}
-                disabled={saving || !subagentsEnabled}
-                onChange={(event) => setSubagentsHeartbeatIntervalSeconds(numberOrDefault(event.target.value, 60))}
-              />
-              <small>OpenPond checks active child workers at this cadence. It does not wake the parent model every interval.</small>
             </label>
           </div>
         </section>
@@ -788,8 +726,6 @@ function subagentSettingsEqual(
     maxConcurrentRuns: number;
     maxConcurrentRunsPerProvider: number | null;
     maxConcurrentRunsPerWorkspaceTarget: number | null;
-    maxTokens: number | null;
-    heartbeatIntervalSeconds: number;
   },
   preferences: BootstrapPayload["preferences"],
 ): boolean {
@@ -801,8 +737,6 @@ function subagentSettingsEqual(
     current.maxConcurrentRuns === saved.maxConcurrentRuns &&
     current.maxConcurrentRunsPerProvider === saved.maxConcurrentRunsPerProvider &&
     current.maxConcurrentRunsPerWorkspaceTarget === saved.maxConcurrentRunsPerWorkspaceTarget &&
-    current.maxTokens === saved.maxTokens &&
-    current.heartbeatIntervalSeconds === saved.heartbeatIntervalSeconds &&
     JSON.stringify(current.roles) === JSON.stringify(saved.roles)
   );
 }

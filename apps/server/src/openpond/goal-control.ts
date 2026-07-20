@@ -16,9 +16,7 @@ export type OpenPondGoalSubagentRunSummary = {
   childSessionId: string | null;
   roleId: string;
   status: string;
-  required: boolean;
   objective: string;
-  reviewStatus: string | null;
   updatedAt: string | null;
   cleanupStatus: string | null;
   archiveStatus: string | null;
@@ -33,26 +31,15 @@ export type OpenPondGoalSubagentState = {
   source: "subagent_runs";
   updatedAt: string;
   totalCount: number;
-  requiredCount: number;
-  optionalCount: number;
   activeCount: number;
-  submittedForReviewCount: number;
-  needsRevisionCount: number;
-  needsUserInputCount: number;
-  acceptedCount: number;
-  blockingCount: number;
+  completedCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  needsResumeCount: number;
   terminalCount: number;
   cleanupNeededCount: number;
   archivedCount: number;
   unresolvedCount: number;
-  requiredActiveCount: number;
-  requiredSubmittedForReviewCount: number;
-  requiredNeedsRevisionCount: number;
-  requiredNeedsUserInputCount: number;
-  requiredAcceptedCount: number;
-  requiredBlockingCount: number;
-  requiredArchivedCount: number;
-  requiredUnresolvedCount: number;
   runs: OpenPondGoalSubagentRunSummary[];
 };
 
@@ -76,6 +63,7 @@ export type OpenPondGoalControlGoal = {
   source: "model_tool";
   createdAt: string;
   updatedAt: string;
+  activeSinceAt?: string;
   restartedFromGoalId?: string | null;
   targetGoalId?: string | null;
   timeUsedSeconds?: number;
@@ -102,7 +90,12 @@ export function runOpenPondGoalControl(input: {
 }): OpenPondGoalControlResult {
   const action = input.request.action;
   const reason = cleanRequired(input.request.reason, "reason");
-  const targetGoalId = cleanOptional(input.request.targetGoalId);
+  // Some model providers synthesize placeholder ids such as "new" for a start
+  // call even though a new goal does not have an id yet. Start is already
+  // protected by the current nonterminal-goal check below, so ignoring every
+  // supplied target for this action is both safer and more robust than failing
+  // the user's first goal turn on a meaningless placeholder.
+  const targetGoalId = action === "start" ? null : cleanOptional(input.request.targetGoalId);
   const targetGoal = input.targetGoal !== undefined
     ? input.targetGoal
     : targetGoalId
@@ -118,11 +111,6 @@ export function runOpenPondGoalControl(input: {
   const normalizedPreviousStatus = normalizeOpenPondGoalStatus(previousStatus);
 
   if (action === "start") {
-    if (targetGoalId) {
-      throw new Error(
-        "targetGoalId cannot be used with start. Continue the targeted goal, or use restart to begin a new attempt for it.",
-      );
-    }
     if (targetGoal && !isTerminalGoalStatus(normalizedPreviousStatus)) {
       const currentGoalId = stringValue(targetGoal.id) ?? "unknown";
       const currentStatus = normalizedPreviousStatus ?? previousStatus ?? "active";
@@ -137,12 +125,12 @@ export function runOpenPondGoalControl(input: {
       objective,
       reason,
       mode,
-      status: "queued",
+      status: "running",
       targetGoal: null,
       previousStatus: null,
       now,
     });
-    return controlResult({ action, goal, previousGoal: null, nextStep: "OpenPond goal queued." });
+    return controlResult({ action, goal, previousGoal: null, nextStep: "OpenPond goal started." });
   }
 
   if (!targetGoal) {
@@ -162,7 +150,7 @@ export function runOpenPondGoalControl(input: {
       objective,
       reason,
       mode,
-      status: "queued",
+      status: "running",
       targetGoal,
       previousStatus,
       now,
@@ -195,7 +183,7 @@ export function runOpenPondGoalControl(input: {
       objective,
       reason,
       mode,
-      status: "queued",
+      status: "running",
       targetGoal,
       previousStatus,
       now,
@@ -277,17 +265,30 @@ function createControlledGoal(input: {
     source: "model_tool",
     createdAt: stringValue(input.targetGoal?.createdAt) ?? input.now,
     updatedAt: input.now,
+    ...(input.status === "running" ? { activeSinceAt: input.now } : {}),
     targetGoalId: stringValue(input.targetGoal?.id),
     restartedFromGoalId: input.restartedFromGoalId,
-    ...preservedUsage(input.targetGoal),
+    ...preservedUsage(input.targetGoal, input.now),
   };
 }
 
-function preservedUsage(goal: Record<string, unknown> | null): Pick<
+function preservedUsage(goal: Record<string, unknown> | null, observedAt: string): Pick<
   OpenPondGoalControlGoal,
   "timeUsedSeconds" | "tokensUsed" | "tokenBudget"
 > {
-  const timeUsedSeconds = numberValue(goal?.timeUsedSeconds) ?? numberValue(goal?.time_used_seconds);
+  const reportedTimeUsedSeconds = numberValue(goal?.timeUsedSeconds) ?? numberValue(goal?.time_used_seconds);
+  const goalStatus = stringValue(goal?.status);
+  const activeSinceAt = stringValue(goal?.activeSinceAt) ?? stringValue(goal?.active_since_at);
+  const createdAt = stringValue(goal?.createdAt) ?? stringValue(goal?.created_at);
+  const activeStartedAt = activeSinceAt ?? createdAt;
+  const startedAtMs = activeStartedAt ? Date.parse(activeStartedAt) : Number.NaN;
+  const observedAtMs = Date.parse(observedAt);
+  const elapsedTimeUsedSeconds = goalStatus === "running" && Number.isFinite(startedAtMs) && Number.isFinite(observedAtMs) && observedAtMs > startedAtMs
+    ? Math.floor((observedAtMs - startedAtMs) / 1_000)
+    : null;
+  const timeUsedSeconds = elapsedTimeUsedSeconds === null
+    ? reportedTimeUsedSeconds
+    : (reportedTimeUsedSeconds ?? 0) + elapsedTimeUsedSeconds;
   const tokensUsed = numberValue(goal?.tokensUsed) ?? numberValue(goal?.tokens_used);
   const tokenBudget = numberValue(goal?.tokenBudget) ?? numberValue(goal?.token_budget);
   return {

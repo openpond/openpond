@@ -157,15 +157,15 @@ describe("codex bridge usage ledger", () => {
       method: "item/commandExecution/requestApproval",
       params: {
         turnId: "turn_child",
-        command: "pnpm test tests/turn-runner-subagents.test.ts",
+        command: "pnpm test tests/subagent-child-lifecycle.test.ts",
         reason: "Validate child subagent changes.",
       },
     } as any);
-    await waitFor(() => events.some((event) => event.name === "subagent.blocked" && event.sessionId === "session_parent"));
+    await waitFor(() => events.some((event) => event.name === "subagent.progress" && event.sessionId === "session_parent"));
 
     expect(runs[0]).toMatchObject({
-      status: "blocked",
-      error: "Waiting for approval: pnpm test tests/turn-runner-subagents.test.ts",
+      status: "running",
+      error: "Waiting for approval: pnpm test tests/subagent-child-lifecycle.test.ts",
       metadata: {
         pendingApproval: {
           sessionId: "session_child",
@@ -173,9 +173,9 @@ describe("codex bridge usage ledger", () => {
         },
       },
     });
-    expect(events.find((event) => event.name === "subagent.blocked" && event.sessionId === "session_parent")).toMatchObject({
+    expect(events.find((event) => event.name === "subagent.progress" && event.sessionId === "session_parent")).toMatchObject({
       status: "pending",
-      output: "Subagent research is waiting for approval: pnpm test tests/turn-runner-subagents.test.ts",
+      output: "Subagent research is waiting for approval: pnpm test tests/subagent-child-lifecycle.test.ts",
       data: {
         childSessionId: "session_child",
         parentGoalId: "goal_parent",
