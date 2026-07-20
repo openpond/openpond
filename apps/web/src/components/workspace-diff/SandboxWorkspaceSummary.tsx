@@ -10,6 +10,7 @@ import type {
   SandboxRecord,
 } from "../../lib/sandbox-types";
 import { LoaderCircle, Plug, RefreshCw, Trash2 } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type IntegrationBusyState = "load" | `attach:${string}` | `remove:${string}` | null;
 
@@ -26,6 +27,8 @@ export function SandboxWorkspaceSummary({
   const [integrationBusy, setIntegrationBusy] = useState<IntegrationBusyState>(null);
   const [error, setError] = useState<string | null>(null);
   const [integrationError, setIntegrationError] = useState<string | null>(null);
+  useErrorToast(error, { prefix: "Sandbox" });
+  useErrorToast(integrationError, { prefix: "Sandbox integrations" });
 
   const integrationLeases = sandbox?.integrationLeases ?? [];
   const availableIntegrationConnections = useMemo(
@@ -162,7 +165,6 @@ export function SandboxWorkspaceSummary({
             </button>
           </div>
         </div>
-        {error ? <div className="sandbox-workspace-error">{error}</div> : null}
         {sandbox ? (
           <dl className="sandbox-workspace-kv">
             <div>
@@ -225,7 +227,6 @@ export function SandboxWorkspaceSummary({
             </button>
           </div>
         </div>
-        {integrationError ? <div className="sandbox-workspace-error">{integrationError}</div> : null}
         {integrationLeases.length > 0 ? (
           <div className="sandbox-workspace-integration-list">
             {integrationLeases.map((lease) => (

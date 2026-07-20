@@ -167,7 +167,7 @@ export function TrainingSourceStep({
               <ChatOption key={entry.sessionId} entry={entry} checked={false} estimatesBySessionId={estimatesBySessionId} onToggleSession={onToggleSession} showSnippet={Boolean(search.trim())} />
             ))}
             {searchLoading ? <div className="training-chat-search-state"><Loader2 className="spin" size={15} /><span>{visibleSessions.length ? "Loading more chats…" : "Searching chats…"}</span></div> : null}
-            {searchError ? <p className="training-empty">{searchError}</p> : null}
+            {searchError ? <p className="training-empty">Chat search is unavailable. Try again.</p> : null}
             {!searchLoading && !searchError && !visibleSessions.length ? <p className="training-empty">{searchIndexing ? "No matches yet. Message indexing is still running." : "No completed chats match this search."}</p> : null}
           </div>
 

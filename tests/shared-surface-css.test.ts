@@ -79,7 +79,10 @@ describe("shared surface stylesheet ownership", () => {
     expect(sharedCss).toContain(
       ".training-existing-dataset-list>button.selected{border-color:var(--border);background:transparent}",
     );
-    expect(sharedCss).toContain(".selected>.training-choice-indicator");
+    expect(sharedCss).toContain(
+      ".selected>.training-choice-indicator{\n  width:15px;\n  height:15px;\n  border:0;\n  background:var(--cyan)",
+    );
+    expect(sharedCss).not.toContain(".selected>.training-choice-indicator::after");
     expect(sharedCss).not.toContain(
       "button.selected{\n  border-color:color-mix(in srgb,var(--cyan)",
     );

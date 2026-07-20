@@ -26,6 +26,7 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { ArrowUpRight, Loader2, RefreshCw } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type UsageRangeFilter = "7d" | "30d" | "90d" | "all";
 
@@ -212,6 +213,7 @@ export function UsageSettingsContent({
   onRefresh,
   onOpenSourceSession,
 }: UsageSettingsContentProps) {
+  useErrorToast(error);
   const chart = useMemo(() => buildUsageChart(summary?.daily ?? []), [summary]);
   const threadTableColumns = useMemo(
     () => withSourceActionColumn(threadColumns, onOpenSourceSession, (row) => row.sessionId, "Open thread"),
@@ -280,12 +282,6 @@ export function UsageSettingsContent({
           </select>
         </label>
       </div>
-
-      {error ? (
-        <div className="settings-footnote usage-load-state">
-          <span>{error}</span>
-        </div>
-      ) : null}
 
       <UsageMetrics totals={totals} loading={loading && !summary} />
 

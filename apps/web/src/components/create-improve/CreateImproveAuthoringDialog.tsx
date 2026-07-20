@@ -1,6 +1,4 @@
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -29,6 +27,7 @@ import type {
 import type { useTraining } from "../../hooks/useTraining";
 import { normalizeChatModel } from "../../lib/app-models";
 import { ArrowLeft, Loader2, X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "../training/training-flow";
 import { TrainingAutomaticCandidatesStep } from "../training/TrainingAutomaticCandidatesStep";
 import { TrainingAutomaticScopeStep } from "../training/TrainingAutomaticScopeStep";
@@ -44,10 +43,6 @@ import {
 
 type TrainingController = ReturnType<typeof useTraining>;
 const CHAT_SEARCH_PAGE_SIZE = 20;
-const TrainingComputeDialog = lazy(() =>
-  import("../training/TrainingComputeDialog").then((module) => ({
-    default: module.TrainingComputeDialog,
-  })));
 
 export type CreateImproveAuthoringTarget = TaskCreationSnapshot["request"]["targetIntent"];
 
@@ -57,6 +52,7 @@ export function CreateImproveAuthoringDialog({
   initialObjective,
   initialSessionIds = [],
   onClose,
+  onOpenComputeSettings,
   onModelCreatedFromTaskset,
   onTasksetCreated,
   preferences,
@@ -73,6 +69,7 @@ export function CreateImproveAuthoringDialog({
   initialObjective: string | null;
   initialSessionIds?: string[];
   onClose: () => void;
+  onOpenComputeSettings: () => void;
   onModelCreatedFromTaskset?: (
     taskset: Taskset,
     run: CreateImproveRun,
@@ -137,8 +134,9 @@ export function CreateImproveAuthoringDialog({
   const [evidenceChanged, setEvidenceChanged] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [authoringError, setAuthoringError] = useState<string | null>(null);
+  useErrorToast(searchError, { prefix: "Chat search" });
+  useErrorToast(authoringError);
   const [preparingScan, setPreparingScan] = useState(false);
-  const [computeOpen, setComputeOpen] = useState(false);
   const [activeMinerRunId, setActiveMinerRunId] = useState<string | null>(null);
   const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
   const [minerConfig, setMinerConfig] = useState<TaskMinerConfig>(() => training.payload?.minerConfig ?? defaultMinerConfig());
@@ -592,6 +590,11 @@ export function CreateImproveAuthoringDialog({
     onClose();
   }
 
+  async function openComputeSettings() {
+    await closeDialog();
+    onOpenComputeSettings();
+  }
+
   async function createTaskset() {
     if (!creation || creation.state !== "awaiting_materialization_approval") return;
     setAuthoringError(null);
@@ -649,7 +652,7 @@ export function CreateImproveAuthoringDialog({
             value={preferredBaseModelKey}
             onChange={setPreferredBaseModelKey}
             onContinue={continueFromBaseModel}
-            onManage={() => setComputeOpen(true)}
+            onManage={() => void openComputeSettings()}
             onScan={() => void training.actions.scanBaseModels()}
           />
         ) : step === "existing_dataset" ? (
@@ -775,34 +778,7 @@ export function CreateImproveAuthoringDialog({
             {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>Preparing the recommendation…</p></>}
           </div>
         )}
-        {authoringError ? <div className="training-banner error" role="alert">{authoringError}</div> : null}
       </section>
-      {computeOpen ? (
-        <Suspense fallback={(
-          <div className="training-dialog-backdrop training-compute-dialog-backdrop">
-            <section
-              aria-label="Loading local model manager"
-              aria-modal="true"
-              className="training-dialog"
-              role="dialog"
-            >
-              <div className="training-dialog-header">
-                <div>
-                  <h2>Manage local models</h2>
-                  <p>Loading compute inventory…</p>
-                </div>
-                <Loader2 className="spin" size={16} />
-              </div>
-            </section>
-          </div>
-        )}>
-          <TrainingComputeDialog
-            connection={training.connection}
-            onCandidatesChanged={training.refresh}
-            onClose={() => setComputeOpen(false)}
-          />
-        </Suspense>
-      ) : null}
     </div>
   );
 }

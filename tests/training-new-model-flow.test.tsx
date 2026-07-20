@@ -89,7 +89,8 @@ describe("New model flow", () => {
     expect(html).toContain("Non-production");
     expect(html).toContain("Manage local models");
     expect(html).toContain("Scan this machine");
-    expect(html).toContain("training-base-model-actions");
+    expect(html).toContain("training-dialog-actions training-base-model-actions");
+    expect(html).not.toContain("training-inline-actions training-base-model-actions");
     expect(html).not.toContain("Only verified trainable weights");
     expect(html).not.toContain("training-base-model-toolbar");
     expect(html).not.toContain("<select");
@@ -369,6 +370,7 @@ function dialogProps() {
     defaultModel: { providerId: "custom-openai-compatible" as const, modelId: "fixture-author" },
     initialSessionIds: [],
     onClose: () => undefined,
+    onOpenComputeSettings: () => undefined,
     onTasksetCreated: () => undefined,
     preferences: { defaultModelRef: null, creationMode: "defaults" as const, autoApproveEvidence: false },
     providerSettings: null,

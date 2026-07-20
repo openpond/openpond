@@ -10,6 +10,7 @@ import type {
 import { useEffect, useMemo, useState } from "react";
 import "../../styles/insights/insights.css";
 import { CheckCircle2, RefreshCw, X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export type InsightsViewProps = {
   enabled: boolean;
@@ -40,6 +41,7 @@ export function InsightsView({
   onPatchStatus,
   onOpenSession,
 }: InsightsViewProps) {
+  useErrorToast(error);
   const [statusFilter, setStatusFilter] = useState<InsightStatus | "all">("all");
   const [severityFilter, setSeverityFilter] = useState<InsightSeverity | "all">("all");
   const [sourceFilter, setSourceFilter] = useState<InsightEvidenceSource | "all">("all");
@@ -151,8 +153,6 @@ export function InsightsView({
           </div>
         </div>
       ) : null}
-
-      {error ? <div className="insights-error">{error}</div> : null}
 
       <InsightRuns
         runs={filteredRuns}

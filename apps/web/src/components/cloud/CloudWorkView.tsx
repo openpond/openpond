@@ -35,6 +35,7 @@ import {
   createPipelineAgentIdFromObjective,
   createPipelineSourceRootPathForAgent,
 } from "../../lib/create-pipeline-request";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type CloudTaskTab = "tasks" | "reviews" | "archive";
 
@@ -434,6 +435,7 @@ export function CloudWorkView({
   onApplyLocalPatch,
   onShowFiles,
 }: CloudWorkViewProps) {
+  useErrorToast(error);
   const [homePrompt, setHomePrompt] = useState("");
   const [threadPrompt, setThreadPrompt] = useState("");
   const homeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -679,7 +681,6 @@ export function CloudWorkView({
             <ArrowUp size={17} />
           </button>
         </div>
-        {error && <div className="cloud-error">{error}</div>}
       </section>
     );
   }
@@ -822,7 +823,6 @@ export function CloudWorkView({
           )}
           {loading && <p className="cloud-empty">Loading tasks...</p>}
         </div>
-        {error && <div className="cloud-error">{error}</div>}
       </div>
     </section>
   );

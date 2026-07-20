@@ -40,25 +40,6 @@ export function TrainingBaseModelStep({
             export, and spend are confirmed separately for each Version.
           </p>
         </div>
-        <div className="training-inline-actions training-base-model-actions">
-          <button
-            className="training-button secondary"
-            type="button"
-            onClick={onManage}
-          >
-            <Boxes size={14} />
-            Manage local models
-          </button>
-          <button
-            className="training-button secondary"
-            type="button"
-            disabled={busy}
-            onClick={onScan}
-          >
-            {busy ? <Loader2 className="spin" size={14} /> : <RefreshCw size={14} />}
-            {busy ? "Scanning" : "Scan this machine"}
-          </button>
-        </div>
         <div
           aria-label="Available base models"
           className="training-base-model-groups"
@@ -96,7 +77,24 @@ export function TrainingBaseModelStep({
           silently switch its base model or provider.
         </p>
       </div>
-      <div className="training-dialog-actions">
+      <div className="training-dialog-actions training-base-model-actions">
+        <button
+          className="training-button secondary"
+          type="button"
+          onClick={onManage}
+        >
+          <Boxes size={14} />
+          Manage local models
+        </button>
+        <button
+          className="training-button secondary"
+          type="button"
+          disabled={busy}
+          onClick={onScan}
+        >
+          {busy ? <Loader2 className="spin" size={14} /> : <RefreshCw size={14} />}
+          {busy ? "Scanning" : "Scan this machine"}
+        </button>
         <button
           className="training-button"
           type="button"

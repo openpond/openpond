@@ -26,6 +26,7 @@ import {
   resolveDefaultOpenPondOrganization,
 } from "../lib/cloud-project-utils";
 import { isSameConnection } from "../lib/layout";
+import { isConnectionErrorMessage } from "../lib/error-messages";
 import type { OpenPondOrganization } from "../lib/organization-types";
 import {
   openPondOrganizationCacheKey,
@@ -518,7 +519,11 @@ export function useAppBootstrap(params: {
     const payload = await api.bootstrap(nextConnection);
     applyBootstrapPayload(payload);
     completeStartup();
-    setError((current) => (current === "Failed to fetch" || current === "Event stream disconnected" ? null : current));
+    setError((current) =>
+      current && (isConnectionErrorMessage(current) || current === "Event stream disconnected")
+        ? null
+        : current
+    );
   }, [applyBootstrapPayload, completeStartup, setBlockingStartupStage, setError]);
 
   useEffect(() => {

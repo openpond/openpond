@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pause, Play, RefreshCw, RotateCcw } from "lucide-react";
 import type { LocalAgentSchedule } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
+import { useErrorToast } from "../../app/AppToastContext";
 
 const LOCAL_SCHEDULE_REFRESH_INTERVAL_MS = 5000;
 
@@ -19,6 +20,7 @@ export function LocalAgentSchedulesPanel({
     schedules: localSchedules,
     toggle: toggleLocalSchedule,
   } = useLocalAgentSchedules(connection);
+  useErrorToast(localSchedulesError, { prefix: "Local schedules" });
 
   return (
     <section className="agent-schedule-section" aria-label="Local schedules">
@@ -42,12 +44,14 @@ export function LocalAgentSchedulesPanel({
         <div className="agent-create-empty">
           <p>Connect to the local OpenPond server before viewing schedules.</p>
         </div>
-      ) : localSchedulesError ? (
-        <div className="agent-create-error">{localSchedulesError}</div>
       ) : null}
       {connection && localSchedulesLoading && localSchedules.length === 0 ? (
         <div className="agent-create-loading compact" aria-label="Loading local schedules" role="status">
           <span />
+        </div>
+      ) : connection && localSchedulesError && localSchedules.length === 0 ? (
+        <div className="agent-create-empty">
+          <p>Local schedules are unavailable. Use Refresh to try again.</p>
         </div>
       ) : connection && localSchedules.length === 0 ? (
         <div className="agent-create-empty">
