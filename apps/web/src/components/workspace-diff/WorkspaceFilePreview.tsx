@@ -10,6 +10,7 @@ import {
   normalizeWorkspaceDiffPath,
 } from "./workspace-diff-panel-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
+import { useErrorToast } from "../../app/AppToastContext";
 
 const FILE_TRUNCATED_MARKER = "\n\n[file truncated]";
 const MonacoFileEditor = lazy(() => import("./WorkspaceMonacoEditor"));
@@ -124,6 +125,8 @@ export function FilePreview({
   workspaceName: string | null;
   workspaceRootPath?: string | null;
 }) {
+  useErrorToast(error, { prefix: "File preview" });
+  useErrorToast(saveError, { prefix: "Save failed" });
   const displayContent = draftContent ?? file.content ?? "";
   const lines = useMemo(() => displayContent.split("\n").slice(0, 800), [displayContent]);
   const language = languageForPath(file.path);
@@ -198,10 +201,9 @@ export function FilePreview({
           <span className="diff-deletion">-{file.deletions}</span>
         </div>
         {saving ? <span className="workspace-file-save-state">Saving</span> : null}
-        {saveError ? <span className="workspace-file-save-error" title={saveError}>Save failed</span> : null}
       </div>
       {!hasContent ? (
-        <div className="workspace-diff-code-empty">{loading ? "Loading file content" : (error ?? "No file content available.")}</div>
+        <div className="workspace-diff-code-empty">{loading ? "Loading file content" : "No file content available."}</div>
       ) : shouldRenderMarkdown ? (
         <div className="workspace-markdown-preview">
           <MarkdownText content={displayContent} />

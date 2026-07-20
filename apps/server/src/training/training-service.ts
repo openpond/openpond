@@ -41,6 +41,7 @@ import type { FireworksRftEvaluatorProvisioner } from "./fireworks-rft-evaluator
 import { createCrossSystemExpertBootstrapService } from "./cross-system-operations/expert-bootstrap-service.js";
 import { createFireworksServingService } from "./fireworks-serving-service.js";
 import { selectPortableModelArtifacts } from "./training-artifact-package.js";
+import { projectBaseModelCandidates } from "./base-model-candidates.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
@@ -344,7 +345,33 @@ export function createTrainingService(deps: {
 
   async function state(profileId?: string) {
     await Promise.all([fireworks.reconcile(), fireworksServing.reconcile()]);
-    const [plans, bundles, jobs, artifacts, models, rolloutReceipts, modelBindings, servingSessions, destinationCapabilities, secretRefs, fireworksCredential] = await Promise.all([deps.store.listTrainingPlans(), deps.store.listTrainingBundles(), deps.store.listTrainingJobs(), deps.store.listTrainingArtifacts(), deps.store.listModelArtifactLineage(), deps.store.listRolloutTrajectoryReceipts(), deps.store.listModelBindings(), fireworksServing.list(profileId), destinations(), listTrainingDestinationSecretRefs(path.join(deps.storeDir, "secrets")), deps.resolveFireworksCredential?.() ?? Promise.resolve(null)]);
+    const [
+      plans,
+      bundles,
+      jobs,
+      artifacts,
+      models,
+      rolloutReceipts,
+      modelBindings,
+      servingSessions,
+      destinationCapabilities,
+      computeInventory,
+      secretRefs,
+      fireworksCredential,
+    ] = await Promise.all([
+      deps.store.listTrainingPlans(),
+      deps.store.listTrainingBundles(),
+      deps.store.listTrainingJobs(),
+      deps.store.listTrainingArtifacts(),
+      deps.store.listModelArtifactLineage(),
+      deps.store.listRolloutTrajectoryReceipts(),
+      deps.store.listModelBindings(),
+      fireworksServing.list(profileId),
+      destinations(),
+      deps.computeInventory?.() ?? Promise.resolve(null),
+      listTrainingDestinationSecretRefs(path.join(deps.storeDir, "secrets")),
+      deps.resolveFireworksCredential?.() ?? Promise.resolve(null),
+    ]);
     return {
       plans,
       bundles,
@@ -355,6 +382,10 @@ export function createTrainingService(deps: {
       modelBindings,
       servingSessions,
       destinations: destinationCapabilities,
+      baseModelCandidates: projectBaseModelCandidates({
+        destinations: destinationCapabilities,
+        inventory: computeInventory,
+      }),
       credentialRefs: [
         ...secretRefs.filter((credential) => credential.destinationId !== "fireworks"),
         {

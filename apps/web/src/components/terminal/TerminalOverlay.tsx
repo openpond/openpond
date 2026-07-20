@@ -18,6 +18,7 @@ import {
   type TerminalServerMessage,
   type TerminalTab,
 } from "./terminal-overlay-types";
+import { useErrorToast } from "../../app/AppToastContext";
 
 const SUCCESS_STATUS_VISIBLE_MS = 6000;
 
@@ -47,6 +48,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   const [activeTabIdsByScope, setActiveTabIdsByScope] = useState<Record<string, string | null>>({});
   const [socketOpen, setSocketOpen] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  useErrorToast(connectionError, { prefix: "Terminal" });
   const [socketRetryKey, setSocketRetryKey] = useState(0);
   const nextTabIndexRef = useRef(1);
   const terminalsRef = useRef<Map<string, TerminalHandle>>(new Map());
@@ -484,7 +486,6 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           </button>
           <div className="guake-terminal-spacer" />
           {activeTab?.detail && <div className="guake-terminal-cwd">{activeTab.detail}</div>}
-          {connectionError && <div className="guake-terminal-error">{connectionError}</div>}
           <button type="button" className="guake-terminal-icon-button" title="Hide terminal" onClick={onClose}>
             <ChevronDown size={16} />
           </button>

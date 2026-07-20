@@ -7,6 +7,7 @@ import { CommunityComposer } from "./CommunityComposer";
 import { CommunityMessageRow } from "./CommunityMessageRow";
 import { CommunityRulesDialog } from "./CommunityRulesDialog";
 import "../../styles/community/community.css";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export type CommunityViewProps = {
   communities: ReturnType<typeof useCommunities>;
@@ -15,6 +16,12 @@ export type CommunityViewProps = {
 };
 
 export function CommunityView({ communities, chat, currentUserId }: CommunityViewProps) {
+  useErrorToast(communities.discoveryError);
+  useErrorToast(communities.previewError);
+  useErrorToast(communities.membershipError?.message);
+  useErrorToast(chat.channelsError, { prefix: "Channels" });
+  useErrorToast(chat.messagesError, { prefix: "Messages" });
+  useErrorToast(chat.actionError);
   const [rulesMode, setRulesMode] = useState<"join" | "reaccept" | "review" | null>(null);
   const [replyTo, setReplyTo] = useState<CommunityMessage | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -42,7 +49,6 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
           <UserRound size={30} />
           <h1>Discover communities</h1>
           <p>{communities.discoveryLoading && communities.items.length === 0 ? "Finding communities…" : "Preview public conversations and join after accepting each community's rules."}</p>
-          {communities.discoveryError ? <div className="community-state error">{communities.discoveryError}</div> : null}
           {communities.items.length > 0 ? (
             <div className="community-discovery-list">
               {communities.items.map((community) => (
@@ -72,7 +78,7 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
       <section className="community-empty-page">
         <div className="community-empty-card">
           <h1>{communities.selectedSummary.displayName}</h1>
-          <div className="community-state error">{communities.previewError ?? "This community preview is unavailable."}</div>
+          <div className="community-state">This community preview is unavailable.</div>
           <button type="button" onClick={() => communities.selectCommunity(communities.selectedSummary!.id)}><RefreshCw size={14} /> Retry preview</button>
         </div>
       </section>
@@ -80,7 +86,6 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
   }
 
   const activeRules = preview.currentRules;
-  const membershipError = communities.membershipError?.message ?? null;
   return (
     <section className="community-view">
       <header className="community-header">
@@ -124,8 +129,7 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
             <div className="community-realtime-state"><WifiOff size={14} /><span>Live updates are reconnecting. Loaded messages are still available.</span></div>
           ) : null}
           {chat.lostMembership ? <div className="community-state error">Your membership changed. Refresh the community before continuing.</div> : null}
-          {chat.channelsError ? <div className="community-state error">Channels: {chat.channelsError} <button type="button" onClick={() => void chat.loadChannels()}>Retry</button></div> : null}
-          {membershipError ? <div className="community-state error" role="alert">{membershipError}</div> : null}
+          {chat.channelsError ? <button type="button" className="community-state" onClick={() => void chat.loadChannels()}>Retry loading channels</button> : null}
         </div>
 
         <div
@@ -140,7 +144,7 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
         >
           {chat.hasMoreBefore ? <button type="button" className="community-load-older" disabled={chat.olderMessagesLoading} onClick={() => void chat.loadOlder()}>{chat.olderMessagesLoading ? "Loading…" : "Load earlier messages"}</button> : null}
           {chat.messagesLoading && chat.messages.length === 0 ? <div className="community-message-state">Loading messages…</div> : null}
-          {chat.messagesError ? <div className="community-message-state error">Could not load messages: {chat.messagesError} <button type="button" onClick={() => void chat.loadMessages()}>Retry</button></div> : null}
+          {chat.messagesError ? <div className="community-message-state">Messages are unavailable. <button type="button" onClick={() => void chat.loadMessages()}>Retry</button></div> : null}
           {!chat.messagesLoading && !chat.messagesError && chat.messages.length === 0 ? <div className="community-message-state">No messages in this channel yet.</div> : null}
           {chat.messages.map((message) => (
             <CommunityMessageRow
@@ -161,10 +165,9 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
 
         {memberActive ? (
           <div className="community-composer-wrap conversation-composer-shell">
-            {chat.actionError ? <div className="community-composer-action-error">{chat.actionError}</div> : null}
             {chat.failedSend ? (
               <div className="community-failed-send">
-                <span>Message not sent. {chat.failedSend.message}</span>
+                <span>Message not sent.</span>
                 <button type="button" disabled={chat.sending} onClick={() => void chat.retrySend()}>Retry</button>
                 <button type="button" onClick={chat.dismissFailedSend}>Dismiss</button>
               </div>
@@ -187,7 +190,6 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
           rules={activeRules}
           mode={rulesMode}
           busy={communities.membershipBusy}
-          error={membershipError}
           onAccept={rulesMode === "join" ? communities.join : communities.acceptRules}
           onClose={() => setRulesMode(null)}
         />

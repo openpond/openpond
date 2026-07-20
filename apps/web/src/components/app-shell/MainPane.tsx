@@ -248,6 +248,7 @@ type MainPaneProps = {
   setView: (view: AppView) => void;
   onOpenProfileSettings: () => void;
   onOpenProviderSettings: () => void;
+  onOpenComputeSettings: () => void;
   changeDraftProvider: (provider: ChatProvider) => void;
   changeProjectTarget: (target: string) => void;
   changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
@@ -436,6 +437,7 @@ export function MainPane({
   setView,
   onOpenProfileSettings,
   onOpenProviderSettings,
+  onOpenComputeSettings,
   changeDraftProvider,
   changeProjectTarget,
   changeWorkspaceTarget,
@@ -1745,6 +1747,7 @@ export function MainPane({
                   onSettingsPreferences: (payload) => {
                     if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
                   },
+                  onOpenComputeSettings,
                   onOpenChat: onOpenInsightsSession,
                   onChatWithModel: onBeginNewChatWithModel,
                   onOpenTasksetFiles: onShowFilesPanel,

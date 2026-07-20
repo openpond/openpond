@@ -4,7 +4,7 @@ import type { ClientConnection, PreferencesPayload } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
 import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
-import { CircleAlert, Loader2, Play, RefreshCw, Settings } from "../icons";
+import { Loader2, Play, RefreshCw, Settings } from "../icons";
 import { TrainingTasksetDetail } from "./TrainingTasksetDetail";
 import { TrainingModels } from "./TrainingModels";
 import { TrainingSuggestions } from "./TrainingSuggestions";
@@ -12,6 +12,7 @@ import { TrainingCreationPanel } from "./TrainingCreationPanel";
 import { CreateImproveAuthoringDialog } from "../create-improve/CreateImproveAuthoringDialog";
 import { TrainingSettingsDialog } from "./TrainingSettingsDialog";
 import "../../styles/training/training.css";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type TrainingController = ReturnType<typeof useTraining>;
 export type TrainingSection = "models" | "evals" | "suggestions";
@@ -28,6 +29,7 @@ export type TrainingViewProps = {
   onError: (message: string | null) => void;
   onToast: ShowAppToast;
   onSettingsPreferences: (payload: PreferencesPayload) => void;
+  onOpenComputeSettings: () => void;
   onOpenChat: (sessionId: string) => void;
   onChatWithModel: (handoff: TrainingModelChatHandoff) => void;
   onOpenTasksetFiles: () => void;
@@ -55,6 +57,7 @@ export function TrainingView({
   onError,
   onToast,
   onSettingsPreferences,
+  onOpenComputeSettings,
   onOpenChat,
   onChatWithModel,
   onOpenTasksetFiles,
@@ -70,6 +73,7 @@ export function TrainingView({
   providerSettings,
   reasoningEffort,
 }: TrainingViewProps) {
+  useErrorToast(training.error);
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const state = training.payload;
@@ -115,7 +119,6 @@ export function TrainingView({
         </div>
       </div>
 
-      {training.error ? <div className="training-banner error"><CircleAlert size={15} />{training.error}</div> : null}
       {training.busyAction ? <div className="training-banner"><Loader2 className="spin" size={15} />Working on {training.busyAction.replaceAll("-", " ")}…</div> : null}
 
       {section === "suggestions" ? (
@@ -155,6 +158,7 @@ export function TrainingView({
           initialObjective={launchRequest?.objective ?? null}
           initialSessionIds={launchRequest?.initialSessionIds ?? []}
           onClose={closeRunDialog}
+          onOpenComputeSettings={onOpenComputeSettings}
           onModelCreatedFromTaskset={finishExistingDatasetModel}
           onTasksetCreated={finishTasksetCreation}
           preferences={preferences}

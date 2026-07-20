@@ -28,16 +28,16 @@ describe("team chat view", () => {
     expect(restoreFailedTeamChatPrompt("First message", "First message")).toBe("First message");
   });
 
-  test("renders accessible loading and failure states with a reload action", () => {
+  test("renders an accessible loading state without placing request failures in the thread", () => {
     const loading = render({ loading: true });
     expect(loading).toContain('role="log"');
     expect(loading).toContain('aria-busy="true"');
     expect(loading).toContain("Loading messages...");
 
     const failed = render({ error: "Could not load messages" });
-    expect(failed).toContain('role="alert"');
-    expect(failed).toContain("Could not load messages");
-    expect(failed).toContain("Retry");
+    expect(failed).not.toContain('role="alert"');
+    expect(failed).not.toContain("Could not load messages");
+    expect(failed).toContain('role="log"');
   });
 
   test("renders the empty state and keeps the team composer available", () => {

@@ -1,5 +1,6 @@
 import { CheckCircle2, Cloud, ExternalLink, Loader2, X } from "../icons";
 import type { MouseEvent } from "react";
+import { useErrorToast } from "../../app/AppToastContext";
 
 export type CloudSetupDialogState = {
   status: "confirm" | "uploading" | "ready" | "error";
@@ -48,6 +49,8 @@ export function CloudSetupDialog({
   onOpenBrowserUrl,
   onStart,
 }: CloudSetupDialogProps) {
+  useErrorToast(state?.previewError, { prefix: "Upload preview" });
+  useErrorToast(state?.error, { prefix: "Cloud setup" });
   if (!state) return null;
   const busy = state.status === "uploading";
   const ready = state.status === "ready";
@@ -116,7 +119,7 @@ export function CloudSetupDialog({
             ) : state.previewError ? (
               <>
                 <strong>Preview unavailable</strong>
-                <span>{state.previewError}</span>
+                <span>Close and reopen setup to try the preview again.</span>
               </>
             ) : preview ? (
               <>
@@ -165,12 +168,6 @@ export function CloudSetupDialog({
                 targetProjectName: state.upload.branch,
               })}
             </span>
-          </div>
-        )}
-
-        {errored && (
-          <div className="cloud-setup-error" role="alert">
-            {state.error ?? "Cloud setup failed."}
           </div>
         )}
 

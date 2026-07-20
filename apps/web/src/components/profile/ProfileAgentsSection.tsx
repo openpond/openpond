@@ -2,6 +2,7 @@ import type { BootstrapPayload, LocalAgentSchedule } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useLocalAgentSchedules } from "../agents/LocalAgentSchedulesPanel";
 import { Bot, Pause, Play, RefreshCw, RotateCcw } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type ProfileState = NonNullable<BootstrapPayload["profile"]>;
 type ProfileAgent = ProfileState["agents"][number];
@@ -20,6 +21,7 @@ export function ProfileAgentsSection({
   selectedDefaultTeamId: string;
 }) {
   const schedules = useLocalAgentSchedules(connection);
+  useErrorToast(schedules.error, { prefix: "Local schedules" });
 
   return (
     <div className="account-list profile-agent-list" aria-label="Profile agents">
@@ -76,11 +78,6 @@ export function ProfileAgentsSection({
           <span>Create an agent, then run Profile checks to add it to the catalog.</span>
         </div>
       )}
-      {schedules.error ? (
-        <div className="profile-footline warning profile-agent-list-note">
-          Local schedules: {schedules.error}
-        </div>
-      ) : null}
     </div>
   );
 }

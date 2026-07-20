@@ -24,6 +24,7 @@ import type {
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
+import { useErrorToast } from "../../app/AppToastContext";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { WorkspaceTargetState } from "../../lib/workspace-location";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
@@ -42,7 +43,7 @@ import { Composer } from "../chat/Composer";
 import type { ComposerProjectTargetState } from "../chat/ComposerControls";
 import { MarkdownText } from "../chat/MarkdownText";
 import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
-import { Bot, MessageSquare, RefreshCw, X } from "../icons";
+import { Bot, MessageSquare, X } from "../icons";
 import { TeamChatMessageRow } from "./TeamChatMessageRow";
 import {
   TeamChatComposerReply,
@@ -158,6 +159,7 @@ export type TeamChatViewProps = {
 };
 
 export function TeamChatView(props: TeamChatViewProps) {
+  useErrorToast(props.error);
   const [prompt, setPrompt] = useState("");
   const [useModel, setUseModel] = useState(false);
   const [replySelection, setReplySelection] = useState<{
@@ -351,15 +353,6 @@ export function TeamChatView(props: TeamChatViewProps) {
   return (
     <section className="team-chat-view">
       <div className="team-chat-main conversation-surface-main">
-        {props.error ? (
-          <div className="team-chat-error" role="alert">
-            <span>{props.error}</span>
-            <button type="button" onClick={() => void props.onRetryLoad()}>
-              <RefreshCw size={14} />
-              Retry
-            </button>
-          </div>
-        ) : null}
         <div
           className="team-chat-messages conversation-message-scroll"
           role="log"

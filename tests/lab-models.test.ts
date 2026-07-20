@@ -168,6 +168,7 @@ describe("Lab Model workspace projection", () => {
       taskset,
       modelId: "model_legacy_first",
       preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModel: managedPreference(),
       timestamp: "2026-07-12T00:00:00.000Z",
     });
     const second = createExistingTasksetModelCreateImproveRun({
@@ -175,6 +176,7 @@ describe("Lab Model workspace projection", () => {
       taskset,
       modelId: "model_legacy_second",
       preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModel: managedPreference(),
       timestamp: "2026-07-13T00:00:00.000Z",
     });
     const draft = createExistingTasksetModelCreateImproveRun({
@@ -182,6 +184,7 @@ describe("Lab Model workspace projection", () => {
       taskset,
       modelId: "model_intentional_new",
       preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModel: managedPreference(),
       timestamp: "2026-07-14T00:00:00.000Z",
     });
     const executed = [
@@ -303,5 +306,17 @@ function lineage(
       keepWarmSeconds: 300,
       updatedAt: null,
     },
+  };
+}
+
+function managedPreference() {
+  return {
+    schemaVersion: "openpond.baseModelPreference.v1" as const,
+    modelId: "accounts/fireworks/models/qwen3-8b",
+    revision: null,
+    tokenizerRevision: null,
+    chatTemplateHash: null,
+    modelAssetId: null,
+    source: "managed" as const,
   };
 }

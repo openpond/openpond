@@ -15,6 +15,7 @@ import { WorkspaceDiffTabs, WorkspaceDiffToolbar } from "./WorkspaceDiffPanelChr
 import { FilePreview } from "./WorkspaceFilePreview";
 import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, sandboxSourceReadbackDiffFromEvents, saveSandboxFile } from "./workspace-diff-file-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
+import { useErrorToast } from "../../app/AppToastContext";
 import {
   WORKSPACE_TEMPLATE_CONFIG_PATH,
   cloneWorkspaceDiffPanelViewState,
@@ -322,6 +323,8 @@ function WorkspaceDiffPanelInner({
   const [lspCheckingPath, setLspCheckingPath] = useState<string | null>(null);
   const [fileLoadingPath, setFileLoadingPath] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  useErrorToast(workspaceError, { prefix: "Workspace" });
+  useErrorToast(sandboxError, { prefix: "Sandbox files" });
   const [fileReloadRequest, setFileReloadRequest] = useState<{ id: number; path: string } | null>(null);
   const [fileSaveErrors, setFileSaveErrors] = useState<Record<string, string>>({});
   const [savingPath, setSavingPath] = useState<string | null>(null);
@@ -1122,7 +1125,7 @@ function WorkspaceDiffPanelInner({
   const emptyMessage = panelLoading
     ? "Loading workspace files"
     : panelError
-      ? panelError
+      ? "Workspace files are unavailable"
       : sandboxMode && !sandboxId
         ? sandboxFileSource?.emptyMessage ?? "No sandbox filesystem is available."
       : waitingForLocalWorkspace

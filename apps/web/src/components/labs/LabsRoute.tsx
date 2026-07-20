@@ -29,6 +29,7 @@ import { LabAgentRenameDialog } from "./LabAgentRenameDialog";
 import { LabDatasetsPage } from "./LabDatasetsPage";
 import { labModelVersions } from "./lab-models";
 import { buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
+import { useErrorToast } from "../../app/AppToastContext";
 import {
   labWorkproductProgression,
 } from "./lab-workproduct-progression";
@@ -144,6 +145,8 @@ export function LabsRoute({
     connection: profileView.connection,
     profileId,
   });
+  useErrorToast(createImprove.error);
+  useErrorToast(training.training.error);
   const modelRunSyncKey = useMemo(
     () => trainingModelRunSyncKey(training.training.payload),
     [training.training.payload]
@@ -398,9 +401,6 @@ export function LabsRoute({
         />
       ) : (
         <div className="labs-flat-body">
-          {createImprove.error ? (
-            <div className="training-banner error">{createImprove.error}</div>
-          ) : null}
           {activeTab === "workproducts" ? (
             <div className="labs-home-profile-controls">
               <ProfileView {...profileView} section="controls" />
@@ -454,6 +454,7 @@ export function LabsRoute({
           initialSessionIds={training.launchRequest.initialSessionIds ?? []}
           localProjects={training.localProjects ?? []}
           onClose={() => training.onLaunchHandled(training.launchRequest!.id)}
+          onOpenComputeSettings={training.onOpenComputeSettings}
           onModelCreatedFromTaskset={async (taskset, run) => {
             training.onLaunchHandled(training.launchRequest!.id);
             training.onSelectedTasksetIdChange(taskset.id);
@@ -487,6 +488,7 @@ export function LabsRoute({
           initialObjective={null}
           localProjects={training.localProjects ?? []}
           onClose={() => setAgentCreateOpen(false)}
+          onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
             const objective = creationObjective(
               creation,
@@ -516,6 +518,7 @@ export function LabsRoute({
           initialObjective={null}
           localProjects={training.localProjects ?? []}
           onClose={() => setDatasetCreateOpen(false)}
+          onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
             setDatasetCreateOpen(false);
             setSelectedKey(null);
@@ -544,6 +547,7 @@ export function LabsRoute({
           initialObjective={agentImprove.initialObjective}
           localProjects={training.localProjects ?? []}
           onClose={() => setAgentImprove(null)}
+          onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
             const objective = creationObjective(
               creation,
@@ -581,6 +585,7 @@ export function LabsRoute({
           initialObjective={resumedModelCreation.request.objective}
           localProjects={training.localProjects ?? []}
           onClose={() => setResumedModelCreation(null)}
+          onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
             await finishModelCreation(
               creation,

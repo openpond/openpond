@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   AppPreferences,
+  BaseModelCandidate,
+  BaseModelPreference,
   ChatModelRef,
   ChatProvider,
   CodexReasoningEffort,
@@ -19,6 +27,7 @@ import type {
 import type { useTraining } from "../../hooks/useTraining";
 import { normalizeChatModel } from "../../lib/app-models";
 import { ArrowLeft, Loader2, X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "../training/training-flow";
 import { TrainingAutomaticCandidatesStep } from "../training/TrainingAutomaticCandidatesStep";
 import { TrainingAutomaticScopeStep } from "../training/TrainingAutomaticScopeStep";
@@ -34,7 +43,6 @@ import {
 
 type TrainingController = ReturnType<typeof useTraining>;
 const CHAT_SEARCH_PAGE_SIZE = 20;
-const DEFAULT_FIREWORKS_BASE_MODEL = "accounts/fireworks/models/qwen3-8b";
 
 export type CreateImproveAuthoringTarget = TaskCreationSnapshot["request"]["targetIntent"];
 
@@ -44,6 +52,7 @@ export function CreateImproveAuthoringDialog({
   initialObjective,
   initialSessionIds = [],
   onClose,
+  onOpenComputeSettings,
   onModelCreatedFromTaskset,
   onTasksetCreated,
   preferences,
@@ -60,6 +69,7 @@ export function CreateImproveAuthoringDialog({
   initialObjective: string | null;
   initialSessionIds?: string[];
   onClose: () => void;
+  onOpenComputeSettings: () => void;
   onModelCreatedFromTaskset?: (
     taskset: Taskset,
     run: CreateImproveRun,
@@ -76,6 +86,7 @@ export function CreateImproveAuthoringDialog({
   targetIntent?: CreateImproveAuthoringTarget;
 }) {
   const initialAuthoringModel = trainingAuthoringModel(preferences, defaultModel);
+  const baseModelCandidates = training.payload?.baseModelCandidates ?? [];
   const restoredSessionIds = sources
     .filter((source) => initialCreation?.request.sourceIds.includes(source.id))
     .map((source) => source.sessionId);
@@ -86,8 +97,12 @@ export function CreateImproveAuthoringDialog({
   const mode: NewModelMode | null =
     setup === "automated" || setup === "manual" ? setup : null;
   const [objective, setObjective] = useState(initialCreation?.request.objective ?? initialObjective ?? "");
-  const [preferredBaseModelId, setPreferredBaseModelId] = useState(
-    initialCreation?.request.preferredBaseModelId ?? DEFAULT_FIREWORKS_BASE_MODEL,
+  const [preferredBaseModelKey, setPreferredBaseModelKey] = useState<string | null>(
+    () => candidateForPreference(
+      baseModelCandidates,
+      initialCreation?.request.preferredBaseModel ?? null,
+      initialCreation?.request.preferredBaseModelId ?? null,
+    )?.selectionKey ?? null,
   );
   const [selectedExistingTasksetId, setSelectedExistingTasksetId] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(initialCreation?.request.candidateId ?? null);
@@ -119,6 +134,8 @@ export function CreateImproveAuthoringDialog({
   const [evidenceChanged, setEvidenceChanged] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [authoringError, setAuthoringError] = useState<string | null>(null);
+  useErrorToast(searchError, { prefix: "Chat search" });
+  useErrorToast(authoringError);
   const [preparingScan, setPreparingScan] = useState(false);
   const [activeMinerRunId, setActiveMinerRunId] = useState<string | null>(null);
   const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
@@ -178,14 +195,13 @@ export function CreateImproveAuthoringDialog({
   const scanning = preparingScan || Boolean(activeMinerRun && ["queued", "running", "cancelling"].includes(activeMinerRun.status));
   const busy = analyzing || preparingScan || Boolean(training.busyAction);
   const usesBaseModelStep = resourceIntent === "workproduct" && targetIntent.kind === "model";
-  const baseModelIds = useMemo(() => {
-    const fireworks = training.payload?.destinations.find(
-      (destination) => destination.destinationId === "fireworks",
-    );
-    return fireworks?.modelAllowlist.length
-      ? fireworks.modelAllowlist
-      : [DEFAULT_FIREWORKS_BASE_MODEL];
-  }, [training.payload?.destinations]);
+  const preferredBaseModelCandidate = useMemo(
+    () => baseModelCandidates.find(
+      (candidate) => candidate.selectionKey === preferredBaseModelKey,
+    ) ?? null,
+    [baseModelCandidates, preferredBaseModelKey],
+  );
+  const preferredBaseModel = preferredBaseModelCandidate?.preference ?? null;
 
   useEffect(
     () => setObjective(initialCreation?.request.objective ?? initialObjective ?? ""),
@@ -193,10 +209,14 @@ export function CreateImproveAuthoringDialog({
   );
 
   useEffect(() => {
-    if (!baseModelIds.includes(preferredBaseModelId)) {
-      setPreferredBaseModelId(baseModelIds[0] ?? DEFAULT_FIREWORKS_BASE_MODEL);
-    }
-  }, [baseModelIds, preferredBaseModelId]);
+    if (preferredBaseModelKey || !initialCreation) return;
+    const restored = candidateForPreference(
+      baseModelCandidates,
+      initialCreation.request.preferredBaseModel,
+      initialCreation.request.preferredBaseModelId,
+    );
+    if (restored) setPreferredBaseModelKey(restored.selectionKey);
+  }, [baseModelCandidates, initialCreation, preferredBaseModelKey]);
 
   useEffect(() => {
     if (step !== "automatic_scope" || activeMinerRunId) return;
@@ -347,6 +367,7 @@ export function CreateImproveAuthoringDialog({
   }
 
   function continueFromBaseModel() {
+    if (usesBaseModelStep && !preferredBaseModelCandidate?.available) return;
     if (setup === "existing_dataset") {
       setStep("existing_dataset");
       return;
@@ -356,13 +377,13 @@ export function CreateImproveAuthoringDialog({
   }
 
   async function createModelFromExistingTaskset() {
-    if (!selectedExistingTasksetId || !onModelCreatedFromTaskset) return;
+    if (!selectedExistingTasksetId || !onModelCreatedFromTaskset || !preferredBaseModel) return;
     setAnalyzing(true);
     setAuthoringError(null);
     try {
       const run = await training.actions.createModelFromTaskset(
         selectedExistingTasksetId,
-        preferredBaseModelId,
+        preferredBaseModel,
       );
       if (!run) {
         throw new Error(
@@ -495,7 +516,7 @@ export function CreateImproveAuthoringDialog({
         resourceIntent,
         objective: objective.trim() || undefined,
         methodHint: null,
-        preferredBaseModelId: usesBaseModelStep ? preferredBaseModelId : null,
+        preferredBaseModel: usesBaseModelStep ? preferredBaseModel : null,
         candidateId: selectedCandidateId,
         analysisModel: { providerId: authoringProvider, modelId: authoringModel },
         analysisReasoningEffort: authoringReasoningEffort,
@@ -569,6 +590,11 @@ export function CreateImproveAuthoringDialog({
     onClose();
   }
 
+  async function openComputeSettings() {
+    await closeDialog();
+    onOpenComputeSettings();
+  }
+
   async function createTaskset() {
     if (!creation || creation.state !== "awaiting_materialization_approval") return;
     setAuthoringError(null);
@@ -621,10 +647,13 @@ export function CreateImproveAuthoringDialog({
           />
         ) : step === "base_model" ? (
           <TrainingBaseModelStep
-            modelIds={baseModelIds}
-            value={preferredBaseModelId}
-            onChange={setPreferredBaseModelId}
+            busy={training.busyAction === "scan-base-models"}
+            candidates={baseModelCandidates}
+            value={preferredBaseModelKey}
+            onChange={setPreferredBaseModelKey}
             onContinue={continueFromBaseModel}
+            onManage={() => void openComputeSettings()}
+            onScan={() => void training.actions.scanBaseModels()}
           />
         ) : step === "existing_dataset" ? (
           <TrainingDatasetStep
@@ -749,7 +778,6 @@ export function CreateImproveAuthoringDialog({
             {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>Preparing the recommendation…</p></>}
           </div>
         )}
-        {authoringError ? <div className="training-banner error" role="alert">{authoringError}</div> : null}
       </section>
     </div>
   );
@@ -759,6 +787,25 @@ function initialCreationStep(creation: TaskCreationSnapshot | null): NewModelSte
   if (!creation) return "start";
   if (creation.state === "awaiting_disclosure_approval") return "evidence";
   return "recommendation";
+}
+
+function candidateForPreference(
+  candidates: BaseModelCandidate[],
+  preference: BaseModelPreference | null,
+  legacyModelId: string | null,
+): BaseModelCandidate | null {
+  if (preference) {
+    const exact = candidates.find((candidate) =>
+      candidate.preference.modelId === preference.modelId
+      && candidate.preference.source === preference.source
+      && candidate.preference.revision === preference.revision
+      && candidate.preference.modelAssetId === preference.modelAssetId);
+    if (exact) return exact;
+  }
+  const modelId = preference?.modelId ?? legacyModelId;
+  return modelId
+    ? candidates.find((candidate) => candidate.preference.modelId === modelId) ?? null
+    : null;
 }
 
 function authoringFailureCopy(reason: string | null): string {

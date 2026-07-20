@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { SftStepMetric, TrainingRunDetail } from "@openpond/contracts";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type MetricKey = "loss" | "reward" | "policyLoss" | "advantageLoss" | "learningRate" | "gradientNorm" | "meanTokenAccuracy" | "entropy" | "memoryBytes";
 const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) => string }> = [
@@ -15,6 +16,7 @@ const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) =>
 ];
 
 export function TrainingRunMetrics({ detail, loading, error }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null }) {
+  useErrorToast(error, { prefix: "Training metrics" });
   const stepMetrics = useMemo(
     () => uniqueStepMetrics(detail?.stepMetrics ?? []),
     [detail?.stepMetrics],
@@ -29,7 +31,7 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
   const summary = detail ? finalSummary(detail) : {};
 
   if (loading && !detail) return <div className="training-run-placeholder">Loading training metrics…</div>;
-  if (error && !detail) return <div className="training-run-placeholder error">{error}</div>;
+  if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
   if (!detail) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
   const rft = detail.job.metadata.trainingMethod === "grpo";
   const rewardValues = stepMetrics.flatMap((metric) => metric.reward == null ? [] : [metric.reward]);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  BaseModelPreference,
   ChatModelRef,
   CodexReasoningEffort,
   CrossSystemFrontierBaselineRun,
@@ -115,13 +116,29 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     cancelCrossSystemFrontierBaseline: (runId: string) => mutate<CrossSystemFrontierBaselineRun>("cancel-cross-system-frontier-baseline", `/cross-system-operations/frontier-baseline/runs/${encodeURIComponent(runId)}/cancel`, {}),
     removeSource: (sourceId: string) => mutate("remove-source", `/sources/${encodeURIComponent(sourceId)}`, {}, "DELETE"),
     deleteTaskset: (tasksetId: string) => mutate<{ deleted: boolean; tasksetId: string }>("delete-model", `/tasksets/${encodeURIComponent(tasksetId)}`, {}, "DELETE"),
-    startCreation: (sourceIds: string[], options: { objective?: string; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModelId?: string | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModelId ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
-    createModelFromTaskset: (tasksetId: string, preferredBaseModelId: string) =>
+    startCreation: (sourceIds: string[], options: { objective?: string; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModel?: BaseModelPreference | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModel?.modelId ?? null, preferredBaseModel: options.preferredBaseModel ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
+    createModelFromTaskset: (tasksetId: string, preferredBaseModel: BaseModelPreference) =>
       mutate<CreateImproveRun>("create-model", "/models/from-taskset", {
         profileId,
         tasksetId,
-        preferredBaseModelId,
+        preferredBaseModelId: preferredBaseModel.modelId,
+        preferredBaseModel,
       }),
+    scanBaseModels: async () => {
+      if (!connection) return null;
+      setBusyAction("scan-base-models");
+      try {
+        await api.scanCompute(connection);
+        const next = await refresh();
+        setError(null);
+        return next;
+      } catch (caught) {
+        setError(message(caught));
+        return null;
+      } finally {
+        setBusyAction(null);
+      }
+    },
     approveDisclosure: (id: string, approved: boolean) => mutate<TaskCreationSnapshot>("approve-disclosure", `/task-creations/${encodeURIComponent(id)}/disclosure`, { approved }),
     retryCreation: (id: string) => mutate<TaskCreationSnapshot>("retry-creation", `/task-creations/${encodeURIComponent(id)}/retry`, {}),
     answerQuestions: (id: string, answers: Record<string, string>) => mutate("answer-questions", `/task-creations/${encodeURIComponent(id)}/questions`, { answers }),
@@ -243,7 +260,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `${modelId}.openpond-lora.tar`,
       ),
     downloadBundle: async (bundleId: string) => downloadAuthenticated(`/bundles/${encodeURIComponent(bundleId)}/download`, "openpond-training-bundle.json"),
-  }), [connection, mutate, profileId]);
+  }), [connection, mutate, profileId, refresh]);
 
   async function downloadAuthenticated(path: string, fallbackName: string) {
     if (!connection) return false;
@@ -260,7 +277,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     finally { setBusyAction(null); }
   }
 
-  return { payload, loading, busyAction, error, refresh, actions };
+  return { connection, payload, loading, busyAction, error, refresh, actions };
 }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }

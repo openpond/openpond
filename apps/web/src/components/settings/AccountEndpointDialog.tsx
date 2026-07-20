@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import "../../styles/workspace/git-dialogs.css";
 import type { AccountState } from "@openpond/contracts";
 import { KeyRound, Save, SlidersHorizontal, X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type AccountRow = AccountState["accounts"][number];
 type AccountEndpointDialogMode = "update" | "connect";
@@ -68,21 +69,25 @@ export function AccountEndpointDialog({
   const [apiKey, setApiKey] = useState(initialApiKey);
   const [baseUrl, setBaseUrl] = useState(account?.baseUrl ?? "");
   const [apiBaseUrl, setApiBaseUrl] = useState(account?.apiBaseUrl ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  useErrorToast(requestError);
 
   useEffect(() => {
     setApiKey(initialApiKey);
     setBaseUrl(account?.baseUrl ?? "");
     setApiBaseUrl(account?.apiBaseUrl ?? "");
-    setError(null);
+    setValidationError(null);
+    setRequestError(null);
   }, [account?.apiBaseUrl, account?.baseUrl, account?.handle, initialApiKey]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
+    setValidationError(null);
+    setRequestError(null);
     const trimmedApiKey = apiKey.trim();
     if (connectMode && !trimmedApiKey) {
-      setError("API key is required.");
+      setValidationError("API key is required.");
       return;
     }
     let normalizedBaseUrl: string;
@@ -91,7 +96,7 @@ export function AccountEndpointDialog({
       normalizedBaseUrl = normalizeRequiredUrl("Base URL", baseUrl);
       normalizedApiBaseUrl = normalizeRequiredUrl("API base URL", apiBaseUrl);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setValidationError(caught instanceof Error ? caught.message : String(caught));
       return;
     }
 
@@ -105,7 +110,7 @@ export function AccountEndpointDialog({
         environment: account?.environment ?? null,
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setRequestError(caught instanceof Error ? caught.message : String(caught));
     }
   }
 
@@ -170,7 +175,7 @@ export function AccountEndpointDialog({
             onChange={(event) => setApiBaseUrl(event.target.value)}
           />
         </label>
-        {error ? <div className="profile-dialog-warning">{error}</div> : null}
+        {validationError ? <div className="profile-dialog-warning">{validationError}</div> : null}
         <div className="git-dialog-footer">
           <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>
             Cancel

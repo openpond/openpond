@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { TeamChatThread } from "@openpond/contracts";
 import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
 import { Bell, BellOff } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 const NOTIFICATION_OPTIONS: Array<{
   mode: TeamChatNotificationMode;
@@ -44,6 +45,7 @@ export function NotificationsSettingsSection({
 }: NotificationsSettingsSectionProps) {
   const [busyThreadId, setBusyThreadId] = useState<string | null>(null);
   const [muteError, setMuteError] = useState<string | null>(null);
+  useErrorToast(muteError);
   const visibleThreads = useMemo(
     () =>
       threads
@@ -139,11 +141,6 @@ export function NotificationsSettingsSection({
             );
           })
         )}
-        {muteError ? (
-          <div className="notification-settings-error" role="alert">
-            {muteError}
-          </div>
-        ) : null}
       </div>
 
       <div className="settings-footnote">

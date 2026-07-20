@@ -47,7 +47,7 @@ import {
   EvalSummary,
   Fact,
   latestReviewableCandidate,
-  preferredBaseModelId,
+  preferredBaseModel,
   titleCase,
   VersionSummary,
   WorkproductConfiguration,
@@ -585,10 +585,11 @@ export function LabWorkproductDetail({
             "start-training",
           ].includes(training.busyAction ?? "")}
           connection={connection}
+          baseModelCandidates={training.payload?.baseModelCandidates ?? []}
           destinations={training.payload?.destinations ?? []}
           initialMethod={startTraining.method}
           modelId={workproduct.id}
-          preferredBaseModelId={preferredBaseModelId(workproductRuns)}
+          preferredBaseModel={preferredBaseModel(workproductRuns)}
           taskset={startTraining.taskset}
           onClose={() => setStartTraining(null)}
           onPrepare={(destinationId, recipe, approval) =>

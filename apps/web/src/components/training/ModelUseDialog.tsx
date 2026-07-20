@@ -10,6 +10,7 @@ import {
   type TrainingModelChatHandoff,
 } from "../../lib/training-model-chat-handoff";
 import { Loader2, MessageSquare, X } from "../icons";
+import { useErrorToast } from "../../app/AppToastContext";
 
 type TrainingController = ReturnType<typeof useTraining>;
 
@@ -26,6 +27,7 @@ export function ModelUseDialog({
   onChat: (handoff: TrainingModelChatHandoff) => void;
   onClose: () => void;
 }) {
+  useErrorToast(training.error);
   const [startAndChat, setStartAndChat] = useState(false);
   const sessions = useMemo(
     () => (training.payload?.servingSessions ?? [])
@@ -133,10 +135,6 @@ export function ModelUseDialog({
             when you press Stop.
           </p>
         )}
-
-        {training.error ? (
-          <div className="training-banner error">{training.error}</div>
-        ) : null}
 
         <div className="training-dialog-actions">
           {active ? (

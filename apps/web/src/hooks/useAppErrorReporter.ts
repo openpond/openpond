@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type { AppAction, AppToast, ShowAppToast } from "../app/app-state";
 import { api, type ClientConnection } from "../api";
+import { errorMessageForToast } from "../lib/error-messages";
 
 export function useAppErrorReporter({
   appDispatch,
@@ -95,5 +96,5 @@ export function useAppErrorReporter({
 }
 
 export function appErrorToastMessage(message: string): string {
-  return message === "Failed to fetch" ? "Couldn’t connect to OpenPond." : message;
+  return errorMessageForToast(message);
 }

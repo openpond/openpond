@@ -6,6 +6,7 @@ import {
   CreateImproveWorkflowCaptureSchema,
   conciseWorkproductName,
   nextCreateImproveRunRevision,
+  type BaseModelPreference,
   type CreateImproveRun,
   type CreateImproveTarget,
   type Taskset,
@@ -27,6 +28,7 @@ export function createTasksetAuthoringCreateImproveRun(input: {
   targetIntent?: TaskCreationSnapshot["request"]["targetIntent"];
   resourceIntent?: TaskCreationSnapshot["request"]["resourceIntent"];
   preferredBaseModelId?: string | null;
+  preferredBaseModel?: BaseModelPreference | null;
   timestamp?: string;
 }): CreateImproveRun {
   const timestamp = input.timestamp ?? new Date().toISOString();
@@ -126,6 +128,7 @@ export function createTasksetAuthoringCreateImproveRun(input: {
       source: "shared_taskset_authoring",
       resourceIntent: input.resourceIntent ?? "workproduct",
       preferredBaseModelId: input.preferredBaseModelId ?? null,
+      preferredBaseModel: input.preferredBaseModel ?? null,
     },
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -136,6 +139,7 @@ export function createExistingTasksetModelCreateImproveRun(input: {
   profileId: string;
   taskset: Taskset;
   preferredBaseModelId: string;
+  preferredBaseModel: BaseModelPreference;
   modelId?: string;
   timestamp?: string;
 }): CreateImproveRun {
@@ -153,6 +157,7 @@ export function createExistingTasksetModelCreateImproveRun(input: {
     },
     resourceIntent: "workproduct",
     preferredBaseModelId: input.preferredBaseModelId,
+    preferredBaseModel: input.preferredBaseModel,
     timestamp,
   });
   const tasksetRef = createTasksetRef({
@@ -180,6 +185,7 @@ export function createExistingTasksetModelCreateImproveRun(input: {
       tasksetRevision: input.taskset.revision,
       tasksetHash: input.taskset.contentHash,
       preferredBaseModelId: input.preferredBaseModelId,
+      preferredBaseModel: input.preferredBaseModel,
     },
     updatedAt: timestamp,
   });
@@ -519,6 +525,7 @@ export async function syncTasksetAuthoringCreateImproveRun(
       taskCreationId: creation.id,
       taskCreationState: creation.state,
       preferredBaseModelId: creation.request.preferredBaseModelId,
+      preferredBaseModel: creation.request.preferredBaseModel,
     },
     updatedAt: creation.updatedAt,
   };
