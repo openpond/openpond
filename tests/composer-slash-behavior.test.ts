@@ -230,7 +230,7 @@ describe("composer slash behavior", () => {
     ).toBe("@sale Summarize top salesmen");
   });
 
-  test("treats a selected invocation as submittable input", () => {
+  test("treats actions as submittable but requires an objective for Make Agent", () => {
     const action = buildOpenPondAgentSlashCommand(sandboxAgent(), "Cloud Repo");
 
     expect(
@@ -245,6 +245,22 @@ describe("composer slash behavior", () => {
       hasComposerSubmittableInput({
         attachmentCount: 0,
         prompt: "",
+        selectedAction: null,
+        selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
+      }),
+    ).toBe(false);
+    expect(
+      hasComposerSubmittableInput({
+        attachmentCount: 2,
+        prompt: "",
+        selectedAction: null,
+        selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
+      }),
+    ).toBe(false);
+    expect(
+      hasComposerSubmittableInput({
+        attachmentCount: 0,
+        prompt: "Monitor customer account health.",
         selectedAction: null,
         selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
       }),
@@ -892,8 +908,8 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
-    expect(markup).toContain("/create Create agent or project");
-    expect(markup).toContain("Start a guided creation flow in OpenPond Cloud.");
+    expect(markup).toContain("/create Make Agent");
+    expect(markup).toContain("Start the guided Agent creation flow.");
     expect(markup).toContain("/edit Edit selected agent");
     expect(markup).toContain("/skill Manage skills");
     expect(markup).toContain("create, edit, list, help");
@@ -959,7 +975,7 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
-    expect(markup).toContain("/create Create agent or project");
+    expect(markup).toContain("/create Make Agent");
   });
 
   test("Cloud composer remains plain task input without slash action menu", () => {

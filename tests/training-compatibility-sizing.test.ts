@@ -8,6 +8,10 @@ import {
 } from "../packages/contracts/src";
 import { validateTrainingCompatibility } from "../packages/training-sdk/src/compatibility";
 import { tasksetFixture } from "./helpers/training-fixtures";
+import {
+  fireworksRftRecipe,
+  rftTasksetFixture,
+} from "./helpers/fireworks-destination-fixtures";
 
 describe("training trajectory sizing", () => {
   test("sizes structured tool messages instead of only their prompt and final text", () => {
@@ -73,6 +77,95 @@ describe("training trajectory sizing", () => {
     expect(report.compatible).toBe(true);
     expect(report.issues.map((issue) => issue.code)).not.toContain(
       "taskset_method_incompatible",
+    );
+  });
+
+  test("uses registered artifact split counts instead of requiring inline RFT rows", () => {
+    const base = rftTasksetFixture();
+    const taskset = {
+      ...base,
+      tasks: [],
+      datasetArtifact: {
+        schemaVersion: "openpond.datasetArtifact.v1",
+        id: "dataset_artifact_compatibility",
+        tasksetId: base.id,
+        tasksetRevision: 1,
+        contentHash: "artifacthash0000",
+        format: "parquet",
+        schema: {
+          schemaVersion: "openpond.datasetSemanticSchema.v1",
+          fields: [{
+            name: "messages",
+            semanticRole: "messages",
+            logicalType: "messages",
+            nullable: false,
+            policy: "visible",
+          }],
+          schemaHash: "schemahash000000",
+        },
+        shards: [{
+          id: "shard_train",
+          split: "train",
+          path: "data/train.parquet",
+          contentHash: "shardhash000000",
+          schemaHash: "schemahash000000",
+          sizeBytes: 100,
+          rowCount: 20,
+          rowGroupCount: 1,
+        }],
+        rowCount: 20,
+        splitCounts: {
+          train: 20,
+          validation: 0,
+          test: 0,
+          frozen_eval: 0,
+        },
+        sourceReceiptRefs: ["receipt_fixture"],
+        mappingHash: "mappinghash0000",
+        qualityReportHash: "qualityhash0000",
+        createdAt: "2026-07-20T00:00:00.000Z",
+      },
+    } as Taskset;
+    const recipe = fireworksRftRecipe();
+    const plan: TrainingPlan = {
+      schemaVersion: "openpond.trainingPlan.v1",
+      id: "plan-artifact-rft",
+      tasksetId: taskset.id,
+      tasksetHash: taskset.contentHash,
+      destinationId: "fireworks",
+      recipe,
+      environmentPlacement: "provider_native",
+      compatibility: null,
+      dataPolicy: {
+        exportApproved: true,
+        approvedSourceIds: taskset.sourceRefs.map((source) => source.id),
+        retentionDays: 7,
+        region: null,
+      },
+      estimatedCostUsd: 3,
+      createdAt: "2026-07-20T00:00:00.000Z",
+      contentHash: "planhash-artifact-rft",
+    };
+    const report = validateTrainingCompatibility({
+      taskset,
+      plan,
+      capabilities: {
+        schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+        destinationId: "fireworks",
+        available: true,
+        methods: ["sft", "grpo"],
+        parameterizations: ["lora"],
+        modelAllowlist: [recipe.baseModel.id],
+        maxDatasetBytes: 1_000_000,
+        environmentPlacements: ["provider_native"],
+        nonProduction: false,
+        unavailableReason: null,
+        checkedAt: "2026-07-20T00:00:00.000Z",
+      },
+    });
+
+    expect(report.issues.map((issue) => issue.code)).not.toContain(
+      "rft_train_split_empty",
     );
   });
 });

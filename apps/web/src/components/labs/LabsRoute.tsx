@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
+  ChatModelRef,
   CreateImproveCandidate,
   CreateImproveRun,
   TaskCreationSnapshot,
@@ -11,6 +12,11 @@ import type { ProfileViewProps } from "../profile/ProfileView";
 import { ProfileView } from "../profile/ProfileView";
 import type { TrainingViewProps } from "../training/TrainingView";
 import { CreateImproveAuthoringDialog } from "../create-improve/CreateImproveAuthoringDialog";
+import {
+  DatasetSourcePickerDialog,
+  type DatasetCreateSource,
+} from "../datasets/DatasetSourcePickerDialog";
+import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
 import { ModelUseDialog } from "../training/ModelUseDialog";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
@@ -51,16 +57,18 @@ export type LabsRouteProps = {
   closeDetailRequestId: number;
   openSuggestionsRequestId: number;
   onNewModel: () => void;
-  onUseAgent: (actionId: string) => void;
+  onUseAgent: (actionId: string, agentName: string) => void;
   onCreateAgent: (
     objective: string,
-    authoringRunId?: string | null
+    authoringRunId?: string | null,
+    authoringModel?: ChatModelRef | null,
   ) => Promise<CreateImproveRun>;
   onImproveAgent: (
     agentId: string,
     objective: string,
     agentName?: string | null,
-    authoringRunId?: string | null
+    authoringRunId?: string | null,
+    authoringModel?: ChatModelRef | null,
   ) => Promise<CreateImproveRun>;
   onOpenRunConversation: (conversationId: string) => void;
   onDetailOpenChange: (location: LabDetailLocation | null) => void;
@@ -151,6 +159,17 @@ export function LabsRoute({
     () => trainingModelRunSyncKey(training.training.payload),
     [training.training.payload]
   );
+  const profileAgentRunSyncKey = useMemo(
+    () => createImprove.runs
+      .filter((run) =>
+        run.target.kind === "agent"
+        && ["ready_local", "released", "published_hosted"].includes(run.state)
+      )
+      .map((run) => `${run.id}:${run.revision}:${run.state}`)
+      .sort()
+      .join("|"),
+    [createImprove.runs]
+  );
   const [activeTab, setActiveTab] = useState<LabPrimaryTab>("workproducts");
   const [suggestionsView, setSuggestionsView] =
     useState<SuggestionsView>("observations");
@@ -160,7 +179,9 @@ export function LabsRoute({
     null,
   );
   const [agentCreateOpen, setAgentCreateOpen] = useState(false);
-  const [datasetCreateOpen, setDatasetCreateOpen] = useState(false);
+  const [datasetCreateRoute, setDatasetCreateRoute] = useState<
+    "source" | DatasetCreateSource | null
+  >(null);
   const [agentRename, setAgentRename] = useState<{
     id: string;
     name: string;
@@ -226,6 +247,22 @@ export function LabsRoute({
     if (!modelRunSyncKey) return;
     void createImprove.refresh();
   }, [createImprove.refresh, modelRunSyncKey]);
+  useEffect(() => {
+    if (!profileAgentRunSyncKey || !profileView.connection) return;
+    let cancelled = false;
+    void api.bootstrap(profileView.connection)
+      .then((payload) => {
+        if (!cancelled) profileView.onPayload(payload);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          profileView.onError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileAgentRunSyncKey, profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
     if (openSuggestionsRequestId <= 0) return;
     setSuggestionsView("observations");
@@ -336,7 +373,7 @@ export function LabsRoute({
       suggestionCount={suggestionCount}
       onTabChange={changePrimaryTab}
       onCreateAgent={() => setAgentCreateOpen(true)}
-      onCreateDataset={() => setDatasetCreateOpen(true)}
+      onCreateDataset={() => setDatasetCreateRoute("source")}
       onCreateModel={onNewModel}
     >
       {activeTab === "suggestions" ? (
@@ -357,7 +394,7 @@ export function LabsRoute({
             profileView.onToast?.(message, tone) ?? 0
           }
           onSelectedIdChange={setSelectedDatasetId}
-          onCreate={() => setDatasetCreateOpen(true)}
+          onCreate={() => setDatasetCreateRoute("source")}
           onOpenFiles={(tasksetId) => {
             training.onSelectedTasksetIdChange(tasksetId);
             training.onOpenTasksetFiles();
@@ -389,6 +426,7 @@ export function LabsRoute({
             setSelectedDatasetId(tasksetId);
             setActiveTab("datasets");
           }}
+          onOpenProviderSettings={training.onOpenProviderSettings}
           onPause={onPause}
           onReconcilePullRequest={onReconcilePullRequest}
           onRejectCandidate={onRejectCandidate}
@@ -488,6 +526,13 @@ export function LabsRoute({
           initialObjective={null}
           localProjects={training.localProjects ?? []}
           onClose={() => setAgentCreateOpen(false)}
+          onAgentPromptSubmitted={async ({ analysisModel, objective }) => {
+            const run = await onCreateAgent(objective, null, analysisModel);
+            await createImprove.refresh();
+            setActiveTab("workproducts");
+            setSelectedKey(workproductKey("agent", run.target.id ?? run.id));
+            setAgentCreateOpen(false);
+          }}
           onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
             const objective = creationObjective(
@@ -496,7 +541,8 @@ export function LabsRoute({
             );
             const run = await onCreateAgent(
               objective,
-              creation.request.createImproveRunId
+              creation.request.createImproveRunId,
+              creation.request.analysisModel,
             );
             await createImprove.refresh();
             setActiveTab("workproducts");
@@ -512,15 +558,23 @@ export function LabsRoute({
           training={training.training}
         />
       ) : null}
-      {datasetCreateOpen ? (
+      {datasetCreateRoute === "source" ? (
+        <DatasetSourcePickerDialog
+          onClose={() => setDatasetCreateRoute(null)}
+          onSelect={setDatasetCreateRoute}
+        />
+      ) : null}
+      {datasetCreateRoute === "build" ? (
         <CreateImproveAuthoringDialog
+          datasetBuildMode
           defaultModel={training.defaultModel}
           initialObjective={null}
           localProjects={training.localProjects ?? []}
-          onClose={() => setDatasetCreateOpen(false)}
+          onBackToDatasetSources={() => setDatasetCreateRoute("source")}
+          onClose={() => setDatasetCreateRoute(null)}
           onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
-            setDatasetCreateOpen(false);
+            setDatasetCreateRoute(null);
             setSelectedKey(null);
             setActiveTab("datasets");
             setSelectedDatasetId(creation.materializedTasksetId);
@@ -541,12 +595,43 @@ export function LabsRoute({
           training={training.training}
         />
       ) : null}
+      {datasetCreateRoute === "huggingface" ? (
+        <HuggingFaceDatasetImportDialog
+          onBack={() => setDatasetCreateRoute("source")}
+          onClose={() => setDatasetCreateRoute(null)}
+          onImported={async (tasksetId) => {
+            setDatasetCreateRoute(null);
+            setSelectedKey(null);
+            setActiveTab("datasets");
+            setSelectedDatasetId(tasksetId);
+            await training.training.refresh();
+          }}
+          onOpenDatasetStorageSettings={() => {
+            setDatasetCreateRoute(null);
+            training.onOpenDatasetStorageSettings();
+          }}
+          training={training.training}
+        />
+      ) : null}
       {agentImprove ? (
         <CreateImproveAuthoringDialog
           defaultModel={training.defaultModel}
           initialObjective={agentImprove.initialObjective}
           localProjects={training.localProjects ?? []}
           onClose={() => setAgentImprove(null)}
+          onAgentPromptSubmitted={async ({ analysisModel, objective }) => {
+            await onImproveAgent(
+              agentImprove.agentId,
+              objective,
+              agentImprove.agentName,
+              null,
+              analysisModel,
+            );
+            await createImprove.refresh();
+            setActiveTab("workproducts");
+            setSelectedKey(workproductKey("agent", agentImprove.agentId));
+            setAgentImprove(null);
+          }}
           onOpenComputeSettings={training.onOpenComputeSettings}
           onTasksetCreated={async (creation) => {
             const objective = creationObjective(
@@ -557,7 +642,8 @@ export function LabsRoute({
               agentImprove.agentId,
               objective,
               agentImprove.agentName,
-              creation.request.createImproveRunId
+              creation.request.createImproveRunId,
+              creation.request.analysisModel,
             );
             await createImprove.refresh();
             setActiveTab("workproducts");

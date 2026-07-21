@@ -1,0 +1,69 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:07.293
+Every reward-based update depends on whether its evaluator measures the right thing. This is the verifier problem.
+
+2
+00:00:08.454 --> 00:00:18.952
+RLVR means Reinforcement Learning with Verifiable Rewards. For our repair, the verifier applies the patch, runs the cancellation tests, and returns a reproducible outcome.
+
+3
+00:00:20.112 --> 00:00:25.161
+The same idea applies to checked math answers, tool states, and agent environments.
+
+4
+00:00:26.321 --> 00:00:32.864
+A preference such as “patch A is cleaner” depends on a judge. A verifiable reward applies an explicit rule.
+
+5
+00:00:34.025 --> 00:00:41.933
+Verifiable does not mean infallible; it means the same patch should receive the same result under the same evaluator state.
+
+6
+00:00:43.094 --> 00:00:54.546
+Write the rule as r equals V of x, y, and e. X is the public task. Y is the sampled attempt. E is evaluator-only state such as hidden tests.
+
+7
+00:00:55.706 --> 00:00:59.891
+For a binary verifier, reward is zero or one.
+
+8
+00:01:01.051 --> 00:01:13.829
+This equation separates the setting from the optimizer. RLVR supplies reward. PPO, GRPO, or another policy optimizer supplies the update. DeepSeek-R1 is an important example of reasoning training built from this combination.
+
+9
+00:01:14.989 --> 00:01:26.261
+The full loop is prompt, policy attempt, execution, verification, reward, and policy update. Automatic checks scale because a person does not need to score every trajectory.
+
+10
+00:01:27.421 --> 00:01:32.198
+The verifier also becomes both the task specification and an attack surface.
+
+11
+00:01:33.359 --> 00:01:46.678
+RLVR applies beyond short math answers. Code can compile and run tests. Tool agents can be checked against a target database state. Search can verify retrieved evidence. Scientific tasks can use simulators and constraints.
+
+12
+00:01:47.839 --> 00:01:54.974
+It is a poor fit when quality is inherently subjective, outcomes cannot be reproduced, or the checker is easy to game.
+
+13
+00:01:56.135 --> 00:02:07.727
+Verifier errors have two directions. A false negative rejects a valid solution. A false positive is more dangerous under optimization because a wrong solution receives positive gradient and can become an exploit.
+
+14
+00:02:08.888 --> 00:02:18.253
+Suppose visible tests cover only three examples. Hard-coding those outputs and implementing the general rule both receive reward one. The optimizer cannot distinguish them.
+
+15
+00:02:19.413 --> 00:02:26.870
+Hidden tests, randomized cases, invariants, and shadow verifiers make the measured objective closer to the intended task.
+
+16
+00:02:28.030 --> 00:02:42.032
+That requires an information boundary. The policy sees the public task and allowed observations. The evaluator alone sees hidden checks and anti-cheat state. Training-only teacher evidence belongs in a third protected channel.
+
+17
+00:02:43.192 --> 00:02:51.834
+So “RLVR with GRPO” is precise: the first term names how outcomes are labeled, and the second names how those labels become an update.

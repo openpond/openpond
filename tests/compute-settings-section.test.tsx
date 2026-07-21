@@ -12,15 +12,15 @@ function computeState(): ComputeStateResponse {
   const selectedPath = "/run/user/1000/gvfs/smb-share:server=nas.local,share=models,user=test";
   return {
     schemaVersion: "openpond.computeState.v1",
-    settings: { schemaVersion: "openpond.computeSettings.v1", modelStorePath: selectedPath, defaultDeviceIds: [], additionalModelPaths: [], updatedAt: now },
+    settings: { schemaVersion: "openpond.computeSettings.v1", modelStorePath: selectedPath, datasetStorePath: "/mnt/data/OpenPond/datasets", defaultDeviceIds: [], additionalModelPaths: [], updatedAt: now },
     inventory: {
       schemaVersion: "openpond.computeInventory.v1",
       host: { platform: "linux", architecture: "x64", operatingSystem: "Test Linux", hostname: "test", totalMemoryBytes: 16_000_000_000 },
       devices: [],
       runtimes: [],
       storageRoots: [
-        { id: "storage:system", label: "System disk", path: "/", modelStorePath: "/home/test/.openpond/openpond-app/models", kind: "local", configured: false, mounted: true, writable: true, totalBytes: 1_000_000_000, freeBytes: 500_000_000 },
-        { id: "storage:smb", label: "models on nas.local", path: selectedPath, modelStorePath: selectedPath, kind: "network", configured: true, mounted: true, writable: true, totalBytes: 2_000_000_000, freeBytes: 1_000_000_000 },
+        { id: "storage:system", label: "System disk", path: "/", modelStorePath: "/home/test/.openpond/openpond-app/models", datasetStorePath: "/home/test/.openpond/openpond-app/datasets", kind: "local", configured: false, mounted: true, writable: true, totalBytes: 1_000_000_000, freeBytes: 500_000_000 },
+        { id: "storage:smb", label: "models on nas.local", path: selectedPath, modelStorePath: selectedPath, datasetStorePath: "/mnt/data/OpenPond/datasets", kind: "network", configured: true, mounted: true, writable: true, totalBytes: 2_000_000_000, freeBytes: 1_000_000_000 },
       ],
       connections: [],
       models: [],
@@ -47,6 +47,8 @@ describe("compute model storage settings", () => {
     expect(html).toContain("models on nas.local");
     expect(html).toContain('value="/run/user/1000/gvfs/smb-share:server=nas.local,share=models,user=test" selected=""');
     expect(html).toContain('aria-label="Add manual model storage location"');
+    expect(html).not.toContain('aria-label="Dataset storage drive"');
+    expect(html).not.toContain("Save Dataset storage");
     expect(html).not.toContain('role="radiogroup"');
     expect(html).not.toContain("Choose a writable drive");
     expect(html).not.toContain("model-storage-selection");

@@ -127,11 +127,11 @@ function optimizerUpdates(
   metrics: SftStepMetric[],
 ): number | null {
   const observed = detail.job.metadata.optimizerUpdatesObserved;
-  const recorded = typeof observed === "number" && Number.isFinite(observed)
-    ? observed
-    : 0;
+  if (typeof observed === "number" && Number.isFinite(observed)) {
+    return Math.max(0, observed);
+  }
   const lastStep = metrics.at(-1)?.step ?? 0;
-  return Math.max(recorded, lastStep) || null;
+  return lastStep || null;
 }
 
 function uniqueStepMetrics(metrics: SftStepMetric[]): SftStepMetric[] {

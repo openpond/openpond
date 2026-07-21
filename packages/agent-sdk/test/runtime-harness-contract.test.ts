@@ -8,7 +8,7 @@ import {
   defineSkill,
   defineWorkflow,
 } from "openpond-agent-sdk/primitives";
-import { createRunState, executeAction } from "openpond-agent-sdk/runtime";
+import { createRunState, executeAction, runAction } from "openpond-agent-sdk/runtime";
 
 const answerWorkflow = defineWorkflow({
   name: "answer-workflow",
@@ -147,6 +147,25 @@ describe("runtime harness contract", () => {
 
     expect(result).toMatchObject({ text: "Answer: direct", intent: "answer" });
     expect(eventNames(state)).toContain("workflow.completed");
+  });
+
+  test("preserves schema-specific properties for direct actions", async () => {
+    const directInputWorkflow = defineWorkflow({
+      name: "direct-input",
+      async run(_ctx, input) {
+        return { text: `Account: ${String(input.accountId ?? "missing")}` };
+      },
+    });
+    const directInputProject = defineAgentProject({
+      ...project,
+      actions: [action("account", { target: { kind: "workflow", workflow: directInputWorkflow } })],
+      workflows: [directInputWorkflow],
+      defaultAction: "account",
+    });
+
+    const result = await runAction(directInputProject, "account", { accountId: "northstar" });
+
+    expect(result.result.text).toBe("Account: northstar");
   });
 
   test("executes workflow commands and captures their output", async () => {

@@ -221,7 +221,6 @@
 }
 
 @container (max-width: 620px) {
-  .composer .composer-create-control,
   .composer .context-status-shell {
     display: none;
   }

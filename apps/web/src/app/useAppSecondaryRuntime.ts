@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RuntimeEvent, Session, SubagentDelegationMode } from "@openpond/contracts";
 import { api } from "../api";
 import { modelRefForTurn, type SidebarProjectItem } from "../lib/app-models";
@@ -21,6 +21,7 @@ import { useSidebarMutations } from "../hooks/useSidebarMutations";
 import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
 import { teamChatThreadTitle } from "../lib/team-chat-thread";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
+import type { TrainingLaunchRequest } from "../components/training/TrainingView";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 
@@ -50,20 +51,22 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     refreshWorkspace, setWorkspaceBusy, refreshWorkspaceDiffWhenNeeded, pendingWorkspaceTarget, setPendingWorkspaceTarget,
     pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget, projectTarget, workspaceTarget,
   } = primary;
-const title =
+  const title =
     view === "apps"
       ? "Apps"
-      : view === "labs"
-        ? "Lab"
-        : view === "team"
-          ? teamChat.detail
-            ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
-            : "Team"
-          : view === "community"
-            ? communities.preview?.displayName ?? "Communities"
-          : view === "cloud"
-              ? (selectedCloudWorkItem?.title ?? "Cloud")
-              : (selectedSession?.title ?? "New task");
+      : view === "get-started"
+        ? "Get started"
+        : view === "labs"
+          ? "Lab"
+          : view === "team"
+            ? teamChat.detail
+              ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
+              : "Team"
+            : view === "community"
+              ? communities.preview?.displayName ?? "Communities"
+              : view === "cloud"
+                ? (selectedCloudWorkItem?.title ?? "Cloud")
+                : (selectedSession?.title ?? "New task");
   const {
     browserConversationId,
     handleWorkspaceDiffPanelViewStateChange,
@@ -628,7 +631,21 @@ const title =
     setView("labs");
     setLabSuggestionsRequestId((requestId) => requestId + 1);
   }, [setView]);
+  const [rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest] =
+    useState<TrainingLaunchRequest | null>(null);
+  const openLabTraining = useCallback((input: {
+    objective: string | null;
+    sessionId: string | null;
+  }) => {
+    setRightChatTrainingLaunchRequest({
+      id: Date.now(),
+      objective: input.objective,
+      initialSessionIds: input.sessionId ? [input.sessionId] : [],
+    });
+    setView("labs");
+  }, [setView]);
   const {
+    activateRightChatPanel,
     closeRightChatPanel,
     openRightChatPanel,
     rightChatPanelViews,
@@ -638,6 +655,7 @@ const title =
     updateRightChatModel,
     updateRightChatPrompt,
     updateRightChatProvider,
+    updateRightChatScrollState,
   } = useRightChatPanels({
     activeModel,
     activeProvider,
@@ -648,6 +666,7 @@ const title =
     contextCompaction: appDefaults.contextCompaction,
     insights,
     openLabSuggestions,
+    openLabTraining,
     locallyActiveCodexHistorySessionIds,
     openPondCommandAccessMode,
     pendingChatUserMessages,
@@ -661,8 +680,6 @@ const title =
     selectedSessionId,
     sendPrompt,
     setDiffPanelOpen,
-    setDraftModel,
-    setDraftProvider,
     setError,
     setRightChatHistoryEvents,
     setRightChatPanels,
@@ -713,8 +730,10 @@ const title =
     toggleProjectPinned, toggleSessionPinned, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
     openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
-    openLabSuggestions, closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
-    showRightPanelDiffTab, submitRightChatPrompt, updateRightChatModel, updateRightChatPrompt, updateRightChatProvider,
+    openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
+    closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
+    showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
+    updateRightChatModel, updateRightChatPrompt, updateRightChatProvider, updateRightChatScrollState,
     openProfileSettings, diagnosticEvents, toggleRightSidebar,
   };
 }

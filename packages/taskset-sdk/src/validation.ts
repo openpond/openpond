@@ -1,4 +1,5 @@
 import {
+  isTrainingSourceRef,
   TasksetSchema,
   type Taskset,
   type TasksetCapabilityManifest,
@@ -38,6 +39,7 @@ export function validateTaskset(input: unknown): TasksetValidationReport {
   const taskset = parsed.data;
   const issues: TasksetValidationIssue[] = [];
   validateSourceConsent(taskset, issues);
+  validateDatasetArtifact(taskset, issues);
   validateSplitIsolation(taskset, issues);
   validatePolicyBoundary(taskset, issues);
   validateGraders(taskset, issues);
@@ -66,11 +68,68 @@ function validateGraderFixtures(taskset: Taskset, issues: TasksetValidationIssue
   const taskIds = new Set(taskset.tasks.map((task) => task.id));
   const required = new Set(["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"]);
   for (const fixture of taskset.graderFixtures) {
-    if (!taskIds.has(fixture.taskId)) issues.push({ code: "grader_fixture_task_missing", severity: "error", message: `Fixture ${fixture.id} references missing task ${fixture.taskId}.`, path: `graderFixtures.${fixture.id}.taskId` });
+    if (!taskset.datasetArtifact && !taskIds.has(fixture.taskId)) issues.push({ code: "grader_fixture_task_missing", severity: "error", message: `Fixture ${fixture.id} references missing task ${fixture.taskId}.`, path: `graderFixtures.${fixture.id}.taskId` });
     required.delete(fixture.label);
     if (fixture.label === "infrastructure_failure" && !fixture.infrastructureError) issues.push({ code: "infrastructure_fixture_error_missing", severity: "error", message: `Infrastructure fixture ${fixture.id} must declare an infrastructure error.`, path: `graderFixtures.${fixture.id}.infrastructureError` });
   }
   for (const label of required) issues.push({ code: "grader_fixture_missing", severity: "error", message: `Taskset requires a ${label} grader fixture.`, path: "graderFixtures" });
+}
+
+function validateDatasetArtifact(
+  taskset: Taskset,
+  issues: TasksetValidationIssue[],
+): void {
+  const artifact = taskset.datasetArtifact;
+  if (!artifact) return;
+  if (
+    artifact.tasksetId !== taskset.id
+    || artifact.tasksetRevision !== taskset.revision
+  ) {
+    issues.push({
+      code: "dataset_artifact_taskset_mismatch",
+      severity: "error",
+      message: "Dataset artifact identity does not match its Taskset revision.",
+      path: "datasetArtifact",
+    });
+  }
+  const splitTotal = Object.values(artifact.splitCounts)
+    .reduce((total, count) => total + count, 0);
+  const shardTotal = artifact.shards
+    .reduce((total, shard) => total + shard.rowCount, 0);
+  if (splitTotal !== artifact.rowCount || shardTotal !== artifact.rowCount) {
+    issues.push({
+      code: "dataset_artifact_row_count_mismatch",
+      severity: "error",
+      message: "Dataset artifact row, split, and shard counts do not agree.",
+      path: "datasetArtifact.rowCount",
+    });
+  }
+  const shardSplitCounts = new Map<string, number>();
+  for (const shard of artifact.shards) {
+    shardSplitCounts.set(
+      shard.split,
+      (shardSplitCounts.get(shard.split) ?? 0) + shard.rowCount,
+    );
+  }
+  for (const [split, count] of Object.entries(artifact.splitCounts)) {
+    if ((shardSplitCounts.get(split) ?? 0) !== count) {
+      issues.push({
+        code: "dataset_artifact_split_count_mismatch",
+        severity: "error",
+        message: `Dataset artifact ${split} shard counts do not match its manifest.`,
+        path: `datasetArtifact.splitCounts.${split}`,
+      });
+    }
+  }
+  const { contentHash: _contentHash, ...hashable } = artifact;
+  if (contentHash(hashable) !== artifact.contentHash) {
+    issues.push({
+      code: "dataset_artifact_hash_mismatch",
+      severity: "error",
+      message: "Dataset artifact manifest content hash is invalid.",
+      path: "datasetArtifact.contentHash",
+    });
+  }
 }
 
 export function computeTasksetHash(taskset: Omit<Taskset, "contentHash"> | Taskset): string {
@@ -90,7 +149,7 @@ export function validatePortability(capabilities: TasksetCapabilityManifest): Ta
 
 function validateSourceConsent(taskset: Taskset, issues: TasksetValidationIssue[]): void {
   for (const [index, source] of taskset.sourceRefs.entries()) {
-    if (source.consent.status !== "granted") {
+    if (isTrainingSourceRef(source) && source.consent.status !== "granted") {
       issues.push({ code: "source_consent_missing", severity: "error", message: `Source ${source.id} is not consented.`, path: `sourceRefs.${index}.consent.status` });
     }
     if (source.secretScanStatus !== "passed") {
@@ -117,7 +176,9 @@ function validateSplitIsolation(taskset: Taskset, issues: TasksetValidationIssue
       issues.push({ code: "split_cluster_contamination", severity: "error", message: `Source cluster ${cluster} appears in multiple splits: ${[...splits].join(", ")}.`, path: "tasks" });
     }
   }
-  const frozenCount = taskset.tasks.filter((task) => task.split === "frozen_eval").length;
+  const frozenCount = taskset.datasetArtifact
+    ? taskset.datasetArtifact.splitCounts.frozen_eval ?? 0
+    : taskset.tasks.filter((task) => task.split === "frozen_eval").length;
   if (frozenCount === 0) issues.push({ code: "frozen_eval_missing", severity: "warning", message: "Add an independent test example before training.", path: "tasks" });
 }
 

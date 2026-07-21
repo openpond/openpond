@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Settings, UserRound } from "../icons";
+import { ChartColumnStacked, Settings, UserRound } from "../icons";
 import type { AccountState } from "@openpond/contracts";
 
 type UserAuthFooterProps = {
   account: AccountState | null;
+  onOpenActivity?: () => void;
   onOpenSettings: () => void;
 };
 
@@ -47,7 +48,7 @@ export function userAuthIdentity(account: AccountState | null): UserAuthIdentity
   };
 }
 
-export function UserAuthFooter({ account, onOpenSettings }: UserAuthFooterProps) {
+export function UserAuthFooter({ account, onOpenActivity, onOpenSettings }: UserAuthFooterProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const identity = useMemo(() => userAuthIdentity(account), [account]);
@@ -87,6 +88,21 @@ export function UserAuthFooter({ account, onOpenSettings }: UserAuthFooterProps)
 
       {open ? (
         <div className="user-auth-menu" role="menu" aria-label="Account">
+          {onOpenActivity ? (
+            <a
+              href="/settings/usage"
+              className="user-auth-menu-link"
+              role="menuitem"
+              onClick={(event) => {
+                event.preventDefault();
+                setOpen(false);
+                onOpenActivity();
+              }}
+            >
+              <ChartColumnStacked size={15} />
+              <span>Activity</span>
+            </a>
+          ) : null}
           <a
             href="/settings"
             className="user-auth-menu-link"

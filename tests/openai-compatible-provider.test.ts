@@ -103,6 +103,37 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(body).toMatchObject({ model: "gpt-5.6-sol", reasoning_effort: "high" });
   });
 
+  test("passes bounded sampling controls for baseline inference", async () => {
+    let body: Record<string, unknown> | null = null;
+    globalThis.fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return streamResponse([
+        'data: {"choices":[{"delta":{"content":"42"},"finish_reason":"stop"}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+    };
+    for await (const _delta of streamOpenAiCompatibleChatCompletion({
+      ...providerState("https://api.fireworks.ai/inference/v1", "fireworks"),
+      providerId: "fireworks",
+      modelId: "accounts/fireworks/models/qwen3-0p6b",
+      messages: [{ role: "user", content: "Solve the problem." }],
+      reasoningEffort: "none",
+      maxOutputTokens: 2_048,
+      temperature: 0.8,
+      topP: 0.95,
+      seed: 17,
+    })) {
+      // Drain the stream.
+    }
+    expect(body).toMatchObject({
+      reasoning_effort: "none",
+      max_tokens: 2_048,
+      temperature: 0.8,
+      top_p: 0.95,
+      seed: 17,
+    });
+  });
+
   test("sends native tools to BYOK providers and streams tool call deltas", async () => {
     const requests: Array<{ url: string; authorization: string | null; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
@@ -493,6 +524,9 @@ describe("OpenAI-compatible provider adapter", () => {
       ],
       toolChoice: "auto",
       requestId: "turn_subscription",
+      maxOutputTokens: 512,
+      temperature: 0.4,
+      topP: 0.8,
     })) {
       deltas.push(delta);
     }
@@ -513,6 +547,9 @@ describe("OpenAI-compatible provider adapter", () => {
           ],
           stream: true,
           store: false,
+          max_output_tokens: 512,
+          temperature: 0.4,
+          top_p: 0.8,
           instructions: "Be concise.",
           tools: [
             {
@@ -540,6 +577,24 @@ describe("OpenAI-compatible provider adapter", () => {
       { type: "tool_call_delta", toolCalls: [{ function: { arguments: '"README.md"}' } }] },
     ]);
     expect(deltas[4]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
+  });
+
+  test("rejects unsupported deterministic seed sampling for ChatGPT subscriptions", async () => {
+    globalThis.fetch = async () => {
+      throw new Error("Fetch must not run for an unsupported request.");
+    };
+    const drain = async () => {
+      for await (const _delta of streamOpenAiCompatibleChatCompletion({
+        ...subscriptionProviderState(),
+        providerId: "openai",
+        modelId: "gpt-5.5",
+        messages: [{ role: "user", content: "sample deterministically" }],
+        seed: 17,
+      })) {
+        // Drain the stream.
+      }
+    };
+    await expect(drain()).rejects.toThrow("do not support deterministic seed");
   });
 
   test("captures and replays opaque Responses reasoning items across tool requests", async () => {

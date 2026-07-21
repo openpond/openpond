@@ -9,11 +9,27 @@ export const AppsView = lazy(() =>
 export const GetStartedView = lazy(() =>
   import("../get-started/GetStartedView").then((module) => ({ default: module.GetStartedView })),
 );
+export const PostTrainingLearningPanel = lazy(() =>
+  import("../get-started/PostTrainingLearningPanel").then((module) => ({
+    default: module.PostTrainingLearningPanel,
+  })),
+);
+export const MakeAgentTutorialLearningPanel = lazy(() =>
+  import("../get-started/MakeAgentTutorialLearningPanel").then((module) => ({
+    default: module.MakeAgentTutorialLearningPanel,
+  })),
+);
 export const LabsRoute = lazy(() =>
   import("../labs/LabsRoute").then((module) => ({ default: module.LabsRoute })),
 );
 export const BrowserSidebar = lazy(() =>
   import("../browser/BrowserSidebar").then((module) => ({ default: module.BrowserSidebar })),
+);
+export const RightChatPanelStack = lazy(() =>
+  import("./RightChatPanelStack").then((module) => ({ default: module.RightChatPanelStack })),
+);
+export const NativeSkillSidebar = lazy(() =>
+  import("./NativeSkillSidebar").then((module) => ({ default: module.NativeSkillSidebar })),
 );
 export const CloudWorkView = lazy(() =>
   import("../cloud/CloudWorkView").then((module) => ({ default: module.CloudWorkView })),

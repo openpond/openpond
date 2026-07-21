@@ -30,11 +30,19 @@ export function useComputeSettings(input: { connection: ClientConnection | null;
     finally { setBusy(null); }
   }, [connection, onError]);
 
-  const save = useCallback(async (modelStorePath: string | null, defaultDeviceIds: string[]) => {
+  const save = useCallback(async (
+    modelStorePath: string | null,
+    datasetStorePath: string | null,
+    defaultDeviceIds: string[],
+  ) => {
     if (!connection) return false;
     setBusy("save");
     try {
-      const settings = await api.updateComputeSettings(connection, { modelStorePath, defaultDeviceIds });
+      const settings = await api.updateComputeSettings(connection, {
+        modelStorePath,
+        datasetStorePath,
+        defaultDeviceIds,
+      });
       const next = await api.computeState(connection);
       setState({ ...next, settings });
       onError(null);

@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 25;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 27;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -297,13 +297,53 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS training_sources (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
-    session_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    session_id TEXT,
+    source_hash TEXT NOT NULL,
+    repository_id TEXT,
+    revision TEXT,
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS training_sources_profile_updated_idx ON training_sources(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS training_sources_session_idx ON training_sources(session_id);
+  CREATE INDEX IF NOT EXISTS training_sources_kind_updated_idx ON training_sources(profile_id, source_kind, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS training_sources_hash_idx ON training_sources(profile_id, source_hash);
+  CREATE INDEX IF NOT EXISTS training_sources_repository_revision_idx ON training_sources(repository_id, revision);
+
+  CREATE TABLE IF NOT EXISTS dataset_import_jobs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    repository_id TEXT,
+    revision TEXT,
+    taskset_id TEXT,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS dataset_import_jobs_profile_updated_idx ON dataset_import_jobs(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS dataset_import_jobs_status_updated_idx ON dataset_import_jobs(status, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS dataset_import_jobs_repository_revision_idx ON dataset_import_jobs(repository_id, revision);
+
+  CREATE TABLE IF NOT EXISTS dataset_artifacts (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    taskset_id TEXT NOT NULL,
+    taskset_revision INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    format TEXT NOT NULL,
+    row_count INTEGER NOT NULL,
+    storage_root TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS dataset_artifacts_taskset_revision_idx ON dataset_artifacts(taskset_id, taskset_revision);
+  CREATE UNIQUE INDEX IF NOT EXISTS dataset_artifacts_content_hash_idx ON dataset_artifacts(content_hash);
+  CREATE INDEX IF NOT EXISTS dataset_artifacts_profile_updated_idx ON dataset_artifacts(profile_id, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS training_chat_search_documents (
     session_id TEXT PRIMARY KEY,
@@ -423,6 +463,19 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS baseline_reports_taskset_idx ON baseline_reports(taskset_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS taskset_baseline_runs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    taskset_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS taskset_baseline_runs_profile_updated_idx ON taskset_baseline_runs(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS taskset_baseline_runs_taskset_updated_idx ON taskset_baseline_runs(taskset_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS taskset_baseline_runs_status_updated_idx ON taskset_baseline_runs(status, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS grader_audit_reports (
     id TEXT PRIMARY KEY,

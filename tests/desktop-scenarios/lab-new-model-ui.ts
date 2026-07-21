@@ -190,7 +190,7 @@ export default desktopScenario({
 
     await clickByAriaLabel(harness, "Create workproduct");
     await clickButtonContainingText(harness, "New model");
-    await clickButtonContainingText(harness, "Automated", "[aria-label='New model']");
+    await clickButtonContainingText(harness, "Automatic", "[aria-label='New model']");
     await clickButtonByText(harness, "Continue", "[aria-label='New model']");
     await harness.renderer.assertText("Find repeated work", {
       label: "Automated New Model scan scope",

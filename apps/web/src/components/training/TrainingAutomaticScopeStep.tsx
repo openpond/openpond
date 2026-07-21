@@ -1,64 +1,175 @@
-import type { TaskMinerConfig, TaskMinerRun } from "@openpond/contracts";
+import type {
+  TaskMinerConfig,
+  TaskMinerRun,
+  TrainingChatSearchEntry,
+} from "@openpond/contracts";
 import { Loader2 } from "../icons";
+import {
+  formatTrainingTokens,
+  TrainingChatPicker,
+  type TrainingSourceEstimate,
+} from "./TrainingChatPicker";
 
 export function TrainingAutomaticScopeStep({
-  chatPreview,
-  chatCount,
   config,
+  estimatesBySessionId,
   estimate,
-  onConfigChange,
+  matchingSessionCount,
   onCancel,
+  onConfigChange,
+  onLoadMore,
   onScan,
+  onSearchChange,
+  onToggleSession,
+  onToggleVisible,
   run,
   scanning,
+  search,
+  searchError,
+  searchHasMore,
+  searchIndexedChats,
+  searchIndexing,
+  searchLoading,
+  searchTotalChats,
+  selectedEntries,
+  selectedSessionIds,
+  targetLabel,
+  visibleSessions,
 }: {
-  chatPreview: Array<{ id: string; title: string; updatedAt: string }>;
-  chatCount: number;
   config: TaskMinerConfig;
-  estimate: { messageCount: number; estimatedTokens: number; measuredChats: number };
-  onConfigChange: (config: TaskMinerConfig) => void;
+  estimatesBySessionId: Record<string, TrainingSourceEstimate>;
+  estimate: TrainingSourceEstimate & { measuredChats: number };
+  matchingSessionCount: number;
   onCancel: () => void;
+  onConfigChange: (config: TaskMinerConfig) => void;
+  onLoadMore: () => void;
   onScan: () => void;
+  onSearchChange: (value: string) => void;
+  onToggleSession: (sessionId: string, selected: boolean) => void;
+  onToggleVisible: () => void;
   run: TaskMinerRun | null;
   scanning: boolean;
+  search: string;
+  searchError: string | null;
+  searchHasMore: boolean;
+  searchIndexedChats: number;
+  searchIndexing: boolean;
+  searchLoading: boolean;
+  searchTotalChats: number;
+  selectedEntries: TrainingChatSearchEntry[];
+  selectedSessionIds: Set<string>;
+  targetLabel: string;
+  visibleSessions: TrainingChatSearchEntry[];
 }) {
+  const selectedCount = selectedSessionIds.size;
+  const estimateComplete = estimate.measuredChats === selectedCount;
+  const copy = automaticCopy(targetLabel);
+
   return (
     <>
       <div className="training-dialog-scroll-body">
         <div className="training-run-step-heading">
-          <h3>Review chats in scope</h3>
-          <p>OpenPond groups repeated work across completed chats on this device. The next step shows candidate workflows and their supporting chats; nothing is sent to an authoring model until you choose a candidate and approve disclosure.</p>
+          <h3>Choose chats to inspect</h3>
+          <p>{copy.description}</p>
         </div>
-        <dl className="training-automatic-scope-summary">
-          <div><dt>Chats in scope</dt><dd>{chatCount}</dd></div>
-          <div><dt>Messages</dt><dd>{estimate.measuredChats === chatCount ? estimate.messageCount : "Estimating…"}</dd></div>
-          <div><dt>Approximate tokens</dt><dd>{estimate.measuredChats === chatCount ? formatTokens(estimate.estimatedTokens) : "Estimating…"}</dd></div>
-        </dl>
-        <section className="training-automatic-chat-preview" aria-label="Recent chats in scope">
-          <div><h4>Recent chats</h4><span>Showing {chatPreview.length} of {chatCount}</span></div>
-          {chatPreview.length ? <ul>{chatPreview.map((chat) => <li key={chat.id}><strong>{chat.title}</strong><time dateTime={chat.updatedAt}>{formatDate(chat.updatedAt)}</time></li>)}</ul> : <p>No completed chats are available yet.</p>}
-          <small>Finding repeated work reads these chats locally. You will review the matching chats before any Taskset is authored.</small>
-        </section>
+        <TrainingChatPicker
+          disabled={scanning}
+          estimatesBySessionId={estimatesBySessionId}
+          matchingSessionCount={matchingSessionCount}
+          onLoadMore={onLoadMore}
+          onSearchChange={onSearchChange}
+          onToggleSession={onToggleSession}
+          onToggleVisible={onToggleVisible}
+          search={search}
+          searchError={searchError}
+          searchHasMore={searchHasMore}
+          searchIndexedChats={searchIndexedChats}
+          searchIndexing={searchIndexing}
+          searchLoading={searchLoading}
+          searchTotalChats={searchTotalChats}
+          selectedEntries={selectedEntries}
+          selectedSessionIds={selectedSessionIds}
+          visibleSessions={visibleSessions}
+        />
+        <p className="training-local-scope-note">
+          The scan reads only the selected chats and runs locally. Nothing is sent to an authoring model until you choose a recommendation and approve its supporting chats.
+        </p>
         <details className="training-automatic-options">
-          <summary>Search options</summary>
+          <summary>Discovery options</summary>
           <div>
             <label>Look back <input type="number" min={1} max={365} value={config.observationWindowDays} onChange={(event) => onConfigChange({ ...config, observationWindowDays: Number(event.target.value) })} /> days</label>
             <label>Minimum recurrence <input type="number" min={2} max={100} value={config.minimumRecurrence} onChange={(event) => onConfigChange({ ...config, minimumRecurrence: Number(event.target.value) })} /></label>
           </div>
         </details>
-        {run && ["queued", "running", "cancelling"].includes(run.status) ? <div className="training-miner-progress" role="status">
-          <div><strong>{minerStageLabel(run)}</strong><span>{run.progress.processedSources} of {run.progress.totalSources || chatCount} chats · {run.progress.candidatesFound} candidates{run.progress.skippedSources ? ` · ${run.progress.skippedSources} skipped` : ""}</span></div>
-          <progress max={Math.max(1, run.progress.totalSources || chatCount)} value={run.progress.processedSources} />
-        </div> : null}
+        {run && ["queued", "running", "cancelling"].includes(run.status) ? (
+          <div className="training-miner-progress" role="status">
+            <div>
+              <strong>{minerStageLabel(run)}</strong>
+              <span>{run.progress.processedSources} of {run.progress.totalSources || selectedCount} chats · {run.progress.candidatesFound} candidates{run.progress.skippedSources ? ` · ${run.progress.skippedSources} skipped` : ""}</span>
+            </div>
+            <progress max={Math.max(1, run.progress.totalSources || selectedCount)} value={run.progress.processedSources} />
+          </div>
+        ) : null}
         {run?.status === "failed" ? <p className="training-empty">Scan failed: {run.error}</p> : null}
-        {run?.status === "cancelled" ? <p className="training-empty">The scan was cancelled. No candidate was selected.</p> : null}
+        {run?.status === "cancelled" ? <p className="training-empty">The scan was cancelled. No recommendation was selected.</p> : null}
       </div>
       <div className="training-dialog-actions">
-        {scanning ? <button className="training-button secondary" type="button" disabled={run?.status === "cancelling"} onClick={onCancel}>{run?.status === "cancelling" ? "Cancelling…" : "Cancel scan"}</button> : null}
-        <button className="training-button" type="button" disabled={scanning || chatCount === 0} onClick={onScan}>{scanning ? <Loader2 className="spin" size={14} /> : null}{scanning ? "Finding repeated work…" : "Find repeated work"}</button>
+        <span className="training-selection-count">
+          {selectedCount === 0
+            ? "Select one or more chats"
+            : estimateComplete
+              ? <>
+                  <span>{selectedCount} chat{selectedCount === 1 ? "" : "s"}</span>
+                  <span>{estimate.messageCount} messages</span>
+                  <span>About {formatTrainingTokens(estimate.estimatedTokens)} tokens</span>
+                </>
+              : <><span>{selectedCount} chat{selectedCount === 1 ? "" : "s"}</span><span>Estimating…</span></>}
+        </span>
+        {scanning ? (
+          <button className="training-button secondary" type="button" disabled={run?.status === "cancelling"} onClick={onCancel}>
+            {run?.status === "cancelling" ? "Cancelling…" : "Cancel scan"}
+          </button>
+        ) : null}
+        <button className="training-button" type="button" disabled={scanning || selectedCount === 0} onClick={onScan}>
+          {scanning ? <Loader2 className="spin" size={14} /> : null}
+          {scanning ? copy.scanningLabel : copy.actionLabel}
+        </button>
       </div>
     </>
   );
+}
+
+function automaticCopy(targetLabel: string): {
+  actionLabel: string;
+  description: string;
+  scanningLabel: string;
+} {
+  if (targetLabel === "agent") {
+    return {
+      actionLabel: "Find Agent opportunities",
+      description: "Select completed chats that may contain repeated work worth turning into an Agent. OpenPond will compare only the chats you choose.",
+      scanningLabel: "Finding Agent opportunities…",
+    };
+  }
+  if (targetLabel === "dataset") {
+    return {
+      actionLabel: "Find Dataset opportunities",
+      description: "Select completed chats that may contain repeated work worth capturing in a reusable Dataset. OpenPond will compare only the chats you choose.",
+      scanningLabel: "Finding Dataset opportunities…",
+    };
+  }
+  if (targetLabel === "model") {
+    return {
+      actionLabel: "Find training opportunities",
+      description: "Select completed chats that may contain repeated work worth training into a Model. OpenPond will compare only the chats you choose.",
+      scanningLabel: "Finding training opportunities…",
+    };
+  }
+  return {
+    actionLabel: "Find repeated work",
+    description: `Select completed chats that may contain repeated work worth turning into a ${targetLabel}. OpenPond will compare only the chats you choose.`,
+    scanningLabel: "Finding repeated work…",
+  };
 }
 
 function minerStageLabel(run: TaskMinerRun): string {
@@ -66,19 +177,6 @@ function minerStageLabel(run: TaskMinerRun): string {
   if (run.status === "cancelling") return "Cancelling scan";
   if (run.progress.stage === "ingesting") return "Preparing local evidence";
   if (run.progress.stage === "clustering") return "Clustering repeated work";
-  if (run.progress.stage === "persisting") return "Saving candidates";
+  if (run.progress.stage === "persisting") return "Saving recommendations";
   return "Scanning local evidence";
-}
-
-function formatTokens(tokens: number): string {
-  if (tokens < 1_000) return String(tokens);
-  if (tokens < 1_000_000) return `${(tokens / 1_000).toFixed(tokens >= 10_000 ? 0 : 1)}K`;
-  return `${(tokens / 1_000_000).toFixed(tokens >= 10_000_000 ? 0 : 1)}M`;
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
 }

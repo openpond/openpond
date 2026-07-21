@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Bot, X } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
+import { AppDialog } from "../dialogs/AppDialog";
 
 export function LabAgentRenameDialog({
   agentId,
@@ -27,14 +28,6 @@ export function LabAgentRenameDialog({
     setError(null);
   }, [agentId, currentName]);
 
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) onClose();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [busy, onClose]);
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!normalizedName || unchanged || busy) return;
@@ -51,19 +44,14 @@ export function LabAgentRenameDialog({
   }
 
   return (
-    <div
-      className="labs-rename-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
-      }}
+    <AppDialog
+      ariaLabel={`Rename ${currentName}`}
+      backdropClassName="labs-rename-backdrop"
+      className="labs-rename-dialog"
+      dismissDisabled={busy}
+      initialFocusKey={agentId}
+      onClose={onClose}
     >
-      <section
-        aria-label={`Rename ${currentName}`}
-        aria-modal="true"
-        className="labs-rename-dialog"
-        role="dialog"
-      >
         <header>
           <span className="labs-rename-dialog-icon">
             <Bot size={16} />
@@ -85,7 +73,7 @@ export function LabAgentRenameDialog({
           <label>
             <span>Display name</span>
             <input
-              autoFocus
+              data-autofocus
               maxLength={80}
               value={name}
               onChange={(event) => setName(event.currentTarget.value)}
@@ -107,7 +95,6 @@ export function LabAgentRenameDialog({
             </button>
           </footer>
         </form>
-      </section>
-    </div>
+    </AppDialog>
   );
 }

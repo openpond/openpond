@@ -73,6 +73,7 @@ export function LabWorkproductDetail({
   onRenameAgent,
   onStartAgentChange,
   onOpenDataset,
+  onOpenProviderSettings,
   onToast,
   onAnswerQuestion,
   candidateReview,
@@ -99,6 +100,7 @@ export function LabWorkproductDetail({
   onRenameAgent: () => void;
   onStartAgentChange: (agentId: string, prompt?: string) => void;
   onOpenDataset: (tasksetId: string) => void;
+  onOpenProviderSettings: () => void;
   onToast: ShowAppToast;
   onAnswerQuestion: (
     input: CreateImproveReviewActionInput,
@@ -163,10 +165,11 @@ export function LabWorkproductDetail({
   const [modelUseVersionId, setModelUseVersionId] = useState<string | null>(
     null,
   );
-  const [startTraining, setStartTraining] = useState<{
-    taskset: Taskset;
-    method: "sft" | "grpo";
-  } | null>(null);
+  const [startTraining, setStartTraining] = useState<Taskset | null>(null);
+  const currentStartTraining = startTraining
+    ? training.payload?.tasksets.find((candidate) =>
+        candidate.id === startTraining.id) ?? startTraining
+    : null;
   const selectedRun =
     workproductRuns.find((run) => run.id === selectedRunId) ??
     workproductRuns[0] ??
@@ -189,6 +192,7 @@ export function LabWorkproductDetail({
             activeTab,
             selectedChangeRunId,
             selectedChangeCommit,
+            workproduct.kind === "agent",
           ),
     [
       activeTab,
@@ -223,7 +227,7 @@ export function LabWorkproductDetail({
   const detailTabs = [
     ["overview", "Overview"],
     ["changes", "Changes"],
-    ["evals", "Evals"],
+    ["evals", workproduct.kind === "agent" ? "Checks" : "Evals"],
     ["versions", "Versions"],
     ["configuration", "Configuration"],
   ] as const;
@@ -312,6 +316,12 @@ export function LabWorkproductDetail({
         taskset: version.taskset,
       }),
     );
+  }
+
+  async function checkDatasetReadiness(tasksetId: string) {
+    const audit = await training.actions.auditGraders(tasksetId);
+    if (!audit?.passed) return;
+    await training.actions.readiness(tasksetId);
   }
 
   return (
@@ -419,11 +429,17 @@ export function LabWorkproductDetail({
             <dl className="labs-inline-facts">
               <Fact label="Type" value={titleCase(workproduct.kind)} />
               <Fact label="Status" value={progression.statusLabel} />
-              <Fact label="ID" value={workproduct.id} />
-              <Fact
-                label="Path"
-                value={workproduct.path ?? "Managed artifact"}
-              />
+              {workproduct.kind === "agent" ? (
+                <Fact label="Profile" value="Saved in your Profile" />
+              ) : (
+                <>
+                  <Fact label="ID" value={workproduct.id} />
+                  <Fact
+                    label="Path"
+                    value={workproduct.path ?? "Managed artifact"}
+                  />
+                </>
+              )}
             </dl>
             <p className="labs-detail-copy">{workproduct.description}</p>
           </DetailSection>
@@ -487,7 +503,7 @@ export function LabWorkproductDetail({
           </div>
         ) : activeTab === "evals" ? (
             <DetailSection
-              title="Evals"
+              title={workproduct.kind === "agent" ? "Checks" : "Evals"}
               actions={
                 workproduct.kind === "agent" ? (
                   <LabAgentEvalActions
@@ -567,35 +583,50 @@ export function LabWorkproductDetail({
 
       {newVersionOpen ? (
         <LabNewVersionDialog
+          checking={["audit-graders", "readiness"].includes(
+            training.busyAction ?? "",
+          )}
           initialTasksetId={taskset?.id ?? null}
           state={training.payload}
           onClose={() => setNewVersionOpen(false)}
-          onContinue={(selection) => {
+          onCheck={checkDatasetReadiness}
+          onContinue={({ taskset: selectedTaskset }) => {
             setNewVersionOpen(false);
-            setStartTraining(selection);
+            setStartTraining(selectedTaskset);
           }}
+          onReview={(tasksetId) => onOpenDataset(tasksetId)}
         />
       ) : null}
 
-      {startTraining ? (
+      {currentStartTraining ? (
         <TrainingStartDialog
           busy={[
             "prepare-training",
             "start-prepared-training",
             "start-training",
+            "baseline",
           ].includes(training.busyAction ?? "")}
+          busyAction={training.busyAction}
           connection={connection}
           baseModelCandidates={training.payload?.baseModelCandidates ?? []}
           destinations={training.payload?.destinations ?? []}
-          initialMethod={startTraining.method}
           modelId={workproduct.id}
           preferredBaseModel={preferredBaseModel(workproductRuns)}
-          taskset={startTraining.taskset}
+          taskset={currentStartTraining}
+          baselineReports={training.payload?.baselineReports.filter((report) =>
+            report.tasksetId === currentStartTraining.id
+            && report.tasksetHash === currentStartTraining.contentHash) ?? []}
+          baselineRuns={training.payload?.baselineRuns.filter((run) =>
+            run.tasksetId === currentStartTraining.id) ?? []}
           onClose={() => setStartTraining(null)}
+          onOpenProviderSettings={onOpenProviderSettings}
+          onRunBaseline={async (model, options) => Boolean(
+            await training.actions.baseline(currentStartTraining.id, model, options),
+          )}
           onPrepare={(destinationId, recipe, approval) =>
             training.actions.prepareTraining({
               modelId: workproduct.id,
-              tasksetId: startTraining.taskset.id,
+              tasksetId: currentStartTraining.id,
               destinationId,
               recipe,
               exportApproved: approval.exportApproved,
@@ -616,7 +647,7 @@ export function LabWorkproductDetail({
             Boolean(
               await training.actions.startTraining({
                 modelId: workproduct.id,
-                tasksetId: startTraining.taskset.id,
+                tasksetId: currentStartTraining.id,
                 destinationId,
                 recipe,
                 ...approval,

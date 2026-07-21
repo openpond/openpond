@@ -1,0 +1,53 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:10.606
+Outcome rewards compress an attempt to a scalar. Distillation supplies richer guidance by specifying a probability distribution over plausible next tokens.
+
+2
+00:00:13.965 --> 00:00:28.970
+A one-hot target says “Cancelled Error” and assigns every alternative zero. A teacher distribution can say that “Cancelled Error” is most likely, “Timeout Error” is also plausible, “return” is weak, and “retry” is unlikely.
+
+3
+00:00:32.328 --> 00:00:36.101
+That structure contains more information than the one sampled token.
+
+4
+00:00:39.459 --> 00:00:47.830
+Teacher probability q weights the log of student probability p over the vocabulary. Minimizing that cross-entropy moves the student toward the teacher.
+
+5
+00:00:51.188 --> 00:00:59.599
+In our example, the student initially favors “return,” while the teacher favors “Cancelled Error.” After an update, the two distributions move closer.
+
+6
+00:01:02.957 --> 00:01:14.229
+Teacher temperature controls how much of that structure is visible. Low temperature makes the target almost one-hot. Higher temperature reveals alternatives in the tail; too much can magnify noise.
+
+7
+00:01:17.587 --> 00:01:22.495
+Teacher-target temperature is separate from the rollout temperature used to sample behavior.
+
+8
+00:01:25.853 --> 00:01:39.854
+KL direction changes the lesson too. Forward KL penalizes the student for missing teacher-supported alternatives. Reverse KL strongly penalizes student probability where the teacher assigns little mass, often favoring a narrower mode.
+
+9
+00:01:43.213 --> 00:01:46.986
+“We used KL” is incomplete without direction and temperature.
+
+10
+00:01:50.344 --> 00:02:04.024
+Prefix provenance determines which states receive teacher targets. Offline distillation uses fixed teacher trajectories. On-policy distillation lets the student reach its own strange cancellation state, then asks the teacher what should come next there.
+
+11
+00:02:07.383 --> 00:02:19.748
+The teacher does not need larger weights. The same frozen model can see the student's failed prefix plus extra training-only evidence: a verified repair, an expert demonstration, or a test explanation.
+
+12
+00:02:23.107 --> 00:02:26.558
+That evidence changes the teacher distribution.
+
+13
+00:02:29.917 --> 00:02:40.967
+Training transfers the useful part of that privileged view into student weights. Deployment removes the evidence. A verified solution, demonstration, or failure explanation produces a different teacher target.

@@ -30,14 +30,14 @@ export function LabAgentEvalActions({
     <div className="labs-eval-actions">
       <button className="training-button secondary" type="button" onClick={onCreate}>
         <Plus size={13} />
-        Create Eval
+        Create check
       </button>
       {available.length ? (
         <>
           <DropdownSelect
             compact
             searchable
-            label="Existing Eval"
+            label="Existing check"
             options={available.map((item) => ({
               value: item.id,
               label: item.name,
@@ -53,7 +53,7 @@ export function LabAgentEvalActions({
             type="button"
             onClick={() => onAttach(selectedEvalRef)}
           >
-            Attach
+            Add check
           </button>
         </>
       ) : null}

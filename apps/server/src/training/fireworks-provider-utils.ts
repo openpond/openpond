@@ -262,6 +262,26 @@ export function safeArtifactName(filename: string): string {
   return basename.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+export function selectLineageAdapterArtifact(
+  artifacts: TrainingArtifact[],
+): TrainingArtifact {
+  return (
+    artifacts.find(
+      (artifact) =>
+        artifact.kind === "adapter" &&
+        typeof artifact.metadata.providerFilename === "string" &&
+        safeArtifactName(artifact.metadata.providerFilename) ===
+          "adapter_model.safetensors",
+    ) ??
+    artifacts.find((artifact) => artifact.kind === "adapter") ??
+    artifacts.find((artifact) => artifact.kind === "checkpoint") ??
+    artifacts[0] ??
+    (() => {
+      throw new Error("Fireworks returned no Model artifacts.");
+    })()
+  );
+}
+
 export function isConflict(error: unknown): boolean {
   return errorMessage(error).includes("(409)");
 }

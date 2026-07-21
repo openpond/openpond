@@ -2,6 +2,9 @@ import {
   CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT,
   CROSS_SYSTEM_TOOL_DEFINITIONS,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  DATASET_NO_TOOLS_CONTRACT_HASH,
+  type DatasetSelectionStrategy,
+  type RftRecipe,
   type Taskset,
 } from "@openpond/contracts";
 import { sha256 } from "@openpond/taskset-sdk";
@@ -38,16 +41,44 @@ export type FireworksRftDataset = {
   taskIds: string[];
 };
 
-export function renderFireworksSftDataset(taskset: Taskset): FireworksSftDataset {
+export type FireworksTrainingRecord = {
+  id: string;
+  input: Record<string, unknown>;
+  expectedOutput?: Record<string, unknown> | null;
+  tags: string[];
+};
+
+export type FireworksTrainingSelection = {
+  records: FireworksTrainingRecord[];
+  eligibleRows: number;
+  selectionSeed: number;
+  selectionStrategy: DatasetSelectionStrategy;
+  taskIdsHash: string;
+  sourceContentHash: string;
+  sourceSizeBytes: number;
+};
+
+export function renderFireworksSftDataset(
+  taskset: Taskset,
+  selection?: FireworksTrainingSelection,
+): FireworksSftDataset {
   const approvedTaskIds = new Set(
     taskset.learningSignals.demonstrations.flatMap((signal) =>
       signal.approved && signal.taskId ? [signal.taskId] : []),
   );
-  const records = taskset.tasks.flatMap((task) => {
+  const sourceRecords: FireworksTrainingRecord[] = selection?.records
+    ?? taskset.tasks
+      .filter((task) => task.split === "train")
+      .map((task) => ({
+        id: task.id,
+        input: task.input,
+        expectedOutput: task.expectedOutput,
+        tags: task.tags,
+      }));
+  const records = sourceRecords.flatMap((task) => {
     if (
-      task.split !== "train" ||
       !task.expectedOutput ||
-      !approvedTaskIds.has(task.id)
+      (!selection && !approvedTaskIds.has(task.id))
     ) {
       return [];
     }
@@ -75,25 +106,52 @@ export function renderFireworksSftDataset(taskset: Taskset): FireworksSftDataset
   };
 }
 
-export function renderFireworksRftDataset(taskset: Taskset): FireworksRftDataset {
-  const records = taskset.tasks
-    .filter((task) => task.split === "train")
+export function renderFireworksRftDataset(
+  taskset: Taskset,
+  recipe?: RftRecipe,
+  selection?: FireworksTrainingSelection,
+): FireworksRftDataset {
+  const sourceRecords: FireworksTrainingRecord[] = selection?.records
+    ?? taskset.tasks
+      .filter((task) => task.split === "train")
+      .map((task) => ({
+        id: task.id,
+        input: task.input,
+        expectedOutput: null,
+        tags: task.tags,
+      }));
+  const crossSystem = recipe
+    ? recipe.reward.environmentId === "cross-system-operations"
+    : usesCrossSystemToolContract(taskset);
+  const toolContractHash = recipe?.reward.toolContractHash
+    ?? (crossSystem
+      ? CROSS_SYSTEM_TOOL_CONTRACT_HASH
+      : DATASET_NO_TOOLS_CONTRACT_HASH);
+  const records = sourceRecords
     .map((task) => {
-      const prompt = requiredText(task.input.prompt, "Task input prompt");
+      const messages = crossSystem
+        ? [
+            {
+              role: "system" as const,
+              content: CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT,
+            },
+            {
+              role: "user" as const,
+              content: requiredPrompt(task.input),
+            },
+          ]
+        : policyMessages(task.input);
       return {
         taskId: task.id,
         value: {
-          messages: [
-            { role: "system", content: CROSS_SYSTEM_BOOTSTRAP_SYSTEM_PROMPT },
-            { role: "user", content: prompt },
-          ],
+          messages,
           input_metadata: {
             row_id: task.id,
             dataset_info: {
               taskset_id: taskset.id,
               taskset_hash: taskset.contentHash,
               task_id: task.id,
-              tool_contract_hash: CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+              tool_contract_hash: toolContractHash,
             },
           },
         },
@@ -120,6 +178,21 @@ export function renderFireworksRftDataset(taskset: Taskset): FireworksRftDataset
     estimatedTokens: Math.max(1, Math.ceil(bytes.byteLength / 4)),
     taskIds: records.map((record) => record.taskId),
   };
+}
+
+function policyMessages(input: Record<string, unknown>): FireworksChatMessage[] {
+  const messages = parseMessages(input.messages);
+  if (messages.length) return messages;
+  return [{ role: "user", content: requiredPrompt(input) }];
+}
+
+function requiredPrompt(input: Record<string, unknown>): string {
+  const prompt = typeof input.prompt === "string" && input.prompt.trim()
+    ? input.prompt
+    : parseMessages(input.messages)
+      .filter((message) => message.role === "user")
+      .at(-1)?.content;
+  return requiredText(prompt, "Task input prompt");
 }
 
 function trainingMessages(

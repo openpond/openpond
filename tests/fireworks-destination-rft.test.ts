@@ -8,6 +8,7 @@ import {
   TasksetSchema,
   type RftRecipe,
   type SftRecipe,
+  type TrainingArtifact,
 } from "../packages/contracts/src";
 import { computeTasksetHash, contentHash } from "../packages/taskset-sdk/src";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";
@@ -21,6 +22,12 @@ import { syncModelTrainingCreateImproveRuns } from "../apps/server/src/training/
 import { listLocalAdapterProviderModels } from "../apps/server/src/training/local-adapter-models";
 import { resolveModelLineageIdForRuntime } from "../apps/server/src/training/local-adapter-chat-runtime";
 import { resolveFireworksRftEvaluatorId } from "../apps/server/src/training/fireworks-rft-evaluator";
+import {
+  fireworksRftChunkSize,
+  fireworksRftOptimizerSteps,
+  fireworksRftRolloutCount,
+} from "../apps/server/src/training/fireworks-client";
+import { selectLineageAdapterArtifact } from "../apps/server/src/training/fireworks-provider-utils";
 import {
   providerOptimizerUpdates,
   selectFireworksEvaluationAccelerator,
@@ -38,9 +45,44 @@ import {
 import { API_KEY, fireworksMock, fireworksRecipe, fireworksRftMock, fireworksRftRecipe, jsonResponse, resolveApprovalActor, rftTasksetFixture } from "./helpers/fireworks-destination-fixtures";
 
 describe.sequential("Fireworks RFT destination", () => {
-  test("executes the GRPO provider lifecycle, proves optimizer updates, imports weights, and evaluates privately", async () =>
+  test("maps the requested update ceiling to Fireworks chunk semantics", () => {
+    const chunkSize = fireworksRftChunkSize(256, 10);
+    expect(chunkSize).toBe(26);
+    expect(fireworksRftOptimizerSteps(256, chunkSize)).toBe(10);
+    expect(fireworksRftRolloutCount(256, 8)).toBe(2_048);
+  });
+
+  test("anchors lineage to weights when provider filenames include checkpoint paths", () => {
+    const artifact = (
+      id: string,
+      providerFilename: string,
+    ): TrainingArtifact =>
+      ({
+        id,
+        kind: "adapter",
+        metadata: { providerFilename },
+      }) as TrainingArtifact;
+    expect(
+      selectLineageAdapterArtifact([
+        artifact(
+          "config",
+          "tuned-model/run/checkpoint/adapter_config.json",
+        ),
+        artifact(
+          "weights",
+          "tuned-model/run/checkpoint/adapter_model.safetensors",
+        ),
+      ]).id,
+    ).toBe("weights");
+  });
+
+  test("executes the DAPO RFT provider lifecycle, proves optimizer updates, imports weights, and evaluates privately", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const taskset = rftTasksetFixture();
+      const recipe = {
+        ...fireworksRftRecipe(),
+        loss: { method: "dapo" as const, klBeta: null },
+      };
       await store.upsertTaskset(taskset);
       const evaluation = createTaskEvaluationService({
         store,
@@ -80,7 +122,7 @@ describe.sequential("Fireworks RFT destination", () => {
         const started = await service.start({
           tasksetId: taskset.id,
           destinationId: "fireworks",
-          recipe: fireworksRftRecipe(),
+          recipe,
           exportApproved: true,
           maximumCostUsd: 9,
           retentionDays: 7,
@@ -100,6 +142,7 @@ describe.sequential("Fireworks RFT destination", () => {
           status: "starting",
           metadata: {
             trainingMethod: "grpo",
+            rftLossMethod: "dapo",
             providerEvaluatorId: "op-cso-remote-fixture",
             providerDatasetTaskIds: [
               taskset.tasks.find((task) => task.split === "train")!.id,
@@ -133,12 +176,15 @@ describe.sequential("Fireworks RFT destination", () => {
             baseModel: "accounts/fireworks/models/qwen3-0p6b",
             loraRank: 8,
             batchSizeSamples: 4,
+            maxContextLength: 1_536,
           },
           inferenceParameters: {
             responseCandidatesCount: 4,
             maxOutputTokens: 512,
+            extraBody: JSON.stringify({ reasoning_effort: "none" }),
           },
-          lossConfig: { method: "GRPO" },
+          lossConfig: { method: "DAPO" },
+          chunkSize: 1,
           maxConcurrentRollouts: 4,
         });
 
@@ -147,7 +193,7 @@ describe.sequential("Fireworks RFT destination", () => {
         await expect(service.start({
           tasksetId: taskset.id,
           destinationId: "fireworks",
-          recipe: fireworksRftRecipe(),
+          recipe,
           exportApproved: true,
           maximumCostUsd: 9,
           retentionDays: 7,

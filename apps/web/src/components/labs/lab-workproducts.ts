@@ -53,6 +53,12 @@ export function labWorkproductProjection(input: {
 
   for (const agent of input.profile?.agents ?? []) {
     const key = workproductKey("agent", agent.id);
+    const defaultChatAction = input.profile?.actionCatalog.find((action) =>
+      action.agentId === agent.id
+      && action.sourceActionId === "chat"
+      && action.visibility !== "internal"
+      && action.visibility !== "debug",
+    ) ?? null;
     byKey.set(key, {
       key,
       kind: "agent",
@@ -71,7 +77,7 @@ export function labWorkproductProjection(input: {
       frontierBaselineRunId: null,
       trainingRunCount: 0,
       evaluationStatus: "not_run",
-      useActionId: `${agent.id}.chat`,
+      useActionId: defaultChatAction?.id ?? null,
     });
   }
 
@@ -172,8 +178,9 @@ export function labWorkproductProjection(input: {
         : run.target.id ?? run.id;
     const key = workproductKey(kind, id);
     const existing = byKey.get(key);
-    const candidateName =
-      run.target.displayName ?? existing?.name ?? draftName(run);
+    const candidateName = kind === "agent"
+      ? agentWorkproductName(run, existing?.name ?? null)
+      : run.target.displayName ?? existing?.name ?? draftName(run);
     const name =
       kind === "model"
         ? conciseWorkproductName(candidateName, "New model")
@@ -392,6 +399,38 @@ function hasActiveRun(
 function draftName(run: CreateImproveRun): string {
   const prefix = run.operation === "improve" ? "Improve" : "Create";
   return `${prefix} ${run.target.kind}`;
+}
+
+function agentWorkproductName(
+  run: CreateImproveRun,
+  profileName: string | null,
+): string {
+  const targetName = meaningfulAgentName(run.target.displayName);
+  if (targetName) return targetName;
+  const persistedName = meaningfulAgentName(profileName);
+  if (persistedName) return persistedName;
+  const purposeClause = run.objective
+    .split(/[.!?\n]|[,;](?=\s)/, 1)[0]
+    ?.replace(/^(?:please\s+)?(?:create|make|build|improve)\s+(?:an?\s+)?agent\s+(?:that\s+|to\s+)?/i, "")
+    .trim();
+  const purposeTitle = conciseWorkproductName(purposeClause, "New agent");
+  return `${purposeTitle} · ${draftRunLabel(run.id)}`;
+}
+
+function draftRunLabel(runId: string): string {
+  const segments = runId.split(/[^a-z0-9]+/i).filter(Boolean);
+  const candidate = segments.at(-1) ?? runId;
+  return candidate.slice(-6).toUpperCase().padStart(4, "0");
+}
+
+function meaningfulAgentName(value: string | null | undefined): string | null {
+  const name = value?.trim() ?? "";
+  if (!name) return null;
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (/^(?:create|creating|improve|improving|new) (?:an )?agent$/.test(normalized)) {
+    return null;
+  }
+  return name;
 }
 
 function runStatusLabel(run: CreateImproveRun): string {

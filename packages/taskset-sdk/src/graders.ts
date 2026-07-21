@@ -93,6 +93,35 @@ async function runGrader(
 function runDeterministic(grader: Extract<GraderSpec, { kind: "content" | "schema" | "file" | "diff" | "test" | "runtime_event" | "state" }>, task: TaskDataRecord, attempt: TaskAttemptResult): GradeComponent {
   const config = grader.config;
   if (grader.kind === "content") {
+    if (config.operator === "final_answer_equals_expected") {
+      const outputField =
+        typeof config.outputField === "string" ? config.outputField : "text";
+      const expectedField =
+        typeof config.expectedField === "string" ? config.expectedField : "text";
+      const actual = typeof attempt.output[outputField] === "string"
+        ? attempt.output[outputField]
+        : null;
+      const expected = typeof task.expectedOutput?.[expectedField] === "string"
+        ? task.expectedOutput[expectedField]
+        : null;
+      const normalizedActual = actual === null ? null : normalizedFinalAnswer(actual);
+      const normalizedExpected = expected === null
+        ? null
+        : normalizedFinalAnswer(expected);
+      const passed =
+        normalizedActual !== null
+        && normalizedExpected !== null
+        && normalizedActual === normalizedExpected;
+      return component(
+        grader,
+        passed ? 1 : 0,
+        passed,
+        passed
+          ? "The final answer matched the privileged expected answer."
+          : "The final answer did not match the privileged expected answer.",
+        [],
+      );
+    }
     if (config.operator === "exact_equals") {
       const outputField = typeof config.outputField === "string" ? config.outputField : "text";
       const expected = typeof config.expectedValue === "string" ? config.expectedValue : null;
@@ -155,3 +184,20 @@ function component(grader: GraderSpec, score: number, passed: boolean, feedback:
 function clamp(value: number): number { return Math.max(0, Math.min(1, value)); }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
 function stringOutput(output: Record<string, unknown>): string { return typeof output.text === "string" ? output.text : JSON.stringify(output); }
+
+function normalizedFinalAnswer(value: string): string {
+  const boxed = [...value.matchAll(/\\boxed\{([^{}]+)\}/g)].at(-1)?.[1];
+  const hashAnswer = value.match(/####\s*([^\n\r]+)/)?.[1];
+  const answerLabel = value.match(
+    /(?:final\s+answer|answer)\s*(?::|is|=)\s*([^\n\r]+)/i,
+  )?.[1];
+  const selected = boxed ?? hashAnswer ?? answerLabel ?? value;
+  return selected
+    .normalize("NFKC")
+    .trim()
+    .replace(/^\$+|\$+$/g, "")
+    .replace(/^\\\(|\\\)$/g, "")
+    .replace(/[,，]/g, "")
+    .replace(/[.\s]+$/g, "")
+    .replace(/\s+/g, " ");
+}

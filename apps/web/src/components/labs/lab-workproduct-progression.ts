@@ -147,7 +147,7 @@ function progressionForFrontierBaseline(
 
 function progressionForRun(run: CreateImproveRun): LabWorkproductProgression {
   const base = {
-    statusLabel: createImproveStatusLabel(run.state),
+    statusLabel: createImproveStatusLabel(run),
     statusValue: run.state,
     runId: run.id,
     conversationId: run.scope.conversationId,
@@ -160,7 +160,7 @@ function progressionForRun(run: CreateImproveRun): LabWorkproductProgression {
     return { ...base, action: { kind: "review_run", label: "Review plan" } };
   }
   if (run.state === "awaiting_promotion") {
-    return { ...base, action: { kind: "review_run", label: "Review candidate" } };
+    return { ...base, action: { kind: "review_run", label: run.target.kind === "agent" ? "Review update" : "Review candidate" } };
   }
   if (run.state === "pull_request_open") {
     return { ...base, action: { kind: "review_run", label: "Review change" } };
@@ -176,7 +176,7 @@ function progressionForRun(run: CreateImproveRun): LabWorkproductProgression {
     return {
       ...base,
       action: resumableCandidate
-        ? { kind: "resume_run", label: "Continue candidate" }
+        ? { kind: "resume_run", label: run.target.kind === "agent" ? "Continue update" : "Continue candidate" }
         : run.target.kind === "agent"
         ? { kind: "start_agent_change", label: "Try again" }
         : run.scope.conversationId
@@ -281,6 +281,26 @@ function progressionForModel(input: {
       conversationId,
     };
   }
+  const baselineReward = input.taskset.readiness.baselineReward;
+  if (
+    input.taskset.readiness.recommendedMethod === "grpo"
+    && !(
+      input.taskset.readiness.baselineReportId
+      && baselineReward
+      && baselineReward.count >= 2
+      && (baselineReward.variance ?? 0) > 0
+      && (baselineReward.mean ?? 0) > 0.05
+      && (baselineReward.mean ?? 0) < 0.95
+    )
+  ) {
+    return {
+      statusLabel: "Test base model",
+      statusValue: "needs_review",
+      action: { kind: "start_training", label: "Configure training" },
+      runId: input.latestRun?.id ?? null,
+      conversationId,
+    };
+  }
   return {
     statusLabel: "Ready to train",
     statusValue: "ready",
@@ -290,19 +310,21 @@ function progressionForModel(input: {
   };
 }
 
-function createImproveStatusLabel(state: CreateImproveRun["state"]): string {
+function createImproveStatusLabel(run: CreateImproveRun): string {
+  const state = run.state;
+  const isAgent = run.target.kind === "agent";
   const labels: Record<CreateImproveRun["state"], string> = {
     planning: "Planning",
     awaiting_questions: "Needs answers",
     awaiting_plan_approval: "Plan ready",
     paused: "Paused",
-    applying_source: "Applying changes",
+    applying_source: isAgent ? "Saving Agent" : "Applying changes",
     running_checks: "Running checks",
-    evaluating: "Evaluating",
-    awaiting_promotion: "Candidate ready",
+    evaluating: isAgent ? "Checking Agent" : "Evaluating",
+    awaiting_promotion: isAgent ? "Update ready" : "Candidate ready",
     opening_pull_request: "Opening review",
     pull_request_open: "Review open",
-    reconciling_release: "Merging change",
+    reconciling_release: isAgent ? "Saving update" : "Merging change",
     released: "Released",
     rejected: "Rejected",
     ready: "Ready",

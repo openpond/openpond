@@ -43,6 +43,8 @@ export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
 
 export type OpenAiCompatibleProviderId = (typeof OPENAI_COMPATIBLE_PROVIDER_IDS)[number];
 
+type OpenAiCompatibleReasoningEffort = CodexReasoningEffort | "none";
+
 export type OpenAiCompatibleStreamDelta =
   | { type: "text_delta"; text: string; raw: unknown }
   | { type: "reasoning_delta"; text: string; raw: unknown }
@@ -241,7 +243,11 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
-  reasoningEffort?: CodexReasoningEffort | null;
+  reasoningEffort?: OpenAiCompatibleReasoningEffort | null;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  seed?: number;
   signal?: AbortSignal;
   requestTimeoutMs?: number;
   errorBodyLimitBytes?: number;
@@ -274,6 +280,10 @@ export async function* streamOpenAiCompatibleChatCompletion(input: {
         tools: input.tools,
         toolChoice: input.toolChoice,
         reasoningEffort: input.reasoningEffort,
+        maxOutputTokens: input.maxOutputTokens,
+        temperature: input.temperature,
+        topP: input.topP,
+        seed: input.seed,
       })),
       signal: requestSignal.signal,
     });
@@ -330,7 +340,11 @@ async function* streamOpenAiSubscriptionResponses(input: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
-  reasoningEffort?: CodexReasoningEffort | null;
+  reasoningEffort?: OpenAiCompatibleReasoningEffort | null;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  seed?: number;
   signal?: AbortSignal;
   requestTimeoutMs?: number;
   errorBodyLimitBytes?: number;
@@ -345,6 +359,11 @@ async function* streamOpenAiSubscriptionResponses(input: {
     saveChatGptSubscriptionCredential: input.saveChatGptSubscriptionCredential,
   });
   if (!credential.accessToken) throw new Error("OpenAI ChatGPT subscription credential has no access token.");
+  if (input.seed != null) {
+    throw new Error(
+      "OpenAI ChatGPT subscription Responses do not support deterministic seed sampling.",
+    );
+  }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
   try {
     const response = await fetch(OPENAI_CODEX_RESPONSES_ENDPOINT, {
@@ -356,6 +375,9 @@ async function* streamOpenAiSubscriptionResponses(input: {
         tools: input.tools,
         toolChoice: input.toolChoice,
         reasoningEffort: input.reasoningEffort,
+        maxOutputTokens: input.maxOutputTokens,
+        temperature: input.temperature,
+        topP: input.topP,
       })),
       signal: requestSignal.signal,
     });
@@ -431,7 +453,11 @@ function buildChatCompletionBody(input: {
   messages: HostedChatMessage[];
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
-  reasoningEffort?: CodexReasoningEffort | null;
+  reasoningEffort?: OpenAiCompatibleReasoningEffort | null;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  seed?: number;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.model,
@@ -441,7 +467,16 @@ function buildChatCompletionBody(input: {
   if (input.tools) {
     body.tools = input.tools;
   }
-  if (input.providerId === "openai" && input.reasoningEffort) body.reasoning_effort = input.reasoningEffort;
+  if (
+    (input.providerId === "openai" || input.providerId === "fireworks")
+    && input.reasoningEffort
+  ) {
+    body.reasoning_effort = input.reasoningEffort;
+  }
+  if (input.maxOutputTokens != null) body.max_tokens = input.maxOutputTokens;
+  if (input.temperature != null) body.temperature = input.temperature;
+  if (input.topP != null) body.top_p = input.topP;
+  if (input.seed != null) body.seed = input.seed;
   if (input.providerId === "zai" && input.tools && input.tools.length > 0) {
     body.tool_stream = true;
   }
@@ -476,7 +511,10 @@ function buildResponsesBody(input: {
   messages: HostedChatMessage[];
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
-  reasoningEffort?: CodexReasoningEffort | null;
+  reasoningEffort?: OpenAiCompatibleReasoningEffort | null;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
 }): Record<string, unknown> {
   const projected = responsesInputFromMessages(input.messages);
   const body: Record<string, unknown> = {
@@ -487,6 +525,9 @@ function buildResponsesBody(input: {
   };
   if (projected.instructions) body.instructions = projected.instructions;
   if (input.reasoningEffort) body.reasoning = { effort: input.reasoningEffort, summary: "auto" };
+  if (input.maxOutputTokens != null) body.max_output_tokens = input.maxOutputTokens;
+  if (input.temperature != null) body.temperature = input.temperature;
+  if (input.topP != null) body.top_p = input.topP;
   const tools = responsesTools(input.tools);
   if (tools.length > 0) body.tools = tools;
   const toolChoice = responsesToolChoice(input.toolChoice);

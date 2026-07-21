@@ -1,0 +1,25 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:10.887
+Post-training changes what a model is likely to do. An input creates a distribution over possible actions, evaluation supplies evidence, and an optimizer changes that distribution.
+
+2
+00:00:12.598 --> 00:00:24.693
+Here a cancellation test is failing. The policy assigns chances to return None, raise the cancellation error, or retry. Those probabilities describe the available behavior; sampling produces one actual patch.
+
+3
+00:00:26.404 --> 00:00:34.313
+Loss is a number saying how bad behavior looks under the training rule. Useful training lowers both training loss and held-out error.
+
+4
+00:00:36.024 --> 00:00:42.025
+If training loss falls while held-out error rises, the model is learning the wrong thing.
+
+5
+00:00:43.736 --> 00:00:56.875
+The sampled patch passes. Training makes the exception-raising action slightly easier to choose in similar states. Ordinary backpropagation implements the change; reinforcement learning determines which sampled behavior receives credit.
+
+6
+00:00:58.587 --> 00:01:04.267
+A usable training record must also identify who generated the attempt and what evidence accompanied it.

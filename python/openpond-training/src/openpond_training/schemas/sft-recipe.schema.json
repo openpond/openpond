@@ -67,13 +67,19 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 32768
+        },
+        "maxExamples": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
         }
       },
       "required": [
         "trainSplit",
         "validationSplit",
         "completionOnly",
-        "maxSequenceLength"
+        "maxSequenceLength",
+        "maxExamples"
       ],
       "additionalProperties": false
     },

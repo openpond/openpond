@@ -3,6 +3,9 @@ import path from "node:path";
 import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
+  DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
+  DATASET_NO_TOOLS_CONTRACT_HASH,
   ModelArtifactLineageSchema,
   TrainingDestinationCapabilitiesSchema,
   TrainingJobSchema,
@@ -21,6 +24,9 @@ import {
 import { resolveCrossSystemTrainTask } from "./cross-system-operations/task-context.js";
 import {
   fireworksMoneyUsd,
+  fireworksRftChunkSize,
+  fireworksRftOptimizerSteps,
+  fireworksRftRolloutCount,
   type FireworksSftJob,
 } from "./fireworks-client.js";
 import {
@@ -125,12 +131,31 @@ export class FireworksTrainingDestination
       capabilities: await this.capabilities(),
     });
     const issues = [...compatibility.issues];
+    let selection = null;
+    try {
+      selection = await this.deps.resolveTrainingSelection?.({
+        taskset,
+        plan,
+        split: "train",
+        maximumBytes: FIREWORKS_MAX_DATASET_BYTES,
+      }) ?? null;
+      if (!selection) {
+        throw new Error("Fireworks training row selection is unavailable.");
+      }
+    } catch (error) {
+      issues.push({
+        code: "fireworks_dataset_projection_failed",
+        severity: "error" as const,
+        path: "taskset.datasetArtifact",
+        message: errorMessage(error),
+      });
+    }
     if (plan.recipe.method === "grpo") {
-      const trainExampleCount = taskset.tasks.filter(
-        (candidate) => candidate.split === "train",
-      ).length;
-      const requiredRollouts =
-        trainExampleCount * plan.recipe.rollout.groupSize;
+      const trainExampleCount = selection?.records.length ?? 0;
+      const requiredRollouts = fireworksRftRolloutCount(
+        trainExampleCount,
+        plan.recipe.rollout.groupSize,
+      );
       if (plan.recipe.resourceLimits.maxRollouts < requiredRollouts) {
         issues.push({
           code: "fireworks_rft_rollout_budget_too_small",
@@ -138,33 +163,95 @@ export class FireworksTrainingDestination
           path: "recipe.resourceLimits.maxRollouts",
           message:
             `Fireworks needs at least ${requiredRollouts} admitted rollouts for `
-            + `${trainExampleCount} training examples with group size `
+            + `${trainExampleCount} prompts with group size `
             + `${plan.recipe.rollout.groupSize}; the recipe allows `
             + `${plan.recipe.resourceLimits.maxRollouts}.`,
         });
       }
-      if (plan.recipe.reward.environmentId !== "cross-system-operations") {
+      const crossSystem =
+        plan.recipe.reward.environmentId === "cross-system-operations";
+      const exactAnswer =
+        plan.recipe.reward.environmentId
+        === DATASET_EXACT_ANSWER_ENVIRONMENT_ID;
+      if (!crossSystem && !exactAnswer) {
         issues.push({
           code: "fireworks_rft_environment_unsupported",
           severity: "error" as const,
           path: "recipe.reward.environmentId",
-          message: "The first Fireworks RFT path supports only Cross-System Operations.",
+          message:
+            "Fireworks RFT supports Cross-System Operations or the Dataset exact-answer environment.",
         });
       }
-      if (plan.recipe.reward.environmentVersion !== CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION) {
+      if (exactAnswer) {
+        const gate = plan.rftSignalGate;
+        const report = gate
+          ? (await this.deps.store.listBaselineReports(taskset.id)).find(
+              (candidate) => candidate.id === gate.baselineReportId,
+            ) ?? null
+          : null;
+        const gateAligned = Boolean(
+          gate
+          && report
+          && contentHash(report) === gate.baselineReportHash
+          && report.tasksetHash === taskset.contentHash
+          && gate.scope.split === "train"
+          && gate.scope.taskCount === trainExampleCount
+          && gate.scope.attemptsPerTask === plan.recipe.rollout.groupSize
+          && gate.scope.selectionSeed === plan.recipe.rollout.seed
+          && gate.scope.selectionStrategy === plan.recipe.dataset.selectionStrategy
+          && gate.scope.taskIdsHash === selection?.taskIdsHash
+          && gate.scope.model.providerId === "fireworks"
+          && gate.scope.model.modelId === plan.recipe.baseModel.id
+          && gate.scope.sampling.maxOutputTokens === plan.recipe.rollout.maxOutputTokens
+          && gate.scope.sampling.temperature === plan.recipe.rollout.temperature
+          && gate.scope.sampling.topP === plan.recipe.rollout.topP,
+        );
+        if (!gateAligned) {
+          issues.push({
+            code: "fireworks_rft_signal_gate_missing",
+            severity: "error" as const,
+            path: "plan.rftSignalGate",
+            message:
+              "Run the train-signal check for this exact base model, prompt selection, and rollout configuration before preparing paid RFT.",
+          });
+        } else if (
+          !gate!.signal.passed
+          || gate!.signal.infrastructureFailures > 0
+          || gate!.signal.mixedRewardGroups
+            < gate!.signal.requiredMixedRewardGroups
+        ) {
+          issues.push({
+            code: "fireworks_rft_signal_gate_failed",
+            severity: "error" as const,
+            path: "plan.rftSignalGate.signal",
+            message:
+              `The aligned train-signal check found ${gate!.signal.mixedRewardGroups} mixed-reward groups; `
+              + `${gate!.signal.requiredMixedRewardGroups} are required with zero infrastructure failures.`,
+          });
+        }
+      }
+      const expectedEnvironmentVersion = crossSystem
+        ? CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION
+        : DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION;
+      if (plan.recipe.reward.environmentVersion !== expectedEnvironmentVersion) {
         issues.push({
           code: "fireworks_rft_environment_stale",
           severity: "error" as const,
           path: "recipe.reward.environmentVersion",
-          message: "The Fireworks RFT environment version does not match the local Cross-System runtime.",
+          message:
+            "The Fireworks RFT environment version does not match the selected local verifier runtime.",
         });
       }
-      if (plan.recipe.reward.toolContractHash !== CROSS_SYSTEM_TOOL_CONTRACT_HASH) {
+      const expectedToolContractHash = crossSystem
+        ? CROSS_SYSTEM_TOOL_CONTRACT_HASH
+        : DATASET_NO_TOOLS_CONTRACT_HASH;
+      if (plan.recipe.reward.toolContractHash !== expectedToolContractHash) {
         issues.push({
           code: "fireworks_rft_tool_contract_stale",
           severity: "error" as const,
           path: "recipe.reward.toolContractHash",
-          message: "The Fireworks RFT tool contract does not match the local Cross-System runtime.",
+          message:
+            "The Fireworks RFT tool contract does not match the selected environment.",
         });
       }
       if (plan.recipe.reward.graderHash !== contentHash(taskset.graders)) {
@@ -175,18 +262,48 @@ export class FireworksTrainingDestination
           message: "The Fireworks RFT grader hash does not match the immutable Taskset.",
         });
       }
-      for (const task of taskset.tasks.filter((candidate) => candidate.split === "train")) {
-        try {
-          resolveCrossSystemTrainTask(taskset, { rowId: task.id });
-        } catch (error) {
-          issues.push({
-            code: "fireworks_rft_task_unresolvable",
-            severity: "error" as const,
-            path: `taskset.tasks.${task.id}`,
-            message: errorMessage(error),
-          });
-          break;
+      if (crossSystem) {
+        for (const task of taskset.tasks.filter((candidate) => candidate.split === "train")) {
+          try {
+            resolveCrossSystemTrainTask(taskset, { rowId: task.id });
+          } catch (error) {
+            issues.push({
+              code: "fireworks_rft_task_unresolvable",
+              severity: "error" as const,
+              path: `taskset.tasks.${task.id}`,
+              message: errorMessage(error),
+            });
+            break;
+          }
         }
+      } else if (
+        taskset.capabilities.requiresTools
+        || taskset.capabilities.requiresState
+        || !taskset.graders.some((grader) =>
+          grader.id === (
+            plan.recipe.method === "grpo"
+              ? plan.recipe.reward.graderId
+              : ""
+          )
+          && grader.kind === "content"
+          && grader.rewardEligible
+          && grader.config.operator === "final_answer_equals_expected")
+      ) {
+        issues.push({
+          code: "fireworks_exact_answer_contract_invalid",
+          severity: "error" as const,
+          path: "taskset.graders",
+          message:
+            "Dataset exact-answer RFT requires a stateless, tool-free Taskset with a reward-eligible final-answer grader.",
+        });
+      }
+      if (trainExampleCount === 0) {
+        issues.push({
+          code: "fireworks_rft_training_rows_missing",
+          severity: "error" as const,
+          path: "taskset.datasetArtifact",
+          message: "Fireworks RFT requires at least one projected train prompt.",
+        });
       }
     }
     const providerValidation = await this.validateProvider();
@@ -225,6 +342,23 @@ export class FireworksTrainingDestination
               "The selected Fireworks model is not enabled for reinforcement fine-tuning.",
           });
         }
+        if (
+          plan.recipe.method === "grpo"
+          && model.trainingContextLength
+          && plan.recipe.dataset.maxPromptTokens
+            + plan.recipe.rollout.maxOutputTokens
+            > model.trainingContextLength
+        ) {
+          issues.push({
+            code: "fireworks_rft_context_length_exceeded",
+            severity: "error" as const,
+            path: "recipe.rollout.maxOutputTokens",
+            message:
+              `The ${plan.recipe.dataset.maxPromptTokens}-token prompt limit plus the `
+              + `${plan.recipe.rollout.maxOutputTokens}-token output limit exceeds `
+              + `${selectedBaseModelId}'s ${model.trainingContextLength}-token training context.`,
+          });
+        }
       } catch (error) {
         issues.push({
           code: "fireworks_model_validation_failed",
@@ -254,10 +388,12 @@ export class FireworksTrainingDestination
         message: "Fireworks training requires an explicit provider retention record from 1 through 30 days.",
       });
     }
-    const dataset = plan.recipe.method === "grpo"
-      ? renderFireworksRftDataset(taskset)
-      : renderFireworksSftDataset(taskset);
-    if (dataset.bytes.byteLength > FIREWORKS_MAX_DATASET_BYTES) {
+    const dataset = selection
+      ? plan.recipe.method === "grpo"
+        ? renderFireworksRftDataset(taskset, plan.recipe, selection)
+        : renderFireworksSftDataset(taskset, selection)
+      : null;
+    if (dataset && dataset.bytes.byteLength > FIREWORKS_MAX_DATASET_BYTES) {
       issues.push({
         code: "fireworks_dataset_too_large",
         severity: "error" as const,
@@ -278,20 +414,42 @@ export class FireworksTrainingDestination
     assumptions: string[];
   }> {
     const taskset = await this.requireTaskset(plan.tasksetId);
+    const selection = await this.deps.resolveTrainingSelection?.({
+      taskset,
+      plan,
+      split: "train",
+      maximumBytes: FIREWORKS_MAX_DATASET_BYTES,
+    });
+    if (!selection) {
+      throw new Error("Fireworks training row selection is unavailable.");
+    }
     if (plan.recipe.method === "grpo") {
-      const dataset = renderFireworksRftDataset(taskset);
+      const dataset = renderFireworksRftDataset(taskset, plan.recipe, selection);
+      const chunkSize = fireworksRftChunkSize(
+        dataset.exampleCount,
+        plan.recipe.optimizer.maxSteps,
+      );
+      const optimizerSteps = fireworksRftOptimizerSteps(
+        dataset.exampleCount,
+        chunkSize,
+      );
+      const rolloutCount = fireworksRftRolloutCount(
+        dataset.exampleCount,
+        plan.recipe.rollout.groupSize,
+      );
       return {
         estimatedCostUsd: FIREWORKS_CONSERVATIVE_MINIMUM_USD,
         assumptions: [
-          `Bounded GRPO on ${plan.recipe.baseModel.id}.`,
-          `${dataset.exampleCount} train prompts with ${plan.recipe.rollout.groupSize} grouped on-policy rollouts.`,
+          `Bounded ${plan.recipe.loss.method === "gspo-token" ? "GSPO-token" : plan.recipe.loss.method.toUpperCase()} RFT on ${plan.recipe.baseModel.id}.`,
+          `${dataset.exampleCount} train prompts × ${plan.recipe.rollout.groupSize} candidates = ${rolloutCount} admitted rollouts.`,
+          `Fireworks chunk size ${chunkSize} produces ${optimizerSteps} planned optimizer updates for one epoch.`,
           "Fireworks currently documents RFT as free for models under 16B; a conservative $3 approval reserve covers independent evaluation inference and pricing changes.",
           "The launch still fails closed above the explicit user maximum.",
         ],
       };
     }
-    const dataset = renderFireworksSftDataset(taskset);
-    if (plan.recipe.method !== "sft") throw new Error("Fireworks quote requires an executable SFT or GRPO recipe.");
+    const dataset = renderFireworksSftDataset(taskset, selection);
+    if (plan.recipe.method !== "sft") throw new Error("Fireworks quote requires an executable SFT or RFT recipe.");
     const billableTokens = dataset.estimatedTokens * Math.max(1, Math.ceil(plan.recipe.optimizer.epochs));
     const tokenEstimate =
       (billableTokens / 1_000_000) * FIREWORKS_SFT_PRICE_PER_MILLION_TOKENS_USD;
@@ -343,7 +501,16 @@ export class FireworksTrainingDestination
     if (!bundle) throw new Error("Approved Training Bundle was not found.");
     const credential = await this.requireCredential();
     const client = this.client(credential.value);
-    const rendered = renderFireworksSftDataset(taskset);
+    const selection = await this.deps.resolveTrainingSelection?.({
+      taskset,
+      plan,
+      split: "train",
+      maximumBytes: FIREWORKS_MAX_DATASET_BYTES,
+    });
+    if (!selection) {
+      throw new Error("Fireworks training row selection is unavailable.");
+    }
+    const rendered = renderFireworksSftDataset(taskset, selection);
     const accountId = validation.accountId;
     // Provider artifacts include the rendered dataset hash so an exporter
     // compatibility fix can be retried without colliding with a provider job

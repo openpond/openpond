@@ -24,6 +24,8 @@ type UsageStore = {
   listModelUsageRecords(query?: {
     sessionId?: string | null;
     turnId?: string | null;
+    provider?: ModelUsageRecord["provider"] | null;
+    model?: string | null;
     startedAtFrom?: string | null;
     startedAtTo?: string | null;
     visibility?: UsageVisibilityFilter | null;
@@ -63,6 +65,8 @@ export async function usageSummaryPayload(input: {
     range: input.requestUrl.searchParams.get("range") ?? undefined,
     visibility: input.requestUrl.searchParams.get("visibility") ?? undefined,
     status: input.requestUrl.searchParams.get("status") ?? undefined,
+    provider: input.requestUrl.searchParams.get("provider") ?? undefined,
+    model: input.requestUrl.searchParams.get("model") ?? undefined,
   });
   const range = usageQueryRange(query.range, input.now ?? new Date());
   const [records, sessions] = await Promise.all([
@@ -71,6 +75,8 @@ export async function usageSummaryPayload(input: {
       startedAtTo: range.startedAtTo,
       visibility: query.visibility,
       status: query.status,
+      provider: query.provider,
+      model: query.model,
     }),
     input.store.sessionShells(),
   ]);
@@ -88,8 +94,10 @@ export async function usageSummaryPayload(input: {
     filters: {
       visibility: query.visibility,
       status: query.status,
+      provider: query.provider ?? null,
+      model: query.model ?? null,
     },
-    totals: usageTotals(records),
+    totals: usageTotals(records, range.startedAtTo),
     daily: dailyBuckets(records),
     models: modelBreakdowns(records),
     threads: threadBreakdowns(records, sessionById),
@@ -111,6 +119,8 @@ export async function usageRecordsPayload(input: {
     range: input.requestUrl.searchParams.get("range") ?? undefined,
     visibility: input.requestUrl.searchParams.get("visibility") ?? undefined,
     status: input.requestUrl.searchParams.get("status") ?? undefined,
+    provider: input.requestUrl.searchParams.get("provider") ?? undefined,
+    model: input.requestUrl.searchParams.get("model") ?? undefined,
     sessionId: input.requestUrl.searchParams.get("sessionId") ?? undefined,
     turnId: input.requestUrl.searchParams.get("turnId") ?? undefined,
     limit: numberParam(input.requestUrl.searchParams.get("limit")),
@@ -123,6 +133,8 @@ export async function usageRecordsPayload(input: {
     startedAtTo: range.startedAtTo,
     visibility: query.visibility,
     status: query.status,
+    provider: query.provider,
+    model: query.model,
     limit: query.limit + 1,
   });
   const response: UsageRecordsResponse = {
@@ -131,6 +143,8 @@ export async function usageRecordsPayload(input: {
     filters: {
       visibility: query.visibility,
       status: query.status,
+      provider: query.provider ?? null,
+      model: query.model ?? null,
       sessionId: query.sessionId ?? null,
       turnId: query.turnId ?? null,
     },
@@ -159,19 +173,27 @@ function usageQueryRange(range: "7d" | "30d" | "90d" | "all", now: Date): UsageQ
   };
 }
 
-function usageTotals(records: ModelUsageRecord[]): UsageSummaryResponse["totals"] {
+function usageTotals(records: ModelUsageRecord[], rangeEnd: string): UsageSummaryResponse["totals"] {
   const totals = accumulator();
   const models = new Set<string>();
+  const activeDateKeys = new Set<string>();
   let completedRequests = 0;
   let failedRequests = 0;
   let missingUsageRequests = 0;
+  let longestRequestMs: number | null = null;
   for (const record of records) {
     addRecord(totals, record);
     models.add(`${record.provider}\u0000${record.model}`);
+    activeDateKeys.add(localDateKey(record.startedAt));
     if (record.status === "completed") completedRequests += 1;
     if (record.status === "failed") failedRequests += 1;
     if (record.source === "missing") missingUsageRequests += 1;
+    if (record.durationMs !== null) {
+      longestRequestMs = Math.max(longestRequestMs ?? 0, record.durationMs);
+    }
   }
+  const daily = dailyBuckets(records);
+  const streaks = usageStreaks(activeDateKeys, localDateKey(rangeEnd));
   return {
     requests: totals.requests,
     completedRequests,
@@ -186,7 +208,56 @@ function usageTotals(records: ModelUsageRecord[]): UsageSummaryResponse["totals"
     p95FirstTokenMs: percentile(totals.firstTokenDurations, 0.95),
     failureRate: failureRate(totals.failures, totals.requests),
     activeModelCount: models.size,
+    peakDailyTokens: daily.reduce((peak, bucket) => Math.max(peak, bucket.totalTokens), 0),
+    longestRequestMs,
+    activeDays: activeDateKeys.size,
+    currentStreakDays: streaks.current,
+    longestStreakDays: streaks.longest,
   };
+}
+
+function usageStreaks(activeDateKeys: ReadonlySet<string>, todayKey: string): {
+  current: number;
+  longest: number;
+} {
+  if (activeDateKeys.size === 0) return { current: 0, longest: 0 };
+  const ordered = [...activeDateKeys].sort();
+  let longest = 0;
+  let running = 0;
+  let previous: Date | null = null;
+  for (const key of ordered) {
+    const date = localDateFromKey(key);
+    if (!date) continue;
+    running = previous && localDayDistance(previous, date) === 1 ? running + 1 : 1;
+    longest = Math.max(longest, running);
+    previous = date;
+  }
+
+  const today = localDateFromKey(todayKey);
+  if (!today) return { current: 0, longest };
+  let cursor = today;
+  if (!activeDateKeys.has(localDateKey(cursor))) {
+    cursor = addLocalDays(cursor, -1);
+    if (!activeDateKeys.has(localDateKey(cursor))) return { current: 0, longest };
+  }
+  let current = 0;
+  while (activeDateKeys.has(localDateKey(cursor))) {
+    current += 1;
+    cursor = addLocalDays(cursor, -1);
+  }
+  return { current, longest };
+}
+
+function localDateFromKey(key: string): Date | null {
+  const parts = key.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  return new Date(parts[0]!, parts[1]! - 1, parts[2]!);
+}
+
+function localDayDistance(left: Date, right: Date): number {
+  const leftUtc = Date.UTC(left.getFullYear(), left.getMonth(), left.getDate());
+  const rightUtc = Date.UTC(right.getFullYear(), right.getMonth(), right.getDate());
+  return Math.round((rightUtc - leftUtc) / 86_400_000);
 }
 
 function dailyBuckets(records: ModelUsageRecord[]): UsageDailyBucket[] {
@@ -449,8 +520,8 @@ function breakdownSort<T extends { totalTokens: number | null; requests: number;
     right.lastSeenAt.localeCompare(left.lastSeenAt);
 }
 
-function localDateKey(timestamp: string): string {
-  const date = new Date(timestamp);
+function localDateKey(timestamp: string | Date): string {
+  const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp;
   return [
     date.getFullYear(),
     pad2(date.getMonth() + 1),

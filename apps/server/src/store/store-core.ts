@@ -8,11 +8,17 @@ import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store
 import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
 import {
   createCreateImproveRunTables,
+  createCrossSystemFrontierBaselineRunTables,
   createFireworksModelServingSessionTables,
+  createGraderAuditTables,
+  createTaskAttemptArtifactTables,
+  createTaskCreationProjectionTables,
+  createTasksetBaselineRunTables,
   createTasksetRevisionTables,
   createTrainingReceiptAndModelBindingTables,
   deduplicateFireworksMetricArtifacts,
 } from "./store-continuous-improvement-schema.js";
+import { createDatasetImportTables as ensureDatasetImportTables } from "./store-dataset-schema.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
@@ -543,9 +549,20 @@ export class SqliteStoreCore {
 
   async createTrainingTables(): Promise<void> {
     await this.exec(`
-      CREATE TABLE IF NOT EXISTS training_sources (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, session_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS training_sources (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, source_kind TEXT NOT NULL, session_id TEXT, source_hash TEXT NOT NULL, repository_id TEXT, revision TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS training_sources_profile_updated_idx ON training_sources(profile_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS training_sources_session_idx ON training_sources(session_id);
+      CREATE INDEX IF NOT EXISTS training_sources_kind_updated_idx ON training_sources(profile_id, source_kind, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS training_sources_hash_idx ON training_sources(profile_id, source_hash);
+      CREATE INDEX IF NOT EXISTS training_sources_repository_revision_idx ON training_sources(repository_id, revision);
+      CREATE TABLE IF NOT EXISTS dataset_import_jobs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, source_kind TEXT NOT NULL, status TEXT NOT NULL, repository_id TEXT, revision TEXT, taskset_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS dataset_import_jobs_profile_updated_idx ON dataset_import_jobs(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS dataset_import_jobs_status_updated_idx ON dataset_import_jobs(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS dataset_import_jobs_repository_revision_idx ON dataset_import_jobs(repository_id, revision);
+      CREATE TABLE IF NOT EXISTS dataset_artifacts (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, taskset_id TEXT NOT NULL, taskset_revision INTEGER NOT NULL, content_hash TEXT NOT NULL, format TEXT NOT NULL, row_count INTEGER NOT NULL, storage_root TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS dataset_artifacts_taskset_revision_idx ON dataset_artifacts(taskset_id, taskset_revision);
+      CREATE UNIQUE INDEX IF NOT EXISTS dataset_artifacts_content_hash_idx ON dataset_artifacts(content_hash);
+      CREATE INDEX IF NOT EXISTS dataset_artifacts_profile_updated_idx ON dataset_artifacts(profile_id, updated_at DESC);
       CREATE TABLE IF NOT EXISTS task_creation_snapshots (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS task_creation_profile_updated_idx ON task_creation_snapshots(profile_id, updated_at DESC);
       CREATE TABLE IF NOT EXISTS tasksets (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -561,6 +578,10 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS grade_results_attempt_idx ON grade_results(attempt_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS baseline_reports (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS baseline_reports_taskset_idx ON baseline_reports(taskset_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS taskset_baseline_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, taskset_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS taskset_baseline_runs_profile_updated_idx ON taskset_baseline_runs(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS taskset_baseline_runs_taskset_updated_idx ON taskset_baseline_runs(taskset_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS taskset_baseline_runs_status_updated_idx ON taskset_baseline_runs(status, updated_at DESC);
       CREATE TABLE IF NOT EXISTS readiness_reports (taskset_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS task_miner_configs (profile_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS task_miner_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -585,6 +606,14 @@ export class SqliteStoreCore {
     `);
   }
 
+  async createDatasetImportTables(): Promise<void> {
+    await ensureDatasetImportTables({
+      all: <T>(sql: string, params: unknown[] = []) =>
+        this.all<T>(sql, params),
+      exec: (sql) => this.exec(sql),
+    });
+  }
+
   async createTasksetRevisionTables(): Promise<void> {
     await createTasksetRevisionTables((sql) => this.exec(sql));
   }
@@ -602,27 +631,15 @@ export class SqliteStoreCore {
   }
 
   async createTaskCreationProjectionTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS task_creation_transcripts (creation_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS task_creation_transcript_profile_idx ON task_creation_transcripts(profile_id, updated_at DESC);
-      CREATE TABLE IF NOT EXISTS task_design_proposals (creation_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, profile_id TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-      CREATE UNIQUE INDEX IF NOT EXISTS task_design_proposal_id_idx ON task_design_proposals(proposal_id);
-    `);
+    await createTaskCreationProjectionTables((sql) => this.exec(sql));
   }
 
   async createGraderAuditTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS grader_audit_reports (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS grader_audit_taskset_idx ON grader_audit_reports(taskset_id, created_at DESC);
-    `);
+    await createGraderAuditTables((sql) => this.exec(sql));
   }
 
   async createTaskAttemptArtifactTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS task_attempt_artifacts (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, attempt_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS task_attempt_artifacts_attempt_idx ON task_attempt_artifacts(attempt_id, created_at);
-      CREATE INDEX IF NOT EXISTS task_attempt_artifacts_taskset_idx ON task_attempt_artifacts(taskset_id, created_at);
-    `);
+    await createTaskAttemptArtifactTables((sql) => this.exec(sql));
   }
 
   async createTrainingChatSearchTables(): Promise<void> {
@@ -677,18 +694,11 @@ export class SqliteStoreCore {
   }
 
   async createCrossSystemFrontierBaselineRunTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS cross_system_frontier_baseline_runs (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_profile_updated_idx ON cross_system_frontier_baseline_runs(profile_id, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_status_updated_idx ON cross_system_frontier_baseline_runs(status, updated_at DESC);
-    `);
+    await createCrossSystemFrontierBaselineRunTables((sql) => this.exec(sql));
+  }
+
+  async createTasksetBaselineRunTables(): Promise<void> {
+    await createTasksetBaselineRunTables((sql) => this.exec(sql));
   }
 
   protected async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {

@@ -15,6 +15,17 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendJson(response, 200, await deps.trainingPayload("state", {}, requestUrl));
     return true;
   }
+  if (
+    request.method === "GET"
+    && requestUrl.pathname === "/v1/training/datasets"
+  ) {
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload("dataset_catalog", {}, requestUrl),
+    );
+    return true;
+  }
   const downloadMatch = /^\/v1\/training\/artifacts\/([^/]+)\/download$/.exec(requestUrl.pathname);
   if (request.method === "GET" && downloadMatch) {
     const result = await deps.trainingPayload("artifact_download", { artifactId: decodeURIComponent(downloadMatch[1]!) }, requestUrl) as { artifact: { path: string; sizeBytes: number }; path: string };
@@ -53,6 +64,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/sources/batch", action: "add_sources", status: 201 },
     { method: "POST", path: "/v1/training/sources/estimate", action: "estimate_sources" },
     { method: "POST", path: "/v1/training/sources/search", action: "search_sources" },
+    { method: "POST", path: "/v1/training/dataset-imports/huggingface/inspect", action: "inspect_huggingface_dataset", status: 201 },
     { method: "POST", path: "/v1/training/cross-system-operations/frontier-baseline", action: "run_cross_system_frontier_baseline", status: 202 },
     { method: "POST", path: "/v1/training/cross-system-operations/fixture-baseline", action: "record_cross_system_fixture_baseline", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
@@ -81,6 +93,9 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
+    { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)$/, method: "DELETE", action: "delete_taskset", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/preview$/, method: "POST", action: "preview_expert_bootstrap", key: "tasksetId" },
@@ -93,6 +108,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/name$/, method: "PATCH", action: "rename_creation", key: "creationId" },
     { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/cancel$/, method: "POST", action: "cancel_creation", key: "creationId" },
     { pattern: /^\/v1\/training\/miner\/runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_miner_run", key: "runId" },
+    { pattern: /^\/v1\/training\/baseline\/runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_baseline_run", key: "runId" },
     { pattern: /^\/v1\/training\/cross-system-operations\/frontier-baseline\/runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_cross_system_frontier_baseline", key: "runId" },
     { pattern: /^\/v1\/training\/candidates\/([^/]+)$/, method: "PATCH", action: "patch_candidate", key: "candidateId", wrap: "patch" },
     { pattern: /^\/v1\/training\/candidates\/([^/]+)\/create$/, method: "POST", action: "create_candidate", key: "candidateId" },

@@ -1,0 +1,41 @@
+WEBVTT
+
+C01
+00:00:03.670 --> 00:00:09.319
+Open Lab, choose New agent, and start the guided creation flow.
+
+C02
+00:00:09.039 --> 00:00:18.125
+Choose From prompt to describe the Agent directly, or From chats to include examples of the work it should handle.
+
+C04
+00:00:17.845 --> 00:00:26.712
+For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.
+
+C06
+00:00:26.432 --> 00:00:34.991
+The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.
+
+C07
+00:00:34.711 --> 00:00:43.797
+Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.
+
+C08
+00:00:43.517 --> 00:00:49.434
+The right side panel asks how the Agent should prioritize conflicting account risks.
+
+C09
+00:00:49.154 --> 00:00:57.931
+Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.
+
+C10
+00:00:57.651 --> 00:01:08.167
+OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.
+
+C11
+00:01:07.887 --> 00:01:14.568
+After the checks pass, the Agent is saved to your Profile and is ready to use.
+
+C12
+00:01:14.288 --> 00:01:20.791
+The Agent page shows its purpose, chat entrypoint, and runnable account actions.

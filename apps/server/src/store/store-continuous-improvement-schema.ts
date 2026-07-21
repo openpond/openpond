@@ -53,6 +53,64 @@ export async function createTasksetRevisionTables(exec: ExecuteSql): Promise<voi
   `);
 }
 
+export async function createTaskCreationProjectionTables(exec: ExecuteSql): Promise<void> {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS task_creation_transcripts (creation_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS task_creation_transcript_profile_idx ON task_creation_transcripts(profile_id, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS task_design_proposals (creation_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, profile_id TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE UNIQUE INDEX IF NOT EXISTS task_design_proposal_id_idx ON task_design_proposals(proposal_id);
+  `);
+}
+
+export async function createGraderAuditTables(exec: ExecuteSql): Promise<void> {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS grader_audit_reports (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS grader_audit_taskset_idx ON grader_audit_reports(taskset_id, created_at DESC);
+  `);
+}
+
+export async function createTaskAttemptArtifactTables(exec: ExecuteSql): Promise<void> {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS task_attempt_artifacts (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, attempt_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS task_attempt_artifacts_attempt_idx ON task_attempt_artifacts(attempt_id, created_at);
+    CREATE INDEX IF NOT EXISTS task_attempt_artifacts_taskset_idx ON task_attempt_artifacts(taskset_id, created_at);
+  `);
+}
+
+export async function createCrossSystemFrontierBaselineRunTables(
+  exec: ExecuteSql,
+): Promise<void> {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS cross_system_frontier_baseline_runs (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_profile_updated_idx ON cross_system_frontier_baseline_runs(profile_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_status_updated_idx ON cross_system_frontier_baseline_runs(status, updated_at DESC);
+  `);
+}
+
+export async function createTasksetBaselineRunTables(exec: ExecuteSql): Promise<void> {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS taskset_baseline_runs (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL,
+      taskset_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS taskset_baseline_runs_profile_updated_idx ON taskset_baseline_runs(profile_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS taskset_baseline_runs_taskset_updated_idx ON taskset_baseline_runs(taskset_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS taskset_baseline_runs_status_updated_idx ON taskset_baseline_runs(status, updated_at DESC);
+  `);
+}
+
 export async function createTrainingReceiptAndModelBindingTables(
   exec: ExecuteSql,
 ): Promise<void> {

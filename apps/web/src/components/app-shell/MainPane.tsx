@@ -7,60 +7,24 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
   type CSSProperties,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, DownloadCloud } from "../icons";
 import type {
-  BootstrapPayload,
   ChatAttachment,
   ChatProvider,
-  CloudProject,
-  CloudWorkItem,
-  CloudWorkItemDetail,
-  CodexPermissionMode,
-  CodexReasoningEffort,
-  OpenPondCommandAccessMode,
-  InsightItem,
-  InsightRun,
-  InsightRunTrigger,
-  InsightStatus,
-  Approval,
-  OpenPondApp,
-  OpenPondProfileSkill,
-  ResolveApprovalRequest,
-  RuntimeEvent,
-  Session,
-  SubagentDelegationMode,
-  UsageRequestAttribution,
-  WorkspaceDiffSummary,
-  WorkspaceKind,
-  WorkspaceState,
-  TerminalScope,
 } from "@openpond/contracts";
-import { api, type ClientConnection } from "../../api";
-import {
-  modelRefForTurn,
-  normalizePreferences,
-  type AppView,
-  type ChatMessage,
-} from "../../lib/app-models";
+import { api } from "../../api";
+import { normalizePreferences } from "../../lib/app-models";
 import { isCodexHistorySessionId } from "../../lib/sidebar-session-projects";
-import type { ContextWindowStatus } from "../../lib/context-window";
-import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
-import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
-import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
-import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
-import { type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
+import type { ComposerSubmitOptions } from "../chat/Composer";
 import { DraftBoundComposer } from "../chat/DraftBoundComposer";
-import { TrainingModelChatHandoffBar } from "../chat/TrainingModelChatHandoffBar";
-import type { ComposerCreateImproveRuntime } from "../chat/ComposerCreateImproveStrip";
+import type {
+  ComposerCreateImproveActions,
+  ComposerCreateImproveRuntime,
+} from "../chat/ComposerCreateImproveStrip";
+import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
-import { MessageRow, ThinkingIndicator } from "../chat/Messages";
-import type { RightPanelMode, ShowAppToast } from "../../app/app-state";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { normalizeChatFilePath } from "../../lib/chat-file-links";
 import {
@@ -71,8 +35,7 @@ import {
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
-import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
-import type { ComposerDraftStore } from "../../lib/composer-draft-store";
+import { buildOpenPondProfileActionCommand } from "../../lib/openpond-action-run";
 import {
   resolveRightSidebarFileSource,
   type RightSidebarFileSource,
@@ -83,23 +46,15 @@ import {
 } from "../../lib/submit-issue-command";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { AppTerminalPanel } from "./AppTerminalPanel";
-import { RightChatPanelStack, type RightChatPanelView } from "./RightChatPanelStack";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/TrainingView";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
-import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
-import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
 import type {
-  WorkspaceDiffPanelViewState,
-  WorkspaceDiffTabRequest,
   WorkspaceFileSourceSwitcher,
 } from "../workspace-diff/workspace-diff-panel-model";
-import type { TeamChatViewProps } from "../team-chat/TeamChatView";
-import type { CommunityViewProps } from "../community/CommunityView";
-import type { useTraining } from "../../hooks/useTraining";
-import type { LabDetailLocation } from "../labs/lab-detail-navigation";
 import { useLabCandidateReview } from "../../hooks/useLabCandidateReview";
+import { useLabAgentAuthoring } from "../../hooks/useLabAgentAuthoring";
 import {
   CHAT_HISTORY_TOP_THRESHOLD_PX,
   CHAT_USER_MESSAGE_SCROLL_OFFSET_PX,
@@ -122,6 +77,14 @@ import {
   userMessageNavigationState,
   type UserMessageNavigationState,
 } from "./main-pane-helpers";
+import {
+  ActiveTrainingChatHandoffBar,
+  MessageNavigationControls,
+  WorkspaceSyncButton,
+  mainPaneViewClass,
+  shouldShowRightSidebarHomePanel,
+} from "./MainPaneControls";
+import type { MainPaneProps } from "./main-pane-types";
 
 import {
   AppsView,
@@ -129,10 +92,13 @@ import {
   CloudWorkView,
   GetStartedView,
   LabsRoute,
+  MakeAgentTutorialLearningPanel,
+  NativeSkillSidebar,
+  PostTrainingLearningPanel,
+  RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
-  TeamChatView,
-  CommunityView,
+  TeamChatView, CommunityView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
 
@@ -141,206 +107,12 @@ const TrainingDraftPanel = lazy(() =>
     default: module.TrainingDraftPanel,
   })),
 );
+const MainChatThread = lazy(() => import("./MainChatThread").then((module) => ({ default: module.MainChatThread })));
 const TrainingCreationPanel = lazy(() =>
   import("../training/TrainingCreationPanel").then((module) => ({
     default: module.TrainingCreationPanel,
   })),
 );
-const TrainingStatusReceipt = lazy(() =>
-  import("../training/TrainingCreationPanel").then((module) => ({
-    default: module.TrainingStatusReceipt,
-  })),
-);
-
-type MainPaneProps = {
-  view: AppView;
-  teamChat: TeamChatViewProps;
-  community: CommunityViewProps;
-  bootstrap: BootstrapPayload | null;
-  runtimeEvents: RuntimeEvent[];
-  chatMessages: ChatMessage[];
-  contextWindowStatus: ContextWindowStatus;
-  goalRuntime: GoalRuntimeStatus | null;
-  subagentRuntime: SubagentRuntimeStatus | null;
-  selectedSessionId: string | null;
-  composerDraftStore: ComposerDraftStore;
-  mainComposerFocusRequestId: number;
-  labCloseDetailRequestId: number;
-  labCloseDetailKind: LabDetailLocation["kind"] | null;
-  labSuggestionsRequestId: number;
-  steerAutoDispatchBlocked: boolean;
-  steerAutoDispatchReady: boolean;
-  mentionApps: OpenPondApp[];
-  connectedAppMentions: ConnectedAppMentionOption[];
-  profileSkills: OpenPondProfileSkill[];
-  selectedMentionAppId: string | null;
-  busy: boolean;
-  turnRunning: boolean;
-  activeProvider: ChatProvider;
-  activeModel: string;
-  codexPermissionMode: CodexPermissionMode;
-  codexReasoningEffort: CodexReasoningEffort;
-  openPondCommandAccessMode: OpenPondCommandAccessMode;
-  subagentDelegationDefaultMode: SubagentDelegationMode;
-  subagentDelegationMode: SubagentDelegationMode | null;
-  subagentDelegationAvailable: boolean;
-  pendingApproval: Approval | null;
-  activeWorkspaceAppId: string | null;
-  activeWorkspaceId: string | null;
-  activeWorkspaceKind: WorkspaceKind | null;
-  projectTarget: ComposerProjectTargetState;
-  actionCatalog: SandboxActionCatalogEntry[];
-  workspaceTarget: WorkspaceTargetState;
-  connection: ClientConnection | null;
-  workspaceName: string | null;
-  workspaceState: WorkspaceState | null;
-  workspaceDiff: WorkspaceDiffSummary | null;
-  workspaceBusy: boolean;
-  diffBusy: boolean;
-  forceChatThread?: boolean;
-  diffPanelOpen: boolean;
-  diffPanelExpanded: boolean;
-  rightPanelMode: RightPanelMode;
-  rightPanelTabRequest: WorkspaceDiffTabRequest | null;
-  rightChatPanels: RightChatPanelView[];
-  workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;
-  browserConversationId: string;
-  terminalScope: TerminalScope;
-  terminalTabs: TerminalTab[];
-  terminalCwd: string | null;
-  pendingTerminalCommand: TerminalQueuedCommand | null;
-  terminalOpen: boolean;
-  onToggleTerminal: () => void;
-  onWorkspaceDiffPanelViewStateChange: (state: WorkspaceDiffPanelViewState) => void;
-  insightsItems: InsightItem[];
-  insightsRuns: InsightRun[];
-  insightsNextScanAt: string | null;
-  insightsScanRunning: boolean;
-  insightsScanStartedAt: string | null;
-  insightsScanning: boolean;
-  insightsError: string | null;
-  training: ReturnType<typeof useTraining>;
-  trainingSessions: Session[];
-  trainingChatHandoff: TrainingModelChatHandoff | null;
-  trainingDetailTasksetId: string | null;
-  onTrainingDetailTasksetIdChange: (tasksetId: string | null) => void;
-  onTrainingChatTaskSelect: (index: number) => void;
-  onTrainingChatHandoffDismiss: () => void;
-  onRunInsightsScan: (input?: { trigger?: InsightRunTrigger }) => Promise<unknown>;
-  onAskInsightsQuestion: (question: string) => Promise<unknown>;
-  onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
-  onOpenInsightsSession: (sessionId: string) => void;
-  cloudProjects: CloudProject[];
-  cloudWorkItems: CloudWorkItem[];
-  selectedCloudWorkItem: CloudWorkItem | null;
-  cloudWorkItemDetail: CloudWorkItemDetail | null;
-  cloudWorkItemLocalProjectName: string | null;
-  cloudLoading: boolean;
-  cloudBusy: boolean;
-  cloudError: string | null;
-  chatHistoryHasMore?: boolean;
-  chatHistoryLoading?: boolean;
-  onDiffPanelResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  canSyncWorkspace: boolean;
-  startMessage: string;
-  onPayload: (payload: BootstrapPayload) => void;
-  onError: (message: string | null) => void;
-  setView: (view: AppView) => void;
-  onOpenProfileSettings: () => void;
-  onOpenProviderSettings: () => void;
-  onOpenComputeSettings: () => void;
-  changeDraftProvider: (provider: ChatProvider) => void;
-  changeProjectTarget: (target: string) => void;
-  changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
-  setDraftProvider: (provider: ChatProvider) => void;
-  setDraftModel: (model: string) => void;
-  onBeginNewChatWithModel: (handoff: TrainingModelChatHandoff) => void;
-  changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
-  changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
-  changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
-  changeSubagentDelegationMode: (mode: SubagentDelegationMode | null) => void;
-  resolveApproval: (
-    approvalId: string,
-    decision: ResolveApprovalRequest["decision"],
-  ) => Promise<void>;
-  answerCreateImproveQuestion: (
-    input: CreateImproveReviewActionInput,
-    questionId: string,
-    answerValue: string,
-  ) => Promise<void>;
-  approveCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
-  applyCreateImproveCandidate: (
-    input: CreateImproveReviewActionInput,
-    candidateId: string,
-  ) => Promise<void>;
-  cancelCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
-  openCreateImprovePullRequest: (
-    input: CreateImproveReviewActionInput,
-    candidateId: string,
-  ) => Promise<void>;
-  pauseCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
-  reconcileCreateImprovePullRequest: (
-    input: CreateImproveReviewActionInput,
-    candidateId: string,
-  ) => Promise<void>;
-  rejectCreateImproveCandidate: (
-    input: CreateImproveReviewActionInput,
-    candidateId: string,
-  ) => Promise<void>;
-  resumeCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
-  reviseCreateImproveRun: (
-    input: CreateImproveReviewActionInput,
-    revision: string,
-  ) => Promise<void>;
-  setMentionedAppId: (appId: string | null) => void;
-  showToast: ShowAppToast;
-  sendPrompt: (
-    attachments?: ChatAttachment[],
-    action?: SandboxActionCatalogEntry | null,
-    promptOverride?: string,
-    options?: { clearPrompt?: () => void; displayPrompt?: string; usageAttribution?: UsageRequestAttribution },
-  ) => Promise<boolean>;
-  stopTurn: () => Promise<boolean>;
-  pauseGoal: () => Promise<boolean>;
-  syncWorkspaceLocally: () => Promise<void>;
-  refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
-  onToggleDiffPanelExpanded: () => void;
-  onShowDiffPanel: () => void;
-  onShowBrowserPanel: () => void;
-  onShowGoalSidebarTab: () => void;
-  onShowTrainingDraftPanel: () => void;
-  onShowFilesPanel: () => void;
-  onShowRightChatPanel: () => void;
-  onAddRightChat: () => void;
-  onOpenRightChatForSession: (sessionId: string) => void;
-  onOpenLabSuggestions: () => void;
-  onLabDetailOpenChange: (location: LabDetailLocation | null) => void;
-  onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
-  onCloseRightChatPanel: (panelId: string) => void;
-  onRightChatModelChange: (panelId: string, model: string) => void;
-  onRightChatPromptChange: (panelId: string, prompt: string) => void;
-  onRightChatProviderChange: (panelId: string, provider: ChatProvider) => void;
-  onSubmitRightChat: (
-    panelId: string,
-    attachments?: ChatAttachment[],
-    action?: SandboxActionCatalogEntry | null,
-    command?: ComposerSlashCommand | null,
-    options?: ComposerSubmitOptions,
-  ) => Promise<boolean>;
-  onStopRightChat: (sessionId: string | null) => Promise<boolean>;
-  onCloseTerminal: () => void;
-  onOpenCloudHome: () => void;
-  onSetupCloudProject: (projectId: string) => void;
-  onCreateCloudWork: (input: { projectId: string; prompt: string; select?: boolean }) => Promise<boolean>;
-  onSelectCloudWorkItem: (workItem: CloudWorkItem) => void;
-  onSendCloudWorkItemMessage: (message: string) => Promise<void>;
-  onHandleCloudWorkItemBackground: (message: string | null) => Promise<void>;
-  onCancelCloudWorkItemCreatePipeline: () => Promise<void>;
-  onCancelCloudWorkItemTask: () => Promise<void>;
-  onApplyCloudWorkItemPatchLocally: () => Promise<void>;
-  onLoadMoreChatHistory?: () => Promise<boolean>;
-};
-
 export function MainPane({
   view,
   teamChat,
@@ -357,6 +129,8 @@ export function MainPane({
   labCloseDetailRequestId,
   labCloseDetailKind,
   labSuggestionsRequestId,
+  sideChatTrainingLaunchRequest,
+  onSideChatTrainingLaunchHandled,
   steerAutoDispatchBlocked,
   steerAutoDispatchReady,
   mentionApps,
@@ -392,6 +166,9 @@ export function MainPane({
   rightPanelMode,
   rightPanelTabRequest,
   rightChatPanels,
+  nativeSkillSidebar,
+  makeAgentTutorial,
+  postTrainingCourse,
   workspaceDiffPanelViewState,
   browserConversationId,
   terminalScope,
@@ -438,6 +215,7 @@ export function MainPane({
   onOpenProfileSettings,
   onOpenProviderSettings,
   onOpenComputeSettings,
+  onOpenDatasetStorageSettings,
   changeDraftProvider,
   changeProjectTarget,
   changeWorkspaceTarget,
@@ -467,6 +245,19 @@ export function MainPane({
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
   onToggleDiffPanelExpanded,
+  onOpenPostTrainingCourse,
+  onClosePostTrainingCourse,
+  onOpenPostTrainingScript,
+  onSelectPostTrainingFullCourse,
+  onSelectPostTrainingLesson,
+  onSetPostTrainingAutoplay,
+  onShowPostTrainingLessons,
+  onOpenMakeAgentTutorial,
+  onCloseMakeAgentTutorial,
+  onSelectMakeAgentTutorialVideo,
+  onSetMakeAgentTutorialAutoplay,
+  onShowMakeAgentTutorialLessons,
+  onShowMakeAgentTutorialScript,
   onShowDiffPanel,
   onShowBrowserPanel,
   onShowTrainingDraftPanel,
@@ -478,8 +269,11 @@ export function MainPane({
   onLabDetailOpenChange,
   onTerminalTabsChange,
   onCloseRightChatPanel,
+  onCloseNativeSkillSidebar,
+  onActivateRightChatPanel,
   onRightChatModelChange,
   onRightChatPromptChange,
+  onRightChatScrollStateChange,
   onRightChatProviderChange,
   onSubmitRightChat,
   onStopRightChat,
@@ -521,7 +315,15 @@ export function MainPane({
     actionId: string;
     requestId: number;
   } | null>(null);
+  const [profileActionCatalogOverride, setProfileActionCatalogOverride] = useState<
+    SandboxActionCatalogEntry[]
+  >([]);
   const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
+  const composerActionCatalog = useMemo(() => {
+    const byId = new Map(actionCatalog.map((action) => [action.id, action]));
+    for (const action of profileActionCatalogOverride) byId.set(action.id, action);
+    return [...byId.values()];
+  }, [actionCatalog, profileActionCatalogOverride]);
   const labCandidateReview = useLabCandidateReview(connection);
   const handleLabCandidateReviewChange = useCallback((input: {
     run: CreateImproveReviewActionInput["run"];
@@ -547,121 +349,68 @@ export function MainPane({
     }
     onShowDiffPanel();
   }, [labCandidateReview.openFile, labCandidateReview.selection?.initialPath, onShowDiffPanel]);
+  const handleUseAgent = useCallback((actionId: string, agentName: string) => {
+    const requestId = Date.now();
+    const existingAction = actionCatalog.find((action) => action.id === actionId) ?? null;
+    composerDraftStore.set("");
+    setMentionedAppId(null);
+    setView("chat");
+
+    const selectActionAfterCatalogCommit = (actions: SandboxActionCatalogEntry[]) => {
+      const selected = actions.find((action) => action.id === actionId) ?? null;
+      if (!selected) return false;
+      const labeledActions = actions.map((action) =>
+        action.id === actionId ? { ...action, label: agentName } : action,
+      );
+      setProfileActionCatalogOverride(labeledActions);
+      window.requestAnimationFrame(() => {
+        setRequestedComposerAction({
+          actionId,
+          requestId: Math.max(Date.now(), requestId + 1),
+        });
+      });
+      return true;
+    };
+
+    if (!connection) {
+      if (existingAction) {
+        selectActionAfterCatalogCommit([existingAction]);
+      } else {
+        showToast("The Agent action catalog is still loading. Try Use again.", "error");
+      }
+      return;
+    }
+
+    void api.profileCurrent(connection)
+      .then((profile) => {
+        const freshActions = profile.actionCatalog.map(buildOpenPondProfileActionCommand);
+        if (!selectActionAfterCatalogCommit(freshActions) && existingAction) {
+          selectActionAfterCatalogCommit([existingAction]);
+        } else if (!freshActions.some((action) => action.id === actionId)) {
+          showToast("This Agent is ready, but its default chat action is unavailable.", "error");
+        }
+      })
+      .catch((error) => {
+        if (!existingAction) {
+          showToast(error instanceof Error ? error.message : String(error), "error");
+        }
+      });
+  }, [actionCatalog, composerDraftStore, connection, setMentionedAppId, setView, showToast]);
   const appPreferences = useMemo(
     () => normalizePreferences(bootstrap?.preferences),
     [bootstrap?.preferences],
   );
   const trainingPreferences = appPreferences.training;
-  const runAgentChangeFromLab = useCallback(async (input: {
-    agentId?: string;
-    agentName?: string | null;
-    objective: string;
-    operation: "create" | "improve";
-    authoringRunId?: string | null;
-  }) => {
-    if (!connection || !bootstrap) throw new Error("OpenPond is still connecting.");
-    const profile = bootstrap.profile;
-    if (profile.mode !== "local" || !profile.repoPath) {
-      throw new Error("A local Git-backed Profile is required to change an Agent.");
-    }
-    const modelRef = modelRefForTurn(
-      activeProvider,
-      activeModel,
-      bootstrap.providers,
-    );
-    if (!modelRef) throw new Error("Choose a model before changing an Agent.");
-    const createImproveRequestPromise = import("../../lib/create-pipeline-request");
-    const session = await api.createSession(connection, {
-      provider: modelRef.providerId,
-      modelRef,
-      systemKind: "openpond.lab",
-      hiddenFromDefaultSidebar: true,
-      title: `${input.operation === "create" ? "New" : "Improve"} Agent · ${input.objective.slice(0, 80)}`,
-      cwd: profile.repoPath,
-      metadata: {
-        source: input.operation === "create" ? "lab_agent_create" : "lab_agent_improve",
-        profileId: profile.activeProfile ?? "default",
-        targetAgentId: input.agentId ?? null,
-      },
-    });
-    const authoringRun = input.authoringRunId
-      ? await api.getCreateImproveRun(connection, input.authoringRunId)
-      : null;
-    const {
-      buildLabAgentCreateImproveRun,
-      buildLabAgentImproveRun,
-      continueLabAgentRunFromTaskset,
-    } = await createImproveRequestPromise;
-    const run = authoringRun
-      ? continueLabAgentRunFromTaskset({
-          authoringRun,
-          agentId: input.agentId,
-          agentName: input.agentName,
-          objective: input.objective,
-          payload: bootstrap,
-          session,
-          operation: input.operation,
-        })
-      : input.operation === "create"
-        ? buildLabAgentCreateImproveRun({
-          objective: input.objective,
-          payload: bootstrap,
-          session,
-        })
-        : buildLabAgentImproveRun({
-            agentId: input.agentId ?? "",
-            agentName: input.agentName,
-            objective: input.objective,
-            payload: bootstrap,
-            session,
-          });
-    if (!run) throw new Error(
-      input.operation === "create"
-        ? "Describe what the Agent should do."
-        : "Describe what the Agent could do better.",
-    );
-    const turn = await api.sendTurn(connection, session.id, {
-      prompt: input.objective,
-      model: modelRef.modelId,
-      modelRef,
-      createImproveRun: run,
-      approvalPolicy: "never",
-      sandbox: "workspace-write",
-      codexPermissionMode: modelRef.providerId === "codex" ? codexPermissionMode : "default",
-      codexReasoningEffort,
-    });
-    if (turn.status === "failed") {
-      throw new Error(turn.error ?? "OpenPond could not start the Agent improvement.");
-    }
-    const planned = turn.createImproveRun
-      ?? await api.getCreateImproveRun(connection, run.id);
-    if (!planned) throw new Error("The Agent plan was not created.");
-    onPayload(await api.bootstrap(connection));
-    return planned;
-  }, [
+  const { createAgentFromLab, improveAgentFromLab } = useLabAgentAuthoring({
     activeModel,
     activeProvider,
     bootstrap,
     codexPermissionMode,
     codexReasoningEffort,
     connection,
+    onOpenRightChatForSession,
     onPayload,
-  ]);
-  const createAgentFromLab = useCallback(
-    (objective: string, authoringRunId?: string | null) => runAgentChangeFromLab({ objective, operation: "create", authoringRunId }),
-    [runAgentChangeFromLab],
-  );
-  const improveAgentFromLab = useCallback(
-    (agentId: string, objective: string, agentName?: string | null, authoringRunId?: string | null) =>
-      runAgentChangeFromLab({
-        agentId,
-        agentName,
-        objective,
-        operation: "improve",
-        authoringRunId,
-      }),
-    [runAgentChangeFromLab],
-  );
+  });
   const updateInsightsEnabled = useCallback(async (enabled: boolean) => {
     if (!connection || !bootstrap || insightsPreferenceSaving) return;
     setInsightsPreferenceSaving(true);
@@ -772,6 +521,11 @@ export function MainPane({
     rightPanelMode === "chat" &&
     rightChatPanels.length > 0;
   const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
+  const showNativeSkillPanel = view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
+  const showPostTrainingPanel =
+    view === "get-started" && diffPanelOpen && Boolean(postTrainingCourse);
+  const showMakeAgentTutorialPanel =
+    view === "get-started" && diffPanelOpen && Boolean(makeAgentTutorial);
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
   const showTeamAgentConversationPanel =
@@ -787,6 +541,7 @@ export function MainPane({
       showBrowserPanel ||
       showRightChatPanel ||
       showTrainingDraftPanel ||
+      showNativeSkillPanel ||
       showTeamAiThreadPanel ||
       showTeamAgentConversationPanel,
   });
@@ -795,10 +550,17 @@ export function MainPane({
     showBrowserPanel ||
     showRightChatPanel ||
     showTrainingDraftPanel ||
+    showNativeSkillPanel ||
+    showPostTrainingPanel ||
+    showMakeAgentTutorialPanel ||
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
     showRightHomePanel;
-  const rightPanelExpanded = showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
+  const rightPanelExpanded = showRightPanel
+    && !showPostTrainingPanel
+    && !showMakeAgentTutorialPanel
+    && rightPanelMode !== "chat"
+    && diffPanelExpanded;
   const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
   const billingTarget = billingTargetForContext({
     activeWorkspaceId,
@@ -811,48 +573,34 @@ export function MainPane({
   const composerSubmissionScopeKey =
     selectedSessionId ??
     `draft:${view}:${activeWorkspaceKind ?? "none"}:${activeWorkspaceId ?? activeWorkspaceAppId ?? "none"}`;
-  const trainingChatHandoffBar =
-    trainingChatHandoff?.model.providerId === activeProvider &&
-    trainingChatHandoff.model.modelId === activeModel
-      ? (
-          <TrainingModelChatHandoffBar
-            busy={turnRunning}
-            handoff={trainingChatHandoff}
-            onDismiss={onTrainingChatHandoffDismiss}
-            onSelectTask={onTrainingChatTaskSelect}
-            servingSession={(training.payload?.servingSessions ?? [])
-              .filter((session) =>
-                session.modelArtifactLineageId === trainingChatHandoff.model.modelId)
-              .sort((left, right) =>
-                right.updatedAt.localeCompare(left.updatedAt))[0] ?? null}
-            onStopServing={(sessionId) => {
-              void training.actions.stopModelServing(sessionId);
-            }}
-          />
-        )
-      : null;
-  const createImproveRuntime = useMemo<ComposerCreateImproveRuntime | null>(() => {
-    return latestCreateRuntime
-      ? {
-          ...latestCreateRuntime,
-          onAnswerQuestion: answerCreateImproveQuestion,
-          onApprove: approveCreateImproveRun,
-          onApplyCandidate: applyCreateImproveCandidate,
-          onCancel: cancelCreateImproveRun,
-          onOpenPullRequest: openCreateImprovePullRequest,
-          onPause: pauseCreateImproveRun,
-          onReconcilePullRequest: reconcileCreateImprovePullRequest,
-          onRejectCandidate: rejectCreateImproveCandidate,
-          onResume: resumeCreateImproveRun,
-          onRevise: reviseCreateImproveRun,
-        }
-      : null;
-  }, [
+  const trainingChatHandoffBar = (
+    <ActiveTrainingChatHandoffBar
+      activeModel={activeModel}
+      activeProvider={activeProvider}
+      busy={turnRunning}
+      handoff={trainingChatHandoff}
+      onDismiss={onTrainingChatHandoffDismiss}
+      onSelectTask={onTrainingChatTaskSelect}
+      onStopServing={(sessionId) => void training.actions.stopModelServing(sessionId)}
+      servingSessions={training.payload?.servingSessions ?? []}
+    />
+  );
+  const createImproveActions = useMemo<ComposerCreateImproveActions>(() => ({
+    onAnswerQuestion: answerCreateImproveQuestion,
+    onApprove: approveCreateImproveRun,
+    onApplyCandidate: applyCreateImproveCandidate,
+    onCancel: cancelCreateImproveRun,
+    onOpenPullRequest: openCreateImprovePullRequest,
+    onPause: pauseCreateImproveRun,
+    onReconcilePullRequest: reconcileCreateImprovePullRequest,
+    onRejectCandidate: rejectCreateImproveCandidate,
+    onResume: resumeCreateImproveRun,
+    onRevise: reviseCreateImproveRun,
+  }), [
     answerCreateImproveQuestion,
     approveCreateImproveRun,
     applyCreateImproveCandidate,
     cancelCreateImproveRun,
-    latestCreateRuntime,
     openCreateImprovePullRequest,
     pauseCreateImproveRun,
     reconcileCreateImprovePullRequest,
@@ -860,18 +608,15 @@ export function MainPane({
     resumeCreateImproveRun,
     reviseCreateImproveRun,
   ]);
-  const viewClass =
-    view === "team"
-      ? "team-active"
-      : view === "community"
-        ? "community-active"
-      : view === "apps" || view === "get-started" || view === "labs"
-      ? "page-active"
-      : view === "cloud"
-        ? "cloud-active"
-      : showChatThread
-        ? "chat-active"
-        : "chat-start";
+  const createImproveRuntime = useMemo<ComposerCreateImproveRuntime | null>(() => {
+    return latestCreateRuntime
+      ? {
+          ...latestCreateRuntime,
+          ...createImproveActions,
+        }
+      : null;
+  }, [createImproveActions, latestCreateRuntime]);
+  const viewClass = mainPaneViewClass(view, showChatThread);
   const slashCommandCloudProjectId =
     selectedCloudWorkItem?.projectId ??
     cloudProjectIdFromComposerTarget(projectTarget.value) ??
@@ -1477,7 +1222,10 @@ export function MainPane({
       onViewStateChange={onWorkspaceDiffPanelViewStateChange}
       onCloseSideChat={onCloseRightChatPanel}
       onOpenSideChat={view === "chat" ? onAddRightChat : undefined}
-      onSelectSideChat={() => onShowRightChatPanel()}
+      onSelectSideChat={(panelId) => {
+        onActivateRightChatPanel(panelId);
+        onShowRightChatPanel();
+      }}
       goalDetails={{
         active: rightPanelMode === "goal",
         createRuntime: createImproveRuntime,
@@ -1519,6 +1267,7 @@ export function MainPane({
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
+      createImproveActions={createImproveActions}
       busy={busy}
       codexPermissionMode={codexPermissionMode}
       codexReasoningEffort={codexReasoningEffort}
@@ -1535,6 +1284,7 @@ export function MainPane({
       showToast={showToast}
       workspaceTarget={workspaceTarget}
       onAddChat={onAddRightChat}
+      onActivatePanel={onActivateRightChatPanel}
       onClosePanel={onCloseRightChatPanel}
       onCodexPermissionModeChange={changeCodexPermissionMode}
       onCodexReasoningEffortChange={changeCodexReasoningEffort}
@@ -1546,6 +1296,7 @@ export function MainPane({
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
+      onScrollStateChange={onRightChatScrollStateChange}
       onProjectTargetChange={changeProjectTarget}
       onResolveApproval={resolveApproval}
       onResizeStart={onDiffPanelResizeStart}
@@ -1584,10 +1335,49 @@ export function MainPane({
       />
     </Suspense>
   ) : null;
+  const nativeSkillPanel = showNativeSkillPanel && nativeSkillSidebar ? (
+    <NativeSkillSidebar
+      expanded={diffPanelExpanded}
+      skill={nativeSkillSidebar}
+      onClose={onCloseNativeSkillSidebar}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
+    />
+  ) : null;
+  const postTrainingPanel = showPostTrainingPanel && postTrainingCourse ? (
+    <PostTrainingLearningPanel
+      activeLessonIndex={postTrainingCourse.lessonIndex}
+      autoplay={postTrainingCourse.autoplay}
+      fullCourseSelected={postTrainingCourse.fullCourseSelected}
+      onResizeStart={onDiffPanelResizeStart}
+      onOpenScript={onOpenPostTrainingScript}
+      onSelectFullCourse={onSelectPostTrainingFullCourse}
+      onSelectLesson={onSelectPostTrainingLesson}
+      onSetAutoplay={onSetPostTrainingAutoplay}
+      onShowLessons={onShowPostTrainingLessons}
+      panelView={postTrainingCourse.panelView}
+      scriptLessonIndex={postTrainingCourse.scriptLessonIndex}
+    />
+  ) : null;
+  const makeAgentTutorialPanel = showMakeAgentTutorialPanel && makeAgentTutorial ? (
+    <MakeAgentTutorialLearningPanel
+      activeVideoId={makeAgentTutorial.videoId}
+      autoplay={makeAgentTutorial.autoplay}
+      onResizeStart={onDiffPanelResizeStart}
+      onSelectVideo={onSelectMakeAgentTutorialVideo}
+      onSetAutoplay={onSetMakeAgentTutorialAutoplay}
+      onShowScript={onShowMakeAgentTutorialScript}
+      onShowLessons={onShowMakeAgentTutorialLessons}
+      panelView={makeAgentTutorial.panelView}
+    />
+  ) : null;
   const rightPanel =
+    makeAgentTutorialPanel ??
+    postTrainingPanel ??
     teamAgentConversationPanel ??
     teamAiThreadPanel ??
     rightChatPanel ??
+    nativeSkillPanel ??
     diffPanel ??
     browserPanel ??
     trainingDraftPanel ??
@@ -1657,19 +1447,30 @@ export function MainPane({
           <CommunityView {...community} />
         </Suspense>
       ) : view === "get-started" ? (
-        <Suspense fallback={null}>
-          <GetStartedView
-            onCreateAgent={() => {
-              composerDraftStore.set("/create ");
-              setMentionedAppId(null);
-              setView("chat");
-            }}
-            onOpenApps={() => setView("apps")}
-            onOpenChat={() => setView("chat")}
-            onOpenCloud={() => setView("cloud")}
-            onOpenProfile={() => setView("labs")}
-          />
-        </Suspense>
+        <>
+          <Suspense fallback={null}>
+            <GetStartedView
+              onCreateAgent={() => {
+                composerDraftStore.set("/create ");
+                setMentionedAppId(null);
+                setView("chat");
+              }}
+              onClosePostTrainingCourse={onClosePostTrainingCourse}
+              makeAgentTutorial={makeAgentTutorial}
+              onCloseMakeAgentTutorial={onCloseMakeAgentTutorial}
+              onOpenApps={() => setView("apps")}
+              onOpenChat={() => setView("chat")}
+              onOpenCloud={() => setView("cloud")}
+              onOpenPostTrainingCourse={onOpenPostTrainingCourse}
+              onOpenMakeAgentTutorial={onOpenMakeAgentTutorial}
+              onOpenProfile={() => setView("labs")}
+              onSelectMakeAgentTutorialVideo={onSelectMakeAgentTutorialVideo}
+              onSelectPostTrainingLesson={onSelectPostTrainingLesson}
+              postTrainingCourse={postTrainingCourse}
+            />
+          </Suspense>
+          {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
+        </>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
           <Suspense fallback={null}>{rightPanel}</Suspense>
@@ -1683,12 +1484,7 @@ export function MainPane({
                 onNewModel={() => {
                   setTrainingLaunchRequest({ id: Date.now(), objective: null, initialSessionIds: [] });
                 }}
-                onUseAgent={(actionId) => {
-                  composerDraftStore.set("");
-                  setRequestedComposerAction({ actionId, requestId: Date.now() });
-                  setMentionedAppId(null);
-                  setView("chat");
-                }}
+                onUseAgent={handleUseAgent}
                 onCreateAgent={createAgentFromLab}
                 onImproveAgent={improveAgentFromLab}
                 onDetailOpenChange={onLabDetailOpenChange}
@@ -1748,11 +1544,19 @@ export function MainPane({
                     if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
                   },
                   onOpenComputeSettings,
+                  onOpenProviderSettings,
+                  onOpenDatasetStorageSettings,
                   onOpenChat: onOpenInsightsSession,
                   onChatWithModel: onBeginNewChatWithModel,
                   onOpenTasksetFiles: onShowFilesPanel,
-                  launchRequest: trainingLaunchRequest,
-                  onLaunchHandled: (id) => setTrainingLaunchRequest((current) => current?.id === id ? null : current),
+                  launchRequest: sideChatTrainingLaunchRequest ?? trainingLaunchRequest,
+                  onLaunchHandled: (id) => {
+                    if (sideChatTrainingLaunchRequest?.id === id) {
+                      onSideChatTrainingLaunchHandled(id);
+                      return;
+                    }
+                    setTrainingLaunchRequest((current) => current?.id === id ? null : current);
+                  },
                   preferences: trainingPreferences,
                   settingsPreferences: appPreferences,
                   providerSettings: bootstrap?.providers ?? null,
@@ -1780,41 +1584,23 @@ export function MainPane({
       ) : showChatThread ? (
         <>
           <div className={`chat-column ${pendingApproval ? "has-approval" : ""}`} style={chatColumnStyle}>
-            <section
-              className={`chat-thread${chatThreadPreparingInitialScroll ? " initial-scroll-pending" : ""}`}
-              aria-label="Conversation"
-              ref={chatThreadRef}
-              onScroll={(event) => {
-                handleChatScroll(event.currentTarget);
-              }}
-            >
-              {chatTimelineRows.map((row) =>
-                row.type === "thinking" ? (
-                  <ThinkingIndicator key={row.id} />
-                ) : (
-                  <MessageRow
-                    activeWorkspaceAppId={activeWorkspaceAppId}
-                    accountBaseUrl={accountBaseUrl}
-                    billingOrganizationSlug={billingTarget.organizationSlug}
-                    billingTeamId={billingTarget.teamId}
-                    connection={connection}
-                    key={row.id}
-                    message={row.message}
-                    onOpenFileInSidebar={handleOpenFileInSidebar}
-                    onOpenBrowserLink={handleOpenBrowserLink}
-                    onOpenProfileSettings={onOpenProfileSettings}
-                    onOpenSession={onOpenInsightsSession}
-                    workspaceRootPath={workspaceRootPath}
-                    showFooter={row.showFooter}
-                  />
-                ),
-              )}
-              {selectedTrainingCreation ? (
-                <Suspense fallback={null}>
-                  <TrainingStatusReceipt creation={selectedTrainingCreation} />
-                </Suspense>
-              ) : null}
-            </section>
+            <Suspense fallback={null}><MainChatThread
+              accountBaseUrl={accountBaseUrl}
+              activeWorkspaceAppId={activeWorkspaceAppId}
+              billingOrganizationSlug={billingTarget.organizationSlug}
+              billingTeamId={billingTarget.teamId}
+              connection={connection}
+              creation={selectedTrainingCreation}
+              onOpenBrowserLink={handleOpenBrowserLink}
+              onOpenFileInSidebar={handleOpenFileInSidebar}
+              onOpenProfileSettings={onOpenProfileSettings}
+              onOpenSession={onOpenInsightsSession}
+              onScroll={(event) => handleChatScroll(event.currentTarget)}
+              preparingInitialScroll={chatThreadPreparingInitialScroll}
+              rows={chatTimelineRows}
+              threadRef={chatThreadRef}
+              workspaceRootPath={workspaceRootPath}
+            /></Suspense>
             <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`} ref={composerStackRef}>
               {selectedTrainingCreation ? (
                 <Suspense fallback={null}>
@@ -1829,41 +1615,17 @@ export function MainPane({
               {trainingChatHandoffBar}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               {showScrollToBottomButton && !chatThreadPreparingInitialScroll ? (
-                <div className="chat-scroll-controls" aria-label="Message navigation">
-                  <button
-                    type="button"
-                    className="chat-scroll-control-button"
-                    data-tooltip="Go to previous message"
-                    aria-label="Go to previous message"
-                    aria-disabled={!userMessageNavigation.canGoPrevious}
-                    onClick={() => {
-                      if (userMessageNavigation.canGoPrevious) goToUserMessage("previous");
-                    }}
-                  >
-                    <ArrowLeft size={17} />
-                  </button>
-                  <button
-                    type="button"
-                    className="chat-scroll-control-button primary"
-                    data-tooltip="Jump to latest"
-                    aria-label="Jump to latest"
-                    onClick={jumpToLatestChatMessage}
-                  >
-                    <ArrowDown size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="chat-scroll-control-button"
-                    data-tooltip="Go to next message"
-                    aria-label="Go to next message"
-                    aria-disabled={!userMessageNavigation.canGoNext}
-                    onClick={() => {
-                      if (userMessageNavigation.canGoNext) goToUserMessage("next");
-                    }}
-                  >
-                    <ArrowRight size={17} />
-                  </button>
-                </div>
+                <MessageNavigationControls
+                  canGoNext={userMessageNavigation.canGoNext}
+                  canGoPrevious={userMessageNavigation.canGoPrevious}
+                  onJumpToLatest={jumpToLatestChatMessage}
+                  onNext={() => {
+                    if (userMessageNavigation.canGoNext) goToUserMessage("next");
+                  }}
+                  onPrevious={() => {
+                    if (userMessageNavigation.canGoPrevious) goToUserMessage("previous");
+                  }}
+                />
               ) : null}
               <DraftBoundComposer
                 draftStore={composerDraftStore}
@@ -1888,7 +1650,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
-                actionCatalog={actionCatalog}
+                actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
                 codexPermissionMode={codexPermissionMode}
@@ -1921,15 +1683,10 @@ export function MainPane({
           <section className="start-panel">
             <h1>{startMessage}</h1>
             {canSyncWorkspace && (
-              <button
-                type="button"
-                className="sync-local-button"
-                disabled={workspaceBusy}
-                onClick={() => void syncWorkspaceLocally()}
-              >
-                <DownloadCloud size={15} />
-                <span>{workspaceBusy ? "Syncing locally" : "Sync locally to work on this"}</span>
-              </button>
+              <WorkspaceSyncButton
+                busy={workspaceBusy}
+                onSync={() => void syncWorkspaceLocally()}
+              />
             )}
             <div className="composer-stack start">
               {trainingChatHandoffBar}
@@ -1957,7 +1714,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
-                actionCatalog={actionCatalog}
+                actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
                 codexPermissionMode={codexPermissionMode}
@@ -1989,10 +1746,4 @@ export function MainPane({
   );
 }
 
-export function shouldShowRightSidebarHomePanel(input: {
-  supportedView: boolean;
-  open: boolean;
-  hasContentPanel: boolean;
-}): boolean {
-  return input.supportedView && input.open && !input.hasContentPanel;
-}
+export { shouldShowRightSidebarHomePanel };

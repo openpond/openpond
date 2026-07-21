@@ -22,6 +22,7 @@ export function TrainingModels({
   onSelectedJobIdChange,
   onChatWithModel,
   onToast,
+  onOpenProviderSettings,
   detailTasksetId,
   onDetailTasksetIdChange,
 }: {
@@ -33,6 +34,7 @@ export function TrainingModels({
   onSelectedJobIdChange: (jobId: string | null) => void;
   onChatWithModel: (handoff: TrainingModelChatHandoff) => void;
   onToast: ShowAppToast;
+  onOpenProviderSettings: () => void;
   detailTasksetId: string | null;
   onDetailTasksetIdChange: (tasksetId: string | null) => void;
 }) {
@@ -46,7 +48,7 @@ export function TrainingModels({
 
   const deleteDialog = deleteTarget ? <div className="training-dialog-backdrop" role="presentation" onMouseDown={() => setDeleteTarget(null)}><section className="training-dialog training-delete-dialog" role="dialog" aria-modal="true" aria-label="Delete model" onMouseDown={(event) => event.stopPropagation()}><div className="training-dialog-header"><h2>Delete model?</h2></div><p>This removes the Taskset, training setup, runs, and locally managed artifacts for {deleteTarget.name}.</p><div className="training-dialog-actions"><button className="training-button secondary" type="button" onClick={() => setDeleteTarget(null)}>Cancel</button><button className="training-button danger" type="button" disabled={Boolean(training.busyAction)} onClick={async () => { const deleted = await training.actions.deleteTaskset(deleteTarget.id); if (deleted) { setDeleteTarget(null); onDetailTasksetIdChange(null); } }}>Delete</button></div></section></div> : null;
 
-  if (selected) return <><TrainingModelDetail key={selected.taskset.id} taskset={selected.taskset} training={training} connection={connection} onDelete={() => setDeleteTarget(selected.taskset)} onOpenTaskset={() => onOpenTaskset(selected.taskset.id)} onOpenTasksetFiles={() => onOpenTasksetFiles(selected.taskset.id)} onSelectedJobIdChange={onSelectedJobIdChange} onToast={onToast}/>{deleteDialog}</>;
+  if (selected) return <><TrainingModelDetail key={selected.taskset.id} taskset={selected.taskset} training={training} connection={connection} onDelete={() => setDeleteTarget(selected.taskset)} onOpenProviderSettings={onOpenProviderSettings} onOpenTaskset={() => onOpenTaskset(selected.taskset.id)} onOpenTasksetFiles={() => onOpenTasksetFiles(selected.taskset.id)} onSelectedJobIdChange={onSelectedJobIdChange} onToast={onToast}/>{deleteDialog}</>;
 
   return (
     <div className="training-page-body training-model-list">

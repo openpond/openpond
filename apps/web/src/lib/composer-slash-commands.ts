@@ -31,8 +31,8 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
   {
     id: "create",
     command: "/create",
-    label: "Create agent or project",
-    description: "Start a guided creation flow in OpenPond Cloud.",
+    label: "Make Agent",
+    description: "Start the guided Agent creation flow.",
   },
   {
     id: "edit",

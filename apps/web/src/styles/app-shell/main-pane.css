@@ -117,6 +117,10 @@
   scrollbar-width: thin;
 }
 
+.main-pane.page-active:has(.get-started-course-player-backdrop) {
+  overflow: hidden;
+}
+
 .main-pane.page-active.diff-open {
   grid-template-columns: minmax(0, 1fr) minmax(320px, max(320px, min(var(--diff-panel-width), calc(100% - 520px))));
   grid-template-rows: minmax(0, 1fr);
@@ -128,7 +132,8 @@
   grid-template-rows: minmax(0, 1fr) var(--terminal-panel-height);
 }
 
-.main-pane.page-active.diff-open .profile-view {
+.main-pane.page-active.diff-open .profile-view,
+.main-pane.page-active.diff-open > .get-started-view {
   grid-column: 1;
   grid-row: 1;
   max-height: 100%;

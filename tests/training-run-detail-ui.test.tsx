@@ -97,4 +97,27 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Reward by optimizer step");
     expect(html.match(/Step 1:/g)).toHaveLength(1);
   });
+
+  test("does not count a reward metric as a verified optimizer update", () => {
+    const failedRftDetail = TrainingRunDetailSchema.parse({
+      ...detail,
+      job: {
+        ...detail.job,
+        status: "failed",
+        metadata: {
+          trainingMethod: "grpo",
+          optimizerUpdatesObserved: 0,
+        },
+      },
+      stepMetrics: [{
+        ...detail.stepMetrics[0]!,
+        loss: null,
+        reward: 0,
+      }],
+    });
+    const html = renderToStaticMarkup(
+      <TrainingRunMetrics detail={failedRftDetail} loading={false} />,
+    );
+    expect(html).toContain("<span>Optimizer updates</span><strong>0</strong>");
+  });
 });

@@ -1,28 +1,101 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import {
   TrainingBundleManifestSchema,
+  type DatasetSelectionStrategy,
   type Taskset,
   type TrainingBundleManifest,
   type TrainingPlan,
 } from "@openpond/contracts";
 import { canonicalJson, contentHash, sha256 } from "@openpond/taskset-sdk";
 
-export async function buildTrainingBundle(input: { taskset: Taskset; plan: TrainingPlan; directory: string }): Promise<TrainingBundleManifest> {
+export type ProjectedTrainingData = {
+  path: string;
+  contentHash: string;
+  sizeBytes: number;
+  exampleCount: number;
+  eligibleRows: number;
+  selectionSeed: number;
+  selectionStrategy: DatasetSelectionStrategy;
+  taskIdsHash: string;
+};
+
+type ResolvedTrainingData = Omit<ProjectedTrainingData, "path"> & (
+  | { sourcePath: string }
+  | { content: string }
+);
+
+export async function buildTrainingBundle(input: {
+  taskset: Taskset;
+  plan: TrainingPlan;
+  directory: string;
+  projectedTrainingData?: ProjectedTrainingData | null;
+}): Promise<TrainingBundleManifest> {
   if (!input.plan.compatibility.compatible) throw new Error("Training Plan is incompatible and cannot be bundled.");
   if (!input.plan.dataPolicy.exportApproved) throw new Error("Training export approval is required before bundle creation.");
   if (input.taskset.contentHash !== input.plan.tasksetHash) throw new Error("Training Plan references a different Taskset hash.");
   const approved = new Set(input.plan.dataPolicy.approvedSourceIds);
-  const trainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.sourceRefs.every((source) => approved.has(source))).map((task) => ({ id: task.id, input: task.input, expectedOutput: task.expectedOutput, tags: task.tags }));
-  if (trainTasks.length === 0) throw new Error("Training Bundle has no approved training demonstrations.");
+  const taskData: ResolvedTrainingData = input.projectedTrainingData
+    ? {
+        ...input.projectedTrainingData,
+        sourcePath: input.projectedTrainingData.path,
+      }
+    : inlineTrainingData(input.taskset, input.plan, approved);
+  if (taskData.exampleCount === 0) throw new Error("Training Bundle has no approved training examples.");
   await mkdir(input.directory, { recursive: true });
   const assets = [
-    { path: "data/train.jsonl", role: "task_data" as const, content: trainTasks.map((task) => JSON.stringify(task)).join("\n") + "\n" },
     { path: "recipe.json", role: "recipe" as const, content: canonicalJson(input.plan.recipe) },
-    { path: "policy.json", role: "policy" as const, content: canonicalJson({ tasksetId: input.taskset.id, tasksetHash: input.taskset.contentHash, sourceIds: input.plan.dataPolicy.approvedSourceIds, retentionDays: input.plan.dataPolicy.retentionDays, region: input.plan.dataPolicy.region }) },
+    {
+      path: "policy.json",
+      role: "policy" as const,
+      content: canonicalJson({
+        tasksetId: input.taskset.id,
+        tasksetHash: input.taskset.contentHash,
+        sourceIds: input.plan.dataPolicy.approvedSourceIds,
+        retentionDays: input.plan.dataPolicy.retentionDays,
+        region: input.plan.dataPolicy.region,
+        trainingData: {
+          exampleCount: taskData.exampleCount,
+          eligibleRows: taskData.eligibleRows,
+          selectionSeed: taskData.selectionSeed,
+          selectionStrategy: taskData.selectionStrategy,
+          taskIdsHash: taskData.taskIdsHash,
+        },
+      }),
+    },
     { path: "provenance.json", role: "provenance" as const, content: canonicalJson(input.taskset.authoringProvenance) },
   ];
-  const files = [];
+  const files: TrainingBundleManifest["files"] = [{
+    path: "data/train.jsonl",
+    sha256: taskData.contentHash,
+    sizeBytes: taskData.sizeBytes,
+    role: "task_data" as const,
+  }];
+  const taskDataDestination = path.join(input.directory, "data/train.jsonl");
+  await mkdir(path.dirname(taskDataDestination), { recursive: true });
+  if ("sourcePath" in taskData) {
+    await copyFile(taskData.sourcePath, taskDataDestination);
+  } else {
+    await writeFile(taskDataDestination, taskData.content, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+  }
+  const copied = await fileIdentity(taskDataDestination);
+  if (
+    copied.contentHash !== taskData.contentHash
+    || copied.sizeBytes !== taskData.sizeBytes
+  ) {
+    throw new Error("Projected training data changed while the Bundle was created.");
+  }
   for (const asset of assets) {
     const destination = path.join(input.directory, asset.path);
     await mkdir(path.dirname(destination), { recursive: true });
@@ -36,6 +109,77 @@ export async function buildTrainingBundle(input: { taskset: Taskset; plan: Train
   const manifest = TrainingBundleManifestSchema.parse({ ...provisional, contentHash: manifestHash, files: provisional.files.map((file) => file.path === "manifest.json" ? { ...file, sha256: manifestHash, sizeBytes: 0 } : file) });
   await writeFile(path.join(input.directory, "manifest.json"), canonicalJson(manifest), "utf8");
   return manifest;
+}
+
+function inlineTrainingData(
+  taskset: Taskset,
+  plan: TrainingPlan,
+  approvedSources: Set<string>,
+): ResolvedTrainingData {
+  if (plan.recipe.method !== "sft" && plan.recipe.method !== "grpo") {
+    throw new Error(`Training method ${plan.recipe.method} cannot produce task data.`);
+  }
+  const approvedDemonstrations = new Set(
+    taskset.learningSignals.demonstrations.flatMap((signal) =>
+      signal.approved && signal.taskId ? [signal.taskId] : []),
+  );
+  const seed = plan.recipe.method === "grpo"
+    ? plan.recipe.rollout.seed
+    : plan.recipe.optimizer.seed;
+  const limit = plan.recipe.dataset.maxExamples;
+  const selected = taskset.tasks
+    .filter((task) =>
+      task.split === "train"
+      && task.sourceRefs.every((source) => approvedSources.has(source))
+      && (
+        plan.recipe.method === "grpo"
+        || (
+          task.expectedOutput !== null
+          && approvedDemonstrations.has(task.id)
+        )
+      ))
+    .map((task) => ({
+      priority: contentHash([taskset.contentHash, seed, "train", task.id]),
+      record: plan.recipe.method === "grpo"
+        ? { id: task.id, input: task.input, tags: task.tags }
+        : {
+            id: task.id,
+            input: task.input,
+            expectedOutput: task.expectedOutput,
+            tags: task.tags,
+          },
+    }))
+    .sort((left, right) =>
+      left.priority.localeCompare(right.priority)
+      || left.record.id.localeCompare(right.record.id))
+    .slice(0, limit);
+  const content = selected.length
+    ? `${selected.map((item) => JSON.stringify(item.record)).join("\n")}\n`
+    : "";
+  const bytes = Buffer.from(content, "utf8");
+  return {
+    content,
+    contentHash: sha256(bytes),
+    sizeBytes: bytes.byteLength,
+    exampleCount: selected.length,
+    eligibleRows: selected.length,
+    selectionSeed: seed,
+    selectionStrategy: "stable_hash_top_n",
+    taskIdsHash: contentHash(selected.map((item) => item.record.id)),
+  };
+}
+
+async function fileIdentity(
+  filePath: string,
+): Promise<{ contentHash: string; sizeBytes: number }> {
+  const digest = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) {
+    digest.update(chunk);
+  }
+  return {
+    contentHash: digest.digest("hex"),
+    sizeBytes: (await stat(filePath)).size,
+  };
 }
 
 export async function inspectTrainingBundle(directory: string): Promise<TrainingBundleManifest> {

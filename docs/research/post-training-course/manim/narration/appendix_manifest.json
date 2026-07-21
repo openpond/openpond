@@ -1,0 +1,33 @@
+{
+  "model": "gpt-4o-mini-tts-2025-12-15",
+  "voice": "cedar",
+  "speed": 1.1,
+  "responseFormat": "wav",
+  "instructions": "Warm, clear educational narration for a mathematical animation. Speak with calm curiosity at a natural conversational pace. Use precise emphasis and extra care around equations, acronyms, and variable names. Finish each paragraph cleanly. Avoid hype, sales cadence, dramatic trailer delivery, or imitation of any real person.",
+  "leadInSeconds": 0.7,
+  "tailSeconds": 0.7,
+  "loudness": {
+    "integratedLufs": -14,
+    "truePeakDb": -1,
+    "rangeLu": 9,
+    "postGainDb": 2
+  },
+  "sourceScript": "../appendix_narration_script.md",
+  "sourceVideo": "../videos/PostTrainingAdvancedAppendix.mp4",
+  "narrationMaster": "appendix_full_narration.wav",
+  "outputVideo": "../videos/PostTrainingAdvancedAppendixNarrated.mp4",
+  "chapters": [
+    {
+      "id": "Appendix01GRPODetails",
+      "durationSeconds": 60.8
+    },
+    {
+      "id": "Appendix02DistillationSystems",
+      "durationSeconds": 32.1
+    },
+    {
+      "id": "Appendix03MethodStudies",
+      "durationSeconds": 98.867
+    }
+  ]
+}

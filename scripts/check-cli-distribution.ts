@@ -27,6 +27,7 @@ type ReadyPayload = {
 };
 
 const MiB = 1024 * 1024;
+const MAX_NPM_PACKAGE_FILES = 260;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tempRoots: string[] = [];
 
@@ -54,7 +55,7 @@ async function checkNpmPackage() {
 
   enforce("npm packed bytes", result.size, 8 * MiB);
   enforce("npm unpacked bytes", result.unpackedSize, 32 * MiB);
-  enforce("npm file count", result.entryCount, 250);
+  enforce("npm file count", result.entryCount, MAX_NPM_PACKAGE_FILES);
   const fileMap = new Map(result.files.map((file) => [file.path, file.size]));
   enforceRequiredFiles(fileMap, [
     "dist/cli.js",

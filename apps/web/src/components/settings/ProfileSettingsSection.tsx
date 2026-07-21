@@ -242,10 +242,10 @@ function ProfileControls({
           {profile ? (
             <span
               className="profile-hosted-status"
-              title={`Hosted profile status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
+              title={`Profile sync status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
             >
               <CloudUpload size={14} />
-              <span>Hosted</span>
+              <span>Profile sync</span>
               <strong>{profileHostedValue(profile, selectedDefaultTeamId)}</strong>
             </span>
           ) : null}

@@ -6,6 +6,26 @@ export function publicAssetUrl(path: string): string {
 
 export const OPENPOND_ICON_URL = publicAssetUrl("openpond-icon.png");
 export const OPENPOND_WORDMARK_WHITE_URL = publicAssetUrl("openpond-wordlogo-white.png");
+export const OPENPOND_AGENT_OVERVIEW_POSTER_URL = publicAssetUrl(
+  "tutorials/what-is-an-openpond-agent-poster.png",
+);
+export const OPENPOND_AGENT_OVERVIEW_CAPTIONS_URL = publicAssetUrl(
+  "tutorials/what-is-an-openpond-agent.vtt",
+);
+export const MAKE_AGENT_TUTORIAL_POSTER_URL = publicAssetUrl(
+  "tutorials/how-to-make-an-agent-poster.png",
+);
+export const MAKE_AGENT_TUTORIAL_CAPTIONS_URL = publicAssetUrl(
+  "tutorials/how-to-make-an-agent.vtt",
+);
+
+export function makeAgentTutorialPosterUrl(chapter: "create" | "use" | "improve"): string {
+  return publicAssetUrl(`tutorials/how-to-make-an-agent-${chapter}-poster.png`);
+}
+
+export function makeAgentTutorialCaptionsUrl(chapter: "create" | "use" | "improve"): string {
+  return publicAssetUrl(`tutorials/how-to-make-an-agent-${chapter}.vtt`);
+}
 
 const CONNECTED_APP_ICON_URLS = {
   github: publicAssetUrl("connected-apps/github.svg"),

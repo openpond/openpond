@@ -52,6 +52,7 @@ export const ComputeStorageRootSchema = z.object({
   label: z.string().trim().min(1).max(500),
   path: z.string().trim().min(1).max(4_000),
   modelStorePath: z.string().trim().min(1).max(4_000),
+  datasetStorePath: z.string().trim().min(1).max(4_000),
   kind: z.enum(["local", "network", "removable", "cache"]),
   configured: z.boolean(),
   mounted: z.boolean(),
@@ -121,6 +122,7 @@ export const ComputeHostProfileSchema = z.object({
 export const ComputeSettingsSchema = z.object({
   schemaVersion: z.literal("openpond.computeSettings.v1"),
   modelStorePath: z.string().trim().min(1).max(4_000).nullable(),
+  datasetStorePath: z.string().trim().min(1).max(4_000).nullable().default(null),
   defaultDeviceIds: z.array(IdSchema).max(64),
   additionalModelPaths: z.array(z.string().trim().min(1).max(4_000)).max(32),
   updatedAt: TimestampSchema,
@@ -166,6 +168,7 @@ export const ComputeStateResponseSchema = z.object({
 
 export const UpdateComputeSettingsRequestSchema = z.object({
   modelStorePath: z.string().trim().min(1).max(4_000).nullable().optional(),
+  datasetStorePath: z.string().trim().min(1).max(4_000).nullable().optional(),
   defaultDeviceIds: z.array(IdSchema).max(64).optional(),
   additionalModelPaths: z.array(z.string().trim().min(1).max(4_000)).max(32).optional(),
 });

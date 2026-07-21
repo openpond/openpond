@@ -123,6 +123,8 @@ export type TurnRepository = {
   listModelUsageRecords?(query?: {
     sessionId?: string | null;
     turnId?: string | null;
+    provider?: ModelUsageRecord["provider"] | null;
+    model?: string | null;
     startedAtFrom?: string | null;
     startedAtTo?: string | null;
     visibility?: ModelUsageRecord["visibility"] | "all" | null;

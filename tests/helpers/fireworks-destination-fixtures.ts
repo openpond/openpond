@@ -210,6 +210,10 @@ export function fireworksRftRecipe(): RftRecipe {
       learningRate: 0.0002,
       maxSteps: 2,
     },
+    loss: {
+      method: "grpo",
+      klBeta: null,
+    },
     reward: {
       graderId: "expected_output",
       graderHash: "graderhash00000000",

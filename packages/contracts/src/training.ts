@@ -1,8 +1,11 @@
 import { z } from "zod";
 import {
   BaseModelPreferenceSchema,
+  BaselineRftSignalSchema,
   BaselineReportSchema,
+  BaselineScopeSchema,
   GraderAuditReportSchema,
+  TasksetBaselineRunSchema,
   TaskCreationSnapshotSchema,
   TasksetSchema,
   TrainingSourceRefSchema,
@@ -13,11 +16,20 @@ import {
   CrossSystemTrajectorySchema,
   CrossSystemVerifierResultSchema,
 } from "./cross-system-operations.js";
+import { DatasetArtifactSummarySchema } from "./dataset-artifacts.js";
+import { DatasetImportJobSchema } from "./dataset-imports.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
 const HashSchema = z.string().trim().min(8).max(256);
 const MetadataSchema = z.record(z.string(), z.unknown()).default({});
+
+export const DATASET_EXACT_ANSWER_ENVIRONMENT_ID =
+  "dataset-exact-answer" as const;
+export const DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION =
+  "dataset-exact-answer-v1" as const;
+export const DATASET_NO_TOOLS_CONTRACT_HASH = "no-tools-v1" as const;
+export const RftLossMethodSchema = z.enum(["grpo", "dapo", "gspo-token"]);
 
 export const TrainingMethodSchema = z.enum(["sft", "dpo", "grpo", "sdft", "opd", "opsd", "sdpo"]);
 export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
@@ -39,7 +51,13 @@ export const SftRecipeSchema = z.object({
   method: z.literal("sft"),
   parameterization: z.literal("lora"),
   baseModel: z.object({ id: IdSchema, revision: z.string().trim().min(1).max(256), tokenizerRevision: z.string().trim().min(1).max(256), chatTemplateHash: HashSchema }),
-  dataset: z.object({ trainSplit: z.literal("train"), validationSplit: z.enum(["validation", "frozen_eval"]), completionOnly: z.boolean(), maxSequenceLength: z.number().int().positive().max(32_768) }),
+  dataset: z.object({
+    trainSplit: z.literal("train"),
+    validationSplit: z.enum(["validation", "frozen_eval"]),
+    completionOnly: z.boolean(),
+    maxSequenceLength: z.number().int().positive().max(32_768),
+    maxExamples: z.number().int().positive().max(100_000).default(1_000),
+  }),
   lora: z.object({ rank: z.number().int().positive().max(256), alpha: z.number().positive().max(1_024), dropout: z.number().min(0).max(1), targetModules: z.array(IdSchema).min(1).max(100) }),
   optimizer: z.object({ learningRate: z.number().positive(), epochs: z.number().positive().max(100), maxSteps: z.number().int().positive().max(1_000_000), batchSize: z.number().int().positive().max(10_000), gradientAccumulationSteps: z.number().int().positive().max(10_000), seed: z.number().int() }),
   resourceLimits: z.object({ cpuThreads: z.number().int().positive().max(256), memoryBytes: z.number().int().positive(), wallTimeMs: z.number().int().positive() }),
@@ -66,6 +84,11 @@ export const RftRecipeSchema = z.object({
     trainSplit: z.literal("train"),
     validationSplit: z.enum(["validation", "frozen_eval"]),
     maxPromptTokens: z.number().int().positive().max(32_768),
+    maxExamples: z.number().int().positive().max(100_000).default(1_000),
+    selectionStrategy: z.enum([
+      "stable_hash_top_n",
+      "rft_easy_curriculum_v1",
+    ]).default("stable_hash_top_n"),
   }),
   lora: z.object({
     rank: z.number().int().positive().max(256),
@@ -83,6 +106,10 @@ export const RftRecipeSchema = z.object({
     learningRate: z.number().positive(),
     maxSteps: z.number().int().positive().max(100_000),
   }),
+  loss: z.object({
+    method: RftLossMethodSchema.default("grpo"),
+    klBeta: z.number().min(0).nullable().default(null),
+  }).default({ method: "grpo", klBeta: null }),
   reward: z.object({
     graderId: IdSchema,
     graderHash: HashSchema,
@@ -172,6 +199,12 @@ export const TrainingPlanSchema = z.object({
   environmentPlacement: z.enum(["none", "local", "remote", "colocated", "provider_native"]),
   compatibility: TrainingCompatibilityReportSchema,
   dataPolicy: z.object({ exportApproved: z.boolean(), approvedSourceIds: z.array(IdSchema), retentionDays: z.number().int().nonnegative().nullable(), region: z.string().trim().min(1).max(200).nullable() }),
+  rftSignalGate: z.object({
+    baselineReportId: IdSchema,
+    baselineReportHash: HashSchema,
+    scope: BaselineScopeSchema,
+    signal: BaselineRftSignalSchema,
+  }).nullable().default(null),
   estimatedCostUsd: z.number().nonnegative().nullable(),
   createdAt: TimestampSchema,
   contentHash: HashSchema,
@@ -363,6 +396,35 @@ export const LocalModelChatConfigurationSchema = z.object({
 
 export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION = LocalModelChatConfigurationSchema.parse({});
 
+export const ManagedAdapterServingProjectionSchema = z.object({
+  schemaVersion: z.literal("openpond.managedAdapterServingProjection.v1"),
+  teamId: IdSchema.nullable().default(null),
+  source: z.literal("openpond_fireworks"),
+  sourceRef: IdSchema,
+  canonicalArtifactId: IdSchema.nullable(),
+  canonicalArtifactState: z.enum([
+    "imported_unvalidated",
+    "evaluating",
+    "promotable",
+    "rejected",
+    "deleted",
+  ]).nullable(),
+  canonicalDeploymentId: IdSchema.nullable(),
+  canonicalDeploymentState: z.enum([
+    "requested",
+    "provisioning",
+    "ready",
+    "degraded",
+    "deleting",
+    "deleted",
+    "failed",
+  ]).nullable(),
+  state: z.enum(["pending", "imported", "ready", "failed"]),
+  publishedAt: TimestampSchema.nullable(),
+  lastSyncedAt: TimestampSchema,
+  lastError: z.string().trim().min(1).max(5_000).nullable(),
+});
+
 export const ModelArtifactLineageSchema = z.object({
   schemaVersion: z.literal("openpond.modelArtifactLineage.v1"),
   id: IdSchema,
@@ -385,6 +447,37 @@ export const ModelArtifactLineageSchema = z.object({
   rejectedAt: TimestampSchema.nullable().default(null),
   rejectionReason: z.string().trim().min(1).max(5_000).nullable().default(null),
   chatConfiguration: LocalModelChatConfigurationSchema.default(DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION),
+  managedServing: ManagedAdapterServingProjectionSchema.nullable().default(null),
+});
+
+export const SingleTurnPolicyTrajectorySchema = z.object({
+  schemaVersion: z.literal("openpond.singleTurnPolicyTrajectory.v1"),
+  id: IdSchema,
+  taskId: IdSchema,
+  status: z.enum(["completed", "infrastructure_failure"]),
+  promptHash: HashSchema,
+  responseText: z.string().max(2_000_000),
+  infrastructureError: z.string().trim().min(1).max(10_000).nullable(),
+  startedAt: TimestampSchema,
+  completedAt: TimestampSchema,
+  metadata: MetadataSchema,
+});
+
+export const ExactAnswerVerifierResultSchema = z.object({
+  schemaVersion: z.literal("openpond.exactAnswerVerifierResult.v1"),
+  outcome: z.enum([
+    "correct",
+    "incorrect",
+    "parse_failure",
+    "infrastructure_failure",
+  ]),
+  graderSetHash: HashSchema,
+  score: z.number().min(0).max(1).nullable(),
+  passed: z.boolean(),
+  rewardEligible: z.boolean(),
+  expectedAnswerHash: HashSchema,
+  extractedAnswer: z.string().max(20_000).nullable(),
+  feedback: z.array(z.string().trim().min(1).max(20_000)).max(1_000),
 });
 
 export const RolloutTrajectoryReceiptSchema = z.object({
@@ -433,8 +526,14 @@ export const RolloutTrajectoryReceiptSchema = z.object({
     normalized: z.number().min(0).max(1).nullable(),
     components: z.record(z.string(), z.number()),
   }),
-  trajectory: CrossSystemTrajectorySchema.nullable(),
-  verifier: CrossSystemVerifierResultSchema.nullable(),
+  trajectory: z.union([
+    CrossSystemTrajectorySchema,
+    SingleTurnPolicyTrajectorySchema,
+  ]).nullable(),
+  verifier: z.union([
+    CrossSystemVerifierResultSchema,
+    ExactAnswerVerifierResultSchema,
+  ]).nullable(),
   providerStatus: z.record(z.string(), z.unknown()).default({}),
   receivedAt: TimestampSchema,
   startedAt: TimestampSchema.nullable(),
@@ -533,7 +632,10 @@ export const TrainingStateResponseSchema = z.object({
   sources: z.array(TrainingSourceRefSchema),
   creations: z.array(TaskCreationSnapshotSchema),
   tasksets: z.array(TasksetSchema),
+  datasetImports: z.array(DatasetImportJobSchema).default([]),
+  datasetArtifacts: z.array(DatasetArtifactSummarySchema).default([]),
   baselineReports: z.array(BaselineReportSchema),
+  baselineRuns: z.array(TasksetBaselineRunSchema).default([]),
   graderAuditReports: z.array(GraderAuditReportSchema),
   candidates: z.array(TaskCandidateSchema),
   minerConfig: TaskMinerConfigSchema,
@@ -555,6 +657,7 @@ export const TrainingStateResponseSchema = z.object({
 
 export type TrainingMethod = z.infer<typeof TrainingMethodSchema>;
 export type TrainingDestinationId = z.infer<typeof TrainingDestinationIdSchema>;
+export type RftLossMethod = z.infer<typeof RftLossMethodSchema>;
 export type SftRecipe = z.infer<typeof SftRecipeSchema>;
 export type RftRecipe = z.infer<typeof RftRecipeSchema>;
 export type SftTrainingRecord = z.infer<typeof SftTrainingRecordSchema>;
@@ -579,6 +682,9 @@ export type TrainingRunDetail = z.infer<typeof TrainingRunDetailSchema>;
 export type TrainingArtifact = z.infer<typeof TrainingArtifactSchema>;
 export type LocalModelChatConfiguration = z.infer<typeof LocalModelChatConfigurationSchema>;
 export type ModelArtifactLineage = z.infer<typeof ModelArtifactLineageSchema>;
+export type ManagedAdapterServingProjection = z.infer<
+  typeof ManagedAdapterServingProjectionSchema
+>;
 export type RolloutTrajectoryReceipt = z.infer<typeof RolloutTrajectoryReceiptSchema>;
 export type ModelBindingRole = z.infer<typeof ModelBindingRoleSchema>;
 export type ModelBinding = z.infer<typeof ModelBindingSchema>;

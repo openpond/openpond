@@ -1,0 +1,25 @@
+WEBVTT
+
+overview-profile
+00:00:04.600 --> 00:00:13.842
+An OpenPond Agent is a reusable capability that lives in your Profile. Its source defines its purpose, the actions people can run, and the checks that protect its behavior.
+
+overview-entrypoints
+00:00:14.942 --> 00:00:24.541
+Use chat when the request is open ended and conversational. Use a direct action when the inputs and result should be explicit, repeatable, and easy to connect to another workflow.
+
+overview-surfaces
+00:00:25.641 --> 00:00:35.995
+A shared action catalog lets the Agent appear in OpenPond chat, its Agent page, supported channels, and API or M C P integrations without duplicating the underlying behavior.
+
+overview-example
+00:00:37.095 --> 00:00:48.563
+An Account Health Agent can answer follow up questions in chat, summarize one account, triage renewal risk, or build a weekly portfolio review. Each path uses the same trusted Agent source.
+
+overview-checks
+00:00:49.663 --> 00:01:00.643
+Checks run repeatable scenarios against the Agent's behavior and outputs. During Improve, OpenPond compares the candidate with the active Agent and only releases the change after the required checks pass.
+
+overview-lifecycle
+00:01:01.743 --> 00:01:11.968
+Start from a purpose or supporting chats, review what OpenPond will build, use the Agent on real work, then improve it from the evidence. Next, create the Account Health Agent step by step.

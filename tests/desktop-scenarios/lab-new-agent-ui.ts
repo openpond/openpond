@@ -42,13 +42,12 @@ export default desktopScenario({
     await openLab(harness);
     await clickWorkproduct(harness, "default");
     await clickByAriaLabel(harness, "Improve agent");
-    await harness.renderer.assertText("How do you want to start?", {
+    await harness.renderer.assertText("Choose a setup", {
       label: "Improve Agent shared authoring shell",
     });
-    await clickButtonContainingText(harness, "Manual", "[aria-label='Improve default']");
+    await clickButtonContainingText(harness, "From chats", "[aria-label='Improve default']");
     await clickButtonByText(harness, "Continue", "[aria-label='Improve default']");
     await fillTextarea(harness, "[aria-label='Improve default'] textarea", OBJECTIVE);
-    await clickButtonByText(harness, "Add evidence", "[aria-label='Improve default']");
     await harness.renderer.assertText("Approved deterministic Agent behavior A", {
       label: "Improve Agent evidence",
       timeoutMs: 30_000,
@@ -68,17 +67,17 @@ export default desktopScenario({
       `document.querySelectorAll("[aria-label='Improve default'] input[type='checkbox']:checked").length >= 2`,
       "selected Improve Agent evidence",
     );
-    await clickButtonByText(harness, "Review data access", "[aria-label='Improve default']");
-    await harness.renderer.assertText("Approve evidence disclosure", {
-      label: "Improve Agent disclosure",
+    await clickButtonByText(harness, "Review selected chats", "[aria-label='Improve default']");
+    await harness.renderer.assertText("Review chats before sharing", {
+      label: "Improve Agent chat sharing review",
       timeoutMs: 30_000,
     });
-    await clickButtonByText(harness, "Approve and analyze", "[aria-label='Improve default']");
-    await harness.renderer.assertText("Create Taskset", {
-      label: "Improve Agent Taskset review",
+    await clickButtonByText(harness, "Approve chats and build plan", "[aria-label='Improve default']");
+    await harness.renderer.assertText("Continue to improvement plan", {
+      label: "Improve Agent review",
       timeoutMs: 60_000,
     });
-    await clickButtonByText(harness, "Create Taskset", "[aria-label='Improve default']");
+    await clickButtonByText(harness, "Continue to improvement plan", "[aria-label='Improve default']");
     await clickTab(harness, "Changes");
     await clickButtonContainingText(harness, OBJECTIVE, ".labs-agent-change-history");
     await harness.renderer.assertText("Confirm plan", {
@@ -117,11 +116,11 @@ export default desktopScenario({
       activeReceipt.metadata.executionContractHash === candidateReceipt.metadata.executionContractHash,
       "Active and candidate evaluation did not use the same execution contract.",
     );
-    await harness.renderer.assertText("Merge change", {
+    await harness.renderer.assertText("Apply update", {
       label: "Agent promotion decision",
       timeoutMs: 30_000,
     });
-    await clickButtonByText(harness, "Merge change");
+    await clickButtonByText(harness, "Apply update");
     const released = await waitForAgentRelease(harness, planned.id);
     assert(released.state === "released", `Agent release ended in ${released.state}: ${released.blockedReason ?? "no failure reason"}`);
     const postRelease = released.evaluationReceipts.find((receipt) => receipt.subject === "post_release");

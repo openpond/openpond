@@ -1,6 +1,7 @@
 import {
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   CROSS_SYSTEM_TOOL_NAMES,
+  isTrainingSourceRef,
   TaskAttemptResultSchema,
   type CrossSystemToolName,
   type TaskAttemptResult,
@@ -191,7 +192,10 @@ async function attemptContextForRequest(
   if (!lineage || lineage.status !== "imported") throw new Error("The chat model has no imported Cross-System Operations lineage.");
   const taskset = await store.getTaskset(lineage.tasksetId);
   if (!taskset || !supportsCrossSystemToolCalling(taskset)) throw new Error("The selected model is not bound to a conformed Cross-System Operations Taskset.");
-  requireSourceProject(taskset.sourceRefs, request.localProjectId);
+  requireSourceProject(
+    taskset.sourceRefs.filter(isTrainingSourceRef),
+    request.localProjectId,
+  );
   const specs = Array.isArray(taskset.metadata.worldSpecs) ? taskset.metadata.worldSpecs.flatMap(parseWorldSpec) : [];
   if (!specs.length) throw new Error("The Cross-System Operations Taskset has no versioned synthetic world specs.");
   const worlds = specs.map(generateCrossSystemWorld);

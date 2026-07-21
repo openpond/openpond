@@ -1,0 +1,460 @@
+{
+  "schemaVersion": "openpond.tutorialFrames.v2",
+  "tutorial": {
+    "title": "How to make an agent",
+    "subtitle": "Create, run, improve, and verify an Account Health Agent.",
+    "outroTitle": "Account Health Agent ready",
+    "outroSubtitle": "Chat, actions, checks, and improvement verified. · AI-generated narration",
+    "narration": {
+      "model": "gpt-4o-mini-tts-2025-12-15",
+      "voice": "cedar",
+      "speed": 1.12,
+      "responseFormat": "wav",
+      "instructions": "Warm, clear product tutorial narration. Speak at a calm conversational pace with practical emphasis on user choices, evidence, approvals, and results. Pronounce OpenPond as open pond, P1 as P one, CSV as C S V, JSON as jay son, and Taskset as task set. Finish each sentence cleanly. Avoid hype, sales cadence, dramatic delivery, or imitation of any real person.",
+      "leadInSeconds": 0.55,
+      "tailSeconds": 0.7,
+      "audioTitle": "AI-generated narration",
+      "audioCredit": "OpenAI Speech · Cedar voice"
+    }
+  },
+  "chapters": [
+    {
+      "id": "create",
+      "label": "Create",
+      "title": "Create an Agent",
+      "subtitle": "Turn a plain-language purpose into a working Account Health Agent.",
+      "outroTitle": "Account Health Agent created",
+      "outroSubtitle": "The agent is ready to use. · AI-generated narration",
+      "cardDuration": 1.5
+    },
+    {
+      "id": "use",
+      "label": "Use",
+      "title": "Use the Agent",
+      "subtitle": "Chat with the Account Health Agent and run its actions with approval.",
+      "outroTitle": "First agent run complete",
+      "outroSubtitle": "The result and supporting evidence are ready to review. · AI-generated narration",
+      "cardDuration": 1.5
+    },
+    {
+      "id": "improve",
+      "label": "Improve",
+      "title": "Improve the Agent",
+      "subtitle": "Use real run evidence and checks to make the Account Health Agent better.",
+      "outroTitle": "Account Health Agent improved",
+      "outroSubtitle": "The updated agent passed its checks. · AI-generated narration",
+      "cardDuration": 1.5
+    }
+  ],
+  "transitionDuration": 0.33,
+  "frames": [
+    {
+      "id": "C01",
+      "file": "C01-account-agent-lab-create-menu.png",
+      "chapter": "create",
+      "label": "Start in Lab",
+      "caption": "Open Lab, choose New agent, and start the guided creation flow.",
+      "placement": "bottom-left",
+      "narration": "Open Lab, choose New agent, and start the guided creation flow.",
+      "focus": {
+        "x": 0.84,
+        "y": 0.06,
+        "width": 0.145,
+        "height": 0.31,
+        "zoom": 1.55
+      }
+    },
+    {
+      "id": "C02",
+      "file": "C02-source-choice-wide.png",
+      "chapter": "create",
+      "label": "Start from a prompt or chats",
+      "caption": "Choose From prompt to describe the Agent directly, or From chats to include examples of the work it should handle.",
+      "placement": "bottom-left",
+      "narration": "Choose From prompt to describe the Agent directly, or From chats to include examples of the work it should handle.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.34,
+        "width": 0.38,
+        "height": 0.31,
+        "zoom": 1.42
+      }
+    },
+    {
+      "id": "C04",
+      "file": "C04-from-chats-wide.png",
+      "chapter": "create",
+      "label": "Add purpose and chats",
+      "caption": "For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.",
+      "placement": "top-left",
+      "narration": "For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.2,
+        "width": 0.38,
+        "height": 0.6,
+        "zoom": 1.32
+      }
+    },
+    {
+      "id": "C06",
+      "file": "C06-disclosure.png",
+      "chapter": "create",
+      "label": "Review chats before sharing",
+      "caption": "The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.",
+      "placement": "bottom-left",
+      "narration": "The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.2,
+        "width": 0.38,
+        "height": 0.6,
+        "zoom": 1.32
+      }
+    },
+    {
+      "id": "C07",
+      "file": "C07-agent-review.png",
+      "chapter": "create",
+      "label": "Review the Agent",
+      "caption": "Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.",
+      "placement": "bottom-left",
+      "narration": "Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.04,
+        "width": 0.38,
+        "height": 0.76,
+        "zoom": 1.27
+      }
+    },
+    {
+      "id": "C08",
+      "file": "C08-right-chat-question.png",
+      "chapter": "create",
+      "label": "Answer the planning question",
+      "caption": "The right side panel asks how the Agent should prioritize conflicting account risks.",
+      "placement": "top-left",
+      "narration": "The right side panel asks how the Agent should prioritize conflicting account risks.",
+      "focus": {
+        "x": 0.715,
+        "y": 0.19,
+        "width": 0.265,
+        "height": 0.72,
+        "zoom": 1.42
+      }
+    },
+    {
+      "id": "C09",
+      "file": "C09-right-chat-plan.png",
+      "chapter": "create",
+      "label": "Confirm the plan",
+      "caption": "Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.",
+      "placement": "top-left",
+      "narration": "Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.",
+      "focus": {
+        "x": 0.715,
+        "y": 0.18,
+        "width": 0.265,
+        "height": 0.72,
+        "zoom": 1.42
+      }
+    },
+    {
+      "id": "C10",
+      "file": "C10-candidate-evaluation.png",
+      "chapter": "create",
+      "label": "Check the Agent",
+      "caption": "OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.",
+      "placement": "bottom-left",
+      "narration": "OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.",
+      "focus": {
+        "x": 0.19,
+        "y": 0.18,
+        "width": 0.5,
+        "height": 0.22,
+        "zoom": 1.36
+      }
+    },
+    {
+      "id": "C11",
+      "file": "C11-local-source-applied.png",
+      "chapter": "create",
+      "label": "Save the Agent",
+      "caption": "After the checks pass, the Agent is saved to your Profile and is ready to use.",
+      "placement": "bottom-left",
+      "narration": "After the checks pass, the Agent is saved to your Profile and is ready to use.",
+      "focus": {
+        "x": 0.19,
+        "y": 0.16,
+        "width": 0.5,
+        "height": 0.14,
+        "zoom": 1.38
+      }
+    },
+    {
+      "id": "C12",
+      "file": "C12-ready-local-detail.png",
+      "chapter": "create",
+      "label": "Use the Agent",
+      "caption": "The Agent page shows its purpose, chat entrypoint, and runnable account actions.",
+      "placement": "bottom-left",
+      "narration": "The Agent page shows its purpose, chat entrypoint, and runnable account actions.",
+      "focus": {
+        "x": 0.19,
+        "y": 0.17,
+        "width": 0.5,
+        "height": 0.13,
+        "zoom": 1.38
+      }
+    },
+    {
+      "id": "C13",
+      "file": "C13-chat-acme.png",
+      "chapter": "use",
+      "label": "Ask about Acme",
+      "caption": "In normal chat, the Agent grounds its Acme answer in renewal timing, usage decline, the disputed invoice, and the open P1 case.",
+      "placement": "top-left",
+      "narration": "In normal chat, the Agent grounds its Acme answer in renewal timing, usage decline, the disputed invoice, and the open P1 case.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.08,
+        "width": 0.48,
+        "height": 0.32,
+        "zoom": 1.34
+      }
+    },
+    {
+      "id": "C14",
+      "file": "C14-chat-follow-up.png",
+      "chapter": "use",
+      "label": "Ask a follow-up",
+      "caption": "A follow-up keeps Acme context and assigns the first actions to Revenue Operations and Support instead of restarting the conversation.",
+      "placement": "top-left",
+      "narration": "A follow-up keeps Acme context and assigns the first actions to Revenue Operations and Support instead of restarting the conversation.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.08,
+        "width": 0.48,
+        "height": 0.36,
+        "zoom": 1.32
+      }
+    },
+    {
+      "id": "C15",
+      "file": "C15-action-picker.png",
+      "chapter": "use",
+      "label": "Choose a direct action",
+      "caption": "The action picker offers chat plus each runnable account action, so you can choose conversation or a focused task.",
+      "placement": "top-left",
+      "narration": "The action picker offers chat plus each runnable account action, so you can choose conversation or a focused task.",
+      "focus": {
+        "x": 0.245,
+        "y": 0.84,
+        "width": 0.39,
+        "height": 0.14,
+        "zoom": 1.48
+      }
+    },
+    {
+      "id": "C16",
+      "file": "C16-northstar-summary.png",
+      "chapter": "use",
+      "label": "Summarize Northstar",
+      "caption": "Running Summarize Account for Northstar identifies the healthy usage trend and the explicit twenty-five-seat expansion request.",
+      "placement": "top-left",
+      "narration": "Running Summarize Account for Northstar identifies the healthy usage trend and the explicit twenty-five-seat expansion request.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.37,
+        "width": 0.48,
+        "height": 0.2,
+        "zoom": 1.38
+      }
+    },
+    {
+      "id": "C17",
+      "file": "C17-acme-triage.png",
+      "chapter": "use",
+      "label": "Triage Acme",
+      "caption": "Running renewal triage for Acme returns high risk, cites the billing and support blockers, and orders the next steps.",
+      "placement": "top-left",
+      "narration": "Running renewal triage for Acme returns high risk, cites the billing and support blockers, and orders the next steps.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.46,
+        "width": 0.48,
+        "height": 0.25,
+        "zoom": 1.34
+      }
+    },
+    {
+      "id": "C18",
+      "file": "C18-weekly-review-artifacts.png",
+      "chapter": "use",
+      "label": "Build the weekly review",
+      "caption": "The weekly review action combines the portfolio and returns visible Markdown, CSV, and JSON artifacts for downstream use.",
+      "placement": "top-left",
+      "narration": "The weekly review action combines the portfolio and returns visible Markdown, CSV, and JSON artifacts for downstream use.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.68,
+        "width": 0.48,
+        "height": 0.19,
+        "zoom": 1.36
+      }
+    },
+    {
+      "id": "C19",
+      "file": "C19-after-restart.png",
+      "chapter": "use",
+      "label": "Verify persistence",
+      "caption": "After restarting OpenPond, the same Agent, chat history, and actions remain available.",
+      "placement": "bottom-left",
+      "narration": "After restarting OpenPond, the same Agent, chat history, and actions remain available.",
+      "focus": {
+        "x": 0.19,
+        "y": 0.16,
+        "width": 0.5,
+        "height": 0.15,
+        "zoom": 1.38
+      }
+    },
+    {
+      "id": "I01",
+      "file": "I01-improve-source-choice.png",
+      "chapter": "improve",
+      "label": "Start Improve",
+      "caption": "Improve Agent lets you describe a change directly or include chats that demonstrate the correction.",
+      "placement": "bottom-left",
+      "narration": "Improve Agent lets you describe a change directly or include chats that demonstrate the correction.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.34,
+        "width": 0.38,
+        "height": 0.31,
+        "zoom": 1.42
+      }
+    },
+    {
+      "id": "I02",
+      "file": "I02-improve-from-chats.png",
+      "chapter": "improve",
+      "label": "Add the correction chat",
+      "caption": "Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.",
+      "placement": "top-left",
+      "narration": "Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.2,
+        "width": 0.38,
+        "height": 0.6,
+        "zoom": 1.32
+      }
+    },
+    {
+      "id": "I03",
+      "file": "I03-improve-review.png",
+      "chapter": "improve",
+      "label": "Review the improvement",
+      "caption": "Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.",
+      "placement": "bottom-left",
+      "narration": "Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.",
+      "focus": {
+        "x": 0.31,
+        "y": 0.04,
+        "width": 0.38,
+        "height": 0.76,
+        "zoom": 1.27
+      }
+    },
+    {
+      "id": "I04",
+      "file": "I04-improve-right-chat-plan.png",
+      "chapter": "improve",
+      "label": "Confirm the Improve plan",
+      "caption": "Review the planned change and confirm that it preserves citations and every existing action.",
+      "placement": "top-left",
+      "narration": "Review the planned change and confirm that it preserves citations and every existing action.",
+      "focus": {
+        "x": 0.715,
+        "y": 0.18,
+        "width": 0.265,
+        "height": 0.72,
+        "zoom": 1.42
+      }
+    },
+    {
+      "id": "I05",
+      "file": "I05-improve-comparison.png",
+      "chapter": "improve",
+      "label": "Compare the results",
+      "caption": "Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.",
+      "placement": "bottom-left",
+      "narration": "Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.",
+      "focus": {
+        "x": 0.745,
+        "y": 0.8,
+        "width": 0.22,
+        "height": 0.13,
+        "zoom": 1.5
+      }
+    },
+    {
+      "id": "I06",
+      "file": "I06-improved-release.png",
+      "chapter": "improve",
+      "label": "Save the improvement",
+      "caption": "Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.",
+      "placement": "bottom-left",
+      "narration": "Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.",
+      "focus": {
+        "x": 0.715,
+        "y": 0.19,
+        "width": 0.265,
+        "height": 0.72,
+        "zoom": 1.42
+      }
+    },
+    {
+      "id": "I07",
+      "file": "I07-improved-chat.png",
+      "chapter": "improve",
+      "label": "Verify improved chat",
+      "caption": "The improved chat now places disputed billing and the open P1 case ahead of adoption decline while preserving source citations.",
+      "placement": "top-left",
+      "narration": "The improved chat now places disputed billing and the open P1 case ahead of adoption decline while preserving source citations.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.08,
+        "width": 0.48,
+        "height": 0.16,
+        "zoom": 1.4
+      }
+    },
+    {
+      "id": "I08",
+      "file": "I08-improved-triage.png",
+      "chapter": "improve",
+      "label": "Verify improved triage",
+      "caption": "The direct triage action repeats the billing-first result, proving the change works outside chat without breaking the existing workflow.",
+      "placement": "top-left",
+      "narration": "The direct triage action repeats the billing-first result, proving the change works outside chat without breaking the existing workflow.",
+      "focus": {
+        "x": 0.2,
+        "y": 0.27,
+        "width": 0.48,
+        "height": 0.16,
+        "zoom": 1.4
+      }
+    }
+  ],
+  "frameMinimumDuration": 5.2,
+  "focusStyle": {
+    "borderColor": "#22d3ee",
+    "borderWidth": 5,
+    "dimOpacity": 0.32,
+    "zoomDelaySeconds": 0.8,
+    "zoomDurationSeconds": 1.2
+  }
+}

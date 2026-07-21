@@ -3,26 +3,30 @@ import { createRoot } from "react-dom/client";
 import type { ModelUsageRecord, UsageRecordsResponse, UsageSummaryResponse } from "@openpond/contracts";
 import { UsageSettingsContent } from "../components/settings/UsageSettingsSection";
 import "../styles.css";
+import "../styles/settings/settings-layout.css";
+import "../styles/settings/settings-forms.css";
+import "../styles/settings/settings-lists.css";
+import "../styles/settings/usage-settings.css";
 
 const NOW = "2026-07-04T20:00:00.000Z";
 
 function UsageBrowserProof() {
   const [openedSessionId, setOpenedSessionId] = useState<string | null>(null);
+  const summary = usageSummary();
 
   return (
     <div className="usage-browser-proof-shell">
       <UsageSettingsContent
-        summary={usageSummary()}
+        summary={summary}
         recordsResponse={usageRecords()}
         loading={false}
         error={null}
-        range="30d"
+        range="all"
         visibility="all"
         status="all"
         onRangeChange={() => undefined}
         onVisibilityChange={() => undefined}
         onStatusChange={() => undefined}
-        onRefresh={() => undefined}
         onOpenSourceSession={setOpenedSessionId}
       />
       <output data-testid="usage-opened-session">{openedSessionId ?? "none"}</output>
@@ -31,40 +35,46 @@ function UsageBrowserProof() {
 }
 
 function usageSummary(): UsageSummaryResponse {
-  const daily = Array.from({ length: 14 }, (_, index) => {
+  const daily = Array.from({ length: 300 }, (_, index) => {
+    const activityDate = new Date(Date.UTC(2026, 6, 4 - (299 - index)));
     const day = index + 1;
-    const date = new Date(Date.UTC(2026, 5, 21 + index)).toISOString().slice(0, 10);
+    const date = activityDate.toISOString().slice(0, 10);
+    const models = [
+      {
+        provider: "openrouter" as const,
+        model: "anthropic/claude-sonnet-4",
+        totalTokens: 800 + (day % 11) * 260,
+        requests: 2 + (index % 3),
+      },
+      ...(index % 3 === 0
+        ? [{
+            provider: "openai" as const,
+            model: "gpt-4.1",
+            totalTokens: 400 + (day % 7) * 210,
+            requests: 1 + (index % 2),
+          }]
+        : []),
+      ...(index % 5 === 0
+        ? [{
+            provider: "google" as const,
+            model: "gemini-2.5-pro",
+            totalTokens: 240 + (day % 9) * 180,
+            requests: 1,
+          }]
+        : []),
+    ];
     return {
       date,
-      totalTokens: 1000 + day * 650,
-      requests: 3 + (index % 5),
-      models: [
-        {
-          provider: "openrouter" as const,
-          model: "anthropic/claude-sonnet-4",
-          totalTokens: 800 + day * 260,
-          requests: 2 + (index % 3),
-        },
-        {
-          provider: "openai" as const,
-          model: "gpt-4.1",
-          totalTokens: 400 + day * 210,
-          requests: 1 + (index % 2),
-        },
-        {
-          provider: "google" as const,
-          model: "gemini-2.5-pro",
-          totalTokens: 240 + day * 180,
-          requests: 1,
-        },
-      ],
+      totalTokens: models.reduce((total, model) => total + model.totalTokens, 0),
+      requests: models.reduce((total, model) => total + model.requests, 0),
+      models,
     };
   });
 
   return {
     generatedAt: NOW,
-    range: { from: "2026-06-21T00:00:00.000Z", to: NOW, bucket: "day" },
-    filters: { visibility: "all", status: "all" },
+    range: { from: `${daily[0]!.date}T00:00:00.000Z`, to: NOW, bucket: "day" },
+    filters: { visibility: "all", status: "all", provider: null, model: null },
     totals: {
       requests: 72,
       completedRequests: 68,
@@ -79,6 +89,11 @@ function usageSummary(): UsageSummaryResponse {
       p95FirstTokenMs: 460,
       failureRate: 0.0416,
       activeModelCount: 3,
+      peakDailyTokens: Math.max(...daily.map((bucket) => bucket.totalTokens)),
+      longestRequestMs: 4_200,
+      activeDays: daily.length,
+      currentStreakDays: 1,
+      longestStreakDays: daily.length,
     },
     daily,
     models: [
@@ -144,7 +159,14 @@ function usageRecords(): UsageRecordsResponse {
   return {
     generatedAt: NOW,
     range: { from: "2026-06-21T00:00:00.000Z", to: NOW, bucket: "day" },
-    filters: { visibility: "all", status: "all", sessionId: null, turnId: null },
+    filters: {
+      visibility: "all",
+      status: "all",
+      provider: null,
+      model: null,
+      sessionId: null,
+      turnId: null,
+    },
     limit: 100,
     hasMore: false,
     records: [

@@ -23,6 +23,8 @@ describe("desktop harness runner", () => {
       "tmp/harness",
       "--json=tmp/harness/report.json",
       "--timeout-ms=1234",
+      "--skip-build",
+      "--frozen-renderer",
     ]);
 
     expect(options).toMatchObject({
@@ -33,6 +35,8 @@ describe("desktop harness runner", () => {
       artifactsDir: "tmp/harness",
       jsonPath: "tmp/harness/report.json",
       timeoutMs: 1234,
+      skipBuild: true,
+      frozenRenderer: true,
     });
   });
 

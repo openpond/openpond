@@ -3,6 +3,9 @@ import { describe, expect, test } from "vitest";
 import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
+  DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
+  DATASET_NO_TOOLS_CONTRACT_HASH,
   RftRecipeSchema,
   TasksetSchema,
   TrainingApprovalSchema,
@@ -14,6 +17,7 @@ import {
 import {
   computeTasksetHash,
   contentHash,
+  gradeAttempt,
 } from "../packages/taskset-sdk/src";
 import { createTrainingPlan } from "../packages/training-sdk/src";
 import {
@@ -318,6 +322,103 @@ describe.sequential("Fireworks RFT remote environment", () => {
       });
     }));
 
+  test("grades a tool-free Dataset math rollout without exporting the answer", async () =>
+    withTrainingStore(async ({ store }) => {
+      const taskset = exactAnswerTasksetFixture();
+      const recipe = exactAnswerRecipe(taskset);
+      const { job } = await seedActiveRftJob(store, taskset, recipe);
+      const task = taskset.tasks.find((candidate) =>
+        candidate.split === "train")!;
+      const requests: Array<Record<string, unknown>> = [];
+      let answer = "Reasoning. Answer: 42";
+      const environment = createFireworksRftEnvironment({
+        store,
+        resolveCredential: credential,
+        request: async (_url, init) => {
+          requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return jsonResponse({ choices: [{ message: { content: answer } }] });
+        },
+        gradeAttempt: async ({ attempt }) =>
+          gradeAttempt({
+            task,
+            attempt,
+            graders: taskset.graders,
+          }),
+        logger: () => ({ info: () => undefined, error: () => undefined }),
+      });
+      const payload = initPayload({
+        rowId: task.id,
+        runId: String(job.metadata.providerJobId),
+        prompt: String(task.input.prompt),
+      });
+      const correct = await environment.handle(payload);
+      expect(correct).toMatchObject({
+        status: 200,
+        body: {
+          reward: 1,
+          reward_eligible: true,
+        },
+      });
+      expect(requests[0]).not.toHaveProperty("tools");
+      expect(requests[0]).not.toHaveProperty("tool_choice");
+      expect(JSON.stringify(requests[0])).not.toContain(
+        JSON.stringify(task.expectedOutput),
+      );
+      expect((await store.listRolloutTrajectoryReceipts({ jobId: job.id }))[0])
+        .toMatchObject({
+          taskId: task.id,
+          failureClass: null,
+          environment: {
+            id: DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
+            version: DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
+            toolContractHash: DATASET_NO_TOOLS_CONTRACT_HASH,
+          },
+          trajectory: {
+            schemaVersion: "openpond.singleTurnPolicyTrajectory.v1",
+            responseText: answer,
+          },
+          verifier: {
+            schemaVersion: "openpond.exactAnswerVerifierResult.v1",
+            outcome: "correct",
+            score: 1,
+            rewardEligible: true,
+          },
+        });
+
+      answer = "Reasoning. Answer: 41";
+      const incorrect = await environment.handle({
+        ...payload,
+        metadata: {
+          ...payload.metadata,
+          rollout_id: "rollout-incorrect-math",
+        },
+      });
+      expect(incorrect).toMatchObject({
+        status: 200,
+        body: {
+          reward: 0,
+          reward_eligible: true,
+        },
+      });
+      expect((await store.listRolloutTrajectoryReceipts({ jobId: job.id }))
+        .find((receipt) =>
+          receipt.providerTrace.rolloutId === "rollout-incorrect-math"))
+        .toMatchObject({
+          status: "succeeded",
+          failureClass: "policy_failure",
+          verifier: {
+            outcome: "incorrect",
+            score: 0,
+            rewardEligible: true,
+          },
+          reward: {
+            eligible: true,
+            raw: 0,
+            normalized: 0,
+          },
+        });
+    }));
+
   test("enforces the recipe rollout budget before another model call", async () =>
     withTrainingStore(async ({ store }) => {
       const taskset = crossSystemTasksetFixture();
@@ -356,6 +457,82 @@ describe.sequential("Fireworks RFT remote environment", () => {
       });
       expect(modelCalls).toBe(1);
       expect(await store.listRolloutTrajectoryReceipts({ jobId: job.id })).toHaveLength(1);
+    }));
+
+  test("does not double-count persisted in-flight receipts at the rollout boundary", async () =>
+    withTrainingStore(async ({ store }) => {
+      const taskset = exactAnswerTasksetFixture();
+      const baseRecipe = exactAnswerRecipe(taskset);
+      const recipe = RftRecipeSchema.parse({
+        ...baseRecipe,
+        resourceLimits: { ...baseRecipe.resourceLimits, maxRollouts: 2 },
+      });
+      const { job } = await seedActiveRftJob(store, taskset, recipe);
+      const task = taskset.tasks.find((candidate) => candidate.split === "train")!;
+      let releaseRequests!: () => void;
+      let markFirstStarted!: () => void;
+      let markSecondStarted!: () => void;
+      const requestsReleased = new Promise<void>((resolve) => {
+        releaseRequests = resolve;
+      });
+      const firstStarted = new Promise<void>((resolve) => {
+        markFirstStarted = resolve;
+      });
+      const secondStarted = new Promise<void>((resolve) => {
+        markSecondStarted = resolve;
+      });
+      let modelCalls = 0;
+      const environment = createFireworksRftEnvironment({
+        store,
+        resolveCredential: credential,
+        request: async () => {
+          modelCalls += 1;
+          if (modelCalls === 1) markFirstStarted();
+          if (modelCalls === 2) markSecondStarted();
+          await requestsReleased;
+          return jsonResponse({
+            choices: [{ message: { content: "Reasoning. Answer: 42" } }],
+          });
+        },
+        gradeAttempt: async ({ attempt }) => gradeAttempt({
+          task,
+          attempt,
+          graders: taskset.graders,
+        }),
+        logger: () => ({ info: () => undefined, error: () => undefined }),
+      });
+      const payload = initPayload({
+        rowId: task.id,
+        runId: String(job.metadata.providerJobId),
+        prompt: String(task.input.prompt),
+      });
+
+      const first = environment.handle(payload);
+      await firstStarted;
+      const second = environment.handle({
+        ...payload,
+        metadata: { ...payload.metadata, rollout_id: "rollout-boundary-second" },
+      });
+      expect(await Promise.race([
+        secondStarted.then(() => "started"),
+        second.then(() => "completed"),
+      ])).toBe("started");
+      expect(await environment.handle({
+        ...payload,
+        metadata: { ...payload.metadata, rollout_id: "rollout-boundary-third" },
+      })).toMatchObject({
+        status: 429,
+        body: { error: expect.stringContaining("rollout budget exhausted") },
+      });
+
+      releaseRequests();
+      expect(await Promise.all([first, second])).toEqual([
+        expect.objectContaining({ status: 200 }),
+        expect.objectContaining({ status: 200 }),
+      ]);
+      expect(modelCalls).toBe(2);
+      expect(await store.listRolloutTrajectoryReceipts({ jobId: job.id }))
+        .toHaveLength(2);
     }));
 
   test("enforces the recipe payload limit before rollout execution", async () =>
@@ -647,6 +824,7 @@ function rftRecipe(taskset: Taskset): RftRecipe {
       trainSplit: "train",
       validationSplit: "frozen_eval",
       maxPromptTokens: 1024,
+      maxExamples: 2,
     },
     lora: { rank: 8 },
     rollout: {
@@ -659,6 +837,7 @@ function rftRecipe(taskset: Taskset): RftRecipe {
       seed: 17,
     },
     optimizer: { learningRate: 0.0002, maxSteps: 2 },
+    loss: { method: "dapo", klBeta: null },
     reward: {
       graderId: "cross-system-exact-verifier",
       graderHash: contentHash(taskset.graders),
@@ -670,6 +849,120 @@ function rftRecipe(taskset: Taskset): RftRecipe {
       wallTimeMs: 180_000,
       maxRollouts: 8,
       maxPayloadBytes: 1_000_000,
+    },
+  });
+}
+
+function exactAnswerTasksetFixture(): Taskset {
+  const base = tasksetFixture();
+  const tasks = base.tasks.map((task, index) => ({
+    ...task,
+    id: `math_task_${index}`,
+    input: { prompt: index === 0 ? "What is 6 × 7?" : "What is 5 × 5?" },
+    expectedOutput: { text: index === 0 ? "42" : "25" },
+    tags: ["math"],
+    metadata: { ...task.metadata, exampleOrigin: "extracted" },
+  }));
+  const graders = [{
+    id: "math_final_answer",
+    version: "1",
+    label: "Mathematical final answer",
+    kind: "content" as const,
+    weight: 1,
+    hardGate: true,
+    rewardEligible: true,
+    privileged: true,
+    config: {
+      operator: "final_answer_equals_expected",
+      outputField: "text",
+      expectedField: "text",
+    },
+    metadata: {},
+  }];
+  const draft = TasksetSchema.parse({
+    ...base,
+    id: "taskset_math_exact_rft",
+    name: "Math exact answer RFT",
+    objective: "Increase exact final-answer correctness.",
+    tasks,
+    graders,
+    graderFixtures: base.graderFixtures.map((fixture) => ({
+      ...fixture,
+      taskId: tasks[1]!.id,
+    })),
+    learningSignals: {
+      demonstrations: [],
+      preferences: [],
+      corrections: [],
+      feedback: [],
+      rewards: [],
+      labels: [],
+    },
+    environment: {
+      ...base.environment,
+      kind: "chat",
+      stateful: false,
+      toolNames: [],
+      metadata: {},
+    },
+    capabilities: {
+      ...base.capabilities,
+      taskKind: "chat",
+      supportedSignals: ["reward", "label"],
+      compatibleMethods: ["grpo"],
+      rewardKinds: ["exact", "deterministic"],
+      requiresTools: false,
+      requiresState: false,
+      requiresPrivilegedGrading: true,
+      environmentPlacements: ["remote", "provider_native"],
+    },
+    readiness: null,
+    contentHash: "00000000",
+    metadata: {
+      ...base.metadata,
+      trainingMethod: "grpo",
+    },
+  });
+  const hash = computeTasksetHash(draft);
+  return TasksetSchema.parse({
+    ...draft,
+    status: "ready",
+    readiness: {
+      schemaVersion: "openpond.tasksetReadiness.v1",
+      tasksetId: draft.id,
+      tasksetHash: hash,
+      ready: true,
+      recommendedMethod: "grpo",
+      trainingPath: { primaryMethod: "grpo", bootstrap: null },
+      compatibleDestinationClasses: ["export", "hosted_byok"],
+      blockers: [],
+      warnings: [],
+      baselineReportId: "baseline_math",
+      generatedAt: "2026-07-20T02:00:00.000Z",
+    },
+    contentHash: hash,
+  });
+}
+
+function exactAnswerRecipe(taskset: Taskset): RftRecipe {
+  return RftRecipeSchema.parse({
+    ...rftRecipe(taskset),
+    dataset: {
+      trainSplit: "train",
+      validationSplit: "frozen_eval",
+      maxPromptTokens: 1024,
+      maxExamples: 1,
+    },
+    rollout: {
+      ...rftRecipe(taskset).rollout,
+      maxTurns: 1,
+    },
+    reward: {
+      graderId: "math_final_answer",
+      graderHash: contentHash(taskset.graders),
+      environmentId: DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
+      environmentVersion: DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
+      toolContractHash: DATASET_NO_TOOLS_CONTRACT_HASH,
     },
   });
 }

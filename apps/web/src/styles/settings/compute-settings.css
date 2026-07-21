@@ -13,6 +13,22 @@
   margin: 0;
 }
 
+.dataset-storage-intro {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: #999;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dataset-storage-list {
+  min-width: 0;
+}
+
+.dataset-storage-row small.dataset-storage-error {
+  color: #df8e8e;
+}
+
 .compute-summary-main {
   grid-template-columns: minmax(0, 1fr);
 }

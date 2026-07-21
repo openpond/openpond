@@ -2,6 +2,9 @@ import {
   BaseModelPreferenceSchema,
   ChatModelRefSchema,
   CodexReasoningEffortSchema,
+  ApproveDatasetImportMappingRequestSchema,
+  CreateHuggingFaceDatasetImportRequestSchema,
+  DatasetCatalogResponseSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
@@ -20,6 +23,8 @@ import type { createTaskEvaluationService } from "./evaluation-service.js";
 import type { createTaskMinerService } from "./task-miner.js";
 import type { createTrainingService } from "./training-service.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
+import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
+import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import { trainingRunDetail } from "./run-detail.js";
 import { scriptedOpenPondModelsEnabled } from "../openpond/scripted-chat-provider.js";
 import { recordFixtureBaselineSources } from "./cross-system-operations/index.js";
@@ -45,6 +50,8 @@ type Evaluation = ReturnType<typeof createTaskEvaluationService>;
 type Training = ReturnType<typeof createTrainingService>;
 type StartedTrainingResult = Awaited<ReturnType<Training["start"]>>;
 type TrainingChatSearch = ReturnType<typeof createTrainingChatSearchService>;
+type DatasetArtifacts = ReturnType<typeof createDatasetArtifactService>;
+type DatasetImports = ReturnType<typeof createDatasetImportService>;
 
 export function createTrainingApi(deps: {
   store: SqliteStore;
@@ -53,6 +60,8 @@ export function createTrainingApi(deps: {
   evaluation: Evaluation;
   training: Training;
   chatSearch: TrainingChatSearch;
+  datasetArtifacts: DatasetArtifacts;
+  datasetImports: DatasetImports;
   frontierBaseline: {
     startRun: (input: {
       profileId: string;
@@ -68,6 +77,13 @@ export function createTrainingApi(deps: {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    if (action === "dataset_catalog") {
+      return datasetCatalog(
+        string(input.profileId)
+          ?? requestUrl?.searchParams.get("profileId")
+          ?? "default",
+      );
+    }
     if (action === "add_source") return deps.taskCreator.addSessionSource({ profileId: requiredString(input.profileId, "profileId"), sessionId: requiredString(input.sessionId, "sessionId"), turnIds: stringArray(input.turnIds), consentScope: input.consentScope === "selected_turns" ? "selected_turns" : "full_session" });
     if (action === "add_sources") {
       const profileId = requiredString(input.profileId, "profileId");
@@ -79,6 +95,33 @@ export function createTrainingApi(deps: {
     }
     if (action === "estimate_sources") return deps.taskCreator.estimateSessionSources(requiredStringArray(input.sessionIds, "sessionIds"));
     if (action === "search_sources") return deps.chatSearch.search(TrainingChatSearchRequestSchema.parse(input));
+    if (action === "dataset_rows") {
+      if (!requestUrl) throw new Error("Dataset row query is missing its URL.");
+      return deps.datasetArtifacts.rows(
+        requiredString(input.tasksetId, "tasksetId"),
+        {
+          split: requestUrl.searchParams.get("split") || null,
+          cursor: requestUrl.searchParams.get("cursor") || null,
+          limit: Number(requestUrl.searchParams.get("limit") ?? 25),
+          columns: requestUrl.searchParams.getAll("column"),
+        },
+      );
+    }
+    if (action === "inspect_huggingface_dataset") {
+      return deps.datasetImports.inspectHuggingFace(
+        CreateHuggingFaceDatasetImportRequestSchema.parse(input),
+      );
+    }
+    if (action === "materialize_dataset_import") {
+      const approved = ApproveDatasetImportMappingRequestSchema.parse(input);
+      return deps.datasetImports.materialize({
+        id: requiredString(input.importId, "importId"),
+        ...approved,
+      });
+    }
+    if (action === "cancel_dataset_import") {
+      return deps.datasetImports.cancel(requiredString(input.importId, "importId"));
+    }
     if (action === "run_cross_system_frontier_baseline") {
       return deps.frontierBaseline.startRun({
         profileId: requiredString(input.profileId, "profileId"),
@@ -161,7 +204,23 @@ export function createTrainingApi(deps: {
       return startModelCreation({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
     }
     if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
-    if (action === "baseline") return deps.evaluation.baseline({ tasksetId: requiredString(input.tasksetId, "tasksetId"), models: modelRefs(input.models), seeds: numberArray(input.seeds), attemptsPerTask: number(input.attemptsPerTask) });
+    if (action === "baseline") return deps.evaluation.startBaseline({
+      tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      targetModelId: string(input.targetModelId),
+      models: modelRefs(input.models),
+      seeds: numberArray(input.seeds),
+      attemptsPerTask: number(input.attemptsPerTask),
+      taskLimit: number(input.taskLimit),
+      selectionSeed: number(input.selectionSeed),
+      split: baselineSplit(input.split),
+      selectionStrategy: baselineSelectionStrategy(input.selectionStrategy),
+      sampling: baselineSampling(input.sampling),
+    });
+    if (action === "cancel_baseline_run") {
+      return deps.evaluation.cancelBaselineRun(
+        requiredString(input.runId, "runId"),
+      );
+    }
     if (action === "regrade_baseline") return deps.evaluation.regradeBaseline({ tasksetId: requiredString(input.tasksetId, "tasksetId"), baselineReportId: requiredString(input.baselineReportId, "baselineReportId") });
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
@@ -308,20 +367,63 @@ export function createTrainingApi(deps: {
   }
 
   async function state(profileId: string) {
-    const [sources, creations, tasksets, candidates, minerConfig, minerRuns, frontierBaselineRuns, execution] = await Promise.all([
+    const [sources, creations, tasksets, datasetImports, datasetArtifacts, candidates, minerConfig, minerRuns, frontierBaselineRuns, baselineRuns, execution] = await Promise.all([
       deps.store.listTrainingSources(profileId),
       deps.store.listTaskCreationSnapshots(profileId),
       deps.store.listTasksets(profileId),
+      deps.store.listDatasetImportJobs(profileId),
+      deps.datasetArtifacts.summaries(profileId),
       deps.store.listTaskCandidates(profileId, "all"),
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listCrossSystemFrontierBaselineRuns(profileId),
+      deps.store.listTasksetBaselineRuns({ profileId }),
       deps.training.state(profileId),
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const baselineReports = (await Promise.all(tasksets.map((taskset) => deps.store.listBaselineReports(taskset.id)))).flat();
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
-    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, baselineReports, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, ...execution, generatedAt: new Date().toISOString() };
+    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, datasetImports, datasetArtifacts, baselineReports, baselineRuns, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, ...execution, generatedAt: new Date().toISOString() };
+  }
+
+  async function datasetCatalog(profileId: string) {
+    const [tasksets, artifactSummaries] = await Promise.all([
+      deps.store.listDatasetCatalogTasksets(profileId),
+      deps.datasetArtifacts.summaries(profileId),
+    ]);
+    const summariesByTaskset = new Map(
+      artifactSummaries.map((summary) => [summary.tasksetId, summary]),
+    );
+    return DatasetCatalogResponseSchema.parse({
+      schemaVersion: "openpond.datasetCatalog.v1",
+      profileId,
+      datasets: tasksets.map((taskset) => {
+        const summary = summariesByTaskset.get(taskset.tasksetId) ?? null;
+        const artifactBacked = taskset.storageKind === "parquet";
+        return {
+          schemaVersion: "openpond.datasetCatalogItem.v1",
+          tasksetId: taskset.tasksetId,
+          tasksetRevision: taskset.tasksetRevision,
+          artifactId: taskset.artifactId,
+          name: taskset.name,
+          status: taskset.status,
+          storageKind: taskset.storageKind,
+          rowCount: taskset.rowCount,
+          splitCounts: taskset.splitCounts,
+          sizeBytes: summary?.sizeBytes ?? null,
+          available: artifactBacked ? summary?.available === true : true,
+          unavailableReason: artifactBacked
+            ? summary?.unavailableReason
+              ?? (summary
+                ? null
+                : "The Dataset artifact is not registered in storage.")
+            : null,
+          createdAt: taskset.createdAt,
+          updatedAt: taskset.updatedAt,
+        };
+      }),
+      generatedAt: new Date().toISOString(),
+    });
   }
 
   async function startModelCreation(
@@ -523,6 +625,19 @@ function number(value: unknown): number | undefined { return typeof value === "n
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function numberArray(value: unknown): number[] { return Array.isArray(value) ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item)) : []; }
 function modelRefs(value: unknown): ChatModelRef[] { if (!Array.isArray(value) || !value.length) throw new Error("At least one baseline model is required."); return value.map((item) => ChatModelRefSchema.parse(item)); }
+function baselineSplit(value: unknown): "train" | "validation" | "frozen_eval" | undefined { return value === "train" || value === "validation" || value === "frozen_eval" ? value : undefined; }
+function baselineSelectionStrategy(value: unknown): "stable_hash_top_n" | "rft_easy_curriculum_v1" | undefined { return value === "stable_hash_top_n" || value === "rft_easy_curriculum_v1" ? value : undefined; }
+function baselineSampling(value: unknown): { maxOutputTokens?: number; temperature?: number; topP?: number } | undefined {
+  const candidate = record(value);
+  const sampling = {
+    maxOutputTokens: number(candidate.maxOutputTokens),
+    temperature: number(candidate.temperature),
+    topP: number(candidate.topP),
+  };
+  return Object.values(sampling).some((item) => item !== undefined)
+    ? sampling
+    : undefined;
+}
 function trainingMethodHint(value: unknown): TaskCreationRequest["methodHint"] { return value === "sft" || value === "dpo" || value === "grpo" ? value : null; }
 function tasksetTargetIntent(value: unknown): TaskCreationRequest["targetIntent"] {
   const candidate = record(value);

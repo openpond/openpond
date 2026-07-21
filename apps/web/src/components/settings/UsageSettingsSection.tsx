@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import "../../styles/settings/usage-settings.css";
 import {
   Bar,
   BarChart,
@@ -10,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type {
+  AccountState,
   ModelUsageRecord,
   UsageCommandBreakdown,
   UsageDailyBucket,
@@ -25,12 +27,14 @@ import type {
   UsageVisibilityFilter,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
-import { ArrowUpRight, Loader2, RefreshCw } from "../icons";
+import { ArrowUpRight, Loader2 } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
+import { UsageActivityOverview } from "./usage/UsageActivityOverview";
 
 type UsageRangeFilter = "7d" | "30d" | "90d" | "all";
 
 type UsageSettingsSectionProps = {
+  account?: AccountState | null;
   connection: ClientConnection | null;
   enabled: boolean;
   onError: (message: string | null) => void;
@@ -38,6 +42,7 @@ type UsageSettingsSectionProps = {
 };
 
 type UsageSettingsContentProps = {
+  account?: AccountState | null;
   summary: UsageSummaryResponse | null;
   recordsResponse: UsageRecordsResponse | null;
   loading: boolean;
@@ -48,7 +53,6 @@ type UsageSettingsContentProps = {
   onRangeChange?: (range: UsageRangeFilter) => void;
   onVisibilityChange?: (visibility: UsageVisibilityFilter) => void;
   onStatusChange?: (status: UsageStatusFilter) => void;
-  onRefresh?: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
 };
 
@@ -127,19 +131,14 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-export function UsageSettingsSection({ connection, enabled, onError, onOpenSourceSession }: UsageSettingsSectionProps) {
-  const [range, setRange] = useState<UsageRangeFilter>("30d");
+export function UsageSettingsSection({ account = null, connection, enabled, onError, onOpenSourceSession }: UsageSettingsSectionProps) {
+  const [range, setRange] = useState<UsageRangeFilter>("all");
   const [visibility, setVisibility] = useState<UsageVisibilityFilter>("all");
   const [status, setStatus] = useState<UsageStatusFilter>("all");
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
   const [recordsResponse, setRecordsResponse] = useState<UsageRecordsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshSerial, setRefreshSerial] = useState(0);
-
-  const refresh = useCallback(() => {
-    setRefreshSerial((current) => current + 1);
-  }, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -155,9 +154,15 @@ export function UsageSettingsSection({ connection, enabled, onError, onOpenSourc
     setLoading(true);
     setError(null);
 
+    const filters = {
+      range,
+      visibility,
+      status,
+    };
+
     Promise.all([
-      api.usage(connection, { range, visibility, status }),
-      api.usageRecords(connection, { range, visibility, status, limit: 100 }),
+      api.usage(connection, filters),
+      api.usageRecords(connection, { ...filters, limit: 100 }),
     ])
       .then(([nextSummary, nextRecords]) => {
         if (cancelled) return;
@@ -179,10 +184,11 @@ export function UsageSettingsSection({ connection, enabled, onError, onOpenSourc
     return () => {
       cancelled = true;
     };
-  }, [connection, enabled, onError, range, refreshSerial, status, visibility]);
+  }, [connection, enabled, onError, range, status, visibility]);
 
   return (
     <UsageSettingsContent
+      account={account}
       summary={summary}
       recordsResponse={recordsResponse}
       loading={loading}
@@ -193,13 +199,13 @@ export function UsageSettingsSection({ connection, enabled, onError, onOpenSourc
       onRangeChange={setRange}
       onVisibilityChange={setVisibility}
       onStatusChange={setStatus}
-      onRefresh={refresh}
       onOpenSourceSession={onOpenSourceSession}
     />
   );
 }
 
 export function UsageSettingsContent({
+  account = null,
   summary,
   recordsResponse,
   loading,
@@ -210,7 +216,6 @@ export function UsageSettingsContent({
   onRangeChange,
   onVisibilityChange,
   onStatusChange,
-  onRefresh,
   onOpenSourceSession,
 }: UsageSettingsContentProps) {
   useErrorToast(error);
@@ -228,23 +233,22 @@ export function UsageSettingsContent({
     [onOpenSourceSession],
   );
   const records = recordsResponse?.records ?? [];
-  const totals = summary?.totals ?? null;
   const hasUsage = Boolean(summary && summary.totals.requests > 0);
 
   return (
     <section className="account-settings usage-settings">
-      <div className="account-settings-title usage-settings-title">
-        <h1>Usage</h1>
-        <button
-          type="button"
-          className="settings-icon-button"
-          title="Refresh usage"
-          aria-label="Refresh usage"
-          disabled={loading || !onRefresh}
-          onClick={onRefresh}
-        >
-          <RefreshCw size={15} className={loading ? "settings-spin" : undefined} />
-        </button>
+      <UsageActivityOverview
+        account={account}
+        summary={summary}
+        loading={loading}
+        range={range}
+      />
+
+      <div className="usage-details-title">
+        <div>
+          <h2>Detailed usage</h2>
+          <span>Inspect latency, routes, threads, workflows, and individual requests.</span>
+        </div>
       </div>
 
       <div className="usage-toolbar">
@@ -282,8 +286,6 @@ export function UsageSettingsContent({
           </select>
         </label>
       </div>
-
-      <UsageMetrics totals={totals} loading={loading && !summary} />
 
       <UsagePanel title="Daily tokens">
         <UsageTokenChart chart={chart} loading={loading && !summary} />
@@ -387,30 +389,6 @@ function withSourceActionColumn<T>(
       },
     },
   ];
-}
-
-function UsageMetrics({ totals, loading }: { totals: UsageSummaryResponse["totals"] | null; loading: boolean }) {
-  const metrics = [
-    { label: "Total tokens", value: totals ? formatTokens(totals.totalTokens) : loading ? "Loading" : "0" },
-    { label: "Requests", value: totals ? formatInteger(totals.requests) : loading ? "Loading" : "0" },
-    { label: "Average latency", value: totals ? formatDuration(totals.averageLatencyMs) : loading ? "Loading" : "missing" },
-    { label: "p95 latency", value: totals ? formatDuration(totals.p95LatencyMs) : loading ? "Loading" : "missing" },
-    { label: "First token p95", value: totals ? formatDuration(totals.p95FirstTokenMs) : loading ? "Loading" : "missing" },
-    { label: "Failed requests", value: totals ? formatInteger(totals.failedRequests) : loading ? "Loading" : "0" },
-    { label: "Missing usage", value: totals ? formatInteger(totals.missingUsageRequests) : loading ? "Loading" : "0" },
-    { label: "Models", value: totals ? formatInteger(totals.activeModelCount) : loading ? "Loading" : "0" },
-  ];
-
-  return (
-    <div className="usage-metric-grid">
-      {metrics.map((metric) => (
-        <div className="usage-metric" key={metric.label}>
-          <span>{metric.label}</span>
-          <strong>{metric.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function UsagePanel({ title, children }: { title: string; children: ReactNode }) {

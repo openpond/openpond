@@ -154,6 +154,8 @@ export const UsageSummaryQuerySchema = z.object({
   range: z.enum(["7d", "30d", "90d", "all"]).default("30d"),
   visibility: UsageVisibilityFilterSchema.default("all"),
   status: UsageStatusFilterSchema.default("all"),
+  provider: UsageProviderSchema.optional(),
+  model: z.string().trim().min(1).optional(),
 });
 
 export const UsageRecordsQuerySchema = UsageSummaryQuerySchema.extend({
@@ -242,6 +244,11 @@ export const UsageTotalsSchema = z.object({
   p95FirstTokenMs: z.number().nonnegative().nullable(),
   failureRate: z.number().nonnegative(),
   activeModelCount: z.number().int().nonnegative(),
+  peakDailyTokens: z.number().int().nonnegative(),
+  longestRequestMs: z.number().int().nonnegative().nullable(),
+  activeDays: z.number().int().nonnegative(),
+  currentStreakDays: z.number().int().nonnegative(),
+  longestStreakDays: z.number().int().nonnegative(),
 });
 
 export const UsageSummaryResponseSchema = z.object({
@@ -250,6 +257,8 @@ export const UsageSummaryResponseSchema = z.object({
   filters: z.object({
     visibility: UsageVisibilityFilterSchema,
     status: UsageStatusFilterSchema,
+    provider: UsageProviderSchema.nullable(),
+    model: z.string().trim().min(1).nullable(),
   }),
   totals: UsageTotalsSchema,
   daily: z.array(UsageDailyBucketSchema),
@@ -268,6 +277,8 @@ export const UsageRecordsResponseSchema = z.object({
   filters: z.object({
     visibility: UsageVisibilityFilterSchema,
     status: UsageStatusFilterSchema,
+    provider: UsageProviderSchema.nullable(),
+    model: z.string().trim().min(1).nullable(),
     sessionId: z.string().trim().min(1).nullable(),
     turnId: z.string().trim().min(1).nullable(),
   }),

@@ -7,8 +7,6 @@ import {
 } from "react";
 import type {
   AppPreferences,
-  BaseModelCandidate,
-  BaseModelPreference,
   ChatModelRef,
   ChatProvider,
   CodexReasoningEffort,
@@ -28,6 +26,7 @@ import type { useTraining } from "../../hooks/useTraining";
 import { normalizeChatModel } from "../../lib/app-models";
 import { ArrowLeft, Loader2, X } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
+import { AppDialog } from "../dialogs/AppDialog";
 import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "../training/training-flow";
 import { TrainingAutomaticCandidatesStep } from "../training/TrainingAutomaticCandidatesStep";
 import { TrainingAutomaticScopeStep } from "../training/TrainingAutomaticScopeStep";
@@ -37,21 +36,38 @@ import { TrainingRunReviewStep } from "../training/TrainingRunReviewStep";
 import { TrainingSourceStep } from "../training/TrainingSourceStep";
 import {
   TrainingStartModeStep,
+  type AgentSourceMode,
   type NewModelMode,
   type NewModelSetup,
 } from "../training/TrainingStartModeStep";
+import { shouldCancelCreationOnDialogDismiss } from "./create-improve-authoring-cancellation";
+import {
+  aggregateEstimate,
+  authoringFailureCopy,
+  backLabel,
+  candidateForPreference,
+  defaultMinerConfig,
+  dialogTitle,
+  initialCreationStep,
+  reviewTitle,
+  targetLabel,
+  type CreateImproveAuthoringTarget,
+} from "./create-improve-authoring-model";
 
 type TrainingController = ReturnType<typeof useTraining>;
 const CHAT_SEARCH_PAGE_SIZE = 20;
 
-export type CreateImproveAuthoringTarget = TaskCreationSnapshot["request"]["targetIntent"];
+export type { CreateImproveAuthoringTarget } from "./create-improve-authoring-model";
 
 export function CreateImproveAuthoringDialog({
+  datasetBuildMode = false,
   defaultModel,
   initialCreation = null,
   initialObjective,
   initialSessionIds = [],
   onClose,
+  onAgentPromptSubmitted,
+  onBackToDatasetSources,
   onOpenComputeSettings,
   onModelCreatedFromTaskset,
   onTasksetCreated,
@@ -64,11 +80,17 @@ export function CreateImproveAuthoringDialog({
   training,
   targetIntent = { kind: "model", id: null, displayName: null, operation: "create" },
 }: {
+  datasetBuildMode?: boolean;
   defaultModel: ChatModelRef;
   initialCreation?: TaskCreationSnapshot | null;
   initialObjective: string | null;
   initialSessionIds?: string[];
   onClose: () => void;
+  onAgentPromptSubmitted?: (input: {
+    analysisModel: ChatModelRef;
+    objective: string;
+  }) => void | Promise<void>;
+  onBackToDatasetSources?: () => void;
   onOpenComputeSettings: () => void;
   onModelCreatedFromTaskset?: (
     taskset: Taskset,
@@ -90,12 +112,25 @@ export function CreateImproveAuthoringDialog({
   const restoredSessionIds = sources
     .filter((source) => initialCreation?.request.sourceIds.includes(source.id))
     .map((source) => source.sessionId);
-  const [step, setStep] = useState<NewModelStep>(() => initialCreationStep(initialCreation));
-  const [setup, setSetup] = useState<NewModelSetup | null>(
-    initialCreation?.request.entryMode ?? null,
+  const [step, setStep] = useState<NewModelStep>(() =>
+    initialCreation
+      ? initialCreationStep(initialCreation)
+      : datasetBuildMode ? "evidence" : "start",
   );
+  const isAgentAuthoring =
+    resourceIntent === "workproduct" && targetIntent.kind === "agent";
+  const [setup, setSetup] = useState<NewModelSetup | null>(() => {
+    if (initialCreation && isAgentAuthoring) {
+      return initialCreation.request.sourceIds.length > 0
+        ? "from_chats"
+        : "from_prompt";
+    }
+    return initialCreation?.request.entryMode ?? (datasetBuildMode ? "manual" : null);
+  });
   const mode: NewModelMode | null =
     setup === "automated" || setup === "manual" ? setup : null;
+  const agentSourceMode: AgentSourceMode | null =
+    setup === "from_prompt" || setup === "from_chats" ? setup : null;
   const [objective, setObjective] = useState(initialCreation?.request.objective ?? initialObjective ?? "");
   const [preferredBaseModelKey, setPreferredBaseModelKey] = useState<string | null>(
     () => candidateForPreference(
@@ -126,6 +161,7 @@ export function CreateImproveAuthoringDialog({
   const [totalIndexChats, setTotalIndexChats] = useState(0);
   const [searchRefreshNonce, setSearchRefreshNonce] = useState(0);
   const searchRequestRef = useRef(0);
+  const dialogDismissedRef = useRef(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     () => new Set([...initialSessionIds, ...restoredSessionIds]),
   );
@@ -140,8 +176,6 @@ export function CreateImproveAuthoringDialog({
   const [activeMinerRunId, setActiveMinerRunId] = useState<string | null>(null);
   const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
   const [minerConfig, setMinerConfig] = useState<TaskMinerConfig>(() => training.payload?.minerConfig ?? defaultMinerConfig());
-  const dialogRef = useRef<HTMLElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const generatedBaselineSessionIds = useMemo(
     () => new Set(
@@ -194,6 +228,8 @@ export function CreateImproveAuthoringDialog({
   const activeMinerRun = useMemo(() => training.payload?.minerRuns.find((run) => run.id === activeMinerRunId) ?? null, [activeMinerRunId, training.payload?.minerRuns]);
   const scanning = preparingScan || Boolean(activeMinerRun && ["queued", "running", "cancelling"].includes(activeMinerRun.status));
   const busy = analyzing || preparingScan || Boolean(training.busyAction);
+  const selectsChats = step === "automatic_scope"
+    || (step === "evidence" && setup !== "from_prompt");
   const usesBaseModelStep = resourceIntent === "workproduct" && targetIntent.kind === "model";
   const preferredBaseModelCandidate = useMemo(
     () => baseModelCandidates.find(
@@ -202,6 +238,16 @@ export function CreateImproveAuthoringDialog({
     [baseModelCandidates, preferredBaseModelKey],
   );
   const preferredBaseModel = preferredBaseModelCandidate?.preference ?? null;
+
+  useEffect(() => {
+    // React Strict Mode probes effects with a setup/cleanup/setup cycle in dev.
+    // Reset here so that probe cannot look like a real user dismissal.
+    dialogDismissedRef.current = false;
+    return () => {
+      dialogDismissedRef.current = true;
+      searchRequestRef.current += 1;
+    };
+  }, []);
 
   useEffect(
     () => setObjective(initialCreation?.request.objective ?? initialObjective ?? ""),
@@ -232,28 +278,15 @@ export function CreateImproveAuthoringDialog({
   }, [activeMinerRun, step, training.payload?.candidates]);
 
   useEffect(() => {
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => previousFocusRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const target = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus], [aria-label^='Back']");
-      target?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [step]);
-
-  useEffect(() => {
-    if (step !== "evidence") return;
+    if (!selectsChats) return;
     setSearchEntries([]);
     setSearchTotal(0);
     setSearchHasMore(false);
     setSearchError(null);
-  }, [search, step]);
+  }, [search, selectsChats]);
 
   useEffect(() => {
-    if (step !== "evidence") return undefined;
+    if (!selectsChats) return undefined;
     const requestId = searchRequestRef.current + 1;
     searchRequestRef.current = requestId;
     setSearchLoading(true);
@@ -279,13 +312,13 @@ export function CreateImproveAuthoringDialog({
       });
     }, 220);
     return () => window.clearTimeout(timer);
-  }, [chatSearchCandidates, search, searchRefreshNonce, step, training.actions]);
+  }, [chatSearchCandidates, search, searchRefreshNonce, selectsChats, training.actions]);
 
   useEffect(() => {
-    if (step !== "evidence" || !search.trim() || !searchIndexing) return undefined;
+    if (!selectsChats || !search.trim() || !searchIndexing) return undefined;
     const timer = window.setTimeout(() => setSearchRefreshNonce((current) => current + 1), 1_500);
     return () => window.clearTimeout(timer);
-  }, [search, searchIndexing, step]);
+  }, [search, searchIndexing, selectsChats]);
 
   const loadMoreChats = useCallback(async () => {
     if (searchLoading || !searchHasMore) return;
@@ -321,7 +354,7 @@ export function CreateImproveAuthoringDialog({
   }, [sources]);
 
   useEffect(() => {
-    if (step !== "evidence" || !visibleSessionKey) return undefined;
+    if (!selectsChats || !visibleSessionKey) return undefined;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void training.actions.estimateSources(visibleSessionKey.split("\n")).then((estimates) => {
@@ -333,25 +366,9 @@ export function CreateImproveAuthoringDialog({
       }).catch(() => undefined);
     }, 200);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [step, training.actions, visibleSessionKey]);
-
-  useEffect(() => {
-    if (step !== "automatic_scope" || !eligibleSessions.length) return undefined;
-    const missing = eligibleSessions.map((session) => session.id).filter((sessionId) => !estimatesBySessionId[sessionId]);
-    if (!missing.length) return undefined;
-    let cancelled = false;
-    void training.actions.estimateSources(missing).then((estimates) => {
-      if (cancelled) return;
-      setEstimatesBySessionId((current) => ({
-        ...current,
-        ...Object.fromEntries(estimates.map((estimate) => [estimate.sessionId, { messageCount: estimate.messageCount, estimatedTokens: estimate.estimatedTokens }])),
-      }));
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [eligibleSessions, estimatesBySessionId, step, training.actions]);
+  }, [selectsChats, training.actions, visibleSessionKey]);
 
   const selectedEstimate = useMemo(() => aggregateEstimate([...selectedSessionIds], estimatesBySessionId), [estimatesBySessionId, selectedSessionIds]);
-  const scanEstimate = useMemo(() => aggregateEstimate(eligibleSessions.map((session) => session.id), estimatesBySessionId), [eligibleSessions, estimatesBySessionId]);
 
   function selectMode(nextMode: NewModelSetup) {
     if (nextMode !== setup && setup !== null) setEvidenceChanged(true);
@@ -370,6 +387,10 @@ export function CreateImproveAuthoringDialog({
     if (usesBaseModelStep && !preferredBaseModelCandidate?.available) return;
     if (setup === "existing_dataset") {
       setStep("existing_dataset");
+      return;
+    }
+    if (agentSourceMode) {
+      setStep("evidence");
       return;
     }
     if (mode === "automated") setStep("automatic_scope");
@@ -463,12 +484,14 @@ export function CreateImproveAuthoringDialog({
   }
 
   async function scanForCandidates() {
+    const sessionIds = [...selectedSessionIds];
+    if (!sessionIds.length) return;
     setPreparingScan(true);
     try {
       const nextConfig = { ...minerConfig, enabled: true };
       const runRecord: TaskMinerRun | null = await training.actions.runMiner(
         [],
-        eligibleSessions.map((session) => session.id),
+        sessionIds,
         nextConfig,
       );
       if (runRecord) setActiveMinerRunId(runRecord.id);
@@ -496,6 +519,16 @@ export function CreateImproveAuthoringDialog({
     setAnalyzing(true);
     setAuthoringError(null);
     try {
+      if (isAgentAuthoring && agentSourceMode === "from_prompt") {
+        if (!onAgentPromptSubmitted) {
+          throw new Error("OpenPond could not continue from the Agent purpose.");
+        }
+        await onAgentPromptSubmitted({
+          analysisModel: { providerId: authoringProvider, modelId: authoringModel },
+          objective: objective.trim(),
+        });
+        return;
+      }
       const selectedSources = await ensureSelectedSources();
       const reusableDraftRunId = creation?.request.sourceIds.length === 0
         ? creation.request.createImproveRunId
@@ -523,14 +556,24 @@ export function CreateImproveAuthoringDialog({
         createImproveRunId: reusableDraftRunId,
         targetIntent,
       });
-      if (!next) throw new Error("OpenPond could not start Taskset authoring.");
+      if (!next) throw new Error(isAgentAuthoring
+        ? "OpenPond could not prepare the Agent review."
+        : "OpenPond could not start Taskset authoring.");
+      if (dialogDismissedRef.current) {
+        if (shouldCancelCreationOnDialogDismiss(next)) {
+          await training.actions.cancelCreation(next.id);
+        }
+        return;
+      }
       setCreation(next);
       setEvidenceChanged(false);
       if (next.state !== "awaiting_disclosure_approval") setStep("recommendation");
     } catch (error) {
-      setAuthoringError(error instanceof Error ? error.message : String(error));
+      if (!dialogDismissedRef.current) {
+        setAuthoringError(error instanceof Error ? error.message : String(error));
+      }
     } finally {
-      setAnalyzing(false);
+      if (!dialogDismissedRef.current) setAnalyzing(false);
     }
   }
 
@@ -554,7 +597,9 @@ export function CreateImproveAuthoringDialog({
     try {
       const next = await training.actions.retryCreation(creation.id);
       if (!next) {
-        throw new Error(training.error ?? "OpenPond could not retry Taskset authoring.");
+        throw new Error(training.error ?? (isAgentAuthoring
+          ? "OpenPond could not retry the Agent review."
+          : "OpenPond could not retry Taskset authoring."));
       }
       setCreation(next);
       setStep("recommendation");
@@ -574,10 +619,18 @@ export function CreateImproveAuthoringDialog({
   function goBack() {
     if (step === "base_model") setStep("start");
     else if (step === "existing_dataset") setStep("base_model");
-    else if (step === "automatic_scope") setStep(usesBaseModelStep ? "base_model" : "start");
+    else if (step === "automatic_scope") {
+      setStep(datasetBuildMode
+        ? "evidence"
+        : usesBaseModelStep ? "base_model" : "start");
+    }
     else if (step === "automatic_candidates") setStep("automatic_scope");
     else if (step === "evidence") {
       if (creation?.state === "awaiting_disclosure_approval") void declineDisclosure();
+      if (datasetBuildMode && onBackToDatasetSources) {
+        onBackToDatasetSources();
+        return;
+      }
       setStep(mode === "automated"
         ? "automatic_candidates"
         : usesBaseModelStep ? "base_model" : "start");
@@ -585,9 +638,17 @@ export function CreateImproveAuthoringDialog({
   }
 
   async function closeDialog() {
+    if (dialogDismissedRef.current) return;
+    dialogDismissedRef.current = true;
+    searchRequestRef.current += 1;
     const activeCreation = creation;
-    if (activeCreation && !["cancelled", "failed", "ready"].includes(activeCreation.state)) await training.actions.cancelCreation(activeCreation.id);
-    onClose();
+    try {
+      if (shouldCancelCreationOnDialogDismiss(activeCreation)) {
+        await training.actions.cancelCreation(activeCreation.id);
+      }
+    } finally {
+      onClose();
+    }
   }
 
   async function openComputeSettings() {
@@ -600,33 +661,35 @@ export function CreateImproveAuthoringDialog({
     setAuthoringError(null);
     try {
       const next = await training.actions.materialize(creation.id, true);
-      if (!next) throw new Error("OpenPond could not materialize the approved Taskset.");
+      if (!next) throw new Error(isAgentAuthoring
+        ? "OpenPond could not continue from the approved Agent review."
+        : "OpenPond could not materialize the approved Taskset.");
+      if (next.state === "ready") {
+        await onTasksetCreated(next);
+        return;
+      }
       setCreation(next);
-      if (next.state === "ready") await onTasksetCreated(next);
     } catch (error) {
       setAuthoringError(error instanceof Error ? error.message : String(error));
     }
   }
 
   return (
-    <div className="training-dialog-backdrop" role="presentation" onMouseDown={() => void closeDialog()}>
-      <section
-        ref={dialogRef}
-        className={`training-dialog training-run-dialog ${step === "start" ? "training-run-start-step" : "training-run-workflow-step"}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={dialogTitle(targetIntent, resourceIntent)}
-        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); void closeDialog(); } }}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+    <AppDialog
+      ariaLabel={dialogTitle(targetIntent, resourceIntent)}
+      className={`training-dialog training-run-dialog ${step === "start" ? "training-run-start-step" : "training-run-workflow-step"}`}
+      initialFocusKey={step}
+      onClose={() => void closeDialog()}
+    >
         <div className="training-dialog-header">
           <div className="training-run-dialog-title">
             {step !== "start" ? (
               <button
                 className="training-icon-button"
-                data-autofocus
                 type="button"
-                aria-label={backLabel(step, usesBaseModelStep, mode)}
+                aria-label={datasetBuildMode && step === "evidence"
+                  ? "Back to Dataset sources"
+                  : backLabel(step, usesBaseModelStep, mode)}
                 onClick={goBack}
               >
                 <ArrowLeft size={16} />
@@ -641,6 +704,7 @@ export function CreateImproveAuthoringDialog({
           <TrainingStartModeStep
             allowExistingDataset={usesBaseModelStep && Boolean(onModelCreatedFromTaskset)}
             mode={setup}
+            operation={targetIntent.operation}
             targetLabel={targetLabel(targetIntent, resourceIntent)}
             onChange={selectMode}
             onContinue={continueFromStart}
@@ -665,23 +729,34 @@ export function CreateImproveAuthoringDialog({
           />
         ) : step === "automatic_scope" ? (
           <TrainingAutomaticScopeStep
-            chatPreview={eligibleSessions.slice(0, 6).map((session) => ({
-              id: session.id,
-              title: session.title,
-              updatedAt: session.updatedAt,
-            }))}
-            chatCount={eligibleSessions.length}
             config={minerConfig}
-            estimate={scanEstimate}
+            estimatesBySessionId={estimatesBySessionId}
+            estimate={selectedEstimate}
+            matchingSessionCount={searchTotal}
             onCancel={() => void cancelScan()}
             onConfigChange={setMinerConfig}
+            onLoadMore={() => void loadMoreChats()}
             onScan={() => void scanForCandidates()}
+            onSearchChange={setSearch}
+            onToggleSession={toggleSession}
+            onToggleVisible={toggleVisible}
             run={activeMinerRun}
             scanning={scanning}
+            search={search}
+            searchError={searchError}
+            searchHasMore={searchHasMore}
+            searchIndexedChats={indexedChats}
+            searchIndexing={searchIndexing}
+            searchLoading={searchLoading}
+            searchTotalChats={totalIndexChats}
+            selectedEntries={selectedEntries}
+            selectedSessionIds={selectedSessionIds}
+            targetLabel={targetLabel(targetIntent, resourceIntent)}
+            visibleSessions={searchEntries}
           />
         ) : step === "automatic_candidates" ? (
           <TrainingAutomaticCandidatesStep candidates={scanCandidates} onRescan={() => { setActiveMinerRunId(null); setStep("automatic_scope"); }} onSelect={selectCandidate} />
-        ) : step === "evidence" && mode ? (
+        ) : step === "evidence" && (mode || agentSourceMode) ? (
           <TrainingSourceStep
             authoringModel={authoringModel}
             authoringProvider={authoringProvider}
@@ -690,7 +765,7 @@ export function CreateImproveAuthoringDialog({
             disclosurePending={creation?.state === "awaiting_disclosure_approval"}
             estimatesBySessionId={estimatesBySessionId}
             matchingSessionCount={searchTotal}
-            mode={mode}
+            mode={agentSourceMode ?? mode!}
             objective={objective}
             onObjectiveChange={changeObjective}
             onAnalyze={() => void analyze()}
@@ -699,6 +774,9 @@ export function CreateImproveAuthoringDialog({
             onAuthoringProviderChange={changeAuthoringProvider}
             onAuthoringReasoningEffortChange={changeReasoningEffort}
             onDeclineDisclosure={() => void declineDisclosure()}
+            onDiscoverFromConversations={datasetBuildMode
+              ? () => setStep("automatic_scope")
+              : undefined}
             onSearchChange={setSearch}
             onLoadMore={() => void loadMoreChats()}
             onReturnToRecommendation={() => setStep("recommendation")}
@@ -717,6 +795,7 @@ export function CreateImproveAuthoringDialog({
             selectedEstimate={selectedEstimate}
             selectedSessionIds={selectedSessionIds}
             targetLabel={targetLabel(targetIntent, resourceIntent)}
+            targetOperation={targetIntent.operation}
             visibleSessions={searchEntries}
           />
         ) : step === "recommendation" && creation?.proposal ? (
@@ -757,16 +836,18 @@ export function CreateImproveAuthoringDialog({
               </div>
               {objective ? (
                 <div className="training-evidence-objective">
-                  <span>Capability</span>
+                  <span>{isAgentAuthoring ? "Agent purpose" : "Capability"}</span>
                   <strong>{objective}</strong>
                 </div>
               ) : null}
               <p className="training-empty">
-                Retry keeps the exact approved evidence, model, and disclosure receipt. Change evidence starts a new review if the selection is too large or no longer representative.
+                {isAgentAuthoring
+                  ? "Retry uses the same approved chats and model. Change chats starts a new review when the selection is no longer right for this Agent."
+                  : "Retry keeps the exact approved evidence, model, and disclosure receipt. Change evidence starts a new review if the selection is too large or no longer representative."}
               </p>
             </div>
             <div className="training-dialog-actions">
-              <button className="training-button secondary" type="button" disabled={busy} onClick={() => setStep("evidence")}>Change evidence</button>
+              <button className="training-button secondary" type="button" disabled={busy} onClick={() => setStep("evidence")}>{isAgentAuthoring ? "Change chats" : "Change evidence"}</button>
               <button className="training-button" type="button" disabled={busy} onClick={() => void retryAuthoring()}>
                 {analyzing ? <Loader2 className="spin" size={14} /> : null}
                 Retry approved evidence
@@ -775,119 +856,9 @@ export function CreateImproveAuthoringDialog({
           </div>
         ) : (
           <div className="training-recommendation-loading">
-            {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>Preparing the recommendation…</p></>}
+            {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>{isAgentAuthoring ? "Preparing the Agent review…" : "Preparing the recommendation…"}</p></>}
           </div>
         )}
-      </section>
-    </div>
+    </AppDialog>
   );
-}
-
-function initialCreationStep(creation: TaskCreationSnapshot | null): NewModelStep {
-  if (!creation) return "start";
-  if (creation.state === "awaiting_disclosure_approval") return "evidence";
-  return "recommendation";
-}
-
-function candidateForPreference(
-  candidates: BaseModelCandidate[],
-  preference: BaseModelPreference | null,
-  legacyModelId: string | null,
-): BaseModelCandidate | null {
-  if (preference) {
-    const exact = candidates.find((candidate) =>
-      candidate.preference.modelId === preference.modelId
-      && candidate.preference.source === preference.source
-      && candidate.preference.revision === preference.revision
-      && candidate.preference.modelAssetId === preference.modelAssetId);
-    if (exact) return exact;
-  }
-  const modelId = preference?.modelId ?? legacyModelId;
-  return modelId
-    ? candidates.find((candidate) => candidate.preference.modelId === modelId) ?? null
-    : null;
-}
-
-function authoringFailureCopy(reason: string | null): string {
-  if (!reason) return "The authoring model did not return a proposal.";
-  if (reason.trim().toLowerCase() === "terminated") {
-    return "OpenPond Chat closed the Taskset authoring stream before a proposal was returned. No Taskset was created.";
-  }
-  return reason;
-}
-
-function dialogTitle(
-  target: CreateImproveAuthoringTarget,
-  resourceIntent: TaskCreationSnapshot["request"]["resourceIntent"],
-): string {
-  if (resourceIntent === "dataset") return "New Dataset";
-  if (target.kind === "agent") {
-    return target.operation === "improve"
-      ? `Improve ${target.displayName ?? "agent"}`
-      : "New agent";
-  }
-  if (target.kind === "model") return "New model";
-  return "New change";
-}
-
-function targetLabel(
-  target: CreateImproveAuthoringTarget,
-  resourceIntent: TaskCreationSnapshot["request"]["resourceIntent"],
-): string {
-  if (resourceIntent === "dataset") return "dataset";
-  if (target.kind === "agent") return "agent";
-  if (target.kind === "model") return "model";
-  return "workproduct";
-}
-
-function reviewTitle(
-  target: CreateImproveAuthoringTarget,
-  resourceIntent: TaskCreationSnapshot["request"]["resourceIntent"],
-): string {
-  if (resourceIntent === "dataset") return "Review Dataset";
-  if (target.kind === "model") return "Review model";
-  if (target.kind === "agent") return target.operation === "improve" ? "Review agent change" : "Review agent";
-  return "Review change";
-}
-
-function aggregateEstimate(sessionIds: string[], estimates: Record<string, { messageCount: number; estimatedTokens: number }>) {
-  let messageCount = 0;
-  let estimatedTokens = 0;
-  let measuredChats = 0;
-  for (const sessionId of sessionIds) {
-    const estimate = estimates[sessionId];
-    if (!estimate) continue;
-    measuredChats += 1;
-    messageCount += estimate.messageCount;
-    estimatedTokens += estimate.estimatedTokens;
-  }
-  return { messageCount, estimatedTokens, measuredChats };
-}
-
-function backLabel(
-  step: NewModelStep,
-  usesBaseModelStep: boolean,
-  mode: NewModelMode | null,
-): string {
-  if (step === "base_model") return "Back to setup";
-  if (step === "existing_dataset") return "Back to base model";
-  if (step === "automatic_scope") return usesBaseModelStep ? "Back to base model" : "Back to setup";
-  if (step === "automatic_candidates") return "Back to scan scope";
-  if (step === "evidence") {
-    if (mode === "automated") return "Back to repeated workflows";
-    return usesBaseModelStep ? "Back to base model" : "Back to setup";
-  }
-  return "Back to Dataset";
-}
-
-function defaultMinerConfig(): TaskMinerConfig {
-  return {
-    schemaVersion: "openpond.taskMinerConfig.v1",
-    enabled: false,
-    localOnly: true,
-    observationWindowDays: 30,
-    minimumRecurrence: 3,
-    clustering: "hybrid_deterministic_first",
-    consentRequired: true,
-  };
 }

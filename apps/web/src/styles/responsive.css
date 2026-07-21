@@ -55,6 +55,14 @@
     display: none;
   }
 
+  .main-pane.page-active.diff-open:has(> .get-started-learning-panel) {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 32vw);
+  }
+
+  .main-pane.page-active.diff-open > .get-started-learning-panel {
+    display: grid;
+  }
+
   .main-pane.team-active.diff-open > .team-ai-thread-panel {
     display: grid;
   }
@@ -209,5 +217,32 @@
   .account-state {
     justify-self: start;
     grid-column: 2;
+  }
+}
+
+@media (max-width: 620px) {
+  .main-pane.page-active.diff-open:has(> .get-started-learning-panel) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(180px, 34vh);
+  }
+
+  .main-pane.page-active.diff-open:has(> .get-started-learning-panel.show-script) {
+    grid-template-rows: minmax(0, 1fr) minmax(240px, 44vh);
+  }
+
+  .main-pane.page-active.diff-open > .get-started-view {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .main-pane.page-active.diff-open > .get-started-learning-panel {
+    grid-column: 1;
+    grid-row: 2;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .get-started-learning-panel .workspace-diff-resize-handle {
+    display: none;
   }
 }

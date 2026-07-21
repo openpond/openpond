@@ -9,12 +9,15 @@ describe("/train command", () => {
   test("uses the typed existing slash catalog and opens manual source selection", async () => {
     expect(COMPOSER_SLASH_COMMANDS.find((item) => item.id === "train")).toMatchObject({ command: "/train", label: "Create training task" });
     expect(parseComposerSlashCommandPrompt("/train")).toEqual({ command: "train", args: "" });
-    const mainPane = await readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8");
+    const [mainPane, mainChatThread] = await Promise.all([
+      readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
+      readFile("apps/web/src/components/app-shell/MainChatThread.tsx", "utf8"),
+    ]);
     expect(mainPane).toContain('command.command === "train"');
     expect(mainPane).toContain("setTrainingLaunchRequest");
     expect(mainPane).toContain("initialSessionIds: [selectedSessionId]");
     expect(mainPane).toContain("TrainingCreationPanel");
-    expect(mainPane).toContain("TrainingStatusReceipt");
+    expect(mainChatThread).toContain("TrainingStatusReceipt");
   });
 
   test("shows /train in the desktop composer slash menu", () => {

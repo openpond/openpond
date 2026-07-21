@@ -26,4 +26,43 @@ describe("deterministic grader primitives", () => {
     await expect(gradeAttempt({ task, attempt: attemptFixture({ output: { response: "expected" } }), graders: [grader] })).resolves.toMatchObject({ passed: true, score: 1 });
     await expect(gradeAttempt({ task, attempt: attemptFixture({ output: { response: "expected\n" } }), graders: [grader] })).resolves.toMatchObject({ passed: false, score: 0 });
   });
+
+  test("extracts and compares deterministic mathematical final answers", async () => {
+    const task = {
+      ...tasksetFixture().tasks[1]!,
+      expectedOutput: { text: "1,234" },
+    };
+    const grader = {
+      id: "math-final",
+      version: "1",
+      label: "Math final answer",
+      kind: "content" as const,
+      weight: 1,
+      hardGate: true,
+      rewardEligible: true,
+      privileged: true,
+      config: {
+        operator: "final_answer_equals_expected",
+        outputField: "text",
+        expectedField: "text",
+      },
+      metadata: {},
+    };
+    await expect(
+      gradeAttempt({
+        task,
+        attempt: attemptFixture({
+          output: { text: "Reasoning here. Therefore, \\\\boxed{1234}." },
+        }),
+        graders: [grader],
+      }),
+    ).resolves.toMatchObject({ passed: true, score: 1, rewardEligible: true });
+    await expect(
+      gradeAttempt({
+        task,
+        attempt: attemptFixture({ output: { text: "#### 1235" } }),
+        graders: [grader],
+      }),
+    ).resolves.toMatchObject({ passed: false, score: 0, rewardEligible: false });
+  });
 });

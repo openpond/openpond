@@ -18,9 +18,9 @@ describe("compute storage discovery", () => {
     ].join("\n"), "/home/glu/.openpond/openpond-app");
 
     expect(candidates).toEqual([
-      { kind: "local", label: "System disk", path: "/", modelStorePath: "/home/glu/.openpond/openpond-app/models" },
-      { kind: "removable", label: "My Passport", path: "/media/glu/My Passport", modelStorePath: "/media/glu/My Passport" },
-      { kind: "network", label: "models", path: "/mnt/team models", modelStorePath: "/mnt/team models" },
+      { kind: "local", label: "System disk", path: "/", modelStorePath: "/home/glu/.openpond/openpond-app/models", datasetStorePath: "/home/glu/.openpond/openpond-app/datasets" },
+      { kind: "removable", label: "My Passport", path: "/media/glu/My Passport", modelStorePath: "/media/glu/My Passport", datasetStorePath: "/media/glu/My Passport/OpenPond/datasets" },
+      { kind: "network", label: "models", path: "/mnt/team models", modelStorePath: "/mnt/team models", datasetStorePath: "/mnt/team models/OpenPond/datasets" },
     ]);
   });
 
@@ -35,9 +35,9 @@ describe("compute storage discovery", () => {
       "/dev/disk4s1 on /Volumes/Fast\\040Disk (apfs, local, nodev)",
       "//glu@nas/models on /Volumes/Models (smbfs, nodev, nosuid)",
     ].join("\n"), "/Users/glu/Library/Application Support/OpenPond")).toEqual([
-      { kind: "local", label: "System disk", path: "/", modelStorePath: "/Users/glu/Library/Application Support/OpenPond/models" },
-      { kind: "removable", label: "Fast Disk", path: "/Volumes/Fast Disk", modelStorePath: "/Volumes/Fast Disk" },
-      { kind: "network", label: "models", path: "/Volumes/Models", modelStorePath: "/Volumes/Models" },
+      { kind: "local", label: "System disk", path: "/", modelStorePath: "/Users/glu/Library/Application Support/OpenPond/models", datasetStorePath: "/Users/glu/Library/Application Support/OpenPond/datasets" },
+      { kind: "removable", label: "Fast Disk", path: "/Volumes/Fast Disk", modelStorePath: "/Volumes/Fast Disk", datasetStorePath: "/Volumes/Fast Disk/OpenPond/datasets" },
+      { kind: "network", label: "models", path: "/Volumes/Models", modelStorePath: "/Volumes/Models", datasetStorePath: "/Volumes/Models/OpenPond/datasets" },
     ]);
 
     expect(parseWindowsLogicalDisks(JSON.stringify([
@@ -45,9 +45,9 @@ describe("compute storage discovery", () => {
       { DeviceID: "E:", VolumeName: "Model SSD", DriveType: 2 },
       { DeviceID: "Z:", VolumeName: "Team models", DriveType: 4 },
     ]), "C:\\Users\\glu\\AppData\\Roaming\\OpenPond")).toEqual([
-      { kind: "local", label: "Windows", path: "C:\\", modelStorePath: "C:\\Users\\glu\\AppData\\Roaming\\OpenPond\\models" },
-      { kind: "removable", label: "Model SSD", path: "E:\\", modelStorePath: "E:\\" },
-      { kind: "network", label: "Team models", path: "Z:\\", modelStorePath: "Z:\\" },
+      { kind: "local", label: "Windows", path: "C:\\", modelStorePath: "C:\\Users\\glu\\AppData\\Roaming\\OpenPond\\models", datasetStorePath: "C:\\Users\\glu\\AppData\\Roaming\\OpenPond\\datasets" },
+      { kind: "removable", label: "Model SSD", path: "E:\\", modelStorePath: "E:\\", datasetStorePath: "E:\\OpenPond\\datasets" },
+      { kind: "network", label: "Team models", path: "Z:\\", modelStorePath: "Z:\\", datasetStorePath: "Z:\\OpenPond\\datasets" },
     ]);
   });
 });

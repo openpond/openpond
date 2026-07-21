@@ -24,13 +24,48 @@ const PENDING_STATES = new Set<CreateImproveRun["state"]>([
 export function latestCreateImproveRuntimeFromEvents(
   events: RuntimeEvent[],
 ): GoalRuntimeStatus | null {
+  const run = latestCreateImproveRunFromEvents(events);
+  return run ? createImproveRuntimeStatus(run) : null;
+}
+
+export function latestCreateImproveRunFromEvents(
+  events: RuntimeEvent[],
+): CreateImproveRun | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const item = events[index];
     if (item?.name !== "create_improve.updated") continue;
     const run = createImproveRunFromRecord(asRecord(item.data));
-    if (run) return createImproveRuntimeStatus(run);
+    if (run) return run;
   }
   return null;
+}
+
+export function latestCreateImproveRunProjection(input: {
+  events?: RuntimeEvent[];
+  messages?: Array<{ createImproveRun?: CreateImproveRun | null }>;
+}): CreateImproveRun | null {
+  if (input.events) return latestCreateImproveRunFromEvents(input.events);
+  const messages = input.messages ?? [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const run = messages[index]?.createImproveRun ?? null;
+    if (run) return run;
+  }
+  return null;
+}
+
+export function createImproveConversationTitle(
+  run: CreateImproveRun | null,
+  fallback: string,
+): string {
+  const candidate = run?.target.displayName?.trim() ?? "";
+  const normalized = candidate.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (
+    candidate
+    && !/^(?:create|creating|improve|improving|new) (?:an )?agent$/.test(normalized)
+  ) {
+    return candidate;
+  }
+  return fallback;
 }
 
 function createImproveRunFromRecord(
@@ -41,7 +76,7 @@ function createImproveRunFromRecord(
 }
 
 function createImproveRuntimeStatus(run: CreateImproveRun): GoalRuntimeStatus | null {
-  const presentation = presentationForState(run.state);
+  const presentation = presentationForState(run);
   if (!presentation) return null;
   const timeUsedSeconds = elapsedSeconds(run.createdAt, run.updatedAt);
   const detail = run.blockedReason ?? statusLabel(run.state);
@@ -61,17 +96,19 @@ function createImproveRuntimeStatus(run: CreateImproveRun): GoalRuntimeStatus | 
   };
 }
 
-function presentationForState(state: CreateImproveRun["state"]): {
+function presentationForState(run: CreateImproveRun): {
   tone: OpenPondGoalStatusTone;
   actionLabel: string;
 } | null {
-  if (ACTIVE_STATES.has(state)) return { tone: "active", actionLabel: "Work running" };
-  if (PENDING_STATES.has(state)) return { tone: "active", actionLabel: "Work awaiting input" };
-  if (state === "blocked") return { tone: "limited", actionLabel: "Work blocked" };
-  if (state === "failed") return { tone: "limited", actionLabel: "Work failed" };
-  if (state === "cancelled") return { tone: "limited", actionLabel: "Work cancelled" };
-  if (state === "ready" || state === "ready_local") return { tone: "done", actionLabel: "Workproduct ready" };
-  if (state === "published_hosted") return { tone: "done", actionLabel: "Workproduct published" };
+  const state = run.state;
+  const subject = run.target.kind === "agent" ? "Agent" : "Work";
+  if (ACTIVE_STATES.has(state)) return { tone: "active", actionLabel: `${subject} running` };
+  if (PENDING_STATES.has(state)) return { tone: "active", actionLabel: `${subject} awaiting input` };
+  if (state === "blocked") return { tone: "limited", actionLabel: `${subject} blocked` };
+  if (state === "failed") return { tone: "limited", actionLabel: `${subject} failed` };
+  if (state === "cancelled") return { tone: "limited", actionLabel: `${subject} cancelled` };
+  if (state === "ready" || state === "ready_local") return { tone: "done", actionLabel: run.target.kind === "agent" ? "Agent ready" : "Workproduct ready" };
+  if (state === "published_hosted") return { tone: "done", actionLabel: run.target.kind === "agent" ? "Agent published" : "Workproduct published" };
   return null;
 }
 

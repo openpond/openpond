@@ -129,34 +129,141 @@ export class CdpDesktopHarnessRenderer implements DesktopHarnessRenderer {
     }, options.timeoutMs ?? this.defaultTimeoutMs, `Timed out waiting for Desktop session row ${sessionId}.`);
   }
 
-  async submitComposer(prompt: string): Promise<void> {
+  async replaceComposerText(text: string): Promise<void> {
+    const removedInvocation = await this.evaluate<boolean>(
+      `(() => {
+        const input = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')]
+          .find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null);
+        const remove = input?.querySelector('.composer-invocation-remove');
+        if (!(remove instanceof HTMLButtonElement)) return false;
+        remove.click();
+        return true;
+      })()`,
+    );
+    if (removedInvocation) {
+      await waitFor(
+        async () => this.evaluate<boolean>(
+          `(() => {
+            const input = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')]
+              .find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null);
+            return input instanceof HTMLElement && !input.querySelector('[data-inline-token="true"]');
+          })()`,
+        ),
+        Math.min(this.defaultTimeoutMs, 10_000),
+        "Desktop composer invocation did not clear.",
+      );
+    }
     const focused = await this.evaluate<boolean>(
       `(() => {
-        const input = document.querySelector('.composer-inline-input[role="textbox"]');
+        const input = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')]
+          .find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null);
         if (!(input instanceof HTMLElement)) return false;
         input.focus();
-        input.textContent = '';
-        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
         return true;
       })()`,
     );
     if (!focused) throw new Error("Desktop composer input was not available.");
-    const cdp = this.requireCdp();
-    await cdp.send("Input.insertText", { text: prompt });
-    await delay(100);
-    await cdp.send("Input.dispatchKeyEvent", {
-      type: "keyDown",
-      key: "Enter",
-      code: "Enter",
-      windowsVirtualKeyCode: 13,
-      nativeVirtualKeyCode: 13,
-    });
-    await cdp.send("Input.dispatchKeyEvent", {
-      type: "keyUp",
-      key: "Enter",
-      code: "Enter",
-      windowsVirtualKeyCode: 13,
-      nativeVirtualKeyCode: 13,
+    await this.requireCdp().send("Input.insertText", { text });
+    const updated = await waitFor(
+      async () => this.evaluate<boolean>(
+        `(() => {
+          const input = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')]
+            .find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null);
+          return input instanceof HTMLElement && input.textContent === ${JSON.stringify(text)};
+        })()`,
+      ),
+      Math.min(this.defaultTimeoutMs, 10_000),
+      "Desktop composer did not retain inserted text.",
+    );
+    if (!updated) throw new Error("Desktop composer text was not updated.");
+  }
+
+  async submitComposer(prompt: string): Promise<void> {
+    const focused = await this.evaluate<boolean>(
+      `(() => {
+        const inputs = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')];
+        const input = inputs.find((candidate) =>
+          candidate instanceof HTMLElement &&
+          candidate.offsetParent !== null &&
+          candidate.querySelector('[data-inline-token="true"]'))
+          ?? inputs.find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null)
+          ?? inputs[0];
+        if (!(input instanceof HTMLElement)) return false;
+        for (const candidate of inputs) delete candidate.dataset.desktopHarnessComposerTarget;
+        input.dataset.desktopHarnessComposerTarget = 'true';
+        input.focus();
+        const token = input.querySelector('[data-inline-token="true"]');
+        input.dataset.desktopHarnessExpectedToken = token ? 'true' : 'false';
+        for (const child of [...input.childNodes]) {
+          if (child !== token) child.remove();
+        }
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return true;
+      })()`,
+    );
+    if (!focused) throw new Error("Desktop composer input was not available.");
+    const pasted = await this.evaluate<boolean>(
+      `(() => {
+        const input = document.querySelector('[data-desktop-harness-composer-target="true"]');
+        if (!(input instanceof HTMLElement)) return false;
+        const clipboardData = new DataTransfer();
+        clipboardData.setData('text/plain', ${JSON.stringify(prompt)});
+        input.dispatchEvent(new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData,
+        }));
+        return true;
+      })()`,
+    );
+    if (!pasted) throw new Error("Desktop composer prompt could not be pasted.");
+    const readyToSubmit = await waitFor(async () => this.evaluate<boolean>(
+      `(() => {
+        const input = document.querySelector('[data-desktop-harness-composer-target="true"]');
+        const form = input?.closest('form.composer');
+        const send = form?.querySelector('.send-button');
+        const expectedToken = input instanceof HTMLElement && input.dataset.desktopHarnessExpectedToken === 'true';
+        return input instanceof HTMLElement &&
+          (input.textContent ?? '').includes(${JSON.stringify(prompt)}) &&
+          (!expectedToken || Boolean(input.querySelector('[data-inline-token="true"]'))) &&
+          form instanceof HTMLFormElement &&
+          send instanceof HTMLButtonElement &&
+          !send.disabled;
+      })()`,
+    ), Math.min(this.defaultTimeoutMs, 10_000), "Desktop composer did not become ready to submit.");
+    if (!readyToSubmit) throw new Error("Desktop composer did not retain the programmatically inserted prompt.");
+    await this.evaluate(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+    const submitted = await this.evaluate<boolean>(
+      `(() => {
+        const input = document.querySelector('[data-desktop-harness-composer-target="true"]');
+        const form = input?.closest('form.composer');
+        const send = form?.querySelector('.send-button');
+        if (!(form instanceof HTMLFormElement) || !(send instanceof HTMLButtonElement) || send.disabled) return false;
+        form.requestSubmit(send);
+        return true;
+      })()`,
+    );
+    if (!submitted) throw new Error("Desktop composer form was not submitted.");
+  }
+
+  async setViewport(width: number, height: number): Promise<void> {
+    await this.requireCdp().send("Emulation.setDeviceMetricsOverride", {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile: false,
+      screenWidth: width,
+      screenHeight: height,
     });
   }
 

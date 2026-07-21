@@ -83,6 +83,78 @@ describe("scripted OpenPond chat provider", () => {
     });
   });
 
+  test("asks for Account Health risk priority before returning the multi-action plan", async () => {
+    const baseRun = {
+      operation: "create",
+      objective: "Monitor customer account health and produce a weekly account review.",
+      target: { kind: "agent", id: null },
+      questions: [],
+    };
+    const questionDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        { role: "system", content: "You are the OpenPond Create/Improve planner." },
+        { role: "user", content: JSON.stringify({ run: baseRun }) },
+      ],
+    })));
+    const questionDecision = JSON.parse(textFromDeltas(questionDeltas));
+    expect(questionDecision).toMatchObject({
+      decision: "questions",
+      questions: [{ id: "account_health_priority", kind: "single_choice" }],
+    });
+
+    const planDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        { role: "system", content: "You are the OpenPond Create/Improve planner." },
+        { role: "user", content: JSON.stringify({ run: {
+          ...baseRun,
+          questions: [{ id: "account_health_priority", status: "answered" }],
+        } }) },
+      ],
+    })));
+    const planDecision = JSON.parse(textFromDeltas(planDeltas));
+    expect(planDecision).toMatchObject({
+      decision: "plan",
+      plan: {
+        targetId: "account-health-agent",
+        targetName: "Account Health Agent",
+        actionShape: {
+          mode: "chat_and_direct_actions",
+          defaultActionKey: "account-health-agent.chat",
+        },
+      },
+    });
+    expect(planDecision.plan.actionShape.directActionHint).toContain("summarize-account");
+    expect(planDecision.plan.actionShape.directActionHint).toContain("triage-renewal-risk");
+    expect(planDecision.plan.actionShape.directActionHint).toContain("build-weekly-account-review");
+  });
+
+  test("returns deterministic source-backed Account Health evidence responses", async () => {
+    const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [{
+        role: "user",
+        content: "Summarize Acme: renewal 21 days, seats -31%, invoice overdue, P1 open.",
+      }],
+    })));
+    expect(textFromDeltas(deltas)).toContain("Acme is high risk");
+    expect(textFromDeltas(deltas)).toContain("Resolve the billing dispute and P1 first");
+  });
+
+  test("retains Account Health context for a follow-up turn", async () => {
+    const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        { role: "system", content: "Use the Account Health Agent for Acme." },
+        { role: "user", content: "Summarize Acme with source-backed facts." },
+        { role: "assistant", content: "Acme is high risk." },
+        { role: "user", content: "What should we do first, and who owns it?" },
+      ],
+    })));
+    expect(textFromDeltas(deltas)).toContain("Resolve the billing dispute and P1 first");
+  });
+
   test("starts a generic child and joins its completed result", async () => {
     const startDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
       model: "openpond-scripted-subagent-lifecycle",

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Taskset } from "@openpond/contracts";
+import { isTrainingSourceRef, type Taskset } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
 import { Loader2 } from "../icons";
 
@@ -55,12 +55,26 @@ export function TrainingTasksetDetail({
         </section>
 
         <details className="training-simple-section training-source-details">
-          <summary>{taskset.sourceRefs.length} chat{taskset.sourceRefs.length === 1 ? "" : "s"}</summary>
+          <summary>{taskset.sourceRefs.length} source{taskset.sourceRefs.length === 1 ? "" : "s"}</summary>
           <div className="training-source-list">
             {taskset.sourceRefs.map((source) => (
               <div key={source.id}>
-                <button className="training-chat-link" type="button" onClick={() => onOpenChat(source.sessionId)}>{source.title}</button>
-                <span className="training-source-metadata"><span>{source.turnIds.length} turns</span><span>{source.consent.scope.replaceAll("_", " ")}</span><span>Privacy {source.secretScanStatus === "passed" && source.piiScanStatus === "passed" ? "passed" : "needs review"}</span></span>
+                {isTrainingSourceRef(source) ? (
+                  <button className="training-chat-link" type="button" onClick={() => onOpenChat(source.sessionId)}>{source.title}</button>
+                ) : (
+                  <strong>{source.title}</strong>
+                )}
+                <span className="training-source-metadata">
+                  {isTrainingSourceRef(source) ? (
+                    <>
+                      <span>{source.turnIds.length} turns</span>
+                      <span>{source.consent.scope.replaceAll("_", " ")}</span>
+                    </>
+                  ) : (
+                    <span>{source.kind.replaceAll("_", " ")}</span>
+                  )}
+                  <span>Privacy {source.secretScanStatus === "passed" && source.piiScanStatus === "passed" ? "passed" : "needs review"}</span>
+                </span>
               </div>
             ))}
           </div>

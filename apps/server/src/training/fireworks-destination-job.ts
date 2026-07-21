@@ -12,6 +12,7 @@ import {
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import {
+  fireworksRftChunkSize,
   fireworksMoneyUsd,
   resourceId,
   type FireworksRftJob,
@@ -37,6 +38,7 @@ import {
   providerProgress,
   providerTerminalReceiptComplete,
   safeArtifactName,
+  selectLineageAdapterArtifact,
   waitForDataset,
 } from "./fireworks-provider-utils.js";
 
@@ -81,7 +83,7 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
     approval: TrainingApproval,
   ): Promise<TrainingJob> {
     if (plan.recipe.method !== "grpo") {
-      throw new Error("Fireworks RFT launch requires a GRPO recipe.");
+      throw new Error("Fireworks RFT launch requires an RFT recipe.");
     }
     this.assertApproval(plan, approval);
     const compatibility = await this.validate(plan);
@@ -128,7 +130,20 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
     if (!bundle) throw new Error("Approved Training Bundle was not found.");
     const credential = await this.requireCredential();
     const client = this.client(credential.value);
-    const rendered = renderFireworksRftDataset(taskset);
+    const selection = await this.deps.resolveTrainingSelection?.({
+      taskset,
+      plan,
+      split: "train",
+      maximumBytes: 1_000_000,
+    });
+    if (!selection) {
+      throw new Error("Fireworks training row selection is unavailable.");
+    }
+    const rendered = renderFireworksRftDataset(
+      taskset,
+      plan.recipe,
+      selection,
+    );
     const accountId = validation.accountId;
     const datasetId = providerId("op-rft-data", bundle.contentHash);
     const remoteJobId = providerId("op-rft", approval.id);
@@ -188,6 +203,7 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
       metadata: {
         provider: "fireworks",
         trainingMethod: "grpo",
+        rftLossMethod: plan.recipe.loss.method,
         providerAccountId: accountId,
         providerDatasetId: datasetId,
         providerDatasetName: providerDataset.name,
@@ -241,14 +257,21 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
         outputModelId,
         baseModel: plan.recipe.baseModel.id,
         learningRate: plan.recipe.optimizer.learningRate,
-        maxContextLength: plan.recipe.dataset.maxPromptTokens,
+        maxContextLength:
+          plan.recipe.dataset.maxPromptTokens
+          + plan.recipe.rollout.maxOutputTokens,
         loraRank: plan.recipe.lora.rank,
-        maxSteps: plan.recipe.optimizer.maxSteps,
+        chunkSize: fireworksRftChunkSize(
+          rendered.exampleCount,
+          plan.recipe.optimizer.maxSteps,
+        ),
         groupSize: plan.recipe.rollout.groupSize,
         maxOutputTokens: plan.recipe.rollout.maxOutputTokens,
         temperature: plan.recipe.rollout.temperature,
         topP: plan.recipe.rollout.topP,
         maxConcurrentRollouts: plan.recipe.rollout.concurrency,
+        lossMethod: plan.recipe.loss.method,
+        klBeta: plan.recipe.loss.klBeta,
       });
     } catch (error) {
       if (isConflict(error)) {
@@ -413,7 +436,7 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
     if (job.metadata.providerCollected === true && existing.length) return job;
     const plan = await this.deps.store.getTrainingPlan(job.planId);
     if (!plan || plan.recipe.method !== "grpo") {
-      throw new Error("Fireworks job lost its GRPO plan.");
+      throw new Error("Fireworks job lost its RFT plan.");
     }
     const optimizerUpdates = providerOptimizerUpdates(providerJob);
     if (optimizerUpdates <= 0) {
@@ -459,6 +482,7 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
         metadata: {
           provider: "fireworks",
           trainingMethod: "grpo",
+          rftLossMethod: plan.recipe.loss.method,
           providerFilename: filename,
           providerJobId: metadataString(job, "providerJobId"),
           outputModelName,
@@ -479,15 +503,7 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
       trainedModel: outputModelName,
     });
     if (evaluationArtifact) artifacts.push(evaluationArtifact);
-    const adapterArtifact =
-      artifacts.find(
-        (artifact) =>
-          artifact.kind === "adapter"
-          && artifact.metadata.providerFilename === "adapter_model.safetensors",
-      ) ??
-      artifacts.find((artifact) => artifact.kind === "adapter") ??
-      artifacts.find((artifact) => artifact.kind === "checkpoint") ??
-      artifacts[0]!;
+    const adapterArtifact = selectLineageAdapterArtifact(artifacts);
     const thresholdPassed = evaluationArtifact?.metadata.thresholdPassed === true;
     const evaluationComplete = evaluationArtifact?.metadata.evaluationComplete === true;
     const lineage = ModelArtifactLineageSchema.parse({
@@ -602,15 +618,7 @@ export abstract class FireworksDestinationJob extends FireworksDestinationEvalua
       trainedModel: outputModelName,
     });
     if (evaluationArtifact) artifacts.push(evaluationArtifact);
-    const adapterArtifact =
-      artifacts.find(
-        (artifact) =>
-          artifact.kind === "adapter"
-          && artifact.metadata.providerFilename === "adapter_model.safetensors",
-      ) ??
-      artifacts.find((artifact) => artifact.kind === "adapter") ??
-      artifacts.find((artifact) => artifact.kind === "checkpoint") ??
-      artifacts[0]!;
+    const adapterArtifact = selectLineageAdapterArtifact(artifacts);
     const thresholdPassed = evaluationArtifact?.metadata.thresholdPassed === true;
     const evaluationComplete = evaluationArtifact?.metadata.evaluationComplete === true;
     const lineage = ModelArtifactLineageSchema.parse({

@@ -1,15 +1,12 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
-  Approval,
   BootstrapPayload,
   ChatAttachment,
   ChatProvider,
@@ -22,40 +19,23 @@ import type {
   Session,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
-import type { RightChatPanel, ShowAppToast } from "../../app/app-state";
-import type { ChatMessage } from "../../lib/app-models";
-import type { ContextWindowStatus } from "../../lib/context-window";
+import type { ShowAppToast } from "../../app/app-state";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
-import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
-import { openBrowserLink } from "../../lib/browser-sidebar-links";
-import {
-  buildChatTimelineRows,
-  shouldShowThinkingIndicator,
-} from "../../lib/chat-timeline-rows";
-import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
-import { Composer, type ComposerProjectTargetState, type ComposerSubmitOptions } from "../chat/Composer";
+import type { ComposerProjectTargetState, ComposerSubmitOptions } from "../chat/Composer";
+import type { ComposerCreateImproveActions } from "../chat/ComposerCreateImproveStrip";
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
-import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 import { FolderOpen, MessageSquare, Plus, X } from "../icons";
+import { mostRecentlyActivatedRightChatPanel } from "../../lib/right-chat-panels";
+import { RightChatPane } from "./RightChatPane";
+import type { RightChatPanelView } from "./right-chat-panel-types";
 
-export type RightChatPanelView = RightChatPanel & {
-  session: Session | null;
-  title: string;
-  messages: ChatMessage[];
-  contextWindowStatus: ContextWindowStatus;
-  goalRuntime: GoalRuntimeStatus | null;
-  pendingApproval: Approval | null;
-  running: boolean;
-  steerAutoDispatchBlocked: boolean;
-  steerAutoDispatchReady: boolean;
-  workspaceRootPath: string | null;
-  activeWorkspaceAppId: string | null;
-};
+export type { RightChatPanelView } from "./right-chat-panel-types";
 
 export function RightChatPanelStack({
   panels,
+  createImproveActions,
   busy,
   codexPermissionMode,
   codexReasoningEffort,
@@ -72,6 +52,7 @@ export function RightChatPanelStack({
   showToast,
   workspaceTarget,
   onAddChat,
+  onActivatePanel,
   onClosePanel,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
@@ -83,6 +64,7 @@ export function RightChatPanelStack({
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
+  onScrollStateChange,
   onProjectTargetChange,
   onResolveApproval,
   onResizeStart,
@@ -93,6 +75,7 @@ export function RightChatPanelStack({
   onWorkspaceTargetChange,
 }: {
   panels: RightChatPanelView[];
+  createImproveActions: ComposerCreateImproveActions;
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
@@ -109,6 +92,7 @@ export function RightChatPanelStack({
   showToast: ShowAppToast;
   workspaceTarget: WorkspaceTargetState;
   onAddChat: () => void;
+  onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
   onCodexPermissionModeChange: (mode: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
@@ -120,6 +104,10 @@ export function RightChatPanelStack({
   onProviderChange: (panelId: string, provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (panelId: string, prompt: string) => void;
+  onScrollStateChange: (
+    panelId: string,
+    state: { scrollTop: number; stickyToBottom: boolean },
+  ) => void;
   onProjectTargetChange: (value: string) => void;
   onResolveApproval: (
     approvalId: string,
@@ -139,20 +127,37 @@ export function RightChatPanelStack({
   onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [activePanelId, setActivePanelId] = useState(() => panels.at(-1)?.id ?? null);
+  const [activePanelId, setActivePanelId] = useState(
+    () => mostRecentlyActivatedRightChatPanel(panels)?.id ?? null,
+  );
   const addAnchorRef = useRef<HTMLDivElement | null>(null);
   const tabButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const previousPanelIdsRef = useRef<Set<string>>(new Set(panels.map((panel) => panel.id)));
+  const previousActivationVersionsRef = useRef<Map<string, number>>(
+    new Map(panels.map((panel) => [panel.id, panel.activationVersion])),
+  );
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels.at(-1) ?? null;
 
   useEffect(() => {
     const previousPanelIds = previousPanelIdsRef.current;
+    const previousActivationVersions = previousActivationVersionsRef.current;
     let addedPanel: RightChatPanelView | null = null;
+    let activatedPanel: RightChatPanelView | null = null;
     for (const panel of panels) {
       if (!previousPanelIds.has(panel.id)) addedPanel = panel;
+      if (
+        previousPanelIds.has(panel.id)
+        && panel.activationVersion > (previousActivationVersions.get(panel.id) ?? 0)
+      ) {
+        activatedPanel = panel;
+      }
     }
     previousPanelIdsRef.current = new Set(panels.map((panel) => panel.id));
+    previousActivationVersionsRef.current = new Map(
+      panels.map((panel) => [panel.id, panel.activationVersion]),
+    );
     setActivePanelId((current) => {
+      if (activatedPanel) return activatedPanel.id;
       if (addedPanel) return addedPanel.id;
       if (current && panels.some((panel) => panel.id === current)) return current;
       return panels.at(-1)?.id ?? null;
@@ -178,20 +183,44 @@ export function RightChatPanelStack({
 
   const selectPanel = useCallback((panelId: string, focus = false) => {
     setActivePanelId(panelId);
+    onActivatePanel(panelId);
     if (focus) window.requestAnimationFrame(() => tabButtonRefs.current.get(panelId)?.focus());
-  }, []);
+  }, [onActivatePanel]);
+
+  const selectFiles = useCallback((focus = false) => {
+    onSelectFiles();
+    if (!focus) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById("right-sidebar-files-tab")?.focus();
+    });
+  }, [onSelectFiles]);
 
   const handleTabKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>, panelId: string) => {
     const currentIndex = panels.findIndex((panel) => panel.id === panelId);
     if (currentIndex < 0) return;
+    const tabIndex = currentIndex + 1;
     let nextIndex: number | null = null;
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % panels.length;
-    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + panels.length) % panels.length;
+    if (event.key === "ArrowRight") nextIndex = (tabIndex + 1) % (panels.length + 1);
+    if (event.key === "ArrowLeft") nextIndex = (tabIndex - 1 + panels.length + 1) % (panels.length + 1);
     if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = panels.length - 1;
+    if (event.key === "End") nextIndex = panels.length;
     if (nextIndex === null) return;
     event.preventDefault();
-    const nextPanel = panels[nextIndex];
+    if (nextIndex === 0) {
+      selectFiles(true);
+      return;
+    }
+    const nextPanel = panels[nextIndex - 1];
+    if (nextPanel) selectPanel(nextPanel.id, true);
+  }, [panels, selectFiles, selectPanel]);
+
+  const handleFilesTabKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "Home") return;
+    const nextPanel = event.key === "ArrowLeft" || event.key === "End"
+      ? panels.at(-1)
+      : panels[0];
     if (nextPanel) selectPanel(nextPanel.id, true);
   }, [panels, selectPanel]);
 
@@ -210,8 +239,12 @@ export function RightChatPanelStack({
             type="button"
             className="workspace-diff-tab"
             role="tab"
+            id="right-sidebar-files-tab"
+            aria-controls="right-sidebar-files-panel"
             aria-selected={false}
-            onClick={onSelectFiles}
+            tabIndex={-1}
+            onClick={() => selectFiles(false)}
+            onKeyDown={handleFilesTabKeyDown}
           >
             <FolderOpen size={14} />
             <span>Files</span>
@@ -298,6 +331,7 @@ export function RightChatPanelStack({
         {activePanel ? (
           <RightChatPane
             busy={busy}
+            createImproveActions={createImproveActions}
             codexPermissionMode={codexPermissionMode}
             codexReasoningEffort={codexReasoningEffort}
             openPondCommandAccessMode={openPondCommandAccessMode}
@@ -307,6 +341,10 @@ export function RightChatPanelStack({
             mentionApps={mentionApps}
             profileSkills={profileSkills}
             panel={activePanel}
+            initialScrollState={{
+              scrollTop: activePanel.scrollTop,
+              stickyToBottom: activePanel.stickyToBottom,
+            }}
             projectTarget={projectTarget}
             providerSettings={providerSettings}
             accountBaseUrl={accountBaseUrl}
@@ -324,6 +362,7 @@ export function RightChatPanelStack({
             onProviderChange={(provider) => onProviderChange(activePanel.id, provider)}
             onProviderSetupOpen={onProviderSetupOpen}
             onPromptChange={(prompt) => onPromptChange(activePanel.id, prompt)}
+            onScrollStateChange={(state) => onScrollStateChange(activePanel.id, state)}
             onProjectTargetChange={onProjectTargetChange}
             onResolveApproval={onResolveApproval}
             onShowBrowserPanel={onShowBrowserPanel}
@@ -334,208 +373,5 @@ export function RightChatPanelStack({
         ) : null}
       </div>
     </aside>
-  );
-}
-
-function RightChatPane({
-  panel,
-  codexPermissionMode,
-  codexReasoningEffort,
-  openPondCommandAccessMode,
-  connection,
-  connectedAppMentions,
-  mentionApps,
-  profileSkills,
-  projectTarget,
-  providerSettings,
-  accountBaseUrl,
-  billingOrganizationSlug,
-  billingTeamId,
-  showToast,
-  workspaceTarget,
-  onCodexPermissionModeChange,
-  onCodexReasoningEffortChange,
-  onOpenPondCommandAccessModeChange,
-  onModelChange,
-  onOpenFileInSidebar,
-  onOpenProfileSettings,
-  onOpenSession,
-  onProviderChange,
-  onProviderSetupOpen,
-  onPromptChange,
-  onProjectTargetChange,
-  onResolveApproval,
-  onShowBrowserPanel,
-  onStop,
-  onSubmit,
-  onWorkspaceTargetChange,
-}: {
-  panel: RightChatPanelView;
-  busy: boolean;
-  codexPermissionMode: CodexPermissionMode;
-  codexReasoningEffort: CodexReasoningEffort;
-  openPondCommandAccessMode: OpenPondCommandAccessMode;
-  connection: ClientConnection | null;
-  connectedAppMentions: ConnectedAppMentionOption[];
-  mentionApps: OpenPondApp[];
-  profileSkills: OpenPondProfileSkill[];
-  projectTarget: ComposerProjectTargetState;
-  providerSettings?: BootstrapPayload["providers"] | null;
-  accountBaseUrl?: string | null;
-  billingOrganizationSlug?: string | null;
-  billingTeamId?: string | null;
-  showToast: ShowAppToast;
-  workspaceTarget: WorkspaceTargetState;
-  onCodexPermissionModeChange: (mode: CodexPermissionMode) => void;
-  onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
-  onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode) => void;
-  onModelChange: (model: string) => void;
-  onOpenFileInSidebar: (path: string) => void;
-  onOpenProfileSettings: () => void;
-  onOpenSession?: (sessionId: string) => void;
-  onProviderChange: (provider: ChatProvider) => void;
-  onProviderSetupOpen: () => void;
-  onPromptChange: (prompt: string) => void;
-  onProjectTargetChange: (value: string) => void;
-  onResolveApproval: (
-    approvalId: string,
-    decision: ResolveApprovalRequest["decision"],
-  ) => Promise<void>;
-  onShowBrowserPanel: () => void;
-  onStop: () => Promise<boolean>;
-  onSubmit: (
-    attachments?: ChatAttachment[],
-    action?: SandboxActionCatalogEntry | null,
-    command?: ComposerSlashCommand | null,
-    options?: ComposerSubmitOptions,
-  ) => Promise<boolean>;
-  onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
-}) {
-  const threadRef = useRef<HTMLDivElement | null>(null);
-  const stickyToBottomRef = useRef(true);
-  const showThinking = panel.running && !panel.pendingApproval && shouldShowThinkingIndicator(panel.messages);
-  const timelineRows = useMemo(
-    () => buildChatTimelineRows(panel.messages, { showThinkingIndicator: showThinking }),
-    [panel.messages, showThinking],
-  );
-  const latestMessage = panel.messages.at(-1);
-  const contentKey = [
-    panel.id,
-    panel.sessionId ?? "draft",
-    timelineRows.length,
-    latestMessage?.id ?? "",
-    latestMessage?.content?.length ?? 0,
-    latestMessage?.timestamp ?? "",
-    showThinking ? "thinking" : "",
-  ].join(":");
-
-  useLayoutEffect(() => {
-    const element = threadRef.current;
-    if (!element || !stickyToBottomRef.current) return;
-    element.scrollTop = element.scrollHeight;
-  }, [contentKey]);
-
-  const handleOpenBrowserLink = useCallback(
-    (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => {
-      const conversationId = panel.sessionId ?? `side-chat:${panel.id}`;
-      void openBrowserLink({
-        conversationId,
-        href,
-        explicitFile: options?.explicitFile,
-        newTab: options?.newTab,
-      }).then((opened) => {
-        if (opened) onShowBrowserPanel();
-      });
-    },
-    [onShowBrowserPanel, panel.id, panel.sessionId],
-  );
-
-  return (
-    <section
-      className={`right-chat-pane ${panel.pendingApproval ? "has-approval" : ""}`}
-      id={`right-chat-panel-${panel.id}`}
-      role="tabpanel"
-      aria-labelledby={`right-chat-tab-${panel.id}`}
-    >
-      <div
-        className="chat-thread right-chat-thread"
-        ref={threadRef}
-        onScroll={(event) => {
-          const element = event.currentTarget;
-          stickyToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 72;
-        }}
-      >
-        {timelineRows.length > 0
-          ? timelineRows.map((row) =>
-            row.type === "thinking" ? (
-              <ThinkingIndicator key={row.id} />
-            ) : (
-              <MessageRow
-                activeWorkspaceAppId={panel.activeWorkspaceAppId}
-                accountBaseUrl={accountBaseUrl}
-                billingOrganizationSlug={billingOrganizationSlug}
-                billingTeamId={billingTeamId}
-                connection={connection}
-                key={row.id}
-                message={row.message}
-                onOpenBrowserLink={handleOpenBrowserLink}
-                onOpenFileInSidebar={onOpenFileInSidebar}
-                onOpenProfileSettings={onOpenProfileSettings}
-                onOpenSession={onOpenSession}
-                workspaceRootPath={panel.workspaceRootPath}
-                showFooter={row.showFooter}
-              />
-            ),
-          )
-          : null}
-      </div>
-      <div className={`composer-stack dock right-chat-composer ${panel.pendingApproval ? "has-approval" : ""}`}>
-        <ApprovalRequestCard approval={panel.pendingApproval} onResolve={onResolveApproval} />
-        <Composer
-          mode="dock"
-          prompt={panel.prompt}
-          mentionApps={mentionApps}
-          connectedAppMentions={connectedAppMentions}
-          profileSkills={profileSkills}
-          selectedMentionAppId={null}
-          contextWindowStatus={panel.contextWindowStatus}
-          goalRuntime={panel.goalRuntime}
-          createImproveRuntime={null}
-          busy={panel.running}
-          running={panel.running}
-          submissionScopeKey={panel.sessionId ?? panel.id}
-          steerAutoDispatchBlocked={panel.steerAutoDispatchBlocked}
-          steerAutoDispatchReady={panel.steerAutoDispatchReady}
-          showProjectFooter={false}
-          connection={connection}
-          providerSettings={providerSettings}
-          provider={panel.session?.provider ?? panel.provider}
-          model={panel.session?.modelRef?.modelId ?? panel.model}
-          projectTarget={projectTarget}
-          actionCatalog={[]}
-          workspaceTarget={workspaceTarget}
-          codexPermissionMode={codexPermissionMode}
-          codexReasoningEffort={codexReasoningEffort}
-          openPondCommandAccessMode={
-            panel.session?.provider === "codex"
-              ? openPondCommandAccessMode
-              : panel.session?.openPondCommandAccessMode ?? openPondCommandAccessMode
-          }
-          onProviderChange={onProviderChange}
-          onProviderSetupOpen={onProviderSetupOpen}
-          onProjectTargetChange={onProjectTargetChange}
-          onWorkspaceTargetChange={onWorkspaceTargetChange}
-          onModelChange={onModelChange}
-          onCodexPermissionModeChange={onCodexPermissionModeChange}
-          onCodexReasoningEffortChange={onCodexReasoningEffortChange}
-          onOpenPondCommandAccessModeChange={onOpenPondCommandAccessModeChange}
-          onPromptChange={onPromptChange}
-          onMentionAppSelect={undefined}
-          showToast={showToast}
-          onSubmit={onSubmit}
-          onStop={onStop}
-        />
-      </div>
-    </section>
   );
 }

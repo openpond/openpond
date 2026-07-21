@@ -16,7 +16,11 @@ export function ComputeSettingsSection({
   busy: "load" | "scan" | "save" | null;
   title?: string;
   onScan: () => Promise<void>;
-  onSave: (modelStorePath: string | null, defaultDeviceIds: string[]) => Promise<boolean>;
+  onSave: (
+    modelStorePath: string | null,
+    datasetStorePath: string | null,
+    defaultDeviceIds: string[],
+  ) => Promise<boolean>;
   onDownloadSmolLm2: () => Promise<void>;
   onCancelDownload: (jobId: string) => Promise<void>;
 }) {
@@ -25,7 +29,9 @@ export function ComputeSettingsSection({
   const [deviceId, setDeviceId] = useState(state?.settings.defaultDeviceIds[0] ?? "automatic");
   useEffect(() => { setModelStorePath(state?.settings.modelStorePath ?? null); }, [state?.settings.modelStorePath]);
   useEffect(() => { setDeviceId(state?.settings.defaultDeviceIds[0] ?? "automatic"); }, [state?.settings.defaultDeviceIds]);
-  const unchanged = modelStorePath === (state?.settings.modelStorePath ?? null) && deviceId === (state?.settings.defaultDeviceIds[0] ?? "automatic");
+  const unchanged =
+    modelStorePath === (state?.settings.modelStorePath ?? null)
+    && deviceId === (state?.settings.defaultDeviceIds[0] ?? "automatic");
   const accelerators = useMemo(() => inventory?.devices.filter((device) => device.kind !== "cpu" && device.available) ?? [], [inventory?.devices]);
   const smol = inventory?.models.find((model) => model.modelId === "HuggingFaceTB/SmolLM2-135M-Instruct") ?? null;
   const download = [...(inventory?.downloads ?? [])].reverse().find((job) => job.modelId === "HuggingFaceTB/SmolLM2-135M-Instruct") ?? null;
@@ -33,7 +39,11 @@ export function ComputeSettingsSection({
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    await onSave(modelStorePath, deviceId === "automatic" ? [] : [deviceId]);
+    await onSave(
+      modelStorePath,
+      state?.settings.datasetStorePath ?? null,
+      deviceId === "automatic" ? [] : [deviceId],
+    );
   }
 
   return (

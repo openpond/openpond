@@ -1,0 +1,57 @@
+{
+  "model": "gpt-4o-mini-tts-2025-12-15",
+  "voice": "cedar",
+  "speed": 1.1,
+  "responseFormat": "wav",
+  "instructions": "Warm, clear educational narration for a mathematical animation. Speak with calm curiosity at a natural conversational pace. Use precise emphasis and extra care around equations, acronyms, and variable names. Finish each paragraph cleanly. Avoid hype, sales cadence, dramatic trailer delivery, or imitation of any real person.",
+  "leadInSeconds": 0.7,
+  "tailSeconds": 0.7,
+  "loudness": {
+    "integratedLufs": -14,
+    "truePeakDb": -1,
+    "rangeLu": 9,
+    "postGainDb": 2
+  },
+  "sourceScript": "../narration_script.md",
+  "sourceVideo": "../videos/PostTrainingFromFirstPrinciples.mp4",
+  "narrationMaster": "full_narration.wav",
+  "outputVideo": "../videos/PostTrainingFromFirstPrinciplesNarrated.mp4",
+  "chapters": [
+    {
+      "id": "Chapter01Policy",
+      "durationSeconds": 64.967
+    },
+    {
+      "id": "Chapter02Definitions",
+      "durationSeconds": 374.367
+    },
+    {
+      "id": "Chapter02OnOffPolicy",
+      "durationSeconds": 66.367
+    },
+    {
+      "id": "Chapter03RLSignals",
+      "durationSeconds": 179.834
+    },
+    {
+      "id": "Chapter04RLVR",
+      "durationSeconds": 172.534
+    },
+    {
+      "id": "Chapter05GRPO",
+      "durationSeconds": 173.6
+    },
+    {
+      "id": "Chapter06Distillation",
+      "durationSeconds": 161.667
+    },
+    {
+      "id": "Chapter07Methods",
+      "durationSeconds": 163.134
+    },
+    {
+      "id": "Chapter08Research",
+      "durationSeconds": 211.934
+    }
+  ]
+}

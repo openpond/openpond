@@ -51,6 +51,7 @@ import {
 import {
   composerActionCatalogLabel,
 } from "../../lib/composer-action-catalog";
+import { shouldRetainOpenPondProfileActionAfterSubmit } from "../../lib/openpond-action-run";
 import {
   COMPOSER_SLASH_COMMANDS,
   composerSlashCommandMatches,
@@ -320,6 +321,7 @@ export function hasComposerSubmittableInput({
   selectedAction: SandboxActionCatalogEntry | null;
   selectedCommand: ComposerSlashCommand | null;
 }): boolean {
+  if (selectedCommand?.id === "create") return Boolean(prompt.trim());
   return Boolean(prompt.trim() || attachmentCount > 0 || selectedAction || selectedCommand);
 }
 
@@ -382,9 +384,13 @@ export function Composer({
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const initialRequestedAction = requestedAction
+    && actionCatalog.some((action) => action.id === requestedAction.actionId)
+    ? requestedAction
+    : null;
   const autoFocusAppliedRef = useRef(false);
   const focusRequestAppliedRef = useRef(0);
-  const requestedActionAppliedRef = useRef(0);
+  const requestedActionAppliedRef = useRef(initialRequestedAction?.requestId ?? 0);
   const submittingScopeKeysRef = useRef<Set<string>>(new Set());
   const previousRunningScopeKeysRef = useRef<Set<string>>(running ? new Set([submissionScopeKey]) : new Set());
   const autoDispatchWaitingForStartedTurnScopeKeysRef = useRef<Set<string>>(new Set());
@@ -399,7 +405,9 @@ export function Composer({
   const [skillMenuStyle, setSkillMenuStyle] = useState<CSSProperties>({});
   const [actionMenuStyle, setActionMenuStyle] = useState<CSSProperties>({});
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(
+    initialRequestedAction?.actionId ?? null,
+  );
   const [selectedCommandId, setSelectedCommandId] = useState<ComposerSlashCommand["id"] | null>(null);
   const [selectedInvocationPosition, setSelectedInvocationPosition] = useState<number | null>(null);
   const [selectedActionMentionText, setSelectedActionMentionText] = useState<string | null>(null);
@@ -1224,7 +1232,9 @@ export function Composer({
             : undefined,
         );
         settleStagedAttachments(stagedAttachments, sent ? "dispose" : "restore");
-        if (sent) clearSelectedInvocation();
+        if (sent && !shouldRetainOpenPondProfileActionAfterSubmit(selectedAction)) {
+          clearSelectedInvocation();
+        }
       } catch (submitError) {
         settleStagedAttachments(stagedAttachments, "restore");
         throw submitError;

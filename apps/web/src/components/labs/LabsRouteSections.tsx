@@ -113,7 +113,7 @@ export function WorkproductsTable({
   progressionByKey: Map<string, LabWorkproductProgression>;
   showType: boolean;
   onSelect: (key: string) => void;
-  onUseAgent: (actionId: string) => void;
+  onUseAgent: (actionId: string, agentName: string) => void;
   onUseModel: (tasksetId: string) => void;
   onUseSkill: (skillName: string) => void;
 }) {
@@ -217,7 +217,7 @@ export function WorkproductsTable({
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          onUseAgent(item.useActionId!);
+                          onUseAgent(item.useActionId!, item.name);
                         }}
                       >
                         Use

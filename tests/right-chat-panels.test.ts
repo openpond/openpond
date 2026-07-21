@@ -2,11 +2,64 @@ import { describe, expect, test } from "vitest";
 import type { Session } from "@openpond/contracts";
 
 import {
+  activateRightChatPanel,
+  activateRightChatSessionPanel,
   appendSubagentRightChatPanels,
+  createRightChatPanel,
+  mostRecentlyActivatedRightChatPanel,
   newlyObservedSubagentSessions,
 } from "../apps/web/src/lib/right-chat-panels";
 
 describe("right chat panels", () => {
+  test("activates an existing session panel without creating a duplicate", () => {
+    const existing = createRightChatPanel({
+      sessionId: "session_1",
+      provider: "openpond",
+      model: "openpond-chat",
+      prompt: "draft",
+    });
+    const panels = activateRightChatSessionPanel([existing], {
+      sessionId: "session_1",
+      prompt: "updated",
+    });
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0]).toMatchObject({
+      id: existing.id,
+      sessionId: "session_1",
+      activationVersion: existing.activationVersion + 1,
+      prompt: "updated",
+    });
+  });
+
+  test("preserves draft and scroll state while changing active tabs", () => {
+    const first = {
+      ...createRightChatPanel({
+        sessionId: "session_1",
+        provider: "openpond",
+        model: "openpond-chat",
+        prompt: "remember this draft",
+      }),
+      scrollTop: 320,
+      stickyToBottom: false,
+    };
+    const second = createRightChatPanel({
+      sessionId: "session_2",
+      provider: "codex",
+      model: "gpt-5.6-sol",
+    });
+    const activated = activateRightChatPanel([first, second], first.id);
+
+    expect(mostRecentlyActivatedRightChatPanel(activated)?.id).toBe(first.id);
+    expect(activated[0]).toMatchObject({
+      prompt: "remember this draft",
+      scrollTop: 320,
+      stickyToBottom: false,
+      provider: "openpond",
+      model: "openpond-chat",
+    });
+  });
+
   test("detects only newly streamed subagent child sessions", () => {
     const existing = childSession("child_existing", "parent_1");
     const spawned = childSession("child_spawned", "parent_1");
