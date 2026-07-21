@@ -21,16 +21,28 @@
     {
       "id": "create",
       "label": "Create",
+      "title": "Create an Agent",
+      "subtitle": "Turn a plain-language purpose into a working Account Health Agent.",
+      "outroTitle": "Account Health Agent created",
+      "outroSubtitle": "The agent is ready to use. · AI-generated narration",
       "cardDuration": 1.5
     },
     {
       "id": "use",
       "label": "Use",
+      "title": "Use the Agent",
+      "subtitle": "Chat with the Account Health Agent and run its actions with approval.",
+      "outroTitle": "First agent run complete",
+      "outroSubtitle": "The result and supporting evidence are ready to review. · AI-generated narration",
       "cardDuration": 1.5
     },
     {
       "id": "improve",
       "label": "Improve",
+      "title": "Improve the Agent",
+      "subtitle": "Use real run evidence and checks to make the Account Health Agent better.",
+      "outroTitle": "Account Health Agent improved",
+      "outroSubtitle": "The updated agent passed its checks. · AI-generated narration",
       "cardDuration": 1.5
     }
   ],

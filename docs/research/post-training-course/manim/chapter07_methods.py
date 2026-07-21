@@ -22,6 +22,10 @@ class Chapter07Methods(LessonScene):
     chapter_color = PINK
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "OPSD, SDFT, and SDPO",
+            "How different teacher evidence creates different training signals.",
+        )
         self._shared_skeleton()
         self._conditioning_equation()
         self._opsd()

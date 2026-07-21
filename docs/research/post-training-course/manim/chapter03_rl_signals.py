@@ -23,6 +23,10 @@ class Chapter03RLSignals(LessonScene):
     chapter_color = AMBER
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "Rewards and credit assignment",
+            "How an outcome becomes credit for earlier actions.",
+        )
         self._trajectory()
         self._trajectory_record_math()
         self._reward_vs_feedback()

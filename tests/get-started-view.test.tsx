@@ -17,6 +17,7 @@ import { PostTrainingLearningPanel } from "../apps/web/src/components/get-starte
 import { MakeAgentTutorialLearningPanel } from "../apps/web/src/components/get-started/MakeAgentTutorialLearningPanel";
 import {
   nextPostTrainingLessonIndex,
+  POST_TRAINING_FULL_COURSE,
   POST_TRAINING_LESSONS,
 } from "../apps/web/src/components/get-started/post-training-lessons";
 import {
@@ -28,6 +29,12 @@ import {
 } from "../apps/web/src/components/get-started/post-training-progress";
 import { GetStartedVisual } from "../apps/web/src/components/get-started/get-started-visuals";
 import { GET_STARTED_DECKS } from "../apps/web/src/components/get-started/get-started-content";
+import {
+  MAKE_AGENT_TUTORIAL_LESSONS,
+  MAKE_AGENT_TUTORIAL_VIDEOS,
+  makeAgentTutorialScript,
+} from "../apps/web/src/components/get-started/make-agent-tutorial";
+import { OPENPOND_AGENT_OVERVIEW } from "../apps/web/src/components/get-started/openpond-agent-overview";
 
 const noop = () => undefined;
 const getStartedProps = {
@@ -41,6 +48,7 @@ const getStartedProps = {
   onOpenMakeAgentTutorial: noop,
   onOpenPostTrainingCourse: noop,
   onOpenProfile: noop,
+  onSelectMakeAgentTutorialVideo: noop,
   onSelectPostTrainingLesson: noop,
   postTrainingCourse: null,
 };
@@ -55,7 +63,7 @@ const postTrainingSeriesProps = {
 };
 
 describe("GetStartedView", () => {
-  test("places one stacked post-training playlist card above the OpenPond guides", () => {
+  test("orders the Agent overview, walkthroughs, deeper learning, and guides", () => {
     const seriesHtml = renderToStaticMarkup(
       createElement(PostTrainingSeries, postTrainingSeriesProps),
     );
@@ -67,7 +75,7 @@ describe("GetStartedView", () => {
     );
     expect(seriesHtml).toContain("Learning series");
     expect(seriesHtml).toContain("10 lessons");
-    expect(seriesHtml).toContain("27 min");
+    expect(seriesHtml).toContain("29 min");
     expect(seriesHtml).toContain("Open Post-training from first principles playlist");
     expect(seriesHtml).toContain("01-how-post-training-works-poster.webp");
     expect(seriesHtml).toContain("02-definitions-poster.webp");
@@ -80,14 +88,16 @@ describe("GetStartedView", () => {
     const pageHtml = renderToStaticMarkup(
       createElement(GetStartedView, getStartedProps),
     );
-    expect(pageHtml).toContain('id="get-started-learn-title">Learn</h2>');
-    expect(pageHtml.match(/get-started-section-heading/g)).toHaveLength(3);
-    expect(pageHtml).toContain('id="get-started-learn-title">Learn</h2>');
+    expect(pageHtml.match(/get-started-section-heading/g)).toHaveLength(4);
+    expect(pageHtml).toContain('id="get-started-start-here-title">Start here</h2>');
     expect(pageHtml).toContain('id="get-started-walkthroughs-title">Walkthroughs</h2>');
+    expect(pageHtml).toContain('id="get-started-learn-title">Learn deeper</h2>');
+    expect(pageHtml).toContain(OPENPOND_AGENT_OVERVIEW.title);
+    expect(pageHtml).toContain("what-is-an-openpond-agent-poster.png");
     expect(pageHtml).not.toContain("OpenPond guides");
-    expect(pageHtml.indexOf("Post-training from first principles")).toBeLessThan(
-      pageHtml.indexOf("How OpenPond works"),
-    );
+    expect(pageHtml.indexOf(OPENPOND_AGENT_OVERVIEW.title)).toBeLessThan(pageHtml.indexOf("Agents"));
+    expect(pageHtml.indexOf("Agents")).toBeLessThan(pageHtml.indexOf("Post-training from first principles"));
+    expect(pageHtml.indexOf("Post-training from first principles")).toBeLessThan(pageHtml.indexOf("How OpenPond works"));
   });
 
   test("keeps the contained player focused on caption-ready video", () => {
@@ -113,12 +123,29 @@ describe("GetStartedView", () => {
     expect(html).toContain("Close video player");
   });
 
+  test("plays the continuous course without treating it as an eleventh lesson", () => {
+    const html = renderToStaticMarkup(
+      createElement(PostTrainingSeries, {
+        ...postTrainingSeriesProps,
+        fullCourseSelected: true,
+        open: true,
+      }),
+    );
+
+    expect(html).toContain("full-course.mp4");
+    expect(html).toContain("full-course.vtt");
+    expect(html).toContain("Full course · 29:20");
+    expect(html).not.toContain("Lesson 1 of 10");
+    expect(html).not.toContain('data-auto-advance="true"');
+  });
+
   test("hides the bottom guides deck while either video player is open", () => {
     const playlistHtml = renderToStaticMarkup(
       createElement(GetStartedView, {
         ...getStartedProps,
         postTrainingCourse: {
           autoplay: true,
+          fullCourseSelected: false,
           lessonIndex: 0,
           panelView: "lessons" as const,
           playRequestId: 0,
@@ -129,7 +156,12 @@ describe("GetStartedView", () => {
     const tutorialHtml = renderToStaticMarkup(
       createElement(GetStartedView, {
         ...getStartedProps,
-        makeAgentTutorial: { panelView: "steps" as const },
+        makeAgentTutorial: {
+          autoplay: true,
+          panelView: "lessons" as const,
+          playRequestId: 0,
+          videoId: "play-all" as const,
+        },
       }),
     );
 
@@ -146,8 +178,10 @@ describe("GetStartedView", () => {
       createElement(PostTrainingLearningPanel, {
         activeLessonIndex: 5,
         autoplay: true,
+        fullCourseSelected: false,
         onOpenScript: noop,
         onResizeStart: noop,
+        onSelectFullCourse: noop,
         onSelectLesson: noop,
         onSetAutoplay: noop,
         onShowLessons: noop,
@@ -159,8 +193,10 @@ describe("GetStartedView", () => {
       createElement(PostTrainingLearningPanel, {
         activeLessonIndex: 5,
         autoplay: true,
+        fullCourseSelected: false,
         onOpenScript: noop,
         onResizeStart: noop,
+        onSelectFullCourse: noop,
         onSelectLesson: noop,
         onSetAutoplay: noop,
         onShowLessons: noop,
@@ -190,6 +226,9 @@ describe("GetStartedView", () => {
     expect(lessonsHtml).toContain('data-tooltip="Open script_01.md"');
     expect(lessonsHtml).not.toContain('title="Open script_01.md"');
     expect(lessonsHtml.match(/get-started-learning-lesson-card/g)).toHaveLength(10);
+    expect(lessonsHtml).toContain("Full video");
+    expect(lessonsHtml).toContain("29:20 · All 10 lessons");
+    expect(lessonsHtml).toContain(`Play full video: ${POST_TRAINING_FULL_COURSE.title}`);
     expect(lessonsHtml).toMatch(
       /get-started-learning-lesson-card[\s\S]*Play lesson 1:[\s\S]*Open script_01\.md/,
     );
@@ -226,6 +265,7 @@ describe("GetStartedView", () => {
     expect(runtimeView).toContain("setDiffPanelOpen(true)");
     expect(runtimeView).toContain("playRequestId: 0");
     expect(runtimeView).toContain("playRequestId: current.playRequestId + 1");
+    expect(runtimeView).toContain('videoId: "create"');
     expect(runtimeView).toContain('? Boolean(postTrainingCourse || makeAgentTutorial) && diffPanelOpen');
     expect(postTrainingSeries).toContain("if (playRequestId > 0)");
     expect(postTrainingSeries).not.toContain("if (open) void player.play()");
@@ -307,7 +347,7 @@ describe("GetStartedView", () => {
       createElement(GetStartedView, getStartedProps),
     );
 
-    expect(html).toContain("How to make an agent");
+    expect(html).toContain("Agents");
     expect(html).toContain("Goal loop");
     expect(html).toContain("Orchestration");
     expect(html).toContain("Create/Edit Loop");
@@ -331,7 +371,7 @@ describe("GetStartedView", () => {
     expect(html).not.toContain("Open Cloud");
   });
 
-  test("puts the single generated screenshot clip in a Walkthroughs card", () => {
+  test("puts the Agents playlist and its full video footer in Walkthroughs", () => {
     const walkthroughCardHtml = renderToStaticMarkup(createElement(MakeAgentTutorialCard));
     const walkthroughPlayerHtml = renderToStaticMarkup(
       createElement(MakeAgentTutorialPlayer, { onClose: noop }),
@@ -340,10 +380,14 @@ describe("GetStartedView", () => {
       createElement(GetStartedView, getStartedProps),
     );
 
-    expect(walkthroughCardHtml).toContain("How to make an agent");
-    expect(walkthroughCardHtml).toContain("Walkthrough");
+    expect(walkthroughCardHtml).toContain("Agents");
+    expect(walkthroughCardHtml).toContain("Walkthrough playlist");
+    expect(walkthroughCardHtml).toContain("3 lessons");
     expect(walkthroughCardHtml).toContain("3:28");
-    expect(walkthroughCardHtml).toContain("how-to-make-an-agent-poster.png");
+    expect(walkthroughCardHtml).toContain("how-to-make-an-agent-create-poster.png");
+    expect(walkthroughCardHtml).toContain("how-to-make-an-agent-use-poster.png");
+    expect(walkthroughCardHtml).toContain("how-to-make-an-agent-improve-poster.png");
+    expect(walkthroughCardHtml).toContain("Open Agents playlist");
     expect(walkthroughCardHtml).toContain('aria-haspopup="dialog"');
     expect(walkthroughCardHtml).not.toContain("<video");
     expect(walkthroughPlayerHtml).toContain("tutorials/how-to-make-an-agent.mp4");
@@ -351,34 +395,61 @@ describe("GetStartedView", () => {
     expect(walkthroughPlayerHtml).toContain('kind="captions"');
     expect(walkthroughPlayerHtml).toContain("controls");
     expect(walkthroughPlayerHtml).not.toContain("autoplay");
-    expect(pageHtml.indexOf("Post-training from first principles")).toBeLessThan(
-      pageHtml.indexOf("Walkthroughs"),
+    expect(pageHtml.indexOf("Walkthroughs")).toBeLessThan(
+      pageHtml.indexOf("Post-training from first principles"),
     );
     expect(pageHtml).not.toContain("Guided product tours");
     expect(pageHtml.indexOf("Walkthroughs")).toBeLessThan(pageHtml.indexOf("How OpenPond works"));
+    expect(MAKE_AGENT_TUTORIAL_LESSONS.map((lesson) => lesson.title)).toEqual([
+      "Create an Agent",
+      "Use the Agent",
+      "Improve the Agent",
+    ]);
+    expect(MAKE_AGENT_TUTORIAL_VIDEOS.map((video) => video.videoId)).toEqual([
+      "play-all",
+      "create",
+      "use",
+      "improve",
+    ]);
   });
 
-  test("gives the Make Agent walkthrough the same steps and script sidebar pattern", () => {
-    const stepsHtml = renderToStaticMarkup(createElement(MakeAgentTutorialLearningPanel, {
+  test("gives the Make Agent walkthrough the same lessons and script sidebar pattern", () => {
+    const lessonsHtml = renderToStaticMarkup(createElement(MakeAgentTutorialLearningPanel, {
+      activeVideoId: "play-all",
+      autoplay: true,
       onResizeStart: noop,
+      onSelectVideo: noop,
+      onSetAutoplay: noop,
+      onShowLessons: noop,
       onShowScript: noop,
-      onShowSteps: noop,
-      panelView: "steps",
+      panelView: "lessons",
     }));
     const scriptHtml = renderToStaticMarkup(createElement(MakeAgentTutorialLearningPanel, {
+      activeVideoId: "improve",
+      autoplay: true,
       onResizeStart: noop,
+      onSelectVideo: noop,
+      onSetAutoplay: noop,
+      onShowLessons: noop,
       onShowScript: noop,
-      onShowSteps: noop,
       panelView: "script",
     }));
-    expect(stepsHtml).toContain("How to make an agent");
-    expect(stepsHtml).toContain("Start from a prompt or chats");
-    expect(stepsHtml).toContain("Review chats before sharing");
-    expect(stepsHtml).not.toContain("Narrow layout");
-    expect(stepsHtml).not.toContain("C01");
-    expect(stepsHtml).not.toContain("I01");
-    expect(scriptHtml).toContain("how-to-make-an-agent.md");
+    expect(lessonsHtml).toContain("Agents");
+    expect(lessonsHtml).toContain("Full video");
+    expect(lessonsHtml).toContain("Play full video: How to make an agent");
+    expect(lessonsHtml).toContain("3:28 · All 3 lessons");
+    expect(lessonsHtml).toContain("Create an Agent");
+    expect(lessonsHtml).toContain("Use the Agent");
+    expect(lessonsHtml).toContain("Improve the Agent");
+    expect(lessonsHtml.match(/get-started-learning-lesson-card/g)).toHaveLength(3);
+    expect(lessonsHtml).toContain("Autoplay");
+    expect(lessonsHtml).not.toContain("Narrow layout");
+    expect(lessonsHtml).not.toContain("C01");
+    expect(lessonsHtml).not.toContain("I01");
+    expect(scriptHtml).toContain("improve-the-agent.md");
     expect(scriptHtml).toContain("Copy walkthrough script");
+    expect(makeAgentTutorialScript("improve")).toContain("Compare the results");
+    expect(makeAgentTutorialScript("improve")).not.toContain("Start from a prompt or chats");
   });
 
   test("keeps local-hosted copy explicit about profile and target mounts", () => {

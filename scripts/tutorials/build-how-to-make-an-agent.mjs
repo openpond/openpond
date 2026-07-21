@@ -2,11 +2,15 @@
 
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { prepareTutorialNarration } from "./tutorial-narration.mjs";
+import {
+  renderTutorialIntro,
+  renderTutorialTitlePoster,
+} from "./tutorial-title-sequence.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -29,6 +33,7 @@ const outDir = path.resolve(args.outDir);
 const reportDir = path.dirname(reportPath);
 const receiptPath = path.join(reportDir, "tutorial-build.json");
 const contactSheetPath = path.join(reportDir, "tutorial-contact-sheet.png");
+const socialExportPath = path.join(repoRoot, "tmp/tutorial-exports/openpond-how-to-make-an-agent-full.mp4");
 const workDir = path.join(reportDir, `.tutorial-build-${process.pid}`);
 const stagedDir = path.join(workDir, "public");
 const preparedDir = path.join(workDir, "frames");
@@ -55,19 +60,6 @@ try {
   await mkdir(preparedDir, { recursive: true });
   await mkdir(stagedDir, { recursive: true });
 
-  const posterPath = path.join(stagedDir, "how-to-make-an-agent-poster.png");
-  const outroPath = path.join(workDir, "outro.png");
-  await renderSplashCard({
-    outputPath: posterPath,
-    title: manifest.tutorial.title,
-    subtitle: manifest.tutorial.subtitle,
-  });
-  await renderSplashCard({
-    outputPath: outroPath,
-    title: manifest.tutorial.outroTitle,
-    subtitle: manifest.tutorial.outroSubtitle,
-  });
-
   const preparedFrames = [];
   for (const frame of manifest.frames) {
     const sourcePath = screenshotByName.get(frame.file.toLowerCase());
@@ -93,109 +85,103 @@ try {
   });
   const narrationById = new Map(narration.map((item) => [item.id, item]));
 
-  const segments = [{
-    kind: "title",
-    id: "title",
-    label: manifest.tutorial.title,
-    path: posterPath,
-    duration: 4,
-  }];
-  const chapterTimes = {};
+  const variants = createVariantSpecs(manifest);
+  const variantAssets = new Map();
+  for (const variant of variants) {
+    const posterPath = path.join(stagedDir, `${variant.slug}-poster.png`);
+    const introPath = path.join(workDir, `${variant.slug}-intro.mp4`);
+    const outroPath = path.join(workDir, `${variant.slug}-outro.png`);
+    await renderTutorialTitlePoster({
+      outputPath: posterPath,
+      title: variant.title,
+      subtitle: variant.subtitle,
+    });
+    await renderTutorialIntro({
+      outputPath: introPath,
+      posterPath,
+      repoRoot,
+      title: variant.title,
+      subtitle: variant.subtitle,
+    });
+    await renderSplashCard({
+      outputPath: outroPath,
+      title: variant.outroTitle,
+      subtitle: variant.outroSubtitle,
+    });
+    variantAssets.set(variant.id, { introPath, outroPath, posterPath });
+  }
+
+  const chapterCardPaths = new Map();
   for (const chapter of manifest.chapters) {
     const chapterCardPath = path.join(workDir, `chapter-${chapter.id}.png`);
-    await renderChapterCard(chapterCardPath, chapter.label, manifest.tutorial.title);
-    segments.push({
-      kind: "chapter",
-      id: `chapter-${chapter.id}`,
-      chapter: chapter.id,
-      label: chapter.label,
-      path: chapterCardPath,
-      duration: chapter.cardDuration,
-    });
-    for (const frame of preparedFrames.filter((candidate) => candidate.chapter === chapter.id)) {
-      const audio = narrationById.get(frame.id);
-      assert(audio, `Narration is missing for ${frame.id}.`);
-      segments.push({
-        kind: "frame",
-        id: frame.id,
-        chapter: chapter.id,
-        label: frame.label,
-        path: frame.preparedPath,
-        duration: Math.max(
-          manifest.frameMinimumDuration,
-          audio.duration
-            + manifest.tutorial.narration.leadInSeconds
-            + manifest.tutorial.narration.tailSeconds
-            + (manifest.transitionDuration * 2),
-        ),
-        caption: frame.caption,
-        narration: frame.narration,
-        audioPath: audio.audioPath,
-        audioDuration: audio.duration,
-        focus: frame.focus,
-        narrow: frame.narrow === true,
-        placement: frame.placement,
-      });
-    }
+    await renderChapterCard(chapterCardPath, chapter.title, manifest.tutorial.title);
+    chapterCardPaths.set(chapter.id, chapterCardPath);
   }
-  segments.push({
-    kind: "outro",
-    id: "outro",
-    label: manifest.tutorial.outroTitle,
-    path: outroPath,
-    duration: 3,
-  });
 
-  const transition = manifest.transitionDuration;
-  let cursor = 0;
-  const timeline = segments.map((segment, index) => {
-    const start = index === 0 ? 0 : cursor - transition;
-    const end = start + segment.duration;
-    cursor = end;
-    if (segment.kind === "chapter") chapterTimes[segment.chapter] = start;
-    return { ...segment, start, end };
+  const builds = variants.map((variant) => {
+    const assets = variantAssets.get(variant.id);
+    assert(assets, `Visual assets are missing for ${variant.id}.`);
+    const timeline = createTimeline({
+      assets,
+      chapterCardPaths,
+      manifest,
+      narrationById,
+      preparedFrames,
+      variant,
+    });
+    const videoPath = path.join(stagedDir, `${variant.slug}.mp4`);
+    const captionsPath = path.join(stagedDir, `${variant.slug}.vtt`);
+    return {
+      ...variant,
+      ...assets,
+      captionsPath,
+      contactSheetPath: variant.id === "play-all"
+        ? contactSheetPath
+        : path.join(reportDir, `tutorial-contact-sheet-${variant.id}.png`),
+      encodeArgs: ffmpegArgs({
+        focusStyle: manifest.focusStyle,
+        narration: manifest.tutorial.narration,
+        outputPath: videoPath,
+        timeline,
+        transition: manifest.transitionDuration,
+      }),
+      timeline,
+      videoPath,
+    };
   });
+  await Promise.all(builds.map((build) => writeFile(
+    build.captionsPath,
+    renderVtt(build.timeline),
+    "utf8",
+  )));
 
-  const vttPath = path.join(stagedDir, "how-to-make-an-agent.vtt");
-  await writeFile(vttPath, renderVtt(timeline), "utf8");
-  const stagedVideoPath = path.join(stagedDir, "how-to-make-an-agent.mp4");
-  const encodeArgs = ffmpegArgs({
-    focusStyle: manifest.focusStyle,
-    narration: manifest.tutorial.narration,
-    outputPath: stagedVideoPath,
-    timeline,
-    transition,
-  });
   const ffmpegVersion = (await execFileAsync("ffmpeg", ["-version"])).stdout.split("\n")[0];
-  await execFileAsync("ffmpeg", encodeArgs, { maxBuffer: 16 * 1024 * 1024 });
-
-  const probe = JSON.parse((await execFileAsync("ffprobe", [
-    "-v", "error",
-    "-show_entries", "format=duration,size",
-    "-show_entries", "stream=index,codec_name,codec_type,width,height,pix_fmt,r_frame_rate,sample_rate,channels:stream_tags=title,handler_name,language",
-    "-of", "json",
-    stagedVideoPath,
-  ])).stdout);
-  validateProbe(probe);
-  const videoSize = Number((await stat(stagedVideoPath)).size);
-  assert(videoSize < 25 * 1024 * 1024, `Tutorial video is ${(videoSize / 1024 / 1024).toFixed(2)} MiB; the limit is 25 MiB.`);
-
-  await renderContactSheet(
-    [posterPath, ...timeline.filter((item) => item.kind === "chapter").map((item) => item.path), ...preparedFrames.map((frame) => frame.preparedPath), outroPath],
-    contactSheetPath,
-  );
-
-  const stagedOutputs = [
-    stagedVideoPath,
-    posterPath,
-    vttPath,
-  ];
-  const outputMetadata = await Promise.all(stagedOutputs.map(async (outputPath) => {
-    const bytes = await readFile(outputPath);
-    return { file: path.basename(outputPath), sha256: sha256(bytes), bytes: bytes.length };
+  const results = await Promise.all(builds.map(async (build) => {
+    await execFileAsync("ffmpeg", build.encodeArgs, { maxBuffer: 16 * 1024 * 1024 });
+    const probe = await probeVideo(build.videoPath);
+    validateProbe(probe);
+    const videoSize = Number((await stat(build.videoPath)).size);
+    assert(videoSize < 25 * 1024 * 1024, `${build.title} is ${(videoSize / 1024 / 1024).toFixed(2)} MiB; the limit is 25 MiB.`);
+    await renderContactSheet(
+      build.timeline.map((segment) => segment.contactPath ?? segment.path),
+      build.contactSheetPath,
+    );
+    const stagedOutputs = [build.videoPath, build.posterPath, build.captionsPath];
+    const outputs = await Promise.all(stagedOutputs.map(outputMetadata));
+    return { ...build, outputs, probe, stagedOutputs, videoSize };
   }));
+  const playAll = results.find((result) => result.id === "play-all");
+  assert(playAll, "The checked tutorial build is missing the Play all variant.");
+  const chapterTimes = Object.fromEntries(
+    playAll.timeline
+      .filter((segment) => segment.kind === "chapter")
+      .map((segment) => [segment.chapter, segment.start]),
+  );
+  const stagedOutputs = results.flatMap((result) => result.stagedOutputs);
+  const playAllVideoOutput = playAll.outputs.find((output) => output.file.endsWith(".mp4"));
+  assert(playAllVideoOutput, "The Play all output metadata is missing its MP4.");
   const receipt = {
-    schemaVersion: "openpond.tutorialBuild.v2",
+    schemaVersion: "openpond.tutorialBuild.v3",
     generatedAt: new Date().toISOString(),
     scenarioReport: reportPath,
     scenarioPassed: true,
@@ -203,46 +189,70 @@ try {
     frames: preparedFrames.map(({ preparedPath: _preparedPath, ...frame }) => frame),
     title: manifest.tutorial,
     chapters: manifest.chapters.map((chapter) => ({ ...chapter, start: chapterTimes[chapter.id] })),
-    timeline: timeline.map((segment) => ({
-      kind: segment.kind,
-      id: segment.id,
-      chapter: segment.chapter ?? null,
-      label: segment.label,
-      start: segment.start,
-      end: segment.end,
-      duration: segment.duration,
-      narration: segment.narration ?? null,
-      focus: segment.focus ?? null,
-    })),
+    timeline: receiptTimeline(playAll.timeline),
     outro: { duration: 3 },
-    transitionDuration: transition,
+    transitionDuration: manifest.transitionDuration,
     narration: {
       ...manifest.tutorial.narration,
       segments: narration.map(({ audioPath, ...item }) => ({ ...item, audioPath })),
     },
-    ffmpeg: { version: ffmpegVersion, args: encodeArgs },
-    probe,
-    durationSeconds: Number(probe.format.duration),
-    outputs: outputMetadata,
-    contactSheet: contactSheetPath,
+    ffmpeg: { version: ffmpegVersion, args: playAll.encodeArgs },
+    probe: playAll.probe,
+    durationSeconds: Number(playAll.probe.format.duration),
+    outputs: playAll.outputs,
+    contactSheet: playAll.contactSheetPath,
+    contactSheets: results.map((result) => result.contactSheetPath),
+    socialExport: {
+      platform: "X / Twitter",
+      file: socialExportPath,
+      sourceFile: playAllVideoOutput.file,
+      sha256: playAllVideoOutput.sha256,
+      bytes: playAllVideoOutput.bytes,
+      durationSeconds: Number(playAll.probe.format.duration),
+    },
+    variants: results.map((result) => ({
+      id: result.id,
+      kind: result.kind,
+      chapter: result.chapter,
+      lessonNumber: result.lessonNumber,
+      title: result.title,
+      subtitle: result.subtitle,
+      durationSeconds: Number(result.probe.format.duration),
+      timeline: receiptTimeline(result.timeline),
+      outputs: result.outputs,
+      contactSheet: result.contactSheetPath,
+      ffmpeg: { version: ffmpegVersion, args: result.encodeArgs },
+      probe: result.probe,
+    })),
     visualQaStatus: "pending",
   };
-  await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
-
   await mkdir(outDir, { recursive: true });
   for (const stagedPath of stagedOutputs) {
     await rename(stagedPath, path.join(outDir, path.basename(stagedPath)));
   }
+  await mkdir(path.dirname(socialExportPath), { recursive: true });
+  await copyFile(path.join(outDir, playAllVideoOutput.file), socialExportPath);
+  const socialExportBytes = await readFile(socialExportPath);
+  assert(
+    sha256(socialExportBytes) === receipt.socialExport.sha256,
+    "The full-length social export does not match the checked Play all video.",
+  );
+  await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   await execFileAsync(process.execPath, [
     path.join(repoRoot, "scripts/tutorials/prepare-public-videos.mjs"),
   ]);
   process.stdout.write(`${JSON.stringify({
     ok: true,
     durationSeconds: receipt.durationSeconds,
-    videoBytes: videoSize,
+    videoBytes: playAll.videoSize,
     receiptPath,
-    contactSheetPath,
-    outputs: outputMetadata.map((item) => path.join(outDir, item.file)),
+    socialExportPath,
+    contactSheetPaths: receipt.contactSheets,
+    variants: receipt.variants.map((variant) => ({
+      id: variant.id,
+      durationSeconds: variant.durationSeconds,
+      outputs: variant.outputs.map((item) => path.join(outDir, item.file)),
+    })),
   }, null, 2)}\n`);
 } finally {
   await rm(workDir, { force: true, recursive: true });
@@ -277,11 +287,143 @@ function parseArgs(argv) {
 async function markVisualQaPassed(reportInput) {
   const receiptPath = path.join(path.dirname(path.resolve(reportInput)), "tutorial-build.json");
   const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
-  await stat(receipt.contactSheet);
+  await Promise.all((receipt.contactSheets ?? [receipt.contactSheet]).map((filePath) => stat(filePath)));
+  if (receipt.socialExport?.file) await stat(receipt.socialExport.file);
   receipt.visualQaStatus = "passed";
   receipt.visualQaReviewedAt = new Date().toISOString();
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   process.stdout.write(`${receiptPath}\n`);
+}
+
+function createVariantSpecs(manifest) {
+  return [
+    {
+      id: "play-all",
+      kind: "compilation",
+      chapter: null,
+      lessonNumber: null,
+      slug: "how-to-make-an-agent",
+      title: manifest.tutorial.title,
+      subtitle: manifest.tutorial.subtitle,
+      outroTitle: manifest.tutorial.outroTitle,
+      outroSubtitle: manifest.tutorial.outroSubtitle,
+      chapters: manifest.chapters,
+      includeChapterCards: true,
+    },
+    ...manifest.chapters.map((chapter, index) => ({
+      id: chapter.id,
+      kind: "lesson",
+      chapter: chapter.id,
+      lessonNumber: index + 1,
+      slug: `how-to-make-an-agent-${chapter.id}`,
+      title: chapter.title,
+      subtitle: chapter.subtitle,
+      outroTitle: chapter.outroTitle,
+      outroSubtitle: chapter.outroSubtitle,
+      chapters: [chapter],
+      includeChapterCards: false,
+    })),
+  ];
+}
+
+function createTimeline({
+  assets,
+  chapterCardPaths,
+  manifest,
+  narrationById,
+  preparedFrames,
+  variant,
+}) {
+  const segments = [{
+    kind: "title",
+    id: "title",
+    label: variant.title,
+    path: assets.introPath,
+    contactPath: assets.posterPath,
+    inputType: "video",
+    duration: 4,
+  }];
+  for (const chapter of variant.chapters) {
+    if (variant.includeChapterCards) {
+      segments.push({
+        kind: "chapter",
+        id: `chapter-${chapter.id}`,
+        chapter: chapter.id,
+        label: chapter.title,
+        path: chapterCardPaths.get(chapter.id),
+        duration: chapter.cardDuration,
+      });
+    }
+    for (const frame of preparedFrames.filter((candidate) => candidate.chapter === chapter.id)) {
+      const audio = narrationById.get(frame.id);
+      assert(audio, `Narration is missing for ${frame.id}.`);
+      segments.push({
+        kind: "frame",
+        id: frame.id,
+        chapter: chapter.id,
+        label: frame.label,
+        path: frame.preparedPath,
+        duration: Math.max(
+          manifest.frameMinimumDuration,
+          audio.duration
+            + manifest.tutorial.narration.leadInSeconds
+            + manifest.tutorial.narration.tailSeconds
+            + (manifest.transitionDuration * 2),
+        ),
+        caption: frame.caption,
+        narration: frame.narration,
+        audioPath: audio.audioPath,
+        audioDuration: audio.duration,
+        focus: frame.focus,
+        narrow: frame.narrow === true,
+        placement: frame.placement,
+      });
+    }
+  }
+  segments.push({
+    kind: "outro",
+    id: "outro",
+    label: variant.outroTitle,
+    path: assets.outroPath,
+    duration: 3,
+  });
+
+  let cursor = 0;
+  return segments.map((segment, index) => {
+    const start = index === 0 ? 0 : cursor - manifest.transitionDuration;
+    const end = start + segment.duration;
+    cursor = end;
+    return { ...segment, start, end };
+  });
+}
+
+function receiptTimeline(timeline) {
+  return timeline.map((segment) => ({
+    kind: segment.kind,
+    id: segment.id,
+    chapter: segment.chapter ?? null,
+    label: segment.label,
+    start: segment.start,
+    end: segment.end,
+    duration: segment.duration,
+    narration: segment.narration ?? null,
+    focus: segment.focus ?? null,
+  }));
+}
+
+async function probeVideo(videoPath) {
+  return JSON.parse((await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-show_entries", "format=duration,size",
+    "-show_entries", "stream=index,codec_name,codec_type,width,height,pix_fmt,r_frame_rate,sample_rate,channels:stream_tags=title,handler_name,language",
+    "-of", "json",
+    videoPath,
+  ])).stdout);
+}
+
+async function outputMetadata(outputPath) {
+  const bytes = await readFile(outputPath);
+  return { file: path.basename(outputPath), sha256: sha256(bytes), bytes: bytes.length };
 }
 
 async function renderSplashCard({ outputPath, title, subtitle }) {
@@ -354,7 +496,11 @@ async function prepareFrame(sourcePath, outputPath, frame, focusStyle) {
 function ffmpegArgs({ focusStyle, narration, outputPath, timeline, transition }) {
   const args = ["-y"];
   for (const segment of timeline) {
-    args.push("-loop", "1", "-t", String(segment.duration), "-i", segment.path);
+    if (segment.inputType === "video") {
+      args.push("-i", segment.path);
+    } else {
+      args.push("-loop", "1", "-t", String(segment.duration), "-i", segment.path);
+    }
   }
   const narratedSegments = timeline.filter((segment) => segment.kind === "frame");
   for (const segment of narratedSegments) args.push("-i", segment.audioPath);
@@ -384,7 +530,7 @@ function ffmpegArgs({ focusStyle, narration, outputPath, timeline, transition })
     "-map", "[outv]",
     "-map", "[outa]",
     "-c:v", "libx264",
-    "-preset", "medium",
+    "-preset", "fast",
     "-crf", "21",
     "-pix_fmt", "yuv420p",
     "-r", "30",
@@ -403,7 +549,9 @@ function ffmpegArgs({ focusStyle, narration, outputPath, timeline, transition })
 
 function frameVideoFilter(segment, index, focusStyle) {
   const prefix = `[${index}:v]fps=30,format=yuv420p,setsar=1`;
-  if (segment.kind !== "frame") return `${prefix},setpts=PTS-STARTPTS[v${index}]`;
+  if (segment.kind !== "frame") {
+    return `${prefix},trim=duration=${segment.duration.toFixed(3)},setpts=PTS-STARTPTS[v${index}]`;
+  }
 
   const focus = pixelFocus(segment.focus);
   const delayFrames = Math.round(focusStyle.zoomDelaySeconds * 30);

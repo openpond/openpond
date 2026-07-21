@@ -1,6 +1,6 @@
 # Rewards and credit assignment
 
-Post-training from first principles · Lesson 4 of 10 · 2:55
+Post-training from first principles · Lesson 4 of 10 · 3:00
 
 ## Learning objective
 

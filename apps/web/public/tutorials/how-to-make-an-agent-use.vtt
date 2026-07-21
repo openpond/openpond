@@ -1,0 +1,29 @@
+WEBVTT
+
+C13
+00:00:03.670 --> 00:00:13.203
+In normal chat, the Agent grounds its Acme answer in renewal timing, usage decline, the disputed invoice, and the open P1 case.
+
+C14
+00:00:12.923 --> 00:00:22.009
+A follow-up keeps Acme context and assigns the first actions to Revenue Operations and Support instead of restarting the conversation.
+
+C15
+00:00:21.729 --> 00:00:29.880
+The action picker offers chat plus each runnable account action, so you can choose conversation or a focused task.
+
+C16
+00:00:29.600 --> 00:00:38.021
+Running Summarize Account for Northstar identifies the healthy usage trend and the explicit twenty-five-seat expansion request.
+
+C17
+00:00:37.741 --> 00:00:46.071
+Running renewal triage for Acme returns high risk, cites the billing and support blockers, and orders the next steps.
+
+C18
+00:00:45.791 --> 00:00:55.105
+The weekly review action combines the portfolio and returns visible Markdown, CSV, and JSON artifacts for downstream use.
+
+C19
+00:00:54.825 --> 00:01:01.904
+After restarting OpenPond, the same Agent, chat history, and actions remain available.

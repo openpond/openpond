@@ -1,6 +1,6 @@
 # On-policy and off-policy data
 
-Post-training from first principles · Lesson 3 of 10 · 1:02
+Post-training from first principles · Lesson 3 of 10 · 1:06
 
 ## Learning objective
 

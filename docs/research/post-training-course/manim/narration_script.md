@@ -6,8 +6,8 @@ The narration voice is AI-generated with the OpenAI Speech API and identified in
 
 ## Chapter 1 — Choose, judge, update
 
-Target window: `00:00.000–01:09.334`
-Visuals: OpenPond reveal, course title, full chapter timestamp map, one cancellation-policy choice, useful versus misleading loss curves, and a plain-language choose-test-update loop.
+Target window: `00:00.000–01:04.967`
+Visuals: OpenPond lesson intro, full chapter timestamp map, one cancellation-policy choice, useful versus misleading loss curves, and a plain-language choose-test-update loop.
 
 <!-- BEGIN VOICEOVER: Chapter01Policy -->
 Post-training changes what a model is likely to do. An input creates a distribution over possible actions, evaluation supplies evidence, and an optimizer changes that distribution.
@@ -23,19 +23,27 @@ A usable training record must also identify who generated the attempt and what e
 
 ## Chapter 2 — Definitions
 
-Target window: `01:09.334–05:50.001`
-Visuals: annotated policy notation, logits transformed through softmax, a rollout tuple, reward-to-advantage relationships, a gradient step, probability ratios and clipping, distribution metrics, and full RL and teacher-method acronym maps.
+Target window: `01:04.967–07:19.334`
+Visuals: OpenPond lesson intro, annotated policy notation, separate logits and softmax explainers, a rollout tuple, concrete reward examples, reward-to-advantage relationships, PPO and GRPO definition cards, baseline estimators, a gradient step, probability ratios and clipping, distribution metrics, and full acronym maps.
 
 <!-- BEGIN VOICEOVER: Chapter02Definitions -->
 The expression pi theta of a given state is a compact description of model behavior. Pi names the policy: a probability distribution, not one completed answer. Theta means all adjustable model parameters. The state is the context available now, and an action can be one token, one tool call, or another sampled decision.
 
-Before sampling, the network produces raw scores called logits. Softmax exponentiates and normalizes those scores so the resulting probabilities add to one. Temperature divides the logits before softmax. A lower temperature sharpens the distribution; a higher temperature spreads probability across more alternatives. Temperature changes sampling behavior without changing the stored model weights.
+Before sampling, the network produces raw scores called logits. A logit is not a percentage and logits do not need to add to one. They can be positive or negative. Only their relative differences matter: a larger logit means the model prefers that action compared with the alternatives available at that position.
+
+Softmax converts logits into probabilities. It exponentiates each logit, then divides by the sum of all exponentiated logits. This makes every result positive and makes the distribution sum to one. In the example, logits three, one, and point two become probabilities of roughly eighty-four, eleven, and five percent. Temperature divides the logits before softmax. Lower temperature sharpens the distribution; higher temperature flattens it.
 
 A rollout, also called a trajectory and written tau, is the interaction record used for learning. The behavior policy mu generated each sampled action. Its log-probability is stored beside the action so training can later compare the old behavior distribution with the current policy. Environment observations affect later states, but only the model's sampled actions receive policy-gradient terms.
 
+Reward is the scalar number emitted by an evaluator. A math checker might return one for an exact answer and zero otherwise. A code environment might return one only when every hidden test passes. A tool task might inspect whether the final database state matches a target. The rule can be binary or graded, but the optimizer sees the number, not the evaluator's full explanation. That richer explanation is feedback.
+
 Reward, return, and advantage are related but not interchangeable. Reward is the scalar emitted at a step or at the end. Return, G at time t, combines future rewards and can discount distant outcomes with gamma. Advantage subtracts a baseline from that return. Positive advantage means the action did better than expected; negative advantage means it did worse. PPO learns a value baseline, while GRPO estimates one from sibling responses.
 
-The baseline is an estimate of expected return. PPO trains a second network, called a critic or value function, with its own parameters phi. Generalized Advantage Estimation, or GAE, combines value estimates across several time steps. GRPO removes that critic. It samples a group of responses for the same prompt, computes the group mean and standard deviation of reward, then normalizes each response relative to its siblings. A zero-variance group provides no relative advantage.
+PPO means Proximal Policy Optimization. It is a policy-gradient method that trains a second network, called a critic or value function, to estimate expected return. The observed return minus that expectation becomes advantage. PPO also clips the probability-ratio incentive so one sampled action cannot drive an arbitrarily large update.
+
+GRPO means Group Relative Policy Optimization. It removes the learned critic and samples several sibling responses for the same prompt. Each response is compared with the group's reward mean and standard deviation. Better-than-group responses receive positive advantage; worse responses receive negative advantage. GRPO keeps policy ratios and clipping.
+
+Both methods need a baseline because raw reward lacks context. PPO's baseline comes from the critic, and Generalized Advantage Estimation combines value predictions across time. GRPO's baseline comes from sibling rewards. If every sibling receives the same reward, the group standard deviation is zero and there is no relative advantage to learn from.
 
 An objective, often written L of theta, turns the training goal into one number. The gradient is the local slope of that objective with respect to every adjustable parameter. Backpropagation computes those slopes. The optimizer applies a learning rate alpha to make a small update from theta to theta prime. In policy-gradient training, the RL method determines the credit weights inside the loss; ordinary differentiation performs the parameter update.
 
@@ -50,7 +58,7 @@ The teacher-guided methods use dense distributions instead of only scalar outcom
 
 ## Chapter 3 — Where data came from
 
-Target window: `05:50.001–06:51.668`
+Target window: `07:19.334–08:25.701`
 Visuals: on- and off-policy sources, a concrete rollout record, stored-data schemas, and objective routing.
 
 <!-- BEGIN VOICEOVER: Chapter02OnOffPolicy -->
@@ -71,7 +79,7 @@ Inside any RL rollout, the final patch is only one part of a sequence of actions
 
 ## Chapter 4 — From outcomes to credit
 
-Target window: `06:51.668–09:46.802`
+Target window: `08:25.701–11:25.535`
 Visuals: trajectories, rollout tuples, feedback versus reward, credit assignment, discounted return, advantage, entropy, pass@k, reference KL.
 
 <!-- BEGIN VOICEOVER: Chapter03RLSignals -->
@@ -100,7 +108,7 @@ A test-based reward is useful only when the test measures the intended outcome r
 
 ## Chapter 5 — Verifiable rewards
 
-Target window: `09:46.802–12:34.636`
+Target window: `11:25.535–14:18.069`
 Visuals: the cancellation test as verifier, RLVR definition, verifier equation, executable loop, secondary applications, verifier errors, reward hacking, and hidden evaluation.
 
 <!-- BEGIN VOICEOVER: Chapter04RLVR -->
@@ -129,7 +137,7 @@ So “RLVR with GRPO” is precise: the first term names how outcomes are labele
 
 ## Chapter 6 — PPO and GRPO
 
-Target window: `12:34.636–15:23.536`
+Target window: `14:18.069–17:11.669`
 Visuals: PPO's critic on the cancellation trajectory, GRPO sibling patch attempts, worked group advantages, clipping, mixed-group probability, zero-variance groups, and direct comparison.
 
 <!-- BEGIN VOICEOVER: Chapter05GRPO -->
@@ -156,7 +164,7 @@ Both PPO and GRPO need trajectories, rewards, behavior log-probabilities, clippe
 
 ## Chapter 7 — Distribution matching
 
-Target window: `15:23.536–18:00.503`
+Target window: `17:11.669–19:53.336`
 Visuals: cancellation-token hard and soft targets, token cross-entropy, student update, teacher temperature, KL direction, prefix provenance, and privileged teacher context.
 
 <!-- BEGIN VOICEOVER: Chapter06Distillation -->
@@ -179,7 +187,7 @@ Training transfers the useful part of that privileged view into student weights.
 
 ## Chapter 8 — Teacher evidence
 
-Target window: `18:00.503–20:38.937`
+Target window: `19:53.336–22:36.470`
 Visuals: one failed cancellation patch with three teacher evidence channels, OPSD/SDFT/SDPO worked examples, evidence comparison, and shared failure modes.
 
 <!-- BEGIN VOICEOVER: Chapter07Methods -->
@@ -202,7 +210,7 @@ So the durable comparison is not acronym against acronym. Hold the student prefi
 
 ## Chapter 9 — Credible experiments
 
-Target window: `20:38.937–24:06.171`
+Target window: `22:36.470–26:08.404`
 Visuals: Taskset boundaries, Hugging Face import, baselines, evaluation, compute, experimental campaigns, claim table, synthesis.
 
 <!-- BEGIN VOICEOVER: Chapter08Research -->

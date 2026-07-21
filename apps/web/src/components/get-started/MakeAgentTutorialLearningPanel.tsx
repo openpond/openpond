@@ -7,12 +7,15 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { copyToClipboard } from "../../lib/clipboard";
-import { BookOpenText, Copy, FileText, ListFilter } from "../icons";
+import { BookOpenText, Copy, FileText, Play } from "../icons";
 import {
-  MAKE_AGENT_TUTORIAL,
-  MAKE_AGENT_TUTORIAL_CHAPTERS,
-  MAKE_AGENT_TUTORIAL_SCRIPT,
+  MAKE_AGENT_TUTORIAL_LESSONS,
+  MAKE_AGENT_PLAYLIST_TITLE,
+  MAKE_AGENT_TUTORIAL_PLAY_ALL,
+  makeAgentTutorialScript,
+  makeAgentTutorialVideo,
   type MakeAgentTutorialPanelView,
+  type MakeAgentTutorialVideoId,
 } from "./make-agent-tutorial";
 
 const MarkdownText = lazy(() =>
@@ -20,17 +23,33 @@ const MarkdownText = lazy(() =>
 );
 
 export function MakeAgentTutorialLearningPanel({
+  activeVideoId,
+  autoplay,
   onResizeStart,
+  onSelectVideo,
+  onSetAutoplay,
+  onShowLessons,
   onShowScript,
-  onShowSteps,
   panelView,
 }: {
+  activeVideoId: MakeAgentTutorialVideoId;
+  autoplay: boolean;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onSelectVideo: (videoId: MakeAgentTutorialVideoId) => void;
+  onSetAutoplay: (autoplay: boolean) => void;
+  onShowLessons: () => void;
   onShowScript: () => void;
-  onShowSteps: () => void;
   panelView: MakeAgentTutorialPanelView;
 }) {
   const [copied, setCopied] = useState(false);
+  const activeVideo = makeAgentTutorialVideo(activeVideoId);
+  const activeScript = makeAgentTutorialScript(activeVideoId);
+  const scriptFileName = {
+    "play-all": "how-to-make-an-agent.md",
+    create: "create-an-agent.md",
+    use: "use-the-agent.md",
+    improve: "improve-the-agent.md",
+  }[activeVideoId];
 
   useEffect(() => {
     if (!copied) return undefined;
@@ -42,21 +61,21 @@ export function MakeAgentTutorialLearningPanel({
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const nextView = event.key === "ArrowLeft" || event.key === "Home"
-      ? "steps"
+      ? "lessons"
       : "script";
-    if (nextView === "steps") onShowSteps();
+    if (nextView === "lessons") onShowLessons();
     else onShowScript();
     document.getElementById(`make-agent-${nextView}-tab`)?.focus();
   }
 
   async function copyScript() {
-    if (!await copyToClipboard(MAKE_AGENT_TUTORIAL_SCRIPT)) return;
+    if (!await copyToClipboard(activeScript)) return;
     setCopied(true);
   }
 
   return (
     <aside
-      aria-label="How to make an agent walkthrough panel"
+      aria-label="Agents walkthrough panel"
       className={`workspace-diff-panel get-started-learning-panel show-${panelView}`}
     >
       <div
@@ -70,18 +89,18 @@ export function MakeAgentTutorialLearningPanel({
       <div className="workspace-diff-topbar get-started-learning-panel-tabs">
         <div aria-label="Walkthrough panel views" className="workspace-diff-tabs" role="tablist">
           <button
-            aria-controls="make-agent-steps-panel"
-            aria-selected={panelView === "steps"}
-            className={`workspace-diff-tab ${panelView === "steps" ? "active" : ""}`}
-            id="make-agent-steps-tab"
-            onClick={onShowSteps}
+            aria-controls="make-agent-lessons-panel"
+            aria-selected={panelView === "lessons"}
+            className={`workspace-diff-tab ${panelView === "lessons" ? "active" : ""}`}
+            id="make-agent-lessons-tab"
+            onClick={onShowLessons}
             onKeyDown={handleTabKeyDown}
             role="tab"
-            tabIndex={panelView === "steps" ? 0 : -1}
+            tabIndex={panelView === "lessons" ? 0 : -1}
             type="button"
           >
-            <ListFilter size={14} />
-            <span>Steps</span>
+            <Play size={14} />
+            <span>Lessons</span>
           </button>
           <button
             aria-controls="make-agent-script-panel"
@@ -100,44 +119,88 @@ export function MakeAgentTutorialLearningPanel({
         </div>
       </div>
 
-      {panelView === "steps" ? (
+      {panelView === "lessons" ? (
         <>
           <div className="get-started-learning-panel-toolbar">
             <span>
-              <strong>{MAKE_AGENT_TUTORIAL.title}</strong>
-              <small>{MAKE_AGENT_TUTORIAL_CHAPTERS.length} chapters · captions available</small>
+              <strong>{MAKE_AGENT_PLAYLIST_TITLE}</strong>
+              <small>{MAKE_AGENT_TUTORIAL_LESSONS.length} lessons</small>
             </span>
+            <button
+              aria-checked={autoplay}
+              aria-label="Autoplay lessons"
+              className={`get-started-learning-autoplay ${autoplay ? "active" : ""}`}
+              onClick={() => onSetAutoplay(!autoplay)}
+              role="switch"
+              type="button"
+            >
+              <span>Autoplay</span>
+              <i aria-hidden="true" />
+            </button>
           </div>
           <div
-            aria-labelledby="make-agent-steps-tab"
-            className="get-started-learning-panel-body make-agent-steps"
-            id="make-agent-steps-panel"
+            aria-labelledby="make-agent-lessons-tab"
+            className="get-started-learning-panel-body lessons"
+            id="make-agent-lessons-panel"
             role="tabpanel"
           >
-            {MAKE_AGENT_TUTORIAL_CHAPTERS.map((chapter) => (
-              <section key={chapter.id}>
-                <h3>{chapter.label}</h3>
-                <ol>
-                  {chapter.steps.map((step, index) => (
-                    <li key={step.id}>
-                      <span>{index + 1}</span>
-                      <div>
-                        <strong>{step.label}</strong>
-                        <p>{step.narration}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            ))}
+            <ol>
+              {MAKE_AGENT_TUTORIAL_LESSONS.map((video) => (
+                <li key={video.id}>
+                  <div className="get-started-learning-lesson-card">
+                    <button
+                      aria-current={video.videoId === activeVideoId ? "true" : undefined}
+                      aria-label={`Play lesson ${video.lessonNumber}: ${video.title}`}
+                      className="get-started-learning-lesson-button"
+                      onClick={() => onSelectVideo(video.videoId)}
+                      type="button"
+                    >
+                      <img alt="" decoding="async" loading="lazy" src={video.posterUrl} />
+                      <span>
+                        <small>{video.eyebrow} · {video.duration}</small>
+                        <strong>{video.title}</strong>
+                      </span>
+                    </button>
+                    <button
+                      aria-label={`Open script for ${video.title}`}
+                      className="get-started-learning-script-button app-tooltip app-tooltip-right"
+                      data-tooltip="Open script"
+                      onClick={() => {
+                        onSelectVideo(video.videoId);
+                        onShowScript();
+                      }}
+                      type="button"
+                    >
+                      <FileText size={16} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <footer className="get-started-learning-full-video">
+              <button
+                aria-current={activeVideoId === "play-all" ? "true" : undefined}
+                aria-label={`Play full video: ${MAKE_AGENT_TUTORIAL_PLAY_ALL.title}`}
+                onClick={() => onSelectVideo("play-all")}
+                type="button"
+              >
+                <span className="get-started-learning-full-video-icon" aria-hidden="true">
+                  <Play fill="currentColor" size={13} />
+                </span>
+                <span>
+                  <strong>Full video</strong>
+                  <small>{MAKE_AGENT_TUTORIAL_PLAY_ALL.duration} · All 3 lessons</small>
+                </span>
+              </button>
+            </footer>
           </div>
         </>
       ) : (
         <>
           <div className="get-started-learning-panel-toolbar file">
             <span>
-              <small>Walkthrough</small>
-              <strong>how-to-make-an-agent.md</strong>
+              <small>{activeVideo.eyebrow}</small>
+              <strong>{scriptFileName}</strong>
             </span>
             <button
               aria-label={copied ? "Script copied" : "Copy walkthrough script"}
@@ -157,7 +220,7 @@ export function MakeAgentTutorialLearningPanel({
           >
             <div className="workspace-markdown-preview">
               <Suspense fallback={<ScriptLoadingState />}>
-                <MarkdownText content={MAKE_AGENT_TUTORIAL_SCRIPT} />
+                <MarkdownText content={activeScript} />
               </Suspense>
             </div>
           </div>

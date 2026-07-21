@@ -1,6 +1,6 @@
 # Verifiable rewards
 
-Post-training from first principles · Lesson 5 of 10 · 2:48
+Post-training from first principles · Lesson 5 of 10 · 2:53
 
 ## Learning objective
 

@@ -13,7 +13,9 @@ export type PublicVideoAsset = {
 };
 
 export type PublicVideoPlaylist = {
+  fullVideoId?: string;
   id: string;
+  playAllVideoId?: string;
   status: "draft" | "published";
   title: string;
   videoIds: string[];
@@ -59,5 +61,13 @@ export function publicVideoUrl(id: string): string {
 export const MAKE_AGENT_TUTORIAL_VIDEO_URL = publicVideoUrl(
   "make-agent-tutorial",
 );
+
+export const OPENPOND_AGENT_OVERVIEW_VIDEO_URL = publicVideoUrl(
+  "openpond-agent-overview",
+);
+
+export function makeAgentTutorialVideoUrl(chapter: "create" | "use" | "improve"): string {
+  return publicVideoUrl(`make-agent-tutorial-${chapter}`);
+}
 
 export const PUBLIC_VIDEO_MANIFEST = manifest;

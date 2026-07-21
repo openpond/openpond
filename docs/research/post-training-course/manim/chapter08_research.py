@@ -22,6 +22,10 @@ class Chapter08Research(LessonScene):
     chapter_color = AMBER
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "Credible experiments",
+            "How to build datasets, baselines, and evaluations you can trust.",
+        )
         self._task_contract()
         self._hugging_face()
         self._baseline_ladder()

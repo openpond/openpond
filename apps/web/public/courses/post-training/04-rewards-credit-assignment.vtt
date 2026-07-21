@@ -5,61 +5,61 @@ WEBVTT
 An RL rollout is a sequence, not only a final response. Credit assignment asks which decisions inside that sequence should become more or less likely.
 
 2
-00:00:11.067 --> 00:00:23.975
+00:00:11.381 --> 00:00:24.289
 The issue and repository form state zero. The behavior policy samples “inspect files.” File contents are an environment observation, not another sampled action. The next state contains those contents.
 
 3
-00:00:25.390 --> 00:00:31.251
+00:00:26.016 --> 00:00:31.878
 The policy then writes raise Cancelled Error, and test output closes the trajectory.
 
 4
-00:00:32.665 --> 00:00:45.483
+00:00:33.605 --> 00:00:46.423
 The tuple makes those roles explicit. Tau contains states, sampled actions, behavior log-probabilities, observations, and terminal reward. Gradients apply to action positions controlled by the policy.
 
 5
-00:00:46.897 --> 00:00:51.584
+00:00:48.150 --> 00:00:52.837
 Observations condition later actions but are masked out of the policy-gradient loss.
 
 6
-00:00:52.998 --> 00:01:04.049
+00:00:54.565 --> 00:01:05.615
 Reward and feedback carry different information. A patch can receive reward zero while the environment still knows that eight tests passed, cancellation failed, and the expected exception was Cancelled Error.
 
 7
-00:01:05.463 --> 00:01:11.053
+00:01:07.343 --> 00:01:12.933
 Reward is the scalar consumed by an objective. Feedback is the richer evidence the environment produced.
 
 8
-00:01:12.467 --> 00:01:23.738
+00:01:14.661 --> 00:01:25.932
 A terminal score also leaves the cause ambiguous. Was the wrong file inspected? Was the timeout branch incorrect? Was “None” the decisive token? Response-level credit applies one outcome broadly.
 
 9
-00:01:25.153 --> 00:01:30.432
+00:01:27.659 --> 00:01:32.939
 Step- or token-level signals can be denser, but density alone does not prove causal accuracy.
 
 10
-00:01:31.846 --> 00:01:45.346
+00:01:34.666 --> 00:01:48.166
 For multi-step problems, return carries future rewards backward. G at time t is the discounted sum of later rewards. With gamma point nine and success two steps later, the earlier action receives return point eight one.
 
 11
-00:01:46.760 --> 00:01:52.350
+00:01:49.894 --> 00:01:55.484
 PPO critics and Generalized Advantage Estimation, or GAE, build on this idea.
 
 12
-00:01:53.765 --> 00:02:05.538
+00:01:57.211 --> 00:02:08.985
 Advantage then asks: better than what was expected? If observed return is point eight and the baseline is point five, advantage is positive point three. A return of point two gives negative point three.
 
 13
-00:02:06.952 --> 00:02:19.549
+00:02:10.712 --> 00:02:23.309
 Positive advantage raises the sampled behavior’s probability; negative advantage lowers it. PPO learns a critic for the baseline. GRPO replaces that critic with statistics from sibling responses.
 
 14
-00:02:20.963 --> 00:02:32.104
+00:02:25.037 --> 00:02:36.177
 Learning also changes exploration. Pass-at-one can rise while entropy and pass-at-k fall if the model collapses onto one strategy. Reliability and breadth therefore need separate metrics.
 
 15
-00:02:33.518 --> 00:02:48.062
+00:02:37.905 --> 00:02:52.448
 Finally, a frozen reference policy anchors behavior outside the optimized task. Kullback–Leibler divergence, shortened to KL, measures distribution shift. Too little constraint permits drift and reward exploits; too much prevents useful learning.
 
 16
-00:02:49.476 --> 00:02:54.434
+00:02:54.176 --> 00:02:59.134
 A test-based reward is useful only when the test measures the intended outcome reliably.

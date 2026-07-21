@@ -91,7 +91,10 @@ import type { TrainingLaunchRequest } from "../training/TrainingView";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
 import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import type { PostTrainingCourseState } from "../get-started/post-training-lessons";
-import type { MakeAgentTutorialState } from "../get-started/make-agent-tutorial";
+import type {
+  MakeAgentTutorialState,
+  MakeAgentTutorialVideoId,
+} from "../get-started/make-agent-tutorial";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
 import type {
   WorkspaceDiffPanelViewState,
@@ -323,12 +326,15 @@ type MainPaneProps = {
   onOpenPostTrainingCourse: () => void;
   onClosePostTrainingCourse: () => void;
   onOpenPostTrainingScript: (lessonIndex: number) => void;
+  onSelectPostTrainingFullCourse: () => void;
   onSelectPostTrainingLesson: (lessonIndex: number) => void;
   onSetPostTrainingAutoplay: (autoplay: boolean) => void;
   onShowPostTrainingLessons: () => void;
   onOpenMakeAgentTutorial: () => void;
   onCloseMakeAgentTutorial: () => void;
-  onShowMakeAgentTutorialSteps: () => void;
+  onSelectMakeAgentTutorialVideo: (videoId: MakeAgentTutorialVideoId) => void;
+  onSetMakeAgentTutorialAutoplay: (autoplay: boolean) => void;
+  onShowMakeAgentTutorialLessons: () => void;
   onShowMakeAgentTutorialScript: () => void;
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
@@ -507,12 +513,15 @@ export function MainPane({
   onOpenPostTrainingCourse,
   onClosePostTrainingCourse,
   onOpenPostTrainingScript,
+  onSelectPostTrainingFullCourse,
   onSelectPostTrainingLesson,
   onSetPostTrainingAutoplay,
   onShowPostTrainingLessons,
   onOpenMakeAgentTutorial,
   onCloseMakeAgentTutorial,
-  onShowMakeAgentTutorialSteps,
+  onSelectMakeAgentTutorialVideo,
+  onSetMakeAgentTutorialAutoplay,
+  onShowMakeAgentTutorialLessons,
   onShowMakeAgentTutorialScript,
   onShowDiffPanel,
   onShowBrowserPanel,
@@ -1604,8 +1613,10 @@ export function MainPane({
     <PostTrainingLearningPanel
       activeLessonIndex={postTrainingCourse.lessonIndex}
       autoplay={postTrainingCourse.autoplay}
+      fullCourseSelected={postTrainingCourse.fullCourseSelected}
       onResizeStart={onDiffPanelResizeStart}
       onOpenScript={onOpenPostTrainingScript}
+      onSelectFullCourse={onSelectPostTrainingFullCourse}
       onSelectLesson={onSelectPostTrainingLesson}
       onSetAutoplay={onSetPostTrainingAutoplay}
       onShowLessons={onShowPostTrainingLessons}
@@ -1615,9 +1626,13 @@ export function MainPane({
   ) : null;
   const makeAgentTutorialPanel = showMakeAgentTutorialPanel && makeAgentTutorial ? (
     <MakeAgentTutorialLearningPanel
+      activeVideoId={makeAgentTutorial.videoId}
+      autoplay={makeAgentTutorial.autoplay}
       onResizeStart={onDiffPanelResizeStart}
+      onSelectVideo={onSelectMakeAgentTutorialVideo}
+      onSetAutoplay={onSetMakeAgentTutorialAutoplay}
       onShowScript={onShowMakeAgentTutorialScript}
-      onShowSteps={onShowMakeAgentTutorialSteps}
+      onShowLessons={onShowMakeAgentTutorialLessons}
       panelView={makeAgentTutorial.panelView}
     />
   ) : null;
@@ -1714,6 +1729,7 @@ export function MainPane({
               onOpenPostTrainingCourse={onOpenPostTrainingCourse}
               onOpenMakeAgentTutorial={onOpenMakeAgentTutorial}
               onOpenProfile={() => setView("labs")}
+              onSelectMakeAgentTutorialVideo={onSelectMakeAgentTutorialVideo}
               onSelectPostTrainingLesson={onSelectPostTrainingLesson}
               postTrainingCourse={postTrainingCourse}
             />

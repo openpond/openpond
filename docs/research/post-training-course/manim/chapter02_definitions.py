@@ -13,10 +13,18 @@ class Chapter02Definitions(LessonScene):
     hold_scale = 6.25
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "Definitions",
+            "The symbols and terms used throughout reinforcement fine-tuning.",
+        )
         self._policy_notation()
+        self._logits()
         self._softmax()
         self._trajectory_notation()
+        self._reward_definition()
         self._reward_to_advantage()
+        self._ppo_definition()
+        self._grpo_definition()
         self._baseline_estimators()
         self._gradient_update()
         self._policy_ratio()
@@ -63,11 +71,54 @@ class Chapter02Definitions(LessonScene):
         self.hold(3.4)
         self.wipe()
 
+    def _logits(self) -> None:
+        heading = self.heading(
+            "Logits",
+            "Definitions",
+            subtitle="A logit is a raw score produced by the model before those scores become probabilities.",
+        )
+        scores = bar_chart(
+            [
+                BarDatum("raise", 3.0, CYAN),
+                BarDatum("return", 1.0, MUTED),
+                BarDatum("retry", 0.2, MUTED),
+            ],
+            max_value=3.2,
+            width=5.2,
+            height=3.25,
+            value_decimals=1,
+        )
+        scores.move_to(LEFT * 3.15 + DOWN * 0.15)
+        properties = panel(
+            "RAW MODEL SCORES  z",
+            [
+                "can be positive or negative",
+                "do not have to sum to one",
+                "larger means more preferred",
+                "differences determine probability",
+            ],
+            color=CYAN,
+            width=4.65,
+            height=3.45,
+            title_size=22,
+            body_size=19,
+        )
+        properties.move_to(RIGHT * 3.35 + DOWN * 0.10)
+        takeaway = self.conclusion(
+            "A logit of 3.0 is not a 300% probability; it becomes meaningful only relative to the other logits."
+        )
+        self.reveal(heading)
+        self.play(ShowCreation(scores), run_time=1.0)
+        self.reveal(properties, run_time=0.75)
+        self.reveal(takeaway)
+        self.hold(3.5)
+        self.wipe()
+
     def _softmax(self) -> None:
         heading = self.heading(
-            "Logits become probabilities",
+            "Softmax",
             "Definitions",
-            subtitle="Softmax converts raw model scores into a distribution that sums to one.",
+            subtitle="Exponentiate each scaled logit, then divide by the total so every probability is positive and sums to one.",
         )
         logits = bar_chart(
             [
@@ -112,11 +163,15 @@ class Chapter02Definitions(LessonScene):
             VIOLET,
             width=5.0,
         )
-        temperature.move_to(DOWN * 2.25)
+        temperature.move_to(DOWN * 1.95)
+        takeaway = self.conclusion(
+            "softmax([3.0, 1.0, 0.2]) ≈ [84%, 11%, 5%]"
+        )
         self.reveal(heading, logits, logits_label)
         self.play(ShowCreation(arrow), FadeIn(equation), run_time=0.85)
         self.reveal(probabilities, probability_label, run_time=0.8)
         self.reveal(temperature, run_time=0.5)
+        self.reveal(takeaway, run_time=0.5)
         self.hold(3.7)
         self.wipe()
 
@@ -157,6 +212,53 @@ class Chapter02Definitions(LessonScene):
         self.play(TransformFromCopy(flow, record), run_time=0.8)
         self.reveal(provenance, run_time=0.55)
         self.hold(3.6)
+        self.wipe()
+
+    def _reward_definition(self) -> None:
+        heading = self.heading(
+            "Reward",
+            "Definitions",
+            subtitle="Reward is the scalar number an evaluator gives an action or completed trajectory.",
+        )
+        math = panel(
+            "MATH ANSWER",
+            ["exact match", "correct → r = 1", "incorrect → r = 0"],
+            color=GREEN,
+            width=3.35,
+            height=3.0,
+            title_size=22,
+            body_size=19,
+        )
+        code = panel(
+            "CODE PATCH",
+            ["run hidden tests", "all pass → r = 1", "otherwise → r = 0"],
+            color=CYAN,
+            width=3.35,
+            height=3.0,
+            title_size=22,
+            body_size=19,
+        )
+        tools = panel(
+            "TOOL TASK",
+            ["inspect final state", "target reached → r = 1", "wrong state → r = 0"],
+            color=VIOLET,
+            width=3.35,
+            height=3.0,
+            title_size=22,
+            body_size=19,
+        )
+        examples = VGroup(math, code, tools).arrange(RIGHT, buff=0.50)
+        examples.move_to(DOWN * 0.05)
+        takeaway = self.conclusion(
+            "Feedback can explain what happened; reward is the number the optimization objective consumes."
+        )
+        self.reveal(heading)
+        self.play(
+            LaggedStart(*[FadeIn(example, shift=UP * 0.08) for example in examples], lag_ratio=0.14),
+            run_time=1.35,
+        )
+        self.reveal(takeaway)
+        self.hold(3.8)
         self.wipe()
 
     def _reward_to_advantage(self) -> None:
@@ -205,6 +307,22 @@ class Chapter02Definitions(LessonScene):
         self.reveal(worked)
         self.hold(3.8)
         self.wipe()
+
+    def _ppo_definition(self) -> None:
+        self.concept_card(
+            "PPO",
+            "Proximal Policy Optimization",
+            "A policy-gradient method that compares return with a learned critic and clips large probability-ratio incentives.",
+            "PPO learns a value model in addition to the policy.",
+        )
+
+    def _grpo_definition(self) -> None:
+        self.concept_card(
+            "GRPO",
+            "Group Relative Policy Optimization",
+            "A policy-gradient method that compares sibling responses for the same prompt and clips probability-ratio incentives.",
+            "GRPO replaces the learned critic with group reward statistics.",
+        )
 
     def _baseline_estimators(self) -> None:
         heading = self.heading(

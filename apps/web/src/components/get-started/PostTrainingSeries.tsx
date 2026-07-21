@@ -3,6 +3,7 @@ import { Play } from "../icons";
 import { LearningVideoPlayer } from "./LearningVideoCard";
 import {
   nextPostTrainingLessonIndex,
+  POST_TRAINING_FULL_COURSE,
   POST_TRAINING_LESSONS,
   POST_TRAINING_SERIES_DURATION,
   POST_TRAINING_SERIES_TITLE,
@@ -19,6 +20,7 @@ const PLAYLIST_POSTER_INDEXES = [2, 1, 0] as const;
 
 export function PostTrainingSeries({
   activeLessonIndex,
+  fullCourseSelected = false,
   autoplay = true,
   open,
   onClose,
@@ -27,6 +29,7 @@ export function PostTrainingSeries({
   playRequestId = 0,
 }: {
   activeLessonIndex: number;
+  fullCourseSelected?: boolean;
   autoplay?: boolean;
   open: boolean;
   onClose: () => void;
@@ -38,6 +41,7 @@ export function PostTrainingSeries({
   const lastReportedProgressRef = useRef<{ lessonId: string; percent: number } | null>(null);
   const activeLesson = POST_TRAINING_LESSONS[activeLessonIndex]
     ?? POST_TRAINING_LESSONS[0]!;
+  const activeVideo = fullCourseSelected ? POST_TRAINING_FULL_COURSE : activeLesson;
 
   useEffect(() => {
     if (!open) return;
@@ -50,7 +54,7 @@ export function PostTrainingSeries({
     const preparePlayback = () => {
       if (cancelled) return;
       const resumeTime = postTrainingResumeTime(
-        getPostTrainingProgress()[activeLesson.id],
+        getPostTrainingProgress()[activeVideo.id],
       );
       if (resumeTime > 0) player.currentTime = resumeTime;
       if (playRequestId > 0) void player.play().catch(() => undefined);
@@ -66,11 +70,11 @@ export function PostTrainingSeries({
           completed: player.ended,
           currentTime: player.currentTime,
           duration: player.duration,
-          lessonId: activeLesson.id,
+          lessonId: activeVideo.id,
         });
       }
     };
-  }, [activeLesson.id, open, playRequestId]);
+  }, [activeVideo.id, open, playRequestId]);
 
   function recordProgress(player: HTMLVideoElement, completed = false) {
     if (!Number.isFinite(player.duration) || player.duration <= 0) return;
@@ -78,7 +82,7 @@ export function PostTrainingSeries({
       completed,
       currentTime: completed ? player.duration : player.currentTime,
       duration: player.duration,
-      lessonId: activeLesson.id,
+      lessonId: activeVideo.id,
     });
   }
 
@@ -86,14 +90,14 @@ export function PostTrainingSeries({
     if (!Number.isFinite(player.duration) || player.duration <= 0) return;
     const percent = Math.min(99, Math.floor((player.currentTime / player.duration) * 100));
     const previous = lastReportedProgressRef.current;
-    if (previous?.lessonId === activeLesson.id && previous.percent === percent) return;
-    lastReportedProgressRef.current = { lessonId: activeLesson.id, percent };
+    if (previous?.lessonId === activeVideo.id && previous.percent === percent) return;
+    lastReportedProgressRef.current = { lessonId: activeVideo.id, percent };
     recordProgress(player);
   }
 
   function handleEnded(player: HTMLVideoElement) {
     recordProgress(player, true);
-    if (autoplay) advanceLesson();
+    if (autoplay && !fullCourseSelected) advanceLesson();
   }
 
   function advanceLesson() {
@@ -150,6 +154,7 @@ export function PostTrainingSeries({
         <PostTrainingCoursePlayer
           activeLessonIndex={activeLessonIndex}
           autoplay={autoplay}
+          fullCourseSelected={fullCourseSelected}
           onClose={onClose}
           onEnded={handleEnded}
           onPause={recordProgress}
@@ -165,6 +170,7 @@ export function PostTrainingSeries({
 function PostTrainingCoursePlayer({
   activeLessonIndex,
   autoplay,
+  fullCourseSelected,
   onClose,
   onEnded,
   onPause,
@@ -174,6 +180,7 @@ function PostTrainingCoursePlayer({
 }: {
   activeLessonIndex: number;
   autoplay: boolean;
+  fullCourseSelected: boolean;
   onClose: () => void;
   onEnded?: (video: HTMLVideoElement) => void;
   onPause?: (video: HTMLVideoElement) => void;
@@ -184,25 +191,28 @@ function PostTrainingCoursePlayer({
   const activeLesson = POST_TRAINING_LESSONS[activeLessonIndex]
     ?? POST_TRAINING_LESSONS[0]!;
   const nextIndex = nextPostTrainingLessonIndex(activeLessonIndex);
+  const activeVideo = fullCourseSelected ? POST_TRAINING_FULL_COURSE : activeLesson;
 
   return (
     <LearningVideoPlayer
-      autoAdvance={autoplay}
+      autoAdvance={autoplay && !fullCourseSelected}
       contained
       inertExclusionSelector=".get-started-learning-panel"
-      navigation={{
-        currentIndex: activeLessonIndex,
-        onNext: nextIndex !== null ? () => onSelectLesson(nextIndex) : undefined,
-        onPrevious: activeLessonIndex > 0
-          ? () => onSelectLesson(activeLessonIndex - 1)
-          : undefined,
-        total: POST_TRAINING_LESSONS.length,
-      }}
+      navigation={fullCourseSelected
+        ? undefined
+        : {
+            currentIndex: activeLessonIndex,
+            onNext: nextIndex !== null ? () => onSelectLesson(nextIndex) : undefined,
+            onPrevious: activeLessonIndex > 0
+              ? () => onSelectLesson(activeLessonIndex - 1)
+              : undefined,
+            total: POST_TRAINING_LESSONS.length,
+          }}
       onClose={onClose}
       onEnded={onEnded}
       onPause={onPause}
       onTimeUpdate={onTimeUpdate}
-      video={activeLesson}
+      video={activeVideo}
       videoRef={videoRef}
     />
   );
@@ -219,6 +229,7 @@ export function PostTrainingSeriesPlayer({
     <PostTrainingCoursePlayer
       activeLessonIndex={lessonIndex}
       autoplay
+      fullCourseSelected={false}
       onClose={onClose}
       onEnded={() => undefined}
       onSelectLesson={() => undefined}

@@ -20,6 +20,14 @@ const builder = readFileSync(
   path.join(root, "scripts/tutorials/build-how-to-make-an-agent.mjs"),
   "utf8",
 );
+const agentOverviewBuilder = readFileSync(
+  path.join(root, "scripts/tutorials/build-openpond-agent-overview.mjs"),
+  "utf8",
+);
+const tutorialTitleSequence = readFileSync(
+  path.join(root, "scripts/tutorials/tutorial-title-sequence.mjs"),
+  "utf8",
+);
 const postTrainingSeriesBuilder = readFileSync(
   path.join(root, "scripts/tutorials/build-post-training-series.mjs"),
   "utf8",
@@ -85,6 +93,35 @@ describe("How to make an agent media contract", () => {
     expect(builder).toContain("visualQaStatus");
     expect(builder).toContain("manifest.frames.length > 0");
     expect(builder).toContain("screenshotByName.size >= manifest.frames.length");
+    expect(builder).toContain('schemaVersion: "openpond.tutorialBuild.v3"');
+    expect(builder).toContain('id: "play-all"');
+    expect(builder).toContain('kind: "lesson"');
+    expect(builder).toContain('slug: `how-to-make-an-agent-${chapter.id}`');
+    expect(builder).toContain("contactSheets");
+    expect(builder).toContain("variants: results.map");
+    expect(builder).toContain("renderTutorialIntro");
+    expect(tutorialTitleSequence).toContain("renderTutorialIdentityReveal");
+    expect(tutorialTitleSequence).toContain("IDENTITY_PREFIXES");
+    expect(tutorialTitleSequence).toContain("IDENTITY_DURATIONS");
+    expect(tutorialTitleSequence).not.toContain('identityOnly ? "+635+484" : "+795+190"');
+    expect(builder).toContain('platform: "X / Twitter"');
+    expect(builder).toContain("openpond-how-to-make-an-agent-full.mp4");
+    expect(builder).toContain("The full-length social export does not match the checked Play all video");
+  });
+
+  test("builds a captioned Start here overview with a single identity beat", () => {
+    expect(agentOverviewBuilder).toContain('const title = "What is an OpenPond Agent?"');
+    expect(agentOverviewBuilder).toContain('id: "overview-profile"');
+    expect(agentOverviewBuilder).toContain('id: "overview-entrypoints"');
+    expect(agentOverviewBuilder).toContain('id: "overview-surfaces"');
+    expect(agentOverviewBuilder).toContain('id: "overview-example"');
+    expect(agentOverviewBuilder).toContain('id: "overview-checks"');
+    expect(agentOverviewBuilder).toContain('id: "overview-lifecycle"');
+    expect(agentOverviewBuilder).toContain("renderTutorialIntro");
+    expect(tutorialTitleSequence).toContain('stage: "title"');
+    expect(agentOverviewBuilder).toContain("prepareTutorialNarration");
+    expect(agentOverviewBuilder).toContain('"-movflags", "+faststart"');
+    expect(agentOverviewBuilder).toContain('visualQaStatus: "pending"');
   });
 });
 
@@ -93,6 +130,8 @@ describe("Post-training learning series media contract", () => {
     expect(postTrainingSeriesBuilder.match(/chapterId: "Chapter\d\d\w+"/g)).toHaveLength(9);
     expect(postTrainingSeriesBuilder).toContain("PostTrainingAdvancedAppendixNarrated.mp4");
     expect(postTrainingSeriesBuilder).toContain('slug: "10-technical-appendix"');
+    expect(postTrainingSeriesBuilder).toContain('"full-course.mp4"');
+    expect(postTrainingSeriesBuilder).toContain("createFullCourseCaptions");
     expect(postTrainingSeriesBuilder).toContain("appendix_manifest.json");
     expect(postTrainingSeriesBuilder).toContain('"-movflags"');
     expect(postTrainingSeriesBuilder).toContain('"+faststart"');
@@ -127,6 +166,11 @@ describe("Post-training learning series media contract", () => {
   test("publishes only manifest-tracked MP4s and gates production playback", () => {
     expect(publicVideoPreparer).toContain('status: "draft"');
     expect(publicVideoPreparer).toContain('id: "post-training-from-first-principles"');
+    expect(publicVideoPreparer).toContain('id: "post-training-full-course"');
+    expect(publicVideoPreparer).toContain("fullVideoId: fullCourseVideo.id");
+    expect(publicVideoPreparer).toContain('id: "how-to-make-an-agent"');
+    expect(publicVideoPreparer).toContain('id: "openpond-agent-overview"');
+    expect(publicVideoPreparer).toContain('playAllVideoId: "make-agent-tutorial"');
     expect(publicMediaVerifier).toContain('Range: "bytes=0-0"');
     expect(publicMediaVerifier).toContain('"access-control-allow-origin"');
     expect(publicMediaVerifier).toContain('includes("immutable")');

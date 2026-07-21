@@ -19,39 +19,39 @@
   "chapters": [
     {
       "id": "Chapter01Policy",
-      "durationSeconds": 69.334
+      "durationSeconds": 64.967
     },
     {
       "id": "Chapter02Definitions",
-      "durationSeconds": 280.667
+      "durationSeconds": 374.367
     },
     {
       "id": "Chapter02OnOffPolicy",
-      "durationSeconds": 61.667
+      "durationSeconds": 66.367
     },
     {
       "id": "Chapter03RLSignals",
-      "durationSeconds": 175.134
+      "durationSeconds": 179.834
     },
     {
       "id": "Chapter04RLVR",
-      "durationSeconds": 167.834
+      "durationSeconds": 172.534
     },
     {
       "id": "Chapter05GRPO",
-      "durationSeconds": 168.9
+      "durationSeconds": 173.6
     },
     {
       "id": "Chapter06Distillation",
-      "durationSeconds": 156.967
+      "durationSeconds": 161.667
     },
     {
       "id": "Chapter07Methods",
-      "durationSeconds": 158.434
+      "durationSeconds": 163.134
     },
     {
       "id": "Chapter08Research",
-      "durationSeconds": 207.234
+      "durationSeconds": 211.934
     }
   ]
 }

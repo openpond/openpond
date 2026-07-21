@@ -4,28 +4,29 @@ This is a first-principles visual course and the primary companion to [Post-Trai
 
 ## Watch
 
+- [Full narrated course — 29:20](videos/lessons/full-course.mp4) — all ten lessons in one continuous, upload-ready video with a matching WebVTT caption file
 - Narrated learning series — ten focused lessons with individual captions and LLM-ready Markdown scripts (`script_01.md` through `script_10.md`) that open from each lesson row in the app's right panel:
-  1. [How post-training works — 1:09](videos/lessons/01-how-post-training-works.mp4)
-  2. [Definitions — 4:41](videos/lessons/02-definitions.mp4)
-  3. [On-policy and off-policy data — 1:02](videos/lessons/03-on-policy-off-policy.mp4)
-  4. [Rewards and credit assignment — 2:55](videos/lessons/04-rewards-credit-assignment.mp4)
-  5. [Verifiable rewards — 2:48](videos/lessons/05-verifiable-rewards-rlvr.mp4)
-  6. [PPO and GRPO — 2:49](videos/lessons/06-ppo-grpo.mp4)
-  7. [Distillation — 2:37](videos/lessons/07-distillation.mp4)
-  8. [OPSD, SDFT, and SDPO — 2:38](videos/lessons/08-opsd-sdft-sdpo.mp4)
-  9. [Credible experiments — 3:27](videos/lessons/09-credible-experiments.mp4)
-  10. [Technical appendix — 3:07](videos/lessons/10-technical-appendix.mp4)
-- [Narrated core course — about 24 minutes](videos/PostTrainingFromFirstPrinciplesNarrated.mp4)
-- [Silent core master — 24:06](videos/PostTrainingFromFirstPrinciples.mp4)
-- [Narrated advanced appendix — 3:07](videos/PostTrainingAdvancedAppendixNarrated.mp4)
-- [Silent advanced appendix — 3:07](videos/PostTrainingAdvancedAppendix.mp4)
+  1. [How post-training works — 1:05](videos/lessons/01-how-post-training-works.mp4)
+  2. [Definitions — 6:14](videos/lessons/02-definitions.mp4)
+  3. [On-policy and off-policy data — 1:06](videos/lessons/03-on-policy-off-policy.mp4)
+  4. [Rewards and credit assignment — 3:00](videos/lessons/04-rewards-credit-assignment.mp4)
+  5. [Verifiable rewards — 2:53](videos/lessons/05-verifiable-rewards-rlvr.mp4)
+  6. [PPO and GRPO — 2:54](videos/lessons/06-ppo-grpo.mp4)
+  7. [Distillation — 2:42](videos/lessons/07-distillation.mp4)
+  8. [OPSD, SDFT, and SDPO — 2:43](videos/lessons/08-opsd-sdft-sdpo.mp4)
+  9. [Credible experiments — 3:32](videos/lessons/09-credible-experiments.mp4)
+  10. [Technical appendix — 3:12](videos/lessons/10-technical-appendix.mp4)
+- [Narrated core course — about 26 minutes](videos/PostTrainingFromFirstPrinciplesNarrated.mp4)
+- [Silent core master — 26:08](videos/PostTrainingFromFirstPrinciples.mp4)
+- [Narrated advanced appendix — 3:12](videos/PostTrainingAdvancedAppendixNarrated.mp4)
+- [Silent advanced appendix — 3:12](videos/PostTrainingAdvancedAppendix.mp4)
 
 The core follows the causal training process: a policy produces behavior, the environment evaluates it, credit assignment connects outcomes to actions, and an optimizer updates the policy. Concrete examples stay in the visuals rather than becoming narration about the course structure.
 
 ### Part I — Foundations
 
 1. [Choose, judge, update](videos/lessons/01-how-post-training-works.mp4) — a policy chooses among patches, tests judge the sampled repair, loss tracks the written objective, and training changes the next distribution
-2. [Definitions](videos/lessons/02-definitions.mp4) — policy notation, logits, softmax, temperature, rollouts, log-probabilities, return, advantage, gradients, PPO/GRPO baselines, clipping, distribution metrics, and acronym references
+2. [Definitions](videos/lessons/02-definitions.mp4) — policy notation, separate logits and softmax explainers, temperature, rollouts, log-probabilities, concrete reward examples, return, advantage, gradients, dedicated PPO/GRPO definitions, baselines, clipping, distribution metrics, and acronym references
 3. [Where data came from](videos/lessons/03-on-policy-off-policy.mp4) — a one-minute explanation of on- versus off-policy sources, concrete rollout fields, stored-data schemas, and objective routing
 4. [From outcomes to credit](videos/lessons/04-rewards-credit-assignment.mp4) — the repair becomes an inspect–edit–test trajectory; sampled actions versus observations, reward versus feedback, return, advantage, exploration, and reference KL
 
@@ -77,7 +78,7 @@ bash render_appendix.sh
 
 The reproducible [narration pipeline](narration/README.md) uses the OpenAI Speech API with the pinned `gpt-4o-mini-tts-2025-12-15` model, Cedar voice, and speed `1.10`. Human-editable scripts, manifests, raw WAV responses, fitted audio, full narration masters, and final narrated MP4s are stored with the course. The API key remains external to the repository.
 
-The lesson opens with a brief OpenPond reveal, then narration begins over the course framing. Narrated outputs identify the generated voice in audio metadata and provide timed WebVTT captions without adding a disclosure outro to the learning sequence.
+Every lesson opens with a brief OpenPond reveal, its own title, and one sentence explaining what it teaches. Narrated outputs identify the generated voice in audio metadata and provide timed WebVTT captions without adding a disclosure outro to the learning sequence.
 
 Package the existing chapter renders and fitted narration tracks as the web learning series without making new Speech API calls:
 
@@ -95,7 +96,7 @@ Prepare the checked-in manifest after changing any video:
 pnpm media:prepare
 ```
 
-The manifest records each playlist's lifecycle status plus every logical video ID, local source path, byte size, duration, SHA-256 digest, and immutable key `media/videos/<sha256>.mp4`. Both video builders refresh it automatically. Because each key represents one file's content, rebuilding one lesson produces one new object rather than a second copy of the entire series. The learning UI reads the post-training playlist's `draft` or `published` status directly from this manifest.
+The manifest records each playlist's lifecycle status plus every logical video ID, local source path, byte size, duration, SHA-256 digest, and immutable key `media/videos/<sha256>.mp4`. Both video builders refresh it automatically. The continuous full-course video is referenced by `fullVideoId` and deliberately excluded from the lesson `videoIds`. Because each key represents one file's content, rebuilding one lesson produces one new lesson object plus a new continuous-course object rather than replacing unrelated media. The learning UI reads the post-training playlist's `draft` or `published` status directly from this manifest.
 
 Publish exactly the manifest entries from the infrastructure repository. The command preflights every local hash before changing R2, skips matching objects, rejects mismatches, uploads only missing objects, and verifies public range playback:
 

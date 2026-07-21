@@ -21,6 +21,10 @@ class Chapter06Distillation(LessonScene):
     chapter_color = BLUE
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "Distillation",
+            "How a student learns from a teacher's probability distribution.",
+        )
         self._hard_vs_soft()
         self._distillation_loss()
         self._worked_distribution()

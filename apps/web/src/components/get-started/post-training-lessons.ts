@@ -14,6 +14,7 @@ export type PostTrainingPanelView = "lessons" | "script";
 
 export type PostTrainingCourseState = {
   autoplay: boolean;
+  fullCourseSelected: boolean;
   lessonIndex: number;
   panelView: PostTrainingPanelView;
   playRequestId: number;
@@ -62,7 +63,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "01-how-post-training-works",
     "How post-training works",
     "Start here",
-    "1:09",
+    "1:05",
     "The choose, judge, and update loop behind every method in this series.",
   ),
   lesson(
@@ -70,7 +71,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "02-definitions",
     "Definitions",
     "Reference",
-    "4:41",
+    "6:14",
     "Policy notation, softmax, rollouts, advantages, gradients, GRPO, and the acronyms used throughout the series.",
   ),
   lesson(
@@ -78,7 +79,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "03-on-policy-off-policy",
     "On-policy and off-policy data",
     "Data source",
-    "1:02",
+    "1:06",
     "Why learner rollouts and teacher or stored data support different updates.",
   ),
   lesson(
@@ -86,7 +87,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "04-rewards-credit-assignment",
     "Rewards and credit assignment",
     "RL foundation",
-    "2:55",
+    "3:00",
     "Follow a code-repair trajectory from actions and observations to advantage.",
   ),
   lesson(
@@ -94,7 +95,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "05-verifiable-rewards-rlvr",
     "Verifiable rewards",
     "RLVR",
-    "2:48",
+    "2:53",
     "See how tests create scalable rewards—and how a model can exploit the checker.",
   ),
   lesson(
@@ -102,7 +103,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "06-ppo-grpo",
     "PPO and GRPO",
     "Policy updates",
-    "2:49",
+    "2:54",
     "Compare PPO's learned critic with GRPO's sibling-response baseline.",
   ),
   lesson(
@@ -110,7 +111,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "07-distillation",
     "Distillation",
     "Teacher targets",
-    "2:37",
+    "2:42",
     "Transfer a teacher's token distribution instead of copying one final answer.",
   ),
   lesson(
@@ -118,7 +119,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "08-opsd-sdft-sdpo",
     "OPSD, SDFT, and SDPO",
     "Teacher evidence",
-    "2:38",
+    "2:43",
     "Compare trusted solutions, demonstrations, and failure feedback at one prefix.",
   ),
   lesson(
@@ -126,7 +127,7 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "09-credible-experiments",
     "Credible experiments",
     "Research design",
-    "3:27",
+    "3:32",
     "Build versioned datasets, fair baselines, and claims that survive scrutiny.",
   ),
   lesson(
@@ -134,12 +135,28 @@ export const POST_TRAINING_LESSONS: readonly PostTrainingLesson[] = [
     "10-technical-appendix",
     "Technical appendix",
     "Advanced details",
-    "3:07",
+    "3:12",
     "Inspect GRPO normalization, compressed teacher logits, reported method results, and sample routing.",
   ),
 ] as const;
 
-export const POST_TRAINING_SERIES_DURATION = "27 min";
+export const POST_TRAINING_SERIES_DURATION = "29 min";
+
+const POST_TRAINING_FULL_VIDEO_ID = POST_TRAINING_PLAYLIST.fullVideoId;
+if (!POST_TRAINING_FULL_VIDEO_ID) {
+  throw new Error("Post-training playlist is missing its full video");
+}
+
+export const POST_TRAINING_FULL_COURSE: LearningVideo = {
+  captionsUrl: publicAssetUrl("courses/post-training/full-course.vtt"),
+  description: "All ten lessons in one continuous video for watching, sharing, or uploading.",
+  duration: "29:20",
+  eyebrow: "Full course",
+  id: POST_TRAINING_FULL_VIDEO_ID,
+  posterUrl: publicAssetUrl("courses/post-training/full-course-poster.webp"),
+  title: POST_TRAINING_SERIES_TITLE,
+  videoUrl: publicVideoUrl(POST_TRAINING_FULL_VIDEO_ID),
+};
 
 export function nextPostTrainingLessonIndex(currentIndex: number): number | null {
   const nextIndex = currentIndex + 1;

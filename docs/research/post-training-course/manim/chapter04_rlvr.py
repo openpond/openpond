@@ -21,6 +21,10 @@ class Chapter04RLVR(LessonScene):
     chapter_color = GREEN
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "Verifiable rewards",
+            "When tests and checkers can score model behavior automatically.",
+        )
         self._definition()
         self._verifier_equation()
         self._verifier_loop()

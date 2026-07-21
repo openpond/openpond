@@ -24,6 +24,10 @@ class Chapter05GRPO(LessonScene):
     chapter_color = VIOLET
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "PPO and GRPO",
+            "Two ways to turn rollout outcomes into a controlled policy update.",
+        )
         self._ppo_baseline()
         self._group_rollout()
         self._worked_advantages()

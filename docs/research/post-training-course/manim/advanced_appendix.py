@@ -10,6 +10,10 @@ class Appendix01GRPODetails(Chapter05GRPO):
     chapter_count = 3
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "Technical appendix",
+            "Implementation details and paper results behind the core lessons.",
+        )
         self.part_card(
             "APPENDIX I",
             "GRPO DETAILS",

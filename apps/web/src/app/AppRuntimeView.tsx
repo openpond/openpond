@@ -17,7 +17,10 @@ import {
   getPostTrainingProgress,
   startingPostTrainingLessonIndex,
 } from "../components/get-started/post-training-progress";
-import type { MakeAgentTutorialState } from "../components/get-started/make-agent-tutorial";
+import type {
+  MakeAgentTutorialState,
+  MakeAgentTutorialVideoId,
+} from "../components/get-started/make-agent-tutorial";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -93,6 +96,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     }
     setPostTrainingCourse({
       autoplay: true,
+      fullCourseSelected: false,
       lessonIndex: startingPostTrainingLessonIndex(
         getPostTrainingProgress(),
         POST_TRAINING_LESSONS.map((lesson) => lesson.id),
@@ -114,7 +118,18 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setPostTrainingCourse((current) => current
       ? {
           ...current,
+          fullCourseSelected: false,
           lessonIndex,
+          playRequestId: current.playRequestId + 1,
+        }
+      : current);
+  }, []);
+  const selectPostTrainingFullCourse = useCallback(() => {
+    setPostTrainingCourse((current) => current
+      ? {
+          ...current,
+          fullCourseSelected: true,
+          panelView: "lessons",
           playRequestId: current.playRequestId + 1,
         }
       : current);
@@ -135,7 +150,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       preCourseSidebarOpenRef.current = diffPanelOpen;
     }
     setPostTrainingCourse(null);
-    setMakeAgentTutorial({ panelView: "steps" });
+    setMakeAgentTutorial({
+      autoplay: true,
+      panelView: "lessons",
+      playRequestId: 0,
+      videoId: "create",
+    });
     setDiffPanelOpen(true);
   }, [diffPanelOpen, setDiffPanelOpen]);
   const closeMakeAgentTutorial = useCallback(() => {
@@ -144,8 +164,16 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setMakeAgentTutorial(null);
     if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
   }, [setDiffPanelOpen]);
-  const showMakeAgentTutorialSteps = useCallback(() => {
-    setMakeAgentTutorial((current) => current ? { ...current, panelView: "steps" } : current);
+  const selectMakeAgentTutorialVideo = useCallback((videoId: MakeAgentTutorialVideoId) => {
+    setMakeAgentTutorial((current) => current
+      ? { ...current, playRequestId: current.playRequestId + 1, videoId }
+      : current);
+  }, []);
+  const setMakeAgentTutorialAutoplay = useCallback((autoplay: boolean) => {
+    setMakeAgentTutorial((current) => current ? { ...current, autoplay } : current);
+  }, []);
+  const showMakeAgentTutorialLessons = useCallback(() => {
+    setMakeAgentTutorial((current) => current ? { ...current, panelView: "lessons" } : current);
   }, []);
   const showMakeAgentTutorialScript = useCallback(() => {
     setMakeAgentTutorial((current) => current ? { ...current, panelView: "script" } : current);
@@ -610,12 +638,15 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onOpenPostTrainingCourse: openPostTrainingCourse,
         onClosePostTrainingCourse: closePostTrainingCourse,
         onOpenPostTrainingScript: openPostTrainingScript,
+        onSelectPostTrainingFullCourse: selectPostTrainingFullCourse,
         onSelectPostTrainingLesson: selectPostTrainingLesson,
         onSetPostTrainingAutoplay: setPostTrainingAutoplay,
         onShowPostTrainingLessons: showPostTrainingLessons,
         onOpenMakeAgentTutorial: openMakeAgentTutorial,
         onCloseMakeAgentTutorial: closeMakeAgentTutorial,
-        onShowMakeAgentTutorialSteps: showMakeAgentTutorialSteps,
+        onSelectMakeAgentTutorialVideo: selectMakeAgentTutorialVideo,
+        onSetMakeAgentTutorialAutoplay: setMakeAgentTutorialAutoplay,
+        onShowMakeAgentTutorialLessons: showMakeAgentTutorialLessons,
         onShowMakeAgentTutorialScript: showMakeAgentTutorialScript,
         onShowDiffPanel: showChangesPanel,
         onShowBrowserPanel: showBrowserPanel,

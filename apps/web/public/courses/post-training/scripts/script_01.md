@@ -1,6 +1,6 @@
 # How post-training works
 
-Post-training from first principles · Lesson 1 of 10 · 1:09
+Post-training from first principles · Lesson 1 of 10 · 1:05
 
 ## Learning objective
 
@@ -12,7 +12,7 @@ Use this script as lesson source material. Preserve its distinctions and caveats
 
 ## Visual context
 
-OpenPond reveal, course title, full chapter timestamp map, one cancellation-policy choice, useful versus misleading loss curves, and a plain-language choose-test-update loop.
+OpenPond lesson intro, full chapter timestamp map, one cancellation-policy choice, useful versus misleading loss curves, and a plain-language choose-test-update loop.
 
 ## Narration transcript
 

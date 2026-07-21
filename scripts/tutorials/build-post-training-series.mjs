@@ -43,7 +43,7 @@ const appendixNarrationScript = readFileSync(
 const lessons = [
   {
     chapterId: "Chapter01Policy",
-    duration: "1:09",
+    duration: "1:05",
     focus: "The choose, judge, and update loop behind every method in this series.",
     slug: "01-how-post-training-works",
     posterSecond: 43,
@@ -51,7 +51,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter02Definitions",
-    duration: "4:41",
+    duration: "6:14",
     focus: "Decode the notation, objectives, estimators, and acronyms used throughout modern reinforcement fine-tuning.",
     slug: "02-definitions",
     posterSecond: 132,
@@ -59,7 +59,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter02OnOffPolicy",
-    duration: "1:02",
+    duration: "1:06",
     focus: "Why learner rollouts and teacher or stored data support different updates.",
     slug: "03-on-policy-off-policy",
     posterSecond: 17,
@@ -67,7 +67,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter03RLSignals",
-    duration: "2:55",
+    duration: "3:00",
     focus: "Follow a code-repair trajectory from actions and observations to advantage.",
     slug: "04-rewards-credit-assignment",
     posterSecond: 84,
@@ -75,7 +75,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter04RLVR",
-    duration: "2:48",
+    duration: "2:53",
     focus: "See how tests create scalable rewards—and how a model can exploit the checker.",
     slug: "05-verifiable-rewards-rlvr",
     posterSecond: 64,
@@ -83,7 +83,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter05GRPO",
-    duration: "2:49",
+    duration: "2:54",
     focus: "Compare PPO's learned critic with GRPO's sibling-response baseline.",
     slug: "06-ppo-grpo",
     posterSecond: 54,
@@ -91,7 +91,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter06Distillation",
-    duration: "2:37",
+    duration: "2:42",
     focus: "Transfer a teacher's token distribution instead of copying one final answer.",
     slug: "07-distillation",
     posterSecond: 48,
@@ -99,7 +99,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter07Methods",
-    duration: "2:38",
+    duration: "2:43",
     focus: "Compare trusted solutions, demonstrations, and failure feedback at one prefix.",
     slug: "08-opsd-sdft-sdpo",
     posterSecond: 72,
@@ -107,7 +107,7 @@ const lessons = [
   },
   {
     chapterId: "Chapter08Research",
-    duration: "3:27",
+    duration: "3:32",
     focus: "Build versioned datasets, fair baselines, and claims that survive scrutiny.",
     slug: "09-credible-experiments",
     posterSecond: 62,
@@ -119,8 +119,8 @@ const lessons = [
       "Appendix02DistillationSystems",
       "Appendix03MethodStudies",
     ],
-    duration: "3:07",
-    expectedDurationSeconds: 187.067,
+    duration: "3:12",
+    expectedDurationSeconds: 191.767,
     focus: "Inspect implementation choices and paper-specific results after the core mechanisms are clear.",
     narrationScript: appendixNarrationScript,
     posterSecond: 139,
@@ -334,10 +334,35 @@ function createCaptions(
   writeFileSync(outputPath, `WEBVTT\n\n${cues.join("\n\n")}\n`);
 }
 
+function parseVttTimestamp(timestamp) {
+  const [hours, minutes, seconds] = timestamp.split(":");
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+}
+
+function createFullCourseCaptions(builtLessons, outputPath) {
+  const cues = [];
+  let lessonOffset = 0;
+  let cueNumber = 1;
+  for (const lesson of builtLessons) {
+    const source = readFileSync(lesson.captionsPath, "utf8");
+    const cuePattern = /\d+\n(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\n([\s\S]*?)(?=\n\n|$)/g;
+    for (const match of source.matchAll(cuePattern)) {
+      const start = parseVttTimestamp(match[1]) + lessonOffset;
+      const end = parseVttTimestamp(match[2]) + lessonOffset;
+      cues.push(`${cueNumber}\n${vttTimestamp(start)} --> ${vttTimestamp(end)}\n${match[3]}`);
+      cueNumber += 1;
+    }
+    lessonOffset += lesson.durationSeconds;
+  }
+  writeFileSync(outputPath, `WEBVTT\n\n${cues.join("\n\n")}\n`);
+}
+
 rmSync(courseOutputRoot, { force: true, recursive: true });
 rmSync(publicOutputRoot, { force: true, recursive: true });
 mkdirSync(courseOutputRoot, { recursive: true });
 mkdirSync(publicOutputRoot, { recursive: true });
+
+const builtLessons = [];
 
 for (const [lessonIndex, lesson] of lessons.entries()) {
   const sourceManifest = lesson.sourceManifest ?? coreManifest;
@@ -464,11 +489,90 @@ for (const [lessonIndex, lesson] of lessons.entries()) {
   if (statSync(courseVideo).size > 15 * 1024 * 1024) {
     throw new Error(`${lesson.title} exceeds the 15 MB lesson budget`);
   }
+  builtLessons.push({
+    captionsPath: courseCaptions,
+    durationSeconds: mediaDuration,
+    videoPath: courseVideo,
+  });
   console.log(
     `${lesson.title}: ${mediaDuration.toFixed(3)}s -> ${courseVideo}`,
   );
 }
 
+const fullCourseVideo = join(courseOutputRoot, "full-course.mp4");
+const fullCoursePoster = join(courseOutputRoot, "full-course-poster.webp");
+const fullCourseCaptions = join(courseOutputRoot, "full-course.vtt");
+const concatFile = join(courseOutputRoot, ".full-course-concat.txt");
+writeFileSync(
+  concatFile,
+  builtLessons.map(({ videoPath }) => `file '${videoPath.replaceAll("'", "'\\''")}'`).join("\n"),
+);
+run("ffmpeg", [
+  "-hide_banner",
+  "-loglevel",
+  "error",
+  "-y",
+  "-f",
+  "concat",
+  "-safe",
+  "0",
+  "-i",
+  concatFile,
+  "-map",
+  "0:v:0",
+  "-map",
+  "0:a:0",
+  "-c",
+  "copy",
+  "-metadata:s:a:0",
+  "title=AI-generated narration",
+  "-metadata:s:a:0",
+  "handler_name=AI-generated narration",
+  "-metadata:s:a:0",
+  "language=eng",
+  "-movflags",
+  "+faststart",
+  fullCourseVideo,
+]);
+rmSync(concatFile, { force: true });
+run("ffmpeg", [
+  "-hide_banner",
+  "-loglevel",
+  "error",
+  "-y",
+  "-ss",
+  "8",
+  "-i",
+  fullCourseVideo,
+  "-frames:v",
+  "1",
+  "-vf",
+  "scale=640:-2",
+  "-c:v",
+  "libwebp",
+  "-quality",
+  "82",
+  fullCoursePoster,
+]);
+createFullCourseCaptions(builtLessons, fullCourseCaptions);
+for (const fullCourseFile of [fullCourseVideo, fullCoursePoster, fullCourseCaptions]) {
+  copyFileSync(fullCourseFile, join(publicOutputRoot, basename(fullCourseFile)));
+}
+const fullCourseDuration = durationSeconds(fullCourseVideo);
+const expectedFullCourseDuration = builtLessons.reduce(
+  (total, lesson) => total + lesson.durationSeconds,
+  0,
+);
+if (Math.abs(fullCourseDuration - expectedFullCourseDuration) > 0.2) {
+  throw new Error(
+    `Full course duration mismatch: ${fullCourseDuration.toFixed(3)}s`,
+  );
+}
+if (statSync(fullCourseVideo).size > 100 * 1024 * 1024) {
+  throw new Error("Full course exceeds the 100 MB publishing budget");
+}
+
 console.log(`Created ${lessons.length} narrated lessons in ${courseOutputRoot}`);
+console.log(`Full course: ${fullCourseDuration.toFixed(3)}s -> ${fullCourseVideo}`);
 console.log(`Copied web assets to ${publicOutputRoot}`);
 run(process.execPath, [join(scriptDir, "prepare-public-videos.mjs")]);

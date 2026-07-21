@@ -2,7 +2,7 @@
 
 Narration and study script for the ManimGL course.
 
-This script accompanies a roughly 24-minute core course plus a short technical appendix. Concrete code, math, and tool examples remain visible in the diagrams while the narration explains the underlying mechanism. Numbers labeled “worked example” or “conceptual” are invented for teaching. Numbers labeled “reported result” come from the cited paper and should be interpreted only inside that paper’s setup.
+This script accompanies a roughly 26-minute core course plus a short technical appendix. Concrete code, math, and tool examples remain visible in the diagrams while the narration explains the underlying mechanism. Numbers labeled “worked example” or “conceptual” are invented for teaching. Numbers labeled “reported result” come from the cited paper and should be interpreted only inside that paper’s setup.
 
 The companion [research paper](../../2026-07-20-post-training-signal-routing.md) contains the equations, annotated bibliography, implementation proposals, and longer caveats.
 
@@ -95,15 +95,23 @@ This chapter is a reference for the AI, machine-learning, and reinforcement-lear
 
 A policy is therefore not the one answer that was sampled. It is the distribution that could have produced many answers.
 
-### 2.2 Logits, softmax, and temperature
+### 2.2 Logits
 
-The network first emits raw scores called **logits**, usually written `z`. Softmax turns those scores into probabilities:
+The network first emits raw scores called **logits**, usually written `z`. A logit can be any real number. Logits are not percentages, do not need to be positive, and do not need to sum to one. Their relative differences express which actions the model prefers before normalization.
+
+A logit of `3.0` does not mean 300 percent. It means that action has a larger raw score than alternatives with logits `1.0` and `0.2`.
+
+### 2.3 Softmax and temperature
+
+**Softmax** turns logits into probabilities:
 
 `p_i = exp(z_i / T) / Σ_j exp(z_j / T)`.
 
+Softmax exponentiates every scaled logit and divides each result by the total. Every output is therefore positive and the outputs sum to one. At temperature one, logits `[3.0, 1.0, 0.2]` become approximately `[0.84, 0.11, 0.05]`.
+
 `T` is temperature. Lower temperature sharpens the distribution around the largest logits. Higher temperature spreads probability across more alternatives. Temperature changes how probabilities are formed or sampled; it does not itself update the stored weights.
 
-### 2.3 Rollouts, trajectories, and log-probabilities
+### 2.4 Rollouts, trajectories, and log-probabilities
 
 A **rollout** or **trajectory**, written `τ`, is the stored interaction record:
 
@@ -111,9 +119,10 @@ A **rollout** or **trajectory**, written `τ`, is the stored interaction record:
 
 `μ` is the behavior policy that generated the action. Its log-probability is stored so the trainer can compare the old generating distribution with the current policy. Logs turn products of many token probabilities into sums and make likelihood calculations numerically manageable. Observations `o` come from the environment and condition later decisions, but they are not sampled policy actions.
 
-### 2.4 Reward, return, baseline, and advantage
+### 2.5 Reward, feedback, return, baseline, and advantage
 
-- **Reward** `r_t` is the scalar emitted at a step or terminal outcome.
+- **Reward** `r_t` is the scalar emitted at a step or terminal outcome. It is the number consumed by the optimization objective.
+- **Feedback** is the richer evidence behind that number, such as a failed test name, expected value, or tool trace.
 - **Return** `G_t` aggregates future reward: `G_t = r_t + γG_(t+1)`, where `γ` is the discount factor.
 - A **baseline** estimates expected return without changing which action is preferred in expectation.
 - **Advantage** `A_t` asks whether the observed return was better or worse than that baseline.
@@ -126,7 +135,9 @@ GRPO means **Group Relative Policy Optimization**. It samples `G` sibling respon
 
 If every sibling has the same reward, `σ_G` is zero and the group contains no relative learning signal.
 
-### 2.5 Objectives, gradients, and parameter updates
+Reward comes from an explicit evaluator rule. Exact-answer math can use `1` for correct and `0` for incorrect. Code can use hidden-test success. A tool agent can be scored by whether it reaches a target environment state. A graded reward can preserve partial progress, but any shaping choices become part of the behavior being optimized.
+
+### 2.6 Objectives, gradients, and parameter updates
 
 An **objective** or **loss** `L(θ)` turns the written training rule into a scalar. The gradient `∇θL` is the local slope of that objective with respect to every parameter. Backpropagation computes the gradient. An optimizer applies a learning rate `α` to make a small parameter update, commonly written:
 
@@ -134,7 +145,7 @@ An **objective** or **loss** `L(θ)` turns the written training rule into a scal
 
 In policy-gradient training, the RL method decides which sampled actions receive positive or negative credit inside the loss. Ordinary differentiation and the optimizer perform the resulting weight change.
 
-### 2.6 Probability ratios and clipping
+### 2.7 Probability ratios and clipping
 
 PPO and GRPO compare the current policy with the behavior policy using an importance ratio:
 
@@ -142,13 +153,13 @@ PPO and GRPO compare the current policy with the behavior policy using an import
 
 `ρ_t = 1` means the action probability is unchanged. A value above one means it became more likely; below one means it became less likely. Clipping constrains the ratio to a local range such as `[1−ε, 1+ε]`. `ε` is the clipping threshold. This caps one sampled incentive but does not guarantee that the full model distribution stayed close everywhere.
 
-### 2.7 Entropy, KL divergence, and cross-entropy
+### 2.8 Entropy, KL divergence, and cross-entropy
 
 - **Entropy** `H(π)` measures the spread of one distribution. High entropy means many actions remain plausible; low entropy means behavior is concentrated.
 - **KL divergence** `D_KL(p||q)` compares two distributions. Its direction matters. RL often uses it to measure drift from a frozen reference policy.
 - **Cross-entropy** `H(q,p) = −Σ_i q_i log p_i` uses target probabilities `q` to score student probabilities `p`. Distillation minimizes it to move the student toward a teacher distribution.
 
-### 2.8 Acronym reference
+### 2.9 Acronym reference
 
 | Term | Expansion | What it names |
 | --- | --- | --- |

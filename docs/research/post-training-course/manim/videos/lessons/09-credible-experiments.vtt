@@ -5,65 +5,65 @@ WEBVTT
 A research result requires many versioned tasks, protected information boundaries, matched baselines, and held-out evaluation.
 
 2
-00:00:09.252 --> 00:00:21.256
+00:00:09.546 --> 00:00:21.550
 Policy-visible input includes the issue, repository revision, allowed tools, and public tests. Training-only evidence may contain an expert repair, privileged patch, or public diagnostic.
 
 3
-00:00:22.352 --> 00:00:28.945
+00:00:22.939 --> 00:00:29.533
 Evaluator-only hidden tests, anti-exploit checks, and held-out repository clusters must remain outside both.
 
 4
-00:00:30.040 --> 00:00:43.630
+00:00:30.921 --> 00:00:44.512
 The Taskset preserves those boundaries together with source revision, license, split, verifier version, and content hash. Related issues from the same repository should be clustered before splitting; otherwise memorization can look like generalization.
 
 5
-00:00:44.726 --> 00:00:55.595
+00:00:45.901 --> 00:00:56.770
 Hugging Face support is worthwhile when it behaves as a reproducible importer. Pin the repository revision. Inspect the dataset card and license. Choose configuration and split explicitly.
 
 6
-00:00:56.690 --> 00:01:07.962
+00:00:58.159 --> 00:01:09.430
 Map columns through a reviewed transform, log rejected rows, preserve original identifiers, and materialize an immutable snapshot. A training run should never silently follow a changing main branch.
 
 7
-00:01:09.057 --> 00:01:21.875
+00:01:10.819 --> 00:01:23.637
 Every proposed method needs a simple credible baseline. Begin with the base model and the most direct token-imitation objective supported by the data. Add offline distillation or preference learning when those signals are relevant.
 
 8
-00:01:22.970 --> 00:01:31.521
+00:01:25.026 --> 00:01:33.578
 Compare with GRPO or another RLVR baseline before claiming value from OPSD, SDFT, or SDPO.
 
 9
-00:01:32.616 --> 00:01:43.436
+00:01:34.966 --> 00:01:45.786
 Equal optimizer tokens and equal total compute answer different questions. A distillation method may use fewer rollouts while spending additional teacher forward passes. Report both controls.
 
 10
-00:01:44.531 --> 00:02:01.896
+00:01:47.175 --> 00:02:04.540
 Evaluation should span four dimensions. Capability measures task success. Diversity measures pass-at-k, entropy, and distinct strategies. Retention tests old domains and distribution drift. Integrity audits reward exploits, leakage, and disagreement with a shadow verifier.
 
 11
-00:02:02.991 --> 00:02:06.262
+00:02:05.929 --> 00:02:09.200
 A single average can hide serious regressions.
 
 12
-00:02:07.358 --> 00:02:18.137
+00:02:10.589 --> 00:02:21.368
 Compute accounting includes student rollout tokens, teacher-scored tokens, backward tokens, verifier time, external calls, failed jobs, memory, storage, and wall clock.
 
 13
-00:02:19.232 --> 00:02:35.643
+00:02:22.757 --> 00:02:39.168
 The primary study compares GRPO, SDPO, and a routed success-and-failure method on code repair while separating public diagnostics from hidden tests. Verified math can replicate the GRPO and OPSD claims with exact graders.
 
 14
-00:02:36.738 --> 00:02:48.512
+00:02:40.557 --> 00:02:52.330
 A tool protocol can replicate token imitation and SDFT while measuring retention. The extra domains test whether a conclusion transfers; they do not replace the main story halfway through it.
 
 15
-00:02:49.607 --> 00:03:00.286
+00:02:53.719 --> 00:03:04.398
 The paper should bind every claim to a dataset revision, metric, run set, seed, confidence interval, and ablation. That structure keeps a local result from turning into a universal claim.
 
 16
-00:03:01.381 --> 00:03:15.432
+00:03:05.787 --> 00:03:19.839
 The final map is simple. Demonstrations produce imitation targets. Preferences produce relative targets. Verifiable outcomes produce rewards. Privileged solutions and failure explanations produce context-conditioned teacher distributions.
 
 17
-00:03:16.528 --> 00:03:26.534
+00:03:21.228 --> 00:03:31.234
 Evidence determines the target. The target determines the update. The update changes future behavior. Evaluation measures what improved—and what changed elsewhere.

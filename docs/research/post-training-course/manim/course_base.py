@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from manimlib import *
 
@@ -57,6 +58,39 @@ class LessonScene(Scene):
     def add_progress(self) -> VGroup:
         # The course is a continuous animation, not a slide deck.
         return VGroup()
+
+    def lesson_intro(self, title: str, explainer: str) -> None:
+        """Open each standalone lesson with a compact OpenPond identity beat."""
+        icon_path = (
+            Path(__file__).resolve().parents[4]
+            / "apps"
+            / "web"
+            / "public"
+            / "openpond-icon.png"
+        )
+        mark = ImageMobject(str(icon_path))
+        mark.set_height(1.18)
+        wordmark = text("OpenPond", size=38, color=INK, weight="BOLD")
+        identity = Group(mark, wordmark).arrange(RIGHT, buff=-0.06).move_to(ORIGIN)
+
+        title_mob = fit_width(text(title, size=55, color=INK, weight="BOLD"), 12.0)
+        explainer_mob = fit_width(text(explainer, size=25, color=MUTED), 11.6)
+        rule = Line(LEFT * 4.35, RIGHT * 4.35, color=self.chapter_color, stroke_width=2.5)
+        lesson_copy = VGroup(title_mob, rule, explainer_mob).arrange(DOWN, buff=0.30)
+        lesson_copy.move_to(DOWN * 0.15)
+
+        self.play(FadeIn(mark, scale=0.92), run_time=0.35)
+        self.wait(0.18)
+        for glyph in wordmark:
+            self.play(FadeIn(glyph, shift=LEFT * 0.05), run_time=0.06)
+            self.wait(0.02)
+        self.wait(0.12)
+        self.play(identity.animate.scale(0.62).move_to(UP * 2.55), run_time=0.50)
+        self.reveal(title_mob, run_time=0.45)
+        self.play(ShowCreation(rule), run_time=0.32)
+        self.reveal(explainer_mob, run_time=0.35)
+        self.wait(0.82)
+        self.wipe()
 
     def title_card(
         self,

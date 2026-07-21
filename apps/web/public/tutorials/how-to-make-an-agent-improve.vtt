@@ -1,0 +1,33 @@
+WEBVTT
+
+I01
+00:00:03.670 --> 00:00:11.693
+Improve Agent lets you describe a change directly or include chats that demonstrate the correction.
+
+I02
+00:00:11.413 --> 00:00:19.614
+Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.
+
+I03
+00:00:19.334 --> 00:00:27.218
+Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.
+
+I04
+00:00:26.938 --> 00:00:33.212
+Review the planned change and confirm that it preserves citations and every existing action.
+
+I05
+00:00:32.932 --> 00:00:42.157
+Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.
+
+I06
+00:00:41.877 --> 00:00:49.850
+Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.
+
+I07
+00:00:49.570 --> 00:00:58.924
+The improved chat now places disputed billing and the open P1 case ahead of adoption decline while preserving source citations.
+
+I08
+00:00:58.644 --> 00:01:07.371
+The direct triage action repeats the billing-first result, proving the change works outside chat without breaking the existing workflow.

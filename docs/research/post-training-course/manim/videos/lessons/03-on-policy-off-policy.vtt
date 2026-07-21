@@ -5,25 +5,25 @@ WEBVTT
 On-policy data comes from the learner being updated. Policy version twelve generates an attempt that will update version twelve.
 
 2
-00:00:08.282 --> 00:00:15.598
+00:00:09.065 --> 00:00:16.382
 Off-policy data comes from a teacher, human, or older checkpoint. These labels describe source, not quality.
 
 3
-00:00:16.406 --> 00:00:24.998
+00:00:17.973 --> 00:00:26.564
 An RL rollout stores the problem, sampled actions, generating checkpoint, behavior probabilities, environment observations, and reward.
 
 4
-00:00:25.805 --> 00:00:32.489
+00:00:28.155 --> 00:00:34.839
 Text alone cannot connect evaluated behavior to an update. The missing record matters as much as the final response.
 
 5
-00:00:33.297 --> 00:00:41.668
+00:00:36.430 --> 00:00:44.801
 Other sources carry different signals: teacher targets, chosen and rejected responses, or old actions with original probabilities and rewards.
 
 6
-00:00:42.475 --> 00:00:53.616
+00:00:46.392 --> 00:00:57.533
 PPO and GRPO usually score learner attempts. Offline distillation uses teacher examples. On-policy distillation labels the student's current prefix.
 
 7
-00:00:54.424 --> 00:01:00.967
+00:00:59.124 --> 00:01:05.667
 Inside any RL rollout, the final patch is only one part of a sequence of actions and observations.

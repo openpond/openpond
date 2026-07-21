@@ -1,6 +1,6 @@
 # Distillation
 
-Post-training from first principles · Lesson 7 of 10 · 2:37
+Post-training from first principles · Lesson 7 of 10 · 2:42
 
 ## Learning objective
 

@@ -1,6 +1,6 @@
 # PPO and GRPO
 
-Post-training from first principles · Lesson 6 of 10 · 2:49
+Post-training from first principles · Lesson 6 of 10 · 2:54
 
 ## Learning objective
 

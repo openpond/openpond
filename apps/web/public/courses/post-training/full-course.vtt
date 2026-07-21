@@ -1,0 +1,623 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:10.887
+Post-training changes what a model is likely to do. An input creates a distribution over possible actions, evaluation supplies evidence, and an optimizer changes that distribution.
+
+2
+00:00:12.598 --> 00:00:24.693
+Here a cancellation test is failing. The policy assigns chances to return None, raise the cancellation error, or retry. Those probabilities describe the available behavior; sampling produces one actual patch.
+
+3
+00:00:26.404 --> 00:00:34.313
+Loss is a number saying how bad behavior looks under the training rule. Useful training lowers both training loss and held-out error.
+
+4
+00:00:36.024 --> 00:00:42.025
+If training loss falls while held-out error rises, the model is learning the wrong thing.
+
+5
+00:00:43.736 --> 00:00:56.875
+The sampled patch passes. Training makes the exception-raising action slightly easier to choose in similar states. Ordinary backpropagation implements the change; reinforcement learning determines which sampled behavior receives credit.
+
+6
+00:00:58.587 --> 00:01:04.267
+A usable training record must also identify who generated the attempt and what evidence accompanied it.
+
+
+7
+00:01:05.667 --> 00:01:17.209
+The expression pi theta of a given state is a compact description of model behavior. Pi names the policy: a probability distribution, not one completed answer. Theta means all adjustable model parameters.
+
+8
+00:01:18.341 --> 00:01:25.205
+The state is the context available now, and an action can be one token, one tool call, or another sampled decision.
+
+9
+00:01:26.336 --> 00:01:34.837
+Before sampling, the network produces raw scores called logits. A logit is not a percentage and logits do not need to add to one. They can be positive or negative.
+
+10
+00:01:35.968 --> 00:01:43.968
+Only their relative differences matter: a larger logit means the model prefers that action compared with the alternatives available at that position.
+
+11
+00:01:45.099 --> 00:01:56.460
+Softmax converts logits into probabilities. It exponentiates each logit, then divides by the sum of all exponentiated logits. This makes every result positive and makes the distribution sum to one.
+
+12
+00:01:57.592 --> 00:02:11.864
+In the example, logits three, one, and point two become probabilities of roughly eighty-four, eleven, and five percent. Temperature divides the logits before softmax. Lower temperature sharpens the distribution; higher temperature flattens it.
+
+13
+00:02:12.995 --> 00:02:22.590
+A rollout, also called a trajectory and written tau, is the interaction record used for learning. The behavior policy mu generated each sampled action.
+
+14
+00:02:23.721 --> 00:02:37.452
+Its log-probability is stored beside the action so training can later compare the old behavior distribution with the current policy. Environment observations affect later states, but only the model's sampled actions receive policy-gradient terms.
+
+15
+00:02:38.583 --> 00:02:50.899
+Reward is the scalar number emitted by an evaluator. A math checker might return one for an exact answer and zero otherwise. A code environment might return one only when every hidden test passes.
+
+16
+00:02:52.030 --> 00:03:05.710
+A tool task might inspect whether the final database state matches a target. The rule can be binary or graded, but the optimizer sees the number, not the evaluator's full explanation. That richer explanation is feedback.
+
+17
+00:03:06.841 --> 00:03:19.067
+Reward, return, and advantage are related but not interchangeable. Reward is the scalar emitted at a step or at the end. Return, G at time t, combines future rewards and can discount distant outcomes with gamma.
+
+18
+00:03:20.198 --> 00:03:34.149
+Advantage subtracts a baseline from that return. Positive advantage means the action did better than expected; negative advantage means it did worse. PPO learns a value baseline, while GRPO estimates one from sibling responses.
+
+19
+00:03:35.280 --> 00:03:50.506
+PPO means Proximal Policy Optimization. It is a policy-gradient method that trains a second network, called a critic or value function, to estimate expected return. The observed return minus that expectation becomes advantage.
+
+20
+00:03:51.638 --> 00:03:58.954
+PPO also clips the probability-ratio incentive so one sampled action cannot drive an arbitrarily large update.
+
+21
+00:04:00.085 --> 00:04:12.591
+GRPO means Group Relative Policy Optimization. It removes the learned critic and samples several sibling responses for the same prompt. Each response is compared with the group's reward mean and standard deviation.
+
+22
+00:04:13.723 --> 00:04:23.177
+Better-than-group responses receive positive advantage; worse responses receive negative advantage. GRPO keeps policy ratios and clipping.
+
+23
+00:04:24.308 --> 00:04:38.540
+Both methods need a baseline because raw reward lacks context. PPO's baseline comes from the critic, and Generalized Advantage Estimation combines value predictions across time. GRPO's baseline comes from sibling rewards.
+
+24
+00:04:39.671 --> 00:04:46.676
+If every sibling receives the same reward, the group standard deviation is zero and there is no relative advantage to learn from.
+
+25
+00:04:47.807 --> 00:04:59.762
+An objective, often written L of theta, turns the training goal into one number. The gradient is the local slope of that objective with respect to every adjustable parameter. Backpropagation computes those slopes.
+
+26
+00:05:00.893 --> 00:05:13.801
+The optimizer applies a learning rate alpha to make a small update from theta to theta prime. In policy-gradient training, the RL method determines the credit weights inside the loss; ordinary differentiation performs the parameter update.
+
+27
+00:05:14.932 --> 00:05:26.434
+PPO and GRPO use a probability ratio. The numerator is the current policy's probability for the stored action. The denominator is the behavior probability recorded during rollout.
+
+28
+00:05:27.565 --> 00:05:35.745
+A ratio above one means that action became more likely. Clipping with epsilon caps the incentive once the ratio moves too far in one update.
+
+29
+00:05:36.876 --> 00:05:41.965
+It limits this sampled term, but does not prove that the entire model stayed close.
+
+30
+00:05:43.096 --> 00:05:55.512
+Entropy measures how spread out one policy distribution is. KL divergence compares two distributions and is commonly used to measure movement from a reference model or mismatch between teacher and student. Its direction matters.
+
+31
+00:05:56.643 --> 00:06:07.784
+Cross-entropy uses target probabilities q to weight the log of student probabilities p. Distillation usually minimizes this quantity so the student assigns probability where the teacher does.
+
+32
+00:06:08.915 --> 00:06:24.965
+RL means reinforcement learning. RFT means reinforcement fine-tuning: applying an RL-style objective to an already pretrained model. RLVR adds verifiable rewards, such as executable tests. PPO and GRPO are policy update rules.
+
+33
+00:06:26.096 --> 00:06:45.096
+PPO is Proximal Policy Optimization. GRPO is Group Relative Policy Optimization. GAE is Generalized Advantage Estimation. Pass-at-k asks whether at least one of k sampled attempts succeeds. On-policy and off-policy describe who generated the data.
+
+34
+00:06:46.227 --> 00:07:01.453
+The teacher-guided methods use dense distributions instead of only scalar outcomes. OPSD is On-Policy Self-Distillation and conditions the teacher on a trusted solution. SDFT is Self-Distillation Fine-Tuning and supplies a demonstration.
+
+35
+00:07:02.584 --> 00:07:18.634
+SDPO is Self-Distillation Policy Optimization and supplies failure feedback. In each case the student creates the prefix and the frozen teacher receives extra evidence. SRPO, Self-Rewarding Policy Optimization, routes successful and unsuccessful samples through different signals.
+
+
+36
+00:07:20.034 --> 00:07:26.808
+On-policy data comes from the learner being updated. Policy version twelve generates an attempt that will update version twelve.
+
+37
+00:07:28.399 --> 00:07:35.716
+Off-policy data comes from a teacher, human, or older checkpoint. These labels describe source, not quality.
+
+38
+00:07:37.307 --> 00:07:45.898
+An RL rollout stores the problem, sampled actions, generating checkpoint, behavior probabilities, environment observations, and reward.
+
+39
+00:07:47.489 --> 00:07:54.173
+Text alone cannot connect evaluated behavior to an update. The missing record matters as much as the final response.
+
+40
+00:07:55.764 --> 00:08:04.135
+Other sources carry different signals: teacher targets, chosen and rejected responses, or old actions with original probabilities and rewards.
+
+41
+00:08:05.726 --> 00:08:16.867
+PPO and GRPO usually score learner attempts. Offline distillation uses teacher examples. On-policy distillation labels the student's current prefix.
+
+42
+00:08:18.458 --> 00:08:25.001
+Inside any RL rollout, the final patch is only one part of a sequence of actions and observations.
+
+
+43
+00:08:26.401 --> 00:08:35.354
+An RL rollout is a sequence, not only a final response. Credit assignment asks which decisions inside that sequence should become more or less likely.
+
+44
+00:08:37.082 --> 00:08:49.990
+The issue and repository form state zero. The behavior policy samples “inspect files.” File contents are an environment observation, not another sampled action. The next state contains those contents.
+
+45
+00:08:51.717 --> 00:08:57.579
+The policy then writes raise Cancelled Error, and test output closes the trajectory.
+
+46
+00:08:59.306 --> 00:09:12.124
+The tuple makes those roles explicit. Tau contains states, sampled actions, behavior log-probabilities, observations, and terminal reward. Gradients apply to action positions controlled by the policy.
+
+47
+00:09:13.851 --> 00:09:18.538
+Observations condition later actions but are masked out of the policy-gradient loss.
+
+48
+00:09:20.266 --> 00:09:31.316
+Reward and feedback carry different information. A patch can receive reward zero while the environment still knows that eight tests passed, cancellation failed, and the expected exception was Cancelled Error.
+
+49
+00:09:33.044 --> 00:09:38.634
+Reward is the scalar consumed by an objective. Feedback is the richer evidence the environment produced.
+
+50
+00:09:40.362 --> 00:09:51.633
+A terminal score also leaves the cause ambiguous. Was the wrong file inspected? Was the timeout branch incorrect? Was “None” the decisive token? Response-level credit applies one outcome broadly.
+
+51
+00:09:53.360 --> 00:09:58.640
+Step- or token-level signals can be denser, but density alone does not prove causal accuracy.
+
+52
+00:10:00.367 --> 00:10:13.867
+For multi-step problems, return carries future rewards backward. G at time t is the discounted sum of later rewards. With gamma point nine and success two steps later, the earlier action receives return point eight one.
+
+53
+00:10:15.595 --> 00:10:21.185
+PPO critics and Generalized Advantage Estimation, or GAE, build on this idea.
+
+54
+00:10:22.912 --> 00:10:34.686
+Advantage then asks: better than what was expected? If observed return is point eight and the baseline is point five, advantage is positive point three. A return of point two gives negative point three.
+
+55
+00:10:36.413 --> 00:10:49.010
+Positive advantage raises the sampled behavior’s probability; negative advantage lowers it. PPO learns a critic for the baseline. GRPO replaces that critic with statistics from sibling responses.
+
+56
+00:10:50.738 --> 00:11:01.878
+Learning also changes exploration. Pass-at-one can rise while entropy and pass-at-k fall if the model collapses onto one strategy. Reliability and breadth therefore need separate metrics.
+
+57
+00:11:03.606 --> 00:11:18.149
+Finally, a frozen reference policy anchors behavior outside the optimized task. Kullback–Leibler divergence, shortened to KL, measures distribution shift. Too little constraint permits drift and reward exploits; too much prevents useful learning.
+
+58
+00:11:19.877 --> 00:11:24.835
+A test-based reward is useful only when the test measures the intended outcome reliably.
+
+
+59
+00:11:26.235 --> 00:11:32.828
+Every reward-based update depends on whether its evaluator measures the right thing. This is the verifier problem.
+
+60
+00:11:33.989 --> 00:11:44.487
+RLVR means Reinforcement Learning with Verifiable Rewards. For our repair, the verifier applies the patch, runs the cancellation tests, and returns a reproducible outcome.
+
+61
+00:11:45.647 --> 00:11:50.696
+The same idea applies to checked math answers, tool states, and agent environments.
+
+62
+00:11:51.856 --> 00:11:58.399
+A preference such as “patch A is cleaner” depends on a judge. A verifiable reward applies an explicit rule.
+
+63
+00:11:59.560 --> 00:12:07.468
+Verifiable does not mean infallible; it means the same patch should receive the same result under the same evaluator state.
+
+64
+00:12:08.629 --> 00:12:20.081
+Write the rule as r equals V of x, y, and e. X is the public task. Y is the sampled attempt. E is evaluator-only state such as hidden tests.
+
+65
+00:12:21.241 --> 00:12:25.426
+For a binary verifier, reward is zero or one.
+
+66
+00:12:26.586 --> 00:12:39.364
+This equation separates the setting from the optimizer. RLVR supplies reward. PPO, GRPO, or another policy optimizer supplies the update. DeepSeek-R1 is an important example of reasoning training built from this combination.
+
+67
+00:12:40.524 --> 00:12:51.796
+The full loop is prompt, policy attempt, execution, verification, reward, and policy update. Automatic checks scale because a person does not need to score every trajectory.
+
+68
+00:12:52.956 --> 00:12:57.733
+The verifier also becomes both the task specification and an attack surface.
+
+69
+00:12:58.894 --> 00:13:12.213
+RLVR applies beyond short math answers. Code can compile and run tests. Tool agents can be checked against a target database state. Search can verify retrieved evidence. Scientific tasks can use simulators and constraints.
+
+70
+00:13:13.374 --> 00:13:20.509
+It is a poor fit when quality is inherently subjective, outcomes cannot be reproduced, or the checker is easy to game.
+
+71
+00:13:21.670 --> 00:13:33.262
+Verifier errors have two directions. A false negative rejects a valid solution. A false positive is more dangerous under optimization because a wrong solution receives positive gradient and can become an exploit.
+
+72
+00:13:34.423 --> 00:13:43.788
+Suppose visible tests cover only three examples. Hard-coding those outputs and implementing the general rule both receive reward one. The optimizer cannot distinguish them.
+
+73
+00:13:44.948 --> 00:13:52.405
+Hidden tests, randomized cases, invariants, and shadow verifiers make the measured objective closer to the intended task.
+
+74
+00:13:53.565 --> 00:14:07.567
+That requires an information boundary. The policy sees the public task and allowed observations. The evaluator alone sees hidden checks and anti-cheat state. Training-only teacher evidence belongs in a third protected channel.
+
+75
+00:14:08.727 --> 00:14:17.369
+So “RLVR with GRPO” is precise: the first term names how outcomes are labeled, and the second names how those labels become an update.
+
+
+76
+00:14:18.769 --> 00:14:27.321
+A trustworthy reward still has to become a learning signal. PPO and GRPO differ mainly in how they decide whether an outcome was better or worse than expected.
+
+77
+00:14:28.868 --> 00:14:43.281
+PPO means Proximal Policy Optimization. For the successful inspect, patch, and test trajectory, observed return is point eight. A learned critic expected point five. Their difference, positive point three, is the advantage.
+
+78
+00:14:44.829 --> 00:14:49.877
+PPO combines that advantage with a clipped probability ratio and updates the policy.
+
+79
+00:14:51.425 --> 00:15:06.249
+GRPO means Group Relative Policy Optimization. It keeps rollouts, rewards, probability ratios, and clipping, but removes the critic. Instead, it samples several patches for the same cancellation bug and compares their verifier scores.
+
+80
+00:15:07.797 --> 00:15:16.710
+Our six sibling patches produce rewards one, zero, zero, one, one, zero. The mean is one half and the standard deviation is one half.
+
+81
+00:15:18.257 --> 00:15:24.119
+Normalizing gives every passing patch advantage positive one and every failing patch negative one.
+
+82
+00:15:25.666 --> 00:15:35.031
+That comparison is useful but coarse. Raise Timeout Error and return None both failed, so binary GRPO treats them alike even if one was closer.
+
+83
+00:15:36.579 --> 00:15:40.804
+The group says which siblings did better; it does not explain why.
+
+84
+00:15:42.351 --> 00:15:52.538
+The clipping graph controls how much one sampled action can influence a single update. If its probability moves from point one zero to point one three, the ratio is one point three.
+
+85
+00:15:54.086 --> 00:16:03.902
+With a cap at one point two, additional positive credit stops growing. Clipping limits a local incentive; it does not guarantee that the whole policy stayed close.
+
+86
+00:16:05.450 --> 00:16:08.681
+A group teaches only when it contains contrast.
+
+87
+00:16:10.228 --> 00:16:22.684
+If one patch succeeds with probability p, a group of size G is mixed with probability one minus p to the G minus one minus p, all to the G. That subtracts all-success and all-failure groups.
+
+88
+00:16:24.232 --> 00:16:38.735
+Near zero success, almost every group fails. Near one, almost every group passes. Either case produces little relative signal. Larger groups widen the useful middle but require more patch generation and test execution.
+
+89
+00:16:40.283 --> 00:16:50.690
+This is why prompts need to sit near the learning frontier: difficult enough to fail, possible enough to solve. If every cancellation patch receives the same reward, normalized group advantage is zero.
+
+90
+00:16:52.238 --> 00:17:04.283
+Both PPO and GRPO need trajectories, rewards, behavior log-probabilities, clipped ratios, and gradients. PPO learns expected value with a critic. GRPO estimates a baseline from sibling patches.
+
+91
+00:17:05.830 --> 00:17:10.969
+The cancellation environment stays the same; only the baseline estimator changes.
+
+
+92
+00:17:12.369 --> 00:17:22.275
+Outcome rewards compress an attempt to a scalar. Distillation supplies richer guidance by specifying a probability distribution over plausible next tokens.
+
+93
+00:17:25.634 --> 00:17:40.639
+A one-hot target says “Cancelled Error” and assigns every alternative zero. A teacher distribution can say that “Cancelled Error” is most likely, “Timeout Error” is also plausible, “return” is weak, and “retry” is unlikely.
+
+94
+00:17:43.997 --> 00:17:47.770
+That structure contains more information than the one sampled token.
+
+95
+00:17:51.128 --> 00:17:59.499
+Teacher probability q weights the log of student probability p over the vocabulary. Minimizing that cross-entropy moves the student toward the teacher.
+
+96
+00:18:02.857 --> 00:18:11.268
+In our example, the student initially favors “return,” while the teacher favors “Cancelled Error.” After an update, the two distributions move closer.
+
+97
+00:18:14.626 --> 00:18:25.898
+Teacher temperature controls how much of that structure is visible. Low temperature makes the target almost one-hot. Higher temperature reveals alternatives in the tail; too much can magnify noise.
+
+98
+00:18:29.256 --> 00:18:34.164
+Teacher-target temperature is separate from the rollout temperature used to sample behavior.
+
+99
+00:18:37.522 --> 00:18:51.523
+KL direction changes the lesson too. Forward KL penalizes the student for missing teacher-supported alternatives. Reverse KL strongly penalizes student probability where the teacher assigns little mass, often favoring a narrower mode.
+
+100
+00:18:54.882 --> 00:18:58.655
+“We used KL” is incomplete without direction and temperature.
+
+101
+00:19:02.013 --> 00:19:15.693
+Prefix provenance determines which states receive teacher targets. Offline distillation uses fixed teacher trajectories. On-policy distillation lets the student reach its own strange cancellation state, then asks the teacher what should come next there.
+
+102
+00:19:19.052 --> 00:19:31.417
+The teacher does not need larger weights. The same frozen model can see the student's failed prefix plus extra training-only evidence: a verified repair, an expert demonstration, or a test explanation.
+
+103
+00:19:34.776 --> 00:19:38.227
+That evidence changes the teacher distribution.
+
+104
+00:19:41.586 --> 00:19:52.636
+Training transfers the useful part of that privileged view into student weights. Deployment removes the evidence. A verified solution, demonstration, or failure explanation produces a different teacher target.
+
+
+105
+00:19:54.036 --> 00:20:04.996
+OPSD, SDFT, and SDPO share one mechanism. A frozen teacher scores the student's prefix while receiving additional evidence. The evidence source defines the method.
+
+106
+00:20:06.426 --> 00:20:16.333
+The student distribution is p theta given the issue and its prefix. Teacher target q scores the same next token at the same prefix, but also conditions on evidence e.
+
+107
+00:20:17.763 --> 00:20:22.761
+Training matches q into p; deployment removes e.
+
+108
+00:20:24.191 --> 00:20:33.516
+On-Policy Self-Distillation, or OPSD, gives the teacher a trusted solution. Here that is the verified repair: preserve cleanup and raise Cancelled Error.
+
+109
+00:20:34.946 --> 00:20:41.630
+The teacher uses it to guide the student's own prefix without placing the privileged patch in the deployed student's prompt.
+
+110
+00:20:43.060 --> 00:20:51.240
+The OPSD paper evaluated this mechanism on reasoning tasks; the animation maps the information flow onto our code case.
+
+111
+00:20:52.671 --> 00:21:04.354
+Self-Distillation Fine-Tuning, or SDFT, gives the teacher an expert demonstration. A related repair shows the sequence inspect the flag, run cleanup, then raise the exception.
+
+112
+00:21:05.784 --> 00:21:13.964
+Unlike offline imitation, SDFT scores the current student's return-None prefix, so the demonstration guides the state the student actually reached.
+
+113
+00:21:15.394 --> 00:21:29.807
+Self-Distillation Policy Optimization, or SDPO, gives the teacher feedback about the current failure. The scalar reward is zero, but the test trace says test-cancel failed, expected Cancelled Error, and return skipped cancellation.
+
+114
+00:21:31.237 --> 00:21:36.787
+The teacher converts that explanation into dense token probabilities along the failed prefix.
+
+115
+00:21:38.217 --> 00:21:49.719
+The choice follows the evidence. A trusted solution supports OPSD. A demonstration supports SDFT. An explanatory failure trace supports SDPO.
+
+116
+00:21:51.150 --> 00:22:00.153
+If all you have is a binary outcome, GRPO may be the honest baseline; inventing a generic “feedback” field would hide these different trust boundaries.
+
+117
+00:22:01.583 --> 00:22:11.400
+None of the dense methods is automatically safe. A privileged patch can leak. A demonstration can be irrelevant. A teacher can misread feedback and densify an error.
+
+118
+00:22:12.830 --> 00:22:21.291
+New capability can overwrite old behavior, entropy can collapse, and teacher forward passes can erase claimed efficiency savings.
+
+119
+00:22:22.721 --> 00:22:35.770
+So the durable comparison is not acronym against acronym. Hold the student prefix fixed, vary the evidence, record the cost, and measure both the cancellation repair and unrelated retained capability.
+
+
+120
+00:22:37.170 --> 00:22:44.627
+A research result requires many versioned tasks, protected information boundaries, matched baselines, and held-out evaluation.
+
+121
+00:22:46.016 --> 00:22:58.020
+Policy-visible input includes the issue, repository revision, allowed tools, and public tests. Training-only evidence may contain an expert repair, privileged patch, or public diagnostic.
+
+122
+00:22:59.409 --> 00:23:06.003
+Evaluator-only hidden tests, anti-exploit checks, and held-out repository clusters must remain outside both.
+
+123
+00:23:07.391 --> 00:23:20.982
+The Taskset preserves those boundaries together with source revision, license, split, verifier version, and content hash. Related issues from the same repository should be clustered before splitting; otherwise memorization can look like generalization.
+
+124
+00:23:22.371 --> 00:23:33.240
+Hugging Face support is worthwhile when it behaves as a reproducible importer. Pin the repository revision. Inspect the dataset card and license. Choose configuration and split explicitly.
+
+125
+00:23:34.629 --> 00:23:45.900
+Map columns through a reviewed transform, log rejected rows, preserve original identifiers, and materialize an immutable snapshot. A training run should never silently follow a changing main branch.
+
+126
+00:23:47.289 --> 00:24:00.107
+Every proposed method needs a simple credible baseline. Begin with the base model and the most direct token-imitation objective supported by the data. Add offline distillation or preference learning when those signals are relevant.
+
+127
+00:24:01.496 --> 00:24:10.048
+Compare with GRPO or another RLVR baseline before claiming value from OPSD, SDFT, or SDPO.
+
+128
+00:24:11.436 --> 00:24:22.256
+Equal optimizer tokens and equal total compute answer different questions. A distillation method may use fewer rollouts while spending additional teacher forward passes. Report both controls.
+
+129
+00:24:23.645 --> 00:24:41.010
+Evaluation should span four dimensions. Capability measures task success. Diversity measures pass-at-k, entropy, and distinct strategies. Retention tests old domains and distribution drift. Integrity audits reward exploits, leakage, and disagreement with a shadow verifier.
+
+130
+00:24:42.399 --> 00:24:45.670
+A single average can hide serious regressions.
+
+131
+00:24:47.059 --> 00:24:57.838
+Compute accounting includes student rollout tokens, teacher-scored tokens, backward tokens, verifier time, external calls, failed jobs, memory, storage, and wall clock.
+
+132
+00:24:59.227 --> 00:25:15.638
+The primary study compares GRPO, SDPO, and a routed success-and-failure method on code repair while separating public diagnostics from hidden tests. Verified math can replicate the GRPO and OPSD claims with exact graders.
+
+133
+00:25:17.027 --> 00:25:28.800
+A tool protocol can replicate token imitation and SDFT while measuring retention. The extra domains test whether a conclusion transfers; they do not replace the main story halfway through it.
+
+134
+00:25:30.189 --> 00:25:40.868
+The paper should bind every claim to a dataset revision, metric, run set, seed, confidence interval, and ablation. That structure keeps a local result from turning into a universal claim.
+
+135
+00:25:42.257 --> 00:25:56.309
+The final map is simple. Demonstrations produce imitation targets. Preferences produce relative targets. Verifiable outcomes produce rewards. Privileged solutions and failure explanations produce context-conditioned teacher distributions.
+
+136
+00:25:57.698 --> 00:26:07.704
+Evidence determines the target. The target determines the update. The update changes future behavior. Evaluation measures what improved—and what changed elsewhere.
+
+
+137
+00:26:09.104 --> 00:26:15.969
+The first appendix isolates two GRPO evaluation choices that matter after the main mechanism is understood.
+
+138
+00:26:20.463 --> 00:26:30.741
+Length normalization changes gradient weight. A fourteen-hundred-token correct answer and a one-hundred-eighty-token correct answer may receive the same reward but contribute very different numbers of token terms.
+
+139
+00:26:35.235 --> 00:26:43.235
+Sequence averaging, token averaging, overlong penalties, and group normalization therefore change the effective objective.
+
+140
+00:26:47.730 --> 00:26:56.733
+Pass-at-one measures reliability from one sample. Pass-at-k asks whether any of k samples succeeds and exposes remaining search diversity.
+
+141
+00:27:01.228 --> 00:27:08.504
+A model can improve pass-at-one while collapsing onto one strategy, so report both metrics with the sampling configuration.
+
+142
+00:27:09.904 --> 00:27:17.994
+The systems problem is storage. A large vocabulary creates one teacher logit for every token at every trajectory position.
+
+143
+00:27:21.415 --> 00:27:30.459
+Top-k compression stores the most likely teacher logits and approximates the remaining tail. This reduces memory and bandwidth but changes the target distribution.
+
+144
+00:27:33.880 --> 00:27:40.604
+Measure divergence from full logits on a validation sample, and count teacher-forward cost when comparing efficiency.
+
+145
+00:27:42.004 --> 00:27:48.547
+The reported graphs belong in an appendix because they come from different models, datasets, and experimental budgets.
+
+146
+00:27:50.405 --> 00:27:56.226
+The OPSD study reports its largest displayed aggregate gain at the smallest Qwen3 model.
+
+147
+00:27:58.084 --> 00:28:10.541
+At one point seven billion parameters, the displayed base score is thirty-seven point one, GRPO is thirty-seven point seven, and OPSD is forty-three point four. The gaps are smaller at four and eight billion parameters.
+
+148
+00:28:12.398 --> 00:28:17.537
+That is a hypothesis for replication, not a universal model-size law.
+
+149
+00:28:19.395 --> 00:28:30.124
+The SDFT study emphasizes knowledge acquisition and retention. Its displayed strict aggregate moves from eighty to eighty-nine, while its out-of-distribution aggregate moves from eighty to ninety-eight.
+
+150
+00:28:31.982 --> 00:28:44.117
+The SDPO study reports forty-one point two for GRPO and forty-eight point eight for SDPO on its code benchmark. Their bars answer different questions and should not be read as a controlled head-to-head comparison.
+
+151
+00:28:45.975 --> 00:28:58.612
+SRPO means Sample-Routed Policy Optimization. It sends verified successes toward a GRPO-style outcome update and failures with explanations toward an SDPO-style corrective target.
+
+152
+00:29:00.470 --> 00:29:12.243
+The useful principle is signal routing. A successful rollout already shows what worked and can support sparse selection. A failed rollout with diagnostics may reveal how to recover and can support dense correction.
+
+153
+00:29:14.101 --> 00:29:19.471
+The router preserves that asymmetry instead of forcing every sample through one uniform loss.
+

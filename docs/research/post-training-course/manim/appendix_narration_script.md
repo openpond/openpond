@@ -4,7 +4,7 @@ These optional scenes preserve implementation details and individual paper resul
 
 ## Appendix 1 — GRPO details
 
-Target window: `00:00.000–00:56.100`
+Target window: `00:00.000–01:00.800`
 
 <!-- BEGIN VOICEOVER: Appendix01GRPODetails -->
 The first appendix isolates two GRPO evaluation choices that matter after the main mechanism is understood.
@@ -16,7 +16,7 @@ Pass-at-one measures reliability from one sample. Pass-at-k asks whether any of 
 
 ## Appendix 2 — Distillation systems
 
-Target window: `00:56.100–01:28.200`
+Target window: `01:00.800–01:32.900`
 
 <!-- BEGIN VOICEOVER: Appendix02DistillationSystems -->
 The systems problem is storage. A large vocabulary creates one teacher logit for every token at every trajectory position.
@@ -26,7 +26,7 @@ Top-k compression stores the most likely teacher logits and approximates the rem
 
 ## Appendix 3 — Paper details and SRPO
 
-Target window: `01:28.200–03:07.067`
+Target window: `01:32.900–03:11.767`
 
 <!-- BEGIN VOICEOVER: Appendix03MethodStudies -->
 The reported graphs belong in an appendix because they come from different models, datasets, and experimental budgets.

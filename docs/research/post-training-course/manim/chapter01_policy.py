@@ -1,7 +1,5 @@
 """Chapter 1: one policy decision, one evaluation, and one update."""
 
-from pathlib import Path
-
 from manimlib import *
 
 from components import (
@@ -34,59 +32,19 @@ class Chapter01Policy(LessonScene):
     hold_scale = 5.8
 
     def construct(self) -> None:
-        self._openpond_intro()
-        self._course_title()
+        self.lesson_intro(
+            "How post-training works",
+            "How a model chooses, receives evidence, and changes its behavior.",
+        )
         self._course_contents()
         self._policy_chooses()
         self._loss_in_plain_english()
         self._training_changes_the_odds()
 
-    def _openpond_intro(self) -> None:
-        """Mirror the app splash: mark first, then reveal OpenPond letter by letter."""
-        icon_path = (
-            Path(__file__).resolve().parents[4]
-            / "apps"
-            / "web"
-            / "public"
-            / "openpond-icon.png"
-        )
-        mark = ImageMobject(str(icon_path))
-        mark.set_height(1.34)
-        wordmark = text("OpenPond", size=42, color=INK, weight="BOLD")
-        Group(mark, wordmark).arrange(RIGHT, buff=-0.08).move_to(ORIGIN)
-
-        self.play(FadeIn(mark, scale=0.92), run_time=0.45)
-        self.wait(0.52)
-        for glyph in wordmark:
-            self.play(FadeIn(glyph, shift=LEFT * 0.06), run_time=0.14)
-            self.wait(0.10)
-        self.wait(0.35)
-        self.wipe()
-
-    def _course_title(self) -> None:
-        title = text(
-            "Post-training from first principles",
-            size=56,
-            color=INK,
-            weight="BOLD",
-        )
-        subtitle = text(
-            "How rewards and teacher feedback change a model",
-            size=27,
-            color=MUTED,
-        )
-        rule = Line(LEFT * 4.8, RIGHT * 4.8, color=CYAN, stroke_width=2.5)
-        VGroup(title, rule, subtitle).arrange(DOWN, buff=0.34).move_to(ORIGIN)
-        self.reveal(title, run_time=0.65)
-        self.play(ShowCreation(rule), run_time=0.45)
-        self.reveal(subtitle, run_time=0.45)
-        self.hold(0.48)
-        self.wipe()
-
     def _course_contents(self) -> None:
         title = text("Contents", size=46, color=INK, weight="BOLD")
         subtitle = text(
-            "Nine chapters · about twenty-four minutes",
+            "Nine chapters · about twenty-six minutes",
             size=21,
             color=MUTED,
         )
@@ -97,14 +55,14 @@ class Chapter01Policy(LessonScene):
         # makes the opening useful as a navigable table of contents.
         chapters = [
             ("00:00", "Choose, judge, update", CYAN),
-            ("01:09", "Definitions", VIOLET),
-            ("05:50", "On- and off-policy data", BLUE),
-            ("06:52", "From outcomes to credit", AMBER),
-            ("09:47", "Verifiable rewards", GREEN),
-            ("12:35", "PPO and GRPO", CYAN),
-            ("15:24", "Distillation", VIOLET),
-            ("18:01", "Teacher-guided methods", PINK),
-            ("20:39", "Credible experiments", GREEN),
+            ("01:05", "Definitions", VIOLET),
+            ("07:19", "On- and off-policy data", BLUE),
+            ("08:26", "From outcomes to credit", AMBER),
+            ("11:26", "Verifiable rewards", GREEN),
+            ("14:18", "PPO and GRPO", CYAN),
+            ("17:12", "Distillation", VIOLET),
+            ("19:53", "Teacher-guided methods", PINK),
+            ("22:36", "Credible experiments", GREEN),
         ]
         entries = VGroup()
         for timestamp_value, chapter, color in chapters:

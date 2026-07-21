@@ -32,12 +32,32 @@ if (courseVideos.length !== 10) {
   throw new Error(`Expected 10 post-training lesson videos, found ${courseVideos.length}`);
 }
 
-const catalog = [
-  ...courseVideos,
+const makeAgentVideos = [
   {
     id: "make-agent-tutorial",
     localPath: "tutorials/how-to-make-an-agent.mp4",
   },
+  ...["create", "use", "improve"].map((chapter) => ({
+    id: `make-agent-tutorial-${chapter}`,
+    localPath: `tutorials/how-to-make-an-agent-${chapter}.mp4`,
+  })),
+];
+
+const agentOverviewVideo = {
+  id: "openpond-agent-overview",
+  localPath: "tutorials/what-is-an-openpond-agent.mp4",
+};
+
+const fullCourseVideo = {
+  id: "post-training-full-course",
+  localPath: "courses/post-training/full-course.mp4",
+};
+
+const catalog = [
+  ...courseVideos,
+  fullCourseVideo,
+  agentOverviewVideo,
+  ...makeAgentVideos,
 ];
 
 function durationSeconds(filePath) {
@@ -91,9 +111,17 @@ const manifest = {
   playlists: [
     {
       id: "post-training-from-first-principles",
+      fullVideoId: fullCourseVideo.id,
       status: "draft",
       title: "Post-training from first principles",
       videoIds: courseVideos.map((video) => video.id),
+    },
+    {
+      id: "how-to-make-an-agent",
+      status: "published",
+      title: "Agents",
+      playAllVideoId: "make-agent-tutorial",
+      videoIds: makeAgentVideos.slice(1).map((video) => video.id),
     },
   ],
   videos,

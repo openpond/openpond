@@ -13,6 +13,10 @@ class Chapter02OnOffPolicy(LessonScene):
     hold_scale = 5.0
 
     def construct(self) -> None:
+        self.lesson_intro(
+            "On-policy and off-policy data",
+            "The data source determines which update a training record can support.",
+        )
         self._source_definition()
         self._rollout_record()
         self._stored_signals()

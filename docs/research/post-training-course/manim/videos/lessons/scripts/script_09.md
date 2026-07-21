@@ -1,6 +1,6 @@
 # Credible experiments
 
-Post-training from first principles · Lesson 9 of 10 · 3:27
+Post-training from first principles · Lesson 9 of 10 · 3:32
 
 ## Learning objective
 

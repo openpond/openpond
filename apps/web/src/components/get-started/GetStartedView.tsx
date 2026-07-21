@@ -4,9 +4,14 @@ import "../../styles/get-started/get-started.css";
 import { GetStartedDeckView } from "./GetStartedDeck";
 import { GET_STARTED_DECKS, type GetStartedDeckId } from "./get-started-content";
 import { MakeAgentTutorialCard } from "./MakeAgentTutorialCard";
+import { LearningVideoCard } from "./LearningVideoCard";
 import { PostTrainingSeries } from "./PostTrainingSeries";
+import { OPENPOND_AGENT_OVERVIEW } from "./openpond-agent-overview";
 import type { PostTrainingCourseState } from "./post-training-lessons";
-import type { MakeAgentTutorialState } from "./make-agent-tutorial";
+import type {
+  MakeAgentTutorialState,
+  MakeAgentTutorialVideoId,
+} from "./make-agent-tutorial";
 
 type GetStartedViewProps = {
   onCreateAgent: () => void;
@@ -19,6 +24,7 @@ type GetStartedViewProps = {
   onOpenProfile: () => void;
   onOpenPostTrainingCourse: () => void;
   onOpenMakeAgentTutorial: () => void;
+  onSelectMakeAgentTutorialVideo: (videoId: MakeAgentTutorialVideoId) => void;
   onSelectPostTrainingLesson: (lessonIndex: number) => void;
   postTrainingCourse: PostTrainingCourseState | null;
 };
@@ -29,6 +35,7 @@ export function GetStartedView({
   onClosePostTrainingCourse,
   onOpenMakeAgentTutorial,
   onOpenPostTrainingCourse,
+  onSelectMakeAgentTutorialVideo,
   onSelectPostTrainingLesson,
   postTrainingCourse,
 }: GetStartedViewProps) {
@@ -51,20 +58,12 @@ export function GetStartedView({
       aria-label="Get started"
     >
       <div className="get-started-shell">
-        <section className="get-started-learn" aria-labelledby="get-started-learn-title">
+        <section className="get-started-start-here" aria-labelledby="get-started-start-here-title">
           <header className="get-started-section-heading">
-            <h2 id="get-started-learn-title">Learn</h2>
+            <h2 id="get-started-start-here-title">Start here</h2>
           </header>
           <div className="get-started-learning-grid">
-            <PostTrainingSeries
-              activeLessonIndex={postTrainingCourse?.lessonIndex ?? 0}
-              autoplay={postTrainingCourse?.autoplay ?? true}
-              open={Boolean(postTrainingCourse)}
-              onClose={onClosePostTrainingCourse}
-              onOpen={onOpenPostTrainingCourse}
-              onSelectLesson={onSelectPostTrainingLesson}
-              playRequestId={postTrainingCourse?.playRequestId ?? 0}
-            />
+            <LearningVideoCard titleElement="h1" video={OPENPOND_AGENT_OVERVIEW} />
           </div>
         </section>
 
@@ -74,9 +73,31 @@ export function GetStartedView({
           </header>
           <div className="get-started-learning-grid">
             <MakeAgentTutorialCard
+              activeVideoId={makeAgentTutorial?.videoId ?? "create"}
+              autoplay={makeAgentTutorial?.autoplay ?? true}
               onClose={onCloseMakeAgentTutorial}
               onOpen={onOpenMakeAgentTutorial}
+              onSelectVideo={onSelectMakeAgentTutorialVideo}
               open={Boolean(makeAgentTutorial)}
+              playRequestId={makeAgentTutorial?.playRequestId ?? 0}
+            />
+          </div>
+        </section>
+
+        <section className="get-started-learn" aria-labelledby="get-started-learn-title">
+          <header className="get-started-section-heading">
+            <h2 id="get-started-learn-title">Learn deeper</h2>
+          </header>
+          <div className="get-started-learning-grid">
+            <PostTrainingSeries
+              activeLessonIndex={postTrainingCourse?.lessonIndex ?? 0}
+              autoplay={postTrainingCourse?.autoplay ?? true}
+              fullCourseSelected={postTrainingCourse?.fullCourseSelected ?? false}
+              open={Boolean(postTrainingCourse)}
+              onClose={onClosePostTrainingCourse}
+              onOpen={onOpenPostTrainingCourse}
+              onSelectLesson={onSelectPostTrainingLesson}
+              playRequestId={postTrainingCourse?.playRequestId ?? 0}
             />
           </div>
         </section>

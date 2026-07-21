@@ -10,6 +10,7 @@ import { copyToClipboard } from "../../lib/clipboard";
 import { BookOpenText, Copy, FileText, Play, RotateCw } from "../icons";
 import {
   POST_TRAINING_LESSONS,
+  POST_TRAINING_FULL_COURSE,
   POST_TRAINING_SERIES_TITLE,
   type PostTrainingPanelView,
 } from "./post-training-lessons";
@@ -45,9 +46,11 @@ function requestScript(url: string): Promise<string> {
 export function PostTrainingLearningPanel({
   activeLessonIndex,
   autoplay,
+  fullCourseSelected,
   onResizeStart,
   onOpenScript,
   onSelectLesson,
+  onSelectFullCourse,
   onSetAutoplay,
   onShowLessons,
   panelView,
@@ -55,9 +58,11 @@ export function PostTrainingLearningPanel({
 }: {
   activeLessonIndex: number;
   autoplay: boolean;
+  fullCourseSelected: boolean;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onOpenScript: (lessonIndex: number) => void;
   onSelectLesson: (index: number) => void;
+  onSelectFullCourse: () => void;
   onSetAutoplay: (autoplay: boolean) => void;
   onShowLessons: () => void;
   panelView: PostTrainingPanelView;
@@ -157,7 +162,9 @@ export function PostTrainingLearningPanel({
           >
             <PostTrainingLessonList
               activeLessonIndex={activeLessonIndex}
+              fullCourseSelected={fullCourseSelected}
               onOpenScript={onOpenScript}
+              onSelectFullCourse={onSelectFullCourse}
               onSelectLesson={onSelectLesson}
             />
           </div>
@@ -173,69 +180,91 @@ export function PostTrainingLearningPanel({
 
 function PostTrainingLessonList({
   activeLessonIndex,
+  fullCourseSelected,
   onOpenScript,
+  onSelectFullCourse,
   onSelectLesson,
 }: {
   activeLessonIndex: number;
+  fullCourseSelected: boolean;
   onOpenScript: (lessonIndex: number) => void;
+  onSelectFullCourse: () => void;
   onSelectLesson: (index: number) => void;
 }) {
   const progress = usePostTrainingProgress();
 
   return (
-    <ol>
-      {POST_TRAINING_LESSONS.map((lesson, index) => {
-        const isActive = index === activeLessonIndex;
-        const lessonProgress = progress[lesson.id];
-        const percent = postTrainingProgressPercent(lessonProgress);
-        const progressLabel = lessonProgress?.completed
-          ? "Complete"
-          : `${percent}% watched`;
-        return (
-          <li key={lesson.id}>
-            <div className="get-started-learning-lesson-card">
-              <button
-                className="get-started-learning-lesson-button"
-                aria-current={isActive ? "true" : undefined}
-                aria-label={`Play lesson ${lesson.lessonNumber}: ${lesson.title}`}
-                onClick={() => onSelectLesson(index)}
-                type="button"
-              >
-                <img alt="" decoding="async" loading="lazy" src={lesson.posterUrl} />
-                <span>
-                  <small>
-                    {lesson.lessonNumber} · {lesson.duration}
-                    {percent > 0 ? ` · ${progressLabel}` : ""}
-                  </small>
-                  <strong>{lesson.title}</strong>
-                </span>
-              </button>
-              {lesson.script ? (
+    <>
+      <ol>
+        {POST_TRAINING_LESSONS.map((lesson, index) => {
+          const isActive = index === activeLessonIndex;
+          const lessonProgress = progress[lesson.id];
+          const percent = postTrainingProgressPercent(lessonProgress);
+          const progressLabel = lessonProgress?.completed
+            ? "Complete"
+            : `${percent}% watched`;
+          return (
+            <li key={lesson.id}>
+              <div className="get-started-learning-lesson-card">
                 <button
-                  aria-label={`Open ${lesson.script.fileName} for ${lesson.title}`}
-                  className="get-started-learning-script-button app-tooltip app-tooltip-right"
-                  data-tooltip={`Open ${lesson.script.fileName}`}
-                  onClick={() => onOpenScript(index)}
+                  className="get-started-learning-lesson-button"
+                  aria-current={isActive && !fullCourseSelected ? "true" : undefined}
+                  aria-label={`Play lesson ${lesson.lessonNumber}: ${lesson.title}`}
+                  onClick={() => onSelectLesson(index)}
                   type="button"
                 >
-                  <FileText size={16} />
+                  <img alt="" decoding="async" loading="lazy" src={lesson.posterUrl} />
+                  <span>
+                    <small>
+                      {lesson.lessonNumber} · {lesson.duration}
+                      {percent > 0 ? ` · ${progressLabel}` : ""}
+                    </small>
+                    <strong>{lesson.title}</strong>
+                  </span>
                 </button>
-              ) : null}
-              <div
-                aria-label={`${lesson.title}: ${progressLabel}`}
-                aria-valuemax={100}
-                aria-valuemin={0}
-                aria-valuenow={percent}
-                className={`get-started-learning-progress ${lessonProgress?.completed ? "complete" : ""}`}
-                role="progressbar"
-              >
-                <i aria-hidden="true" style={{ width: `${percent}%` }} />
+                {lesson.script ? (
+                  <button
+                    aria-label={`Open ${lesson.script.fileName} for ${lesson.title}`}
+                    className="get-started-learning-script-button app-tooltip app-tooltip-right"
+                    data-tooltip={`Open ${lesson.script.fileName}`}
+                    onClick={() => onOpenScript(index)}
+                    type="button"
+                  >
+                    <FileText size={16} />
+                  </button>
+                ) : null}
+                <div
+                  aria-label={`${lesson.title}: ${progressLabel}`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={percent}
+                  className={`get-started-learning-progress ${lessonProgress?.completed ? "complete" : ""}`}
+                  role="progressbar"
+                >
+                  <i aria-hidden="true" style={{ width: `${percent}%` }} />
+                </div>
               </div>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+            </li>
+          );
+        })}
+      </ol>
+      <footer className="get-started-learning-full-video">
+        <button
+          aria-current={fullCourseSelected ? "true" : undefined}
+          aria-label={`Play full video: ${POST_TRAINING_FULL_COURSE.title}`}
+          onClick={onSelectFullCourse}
+          type="button"
+        >
+          <span className="get-started-learning-full-video-icon" aria-hidden="true">
+            <Play fill="currentColor" size={13} />
+          </span>
+          <span>
+            <strong>Full video</strong>
+            <small>{POST_TRAINING_FULL_COURSE.duration} · All 10 lessons</small>
+          </span>
+        </button>
+      </footer>
+    </>
   );
 }
 
