@@ -129,7 +129,7 @@ export function TrainingSourceStep({
   const authoringProviderLabel = providerOptions.find((option) => option.value === authoringProvider)?.label ?? authoringProvider;
   const authorsDataset = isModel || isDataset;
   const sourceHeading = disclosurePending && isAgent
-    ? "Review chats before sharing"
+    ? "Review chats for the Agent plan"
     : isDataset
       ? "Build the Dataset"
       : isModel
@@ -138,7 +138,7 @@ export function TrainingSourceStep({
           ? "Describe the Agent"
           : "Add purpose and supporting chats";
   const sourceDescription = disclosurePending && isAgent
-    ? "Nothing has been sent. Approve below to share excerpts from only the selected chats and use them to prepare the Agent plan."
+    ? "Approve the selected chat excerpts so OpenPond can turn their goals, decisions, and answer patterns into the first Agent plan."
     : mode === "automated"
     ? authorsDataset
       ? "Confirm the chats that demonstrate this repeated workflow. Only selected chats seed the Dataset."
@@ -257,8 +257,8 @@ export function TrainingSourceStep({
 
         {disclosurePending ? (
           <div className="training-disclosure-review" role="status">
-            <strong>{isAgent ? "Review chats before sharing" : "Approve evidence disclosure"}</strong>
-            <p><b>{authoringProviderLabel} / {authoringModelLabel}</b> will receive raw excerpts from {selectedCount} selected chat{selectedCount === 1 ? "" : "s"}, {selectedEstimate.messageCount} messages, and approximately {formatTrainingTokens(selectedEstimate.estimatedTokens)} tokens. Unselected local chats and the local search index are not sent. {isAgent ? "Nothing is sent until you approve; approval lets OpenPond use these excerpts to prepare the Agent plan." : ""}</p>
+            <strong>{isAgent ? "How the chats build the plan" : "Approve evidence disclosure"}</strong>
+            <p><b>{authoringProviderLabel} / {authoringModelLabel}</b> will analyze excerpts from {selectedCount} selected chat{selectedCount === 1 ? "" : "s"}, {selectedEstimate.messageCount} messages, and approximately {formatTrainingTokens(selectedEstimate.estimatedTokens)} tokens. {isAgent ? "OpenPond uses the recurring goals, decisions, corrections, and answer patterns to draft the Agent's purpose, behavior, actions, outputs, and Evals." : ""}</p>
           </div>
         ) : null}
         {evidenceOverBudget ? (
@@ -297,7 +297,7 @@ export function TrainingSourceStep({
             <button className="training-button" type="button" disabled={!canAnalyze || busy || evidenceOverBudget || (selectedCount > 0 && !selectedEstimateComplete)} onClick={onAnalyze}>
               {busy ? <Loader2 className="spin" size={14} /> : null}
               {selectedCount > 0
-                ? isAgent ? "Review selected chats" : "Review data access"
+                ? isAgent ? "Review chats for plan" : "Review data access"
                 : isAgent && fromPrompt ? "Continue" : authorsDataset ? "Build Dataset" : "Review setup"}
             </button>
           </>

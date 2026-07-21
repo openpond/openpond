@@ -24,7 +24,7 @@ export function CreateImproveStatusReceipt({ run }: { run: CreateImproveRun }) {
         <div className="chat-create-receipt-facts">
           {actionShape ? <span title={actionShape.detail}>{actionShape.label}</span> : null}
           {source ? <span title={source}>{source}</span> : null}
-          {checks ? <span>{checks} checks</span> : null}
+          {checks ? <span>{checks} Evals</span> : null}
         </div>
       ) : null}
     </section>
@@ -36,7 +36,7 @@ function receiptTitle(run: CreateImproveRun): string {
   if (run.state === "awaiting_questions") return "Question ready";
   if (run.state === "awaiting_plan_approval") return "Plan ready";
   if (run.state === "applying_source") return isAgent ? "Saving Agent" : "Applying source";
-  if (run.state === "running_checks") return "Running checks";
+  if (run.state === "running_checks") return "Running Evals";
   if (run.state === "evaluating") return isAgent ? "Checking Agent" : "Evaluating candidate";
   if (run.state === "awaiting_promotion") return isAgent ? "Update ready" : "Candidate ready";
   if (run.state === "opening_pull_request") return "Opening review";
@@ -63,11 +63,11 @@ function receiptText(
   if (run.state === "ready" || run.state === "ready_local") {
     return run.target.kind === "agent"
       ? "The Agent and its actions are ready to use."
-      : "The candidate and its checks are ready.";
+      : "The candidate and its Evals are ready.";
   }
   if (run.state === "awaiting_promotion") {
     return run.target.kind === "agent"
-      ? "The updated Agent passed its checks. Apply the update or keep the current version."
+      ? "The updated Agent passed its Evals. Apply the update or keep the current version."
       : "The candidate has been committed and evaluated. Merge or reject it.";
   }
   if (run.state === "pull_request_open" && run.releaseOutcome.pullRequest) {
@@ -77,7 +77,7 @@ function receiptText(
   }
   if (run.state === "released") {
     return run.target.kind === "agent"
-      ? "The Agent update is saved and its checks passed."
+      ? "The Agent update is saved and its Evals passed."
       : "The change merged and the active Profile passed its post-merge Evals.";
   }
   if (run.state === "rejected") {

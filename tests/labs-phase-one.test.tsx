@@ -1395,13 +1395,13 @@ describe("Lab Phase 1", () => {
       })
     );
     expect(markup).toContain("Update ready");
-    expect(markup).toContain("Current Agent: 0/1 checks passed");
-    expect(markup).toContain("Updated Agent: 1/1 checks passed");
+    expect(markup).toContain("Current Agent: 0/1 Evals passed");
+    expect(markup).toContain("Updated Agent: 1/1 Evals passed");
     expect(markup).toContain("Apply update");
     expect(markup).toContain("Keep current version");
   });
 
-  test("renders Agent change review as request, changes, checks, and apply without internal Git details", () => {
+  test("renders Agent change review as request, changes, Evals, and apply without internal Git details", () => {
     const run = createImproveRunFixture({
       operation: "improve",
       objective: "Make the Agent better at finding files.",
@@ -1477,14 +1477,13 @@ describe("Lab Phase 1", () => {
 
     expect(markup).toContain(">Request<");
     expect(markup).toContain(">Changes<");
-    expect(markup).toContain(">Checks<");
+    expect(markup).toContain(">Evals<");
     expect(markup).toContain(">Apply<");
     expect(markup).toContain("Files (1)");
     expect(markup).toContain("Apply update");
     expect(markup).not.toContain("Base");
     expect(markup).not.toContain("Branch");
     expect(markup).not.toContain("candidate");
-    expect(markup).not.toContain("Evals");
     expect(markup).not.toContain("Review the drafted files and their Evals");
     expect(markup).not.toContain("Files changed");
     expect(markup).not.toContain("profiles/default/agent/instructions.md");
@@ -1494,9 +1493,9 @@ describe("Lab Phase 1", () => {
     expect(markup.indexOf(">Changes<")).toBeLessThan(
       markup.indexOf("Files (1)")
     );
-    expect(markup.indexOf("Files (1)")).toBeLessThan(markup.indexOf(">Checks<"));
-    expect(markup.indexOf(">Changes<")).toBeLessThan(markup.indexOf(">Checks<"));
-    expect(markup.indexOf(">Checks<")).toBeLessThan(markup.indexOf(">Apply<"));
+    expect(markup.indexOf("Files (1)")).toBeLessThan(markup.indexOf(">Evals<"));
+    expect(markup.indexOf(">Changes<")).toBeLessThan(markup.indexOf(">Evals<"));
+    expect(markup.indexOf(">Evals<")).toBeLessThan(markup.indexOf(">Apply<"));
 
     const history = renderToStaticMarkup(
       createElement(LabAgentChangeHistory, {

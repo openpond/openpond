@@ -18,7 +18,6 @@ import type {
   OpenPondApp,
   OpenPondProfileSkill,
   ProviderSettings,
-  SubagentDelegationMode,
   TeamChatMember,
 } from "@openpond/contracts";
 import {
@@ -151,8 +150,6 @@ export type ComposerProps = {
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
-  subagentDelegationDefaultMode?: SubagentDelegationMode;
-  subagentDelegationMode?: SubagentDelegationMode | null;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
@@ -161,7 +158,6 @@ export type ComposerProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
-  onSubagentDelegationModeChange?: (mode: SubagentDelegationMode | null) => void;
   onPromptChange: (value: string) => void;
   onMentionAppSelect?: (appId: string | null) => void;
   showToast: ShowAppToast;
@@ -289,6 +285,49 @@ function synthesizedActionMentionText(action: SandboxActionCatalogEntry): string
   return token ? `@${token}` : null;
 }
 
+export function humanizeSelectedActionInput(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return prompt;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") return prompt;
+    const parts = Object.entries(parsed)
+      .filter(([, value]) => value !== undefined && value !== null && value !== "")
+      .map(([key, value]) => `${actionInputLabel(key)}: ${actionInputValue(key, value)}`);
+    return parts.length ? parts.join(" · ") : prompt;
+  } catch {
+    return prompt;
+  }
+}
+
+function actionInputLabel(key: string): string {
+  const words = key
+    .replace(/Id$/, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase();
+  return words ? `${words[0]!.toUpperCase()}${words.slice(1)}` : "Input";
+}
+
+function actionInputValue(key: string, value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => actionInputValue(key, item)).join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([nestedKey, nestedValue]) => `${actionInputLabel(nestedKey)}: ${actionInputValue(nestedKey, nestedValue)}`)
+      .join(" · ");
+  }
+  const text = String(value);
+  if (/Id$/.test(key) && /^[a-z0-9_-]+$/i.test(text)) {
+    return text
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((part) => `${part[0]!.toUpperCase()}${part.slice(1)}`)
+      .join(" ");
+  }
+  return text;
+}
+
 export function selectedActionDisplayPrompt({
   action,
   prompt,
@@ -306,7 +345,7 @@ export function selectedActionDisplayPrompt({
     ? explicitMention
     : synthesizedActionMentionText(action);
   return mentionText
-    ? promptWithSelectedInvocationText(prompt, mentionText, selectedInvocationPosition)
+    ? promptWithSelectedInvocationText(humanizeSelectedActionInput(prompt), mentionText, selectedInvocationPosition)
     : null;
 }
 
@@ -362,8 +401,6 @@ export function Composer({
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,
-  subagentDelegationDefaultMode,
-  subagentDelegationMode,
   onProviderChange,
   onProviderSetupOpen,
   onProjectTargetChange,
@@ -372,7 +409,6 @@ export function Composer({
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
-  onSubagentDelegationModeChange,
   onPromptChange,
   onMentionAppSelect,
   showToast,
@@ -1596,9 +1632,6 @@ export function Composer({
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           selectedMentionAppId={selectedMentionAppId}
-          subagentDelegationDefaultMode={subagentDelegationDefaultMode}
-          subagentDelegationMode={subagentDelegationMode}
-          onSubagentDelegationModeChange={onSubagentDelegationModeChange}
           showToast={showToast}
           stopIcon={stopControlIcon}
           stopLabel={stopControlLabel}

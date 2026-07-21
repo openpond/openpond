@@ -7,6 +7,7 @@ import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import {
   Composer,
   hasComposerSubmittableInput,
+  humanizeSelectedActionInput,
   promptWithSelectedInvocationText,
   selectedActionDisplayPrompt,
   type ComposerProjectTargetState,
@@ -230,6 +231,26 @@ describe("composer slash behavior", () => {
     ).toBe("@sale Summarize top salesmen");
   });
 
+  test("keeps structured action input out of the visible chat prompt", () => {
+    const action = buildOpenPondAgentSlashCommand(
+      sandboxAgent({ id: "account-health", name: "Account Health" }),
+      "Revenue Workspace",
+    );
+    const input = JSON.stringify({ accountId: "northstar", asOfDate: "2026-07-20" });
+
+    expect(humanizeSelectedActionInput(input)).toBe(
+      "Account: Northstar · As of date: 2026-07-20",
+    );
+    expect(
+      selectedActionDisplayPrompt({
+        action,
+        prompt: input,
+        selectedActionMentionText: "@summarize-account",
+        selectedInvocationPosition: 0,
+      }),
+    ).toBe("@summarize-account Account: Northstar · As of date: 2026-07-20");
+  });
+
   test("treats actions as submittable but requires an objective for Make Agent", () => {
     const action = buildOpenPondAgentSlashCommand(sandboxAgent(), "Cloud Repo");
 
@@ -275,7 +296,7 @@ describe("composer slash behavior", () => {
     ).toBe(false);
   });
 
-  test("regular chat composer exposes a dedicated create button beside add context", () => {
+  test("regular chat composer omits dedicated subagent and make-agent controls", () => {
     const markup = renderToStaticMarkup(
       createElement(Composer, {
         mode: "start",
@@ -309,11 +330,10 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="Add photos and files"');
-    expect(markup).toContain('class="composer-create-control"');
-    expect(markup).toContain('aria-label="Make Agent"');
-    expect(markup).toMatch(
-      /class="composer-create-control" aria-label="Make Agent"[^>]*><span>Make Agent<\/span><\/button>/,
-    );
+    expect(markup).not.toContain("composer-create-control");
+    expect(markup).not.toContain('aria-label="Make Agent"');
+    expect(markup).not.toContain("composer-delegation-trigger");
+    expect(markup).not.toContain(">SUB<");
   });
 
   test("plus menu lists connected apps as planning context", () => {
@@ -362,7 +382,7 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('role="menu"');
-    expect(markup).toContain("Create as agent");
+    expect(markup).toContain("Make Agent");
     expect(markup).toContain('data-app-context-id="app_alpha"');
     expect(markup).toContain("Alpha Bot");
     expect(markup).toContain("Selected planning context");

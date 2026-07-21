@@ -94,12 +94,12 @@ export function AgentRecommendationReview({
       <details className="training-setup-section">
         <summary>
           <span className="training-setup-step-number">4</span>
-          <strong>How OpenPond will check it</strong>
-          <small>{reviewScenarios.length} scenario{reviewScenarios.length === 1 ? "" : "s"}</small>
+          <strong>Evals</strong>
+          <small>{reviewScenarios.length} Eval scenario{reviewScenarios.length === 1 ? "" : "s"}</small>
         </summary>
         <div className="training-recommendation-detail-body">
           <p>
-            OpenPond will run the Agent against review scenarios derived from the
+            OpenPond will evaluate the Agent against scenarios derived from the
             approved chats before it can be released.
           </p>
           {reviewScenarios.length > 0 ? (
@@ -109,7 +109,7 @@ export function AgentRecommendationReview({
               ))}
             </ul>
           ) : (
-            <p>Add another supporting chat so OpenPond can keep a separate review scenario.</p>
+            <p>Add another supporting chat so OpenPond can keep a separate Eval scenario.</p>
           )}
         </div>
       </details>
@@ -142,7 +142,7 @@ export function AgentRecommendationReview({
         <div className="training-recommendation-guidance">
           <strong>Add another example before continuing</strong>
           <p>
-            OpenPond needs enough independent examples to check the Agent without
+            OpenPond needs enough independent examples to evaluate the Agent without
             reusing the same conversation it learned from.
           </p>
         </div>

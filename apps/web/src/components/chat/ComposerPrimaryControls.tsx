@@ -18,7 +18,6 @@ import type {
   OpenPondCommandAccessMode,
   OpenPondApp,
   ProviderSettings,
-  SubagentDelegationMode,
 } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import {
@@ -32,7 +31,6 @@ import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { VoiceInputButton } from "../voice/VoiceInputButton";
 import { CodexModelReasoningMenu } from "./ComposerControls";
-import { ComposerDelegationMenu } from "./ComposerDelegationMenu";
 
 const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "codex",
@@ -93,9 +91,6 @@ export function ComposerPrimaryControls({
   sendDisabled,
   sendTooltip,
   selectedMentionAppId,
-  subagentDelegationDefaultMode,
-  subagentDelegationMode,
-  onSubagentDelegationModeChange,
   showToast,
   stopIcon = "stop",
   stopLabel = "Stop response",
@@ -144,9 +139,6 @@ export function ComposerPrimaryControls({
   sendDisabled: boolean;
   sendTooltip: string;
   selectedMentionAppId: string | null;
-  subagentDelegationDefaultMode?: SubagentDelegationMode;
-  subagentDelegationMode?: SubagentDelegationMode | null;
-  onSubagentDelegationModeChange?: (mode: SubagentDelegationMode | null) => void;
   showToast: ShowAppToast;
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
@@ -283,7 +275,7 @@ export function ComposerPrimaryControls({
             <button type="button" role="menuitem" onClick={onCreateAsAgent}>
               <Bot size={13} />
               <span>
-                <strong>Create as agent</strong>
+                <strong>Make Agent</strong>
               </span>
             </button>
             {mentionApps.length > 0 && (
@@ -322,15 +314,6 @@ export function ComposerPrimaryControls({
           }}
         />
       </div>
-      <button
-        type="button"
-        className="composer-create-control"
-        aria-label="Make Agent"
-        disabled={disabled}
-        onClick={onCreateAsAgent}
-      >
-        <span>Make Agent</span>
-      </button>
       {provider === "codex" ? (
         <DropdownSelect
           compact
@@ -438,14 +421,6 @@ export function ComposerPrimaryControls({
         showToast={showToast}
         onTranscript={onTranscript}
       />
-      {subagentDelegationDefaultMode && onSubagentDelegationModeChange ? (
-        <ComposerDelegationMenu
-          defaultMode={subagentDelegationDefaultMode}
-          disabled={disabled}
-          overrideMode={subagentDelegationMode ?? null}
-          onChange={onSubagentDelegationModeChange}
-        />
-      ) : null}
       {steering ? (
         <button
           type="button"

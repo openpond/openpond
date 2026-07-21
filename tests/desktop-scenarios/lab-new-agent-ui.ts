@@ -67,8 +67,8 @@ export default desktopScenario({
       `document.querySelectorAll("[aria-label='Improve default'] input[type='checkbox']:checked").length >= 2`,
       "selected Improve Agent evidence",
     );
-    await clickButtonByText(harness, "Review selected chats", "[aria-label='Improve default']");
-    await harness.renderer.assertText("Review chats before sharing", {
+    await clickButtonByText(harness, "Review chats for plan", "[aria-label='Improve default']");
+    await harness.renderer.assertText("Review chats for the Agent plan", {
       label: "Improve Agent chat sharing review",
       timeoutMs: 30_000,
     });

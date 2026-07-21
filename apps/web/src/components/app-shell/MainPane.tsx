@@ -144,9 +144,6 @@ export function MainPane({
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,
-  subagentDelegationDefaultMode,
-  subagentDelegationMode,
-  subagentDelegationAvailable,
   pendingApproval,
   activeWorkspaceAppId,
   activeWorkspaceId,
@@ -225,7 +222,6 @@ export function MainPane({
   changeCodexPermissionMode,
   changeCodexReasoningEffort,
   changeOpenPondCommandAccessMode,
-  changeSubagentDelegationMode,
   resolveApproval,
   answerCreateImproveQuestion,
   approveCreateImproveRun,
@@ -1656,8 +1652,6 @@ export function MainPane({
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
                 openPondCommandAccessMode={openPondCommandAccessMode}
-                subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
-                subagentDelegationMode={subagentDelegationMode}
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1666,7 +1660,6 @@ export function MainPane({
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
-                onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
@@ -1720,8 +1713,6 @@ export function MainPane({
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
                 openPondCommandAccessMode={openPondCommandAccessMode}
-                subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
-                subagentDelegationMode={subagentDelegationMode}
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1730,7 +1721,6 @@ export function MainPane({
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
-                onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}

@@ -99,14 +99,14 @@ export function LabAgentChanges({
         <article className="labs-change-timeline-item">
           <div className="labs-change-card">
             <header className="labs-change-card-header">
-              <span className="labs-change-timeline-label">Checks</span>
+              <span className="labs-change-timeline-label">Evals</span>
               <span>{evalSummary(candidateReceipts)}</span>
             </header>
             <div className="labs-change-evals">
               {candidateReceipts.length ? candidateReceipts.map((receipt) => (
                 <div className="labs-change-eval" key={receipt.id}>
                   <div>
-                    <strong>{receipt.summary ?? "Agent checks"}</strong>
+                    <strong>{receipt.summary ?? "Agent Evals"}</strong>
                     <span>
                       {receipt.summaryCounts
                         ? `${receipt.summaryCounts.passed}/${receipt.summaryCounts.total} passed`
@@ -116,7 +116,7 @@ export function LabAgentChanges({
                   <LabStatusBadge label={receipt.status} value={receipt.status} />
                 </div>
               )) : (
-                <div className="labs-change-empty">Agent checks have not finished yet.</div>
+                <div className="labs-change-empty">Agent Evals have not finished yet.</div>
               )}
             </div>
           </div>
@@ -129,7 +129,7 @@ export function LabAgentChanges({
             </header>
             <div className="labs-change-card-body">
               <h3>Save this Agent update</h3>
-              <p>Applying the update changes the Agent in your Profile, then runs its checks again.</p>
+              <p>Applying the update changes the Agent in your Profile, then runs its Evals again.</p>
             </div>
             <footer className="labs-change-card-footer">
               <span className="labs-change-footer-status">
@@ -163,7 +163,7 @@ export function LabAgentChanges({
                   {applying || busyAction === "apply"
                     ? "Applying"
                     : run.state === "blocked"
-                      ? "Re-run checks"
+                      ? "Re-run Evals"
                       : "Apply update"}
                 </button>
               </div>
@@ -192,7 +192,7 @@ function candidateChangeSummary(
 }
 
 function evalSummary(receipts: CreateImproveRun["evaluationReceipts"]): string {
-  if (!receipts.length) return "Waiting for Agent checks";
+  if (!receipts.length) return "Waiting for Agent Evals";
   const counts = receipts.reduce(
     (total, receipt) => ({
       passed: total.passed + (receipt.summaryCounts?.passed ?? 0),
@@ -200,9 +200,9 @@ function evalSummary(receipts: CreateImproveRun["evaluationReceipts"]): string {
     }),
     { passed: 0, tests: 0 },
   );
-  if (counts.tests > 0) return `${counts.passed}/${counts.tests} checks passed`;
+  if (counts.tests > 0) return `${counts.passed}/${counts.tests} Evals passed`;
   const passed = receipts.filter((receipt) => receipt.status === "passed").length;
-  return `${passed}/${receipts.length} check results passed`;
+  return `${passed}/${receipts.length} Eval results passed`;
 }
 
 function changeStatusLabel(run: CreateImproveRun): string {

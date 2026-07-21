@@ -3,8 +3,8 @@
   "tutorial": {
     "title": "How to make an agent",
     "subtitle": "Create, run, improve, and verify an Account Health Agent.",
-    "outroTitle": "Account Health Agent ready",
-    "outroSubtitle": "Chat, actions, checks, and improvement verified. · AI-generated narration",
+    "outroTitle": "Agent shared from the hosted Profile",
+    "outroSubtitle": "Available to teammates and hosted sandboxes. · Synthetic tutorial data · AI-generated narration",
     "narration": {
       "model": "gpt-4o-mini-tts-2025-12-15",
       "voice": "cedar",
@@ -85,9 +85,9 @@
       "file": "C04-from-chats-wide.png",
       "chapter": "create",
       "label": "Add purpose and chats",
-      "caption": "For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.",
+      "caption": "This synthetic example starts with three chats: Acme has renewal blockers, Northstar is expanding, and the team needs a weekly account review. Add them with the Agent purpose.",
       "placement": "top-left",
-      "narration": "For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.",
+      "narration": "This synthetic example starts with three chats: Acme has renewal blockers, Northstar is expanding, and the team needs a weekly account review. Add them with the Agent purpose.",
       "focus": {
         "x": 0.31,
         "y": 0.2,
@@ -100,10 +100,10 @@
       "id": "C06",
       "file": "C06-disclosure.png",
       "chapter": "create",
-      "label": "Review chats before sharing",
-      "caption": "The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.",
+      "label": "See how chats build the plan",
+      "caption": "Review the selected excerpts as examples. OpenPond turns their recurring goals, decisions, corrections, and answer patterns into the first Agent plan.",
       "placement": "bottom-left",
-      "narration": "The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.",
+      "narration": "Review the selected excerpts as examples. OpenPond turns their recurring goals, decisions, corrections, and answer patterns into the first Agent plan.",
       "focus": {
         "x": 0.31,
         "y": 0.2,
@@ -117,9 +117,9 @@
       "file": "C07-agent-review.png",
       "chapter": "create",
       "label": "Review the Agent",
-      "caption": "Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.",
+      "caption": "The draft converts those examples into the Agent's purpose, chat behavior, runnable actions, output formats, and Evals for your review.",
       "placement": "bottom-left",
-      "narration": "Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.",
+      "narration": "The draft converts those examples into the Agent's purpose, chat behavior, runnable actions, output formats, and Evals for your review.",
       "focus": {
         "x": 0.31,
         "y": 0.04,
@@ -149,9 +149,9 @@
       "file": "C09-right-chat-plan.png",
       "chapter": "create",
       "label": "Confirm the plan",
-      "caption": "Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.",
+      "caption": "Before creation, review the proposed name, chat endpoint, runnable actions, Evals, and output formats.",
       "placement": "top-left",
-      "narration": "Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.",
+      "narration": "Before creation, review the proposed name, chat endpoint, runnable actions, Evals, and output formats.",
       "focus": {
         "x": 0.715,
         "y": 0.18,
@@ -161,13 +161,45 @@
       }
     },
     {
+      "id": "C09A",
+      "file": "C09A-edit-plan.png",
+      "chapter": "create",
+      "label": "Edit the plan",
+      "caption": "If the plan misses a requirement, open Edit plan and describe the change in plain language before any Agent source is created.",
+      "placement": "top-left",
+      "narration": "If the plan misses a requirement, open Edit plan and describe the change in plain language before any Agent source is created.",
+      "focus": {
+        "x": 0.73,
+        "y": 0.66,
+        "width": 0.24,
+        "height": 0.24,
+        "zoom": 1.45
+      }
+    },
+    {
+      "id": "C09B",
+      "file": "C09B-revised-plan.png",
+      "chapter": "create",
+      "label": "Create from the revised plan",
+      "caption": "Review the revised plan, then click Confirm plan to create the Agent and run its Evals.",
+      "placement": "top-left",
+      "narration": "Review the revised plan, then click Confirm plan to create the Agent and run its Evals.",
+      "focus": {
+        "x": 0.72,
+        "y": 0.7,
+        "width": 0.25,
+        "height": 0.2,
+        "zoom": 1.45
+      }
+    },
+    {
       "id": "C10",
       "file": "C10-candidate-evaluation.png",
       "chapter": "create",
-      "label": "Check the Agent",
-      "caption": "OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.",
+      "label": "Review the Evals",
+      "caption": "This is the creation result: OpenPond built the Agent and passed its behavior Evals against the Account Health examples.",
       "placement": "bottom-left",
-      "narration": "OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.",
+      "narration": "This is the creation result: OpenPond built the Agent and passed its behavior Evals against the Account Health examples.",
       "focus": {
         "x": 0.19,
         "y": 0.18,
@@ -181,9 +213,9 @@
       "file": "C11-local-source-applied.png",
       "chapter": "create",
       "label": "Save the Agent",
-      "caption": "After the checks pass, the Agent is saved to your Profile and is ready to use.",
+      "caption": "After the Evals pass, the Agent is saved to your Profile and is ready to use.",
       "placement": "bottom-left",
-      "narration": "After the checks pass, the Agent is saved to your Profile and is ready to use.",
+      "narration": "After the Evals pass, the Agent is saved to your Profile and is ready to use.",
       "focus": {
         "x": 0.19,
         "y": 0.16,
@@ -209,13 +241,29 @@
       }
     },
     {
+      "id": "C13Q",
+      "file": "C13Q-chat-acme-prompt.png",
+      "chapter": "use",
+      "label": "Ask the chat endpoint",
+      "caption": "Use opens a normal chat with the Agent attached. Type a natural-language question about Acme before sending it.",
+      "placement": "top-left",
+      "narration": "Use opens a normal chat with the Agent attached. Type a natural-language question about Acme before sending it.",
+      "focus": {
+        "x": 0.18,
+        "y": 0.63,
+        "width": 0.52,
+        "height": 0.3,
+        "zoom": 1.25
+      }
+    },
+    {
       "id": "C13",
       "file": "C13-chat-acme.png",
       "chapter": "use",
       "label": "Ask about Acme",
-      "caption": "In normal chat, the Agent grounds its Acme answer in renewal timing, usage decline, the disputed invoice, and the open P1 case.",
+      "caption": "Acme is the at-risk example: the Agent answers in chat with renewal timing, usage decline, the disputed invoice, and the open P1 case.",
       "placement": "top-left",
-      "narration": "In normal chat, the Agent grounds its Acme answer in renewal timing, usage decline, the disputed invoice, and the open P1 case.",
+      "narration": "Acme is the at-risk example: the Agent answers in chat with renewal timing, usage decline, the disputed invoice, and the open P1 case.",
       "focus": {
         "x": 0.2,
         "y": 0.08,
@@ -261,9 +309,9 @@
       "file": "C16-northstar-summary.png",
       "chapter": "use",
       "label": "Summarize Northstar",
-      "caption": "Running Summarize Account for Northstar identifies the healthy usage trend and the explicit twenty-five-seat expansion request.",
+      "caption": "Northstar is the healthy expansion example from the source chats. Its direct summary identifies rising usage and the request for twenty-five more seats.",
       "placement": "top-left",
-      "narration": "Running Summarize Account for Northstar identifies the healthy usage trend and the explicit twenty-five-seat expansion request.",
+      "narration": "Northstar is the healthy expansion example from the source chats. Its direct summary identifies rising usage and the request for twenty-five more seats.",
       "focus": {
         "x": 0.2,
         "y": 0.37,
@@ -321,13 +369,29 @@
       }
     },
     {
+      "id": "I00",
+      "file": "I00-current-priority-gap.png",
+      "chapter": "improve",
+      "label": "Identify the behavior gap",
+      "caption": "The current Agent finds the right facts, but buries the priority after the account summary. Improve will make the billing and P1 decision lead every high-risk result.",
+      "placement": "top-left",
+      "narration": "The current Agent finds the right facts, but buries the priority after the account summary. Improve will make the billing and P one decision lead every high-risk result.",
+      "focus": {
+        "x": 0.18,
+        "y": 0.07,
+        "width": 0.52,
+        "height": 0.6,
+        "zoom": 1.25
+      }
+    },
+    {
       "id": "I01",
       "file": "I01-improve-source-choice.png",
       "chapter": "improve",
       "label": "Start Improve",
-      "caption": "Improve Agent lets you describe a change directly or include chats that demonstrate the correction.",
+      "caption": "Open Improve agent on the existing Agent, then choose whether to describe the correction directly or include a chat that demonstrates it.",
       "placement": "bottom-left",
-      "narration": "Improve Agent lets you describe a change directly or include chats that demonstrate the correction.",
+      "narration": "Open Improve agent on the existing Agent, then choose whether to describe the correction directly or include a chat that demonstrates it.",
       "focus": {
         "x": 0.31,
         "y": 0.34,
@@ -341,9 +405,9 @@
       "file": "I02-improve-from-chats.png",
       "chapter": "improve",
       "label": "Add the correction chat",
-      "caption": "Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.",
+      "caption": "Choose From chats, ask every high-risk response to lead with the billing and P1 decision, and attach the correction conversation that demonstrates it.",
       "placement": "top-left",
-      "narration": "Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.",
+      "narration": "Choose From chats, ask every high-risk response to lead with the billing and P one decision, and attach the correction conversation that demonstrates it.",
       "focus": {
         "x": 0.31,
         "y": 0.2,
@@ -357,9 +421,9 @@
       "file": "I03-improve-review.png",
       "chapter": "improve",
       "label": "Review the improvement",
-      "caption": "Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.",
+      "caption": "Review the new lead-with-priority behavior, the existing capabilities that must stay intact, and the Evals OpenPond will rerun.",
       "placement": "bottom-left",
-      "narration": "Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.",
+      "narration": "Review the new lead-with-priority behavior, the existing capabilities that must stay intact, and the Evals OpenPond will rerun.",
       "focus": {
         "x": 0.31,
         "y": 0.04,
@@ -389,9 +453,9 @@
       "file": "I05-improve-comparison.png",
       "chapter": "improve",
       "label": "Compare the results",
-      "caption": "Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.",
+      "caption": "The same locked Evals make the decision clear: the current Agent misses the new lead sentence, while the updated Agent passes every original and new Eval.",
       "placement": "bottom-left",
-      "narration": "Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.",
+      "narration": "The same locked Evals make the decision clear: the current Agent misses the new lead sentence, while the updated Agent passes every original and new Eval.",
       "focus": {
         "x": 0.745,
         "y": 0.8,
@@ -405,9 +469,9 @@
       "file": "I06-improved-release.png",
       "chapter": "improve",
       "label": "Save the improvement",
-      "caption": "Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.",
+      "caption": "Apply the update only after that comparison. The existing Agent updates in place, with the successful Evals recorded.",
       "placement": "bottom-left",
-      "narration": "Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.",
+      "narration": "Apply the update only after that comparison. The existing Agent updates in place, with the successful Evals recorded.",
       "focus": {
         "x": 0.715,
         "y": 0.19,
@@ -446,6 +510,54 @@
         "width": 0.48,
         "height": 0.16,
         "zoom": 1.4
+      }
+    },
+    {
+      "id": "I09",
+      "file": "I09-profile-commit.png",
+      "chapter": "improve",
+      "label": "Commit the Profile source",
+      "caption": "Commit the final Agent source with a clear Git message so the exact Profile version remains reviewable and shareable.",
+      "placement": "bottom-left",
+      "narration": "Commit the final Agent source with a clear Git message so the exact Profile version remains reviewable and shareable.",
+      "focus": {
+        "x": 0.19,
+        "y": 0.05,
+        "width": 0.5,
+        "height": 0.5,
+        "zoom": 1.28
+      }
+    },
+    {
+      "id": "I10",
+      "file": "I10-profile-sync-dialog.png",
+      "chapter": "improve",
+      "label": "Review the hosted sync",
+      "caption": "Open Sync to review the committed Profile changes before publishing them to the hosted Profile repo.",
+      "placement": "bottom-left",
+      "narration": "Open Sync to review the committed Profile changes before publishing them to the hosted Profile repo.",
+      "focus": {
+        "x": 0.34,
+        "y": 0.2,
+        "width": 0.32,
+        "height": 0.6,
+        "zoom": 1.32
+      }
+    },
+    {
+      "id": "I11",
+      "file": "I11-profile-synced.png",
+      "chapter": "improve",
+      "label": "Share and use in sandboxes",
+      "caption": "After sync, the hosted Profile records this commit so teammates can use the Agent and hosted sandboxes can attach the same source.",
+      "placement": "bottom-left",
+      "narration": "After sync, the hosted Profile records this commit so teammates can use the Agent and hosted sandboxes can attach the same source.",
+      "focus": {
+        "x": 0.18,
+        "y": 0.08,
+        "width": 0.52,
+        "height": 0.35,
+        "zoom": 1.3
       }
     }
   ],

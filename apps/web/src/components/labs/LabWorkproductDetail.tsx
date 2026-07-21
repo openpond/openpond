@@ -227,7 +227,7 @@ export function LabWorkproductDetail({
   const detailTabs = [
     ["overview", "Overview"],
     ["changes", "Changes"],
-    ["evals", workproduct.kind === "agent" ? "Checks" : "Evals"],
+    ["evals", "Evals"],
     ["versions", "Versions"],
     ["configuration", "Configuration"],
   ] as const;
@@ -503,7 +503,7 @@ export function LabWorkproductDetail({
           </div>
         ) : activeTab === "evals" ? (
             <DetailSection
-              title={workproduct.kind === "agent" ? "Checks" : "Evals"}
+              title="Evals"
               actions={
                 workproduct.kind === "agent" ? (
                   <LabAgentEvalActions

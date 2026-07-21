@@ -312,7 +312,7 @@ export function ComposerCreateImproveStrip({
         <div className="composer-create-status-body composer-create-status-body-reveals">
           <p>
             {run.state === "released"
-              ? "The Agent update is saved and its checks passed."
+              ? "The Agent update is saved and its Evals passed."
               : run.state === "rejected"
                 ? "The Agent update was not applied."
                 : run.state === "published_hosted"
@@ -369,7 +369,7 @@ function CreateImprovePlanFacts({ run }: { run: CreateImproveRun }) {
       <div className="composer-create-facts">
         {actionShape ? <span title={actionShape.detail}>{actionShape.label}</span> : null}
         {source ? <span title={source}>{source}</span> : null}
-        {checks ? <span>{isAgent ? `${checks} checks` : run.checkRefs.length ? `${run.checkRefs.length} check refs` : `${checks} checks`}</span> : null}
+        {checks ? <span>{isAgent ? `${checks} Evals` : run.checkRefs.length ? `${run.checkRefs.length} check refs` : `${checks} checks`}</span> : null}
         {requirements ? <span>{requirements} setup rows</span> : null}
       </div>
       {refs.length ? (
@@ -386,7 +386,7 @@ function createImproveTitle(run: CreateImproveRun): string {
   if (run.state === "awaiting_questions") return "Question";
   if (run.state === "awaiting_plan_approval") return "Plan";
   if (run.state === "applying_source") return isAgent ? "Saving Agent" : "Applying source";
-  if (run.state === "running_checks") return "Running checks";
+  if (run.state === "running_checks") return "Running Evals";
   if (run.state === "evaluating") return isAgent ? "Checking Agent" : "Evaluating";
   if (run.state === "awaiting_promotion") return isAgent ? "Update ready" : "Candidate ready";
   if (run.state === "opening_pull_request") return "Opening review";
@@ -407,12 +407,12 @@ function createImproveProgressText(run: CreateImproveRun): string {
   const state = run.state;
   const isAgent = run.target.kind === "agent";
   if (state === "applying_source") return isAgent ? "Saving the approved Agent plan." : "Applying the approved source changes.";
-  if (state === "running_checks") return isAgent ? "Running checks against the Agent." : "Running checks against the candidate.";
+  if (state === "running_checks") return isAgent ? "Running Evals against the Agent." : "Running checks against the candidate.";
   if (state === "evaluating") return isAgent ? "Checking the Agent's behavior." : "Evaluating the candidate against its Evals.";
   if (state === "opening_pull_request") return isAgent ? "Preparing the Agent update review." : "Opening the candidate review.";
   if (state === "reconciling_release") return "Applying the change and verifying the active Profile.";
   if (state === "pushing_hosted") return "Pushing the Profile source.";
-  if (state === "running_hosted_checks") return "Running hosted checks.";
+  if (state === "running_hosted_checks") return isAgent ? "Running hosted Evals." : "Running hosted checks.";
   return "Preparing the work.";
 }
 
@@ -453,6 +453,6 @@ function candidateComparisonText(run: CreateImproveRun, candidateId: string): st
     ? `${receipt.summaryCounts.passed}/${receipt.summaryCounts.total}`
     : receipt?.status ?? "not run";
   return run.target.kind === "agent"
-    ? `Current Agent: ${result(active)} checks passed. Updated Agent: ${result(candidate)} checks passed.`
+    ? `Current Agent: ${result(active)} Evals passed. Updated Agent: ${result(candidate)} Evals passed.`
     : `Base Evals: ${result(active)} passed. Candidate Evals: ${result(candidate)} passed.`;
 }

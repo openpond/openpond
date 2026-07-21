@@ -15,7 +15,7 @@ export const ACCOUNT_AGENT_PURPOSE =
   "Monitor customer account health, answer account questions with source-backed facts, triage renewal risk, and produce a weekly account review with clear owners and next steps.";
 
 export const ACCOUNT_AGENT_IMPROVEMENT =
-  "For high-risk accounts, always rank overdue or disputed billing and open P1 support blockers before adoption decline, while preserving source citations and all existing actions.";
+  "For high-risk accounts, lead every chat and runnable triage result with 'Billing/P1 priority comes first' before the account summary, while preserving source citations and all existing actions.";
 
 export const ACCOUNT_CHAT_FIXTURES = [
   {
@@ -44,9 +44,9 @@ export const ACCOUNT_CHAT_FIXTURES = [
 export const ACCOUNT_CORRECTION_CHAT = {
   title: "Account Health · risk-priority correction",
   prompt:
-    "Correction: for high-risk accounts, billing and P1 must be ranked before adoption decline, with source citations.",
+    "Correction: for high-risk accounts, lead the response with 'Billing/P1 priority comes first' before the account summary, with source citations.",
   expected:
-    "For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline, while citing each supporting source.",
+    "For high-risk accounts, begin chat and triage results with 'Billing/P1 priority comes first,' then give the account facts and supporting source citations.",
 } as const;
 
 export async function createAccountEvidenceChat(

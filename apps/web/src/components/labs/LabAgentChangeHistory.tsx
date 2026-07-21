@@ -18,7 +18,7 @@ export function LabAgentChangeHistory({
             <tr>
               <th>Change</th>
               <th>Status</th>
-              <th>Checks</th>
+              <th>Evals</th>
               <th>Updated</th>
             </tr>
           </thead>
@@ -78,7 +78,7 @@ function agentChangeStatusLabel(run: CreateImproveRun): string {
   if (run.state === "awaiting_questions") return "Waiting for input";
   if (run.state === "awaiting_plan_approval") return "Plan ready";
   if (run.state === "applying_source") return "Saving Agent";
-  if (run.state === "running_checks" || run.state === "evaluating") return "Running checks";
+  if (run.state === "running_checks" || run.state === "evaluating") return "Running Evals";
   if (run.state === "awaiting_promotion") return "Update ready";
   if (run.state === "opening_pull_request") return "Preparing review";
   if (run.state === "pull_request_open") return "Review open";
@@ -88,7 +88,7 @@ function agentChangeStatusLabel(run: CreateImproveRun): string {
   if (run.state === "paused") return "Paused";
   if (run.state === "ready" || run.state === "ready_local") return "Ready";
   if (run.state === "pushing_hosted") return "Saving to hosted Profile";
-  if (run.state === "running_hosted_checks") return "Running hosted checks";
+  if (run.state === "running_hosted_checks") return "Running hosted Evals";
   if (run.state === "published_hosted") return "Published";
   if (run.state === "cancelled") return "Cancelled";
   if (run.state === "blocked") return "Blocked";

@@ -131,33 +131,33 @@
     {
       "id": "make-agent-tutorial",
       "localPath": "tutorials/how-to-make-an-agent.mp4",
-      "objectKey": "media/videos/6737f5a31c9743f96e5ef57df8440028ea1d0887e0d7f4d82721281bca51cfbe.mp4",
-      "sha256": "6737f5a31c9743f96e5ef57df8440028ea1d0887e0d7f4d82721281bca51cfbe",
-      "sizeBytes": 13927850,
+      "objectKey": "media/videos/fc5bdfdd2ec3b70947b81a40c759ec79a3519ac2e8ea3ae52627ae1b81650cc7.mp4",
+      "sha256": "fc5bdfdd2ec3b70947b81a40c759ec79a3519ac2e8ea3ae52627ae1b81650cc7",
+      "sizeBytes": 13883072,
       "durationSeconds": 208.4
     },
     {
       "id": "make-agent-tutorial-create",
       "localPath": "tutorials/how-to-make-an-agent-create.mp4",
-      "objectKey": "media/videos/8edc019c236da9bca711999834ffc501c43f579326ba7c52b2621b8420fed7cf.mp4",
-      "sha256": "8edc019c236da9bca711999834ffc501c43f579326ba7c52b2621b8420fed7cf",
-      "sizeBytes": 5019630,
+      "objectKey": "media/videos/833795f0d5c1115fd184ef888ad4089d77196cf5e40fad57a67c7fb9470b5897.mp4",
+      "sha256": "833795f0d5c1115fd184ef888ad4089d77196cf5e40fad57a67c7fb9470b5897",
+      "sizeBytes": 4944610,
       "durationSeconds": 83.534
     },
     {
       "id": "make-agent-tutorial-use",
       "localPath": "tutorials/how-to-make-an-agent-use.mp4",
-      "objectKey": "media/videos/4beaa7c9fb658fae27a5f892f43307e47b6e726024e824e65d505d169e23744a.mp4",
-      "sha256": "4beaa7c9fb658fae27a5f892f43307e47b6e726024e824e65d505d169e23744a",
-      "sizeBytes": 4736509,
+      "objectKey": "media/videos/2454a480ae5433b6ffe3b7e37ecd5c45c5731556355d161ea7d03c352875e214.mp4",
+      "sha256": "2454a480ae5433b6ffe3b7e37ecd5c45c5731556355d161ea7d03c352875e214",
+      "sizeBytes": 4745204,
       "durationSeconds": 64.667
     },
     {
       "id": "make-agent-tutorial-improve",
       "localPath": "tutorials/how-to-make-an-agent-improve.mp4",
-      "objectKey": "media/videos/2f956d453e4a1c98bc24933bf1a8aaf3f12532e77cd0ba8a57e68c4fb88707e7.mp4",
-      "sha256": "2f956d453e4a1c98bc24933bf1a8aaf3f12532e77cd0ba8a57e68c4fb88707e7",
-      "sizeBytes": 4428242,
+      "objectKey": "media/videos/ccf44b82b38323d829dd9100c105c6477f4e9b8554e4adda4ede46a62919190e.mp4",
+      "sha256": "ccf44b82b38323d829dd9100c105c6477f4e9b8554e4adda4ede46a62919190e",
+      "sizeBytes": 4314626,
       "durationSeconds": 70.1
     }
   ]

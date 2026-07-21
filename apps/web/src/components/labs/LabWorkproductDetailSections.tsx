@@ -228,14 +228,14 @@ export function EvalSummary({
   const isAgent = workproduct.kind === "agent";
   if (!receipts.length && !sourceEvals.length && !attachedEvalRefs.length) {
     return (
-      <div className="training-run-placeholder">{isAgent ? "No checks yet." : "No Eval receipts yet."}</div>
+      <div className="training-run-placeholder">No Eval receipts yet.</div>
     );
   }
   return (
     <div className="labs-eval-summary">
       {sourceEvals.length ? (
         <div className="labs-source-evals">
-          <strong>{isAgent ? "Available checks" : "Available Evals"}</strong>
+          <strong>Available Evals</strong>
           <ul>
             {sourceEvals.map((item) => (
               <li key={item.id}>
@@ -251,7 +251,7 @@ export function EvalSummary({
           <strong>{isAgent ? "Included in this update" : "Used for this change"}</strong>
           <ul>
             {isAgent ? (
-              <li><span>{attachedEvalRefs.length} check set{attachedEvalRefs.length === 1 ? "" : "s"}</span></li>
+              <li><span>{attachedEvalRefs.length} Eval set{attachedEvalRefs.length === 1 ? "" : "s"}</span></li>
             ) : attachedEvalRefs.map((ref) => (
               <li key={ref}><code>{ref}</code></li>
             ))}
@@ -267,7 +267,7 @@ export function EvalSummary({
                 <tr>
                   {isAgent ? null : <th>Receipt</th>}
                   <th>Status</th>
-                  <th>{isAgent ? "Checks" : "Evals"}</th>
+                  <th>Evals</th>
                   <th>Summary</th>
                 </tr>
               </thead>
@@ -293,11 +293,11 @@ export function EvalSummary({
 
 function agentCheckSummary(receipt: CreateImproveRun["evaluationReceipts"][number]): string {
   if (receipt.summaryCounts) {
-    return `${receipt.summaryCounts.passed} of ${receipt.summaryCounts.total} checks passed.`;
+    return `${receipt.summaryCounts.passed} of ${receipt.summaryCounts.total} Evals passed.`;
   }
-  if (receipt.status === "passed") return "Agent behavior checks passed.";
-  if (receipt.status === "failed") return "One or more Agent behavior checks failed.";
-  return "Agent behavior checks are still running.";
+  if (receipt.status === "passed") return "Agent behavior Evals passed.";
+  if (receipt.status === "failed") return "One or more Agent behavior Evals failed.";
+  return "Agent behavior Evals are still running.";
 }
 
 export function VersionSummary({
@@ -464,7 +464,7 @@ export function detailBreadcrumbs(
   activeTab: WorkproductDetailTab,
   selectedChangeRunId: string | null,
   changeCommit: string | null,
-  isAgent = false,
+  _isAgent = false,
 ): string[] {
   if (activeTab === "changes") {
     if (!selectedChangeRunId) return ["Changes"];
@@ -475,7 +475,7 @@ export function detailBreadcrumbs(
         : `Change ${shortId(selectedChangeRunId)}`,
     ];
   }
-  return [activeTab === "evals" && isAgent ? "Checks" : titleCase(activeTab)];
+  return [titleCase(activeTab)];
 }
 
 export function candidateFileScope(
@@ -510,7 +510,7 @@ export function changeStatusDescription(run: CreateImproveRun | null): string {
   if (run.state === "awaiting_questions") return "Waiting for input";
   if (run.state === "awaiting_plan_approval") return "Plan ready";
   if (run.state === "applying_source") return "Saving Agent";
-  if (run.state === "running_checks" || run.state === "evaluating") return "Running checks";
+  if (run.state === "running_checks" || run.state === "evaluating") return "Running Evals";
   if (run.state === "awaiting_promotion") return "Update ready to apply";
   if (run.state === "opening_pull_request" || run.state === "pull_request_open") return "Update review open";
   if (run.state === "reconciling_release") return "Applying update";

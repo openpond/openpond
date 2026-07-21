@@ -221,8 +221,8 @@ describe("New model flow", () => {
         visibleSessions={[{ sessionId: "chat_1", title: "Acme renewal review", updatedAt: "2026-07-20T12:00:00.000Z", snippet: null }]}
       />,
     );
-    expect(ready).toContain("Review selected chats");
-    expect(ready).not.toMatch(/<button class="training-button" type="button" disabled=""[^>]*>Review selected chats/);
+    expect(ready).toContain("Review chats for plan");
+    expect(ready).not.toMatch(/<button class="training-button" type="button" disabled=""[^>]*>Review chats for plan/);
   });
 
   test("explains the two Agent chat-sharing actions before analysis", () => {
@@ -240,7 +240,7 @@ describe("New model flow", () => {
         visibleSessions={[{ sessionId: "chat_1", title: "Acme renewal review", updatedAt: "2026-07-20T12:00:00.000Z", snippet: null }]}
       />,
     );
-    expect(html).toContain("Review chats before sharing");
+    expect(html).toContain("Review chats for the Agent plan");
     expect(html).toContain("Nothing is sent until you approve");
     expect(html).toContain("Approve chats and build plan");
     expect(html).toContain("Change chats");
@@ -261,7 +261,7 @@ describe("New model flow", () => {
       />,
     );
     expect(html).toContain("Review data access");
-    expect(html).not.toContain("Review selected chats");
+    expect(html).not.toContain("Review chats for plan");
   });
 
   test("renders recommendation review, revision, and Add chats recovery when evidence is insufficient", () => {

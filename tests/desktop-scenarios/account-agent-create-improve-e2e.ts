@@ -28,6 +28,7 @@ import {
   chooseComposerAction,
   delay,
   fillControl,
+  fillComposerPrompt,
   resizeHarness,
   screenshot,
   selectComposerAction,
@@ -45,6 +46,7 @@ export default desktopScenario({
   mode: "isolated",
   timeoutMs: 900_000,
   async run(harness) {
+    const captureHostedShare = process.env.OPENPOND_TUTORIAL_HOSTED_PROFILE_FIXTURE === "1";
     const authoringModel = await registerTrainingModel(harness, "account-agent-create-improve-e2e");
     await harness.api.fetchJson("/v1/preferences", {
       method: "PATCH",
@@ -52,6 +54,7 @@ export default desktopScenario({
         defaultChatProvider: authoringModel.providerId,
         defaultChatModel: authoringModel.modelId,
         defaultChatModelRef: authoringModel,
+        ...(captureHostedShare ? { defaultTeamId: "team-account-health-tutorial" } : {}),
       },
     });
     const activeProfile = await initializeTrainingProfile(harness);
@@ -92,8 +95,8 @@ export default desktopScenario({
     await resizeHarness(harness, 620, 900);
     await screenshot(harness, "C05", "from-chats-narrow");
     await resizeHarness(harness, WIDE_VIEWPORT.width, WIDE_VIEWPORT.height);
-    await clickButton(harness, "Review selected chats", CREATE_DIALOG);
-    await harness.renderer.assertText("Review chats before sharing", {
+    await clickButton(harness, "Review chats for plan", CREATE_DIALOG);
+    await harness.renderer.assertText("Review chats for the Agent plan", {
       label: "Account Health chat sharing review",
       timeoutMs: 30_000,
     });
@@ -122,6 +125,20 @@ export default desktopScenario({
       timeoutMs: 60_000,
     });
     await screenshot(harness, "C09", "right-chat-plan");
+    await clickButton(harness, "Edit plan");
+    await fillControl(
+      harness,
+      ".composer-create-revision textarea",
+      "Keep the source-backed chat, and make the weekly review available as Markdown, CSV, and JSON.",
+    );
+    await clearTransientFocus(harness);
+    await screenshot(harness, "C09A", "edit-plan");
+    await clickButton(harness, "Save revision");
+    await harness.renderer.assertText("Confirm plan", {
+      label: "Revised Account Health plan",
+      timeoutMs: 60_000,
+    });
+    await screenshot(harness, "C09B", "revised-plan");
     await clickButton(harness, "Confirm plan");
 
     const createCandidate = await waitForRunById(harness, createRun.id, [
@@ -140,7 +157,7 @@ export default desktopScenario({
     );
     await openLabHome(harness);
     await clickWorkproduct(harness, "Account Health Agent");
-    await clickTab(harness, "Checks");
+    await clickTab(harness, "Evals");
     await screenshot(harness, "C10", "candidate-evaluation");
     await clickTab(harness, "Changes");
     await screenshot(harness, "C11", "local-source-applied");
@@ -152,6 +169,9 @@ export default desktopScenario({
     assertActionContract(createdActions);
     await openLabHome(harness);
     await useWorkproduct(harness, "Account Health Agent");
+    await fillComposerPrompt(harness, "Summarize Acme with source-backed facts.");
+    await clearTransientFocus(harness);
+    await screenshot(harness, "C13Q", "chat-acme-prompt");
     await submitComposerAndWaitForAssistant(
       harness,
       "Summarize Acme with source-backed facts.",
@@ -212,6 +232,16 @@ export default desktopScenario({
     await clickTab(harness, "Overview");
     await screenshot(harness, "C19", "after-restart");
 
+    await openLabHome(harness);
+    await useWorkproduct(harness, "Account Health Agent");
+    await selectComposerAction(harness, "/triage", "Triage Renewal Risk");
+    await submitComposerAndWaitForAssistant(
+      harness,
+      JSON.stringify({ accountId: "acme", asOfDate: "2026-07-20" }),
+      "Acme is high risk",
+    );
+    await screenshot(harness, "I00", "current-priority-gap");
+
     const correctionChat = await createAccountEvidenceChat(harness, ACCOUNT_CORRECTION_CHAT);
     await addTrainingSource(harness, correctionChat.id);
     await reloadRenderer(harness);
@@ -234,7 +264,7 @@ export default desktopScenario({
     ]);
     await clearTransientFocus(harness);
     await screenshot(harness, "I02", "improve-from-chats");
-    await clickButton(harness, "Review selected chats", IMPROVE_DIALOG);
+    await clickButton(harness, "Review chats for plan", IMPROVE_DIALOG);
     await clickButton(harness, "Approve chats and build plan", IMPROVE_DIALOG);
     await harness.renderer.assertText("Continue to improvement plan", {
       label: "Improve Agent review",
@@ -263,7 +293,7 @@ export default desktopScenario({
     const candidateReceipt = improveCandidate.evaluationReceipts.find((receipt) => receipt.subject === "candidate");
     assert(activeReceipt?.status === "failed", "The active Agent unexpectedly passed the correction Taskset.");
     assert(candidateReceipt?.status === "passed", "The improved candidate did not pass the correction Taskset.");
-    await clickTab(harness, "Checks");
+    await clickTab(harness, "Evals");
     await screenshot(harness, "I05", "improve-comparison");
     await clickButton(harness, "Apply update");
     const improved = await waitForRunById(harness, improveRun.id, ["released", "blocked", "failed", "rejected"], 180_000);
@@ -298,17 +328,43 @@ export default desktopScenario({
     await screenshot(harness, "I08", "improved-triage");
     await verifyDirectActions(harness, improvedActions, true);
 
-    assertScreenshotContract(harness);
+    if (captureHostedShare) {
+      await openLabHome(harness);
+      await clickWorkproduct(harness, "Account Health Agent");
+      await clickTab(harness, "Versions");
+      await harness.renderer.assertText("Profile commit", { label: "Improved Agent Profile commit" });
+      await screenshot(harness, "I09", "profile-commit");
+
+      await openLabHome(harness);
+      await clickButton(harness, "Sync");
+      await harness.renderer.assertText("Sync profile", { label: "Profile sync dialog" });
+      await harness.renderer.assertText("attached to hosted sandboxes", { label: "Profile sync purpose" });
+      await screenshot(harness, "I10", "profile-sync-dialog");
+      await clickButton(harness, "Confirm sync");
+      await waitForRendererCondition(
+        harness,
+        `(() => {
+          const status = document.querySelector('.profile-hosted-status');
+          return status?.textContent?.includes('uploaded') === true;
+        })()`,
+        "hosted Profile sync result",
+        { timeoutMs: 60_000 },
+      );
+      await screenshot(harness, "I11", "profile-synced");
+    }
+
+    assertScreenshotContract(harness, captureHostedShare);
     harness.recordAssertion("accountAgentCreateReadyLocal", true);
     harness.recordAssertion("accountAgentTwoTurnChatPassed", true);
     harness.recordAssertion("accountAgentAllDirectActionsPassed", true);
     harness.recordAssertion("accountAgentRestartPersistencePassed", true);
     harness.recordAssertion("accountAgentImproveRegressionPassed", true);
+    if (captureHostedShare) harness.recordAssertion("accountAgentHostedProfileSyncPassed", true);
     harness.recordMetadata({
       createRunId: createRun.id,
       improveRunId: improveRun.id,
       accountActionIds: improvedActions.map((action) => action.id),
-      screenshotCount: 27,
+      screenshotCount: captureHostedShare ? 34 : 31,
       fixtureFiles: ["accounts.json", "product-usage.csv", "support-cases.json", "billing-status.json"],
     });
   },
@@ -491,9 +547,9 @@ async function submitComposerAndWaitForAssistant(
   await delay(3_000);
 }
 
-function assertScreenshotContract(_harness: DesktopHarness): void {
+function assertScreenshotContract(_harness: DesktopHarness, captureHostedShare: boolean): void {
   // The harness report is the durable source of truth. Keeping the expected count
   // adjacent to the scenario makes accidental frame additions/removals reviewable.
-  const expected = 27;
-  assert(expected === 27, "The Account Health screenshot contract changed unexpectedly.");
+  const expected = captureHostedShare ? 34 : 31;
+  assert(expected === (captureHostedShare ? 34 : 31), "The Account Health screenshot contract changed unexpectedly.");
 }

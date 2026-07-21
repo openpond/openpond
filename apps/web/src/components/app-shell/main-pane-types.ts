@@ -19,7 +19,6 @@ import type {
   ResolveApprovalRequest,
   RuntimeEvent,
   Session,
-  SubagentDelegationMode,
   TerminalScope,
   UsageRequestAttribution,
   WorkspaceDiffSummary,
@@ -96,9 +95,6 @@ export type MainPaneProps = {
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
-  subagentDelegationDefaultMode: SubagentDelegationMode;
-  subagentDelegationMode: SubagentDelegationMode | null;
-  subagentDelegationAvailable: boolean;
   pendingApproval: Approval | null;
   activeWorkspaceAppId: string | null;
   activeWorkspaceId: string | null;
@@ -177,7 +173,6 @@ export type MainPaneProps = {
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
   changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
-  changeSubagentDelegationMode: (mode: SubagentDelegationMode | null) => void;
   resolveApproval: (
     approvalId: string,
     decision: ResolveApprovalRequest["decision"],
