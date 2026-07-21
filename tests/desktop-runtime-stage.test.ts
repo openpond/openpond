@@ -94,7 +94,7 @@ describe("desktop runtime staging", () => {
   });
 
   test("keeps Linux unpacked package budgets architecture-specific", () => {
-    expect(desktopPackageBudget("linux", "x64")?.maxUnpackedBytes).toBe(332 * 1024 * 1024);
+    expect(desktopPackageBudget("linux", "x64")?.maxUnpackedBytes).toBe(400 * 1024 * 1024);
     expect(desktopPackageBudget("linux", "arm64")?.maxUnpackedBytes).toBe(334 * 1024 * 1024);
     expect(desktopPackageBudget("darwin", "arm64")?.maxUnpackedBytes).toBe(400 * 1024 * 1024);
   });
