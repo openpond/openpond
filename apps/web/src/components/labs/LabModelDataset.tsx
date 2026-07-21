@@ -1,8 +1,17 @@
-import { useMemo, useState } from "react";
-import type { Taskset, TrainingSourceRef } from "@openpond/contracts";
+import { useEffect, useMemo, useState } from "react";
+import {
+  isTrainingSourceRef,
+  TaskDataRecordSchema,
+  type DatasetArtifactSummary,
+  type TaskDataRecord,
+  type Taskset,
+  type TasksetSourceRef,
+} from "@openpond/contracts";
 
 import { DetailSection } from "../training/DetailSection";
+import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { LabDatasetRuns } from "./LabDatasetRuns";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
 type Task = Taskset["tasks"][number];
@@ -15,34 +24,88 @@ const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
 const INITIAL_EXAMPLE_COUNT = 10;
 
 export function LabModelDataset({
+  artifact,
   taskset,
   onOpenFiles,
+  training,
 }: {
+  artifact: DatasetArtifactSummary | null;
   taskset: Taskset;
   onOpenFiles: () => void;
+  training: ReturnType<typeof useTraining>;
 }) {
-  const counts = useMemo(() => countBy(taskset.tasks.map((task) => task.split)), [taskset.tasks]);
-  const initialSplit = counts.get("train") ? "train" : taskset.tasks[0]?.split ?? "train";
+  const counts = useMemo(
+    () => artifact
+      ? new Map(Object.entries(artifact.splitCounts))
+      : countBy(taskset.tasks.map((task) => task.split)),
+    [artifact, taskset.tasks],
+  );
+  const initialSplit = counts.get("train")
+    ? "train"
+    : counts.get("validation")
+      ? "validation"
+      : counts.get("frozen_eval")
+        ? "frozen_eval"
+        : taskset.tasks[0]?.split ?? "train";
   const [split, setSplit] = useState<DatasetSplit>(
     initialSplit === "test" ? "frozen_eval" : initialSplit,
   );
   const [showAllExamples, setShowAllExamples] = useState(false);
+  const [artifactRows, setArtifactRows] = useState<TaskDataRecord[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [rowsLoading, setRowsLoading] = useState(false);
+  const [rowsError, setRowsError] = useState<string | null>(null);
   const sourceById = useMemo(
     () => new Map(taskset.sourceRefs.map((source) => [source.id, source])),
     [taskset.sourceRefs],
   );
-  const visibleTasks = taskset.tasks.filter((task) => task.split === split);
+  useEffect(() => {
+    if (!artifact) return undefined;
+    let cancelled = false;
+    setRowsLoading(true);
+    setRowsError(null);
+    void training.actions.datasetRows(taskset.id, {
+      split,
+      cursor,
+      limit: 25,
+    }).then((page) => {
+      if (cancelled || !page) return;
+      setArtifactRows(page.rows.map((row) => TaskDataRecordSchema.parse(row)));
+      setNextCursor(page.nextCursor);
+    }).catch((error) => {
+      if (!cancelled) {
+        setArtifactRows([]);
+        setNextCursor(null);
+        setRowsError(error instanceof Error ? error.message : String(error));
+      }
+    }).finally(() => {
+      if (!cancelled) setRowsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [artifact, cursor, split, taskset.id, training.actions]);
+
+  const visibleTasks = artifact
+    ? artifactRows
+    : taskset.tasks.filter((task) => task.split === split);
   const displayedTasks = showAllExamples
     ? visibleTasks
     : visibleTasks.slice(0, INITIAL_EXAMPLE_COUNT);
   const syntheticSources = taskset.sourceRefs.filter(isSyntheticSource).length;
-  const chatSources = taskset.sourceRefs.filter((source) => source.turnIds.length > 0).length;
+  const chatSources = taskset.sourceRefs.filter(
+    (source) => isTrainingSourceRef(source) && source.turnIds.length > 0,
+  ).length;
   const customerSources = taskset.sourceRefs.filter(
     (source) => source.metadata.containsCustomerData === true,
   ).length;
   const approvedDemonstrations = taskset.learningSignals.demonstrations.filter(
     (signal) => signal.approved,
   ).length;
+  const baselineRuns = training.payload?.baselineRuns.filter((run) =>
+    run.tasksetId === taskset.id) ?? [];
 
   return (
     <>
@@ -70,6 +133,12 @@ export function LabModelDataset({
         </dl>
       </DetailSection>
 
+      <LabDatasetRuns
+        runs={baselineRuns}
+        taskset={taskset}
+        onCancel={training.actions.cancelBaselineRun}
+      />
+
       <DetailSection title="Examples">
         <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Dataset splits">
           {SPLITS.map((item) => (
@@ -82,6 +151,8 @@ export function LabModelDataset({
               onClick={() => {
                 setSplit(item.id);
                 setShowAllExamples(false);
+                setCursor(null);
+                setCursorHistory([]);
               }}
             >
               {item.label}
@@ -107,6 +178,39 @@ export function LabModelDataset({
               {showAllExamples ? `Show first ${INITIAL_EXAMPLE_COUNT}` : `Show all ${visibleTasks.length}`}
             </button>
           ) : null}
+          {artifact ? (
+            <div className="labs-pagination" aria-label="Dataset example pages">
+              <button
+                type="button"
+                disabled={!cursorHistory.length || rowsLoading}
+                onClick={() => {
+                  const previous = cursorHistory.at(-1) ?? null;
+                  setCursorHistory((history) => history.slice(0, -1));
+                  setCursor(previous || null);
+                }}
+              >
+                Previous
+              </button>
+              <span>
+                {rowsLoading
+                  ? "Loading…"
+                  : `${artifactRows.length.toLocaleString()} rows on this page`}
+              </span>
+              <button
+                type="button"
+                disabled={!nextCursor || rowsLoading}
+                onClick={() => {
+                  setCursorHistory((history) => [...history, cursor ?? ""]);
+                  setCursor(nextCursor);
+                }}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+          {rowsError ? (
+            <div className="training-banner error" role="alert">{rowsError}</div>
+          ) : null}
         </div>
       </DetailSection>
     </>
@@ -119,7 +223,7 @@ function DatasetExample({
   task,
 }: {
   index: number;
-  source: TrainingSourceRef | null;
+  source: TasksetSourceRef | null;
   task: Task;
 }) {
   const prompt = taskPrompt(task);
@@ -247,7 +351,7 @@ function expectedToolNames(task: Task): string[] {
   return names;
 }
 
-function taskFamily(task: Task, source: TrainingSourceRef | null): string | null {
+function taskFamily(task: Task, source: TasksetSourceRef | null): string | null {
   const crossSystem = source?.metadata.crossSystemOperations;
   if (crossSystem && typeof crossSystem === "object" && "taskFamily" in crossSystem) {
     const family = crossSystem.taskFamily;
@@ -257,7 +361,7 @@ function taskFamily(task: Task, source: TrainingSourceRef | null): string | null
   return familyTag ? titleCase(familyTag) : null;
 }
 
-function taskDifficulty(task: Task, source: TrainingSourceRef | null): string | null {
+function taskDifficulty(task: Task, source: TasksetSourceRef | null): string | null {
   const crossSystem = source?.metadata.crossSystemOperations;
   if (crossSystem && typeof crossSystem === "object" && "worldDifficulty" in crossSystem) {
     const difficulty = crossSystem.worldDifficulty;
@@ -266,23 +370,35 @@ function taskDifficulty(task: Task, source: TrainingSourceRef | null): string | 
   return task.clusterKey.match(/_(easy|medium|hard)$/)?.[1] ?? null;
 }
 
-function isSyntheticSource(source: TrainingSourceRef): boolean {
-  return source.metadata.syntheticSpecification === true;
+function isSyntheticSource(source: TasksetSourceRef): boolean {
+  return (
+    source.schemaVersion === "openpond.generatedDatasetSource.v1"
+    || source.metadata.syntheticSpecification === true
+  );
 }
 
-function sourceKind(source: TrainingSourceRef): string {
+function sourceKind(source: TasksetSourceRef): string {
   if (isSyntheticSource(source)) return "Generated scenario";
-  if (source.turnIds.length > 0) return "Chat";
+  if (isTrainingSourceRef(source) && source.turnIds.length > 0) return "Chat";
+  if (source.schemaVersion === "openpond.huggingFaceDatasetSource.v1") {
+    return "Hugging Face";
+  }
+  if (source.schemaVersion === "openpond.uploadedFileDatasetSource.v1") {
+    return "Uploaded file";
+  }
   return "Imported source";
 }
 
-function sourceDescription(source: TrainingSourceRef | null): string {
+function sourceDescription(source: TasksetSourceRef | null): string {
   if (!source) return "The referenced source could not be loaded.";
   if (isSyntheticSource(source) && source.metadata.containsCustomerData === false) {
     return "generated locally from a deterministic specification; no customer content is attached.";
   }
-  if (source.turnIds.length > 0) {
+  if (isTrainingSourceRef(source) && source.turnIds.length > 0) {
     return `${source.turnIds.length} approved chat turn${source.turnIds.length === 1 ? "" : "s"} are attached.`;
+  }
+  if (source.schemaVersion === "openpond.huggingFaceDatasetSource.v1") {
+    return `${source.repositoryId}@${source.revision.slice(0, 12)} is attached.`;
   }
   return "an approved imported source is attached.";
 }

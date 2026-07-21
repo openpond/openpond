@@ -36,7 +36,12 @@ export function validateTrainingCompatibility(input: {
   if (recipe.method === "sft") {
     const maxSequenceLength = recipe.dataset.maxSequenceLength;
     const trainTasks = input.taskset.tasks.filter((task) => task.split === recipe.dataset.trainSplit);
-    const sizedTasks = trainTasks.map((task) => ({ task, sizing: estimateTrainingTaskSizing(task) }));
+    const sizedTasks = input.taskset.datasetArtifact
+      ? []
+      : trainTasks.map((task) => ({
+          task,
+          sizing: estimateTrainingTaskSizing(task),
+        }));
     if (recipe.dataset.completionOnly) {
       const oversizedTargets = sizedTasks.filter(({ sizing }) => sizing.maximumAssistantTargetTokens > maxSequenceLength);
       if (oversizedTargets.length) issues.push({ code: "training_completions_truncated", severity: "error", path: "recipe.dataset.maxSequenceLength", message: `${oversizedTargets.length} training trajector${oversizedTargets.length === 1 ? "y has" : "ies have"} an assistant target that cannot fit at ${maxSequenceLength} tokens. Increase the sequence length or shorten the target before training.` });
@@ -46,12 +51,17 @@ export function validateTrainingCompatibility(input: {
       const oversized = sizedTasks.filter(({ sizing }) => sizing.renderedTokens > maxSequenceLength);
       if (oversized.length) issues.push({ code: "training_examples_truncated", severity: "error", path: "recipe.dataset.maxSequenceLength", message: `${oversized.length} training example${oversized.length === 1 ? " is" : "s are"} likely to be truncated at ${maxSequenceLength} tokens. Increase the sequence length or shorten the examples before training.` });
     }
-    const trainCount = trainTasks.length;
+    const trainCount = input.taskset.datasetArtifact?.splitCounts[
+      recipe.dataset.trainSplit
+    ] ?? trainTasks.length;
     if (trainCount < 8) issues.push({ code: "training_dataset_small", severity: "warning", path: "taskset.tasks", message: `${trainCount} training example${trainCount === 1 ? " is" : "s are"} sufficient for a pipeline test, not evidence of useful model quality.` });
   }
   if (recipe.method === "grpo") {
     const trainTasks = input.taskset.tasks.filter((task) => task.split === recipe.dataset.trainSplit);
-    if (!trainTasks.length) issues.push({ code: "rft_train_split_empty", severity: "error", path: "taskset.tasks", message: "RFT requires at least one approved train prompt." });
+    const trainCount = input.taskset.datasetArtifact?.splitCounts[
+      recipe.dataset.trainSplit
+    ] ?? trainTasks.length;
+    if (!trainCount) issues.push({ code: "rft_train_split_empty", severity: "error", path: input.taskset.datasetArtifact ? "taskset.datasetArtifact.splitCounts.train" : "taskset.tasks", message: "RFT requires at least one approved train prompt." });
     const baselineReward = input.taskset.readiness?.baselineReward ?? null;
     const hasRewardVariance = Boolean(
       input.taskset.readiness?.baselineReportId
@@ -70,8 +80,8 @@ export function validateTrainingCompatibility(input: {
       });
     }
     if (!input.capabilities.environmentPlacements.includes("provider_native")) issues.push({ code: "rft_environment_placement", severity: "error", path: "environmentPlacement", message: "RFT requires a provider-native rollout environment placement." });
-    if (input.plan.destinationId !== "fireworks") issues.push({ code: "rft_destination_unproven", severity: "error", path: "destinationId", message: "The executable GRPO contract is currently proven only for Fireworks." });
-    if (input.plan.environmentPlacement !== "provider_native") issues.push({ code: "rft_plan_placement", severity: "error", path: "environmentPlacement", message: "The GRPO plan must use provider-native placement." });
+    if (input.plan.destinationId !== "fireworks") issues.push({ code: "rft_destination_unproven", severity: "error", path: "destinationId", message: "The executable RFT contract is currently proven only for Fireworks." });
+    if (input.plan.environmentPlacement !== "provider_native") issues.push({ code: "rft_plan_placement", severity: "error", path: "environmentPlacement", message: "The RFT plan must use provider-native placement." });
   }
   return TrainingCompatibilityReportSchema.parse({ schemaVersion: "openpond.trainingCompatibility.v1", compatible: !issues.some((issue) => issue.severity === "error"), destinationId: input.plan.destinationId, tasksetId: input.taskset.id, recipeMethod: input.plan.recipe.method, issues, checkedAt: new Date().toISOString() });
 }

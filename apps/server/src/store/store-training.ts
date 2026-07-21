@@ -14,6 +14,7 @@ import type {
   TaskMinerConfig,
   TaskMinerRun,
   Taskset,
+  TasksetBaselineRun,
   TasksetReadinessReport,
   TrainingApproval,
   TrainingArtifact,
@@ -40,6 +41,7 @@ import {
   TaskMinerConfigSchema,
   TaskMinerRunSchema,
   TasksetReadinessReportSchema,
+  TasksetBaselineRunSchema,
   TasksetSchema,
   TrainingApprovalSchema,
   TrainingArtifactSchema,
@@ -52,7 +54,7 @@ import {
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
-import { SqliteTrainingModelStore } from "./store-training-models.js";
+import { SqliteDatasetStore } from "./store-datasets.js";
 
 export type TrainingChatSearchDocument = {
   sessionId: string;
@@ -83,7 +85,7 @@ type TrainingChatSearchEvidenceRow = {
 };
 
 
-export class SqliteTrainingStore extends SqliteTrainingModelStore {
+export class SqliteTrainingStore extends SqliteDatasetStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
     await this.ready;
     await this.writeQueue;
@@ -274,14 +276,20 @@ export class SqliteTrainingStore extends SqliteTrainingModelStore {
   async listTrainingSources(profileId: string): Promise<TrainingSourceRef[]> {
     await this.ready;
     await this.writeQueue;
-    const rows = await this.all<PayloadRow>("SELECT payload FROM training_sources WHERE profile_id = ? ORDER BY updated_at DESC", [profileId]);
+    const rows = await this.all<PayloadRow>(
+      "SELECT payload FROM training_sources WHERE profile_id = ? AND source_kind = 'conversation' ORDER BY updated_at DESC",
+      [profileId],
+    );
     return rows.map((row) => TrainingSourceRefSchema.parse(JSON.parse(row.payload)));
   }
 
   async getTrainingSource(id: string): Promise<TrainingSourceRef | null> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<PayloadRow>("SELECT payload FROM training_sources WHERE id = ?", [id]);
+    const row = await this.get<PayloadRow>(
+      "SELECT payload FROM training_sources WHERE id = ? AND source_kind = 'conversation'",
+      [id],
+    );
     return row ? TrainingSourceRefSchema.parse(JSON.parse(row.payload)) : null;
   }
 
@@ -295,6 +303,7 @@ export class SqliteTrainingStore extends SqliteTrainingModelStore {
     const row = await this.get<PayloadRow>(
       `SELECT payload FROM training_sources
        WHERE profile_id = ? AND session_id = ?
+         AND source_kind = 'conversation'
          AND json_extract(payload, '$.sourceHash') = ?
          AND json_extract(payload, '$.consent.status') = 'granted'
        ORDER BY CASE
@@ -312,10 +321,29 @@ export class SqliteTrainingStore extends SqliteTrainingModelStore {
     await this.ready;
     const timestamp = now();
     const write = this.writeQueue.then(() => this.run(
-      `INSERT INTO training_sources (id, profile_id, session_id, payload, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, session_id = excluded.session_id, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [source.id, source.profileId, source.sessionId, JSON.stringify(source), timestamp, timestamp],
+      `INSERT INTO training_sources (
+         id, profile_id, source_kind, session_id, source_hash,
+         repository_id, revision, payload, created_at, updated_at
+       )
+       VALUES (?, ?, 'conversation', ?, ?, NULL, NULL, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         profile_id = excluded.profile_id,
+         source_kind = excluded.source_kind,
+         session_id = excluded.session_id,
+         source_hash = excluded.source_hash,
+         repository_id = NULL,
+         revision = NULL,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [
+        source.id,
+        source.profileId,
+        source.sessionId,
+        source.sourceHash,
+        JSON.stringify(source),
+        timestamp,
+        timestamp,
+      ],
     ));
     this.writeQueue = write.catch(() => undefined);
     await write;
@@ -428,6 +456,7 @@ export class SqliteTrainingStore extends SqliteTrainingModelStore {
         await this.run("DELETE FROM task_design_proposals WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
         await this.run("DELETE FROM task_creation_transcripts WHERE creation_id IN (SELECT id FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?)", [id]);
         await this.run("DELETE FROM task_creation_snapshots WHERE json_extract(payload, '$.materializedTasksetId') = ?", [id]);
+        await this.run("DELETE FROM dataset_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM tasksets WHERE id = ?", [id]);
         await this.run("DELETE FROM taskset_revisions WHERE taskset_id = ?", [id]);
         await this.exec("COMMIT");
@@ -526,6 +555,46 @@ export class SqliteTrainingStore extends SqliteTrainingModelStore {
 
   async listBaselineReports(tasksetId: string): Promise<BaselineReport[]> {
     return this.listParsedPayloads("SELECT payload FROM baseline_reports WHERE taskset_id = ? ORDER BY created_at DESC", [tasksetId], BaselineReportSchema.parse);
+  }
+
+  async saveTasksetBaselineRun(runInput: TasksetBaselineRun): Promise<TasksetBaselineRun> {
+    const run = TasksetBaselineRunSchema.parse(runInput);
+    await this.upsertPayload(
+      `INSERT INTO taskset_baseline_runs (id, profile_id, taskset_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, taskset_id = excluded.taskset_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [run.id, run.profileId, run.tasksetId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
+    );
+    return run;
+  }
+
+  async getTasksetBaselineRun(id: string): Promise<TasksetBaselineRun | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM taskset_baseline_runs WHERE id = ?",
+      [id],
+      TasksetBaselineRunSchema.parse,
+    );
+  }
+
+  async listTasksetBaselineRuns(input: { profileId?: string; tasksetId?: string } = {}): Promise<TasksetBaselineRun[]> {
+    if (input.tasksetId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM taskset_baseline_runs WHERE taskset_id = ? ORDER BY updated_at DESC",
+        [input.tasksetId],
+        TasksetBaselineRunSchema.parse,
+      );
+    }
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM taskset_baseline_runs WHERE profile_id = ? ORDER BY updated_at DESC",
+        [input.profileId],
+        TasksetBaselineRunSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM taskset_baseline_runs ORDER BY updated_at DESC",
+      [],
+      TasksetBaselineRunSchema.parse,
+    );
   }
 
   async saveGraderAuditReport(reportInput: GraderAuditReport): Promise<GraderAuditReport> {

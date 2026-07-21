@@ -73,6 +73,47 @@ describe("canonical Create/Improve planner", () => {
     });
   });
 
+  test("keeps the target id and default chat action key aligned when planning renames an Agent", async () => {
+    const run = createImproveRunFixture({
+      target: {
+        kind: "agent",
+        id: "monitor-customer-account-health",
+        displayName: "Monitor customer account health",
+        defaultActionKey: "monitor-customer-account-health.chat",
+      },
+      objective: "Monitor customer account health and produce a weekly review.",
+    });
+    const planned = await planner(run, {
+      schemaVersion: "openpond.createImprove.plannerDecision.v1",
+      decision: "plan",
+      plan: {
+        targetId: "account-health-agent",
+        targetName: "Account Health Agent",
+        summary: "Create the Account Health Agent.",
+        capturedContextSummary: "Direct request.",
+        actionShape: {
+          ...actionShape(),
+          defaultActionKey: "account-health-agent.chat",
+        },
+        defaultChatAction: {
+          key: "account-health-agent.chat",
+          label: "Chat",
+          required: true,
+        },
+        sourcePlan: [],
+        requirements: [],
+        checks: [],
+      },
+    });
+
+    expect(planned.target).toMatchObject({
+      kind: "agent",
+      id: "account-health-agent",
+      defaultActionKey: "account-health-agent.chat",
+    });
+    expect(planned.plan?.defaultChatAction.key).toBe("account-health-agent.chat");
+  });
+
   test("normalizes question and source-operation aliases before validation", async () => {
     const questionRun = await planner(createImproveRunFixture(), {
       schemaVersion: "openpond.createImprove.plannerDecision.v1",
@@ -206,6 +247,36 @@ describe("canonical Create/Improve planner", () => {
         },
       },
     });
+  });
+
+  test("preserves Account Health direct actions in deterministic Lab improvement plans", async () => {
+    const run = createImproveRunFixture({
+      operation: "improve",
+      surface: "lab_improve",
+      command: "lab_improve",
+      objective: "Correct renewal risk so billing and P1 blockers rank first.",
+      target: {
+        kind: "agent",
+        id: "account-health-agent",
+        displayName: "Account Health Agent",
+        defaultActionKey: "account-health-agent.chat",
+      },
+    });
+    const planned = await runModelBackedCreateImprovePlanner({
+      run,
+      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+      requestId: "lab_improve_account_health",
+      signal: new AbortController().signal,
+      stream: async function* () {
+        throw new Error("Lab improvement planning should not call the model.");
+      },
+    });
+
+    expect(planned.plan?.metadata.actionShape).toMatchObject({
+      mode: "chat_and_direct_actions",
+      defaultActionKey: "account-health-agent.chat",
+    });
+    expect(String(planned.plan?.metadata.actionShape && (planned.plan.metadata.actionShape as any).directActionHint)).toContain("summarize-account");
   });
 
   test("repairs invalid requirement bullets without creating a second run", async () => {

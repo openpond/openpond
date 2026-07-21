@@ -85,6 +85,14 @@ tmp/
 .openpond-negative/
 .openpond-test-fixtures/
 
+# Local/CDN video artifacts (restored with pnpm media:pull)
+apps/web/public/courses/post-training/*.mp4
+apps/web/public/tutorials/*.mp4
+
+# Generated post-training course media (source code and metadata stay tracked)
+docs/research/post-training-course/**/*.wav
+docs/research/post-training-course/**/*.mp4
+
 # Local databases and process diagnostics
 *.sqlite
 *.sqlite-*

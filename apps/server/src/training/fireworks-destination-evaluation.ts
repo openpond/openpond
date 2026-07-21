@@ -5,6 +5,7 @@ import {
   TaskAttemptResultSchema,
   TrainingArtifactSchema,
   type TaskAttemptResult,
+  type TaskDataRecord,
   type Taskset,
   type TrainingArtifact,
   type TrainingJob,
@@ -90,7 +91,9 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
     trainedModel: string;
   }): Promise<TrainingArtifact | null> {
     if (!this.deps.gradeAttempt) return null;
-    const frozen = input.taskset.tasks.filter((task) => task.split === "frozen_eval");
+    const frozen = input.taskset.datasetArtifact
+      ? await this.artifactFrozenTasks(input.taskset, input.job)
+      : input.taskset.tasks.filter((task) => task.split === "frozen_eval");
     const results: Array<{
       taskId: string;
       stage: "base" | "trained";
@@ -965,5 +968,32 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
     });
     await this.deps.store.saveTrainingArtifact(artifact);
     return artifact;
+  }
+
+  private async artifactFrozenTasks(
+    taskset: Taskset,
+    job: TrainingJob,
+  ): Promise<TaskDataRecord[]> {
+    if (!this.deps.resolveTrainingSelection || !this.deps.resolveTask) {
+      throw new Error(
+        "Artifact-backed frozen evaluation is unavailable.",
+      );
+    }
+    const plan = await this.deps.store.getTrainingPlan(job.planId);
+    if (!plan || plan.tasksetHash !== taskset.contentHash) {
+      throw new Error("Frozen evaluation plan no longer matches its Dataset.");
+    }
+    const selection = await this.deps.resolveTrainingSelection({
+      taskset,
+      plan,
+      split: "frozen_eval",
+      maximumBytes: 10 * 1024 * 1024,
+    });
+    return Promise.all(selection.records.map((record) =>
+      this.deps.resolveTask!({
+        tasksetId: taskset.id,
+        taskId: record.id,
+        split: "frozen_eval",
+      })));
   }
 }

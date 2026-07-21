@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import type { AppStartupState } from "../../startup/app-startup";
+import { OpenPondLockup, OPENPOND_WORDMARK_LENGTH } from "../brand/OpenPondLockup";
 
-const WORDMARK = "OpenPond".split("");
 const LETTER_REVEAL_START_MS = 520;
 const LETTER_REVEAL_STEP_MS = 240;
 
@@ -13,16 +12,16 @@ function shouldReduceSplashMotion() {
 
 export function AppSplash({ startup }: { startup: AppStartupState }) {
   const [visibleLetterCount, setVisibleLetterCount] = useState(() =>
-    shouldReduceSplashMotion() ? WORDMARK.length : 0,
+    shouldReduceSplashMotion() ? OPENPOND_WORDMARK_LENGTH : 0,
   );
 
   useEffect(() => {
     if (shouldReduceSplashMotion()) {
-      setVisibleLetterCount(WORDMARK.length);
+      setVisibleLetterCount(OPENPOND_WORDMARK_LENGTH);
       return;
     }
 
-    const timers = WORDMARK.map((_, index) =>
+    const timers = Array.from({ length: OPENPOND_WORDMARK_LENGTH }, (_, index) =>
       window.setTimeout(
         () => setVisibleLetterCount(index + 1),
         LETTER_REVEAL_START_MS + LETTER_REVEAL_STEP_MS * index,
@@ -36,21 +35,7 @@ export function AppSplash({ startup }: { startup: AppStartupState }) {
 
   return (
     <main className="app-splash" aria-busy="true" aria-label={startup.label} role="status">
-      <div className="app-splash-lockup" data-stage={startup.stage}>
-        <div className="app-splash-mark">
-          <img alt="OpenPond" className="app-splash-logo" decoding="async" src={OPENPOND_ICON_URL} />
-        </div>
-        <span
-          aria-hidden="true"
-          className={`app-splash-wordmark${visibleLetterCount > 0 ? " is-visible" : ""}`}
-        >
-          {WORDMARK.slice(0, visibleLetterCount).map((letter, index) => (
-            <span className="app-splash-letter" key={`${letter}-${index}`}>
-              {letter}
-            </span>
-          ))}
-        </span>
-      </div>
+      <OpenPondLockup visibleLetterCount={visibleLetterCount} />
       <span className="app-splash-status">{startup.label}</span>
     </main>
   );

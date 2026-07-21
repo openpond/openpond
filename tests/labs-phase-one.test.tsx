@@ -6,7 +6,10 @@ import {
   CrossSystemExpertBootstrapPreviewSchema,
   CrossSystemFrontierBaselineRunSchema,
   emptyOpenPondProfileState,
+  TasksetSchema,
+  TasksetBaselineRunSchema,
   TrainingStateResponseSchema,
+  type OpenPondProfileState,
   type TrainingStateResponse,
 } from "@openpond/contracts";
 
@@ -28,6 +31,11 @@ import {
   LabModelBaselineProgress,
 } from "../apps/web/src/components/labs/LabModelBaseline";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
+import {
+  LabModelVersionDetailPage,
+  LabModelVersionsPage,
+} from "../apps/web/src/components/labs/LabModelWorkspace";
+import { LabNewVersionDialog } from "../apps/web/src/components/labs/LabNewVersionDialog";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
@@ -344,8 +352,14 @@ describe("Lab Phase 1", () => {
     };
     const markup = renderToStaticMarkup(
       createElement(LabModelDataset, {
+        artifact: null,
         taskset,
         onOpenFiles: noop,
+        training: {
+          actions: {
+            datasetRows: async () => null,
+          },
+        } as any,
       }),
     );
 
@@ -359,6 +373,77 @@ describe("Lab Phase 1", () => {
     expect(markup).toContain("Hello friend");
     expect(markup).toContain('class="labs-dataset-example"');
     expect(markup).not.toContain(">Evidence<");
+  });
+
+  test("shows failed train-signal checks on the current Dataset version", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const run = TasksetBaselineRunSchema.parse({
+      schemaVersion: "openpond.tasksetBaselineRun.v1",
+      id: "baseline_run_capacity",
+      profileId: "default",
+      tasksetId: taskset.id,
+      tasksetHash: taskset.contentHash,
+      status: "failed",
+      configuration: {
+        split: "train",
+        taskLimit: 16,
+        attemptsPerTask: 8,
+        selectionSeed: 17,
+        selectionStrategy: "stable_hash_top_n",
+        model: { providerId: "fireworks", modelId: "accounts/fireworks/models/qwen3-0p6b" },
+        sampling: { maxOutputTokens: 2_048, temperature: 0.8, topP: 0.95 },
+      },
+      scope: null,
+      progress: {
+        stage: "provisioning",
+        completedAttempts: 0,
+        totalAttempts: 128,
+        correctAttempts: 0,
+        incorrectAttempts: 0,
+        parseableAttempts: 0,
+        infrastructureFailures: 0,
+      },
+      provider: {
+        providerId: "fireworks",
+        accountId: "test-account",
+        deploymentId: "op-baseline-capacity",
+        phase: "deleted",
+        state: "DELETED",
+        statusCode: "RESOURCE_EXHAUSTED",
+        statusMessage: "no available capacity",
+        createdAt: "2026-07-21T12:00:00.000Z",
+        readyAt: null,
+        releasedAt: "2026-07-21T12:00:02.000Z",
+      },
+      reportId: null,
+      estimatedCostUsd: null,
+      cancelRequested: false,
+      error: "Fireworks base-model deployment has no available capacity.",
+      createdAt: "2026-07-21T12:00:00.000Z",
+      startedAt: "2026-07-21T12:00:00.000Z",
+      completedAt: "2026-07-21T12:00:02.000Z",
+      updatedAt: "2026-07-21T12:00:02.000Z",
+    });
+    const markup = renderToStaticMarkup(
+      createElement(LabModelDataset, {
+        artifact: null,
+        taskset,
+        onOpenFiles: noop,
+        training: {
+          payload: { baselineRuns: [run] },
+          actions: {
+            datasetRows: async () => null,
+            cancelBaselineRun: async () => null,
+          },
+        } as any,
+      }),
+    );
+
+    expect(markup).toContain(">Checks<");
+    expect(markup).toContain("Train signal");
+    expect(markup).toContain("Current");
+    expect(markup).toContain("RESOURCE_EXHAUSTED");
+    expect(markup).toContain("no available capacity");
   });
 
   test("does not project a completed baseline from an older Taskset revision", () => {
@@ -495,6 +580,109 @@ describe("Lab Phase 1", () => {
     expect(workproduct?.description).toBe(objective);
   });
 
+  test("uses the canonical profile catalog id for an Agent chat action", () => {
+    const profile = {
+      agents: [{
+        id: "account-health-agent",
+        name: "Account Health Agent",
+        path: "agents/account-health-agent",
+        enabled: true,
+      }],
+      actionCatalog: [{
+        id: "chat",
+        agentId: "account-health-agent",
+        sourcePath: "/profile/agents/account-health-agent",
+        sourceActionId: "chat",
+        name: "chat",
+        label: "Chat",
+        description: "Answer account questions.",
+        visibility: "default",
+        inputSchema: "AccountHealthChatInput",
+        outputSchema: "AccountHealthResponse",
+        approvalPolicy: null,
+        artifactPolicy: null,
+        setupRequirements: [],
+        mcp: null,
+        schedulePolicy: null,
+        trace: null,
+        implementation: { type: "workflow", workflowId: "account-health-chat" },
+      }],
+      lastCheck: null,
+    } as unknown as OpenPondProfileState;
+
+    expect(labWorkproductProjection({ profile, training: null, runs: [] })[0])
+      .toMatchObject({
+        id: "account-health-agent",
+        useActionId: "chat",
+      });
+
+    profile.actionCatalog[0]!.id = "account-health-agent.chat";
+    expect(labWorkproductProjection({ profile, training: null, runs: [] })[0])
+      .toMatchObject({ useActionId: "account-health-agent.chat" });
+  });
+
+  test("uses meaningful Agent names instead of lifecycle labels", () => {
+    const objective =
+      "Monitor customer account health, answer account questions with source-backed facts.";
+    const draft = createImproveRunFixture({
+      id: "create_improve_agent_name",
+      target: {
+        kind: "agent",
+        id: "agent_draft_name",
+        displayName: "Create agent",
+        defaultActionKey: null,
+      },
+      objective,
+    });
+    const [workproduct] = labWorkproductProjection({
+      profile: null,
+      training: null,
+      runs: [draft],
+    });
+
+    expect(workproduct?.name).toBe("Monitor customer account health · NAME");
+    expect(workproduct?.name).not.toBe("Create agent");
+    expect(workproduct?.description).toBe(objective);
+  });
+
+  test("gives concurrent Agent drafts distinct stable titles and replaces them with a canonical name", () => {
+    const objective = "Monitor customer account health and renewal risk.";
+    const draft = (id: string, state: "planning" | "failed" | "awaiting_plan_approval") =>
+      createImproveRunFixture({
+        id,
+        state,
+        target: {
+          kind: "agent",
+          id: null,
+          displayName: "Create agent",
+          defaultActionKey: null,
+        },
+        objective,
+      });
+    const drafts = [
+      draft("create_agent_alpha", "planning"),
+      draft("create_agent_bravo", "failed"),
+      draft("create_agent_charlie", "awaiting_plan_approval"),
+    ];
+    const projected = labWorkproductProjection({ profile: null, training: null, runs: drafts });
+
+    expect(new Set(projected.map((item) => item.name))).toHaveLength(3);
+    expect(projected.every((item) => item.name.startsWith("Monitor customer account health"))).toBe(true);
+    expect(projected.every((item) => item.name !== "Create agent")).toBe(true);
+
+    const canonical = createImproveRunFixture({
+      ...drafts[0],
+      target: {
+        kind: "agent",
+        id: "account-health-agent",
+        displayName: "Account Health Agent",
+        defaultActionKey: "chat",
+      },
+    });
+    expect(labWorkproductProjection({ profile: null, training: null, runs: [canonical] })[0]?.name)
+      .toBe("Account Health Agent");
+  });
+
   test("derives one workproduct status and next action while preserving completed history", () => {
     const active = createImproveRunFixture({
       id: "create_improve_active",
@@ -583,7 +771,7 @@ describe("Lab Phase 1", () => {
         taskset: null,
         training: null,
       }).action
-    ).toEqual({ kind: "resume_run", label: "Continue candidate" });
+    ).toEqual({ kind: "resume_run", label: "Continue update" });
   });
 
   test("makes Model data and training part of the same status-aware workproduct flow", () => {
@@ -620,6 +808,267 @@ describe("Lab Phase 1", () => {
         training: null,
       }).action
     ).toEqual({ kind: "start_training", label: "Start training" });
+    const rftTaskset = TasksetSchema.parse({
+      ...readyTaskset,
+      capabilities: {
+        ...readyTaskset.capabilities,
+        compatibleMethods: ["grpo"],
+      },
+      readiness: {
+        ...readyTaskset.readiness!,
+        recommendedMethod: "grpo",
+        trainingPath: { primaryMethod: "grpo", bootstrap: null },
+        baselineReportId: null,
+        baselineReward: null,
+      },
+    });
+    expect(
+      labWorkproductProgression({
+        workproduct,
+        runs: [],
+        taskset: rftTaskset,
+        training: null,
+      })
+    ).toMatchObject({
+      statusLabel: "Test base model",
+      action: { kind: "start_training", label: "Configure training" },
+    });
+  });
+
+  test("keeps the Versions screen visible before the first training attempt", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const trainingState = TrainingStateResponseSchema.parse({
+      schemaVersion: "openpond.trainingState.v1",
+      profileId: "default",
+      sources: [],
+      creations: [],
+      tasksets: [taskset],
+      baselineReports: [],
+      graderAuditReports: [],
+      candidates: [],
+      minerConfig: { schemaVersion: "openpond.taskMinerConfig.v1" },
+      plans: [],
+      bundles: [],
+      jobs: [],
+      artifacts: [],
+      models: [],
+      destinations: [],
+      credentialRefs: [],
+      generatedAt: "2026-07-20T12:00:00.000Z",
+    });
+    const markup = renderToStaticMarkup(
+      createElement(LabModelVersionsPage, {
+        workproduct: {
+          key: `model:${taskset.id}`,
+          kind: "model",
+          id: taskset.id,
+          name: "Fixture model",
+          description: taskset.objective,
+          status: "Ready",
+          updatedAt: taskset.updatedAt,
+          path: null,
+          enabled: null,
+          runIds: [],
+          conversationId: null,
+          tasksetId: taskset.id,
+        },
+        runs: [],
+        training: {
+          payload: trainingState,
+          actions: {},
+        } as any,
+        onOpenDataset: noop,
+        onOpenEntry: noop,
+        onToast: noop,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Versions"');
+    expect(markup).toContain("<table");
+    expect(markup).toContain("<th>Version</th>");
+    expect(markup).toContain("No training attempts yet.");
+    expect(markup).toContain("Create the first Version");
+  });
+
+  test("shows a persisted train-signal check in the Model Versions table", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const modelId = "model_fixture_train_signal";
+    const baselineRun = TasksetBaselineRunSchema.parse({
+      schemaVersion: "openpond.tasksetBaselineRun.v1",
+      id: "baseline_run_model_capacity",
+      profileId: "default",
+      targetModelId: modelId,
+      tasksetId: taskset.id,
+      tasksetHash: taskset.contentHash,
+      status: "failed",
+      configuration: {
+        split: "train",
+        taskLimit: 16,
+        attemptsPerTask: 8,
+        selectionSeed: 17,
+        selectionStrategy: "rft_easy_curriculum_v1",
+        model: {
+          providerId: "fireworks",
+          modelId: "accounts/fireworks/models/qwen3-0p6b",
+        },
+        sampling: { maxOutputTokens: 2_048, temperature: 0.8, topP: 0.95 },
+      },
+      scope: null,
+      progress: {
+        stage: "provisioning",
+        completedAttempts: 0,
+        totalAttempts: 128,
+        correctAttempts: 0,
+        incorrectAttempts: 0,
+        parseableAttempts: 0,
+        infrastructureFailures: 0,
+      },
+      provider: {
+        providerId: "fireworks",
+        accountId: "test-account",
+        deploymentId: "op-baseline-capacity",
+        phase: "deleted",
+        state: "DELETED",
+        statusCode: "RESOURCE_EXHAUSTED",
+        statusMessage: "no available capacity",
+        createdAt: "2026-07-21T12:00:00.000Z",
+        readyAt: null,
+        releasedAt: "2026-07-21T12:00:02.000Z",
+      },
+      reportId: null,
+      estimatedCostUsd: null,
+      cancelRequested: false,
+      error: "Fireworks base-model deployment has no available capacity.",
+      createdAt: "2026-07-21T12:00:00.000Z",
+      startedAt: "2026-07-21T12:00:00.000Z",
+      completedAt: "2026-07-21T12:00:02.000Z",
+      updatedAt: "2026-07-21T12:00:02.000Z",
+    });
+    const trainingState = TrainingStateResponseSchema.parse({
+      schemaVersion: "openpond.trainingState.v1",
+      profileId: "default",
+      sources: [],
+      creations: [],
+      tasksets: [taskset],
+      baselineReports: [],
+      baselineRuns: [baselineRun],
+      graderAuditReports: [],
+      candidates: [],
+      minerConfig: { schemaVersion: "openpond.taskMinerConfig.v1" },
+      plans: [],
+      bundles: [],
+      jobs: [],
+      artifacts: [],
+      models: [],
+      destinations: [],
+      credentialRefs: [],
+      generatedAt: "2026-07-21T12:00:03.000Z",
+    });
+    const markup = renderToStaticMarkup(
+      createElement(LabModelVersionsPage, {
+        workproduct: {
+          key: `model:${modelId}`,
+          kind: "model",
+          id: modelId,
+          name: "Fixture model",
+          description: taskset.objective,
+          status: "Ready",
+          updatedAt: taskset.updatedAt,
+          path: null,
+          enabled: null,
+          runIds: [],
+          conversationId: null,
+          tasksetId: taskset.id,
+        },
+        runs: [],
+        training: {
+          payload: trainingState,
+          actions: { cancelBaselineRun: async () => null },
+        } as any,
+        onOpenDataset: noop,
+        onOpenEntry: noop,
+        onToast: noop,
+      }),
+    );
+
+    expect(markup).toContain("Train-signal check");
+    expect(markup).toContain("Check failed");
+    expect(markup).toContain("No attempts");
+    expect(markup).toContain("model_capaci");
+    expect(markup).not.toContain("No training attempts yet.");
+
+    const detail = renderToStaticMarkup(
+      createElement(LabModelVersionDetailPage, {
+        connection: null,
+        selectedEntryKey: `baseline:${baselineRun.id}`,
+        workproduct: {
+          key: `model:${modelId}`,
+          kind: "model",
+          id: modelId,
+          name: "Fixture model",
+          description: taskset.objective,
+          status: "Ready",
+          updatedAt: taskset.updatedAt,
+          path: null,
+          enabled: null,
+          runIds: [],
+          conversationId: null,
+          tasksetId: taskset.id,
+        },
+        runs: [],
+        training: {
+          payload: trainingState,
+          actions: { cancelBaselineRun: async () => null },
+        } as any,
+        onBack: noop,
+        onOpenDataset: noop,
+        onUseVersion: noop,
+      }),
+    );
+    expect(detail).toContain("Train-signal check");
+    expect(detail).toContain("RESOURCE_EXHAUSTED");
+    expect(detail).toContain("no available capacity");
+  });
+
+  test("chooses only the Dataset in the first New version dialog", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const state = TrainingStateResponseSchema.parse({
+      schemaVersion: "openpond.trainingState.v1",
+      profileId: "default",
+      sources: [],
+      creations: [],
+      tasksets: [taskset],
+      baselineReports: [],
+      graderAuditReports: [],
+      candidates: [],
+      minerConfig: { schemaVersion: "openpond.taskMinerConfig.v1" },
+      plans: [],
+      bundles: [],
+      jobs: [],
+      artifacts: [],
+      models: [],
+      destinations: [],
+      credentialRefs: [],
+      generatedAt: "2026-07-20T12:00:00.000Z",
+    });
+    const markup = renderToStaticMarkup(
+      createElement(LabNewVersionDialog, {
+        state,
+        initialTasksetId: taskset.id,
+        checking: false,
+        onClose: noop,
+        onCheck: async () => undefined,
+        onContinue: noop,
+        onReview: noop,
+      }),
+    );
+
+    expect(markup).toContain("Choose the immutable Dataset revision.");
+    expect(markup).toContain("Training setup comes next.");
+    expect(markup).toContain("Configure training");
+    expect(markup).not.toContain("Version training method");
+    expect(markup).not.toContain(">Supervised<");
+    expect(markup).not.toContain(">RFT<");
   });
 
   test("shows an active training job instead of a stale authoring state", () => {
@@ -872,6 +1321,10 @@ describe("Lab Phase 1", () => {
       "apps/web/src/app/AppRuntimeView.tsx",
       "utf8"
     );
+    const labAgentAuthoring = await readFile(
+      "apps/web/src/hooks/useLabAgentAuthoring.ts",
+      "utf8",
+    );
     const navigation = await readFile(
       "apps/web/src/hooks/useLabDetailNavigation.ts",
       "utf8"
@@ -881,8 +1334,8 @@ describe("Lab Phase 1", () => {
       "onOpenRunConversation={onOpenRightChatForSession}"
     );
     expect(mainPane).toContain("onCreateAgent={createAgentFromLab}");
-    expect(mainPane).toContain('systemKind: "openpond.lab"');
-    expect(mainPane).toContain("hiddenFromDefaultSidebar: true");
+    expect(labAgentAuthoring).toContain('systemKind: "openpond.lab"');
+    expect(labAgentAuthoring).toContain("hiddenFromDefaultSidebar: true");
     expect(mainPane).toContain(
       "closeDetailRequestId={labCloseDetailRequestId}"
     );
@@ -941,14 +1394,14 @@ describe("Lab Phase 1", () => {
         runtime: { run },
       })
     );
-    expect(markup).toContain("Candidate ready");
-    expect(markup).toContain("Base Evals: 0/1 passed");
-    expect(markup).toContain("Candidate Evals: 1/1 passed");
-    expect(markup).toContain("Merge change");
-    expect(markup).toContain("Reject");
+    expect(markup).toContain("Update ready");
+    expect(markup).toContain("Current Agent: 0/1 checks passed");
+    expect(markup).toContain("Updated Agent: 1/1 checks passed");
+    expect(markup).toContain("Apply update");
+    expect(markup).toContain("Keep current version");
   });
 
-  test("renders Agent change review as request, changes, Evals, and merge without an inline file list", () => {
+  test("renders Agent change review as request, changes, checks, and apply without internal Git details", () => {
     const run = createImproveRunFixture({
       operation: "improve",
       objective: "Make the Agent better at finding files.",
@@ -1024,12 +1477,14 @@ describe("Lab Phase 1", () => {
 
     expect(markup).toContain(">Request<");
     expect(markup).toContain(">Changes<");
-    expect(markup).toContain(">Evals<");
-    expect(markup).toContain(">Merge<");
+    expect(markup).toContain(">Checks<");
+    expect(markup).toContain(">Apply<");
     expect(markup).toContain("Files (1)");
-    expect(markup).toContain("Base");
-    expect(markup).toContain("Branch");
-    expect(markup).toContain("Merge change");
+    expect(markup).toContain("Apply update");
+    expect(markup).not.toContain("Base");
+    expect(markup).not.toContain("Branch");
+    expect(markup).not.toContain("candidate");
+    expect(markup).not.toContain("Evals");
     expect(markup).not.toContain("Review the drafted files and their Evals");
     expect(markup).not.toContain("Files changed");
     expect(markup).not.toContain("profiles/default/agent/instructions.md");
@@ -1039,9 +1494,9 @@ describe("Lab Phase 1", () => {
     expect(markup.indexOf(">Changes<")).toBeLessThan(
       markup.indexOf("Files (1)")
     );
-    expect(markup.indexOf("Files (1)")).toBeLessThan(markup.indexOf(">Evals<"));
-    expect(markup.indexOf(">Changes<")).toBeLessThan(markup.indexOf(">Evals<"));
-    expect(markup.indexOf(">Evals<")).toBeLessThan(markup.indexOf(">Merge<"));
+    expect(markup.indexOf("Files (1)")).toBeLessThan(markup.indexOf(">Checks<"));
+    expect(markup.indexOf(">Changes<")).toBeLessThan(markup.indexOf(">Checks<"));
+    expect(markup.indexOf(">Checks<")).toBeLessThan(markup.indexOf(">Apply<"));
 
     const history = renderToStaticMarkup(
       createElement(LabAgentChangeHistory, {

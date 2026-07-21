@@ -11,5 +11,5 @@
     "types": ["vite/client"]
   },
   "references": [{ "path": "../../packages/contracts" }],
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/vite-env.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.json", "src/vite-env.d.ts"]
 }

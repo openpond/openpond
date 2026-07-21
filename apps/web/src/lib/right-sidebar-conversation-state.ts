@@ -69,10 +69,13 @@ export function rightSidebarConversationStatesEqual(
     return Boolean(
       other &&
         panel.id === other.id &&
+        panel.activationVersion === other.activationVersion &&
         panel.sessionId === other.sessionId &&
         panel.prompt === other.prompt &&
         panel.provider === other.provider &&
-        panel.model === other.model,
+        panel.model === other.model &&
+        panel.scrollTop === other.scrollTop &&
+        panel.stickyToBottom === other.stickyToBottom,
     );
   });
 }

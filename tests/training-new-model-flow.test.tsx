@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TaskCreationSnapshotSchema, TaskMinerRunSchema } from "../packages/contracts/src";
 import { TrainingAutomaticScopeStep } from "../apps/web/src/components/training/TrainingAutomaticScopeStep";
@@ -6,6 +7,7 @@ import { TrainingBaseModelStep } from "../apps/web/src/components/training/Train
 import { CreateImproveAuthoringDialog } from "../apps/web/src/components/create-improve/CreateImproveAuthoringDialog";
 import { shouldRevealMinerCandidates } from "../apps/web/src/components/training/training-flow";
 import { TrainingDatasetStep } from "../apps/web/src/components/training/TrainingDatasetStep";
+import { TrainingSourceStep } from "../apps/web/src/components/training/TrainingSourceStep";
 import { TrainingStartModeStep } from "../apps/web/src/components/training/TrainingStartModeStep";
 import { TrainingRunReviewStep } from "../apps/web/src/components/training/TrainingRunReviewStep";
 import { proposalFixture, sourceFixture, tasksetFixture } from "./helpers/training-fixtures";
@@ -14,9 +16,9 @@ describe("New model flow", () => {
   test("starts from user intent rather than asking for an optimizer", () => {
     const html = renderToStaticMarkup(<CreateImproveAuthoringDialog {...dialogProps()} initialObjective={null} />);
     expect(html).toContain("Choose a setup");
-    expect(html).toContain("Automated");
+    expect(html).toContain("Automatic");
     expect(html).toContain("Manual");
-    expect(html).toContain("OpenPond recommends the training method");
+    expect(html).toContain("selected chats");
     for (const title of ["Supervised fine-tuning", "Preference tuning", "Reinforcement learning"]) expect(html).not.toContain(title);
     expect(html).not.toContain('placeholder="Search chats"');
     expect(html).not.toContain('aria-label="Back');
@@ -115,7 +117,7 @@ describe("New model flow", () => {
 
   test("pre-populated objectives still start at the explicit intent choice", () => {
     const html = renderToStaticMarkup(<CreateImproveAuthoringDialog {...dialogProps()} initialObjective="Reconcile billing and support risk." initialSessionIds={["session_fixture"]} />);
-    expect(html).toContain("Automated");
+    expect(html).toContain("Automatic");
     expect(html).toContain("Manual");
     expect(html).not.toContain("Reconcile billing and support risk.");
     expect(html).not.toContain("Approved support workflow");
@@ -152,7 +154,7 @@ describe("New model flow", () => {
     expect(html).not.toContain("How do you want to start?");
   });
 
-  test("uses the same Automated and Manual shell for Agent and open-target changes", () => {
+  test("gives Agent authoring a dedicated two-source choice while open targets keep the shared setup", () => {
     const agent = renderToStaticMarkup(<CreateImproveAuthoringDialog
       {...dialogProps()}
       initialObjective={null}
@@ -163,12 +165,103 @@ describe("New model flow", () => {
       initialObjective={null}
       targetIntent={{ kind: null, id: null, displayName: null, operation: "create" }}
     />);
-    for (const html of [agent, generic]) {
-      expect(html).toContain("Automated");
-      expect(html).toContain("Manual");
-    }
+    expect(agent).toContain("From prompt");
+    expect(agent).toContain("From chats");
+    expect(agent).not.toContain(">Automatic<");
+    expect(agent).not.toContain(">Manual<");
+    expect(agent.match(/role="radio"/g)).toHaveLength(2);
+    expect(generic).toContain("Automatic");
+    expect(generic).toContain("Manual");
     expect(agent).toContain('aria-label="New agent"');
     expect(generic).toContain('aria-label="New change"');
+  });
+
+  test("keeps Agent prompt-only authoring free of chat search and requires purpose", () => {
+    const html = renderToStaticMarkup(
+      <TrainingSourceStep
+        {...manualSourceProps()}
+        mode="from_prompt"
+        targetLabel="agent"
+      />,
+    );
+    expect(html).toContain("Agent purpose");
+    expect(html).toContain("This path does not attach or search your chats.");
+    expect(html).toContain("No chats will be attached");
+    expect(html).toContain("required");
+    expect(html).not.toContain('placeholder="Search chats"');
+    expect(html).not.toContain("Add supporting chats");
+    expect(html).toContain("disabled");
+  });
+
+  test("requires both an Improvement goal and supporting chats for Agent chat authoring", () => {
+    const empty = renderToStaticMarkup(
+      <TrainingSourceStep
+        {...manualSourceProps()}
+        mode="from_chats"
+        targetLabel="agent"
+        targetOperation="improve"
+      />,
+    );
+    expect(empty).toContain("Improvement goal");
+    expect(empty).toContain('placeholder="Search chats"');
+    expect(empty).toContain("Select at least one supporting chat");
+    expect(empty).toContain("disabled");
+
+    const ready = renderToStaticMarkup(
+      <TrainingSourceStep
+        {...manualSourceProps()}
+        estimatesBySessionId={{ chat_1: { messageCount: 4, estimatedTokens: 220 } }}
+        mode="from_chats"
+        objective="Prioritize billing blockers before adoption risk."
+        selectedEntries={[{ sessionId: "chat_1", title: "Acme renewal review", updatedAt: "2026-07-20T12:00:00.000Z", snippet: null }]}
+        selectedEstimate={{ messageCount: 4, estimatedTokens: 220, measuredChats: 1 }}
+        selectedSessionIds={new Set(["chat_1"])}
+        targetLabel="agent"
+        targetOperation="improve"
+        visibleSessions={[{ sessionId: "chat_1", title: "Acme renewal review", updatedAt: "2026-07-20T12:00:00.000Z", snippet: null }]}
+      />,
+    );
+    expect(ready).toContain("Review selected chats");
+    expect(ready).not.toMatch(/<button class="training-button" type="button" disabled=""[^>]*>Review selected chats/);
+  });
+
+  test("explains the two Agent chat-sharing actions before analysis", () => {
+    const html = renderToStaticMarkup(
+      <TrainingSourceStep
+        {...manualSourceProps()}
+        disclosurePending
+        estimatesBySessionId={{ chat_1: { messageCount: 4, estimatedTokens: 220 } }}
+        mode="from_chats"
+        objective="Prioritize billing blockers before adoption risk."
+        selectedEntries={[{ sessionId: "chat_1", title: "Acme renewal review", updatedAt: "2026-07-20T12:00:00.000Z", snippet: null }]}
+        selectedEstimate={{ messageCount: 4, estimatedTokens: 220, measuredChats: 1 }}
+        selectedSessionIds={new Set(["chat_1"])}
+        targetLabel="agent"
+        visibleSessions={[{ sessionId: "chat_1", title: "Acme renewal review", updatedAt: "2026-07-20T12:00:00.000Z", snippet: null }]}
+      />,
+    );
+    expect(html).toContain("Review chats before sharing");
+    expect(html).toContain("Nothing is sent until you approve");
+    expect(html).toContain("Approve chats and build plan");
+    expect(html).toContain("Change chats");
+    expect(html).not.toContain("Review data access");
+    expect(html).not.toContain("Approve and analyze");
+  });
+
+  test("keeps Model data-access wording separate from Agent chat-sharing wording", () => {
+    const html = renderToStaticMarkup(
+      <TrainingSourceStep
+        {...manualSourceProps()}
+        estimatesBySessionId={{ chat_1: { messageCount: 4, estimatedTokens: 220 } }}
+        mode="manual"
+        objective="Train a renewal-risk capability."
+        selectedEstimate={{ messageCount: 4, estimatedTokens: 220, measuredChats: 1 }}
+        selectedSessionIds={new Set(["chat_1"])}
+        targetLabel="model"
+      />,
+    );
+    expect(html).toContain("Review data access");
+    expect(html).not.toContain("Review selected chats");
   });
 
   test("renders recommendation review, revision, and Add chats recovery when evidence is insufficient", () => {
@@ -180,6 +273,34 @@ describe("New model flow", () => {
     expect(html).toContain("Advanced");
     expect(html).toContain(">Add chats</button>");
     expect(html).not.toContain(">Create Taskset</button>");
+  });
+
+  test("renders an Agent-specific review without Model and Taskset internals", () => {
+    const source = sourceFixture();
+    const base = creationFixture("awaiting_materialization_approval", [source.id]);
+    const creation = TaskCreationSnapshotSchema.parse({
+      ...base,
+      request: {
+        ...base.request,
+        objective: "Monitor customer account health and explain renewal risk.",
+        targetIntent: {
+          kind: "agent",
+          id: null,
+          displayName: null,
+          operation: "create",
+        },
+      },
+    });
+    const html = renderToStaticMarkup(<TrainingRunReviewStep busy={false} creation={creation} onAddChats={() => undefined} onClose={() => undefined} onCreateTaskset={() => undefined} onCreationChange={() => undefined} sources={[source]} training={controller()} />);
+    expect(html).toContain("What the Agent should do");
+    expect(html).toContain("Supporting chats");
+    expect(html).toContain("How OpenPond will check it");
+    expect(html).toContain("Continue to Agent plan");
+    expect(html).not.toContain("Dataset &amp; Evals");
+    expect(html).not.toContain("Recommended training");
+    expect(html).not.toContain("Technical method");
+    expect(html).not.toContain("Create Taskset");
+    expect(html).not.toContain("Workproduct name");
   });
 
   test("offers model creation only after a trainable proposal has independent evaluation", () => {
@@ -235,27 +356,41 @@ describe("New model flow", () => {
     expect(html).not.toContain(">Create Taskset</button>");
   });
 
-  test("shows the actual chat scope without injecting one-off proof controls", () => {
-    const html = renderToStaticMarkup(<TrainingAutomaticScopeStep
-      chatPreview={[
-        { id: "chat_1", title: "Reconcile customer renewal", updatedAt: "2026-07-17T12:00:00.000Z" },
-        { id: "chat_2", title: "Review billing mismatch", updatedAt: "2026-07-16T12:00:00.000Z" },
-      ]}
-      chatCount={12}
-      config={minerConfig()}
-      estimate={{ messageCount: 24, estimatedTokens: 1_200, measuredChats: 12 }}
-      onCancel={() => undefined}
-      onConfigChange={() => undefined}
-      onScan={() => undefined}
-      run={null}
-      scanning={false}
-    />);
-    expect(html).toContain("Review chats in scope");
+  test("requires explicit multi-chat scope for Automatic discovery", () => {
+    const chats = [
+      { sessionId: "chat_1", title: "Reconcile customer renewal", updatedAt: "2026-07-17T12:00:00.000Z", snippet: null },
+      { sessionId: "chat_2", title: "Review billing mismatch", updatedAt: "2026-07-16T12:00:00.000Z", snippet: null },
+    ];
+    const html = renderToStaticMarkup(<TrainingAutomaticScopeStep {...automaticScopeProps({
+      estimatesBySessionId: {
+        chat_1: { messageCount: 12, estimatedTokens: 600 },
+        chat_2: { messageCount: 12, estimatedTokens: 600 },
+      },
+      estimate: { messageCount: 24, estimatedTokens: 1_200, measuredChats: 2 },
+      matchingSessionCount: 12,
+      selectedEntries: chats,
+      selectedSessionIds: new Set(["chat_1", "chat_2"]),
+      targetLabel: "agent",
+      visibleSessions: chats,
+    })} />);
+    expect(html).toContain("Choose chats to inspect");
     expect(html).toContain("Reconcile customer renewal");
     expect(html).toContain("Review billing mismatch");
-    expect(html).toContain("Find repeated work</button>");
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain("Find Agent opportunities</button>");
+    expect(html).toContain("reads only the selected chats");
+    expect(html).not.toContain("Chats in scope");
     expect(html).not.toContain("Cross-System Operations proof evidence");
     expect(html).not.toContain("frontier baseline");
+  });
+
+  test("keeps optional Manual chats collapsed behind target-specific setup copy", () => {
+    const html = renderToStaticMarkup(<TrainingSourceStep {...manualSourceProps()} />);
+    expect(html).toContain("Dataset purpose");
+    expect(html).toContain('<details class="training-manual-chat-seeds">');
+    expect(html).toContain("Add supporting chats");
+    expect(html).toContain("Optional");
+    expect(html).not.toContain('<details class="training-manual-chat-seeds" open="">');
   });
 
   test("shows cancellable durable progress while Miner ingests local evidence", () => {
@@ -277,17 +412,13 @@ describe("New model flow", () => {
       completedAt: null,
       updatedAt: timestamp,
     });
-    const html = renderToStaticMarkup(<TrainingAutomaticScopeStep
-      chatPreview={[{ id: "chat_1", title: "Recent work", updatedAt: timestamp }]}
-      chatCount={471}
-      config={minerConfig()}
-      estimate={{ messageCount: 0, estimatedTokens: 0, measuredChats: 0 }}
-      onCancel={() => undefined}
-      onConfigChange={() => undefined}
-      onScan={() => undefined}
-      run={run}
-      scanning
-    />);
+    const html = renderToStaticMarkup(<TrainingAutomaticScopeStep {...automaticScopeProps({
+      estimate: { messageCount: 0, estimatedTokens: 0, measuredChats: 0 },
+      matchingSessionCount: 471,
+      run,
+      scanning: true,
+      selectedSessionIds: new Set(Array.from({ length: 471 }, (_, index) => `chat_${index}`)),
+    })} />);
     expect(html).toContain("Preparing local evidence");
     expect(html).toContain("8 of 471 chats");
     expect(html).toContain("2 skipped");
@@ -365,12 +496,85 @@ function minerConfig() {
   return { schemaVersion: "openpond.taskMinerConfig.v1" as const, enabled: true, localOnly: true, observationWindowDays: 30, minimumRecurrence: 3, clustering: "hybrid_deterministic_first" as const, consentRequired: true };
 }
 
+function automaticScopeProps(
+  overrides: Partial<ComponentProps<typeof TrainingAutomaticScopeStep>> = {},
+): ComponentProps<typeof TrainingAutomaticScopeStep> {
+  return {
+    config: minerConfig(),
+    estimatesBySessionId: {},
+    estimate: { messageCount: 0, estimatedTokens: 0, measuredChats: 0 },
+    matchingSessionCount: 0,
+    onCancel: () => undefined,
+    onConfigChange: () => undefined,
+    onLoadMore: () => undefined,
+    onScan: () => undefined,
+    onSearchChange: () => undefined,
+    onToggleSession: () => undefined,
+    onToggleVisible: () => undefined,
+    run: null,
+    scanning: false,
+    search: "",
+    searchError: null,
+    searchHasMore: false,
+    searchIndexedChats: 0,
+    searchIndexing: false,
+    searchLoading: false,
+    searchTotalChats: 0,
+    selectedEntries: [],
+    selectedSessionIds: new Set(),
+    targetLabel: "model",
+    visibleSessions: [],
+    ...overrides,
+  };
+}
+
+function manualSourceProps(): ComponentProps<typeof TrainingSourceStep> {
+  return {
+    authoringModel: "fixture-author",
+    authoringProvider: "custom-openai-compatible",
+    authoringReasoningEffort: "high",
+    busy: false,
+    disclosurePending: false,
+    estimatesBySessionId: {},
+    matchingSessionCount: 2,
+    mode: "manual",
+    objective: "",
+    onAnalyze: () => undefined,
+    onApproveDisclosure: () => undefined,
+    onAuthoringModelChange: () => undefined,
+    onAuthoringProviderChange: () => undefined,
+    onAuthoringReasoningEffortChange: () => undefined,
+    onDeclineDisclosure: () => undefined,
+    onLoadMore: () => undefined,
+    onObjectiveChange: () => undefined,
+    onReturnToRecommendation: () => undefined,
+    onSearchChange: () => undefined,
+    onToggleSession: () => undefined,
+    onToggleVisible: () => undefined,
+    providerSettings: null,
+    recommendationAvailable: false,
+    search: "",
+    searchError: null,
+    searchHasMore: false,
+    searchIndexedChats: 2,
+    searchIndexing: false,
+    searchLoading: false,
+    searchTotalChats: 2,
+    selectedEntries: [],
+    selectedEstimate: { messageCount: 0, estimatedTokens: 0, measuredChats: 0 },
+    selectedSessionIds: new Set(),
+    targetLabel: "dataset",
+    visibleSessions: [],
+  };
+}
+
 function dialogProps() {
   return {
     defaultModel: { providerId: "custom-openai-compatible" as const, modelId: "fixture-author" },
     initialSessionIds: [],
     onClose: () => undefined,
     onOpenComputeSettings: () => undefined,
+    onOpenDatasetStorageSettings: () => undefined,
     onTasksetCreated: () => undefined,
     preferences: { defaultModelRef: null, creationMode: "defaults" as const, autoApproveEvidence: false },
     providerSettings: null,

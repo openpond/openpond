@@ -12,6 +12,7 @@ import {
 import {
   cloneWorkspaceDiffPanelViewState,
   defaultWorkspaceDiffPanelViewState,
+  nextRovingTabIndex,
   normalizeWorkspaceDiffPanelViewState,
   workspaceDiffPanelViewStatesEqual,
 } from "../apps/web/src/components/workspace-diff/workspace-diff-panel-model";
@@ -20,15 +21,26 @@ import { shouldShowRightSidebarHomePanel } from "../apps/web/src/components/app-
 function panel(overrides: Partial<RightChatPanel> = {}): RightChatPanel {
   return {
     id: "panel_1",
+    activationVersion: 1,
     sessionId: "session_1",
     prompt: "Check this",
     provider: "openai",
     model: "gpt-5.5",
+    scrollTop: 0,
+    stickyToBottom: true,
     ...overrides,
   };
 }
 
 describe("right sidebar conversation state", () => {
+  test("moves Files-plus-chat tabs with arrows, Home, and End", () => {
+    expect(nextRovingTabIndex(0, 3, "ArrowRight")).toBe(1);
+    expect(nextRovingTabIndex(2, 3, "ArrowRight")).toBe(0);
+    expect(nextRovingTabIndex(0, 3, "ArrowLeft")).toBe(2);
+    expect(nextRovingTabIndex(1, 3, "Home")).toBe(0);
+    expect(nextRovingTabIndex(1, 3, "End")).toBe(2);
+  });
+
   test("uses Workspace as the fallback for an open sidebar with no content panel", () => {
     expect(
       shouldShowRightSidebarHomePanel({
@@ -85,6 +97,18 @@ describe("right sidebar conversation state", () => {
       rightSidebarConversationStatesEqual(state, {
         ...cloned,
         rightChatPanels: [panel({ prompt: "Different prompt" })],
+      }),
+    ).toBe(false);
+    expect(
+      rightSidebarConversationStatesEqual(state, {
+        ...cloned,
+        rightChatPanels: [panel({ scrollTop: 240, stickyToBottom: false })],
+      }),
+    ).toBe(false);
+    expect(
+      rightSidebarConversationStatesEqual(state, {
+        ...cloned,
+        rightChatPanels: [panel({ activationVersion: 2 })],
       }),
     ).toBe(false);
   });

@@ -48,6 +48,20 @@ export type SandboxFileSource = {
 
 export const WORKSPACE_TEMPLATE_CONFIG_PATH = "openpond.config.json";
 
+export type RovingTabKey = "ArrowRight" | "ArrowLeft" | "Home" | "End";
+
+export function nextRovingTabIndex(
+  currentIndex: number,
+  tabCount: number,
+  key: RovingTabKey,
+): number {
+  if (tabCount <= 0) return -1;
+  if (key === "Home") return 0;
+  if (key === "End") return tabCount - 1;
+  if (key === "ArrowRight") return (currentIndex + 1) % tabCount;
+  return (currentIndex - 1 + tabCount) % tabCount;
+}
+
 export function defaultWorkspaceDiffPanelViewState(): WorkspaceDiffPanelViewState {
   return {
     activeTab: "files",

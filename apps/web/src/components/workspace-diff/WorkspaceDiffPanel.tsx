@@ -1201,7 +1201,12 @@ function WorkspaceDiffPanelInner({
   ) : null;
   return (
     <>
-    <aside className={`workspace-diff-panel ${expanded ? "expanded" : ""}`} aria-label="Workspace diffs">
+    <aside
+      className={`workspace-diff-panel ${expanded ? "expanded" : ""}`}
+      id="right-sidebar-files-panel"
+      role="tabpanel"
+      aria-label="Workspace diffs"
+    >
       {!expanded && (
         <div
           className="workspace-diff-resize-handle"

@@ -20,6 +20,7 @@ dependencies = [
 openpond-training = "openpond_training.worker:main"
 openpond-models = "openpond_training.model_manager:main"
 openpond-inference = "openpond_training.inference:main"
+openpond-datasets = "openpond_training.dataset_worker:main"
 
 [dependency-groups]
 dev = ["pytest==9.0.2"]

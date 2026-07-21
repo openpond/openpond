@@ -28,7 +28,13 @@ import {
   getBundledRuntimeVersion,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
-import { DEFAULT_HOST, DEFAULT_PORT, VERSION } from "./constants.js";
+import {
+  APP_PREFERENCES_CACHE_KEY,
+  APP_PREFERENCES_CACHE_TYPE,
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  VERSION,
+} from "./constants.js";
 import { runOpenPondServerCli } from "./cli.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
@@ -126,9 +132,17 @@ import { createTaskEvaluationService } from "./training/evaluation-service.js";
 import { createTrainingService } from "./training/training-service.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
+import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
+import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
 import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
+import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
+import { normalizeAppPreferences } from "./preferences.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
+import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
+import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
+import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
+import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat-runtime.js";
 import {
   createCrossSystemChatToolRuntime,
   createCrossSystemFrontierBaselineService,
@@ -400,21 +414,42 @@ export async function createOpenPondServer(
       ),
     };
   }
+  async function resolveFireworksCredential() {
+    const credential = (await readProviderSecrets(providerSecretPaths))
+      .providers.fireworks;
+    if (!credential) return null;
+    const value = credential.source === "local_secret"
+      ? credential.value
+      : credential.source === "env" && credential.envVar
+        ? process.env[credential.envVar] ?? null
+        : null;
+    if (
+      !value?.trim()
+      || (credential.source !== "local_secret" && credential.source !== "env")
+    ) {
+      return null;
+    }
+    return {
+      value,
+      source: credential.source,
+      createdAt: credential.createdAt,
+      updatedAt: credential.updatedAt,
+    };
+  }
   async function trainingModelText(input: {
     model: ChatModelRef;
-    reasoningEffort?: CodexReasoningEffort | null;
+    reasoningEffort?: CodexReasoningEffort | "none" | null;
     messages: Array<{ role: "system" | "user"; content: string }>;
     signal: AbortSignal;
     requestId: string;
+    maxOutputTokens?: number;
+    temperature?: number;
+    topP?: number;
+    seed?: number;
   }): Promise<string> {
     let text = "";
     if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      const runtime = (await trainingService.isFireworksModel(
-        input.model.modelId
-      ))
-        ? trainingService.streamFireworksModel
-        : localAdapterChatRuntime.stream;
-      for await (const delta of runtime({
+      for await (const delta of trainedAdapterChatRuntime.stream({
         modelId: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
@@ -445,6 +480,10 @@ export async function createOpenPondServer(
       requestId: input.requestId,
       signal: input.signal,
       reasoningEffort: input.reasoningEffort,
+      maxOutputTokens: input.maxOutputTokens,
+      temperature: input.temperature,
+      topP: input.topP,
+      seed: input.seed,
     })) {
       if (delta.type === "text_delta" && delta.text) text += delta.text;
     }
@@ -486,9 +525,27 @@ export async function createOpenPondServer(
   let trainingBaselineAttemptRunner: ReturnType<
     typeof createTrainingBaselineAttemptRunner
   > | null = null;
+  const datasetArtifactService = createDatasetArtifactService({
+    store,
+    workerProjectDir: path.resolve(
+      process.cwd(),
+      "python",
+      "openpond-training",
+    ),
+  });
+  const fireworksBaselineDeployments =
+    createFireworksBaselineDeploymentService({
+      resolveCredential: resolveFireworksCredential,
+    });
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
+    projectDatasetArtifact: datasetArtifactService.project,
+    prepareBaselineModels: fireworksBaselineDeployments.prepare,
+    cleanupBaselineDeployments:
+      fireworksBaselineDeployments.cleanupOrphanedDeployments,
+    resolveTask: ({ tasksetId, taskId, split }) =>
+      datasetArtifactService.task(tasksetId, taskId, split),
     runAttempt: async (input) => {
       if (!trainingBaselineAttemptRunner) {
         throw new Error("The Taskset baseline runner is not initialized.");
@@ -528,6 +585,18 @@ export async function createOpenPondServer(
       "python",
       "openpond-training"
     ),
+  });
+  const managedAdapterRegistryClient = createManagedAdapterRegistryClient();
+  const managedAdapterSyncService = createManagedAdapterSyncService({
+    store,
+    client: managedAdapterRegistryClient,
+    resolveSelectedTeamId: async () => {
+      const entry = await store.getCacheEntry<unknown>(
+        APP_PREFERENCES_CACHE_TYPE,
+        APP_PREFERENCES_CACHE_KEY,
+      );
+      return normalizeAppPreferences(entry?.payload).defaultTeamId;
+    },
   });
   const computePayload = async (action: string, payload: unknown) => {
     if (action === "state") return computeService.state();
@@ -570,29 +639,7 @@ export async function createOpenPondServer(
       if (account.state !== "signed_in") return null;
       return account.profile?.handle?.trim() || null;
     },
-    resolveFireworksCredential: async () => {
-      const credential = (await readProviderSecrets(providerSecretPaths))
-        .providers.fireworks;
-      if (!credential) return null;
-      const value =
-        credential.source === "local_secret"
-          ? credential.value
-          : credential.source === "env" && credential.envVar
-          ? process.env[credential.envVar] ?? null
-          : null;
-      if (
-        !value?.trim() ||
-        (credential.source !== "local_secret" && credential.source !== "env")
-      ) {
-        return null;
-      }
-      return {
-        value,
-        source: credential.source,
-        createdAt: credential.createdAt,
-        updatedAt: credential.updatedAt,
-      };
-    },
+    resolveFireworksCredential,
     recordFireworksCredentialValidation: async (error) => {
       await updateProviderCredentialValidation({
         paths: providerSecretPaths,
@@ -602,26 +649,51 @@ export async function createOpenPondServer(
       });
     },
     gradeTaskAttempt: taskEvaluationService.grade,
+    projectDatasetArtifact: datasetArtifactService.project,
+    resolveDatasetTask: ({ tasksetId, taskId, split }) =>
+      datasetArtifactService.task(tasksetId, taskId, split),
+    deactivateManagedBinding: managedAdapterSyncService.deactivateBinding,
+    reactivateManagedBinding: managedAdapterSyncService.reactivateBinding,
+    activateManagedBinding: managedAdapterSyncService.activateBinding,
   });
   const localAdapterChatRuntime = createLocalAdapterChatRuntime({
     store,
     projectDir: path.resolve(process.cwd(), "python", "openpond-training"),
     resolveModelPath: computeService.modelPath,
   });
+  const managedAdapterChatRuntime = createManagedAdapterChatRuntime({
+    store,
+    client: managedAdapterRegistryClient,
+  });
+  const trainedAdapterChatRuntime = createTrainedAdapterChatRuntime({
+    managed: managedAdapterChatRuntime,
+    fireworks: {
+      appliesTo: trainingService.isFireworksModel,
+      stream: trainingService.streamFireworksModel,
+    },
+    local: localAdapterChatRuntime,
+  });
+  managedAdapterSyncService.start();
   const crossSystemChatToolRuntime = createCrossSystemChatToolRuntime({
     store,
     gradeAttempt: taskEvaluationService.grade,
   });
   const trainingChatSearchService = createTrainingChatSearchService({ store });
+  const datasetImportService = createDatasetImportService({
+    store,
+    workerProjectDir: path.resolve(
+      process.cwd(),
+      "python",
+      "openpond-training",
+    ),
+    datasetStorageRoot: async () =>
+      (await computeService.settings()).datasetStorePath,
+  });
+  await datasetImportService.reconcile();
   const crossSystemFrontierModelStream: CrossSystemFrontierModelStream =
     async function* (input) {
       if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        const runtime = (await trainingService.isFireworksModel(
-          input.model.modelId
-        ))
-          ? trainingService.streamFireworksModel
-          : localAdapterChatRuntime.stream;
-        for await (const delta of runtime({
+        for await (const delta of trainedAdapterChatRuntime.stream({
           modelId: input.model.modelId,
           messages: input.messages,
           tools: input.tools,
@@ -716,6 +788,8 @@ export async function createOpenPondServer(
     evaluation: taskEvaluationService,
     training: trainingService,
     chatSearch: trainingChatSearchService,
+    datasetArtifacts: datasetArtifactService,
+    datasetImports: datasetImportService,
     frontierBaseline: crossSystemFrontierBaselineService,
   });
 
@@ -801,10 +875,7 @@ export async function createOpenPondServer(
     appendHostedContextUsage,
     streamLocalByokChatTurn: async function* (input) {
       if (input.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        const runtime = (await trainingService.isFireworksModel(input.modelId))
-          ? trainingService.streamFireworksModel
-          : localAdapterChatRuntime.stream;
-        yield* runtime({
+        yield* trainedAdapterChatRuntime.stream({
           modelId: input.modelId,
           messages: input.messages,
           tools: input.tools,
@@ -1711,10 +1782,12 @@ export async function createOpenPondServer(
       waitForOpenPondRefresh,
       turnRunner.close,
       teamChatAiExecutions.close,
-      localAdapterChatRuntime.close,
+      trainedAdapterChatRuntime.close,
+      managedAdapterSyncService.close,
       crossSystemChatToolRuntime.close,
       crossSystemFrontierBaselineService.close,
       taskMinerService.close,
+      taskEvaluationService.close,
       trainingService.close,
       computeService.close,
       closeCloudWorkspaceReadiness,

@@ -31,4 +31,6 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 23, run: (store) => store.deduplicateFireworksMetricArtifacts() },
   { version: 24, run: (store) => store.resetLegacySubagentTransportState() },
   { version: 25, run: (store) => store.resetLegacySubagentRuntimeEvents() },
+  { version: 26, run: (store) => store.createDatasetImportTables() },
+  { version: 27, run: (store) => store.createTasksetBaselineRunTables() },
 ];

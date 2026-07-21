@@ -20,7 +20,11 @@ import type {
   FireworksModelServingSession,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
+  DatasetImportJob,
+  DatasetImportMapping,
+  DatasetRowPage,
   Taskset,
+  TasksetBaselineRun,
 } from "@openpond/contracts";
 import { DEFAULT_CROSS_SYSTEM_WORLD_SPECS } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
@@ -78,13 +82,17 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   const hasActiveJob = payload?.jobs.some((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) ?? false;
   const hasActiveMinerRun = payload?.minerRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)) ?? false;
   const hasActiveFrontierBaselineRun = payload?.frontierBaselineRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)) ?? false;
+  const hasActiveBaselineRun = payload?.baselineRuns.some((run) =>
+    ["queued", "preparing", "running", "cancelling"].includes(run.status)) ?? false;
+  const hasActiveDatasetImport = payload?.datasetImports.some((job) =>
+    ["inspecting", "materializing", "validating", "cancelling"].includes(job.status)) ?? false;
   const hasActiveServingSession = payload?.servingSessions.some((session) =>
     ["starting", "ready", "stopping"].includes(session.state)) ?? false;
   useEffect(() => {
     if (!connection) return undefined;
     let active = true;
     let timer: number | null = null;
-    const delay = hasActiveJob || hasActiveMinerRun || hasActiveFrontierBaselineRun || hasActiveServingSession ? 500 : 30_000;
+    const delay = hasActiveJob || hasActiveMinerRun || hasActiveFrontierBaselineRun || hasActiveBaselineRun || hasActiveDatasetImport || hasActiveServingSession ? 500 : 30_000;
     const poll = async () => {
       await refresh();
       if (active) timer = window.setTimeout(() => void poll(), delay);
@@ -94,9 +102,58 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       active = false;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [connection, hasActiveFrontierBaselineRun, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
+  }, [connection, hasActiveBaselineRun, hasActiveDatasetImport, hasActiveFrontierBaselineRun, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
 
   const actions = useMemo(() => ({
+    inspectHuggingFaceDataset: (url: string) =>
+      mutate<DatasetImportJob>(
+        "inspect-huggingface-dataset",
+        "/dataset-imports/huggingface/inspect",
+        { profileId, url },
+      ),
+    materializeDatasetImport: (
+      importId: string,
+      input: {
+        name: string;
+        objective: string;
+        mapping: DatasetImportMapping;
+        targetStorageRoot: string | null;
+        licenseApproved: boolean;
+      },
+    ) =>
+      mutate<DatasetImportJob>(
+        "materialize-dataset-import",
+        `/dataset-imports/${encodeURIComponent(importId)}/materialize`,
+        input,
+      ),
+    cancelDatasetImport: (importId: string) =>
+      mutate<DatasetImportJob>(
+        "cancel-dataset-import",
+        `/dataset-imports/${encodeURIComponent(importId)}/cancel`,
+        {},
+      ),
+    datasetRows: (
+      tasksetId: string,
+      input: {
+        split?: "train" | "validation" | "test" | "frozen_eval" | null;
+        cursor?: string | null;
+        limit?: number;
+        columns?: string[];
+      } = {},
+    ) => {
+      if (!connection) return Promise.resolve(null);
+      const params = new URLSearchParams();
+      if (input.split) params.set("split", input.split);
+      if (input.cursor) params.set("cursor", input.cursor);
+      params.set("limit", String(input.limit ?? 25));
+      for (const column of input.columns ?? []) params.append("column", column);
+      return api.trainingRequest<DatasetRowPage>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/rows?${params}`,
+        {},
+        "GET",
+      );
+    },
     addSource: (sessionId: string, turnIds?: string[]) => mutate<TrainingSourceRef>("add-source", "/sources", { profileId, sessionId, turnIds }),
     addSources: (sessionIds: string[]) => mutate<TrainingSourceRef[]>("add-sources", "/sources/batch", { profileId, sessionIds }),
     estimateSources: (sessionIds: string[]) => connection
@@ -151,7 +208,39 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     configureMiner: (config: TaskMinerConfig) => mutate("configure-miner", "/miner/config", { profileId, config }, "PUT"),
     patchCandidate: (id: string, patch: Record<string, unknown>) => mutate("candidate", `/candidates/${encodeURIComponent(id)}`, patch, "PATCH"),
     createCandidate: (id: string, mode: "defaults" | "customize", analysisModel?: ChatModelRef | null, analysisReasoningEffort?: CodexReasoningEffort | null) => mutate<TaskCreationSnapshot>("create-candidate", `/candidates/${encodeURIComponent(id)}/create`, { mode, analysisModel: analysisModel ?? null, analysisReasoningEffort: analysisReasoningEffort ?? null }),
-    baseline: (tasksetId: string, models: ChatModelRef[]) => mutate("baseline", "/baseline", { tasksetId, models, seeds: [0, 1, 2], attemptsPerTask: 3 }),
+    baseline: (
+      tasksetId: string,
+      model: ChatModelRef,
+      options: {
+        targetModelId?: string | null;
+        taskLimit?: number;
+        attemptsPerTask?: number;
+        selectionSeed?: number;
+        split?: "train" | "validation" | "frozen_eval";
+        selectionStrategy?: "stable_hash_top_n" | "rft_easy_curriculum_v1";
+        sampling?: {
+          maxOutputTokens: number;
+          temperature: number;
+          topP: number;
+        };
+      } = {},
+    ) => mutate<TasksetBaselineRun>("baseline", "/baseline", {
+      tasksetId,
+      targetModelId: options.targetModelId ?? null,
+      models: [model],
+      seeds: [17],
+      attemptsPerTask: options.attemptsPerTask ?? 4,
+      taskLimit: options.taskLimit ?? 8,
+      selectionSeed: options.selectionSeed ?? 17,
+      split: options.split ?? "frozen_eval",
+      selectionStrategy: options.selectionStrategy ?? "stable_hash_top_n",
+      sampling: options.sampling,
+    }),
+    cancelBaselineRun: (runId: string) => mutate<TasksetBaselineRun>(
+      "cancel-baseline",
+      `/baseline/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+    ),
     auditGraders: (tasksetId: string) => mutate<{ passed: boolean; results: Array<{ id: string; label: string; expectedPassed?: boolean; expectedRewardEligible?: boolean; result: { passed: boolean; score: number | null; rewardEligible: boolean } }>; failures: Array<{ label: string; gradeId: string }> }>("audit-graders", "/audit-graders", { tasksetId }),
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
     readiness: (tasksetId: string) => mutate("readiness", "/readiness", { tasksetId }),

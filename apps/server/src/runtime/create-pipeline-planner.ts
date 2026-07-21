@@ -326,11 +326,14 @@ function plannedTarget(
     || target.id
     || normalizeTargetId(requestedName ?? "")
     || targetIdFromObjective(objective);
+  const defaultActionKey = target.id === id && target.defaultActionKey
+    ? target.defaultActionKey
+    : `${id}.chat`;
   return {
     ...target,
     id,
     displayName: requestedName ?? target.displayName,
-    defaultActionKey: target.defaultActionKey ?? `${id}.chat`,
+    defaultActionKey,
   };
 }
 
@@ -535,6 +538,8 @@ function labImprovePlanDecision(run: CreateImproveRun): PlannerDecision | null {
     return null;
   }
   const targetName = run.target.displayName ?? run.target.id ?? "Agent";
+  const accountHealth = run.target.id === "account-health-agent"
+    || /account health|renewal risk|weekly account review/i.test(run.objective);
   const defaultActionKey = run.target.kind === "agent"
     ? run.target.defaultActionKey ?? `${run.target.id ?? "default"}.chat`
     : "chat";
@@ -548,12 +553,18 @@ function labImprovePlanDecision(run: CreateImproveRun): PlannerDecision | null {
       capturedContextSummary:
         "The user supplied the desired outcome in Lab. Inspect the existing Profile source and choose the narrowest implementation that achieves it.",
       actionShape: {
-        mode: "chat",
-        label: "Chat",
-        detail: "Preserve the Agent's existing chat surface while improving the requested behavior.",
+        mode: accountHealth ? "chat_and_direct_actions" : "chat",
+        label: accountHealth ? "Account health chat and reviews" : "Chat",
+        detail: accountHealth
+          ? "Preserve chat plus the account summary, renewal triage, and weekly review actions while applying the correction."
+          : "Preserve the Agent's existing chat surface while improving the requested behavior.",
         defaultActionKey,
-        directActionHint: null,
-        artifactPolicy: "Keep the source diff, checks, and evaluation evidence with the candidate for review.",
+        directActionHint: accountHealth
+          ? "Preserve summarize-account, triage-renewal-risk, and build-weekly-account-review with their existing inputs and artifacts."
+          : null,
+        artifactPolicy: accountHealth
+          ? "Keep the source diff, checks, evaluations, and weekly-review Markdown and JSON artifacts with the candidate for review."
+          : "Keep the source diff, checks, and evaluation evidence with the candidate for review.",
       },
       defaultChatAction: {
         key: defaultActionKey,

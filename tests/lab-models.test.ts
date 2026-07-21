@@ -6,9 +6,11 @@ import type {
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
+import { TasksetBaselineRunSchema } from "@openpond/contracts";
 
 import {
   currentModelBinding,
+  labModelBaselineRuns,
   labModelDatasets,
   labModelJobs,
   labModelPlans,
@@ -25,6 +27,29 @@ import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
 
 describe("Lab Model workspace projection", () => {
+  test("uses exact model lineage for new checks and Dataset lineage for existing checks", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const firstModel = modelWorkproduct("model_fixture_first", taskset);
+    const secondModel = modelWorkproduct("model_fixture_second", taskset);
+    const targeted = baselineRun("baseline_run_targeted", taskset, firstModel.id);
+    const legacy = baselineRun("baseline_run_legacy", taskset, null);
+    const state = {
+      tasksets: [taskset],
+      plans: [],
+      jobs: [],
+      models: [],
+      modelBindings: [],
+      baselineRuns: [targeted, legacy],
+    } as unknown as TrainingStateResponse;
+
+    expect(
+      labModelBaselineRuns(firstModel, [], state).map((run) => run.id),
+    ).toEqual([targeted.id, legacy.id]);
+    expect(
+      labModelBaselineRuns(secondModel, [], state).map((run) => run.id),
+    ).toEqual([legacy.id]);
+  });
+
   test("keeps multiple Dataset runs and methods under one stable Model with a current Version", () => {
     const modelId = "model_fixture_stable";
     const firstDataset = tasksetFixture({ ready: true });
@@ -319,4 +344,74 @@ function managedPreference() {
     modelAssetId: null,
     source: "managed" as const,
   };
+}
+
+function modelWorkproduct(
+  id: string,
+  taskset: Taskset,
+): LabWorkproductSummary {
+  return {
+    key: `model:${id}`,
+    kind: "model",
+    id,
+    name: id,
+    description: "Fixture model",
+    status: "Ready",
+    updatedAt: taskset.updatedAt,
+    path: null,
+    enabled: true,
+    runIds: [],
+    conversationId: null,
+    tasksetId: taskset.id,
+    trainingRunCount: 0,
+    evaluationStatus: "not_run",
+    frontierBaselineRunId: null,
+    useActionId: null,
+  };
+}
+
+function baselineRun(id: string, taskset: Taskset, targetModelId: string | null) {
+  const timestamp = id.endsWith("targeted")
+    ? "2026-07-21T12:01:00.000Z"
+    : "2026-07-21T12:00:00.000Z";
+  return TasksetBaselineRunSchema.parse({
+    schemaVersion: "openpond.tasksetBaselineRun.v1",
+    id,
+    profileId: "default",
+    targetModelId,
+    tasksetId: taskset.id,
+    tasksetHash: taskset.contentHash,
+    status: "failed",
+    configuration: {
+      split: "train",
+      taskLimit: 16,
+      attemptsPerTask: 8,
+      selectionSeed: 17,
+      selectionStrategy: "rft_easy_curriculum_v1",
+      model: {
+        providerId: "fireworks",
+        modelId: "accounts/fireworks/models/qwen3-0p6b",
+      },
+      sampling: { maxOutputTokens: 2_048, temperature: 0.8, topP: 0.95 },
+    },
+    scope: null,
+    progress: {
+      stage: "provisioning",
+      completedAttempts: 0,
+      totalAttempts: 128,
+      correctAttempts: 0,
+      incorrectAttempts: 0,
+      parseableAttempts: 0,
+      infrastructureFailures: 0,
+    },
+    provider: null,
+    reportId: null,
+    estimatedCostUsd: null,
+    cancelRequested: false,
+    error: "No available capacity",
+    createdAt: timestamp,
+    startedAt: timestamp,
+    completedAt: timestamp,
+    updatedAt: timestamp,
+  });
 }

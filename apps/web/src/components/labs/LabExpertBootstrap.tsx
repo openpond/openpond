@@ -4,6 +4,7 @@ import type {
   CrossSystemExpertBootstrapPreview,
   Taskset,
 } from "@openpond/contracts";
+import { AppDialog } from "../dialogs/AppDialog";
 
 import type { ShowAppToast } from "../../app/app-state";
 import { DetailSection } from "../training/DetailSection";
@@ -122,18 +123,12 @@ export function ExpertTrajectoryDialog({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="training-dialog-backdrop"
-      role="presentation"
-      onMouseDown={approving ? undefined : onClose}
+    <AppDialog
+      ariaLabel="Review expert trajectories"
+      className="training-dialog labs-expert-bootstrap-dialog"
+      dismissDisabled={approving}
+      onClose={onClose}
     >
-      <section
-        aria-label="Review expert trajectories"
-        aria-modal="true"
-        className="training-dialog labs-expert-bootstrap-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
         <div className="training-dialog-header">
           <div>
             <h2>Review expert trajectories</h2>
@@ -208,8 +203,7 @@ export function ExpertTrajectoryDialog({
             </button>
           ) : null}
         </div>
-      </section>
-    </div>
+    </AppDialog>
   );
 }
 

@@ -43,7 +43,7 @@ export function TrainingSuggestions({
         </div>
       ) : (
         <div className="training-empty training-suggestions-empty">
-          No AI suggestions yet. Start New model with Automated to scan selected chats for repeated, verifiable work.
+          No AI suggestions yet. Start New model with Automatic to scan selected chats for repeated, verifiable work.
         </div>
       )}
     </section>

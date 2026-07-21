@@ -23,11 +23,29 @@ import {
 
 type ModelTextRunner = (input: {
   model: ChatModelRef;
-  reasoningEffort?: CodexReasoningEffort | null;
+  reasoningEffort?: CodexReasoningEffort | "none" | null;
   messages: Array<{ role: "system" | "user"; content: string }>;
   signal: AbortSignal;
   requestId: string;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  seed?: number;
 }) => Promise<string>;
+
+type TrainingBaselineAttemptInput = {
+  tasksetId: string;
+  task: TaskDataRecord;
+  model: ChatModelRef;
+  seed: number;
+  attempt: number;
+  sampling?: {
+    maxOutputTokens: number;
+    temperature: number;
+    topP: number;
+  };
+  signal?: AbortSignal;
+};
 
 export function createTrainingBaselineAttemptRunner(input: {
   store: SqliteStore;
@@ -52,13 +70,7 @@ export async function runTrainingTasksetAttempt(input: {
   crossSystemStream: CrossSystemFrontierModelStream;
   timestamp?: () => string;
   resultId?: string;
-  attemptInput: {
-    tasksetId: string;
-    task: TaskDataRecord;
-    model: ChatModelRef;
-    seed: number;
-    attempt: number;
-  };
+  attemptInput: TrainingBaselineAttemptInput;
 }) {
   const timestamp = input.timestamp ?? (() => new Date().toISOString());
   const taskset = await input.store.getTaskset(input.attemptInput.tasksetId);
@@ -95,13 +107,7 @@ async function runCrossSystemAttempt(input: {
   timestamp: () => string;
   resultId?: string;
   taskset: Taskset;
-  attemptInput: {
-    tasksetId: string;
-    task: TaskDataRecord;
-    model: ChatModelRef;
-    seed: number;
-    attempt: number;
-  };
+  attemptInput: TrainingBaselineAttemptInput;
 }) {
   const { attemptInput, taskset } = input;
   const startedAt = input.timestamp();
@@ -113,6 +119,10 @@ async function runCrossSystemAttempt(input: {
       : null,
   });
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort(
+    attemptInput.signal?.reason ?? new Error("The baseline was cancelled."),
+  );
+  attemptInput.signal?.addEventListener("abort", abortFromParent, { once: true });
   const timeoutMs = Math.max(
     1,
     Math.min(taskset.environment.defaultTimeoutMs, 10 * 60_000),
@@ -228,6 +238,7 @@ async function runCrossSystemAttempt(input: {
     });
   } finally {
     clearTimeout(timer);
+    attemptInput.signal?.removeEventListener("abort", abortFromParent);
   }
 }
 
@@ -237,13 +248,7 @@ async function runTextAttempt(input: {
   modelText: ModelTextRunner;
   timestamp: () => string;
   resultId?: string;
-  attemptInput: {
-    tasksetId: string;
-    task: TaskDataRecord;
-    model: ChatModelRef;
-    seed: number;
-    attempt: number;
-  };
+  attemptInput: TrainingBaselineAttemptInput;
 }) {
   const { attemptInput } = input;
   const startedAt = input.timestamp();
@@ -251,15 +256,15 @@ async function runTextAttempt(input: {
   try {
     const text = await input.modelText({
       model: attemptInput.model,
-      signal: new AbortController().signal,
+      reasoningEffort:
+        attemptInput.model.providerId === "fireworks" ? "none" : null,
+      signal: attemptInput.signal ?? new AbortController().signal,
       requestId,
-      messages: [
-        {
-          role: "system",
-          content: `Complete the task using only policy-visible input. Sampling seed: ${attemptInput.seed}.`,
-        },
-        { role: "user", content: JSON.stringify(attemptInput.task.input) },
-      ],
+      messages: policyMessages(attemptInput.task),
+      maxOutputTokens: attemptInput.sampling?.maxOutputTokens ?? 2_048,
+      temperature: attemptInput.sampling?.temperature ?? 0.8,
+      topP: attemptInput.sampling?.topP ?? 0.95,
+      seed: attemptInput.seed + attemptInput.attempt,
     });
     const completedAt = input.timestamp();
     const attemptId =
@@ -304,6 +309,11 @@ async function runTextAttempt(input: {
       metadata: { requestId, execution: "text_completion" },
     });
   } catch (error) {
+    if (attemptInput.signal?.aborted) {
+      throw attemptInput.signal.reason instanceof Error
+        ? attemptInput.signal.reason
+        : new Error("The baseline was cancelled.");
+    }
     const completedAt = input.timestamp();
     const message = error instanceof Error ? error.message : String(error);
     const attemptId =
@@ -348,6 +358,33 @@ async function runTextAttempt(input: {
       metadata: { requestId, execution: "text_completion" },
     });
   }
+}
+
+function policyMessages(
+  task: TaskDataRecord,
+): Array<{ role: "system" | "user"; content: string }> {
+  const messages = Array.isArray(task.input.messages)
+    ? task.input.messages.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const message = value as Record<string, unknown>;
+        if (
+          (message.role !== "system" && message.role !== "user")
+          || typeof message.content !== "string"
+          || !message.content.trim()
+        ) {
+          return [];
+        }
+        return [{
+          role: message.role as "system" | "user",
+          content: message.content,
+        }];
+      })
+    : [];
+  if (messages.length) return messages;
+  if (typeof task.input.prompt === "string" && task.input.prompt.trim()) {
+    return [{ role: "user", content: task.input.prompt }];
+  }
+  throw new Error(`Baseline task ${task.id} has no policy-visible prompt.`);
 }
 
 async function persistBaselineArtifact(input: {

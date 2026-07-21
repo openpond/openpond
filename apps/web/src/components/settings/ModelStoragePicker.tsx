@@ -7,29 +7,37 @@ import { FolderPlus, Plus, X } from "../icons";
 export function ModelStoragePicker({
   disabled,
   onChange,
+  purpose = "model",
   storageRoots,
   value,
 }: {
   disabled: boolean;
   onChange: (value: string | null) => void;
+  purpose?: "dataset" | "model";
   storageRoots: ComputeStorageRoot[];
   value: string | null;
 }) {
   const selectId = useId();
   const [manualOpen, setManualOpen] = useState(false);
   const selectedPath = normalizedPath(value);
-  const selectedStorage = storageRoots.find((storage) => normalizedPath(storage.modelStorePath) === selectedPath) ?? null;
+  const storagePath = (storage: ComputeStorageRoot) =>
+    purpose === "dataset" ? storage.datasetStorePath : storage.modelStorePath;
+  const label = purpose === "dataset" ? "Dataset" : "Model";
+  const selectedStorage =
+    storageRoots.find(
+      (storage) => normalizedPath(storagePath(storage)) === selectedPath,
+    ) ?? null;
 
   return (
     <div className="model-storage-picker">
-      <label className="model-storage-label" htmlFor={selectId}>Model storage</label>
+      <label className="model-storage-label" htmlFor={selectId}>{label} storage</label>
       <div className="model-storage-control-row">
         <select
-          aria-label="Model storage drive"
+          aria-label={`${label} storage drive`}
           className="model-storage-select"
           disabled={disabled}
           id={selectId}
-          title={value ?? "No model storage configured"}
+          title={value ?? `No ${purpose} storage configured`}
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value || null)}
         >
@@ -39,14 +47,14 @@ export function ModelStoragePicker({
             <option
               disabled={!storage.mounted || !storage.writable}
               key={storage.id}
-              title={storage.modelStorePath}
-              value={storage.modelStorePath}
+              title={storagePath(storage)}
+              value={storagePath(storage)}
             >
               {storage.label} · {storageKindLabel(storage.kind)} · {storageStatus(storage)}
             </option>
           ))}
         </select>
-        <button className="settings-icon-button model-storage-add" disabled={disabled} type="button" title="Add manual location" aria-label="Add manual model storage location" onClick={() => setManualOpen(true)}>
+        <button className="settings-icon-button model-storage-add" disabled={disabled} type="button" title="Add manual location" aria-label={`Add manual ${purpose} storage location`} onClick={() => setManualOpen(true)}>
           <Plus size={15} />
         </button>
       </div>
@@ -54,6 +62,7 @@ export function ModelStoragePicker({
       {manualOpen ? renderDialog(
         <ManualModelStorageDialog
           initialPath={value ?? ""}
+          purpose={purpose}
           onClose={() => setManualOpen(false)}
           onUse={(path) => {
             onChange(path);
@@ -73,10 +82,12 @@ export function ManualModelStorageDialog({
   initialPath,
   onClose,
   onUse,
+  purpose = "model",
 }: {
   initialPath: string;
   onClose: () => void;
   onUse: (path: string) => void;
+  purpose?: "dataset" | "model";
 }) {
   const titleId = useId();
   const [manualPath, setManualPath] = useState(initialPath);
@@ -92,6 +103,7 @@ export function ManualModelStorageDialog({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    event.stopPropagation();
     if (error) return;
     onUse(manualPath.trim());
   }
@@ -99,15 +111,15 @@ export function ManualModelStorageDialog({
   return (
     <div className="git-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <form className="git-dialog model-storage-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={submit}>
-        <button className="git-dialog-close" type="button" title="Close" aria-label="Close manual model storage" onClick={onClose}>
+        <button className="git-dialog-close" type="button" title="Close" aria-label={`Close manual ${purpose} storage`} onClick={onClose}>
           <X size={15} />
         </button>
         <div className="git-dialog-icon"><FolderPlus size={18} /></div>
-        <h2 id={titleId}>Manual model storage</h2>
+        <h2 id={titleId}>Manual {purpose} storage</h2>
         <p>Enter an absolute path to a folder mounted on this machine.</p>
         <label className="git-dialog-field">
           <span>Mounted folder path</span>
-          <input autoFocus spellCheck={false} value={manualPath} placeholder="/mnt/models or /run/user/…/gvfs/…" onChange={(event) => setManualPath(event.target.value)} />
+          <input autoFocus spellCheck={false} value={manualPath} placeholder={purpose === "dataset" ? "/mnt/OpenPond/datasets" : "/mnt/models or /run/user/…/gvfs/…"} onChange={(event) => setManualPath(event.target.value)} />
         </label>
         <div className="model-storage-dialog-note">
           For SMB, connect the share in Files or Finder first, then paste its mounted folder path. OpenPond uses your operating system’s existing connection and credentials.

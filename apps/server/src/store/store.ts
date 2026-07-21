@@ -755,6 +755,8 @@ export class SqliteStore extends SqliteCreateImproveStore {
   async listModelUsageRecords(query: {
     sessionId?: string | null;
     turnId?: string | null;
+    provider?: ModelUsageRecord["provider"] | null;
+    model?: string | null;
     startedAtFrom?: string | null;
     startedAtTo?: string | null;
     visibility?: ModelUsageVisibility | "all" | null;
@@ -772,6 +774,14 @@ export class SqliteStore extends SqliteCreateImproveStore {
     if (query.turnId) {
       where.push("turn_id = ?");
       params.push(query.turnId);
+    }
+    if (query.provider) {
+      where.push("provider = ?");
+      params.push(query.provider);
+    }
+    if (query.model) {
+      where.push("model = ?");
+      params.push(query.model);
     }
     if (query.startedAtFrom) {
       where.push("started_at >= ?");

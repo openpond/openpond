@@ -50,7 +50,9 @@ export type DesktopHarnessRenderer = {
   text(): Promise<string>;
   assertText(text: string | RegExp, options?: { timeoutMs?: number; label?: string }): Promise<void>;
   selectSession(sessionId: string, options?: { timeoutMs?: number }): Promise<void>;
+  replaceComposerText?(text: string): Promise<void>;
   submitComposer(prompt: string): Promise<void>;
+  setViewport?(width: number, height: number): Promise<void>;
   screenshot(name: string): Promise<string>;
   close(): void;
 };
@@ -132,6 +134,8 @@ export type DesktopHarnessRunOptions = {
   jsonPath?: string | null;
   timeoutMs?: number;
   keepHome?: boolean;
+  skipBuild?: boolean;
+  frozenRenderer?: boolean;
   appPath?: string | null;
   serverUrl?: string | null;
   token?: string | null;

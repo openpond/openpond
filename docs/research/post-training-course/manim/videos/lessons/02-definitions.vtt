@@ -1,0 +1,89 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:12.242
+The expression pi theta of a given state is a compact description of model behavior. Pi names the policy: a probability distribution, not one completed answer. Theta means all adjustable model parameters.
+
+2
+00:00:13.003 --> 00:00:19.867
+The state is the context available now, and an action can be one token, one tool call, or another sampled decision.
+
+3
+00:00:20.628 --> 00:00:33.445
+Before sampling, the network produces raw scores called logits. Softmax exponentiates and normalizes those scores so the resulting probabilities add to one. Temperature divides the logits before softmax.
+
+4
+00:00:34.206 --> 00:00:44.112
+A lower temperature sharpens the distribution; a higher temperature spreads probability across more alternatives. Temperature changes sampling behavior without changing the stored model weights.
+
+5
+00:00:44.872 --> 00:00:53.464
+A rollout, also called a trajectory and written tau, is the interaction record used for learning. The behavior policy mu generated each sampled action.
+
+6
+00:00:54.224 --> 00:01:08.818
+Its log-probability is stored beside the action so training can later compare the old behavior distribution with the current policy. Environment observations affect later states, but only the model's sampled actions receive policy-gradient terms.
+
+7
+00:01:09.578 --> 00:01:24.081
+Reward, return, and advantage are related but not interchangeable. Reward is the scalar emitted at a step or at the end. Return, G at time t, combines future rewards and can discount distant outcomes with gamma.
+
+8
+00:01:24.842 --> 00:01:38.613
+Advantage subtracts a baseline from that return. Positive advantage means the action did better than expected; negative advantage means it did worse. PPO learns a value baseline, while GRPO estimates one from sibling responses.
+
+9
+00:01:39.373 --> 00:01:53.235
+The baseline is an estimate of expected return. PPO trains a second network, called a critic or value function, with its own parameters phi. Generalized Advantage Estimation, or GAE, combines value estimates across several time steps.
+
+10
+00:01:53.995 --> 00:02:05.588
+GRPO removes that critic. It samples a group of responses for the same prompt, computes the group mean and standard deviation of reward, then normalizes each response relative to its siblings.
+
+11
+00:02:06.348 --> 00:02:09.619
+A zero-variance group provides no relative advantage.
+
+12
+00:02:10.379 --> 00:02:23.338
+An objective, often written L of theta, turns the training goal into one number. The gradient is the local slope of that objective with respect to every adjustable parameter. Backpropagation computes those slopes.
+
+13
+00:02:24.098 --> 00:02:38.099
+The optimizer applies a learning rate alpha to make a small update from theta to theta prime. In policy-gradient training, the RL method determines the credit weights inside the loss; ordinary differentiation performs the parameter update.
+
+14
+00:02:38.860 --> 00:02:50.131
+PPO and GRPO use a probability ratio. The numerator is the current policy's probability for the stored action. The denominator is the behavior probability recorded during rollout.
+
+15
+00:02:50.891 --> 00:02:58.941
+A ratio above one means that action became more likely. Clipping with epsilon caps the incentive once the ratio moves too far in one update.
+
+16
+00:02:59.701 --> 00:03:05.071
+It limits this sampled term, but does not prove that the entire model stayed close.
+
+17
+00:03:05.831 --> 00:03:17.745
+Entropy measures how spread out one policy distribution is. KL divergence compares two distributions and is commonly used to measure movement from a reference model or mismatch between teacher and student. Its direction matters.
+
+18
+00:03:18.505 --> 00:03:28.642
+Cross-entropy uses target probabilities q to weight the log of student probabilities p. Distillation usually minimizes this quantity so the student assigns probability where the teacher does.
+
+19
+00:03:29.402 --> 00:03:46.496
+RL means reinforcement learning. RFT means reinforcement fine-tuning: applying an RL-style objective to an already pretrained model. RLVR adds verifiable rewards, such as executable tests. PPO and GRPO are policy update rules.
+
+20
+00:03:47.256 --> 00:04:05.755
+PPO is Proximal Policy Optimization. GRPO is Group Relative Policy Optimization. GAE is Generalized Advantage Estimation. Pass-at-k asks whether at least one of k sampled attempts succeeds. On-policy and off-policy describe who generated the data.
+
+21
+00:04:06.515 --> 00:04:22.474
+The teacher-guided methods use dense distributions instead of only scalar outcomes. OPSD is On-Policy Self-Distillation and conditions the teacher on a trusted solution. SDFT is Self-Distillation Fine-Tuning and supplies a demonstration.
+
+22
+00:04:23.235 --> 00:04:39.967
+SDPO is Self-Distillation Policy Optimization and supplies failure feedback. In each case the student creates the prefix and the frozen teacher receives extra evidence. SRPO, Self-Rewarding Policy Optimization, routes successful and unsuccessful samples through different signals.

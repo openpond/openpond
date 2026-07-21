@@ -1,0 +1,69 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:08.157
+A research result requires many versioned tasks, protected information boundaries, matched baselines, and held-out evaluation.
+
+2
+00:00:09.252 --> 00:00:21.256
+Policy-visible input includes the issue, repository revision, allowed tools, and public tests. Training-only evidence may contain an expert repair, privileged patch, or public diagnostic.
+
+3
+00:00:22.352 --> 00:00:28.945
+Evaluator-only hidden tests, anti-exploit checks, and held-out repository clusters must remain outside both.
+
+4
+00:00:30.040 --> 00:00:43.630
+The Taskset preserves those boundaries together with source revision, license, split, verifier version, and content hash. Related issues from the same repository should be clustered before splitting; otherwise memorization can look like generalization.
+
+5
+00:00:44.726 --> 00:00:55.595
+Hugging Face support is worthwhile when it behaves as a reproducible importer. Pin the repository revision. Inspect the dataset card and license. Choose configuration and split explicitly.
+
+6
+00:00:56.690 --> 00:01:07.962
+Map columns through a reviewed transform, log rejected rows, preserve original identifiers, and materialize an immutable snapshot. A training run should never silently follow a changing main branch.
+
+7
+00:01:09.057 --> 00:01:21.875
+Every proposed method needs a simple credible baseline. Begin with the base model and the most direct token-imitation objective supported by the data. Add offline distillation or preference learning when those signals are relevant.
+
+8
+00:01:22.970 --> 00:01:31.521
+Compare with GRPO or another RLVR baseline before claiming value from OPSD, SDFT, or SDPO.
+
+9
+00:01:32.616 --> 00:01:43.436
+Equal optimizer tokens and equal total compute answer different questions. A distillation method may use fewer rollouts while spending additional teacher forward passes. Report both controls.
+
+10
+00:01:44.531 --> 00:02:01.896
+Evaluation should span four dimensions. Capability measures task success. Diversity measures pass-at-k, entropy, and distinct strategies. Retention tests old domains and distribution drift. Integrity audits reward exploits, leakage, and disagreement with a shadow verifier.
+
+11
+00:02:02.991 --> 00:02:06.262
+A single average can hide serious regressions.
+
+12
+00:02:07.358 --> 00:02:18.137
+Compute accounting includes student rollout tokens, teacher-scored tokens, backward tokens, verifier time, external calls, failed jobs, memory, storage, and wall clock.
+
+13
+00:02:19.232 --> 00:02:35.643
+The primary study compares GRPO, SDPO, and a routed success-and-failure method on code repair while separating public diagnostics from hidden tests. Verified math can replicate the GRPO and OPSD claims with exact graders.
+
+14
+00:02:36.738 --> 00:02:48.512
+A tool protocol can replicate token imitation and SDFT while measuring retention. The extra domains test whether a conclusion transfers; they do not replace the main story halfway through it.
+
+15
+00:02:49.607 --> 00:03:00.286
+The paper should bind every claim to a dataset revision, metric, run set, seed, confidence interval, and ablation. That structure keeps a local result from turning into a universal claim.
+
+16
+00:03:01.381 --> 00:03:15.432
+The final map is simple. Demonstrations produce imitation targets. Preferences produce relative targets. Verifiable outcomes produce rewards. Privileged solutions and failure explanations produce context-conditioned teacher distributions.
+
+17
+00:03:16.528 --> 00:03:26.534
+Evidence determines the target. The target determines the update. The update changes future behavior. Evaluation measures what improved—and what changed elsewhere.

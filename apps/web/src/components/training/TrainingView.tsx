@@ -30,6 +30,8 @@ export type TrainingViewProps = {
   onToast: ShowAppToast;
   onSettingsPreferences: (payload: PreferencesPayload) => void;
   onOpenComputeSettings: () => void;
+  onOpenProviderSettings: () => void;
+  onOpenDatasetStorageSettings: () => void;
   onOpenChat: (sessionId: string) => void;
   onChatWithModel: (handoff: TrainingModelChatHandoff) => void;
   onOpenTasksetFiles: () => void;
@@ -58,6 +60,7 @@ export function TrainingView({
   onToast,
   onSettingsPreferences,
   onOpenComputeSettings,
+  onOpenProviderSettings,
   onOpenChat,
   onChatWithModel,
   onOpenTasksetFiles,
@@ -139,6 +142,7 @@ export function TrainingView({
           onSelectedJobIdChange={onSelectedTrainingJobIdChange}
           onChatWithModel={onChatWithModel}
           onToast={onToast}
+          onOpenProviderSettings={onOpenProviderSettings}
           detailTasksetId={detailTasksetId}
           onDetailTasksetIdChange={onDetailTasksetIdChange}
         />

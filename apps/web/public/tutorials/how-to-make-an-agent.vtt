@@ -1,0 +1,101 @@
+WEBVTT
+
+C01
+00:00:04.840 --> 00:00:10.489
+Open Lab, choose New agent, and start the guided creation flow.
+
+C02
+00:00:10.209 --> 00:00:19.295
+Choose From prompt to describe the Agent directly, or From chats to include examples of the work it should handle.
+
+C04
+00:00:19.015 --> 00:00:27.882
+For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.
+
+C06
+00:00:27.602 --> 00:00:36.161
+The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.
+
+C07
+00:00:35.881 --> 00:00:44.967
+Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.
+
+C08
+00:00:44.687 --> 00:00:50.604
+The right side panel asks how the Agent should prioritize conflicting account risks.
+
+C09
+00:00:50.324 --> 00:00:59.101
+Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.
+
+C10
+00:00:58.821 --> 00:01:09.337
+OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.
+
+C11
+00:01:09.057 --> 00:01:15.738
+After the checks pass, the Agent is saved to your Profile and is ready to use.
+
+C12
+00:01:15.458 --> 00:01:21.961
+The Agent page shows its purpose, chat entrypoint, and runnable account actions.
+
+C13
+00:01:22.851 --> 00:01:32.384
+In normal chat, the Agent grounds its Acme answer in renewal timing, usage decline, the disputed invoice, and the open P1 case.
+
+C14
+00:01:32.104 --> 00:01:41.190
+A follow-up keeps Acme context and assigns the first actions to Revenue Operations and Support instead of restarting the conversation.
+
+C15
+00:01:40.910 --> 00:01:49.062
+The action picker offers chat plus each runnable account action, so you can choose conversation or a focused task.
+
+C16
+00:01:48.782 --> 00:01:57.202
+Running Summarize Account for Northstar identifies the healthy usage trend and the explicit twenty-five-seat expansion request.
+
+C17
+00:01:56.922 --> 00:02:05.253
+Running renewal triage for Acme returns high risk, cites the billing and support blockers, and orders the next steps.
+
+C18
+00:02:04.973 --> 00:02:14.286
+The weekly review action combines the portfolio and returns visible Markdown, CSV, and JSON artifacts for downstream use.
+
+C19
+00:02:14.006 --> 00:02:21.085
+After restarting OpenPond, the same Agent, chat history, and actions remain available.
+
+I01
+00:02:21.975 --> 00:02:29.998
+Improve Agent lets you describe a change directly or include chats that demonstrate the correction.
+
+I02
+00:02:29.718 --> 00:02:37.919
+Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.
+
+I03
+00:02:37.639 --> 00:02:45.523
+Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.
+
+I04
+00:02:45.243 --> 00:02:51.518
+Review the planned change and confirm that it preserves citations and every existing action.
+
+I05
+00:02:51.238 --> 00:03:00.463
+Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.
+
+I06
+00:03:00.183 --> 00:03:08.156
+Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.
+
+I07
+00:03:07.876 --> 00:03:17.229
+The improved chat now places disputed billing and the open P1 case ahead of adoption decline while preserving source citations.
+
+I08
+00:03:16.949 --> 00:03:25.677
+The direct triage action repeats the billing-first result, proving the change works outside chat without breaking the existing workflow.

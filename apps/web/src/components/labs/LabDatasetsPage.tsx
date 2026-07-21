@@ -39,6 +39,9 @@ export function LabDatasetsPage({
   const [page, setPage] = useState(1);
   const tasksets = state?.tasksets ?? [];
   const selected = tasksets.find((taskset) => taskset.id === selectedId) ?? null;
+  const selectedArtifact = state?.datasetArtifacts.find(
+    (artifact) => artifact.tasksetId === selectedId,
+  ) ?? null;
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return tasksets;
@@ -85,8 +88,10 @@ export function LabDatasetsPage({
           />
         </div>
         <LabModelDataset
+          artifact={selectedArtifact}
           taskset={selected}
           onOpenFiles={() => onOpenFiles(selected.id)}
+          training={training}
         />
         {selected.metadata.flagship === "cross-system-operations" ? (
           <LabExpertBootstrap
@@ -152,9 +157,9 @@ export function LabDatasetsPage({
                       <span>{taskset.objective}</span>
                     </button>
                   </td>
-                  <td>{splitCount(taskset, "train")}</td>
-                  <td>{splitCount(taskset, "validation")}</td>
-                  <td>{splitCount(taskset, "frozen_eval")}</td>
+                  <td>{splitCount(taskset, state, "train")}</td>
+                  <td>{splitCount(taskset, state, "validation")}</td>
+                  <td>{splitCount(taskset, state, "frozen_eval")}</td>
                   <td>{taskset.graders.length}</td>
                   <td>{modelCount || "—"}</td>
                   <td>{formatCompactDate(taskset.updatedAt)}</td>
@@ -174,7 +179,15 @@ export function LabDatasetsPage({
   );
 }
 
-function splitCount(taskset: Taskset, split: Taskset["tasks"][number]["split"]): number {
+function splitCount(
+  taskset: Taskset,
+  state: TrainingStateResponse | null,
+  split: Taskset["tasks"][number]["split"],
+): number {
+  const artifact = state?.datasetArtifacts.find(
+    (candidate) => candidate.tasksetId === taskset.id,
+  );
+  if (artifact) return artifact.splitCounts[split] ?? 0;
   return taskset.tasks.filter((task) => task.split === split).length;
 }
 

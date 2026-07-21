@@ -26,6 +26,9 @@ import {
 import {
   type FireworksRftEvaluatorProvisioner,
 } from "./fireworks-rft-evaluator.js";
+import type {
+  FireworksTrainingSelection,
+} from "./fireworks-dataset.js";
 import { evaluationDeploymentLeases } from "./fireworks-evaluation-runtime.js";
 import {
   errorMessage,
@@ -81,6 +84,17 @@ export type FireworksDestinationDeps = {
     taskId: string;
     attempt: TaskAttemptResult;
   }) => Promise<GradeResult>;
+  resolveTrainingSelection?: (input: {
+    taskset: Taskset;
+    plan: TrainingPlan;
+    split: "train" | "frozen_eval";
+    maximumBytes: number;
+  }) => Promise<FireworksTrainingSelection>;
+  resolveTask?: (input: {
+    tasksetId: string;
+    taskId: string;
+    split: "train" | "frozen_eval";
+  }) => Promise<import("@openpond/contracts").TaskDataRecord>;
   request?: typeof fetch;
   now?: () => Date;
   provisionRftEvaluator?: FireworksRftEvaluatorProvisioner;

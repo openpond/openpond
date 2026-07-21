@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "openpond.publicVideoManifest.v1",
+  "playlists": [
+    {
+      "id": "post-training-from-first-principles",
+      "status": "draft",
+      "title": "Post-training from first principles",
+      "videoIds": [
+        "post-training-01-how-post-training-works",
+        "post-training-02-definitions",
+        "post-training-03-on-policy-off-policy",
+        "post-training-04-rewards-credit-assignment",
+        "post-training-05-verifiable-rewards-rlvr",
+        "post-training-06-ppo-grpo",
+        "post-training-07-distillation",
+        "post-training-08-opsd-sdft-sdpo",
+        "post-training-09-credible-experiments",
+        "post-training-10-technical-appendix"
+      ]
+    }
+  ],
+  "videos": [
+    {
+      "id": "post-training-01-how-post-training-works",
+      "localPath": "courses/post-training/01-how-post-training-works.mp4",
+      "objectKey": "media/videos/a3899320a1396b13aa29681afe2901c443dc5c5e3a7cf9004a7582c79dc3c2ff.mp4",
+      "sha256": "a3899320a1396b13aa29681afe2901c443dc5c5e3a7cf9004a7582c79dc3c2ff",
+      "sizeBytes": 2094298,
+      "durationSeconds": 69.334
+    },
+    {
+      "id": "post-training-02-definitions",
+      "localPath": "courses/post-training/02-definitions.mp4",
+      "objectKey": "media/videos/f9b230449f9539ac7a720fed6b68175ac7620eb09cf689c6b62556a15aff734a.mp4",
+      "sha256": "f9b230449f9539ac7a720fed6b68175ac7620eb09cf689c6b62556a15aff734a",
+      "sizeBytes": 9202205,
+      "durationSeconds": 280.667
+    },
+    {
+      "id": "post-training-03-on-policy-off-policy",
+      "localPath": "courses/post-training/03-on-policy-off-policy.mp4",
+      "objectKey": "media/videos/6ec79e866f575dc8ecf0fc345ce4a9dfb4b5c6ac88a219433ea7f07834dab771.mp4",
+      "sha256": "6ec79e866f575dc8ecf0fc345ce4a9dfb4b5c6ac88a219433ea7f07834dab771",
+      "sizeBytes": 2199681,
+      "durationSeconds": 61.667
+    },
+    {
+      "id": "post-training-04-rewards-credit-assignment",
+      "localPath": "courses/post-training/04-rewards-credit-assignment.mp4",
+      "objectKey": "media/videos/90ae9c10e0752c7b9a774a489ac63b7daff5ac7ef9d1e0abcf6bcfc384056d11.mp4",
+      "sha256": "90ae9c10e0752c7b9a774a489ac63b7daff5ac7ef9d1e0abcf6bcfc384056d11",
+      "sizeBytes": 5599037,
+      "durationSeconds": 175.134
+    },
+    {
+      "id": "post-training-05-verifiable-rewards-rlvr",
+      "localPath": "courses/post-training/05-verifiable-rewards-rlvr.mp4",
+      "objectKey": "media/videos/0c8df977fe8f3201db24bd8ea16f61b9d5d26debec4b6aa2848a930d585298a2.mp4",
+      "sha256": "0c8df977fe8f3201db24bd8ea16f61b9d5d26debec4b6aa2848a930d585298a2",
+      "sizeBytes": 5618213,
+      "durationSeconds": 167.834
+    },
+    {
+      "id": "post-training-06-ppo-grpo",
+      "localPath": "courses/post-training/06-ppo-grpo.mp4",
+      "objectKey": "media/videos/a47746baf124224c75b4f23311dfe3fcc0de3586d775a43b4ace5d76973b935f.mp4",
+      "sha256": "a47746baf124224c75b4f23311dfe3fcc0de3586d775a43b4ace5d76973b935f",
+      "sizeBytes": 5421994,
+      "durationSeconds": 168.9
+    },
+    {
+      "id": "post-training-07-distillation",
+      "localPath": "courses/post-training/07-distillation.mp4",
+      "objectKey": "media/videos/6e918c7d475eb2da1ad0f1e3e8bbb28fe2578f3a2ff7e642d639f54045fb63d6.mp4",
+      "sha256": "6e918c7d475eb2da1ad0f1e3e8bbb28fe2578f3a2ff7e642d639f54045fb63d6",
+      "sizeBytes": 4557517,
+      "durationSeconds": 156.967
+    },
+    {
+      "id": "post-training-08-opsd-sdft-sdpo",
+      "localPath": "courses/post-training/08-opsd-sdft-sdpo.mp4",
+      "objectKey": "media/videos/ec4ba884fb28a198440304b356291a7293201b5e2bc0b516e68426b1af0c4e3b.mp4",
+      "sha256": "ec4ba884fb28a198440304b356291a7293201b5e2bc0b516e68426b1af0c4e3b",
+      "sizeBytes": 5342435,
+      "durationSeconds": 158.434
+    },
+    {
+      "id": "post-training-09-credible-experiments",
+      "localPath": "courses/post-training/09-credible-experiments.mp4",
+      "objectKey": "media/videos/34f20e80b057a44abd20bb2c9fe8d0ae162dc2b27309af577de84a125b5df541.mp4",
+      "sha256": "34f20e80b057a44abd20bb2c9fe8d0ae162dc2b27309af577de84a125b5df541",
+      "sizeBytes": 6848772,
+      "durationSeconds": 207.234
+    },
+    {
+      "id": "post-training-10-technical-appendix",
+      "localPath": "courses/post-training/10-technical-appendix.mp4",
+      "objectKey": "media/videos/1755f219e36bc3cf44a3b388f3b98d6ad479a2ded2274c364a0f79e10719fc85.mp4",
+      "sha256": "1755f219e36bc3cf44a3b388f3b98d6ad479a2ded2274c364a0f79e10719fc85",
+      "sizeBytes": 5369597,
+      "durationSeconds": 187.067
+    },
+    {
+      "id": "make-agent-tutorial",
+      "localPath": "tutorials/how-to-make-an-agent.mp4",
+      "objectKey": "media/videos/0d0da26d8789e9f1e20221959944f1fb46996dd76eb217fb985bcca09af0560f.mp4",
+      "sha256": "0d0da26d8789e9f1e20221959944f1fb46996dd76eb217fb985bcca09af0560f",
+      "sizeBytes": 14157757,
+      "durationSeconds": 208.4
+    }
+  ]
+}

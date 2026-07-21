@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import "../../styles/settings/settings-layout.css";
 import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
 import "../../styles/settings/remote-access.css";
-import "../../styles/settings/usage-settings.css";
 import "../../styles/settings/compute-settings.css";
 import "../../styles/settings/notifications-settings.css";
 import "../../styles/wallet/wallet.css";
 import type {
   BootstrapPayload,
+  ConnectedAppIntegrationSkill,
   ProviderSettings,
   RuntimeEvent,
   TeamChatThread,
@@ -33,9 +33,10 @@ import { ProfileSettingsSection } from "./ProfileSettingsSection";
 import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { RemoteAccessSettingsSection } from "./RemoteAccessSettingsSection";
 import { SettingsNavigation } from "./SettingsNavigation";
-import { UsageSettingsSection } from "./UsageSettingsSection";
+import { SkillsSettingsSection } from "./SkillsSettingsSection";
 import { TrainingSettingsSection } from "./TrainingSettingsSection";
 import { ComputeSettingsSection } from "./ComputeSettingsSection";
+import { DatasetStorageSettingsSection } from "./DatasetStorageSettingsSection";
 import { WalletView } from "../wallet/WalletView";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
@@ -45,7 +46,12 @@ import { usePersonalizationSettings } from "./usePersonalizationSettings";
 import { useProviderSettings } from "./useProviderSettings";
 import { useRemoteAccessSettings } from "./useRemoteAccessSettings";
 import { useComputeSettings } from "./useComputeSettings";
+import { useDatasetStorageSettings } from "./useDatasetStorageSettings";
 import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/WindowControls";
+
+const UsageSettingsSection = lazy(() =>
+  import("./UsageSettingsSection").then((module) => ({ default: module.UsageSettingsSection })),
+);
 
 export function SettingsView({
   payload,
@@ -56,6 +62,7 @@ export function SettingsView({
   onToast,
   onBack,
   onOpenSourceSession,
+  onOpenNativeSkill,
   teamChatCurrentUserId,
   teamChatEnabled,
   teamChatNotificationMode,
@@ -72,6 +79,7 @@ export function SettingsView({
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onBack: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  onOpenNativeSkill: (skill: ConnectedAppIntegrationSkill) => void;
   teamChatCurrentUserId: string | null;
   teamChatEnabled: boolean;
   teamChatNotificationMode: TeamChatNotificationMode;
@@ -130,7 +138,39 @@ export function SettingsView({
   const personalizationSettings = usePersonalizationSettings({ connection, onError, onPayload, personalization });
   const diagnosticsSettings = useDiagnosticsSettings({ onError, section });
   const remoteAccessSettings = useRemoteAccessSettings({ connection, enabled: section === "remote", onError, onToast });
-  const computeSettings = useComputeSettings({ connection, enabled: section === "compute", onError });
+  const datasetStorageEnabled = section === "dataset-storage";
+  const computeSettings = useComputeSettings({
+    connection,
+    enabled: section === "compute" || datasetStorageEnabled,
+    onError,
+  });
+  const datasetStorageSettings = useDatasetStorageSettings({
+    connection,
+    enabled: datasetStorageEnabled,
+    onError,
+    profileId: payload?.profile.activeProfile ?? "default",
+  });
+  const saveDatasetStorage = useCallback(
+    (datasetStorePath: string | null) => computeSettings.save(
+      computeSettings.state?.settings.modelStorePath ?? null,
+      datasetStorePath,
+      computeSettings.state?.settings.defaultDeviceIds ?? [],
+    ),
+    [
+      computeSettings.save,
+      computeSettings.state?.settings.defaultDeviceIds,
+      computeSettings.state?.settings.modelStorePath,
+    ],
+  );
+  const refreshDatasetStorage = useCallback(
+    async () => {
+      await Promise.all([
+        computeSettings.refresh(),
+        datasetStorageSettings.refresh(),
+      ]);
+    },
+    [computeSettings.refresh, datasetStorageSettings.refresh],
+  );
   const confirmSubagentsNavigation = useCallback(() => {
     if (section !== "subagents" || !defaultsSettings.subagentsDirty) return true;
     return window.confirm("You have unsaved changes. Leave Subagents without saving?");
@@ -199,6 +239,8 @@ export function SettingsView({
             onError={onError}
             onToast={onToast}
           />
+        ) : section === "skills" ? (
+          <SkillsSettingsSection onOpenNativeSkill={onOpenNativeSkill} />
         ) : section === "providers" ? (
           <ProviderSettingsSection
             account={payload?.account ?? null}
@@ -214,6 +256,15 @@ export function SettingsView({
             onSave={computeSettings.save}
             onDownloadSmolLm2={computeSettings.downloadSmolLm2}
             onCancelDownload={computeSettings.cancelDownload}
+          />
+        ) : section === "dataset-storage" ? (
+          <DatasetStorageSettingsSection
+            state={computeSettings.state}
+            catalog={datasetStorageSettings.catalog}
+            busy={computeSettings.busy}
+            catalogLoading={datasetStorageSettings.loading}
+            onRefresh={refreshDatasetStorage}
+            onSave={saveDatasetStorage}
           />
         ) : section === "defaults" ? (
           <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
@@ -246,12 +297,15 @@ export function SettingsView({
         ) : section === "remote" ? (
           <RemoteAccessSettingsSection {...remoteAccessSettings} />
         ) : section === "usage" ? (
-          <UsageSettingsSection
-            connection={connection}
-            enabled={section === "usage"}
-            onError={onError}
-            onOpenSourceSession={onOpenSourceSession}
-          />
+          <Suspense fallback={<div className="usage-load-state">Loading activity…</div>}>
+            <UsageSettingsSection
+              account={payload?.account ?? null}
+              connection={connection}
+              enabled={section === "usage"}
+              onError={onError}
+              onOpenSourceSession={onOpenSourceSession}
+            />
+          </Suspense>
         ) : section === "personalization" ? (
           <PersonalizationSettingsSection {...personalizationSettings} />
         ) : (

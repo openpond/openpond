@@ -8,7 +8,7 @@ import {
   type Turn,
 } from "@openpond/contracts";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { cp, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   buildOpenPondProfileSetupGate,
@@ -16,11 +16,13 @@ import {
   runAgentSdkProjectCommand,
 } from "@openpond/cloud";
 import type { RuntimeCodexSession } from "../types.js";
+import { scriptedOpenPondModelsEnabled } from "../openpond/scripted-chat-provider.js";
 import { event } from "../utils.js";
 
 export const MODEL_BACKED_LOCAL_CREATE_REQUIRED_REASON =
   "Approved local Create plans require model-backed SDK source application; no source mutation was performed.";
 export const LOCAL_CREATE_CODEX_WAIT_TIMEOUT_MS = 30 * 60 * 1000;
+export const HARNESS_PREPARED_SOURCE_MANIFEST = ".openpond-harness-source-application.json";
 const LOCAL_CREATE_TIMEOUT_RECOVERY_MS = 5 * 60 * 1000;
 const LOCAL_CREATE_TIMEOUT_RECOVERY_POLL_MS = 2 * 1000;
 const LOCAL_CREATE_TIMEOUT_RECOVERY_STABLE_MS = 5 * 1000;
@@ -382,6 +384,25 @@ export async function runModelBackedLocalCreateSourceApplication(input: {
   if (!existsSync(input.target.sourcePath)) {
     throw new Error(`Profile source path does not exist: ${input.target.sourcePath}`);
   }
+  if (await applyPreparedHarnessSourceApplication(input.snapshot, input.target)) {
+    await input.appendRuntimeEvent(
+      event({
+        sessionId: input.session.id,
+        turnId: input.turn.id,
+        name: "create_improve.updated",
+        source: "server",
+        appId: input.session.appId,
+        status: "completed",
+        output: `Applied prepared harness ${input.snapshot.operation === "improve" ? "Improve" : "Create"} source for ${input.target.agentId}; running local checks.`,
+        data: {
+          phase: "prepared_source_apply_completed",
+          runId: input.snapshot.id,
+          target: input.target,
+        },
+      }),
+    );
+    return;
+  }
   await input.appendRuntimeEvent(
     event({
       sessionId: input.session.id,
@@ -406,10 +427,11 @@ export async function runModelBackedLocalCreateSourceApplication(input: {
     workspaceId: input.session.workspaceId ?? `openpond-profile:${input.target.activeProfile}`,
     workspaceName: input.session.workspaceName ?? `OpenPond profile ${input.target.activeProfile}`,
   };
+  const codexModel = input.session.provider === "codex" ? input.model : null;
   const runtime = await input.ensureCodexRuntime(codexSession, {
     approvalPolicy: "never",
     sandbox: "workspace-write",
-    model: input.model,
+    model: codexModel,
     codexPermissionMode: "auto-review",
     codexReasoningEffort: input.codexReasoningEffort,
   });
@@ -417,7 +439,7 @@ export async function runModelBackedLocalCreateSourceApplication(input: {
     threadId: runtime.threadId,
     prompt: localCreatePipelinePrompt(input.snapshot, input.target),
     cwd: input.target.workspaceRoot,
-    model: input.model,
+    model: codexModel,
     approvalPolicy: "never",
     sandbox: "workspace-write",
   });
@@ -487,6 +509,92 @@ export async function runModelBackedLocalCreateSourceApplication(input: {
       },
     }),
   );
+}
+
+type HarnessPreparedSourceOperation = {
+  source: string;
+  registrations?: Array<{
+    source: string;
+    target: string;
+  }>;
+};
+
+export async function applyPreparedHarnessSourceApplication(
+  snapshot: CreateImproveRun,
+  target: LocalCreatePipelineTarget,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  if (!scriptedOpenPondModelsEnabled(env)) return false;
+  const manifestPath = path.join(target.workspaceRoot, HARNESS_PREPARED_SOURCE_MANIFEST);
+  if (!existsSync(manifestPath)) return false;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
+  const root = asRecord(manifest);
+  if (root?.schema !== "openpond.harnessPreparedSource.v1") {
+    throw new Error(`${HARNESS_PREPARED_SOURCE_MANIFEST} must use schema openpond.harnessPreparedSource.v1.`);
+  }
+  const agents = asRecord(root.agents);
+  const agent = asRecord(agents?.[target.agentId]);
+  const operation = asHarnessPreparedSourceOperation(agent?.[snapshot.operation]);
+  if (!operation) return false;
+
+  const sourcePath = resolveHarnessManifestPath(target.workspaceRoot, operation.source, "source");
+  if (!existsSync(sourcePath)) {
+    throw new Error(`Prepared harness source does not exist: ${operation.source}`);
+  }
+  await mkdir(target.sourceRoot, { recursive: true });
+  await cp(sourcePath, target.sourceRoot, { recursive: true, force: true });
+  for (const registration of operation.registrations ?? []) {
+    const registrationSource = resolveHarnessManifestPath(
+      target.workspaceRoot,
+      registration.source,
+      "registration source",
+    );
+    const registrationTarget = resolveHarnessManifestPath(
+      target.workspaceRoot,
+      registration.target,
+      "registration target",
+    );
+    if (!existsSync(registrationSource)) {
+      throw new Error(`Prepared harness registration source does not exist: ${registration.source}`);
+    }
+    await mkdir(path.dirname(registrationTarget), { recursive: true });
+    await cp(registrationSource, registrationTarget, { force: true });
+  }
+  return true;
+}
+
+function asHarnessPreparedSourceOperation(value: unknown): HarnessPreparedSourceOperation | null {
+  const operation = asRecord(value);
+  if (!operation || typeof operation.source !== "string" || !operation.source.trim()) return null;
+  if (operation.registrations !== undefined && !Array.isArray(operation.registrations)) {
+    throw new Error("Prepared harness source registrations must be an array.");
+  }
+  const registrations = (operation.registrations ?? []).map((value) => {
+    const registration = asRecord(value);
+    if (
+      !registration
+      || typeof registration.source !== "string"
+      || !registration.source.trim()
+      || typeof registration.target !== "string"
+      || !registration.target.trim()
+    ) {
+      throw new Error("Prepared harness source registrations require source and target paths.");
+    }
+    return { source: registration.source, target: registration.target };
+  });
+  return { source: operation.source, registrations };
+}
+
+function resolveHarnessManifestPath(workspaceRoot: string, relativePath: string, label: string): string {
+  if (path.isAbsolute(relativePath)) {
+    throw new Error(`Prepared harness ${label} must be relative to the profile repo.`);
+  }
+  const root = path.resolve(workspaceRoot);
+  const resolved = path.resolve(root, relativePath);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`Prepared harness ${label} must stay inside the profile repo.`);
+  }
+  return resolved;
 }
 
 function isCodexTurnTimeoutError(error: unknown, turnId: string): boolean {

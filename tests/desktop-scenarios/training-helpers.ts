@@ -1,12 +1,33 @@
 import path from "node:path";
-import type { LocalProject, Session, TaskCreationSnapshot, Taskset, TrainingSourceRef, TrainingStateResponse } from "@openpond/contracts";
+import type { LocalProject, OpenPondProfileState, Session, TaskCreationSnapshot, Taskset, TrainingSourceRef, TrainingStateResponse } from "@openpond/contracts";
 import type { DesktopHarness } from "../../scripts/desktop-harness/types";
 import { registerScriptedOpenPondModel, reloadRenderer, waitForAssistantOutput, waitForCompletedTurn, waitForRendererCondition } from "./helpers";
 
 export function scriptedTrainingModel(_suffix: string) { return { providerId: "openpond" as const, modelId: "openpond-scripted-chat-two-turns" }; }
 
-export async function initializeTrainingProfile(harness: DesktopHarness) {
-  return harness.api.fetchJson("/v1/profile/init", { method: "POST", body: { repoPath: path.join(harness.artifactsDir, "profile-repo"), profile: "default", template: "blank-agent", force: true } });
+export async function initializeTrainingProfile(harness: DesktopHarness): Promise<OpenPondProfileState> {
+  const repoPath = path.resolve(harness.artifactsDir, "profile-repo");
+  let state = await harness.api.fetchJson<OpenPondProfileState>("/v1/profile/init", {
+    method: "POST",
+    body: { repoPath, profile: "default", template: "blank-agent", force: true },
+  });
+  const deadline = Date.now() + 30_000;
+  let stableSince = 0;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    state = await harness.api.fetchJson<OpenPondProfileState>("/v1/profile");
+    if (path.resolve(state.repoPath) !== repoPath) {
+      state = await harness.api.fetchJson<OpenPondProfileState>("/v1/profile/load", {
+        method: "POST",
+        body: { repoPath, profile: "default" },
+      });
+      stableSince = 0;
+      continue;
+    }
+    stableSince ||= Date.now();
+    if (Date.now() - stableSince >= 5_000) return state;
+  }
+  throw new Error(`Training profile did not remain active at ${repoPath}. Last active repo: ${state.repoPath}`);
 }
 
 export async function createTrainingChat(

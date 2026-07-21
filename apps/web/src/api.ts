@@ -20,6 +20,7 @@ import type {
   InsightsAskResponse,
   TrainingStateResponse,
   TrainingRunDetail,
+  DatasetCatalogResponse,
   ComputeStateResponse,
   ComputeSettings,
   ModelDownloadJob,
@@ -435,6 +436,8 @@ export const api = {
       range?: "7d" | "30d" | "90d" | "all";
       visibility?: UsageVisibilityFilter;
       status?: UsageStatusFilter;
+      provider?: UsageSummaryResponse["filters"]["provider"];
+      model?: string | null;
     } = {}
   ) => {
     const params = usageSearchParams(input);
@@ -447,6 +450,8 @@ export const api = {
       range?: "7d" | "30d" | "90d" | "all";
       visibility?: UsageVisibilityFilter;
       status?: UsageStatusFilter;
+      provider?: UsageSummaryResponse["filters"]["provider"];
+      model?: string | null;
       sessionId?: string | null;
       turnId?: string | null;
       limit?: number;
@@ -559,6 +564,11 @@ export const api = {
       connection,
       `/v1/training?profileId=${encodeURIComponent(profileId)}`
     ),
+  datasetCatalog: (connection: ClientConnection, profileId: string) =>
+    apiFetch<DatasetCatalogResponse>(
+      connection,
+      `/v1/training/datasets?profileId=${encodeURIComponent(profileId)}`
+    ),
   trainingRunDetail: (connection: ClientConnection, jobId: string) =>
     apiFetch<TrainingRunDetail>(
       connection,
@@ -568,11 +578,13 @@ export const api = {
     connection: ClientConnection,
     path: string,
     input: unknown,
-    method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST"
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "POST"
   ) =>
     apiFetch<T>(connection, `/v1/training${path}`, {
       method,
-      body: method === "DELETE" ? undefined : JSON.stringify(input),
+      body: method === "GET" || method === "DELETE"
+        ? undefined
+        : JSON.stringify(input),
     }),
   computeState: (connection: ClientConnection) =>
     apiFetch<ComputeStateResponse>(connection, "/v1/compute"),
@@ -589,6 +601,7 @@ export const api = {
     connection: ClientConnection,
     input: {
       modelStorePath?: string | null;
+      datasetStorePath?: string | null;
       defaultDeviceIds?: string[];
       additionalModelPaths?: string[];
     }
@@ -1379,10 +1392,14 @@ function usageSearchParams(input: {
   range?: "7d" | "30d" | "90d" | "all";
   visibility?: UsageVisibilityFilter;
   status?: UsageStatusFilter;
+  provider?: UsageSummaryResponse["filters"]["provider"];
+  model?: string | null;
 }): URLSearchParams {
   const params = new URLSearchParams();
   if (input.range) params.set("range", input.range);
   if (input.visibility) params.set("visibility", input.visibility);
   if (input.status) params.set("status", input.status);
+  if (input.provider) params.set("provider", input.provider);
+  if (input.model) params.set("model", input.model);
   return params;
 }

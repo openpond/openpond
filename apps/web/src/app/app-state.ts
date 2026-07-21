@@ -49,10 +49,13 @@ export type NewProjectMode = "local" | "cloud" | "existing-local";
 export type RightPanelMode = "home" | "changes" | "browser" | "goal" | "chat" | "training";
 export type RightChatPanel = {
   id: string;
+  activationVersion: number;
   sessionId: string | null;
   prompt: string;
   provider: ChatProvider;
   model: string;
+  scrollTop: number;
+  stickyToBottom: boolean;
 };
 
 export type AppState = {

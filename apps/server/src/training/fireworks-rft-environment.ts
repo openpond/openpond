@@ -2,9 +2,15 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
+  DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
+  DATASET_NO_TOOLS_CONTRACT_HASH,
   RolloutTrajectoryReceiptSchema,
+  type GradeResult,
   type RolloutTrajectoryReceipt,
   type RftRecipe,
+  type TaskDataRecord,
+  type TaskAttemptResult,
   type TrainingJob,
   type TrainingPlan,
 } from "@openpond/contracts";
@@ -22,12 +28,16 @@ import {
 } from "eval-protocol";
 import type { SqliteStore } from "../store/store.js";
 import {
-  crossSystemAnswersEqual,
   resolveCrossSystemTrainTask,
   runCrossSystemRollout,
   verifyCrossSystemTrajectory,
 } from "./cross-system-operations/index.js";
 import type { FireworksProviderCredential } from "./fireworks-destination.js";
+import {
+  resolveExactAnswerTask,
+  runExactAnswerRollout,
+} from "./fireworks-exact-answer-environment.js";
+import { rftTrainingReward } from "./rft-training-reward.js";
 
 const MAX_PROVIDER_RESPONSE_BYTES = 2 * 1024 * 1024;
 const ACTIVE_JOB_STATUSES = new Set<TrainingJob["status"]>([
@@ -57,6 +67,16 @@ export function createFireworksRftEnvironment(input: {
   resolveCredential: () => Promise<FireworksProviderCredential | null>;
   request?: typeof fetch;
   validateCallbackCredential?: FireworksRftCallbackCredentialValidator;
+  resolveTask?: (input: {
+    tasksetId: string;
+    taskId: string;
+    split: "train";
+  }) => Promise<TaskDataRecord>;
+  gradeAttempt?: (input: {
+    tasksetId: string;
+    taskId: string;
+    attempt: TaskAttemptResult;
+  }) => Promise<GradeResult>;
   maxConcurrency?: number;
   allowedModelOrigins?: string[];
   timestamp?: () => string;
@@ -73,7 +93,52 @@ export function createFireworksRftEnvironment(input: {
     accountKey: string;
     expiresAt: number;
   }>();
+  const reservedRolloutsByJob = new Map<string, Set<string>>();
+  let admissionQueue = Promise.resolve();
   let active = 0;
+
+  async function reserveRollout(
+    job: TrainingJob,
+    recipe: RftRecipe,
+    rolloutId: string,
+  ): Promise<() => void> {
+    let unlock!: () => void;
+    const previous = admissionQueue;
+    admissionQueue = new Promise<void>((resolve) => {
+      unlock = resolve;
+    });
+    await previous;
+    try {
+      const existingRollouts = await input.store.listRolloutTrajectoryReceipts({
+        jobId: job.id,
+      });
+      const existingIds = new Set(
+        existingRollouts.map((candidate) => candidate.providerTrace.rolloutId),
+      );
+      const reserved = reservedRolloutsByJob.get(job.id) ?? new Set<string>();
+      const uncommittedReservations = [...reserved].filter(
+        (candidate) => !existingIds.has(candidate),
+      ).length;
+      const alreadyCommitted = existingIds.has(rolloutId);
+      if (
+        !alreadyCommitted
+        && existingRollouts.length + uncommittedReservations
+          >= recipe.resourceLimits.maxRollouts
+      ) {
+        throw new Error(
+          `RFT rollout budget exhausted at ${recipe.resourceLimits.maxRollouts} admitted rollouts.`,
+        );
+      }
+      reserved.add(rolloutId);
+      reservedRolloutsByJob.set(job.id, reserved);
+      return () => {
+        reserved.delete(rolloutId);
+        if (!reserved.size) reservedRolloutsByJob.delete(job.id);
+      };
+    } finally {
+      unlock();
+    }
+  }
 
   async function handle(payload: unknown): Promise<FireworksRftEnvironmentResponse> {
     const parsed = initRequestSchema.safeParse(payload);
@@ -147,6 +212,7 @@ export function createFireworksRftEnvironment(input: {
       };
     }
     active += 1;
+    let releaseRollout: (() => void) | null = null;
     const rolloutLogger = loggerFactory(init.metadata.rollout_id, {
       gatewayBaseUrl: modelUrl.origin,
       apiKey: credential.value,
@@ -154,18 +220,15 @@ export function createFireworksRftEnvironment(input: {
     let receipt: RolloutTrajectoryReceipt | null = null;
     try {
       const { job, plan, recipe } = await resolveActiveRftJob(input.store, init);
+      releaseRollout = await reserveRollout(
+        job,
+        recipe,
+        init.metadata.rollout_id,
+      );
       const payloadBytes = Buffer.byteLength(JSON.stringify(init), "utf8");
       if (payloadBytes > recipe.resourceLimits.maxPayloadBytes) {
         throw new Error(
           `RFT rollout payload exceeded its ${recipe.resourceLimits.maxPayloadBytes}-byte recipe limit.`,
-        );
-      }
-      const existingRollouts = await input.store.listRolloutTrajectoryReceipts({
-        jobId: job.id,
-      });
-      if (existingRollouts.length + active > recipe.resourceLimits.maxRollouts) {
-        throw new Error(
-          `RFT rollout budget exhausted at ${recipe.resourceLimits.maxRollouts} admitted rollouts.`,
         );
       }
       const taskset = await input.store.getTaskset(plan.tasksetId);
@@ -173,11 +236,40 @@ export function createFireworksRftEnvironment(input: {
         throw new Error("The active RFT job no longer matches its immutable Taskset.");
       }
       const prompt = policyPrompt(init.messages);
-      const context = resolveCrossSystemTrainTask(taskset, {
-        rowId: init.metadata.row_id,
-        prompt,
-      });
+      const crossSystem =
+        recipe.reward.environmentId === "cross-system-operations";
+      const context = crossSystem
+        ? resolveCrossSystemTrainTask(taskset, {
+            rowId: init.metadata.row_id,
+            prompt,
+          })
+        : null;
+      const exactTask = crossSystem
+        ? null
+        : await resolveExactAnswerTask({
+            taskset,
+            taskId: init.metadata.row_id,
+            prompt,
+            resolveTask: input.resolveTask,
+          });
       assertPolicyRequest(init, recipe, job);
+      const taskId = context?.authoredTask.id ?? exactTask!.id;
+      const environmentWorld = context
+        ? {
+            worldId: context.world.id,
+            worldHash: contentHash(context.world),
+          }
+        : {
+            worldId: `exact_${contentHash([
+              taskset.contentHash,
+              taskId,
+            ]).slice(0, 24)}`,
+            worldHash: contentHash({
+              tasksetHash: taskset.contentHash,
+              taskId,
+              graderHash: recipe.reward.graderHash,
+            }),
+          };
       const now = timestamp();
       const receiptId = `rollout_receipt_${contentHash([
         job.id,
@@ -190,7 +282,7 @@ export function createFireworksRftEnvironment(input: {
         planId: plan.id,
         tasksetId: taskset.id,
         tasksetHash: taskset.contentHash,
-        taskId: context.authoredTask.id,
+        taskId,
         split: "train",
         correlationId: `fireworks:${init.metadata.experiment_id}:${init.metadata.rollout_id}`,
         provider: "fireworks",
@@ -198,9 +290,8 @@ export function createFireworksRftEnvironment(input: {
         environment: {
           id: recipe.reward.environmentId,
           version: recipe.reward.environmentVersion,
-          worldId: context.world.id,
-          worldHash: contentHash(context.world),
-          toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+          ...environmentWorld,
+          toolContractHash: recipe.reward.toolContractHash,
         },
         policy: {
           modelId: canonicalFireworksPolicyModel(init.completion_params.model),
@@ -227,75 +318,113 @@ export function createFireworksRftEnvironment(input: {
         startedAt: timestamp(),
         updatedAt: timestamp(),
       });
-      rolloutLogger.info("OpenPond Cross-System rollout started", {
+      rolloutLogger.info("OpenPond RFT rollout started", {
         status: Status.rolloutRunning(),
         extras: {
           correlation_id: receipt.correlationId,
           environment_version: receipt.environment.version,
         },
       });
-      const controller = new AbortController();
-      const timer = setTimeout(
-        () => controller.abort(new Error("RFT rollout exceeded its bounded wall time.")),
-        recipe.resourceLimits.wallTimeMs,
-      );
-      timer.unref?.();
-      let trajectory;
-      try {
-        trajectory = await runCrossSystemRollout({
-          world: context.world,
+      let outcome: {
+        trajectory: NonNullable<RolloutTrajectoryReceipt["trajectory"]>;
+        verifier: NonNullable<RolloutTrajectoryReceipt["verifier"]>;
+        reward: RolloutTrajectoryReceipt["reward"];
+        failureClass: RolloutTrajectoryReceipt["failureClass"];
+      };
+      if (context) {
+        const controller = new AbortController();
+        const timer = setTimeout(
+          () => controller.abort(new Error("RFT rollout exceeded its bounded wall time.")),
+          recipe.resourceLimits.wallTimeMs,
+        );
+        timer.unref?.();
+        let trajectory;
+        try {
+          trajectory = await runCrossSystemRollout({
+            world: context.world,
+            task: context.generatedTask,
+            model: {
+              providerId: "fireworks",
+              modelId: receipt.policy.modelId,
+            },
+            reasoningEffort: null,
+            stream: tracedFireworksStream({
+              request,
+              modelUrl,
+              apiKey: credential.value,
+              completionParameters: init.completion_params,
+              recipe,
+            }),
+            signal: controller.signal,
+            maxTurns: recipe.rollout.maxTurns,
+            trajectoryId: `cso_rft_${contentHash([
+              job.id,
+              init.metadata.rollout_id,
+            ]).slice(0, 24)}`,
+            metadata: {
+              execution: "fireworks_remote_environment",
+              correlationId: receipt.correlationId,
+              providerTrace: providerTrace(init),
+              policyCheckpointId: receipt.policy.checkpointId,
+            },
+            maxFormatRepairs: 2,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        const verifier = verifyCrossSystemTrajectory({
           task: context.generatedTask,
-          model: {
-            providerId: "fireworks",
-            modelId: receipt.policy.modelId,
-          },
-          reasoningEffort: null,
-          stream: tracedFireworksStream({
-            request,
-            modelUrl,
-            apiKey: credential.value,
-            completionParameters: init.completion_params,
-            recipe,
-          }),
-          signal: controller.signal,
-          maxTurns: recipe.rollout.maxTurns,
-          trajectoryId: `cso_rft_${contentHash([
-            job.id,
-            init.metadata.rollout_id,
-          ]).slice(0, 24)}`,
-          metadata: {
-            execution: "fireworks_remote_environment",
-            correlationId: receipt.correlationId,
-            providerTrace: providerTrace(init),
-            policyCheckpointId: receipt.policy.checkpointId,
-          },
-          maxFormatRepairs: 2,
+          trajectory,
         });
-      } finally {
-        clearTimeout(timer);
+        outcome = {
+          trajectory,
+          verifier,
+          reward: rftTrainingReward({
+            task: context.generatedTask,
+            trajectory,
+            verifier,
+          }),
+          failureClass: failureClass(verifier.outcome),
+        };
+      } else {
+        outcome = await runExactAnswerRollout({
+          init,
+          recipe,
+          job,
+          tasksetId: taskset.id,
+          task: exactTask!,
+          correlationId: receipt.correlationId,
+          policyModelId: receipt.policy.modelId,
+          streamPolicy: ({ messages, signal }) =>
+            tracedFireworksStream({
+              request,
+              modelUrl,
+              apiKey: credential.value,
+              completionParameters: init.completion_params,
+              recipe,
+            })({
+              messages,
+              tools: [],
+              signal,
+            }),
+          resolveGrade: input.gradeAttempt,
+          timestamp,
+          providerTrace: providerTrace(init),
+        });
       }
-      const verifier = verifyCrossSystemTrajectory({
-        task: context.generatedTask,
-        trajectory,
-      });
-      const trainingReward = rftTrainingReward({
-        task: context.generatedTask,
-        trajectory,
-        verifier,
-      });
       const completed = timestamp();
       receipt = await input.store.saveRolloutTrajectoryReceipt({
         ...receipt,
         status: "succeeded",
-        failureClass: failureClass(verifier.outcome),
-        reward: trainingReward,
-        trajectory,
-        verifier,
+        failureClass: outcome.failureClass,
+        reward: outcome.reward,
+        trajectory: outcome.trajectory,
+        verifier: outcome.verifier,
         providerStatus: { code: Status.rolloutFinished().code },
         completedAt: completed,
         updatedAt: completed,
       });
-      rolloutLogger.info("OpenPond Cross-System rollout completed", {
+      rolloutLogger.info("OpenPond RFT rollout completed", {
         status: Status.rolloutFinished(),
         extras: {
           correlation_id: receipt.correlationId,
@@ -324,7 +453,7 @@ export function createFireworksRftEnvironment(input: {
           updatedAt: failedAt,
         });
       }
-      rolloutLogger.error("OpenPond Cross-System rollout failed", {
+      rolloutLogger.error("OpenPond RFT rollout failed", {
         status: Status.rolloutError(boundedError(errorMessage)),
         extras: {
           correlation_id: receipt?.correlationId,
@@ -343,6 +472,7 @@ export function createFireworksRftEnvironment(input: {
         },
       };
     } finally {
+      releaseRollout?.();
       active -= 1;
     }
   }
@@ -480,8 +610,9 @@ function tracedFireworksStream(input: {
         ...effectiveCompletionParameters(input.completionParameters),
         model: fireworksInferenceModel(input.completionParameters.model),
         messages: turn.messages.map(openAiMessage),
-        tools: turn.tools,
-        tool_choice: "auto",
+        ...(turn.tools.length
+          ? { tools: turn.tools, tool_choice: "auto" }
+          : {}),
         stream: false,
         max_tokens: Math.min(
           input.recipe.rollout.maxOutputTokens,
@@ -558,11 +689,22 @@ function assertPolicyRequest(init: InitRequest, recipe: RftRecipe, job: Training
       );
     }
   }
-  if (recipe.reward.toolContractHash !== CROSS_SYSTEM_TOOL_CONTRACT_HASH) {
-    throw new Error("The RFT recipe tool contract is stale.");
+  if (recipe.reward.environmentId === "cross-system-operations") {
+    if (recipe.reward.toolContractHash !== CROSS_SYSTEM_TOOL_CONTRACT_HASH) {
+      throw new Error("The RFT recipe tool contract is stale.");
+    }
+    if (recipe.reward.environmentVersion !== CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION) {
+      throw new Error("The RFT recipe environment version is stale.");
+    }
+    return;
   }
-  if (recipe.reward.environmentVersion !== CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION) {
-    throw new Error("The RFT recipe environment version is stale.");
+  if (
+    recipe.reward.environmentId !== DATASET_EXACT_ANSWER_ENVIRONMENT_ID
+    || recipe.reward.environmentVersion
+      !== DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION
+    || recipe.reward.toolContractHash !== DATASET_NO_TOOLS_CONTRACT_HASH
+  ) {
+    throw new Error("The Dataset exact-answer RFT environment contract is stale.");
   }
 }
 
@@ -678,144 +820,6 @@ function effectiveCompletionParameters(
     ...safeCompletionParameters(value),
     reasoning_effort: "none",
   };
-}
-
-function rftTrainingReward(input: {
-  task: Parameters<typeof verifyCrossSystemTrajectory>[0]["task"];
-  trajectory: Parameters<typeof verifyCrossSystemTrajectory>[0]["trajectory"];
-  verifier: ReturnType<typeof verifyCrossSystemTrajectory>;
-}): RolloutTrajectoryReceipt["reward"] {
-  if (!input.verifier.rewardEligible) {
-    return {
-      eligible: false,
-      raw: null,
-      normalized: null,
-      components: {
-        semanticAnswer: 0,
-        responseContract: 0,
-        requiredToolEvidence: 0,
-      },
-    };
-  }
-  const final = [...input.trajectory.steps]
-    .reverse()
-    .find((step) => step.kind === "final");
-  const bareAnswer = final ? bareJsonObject(final.content) : null;
-  const candidateAnswer = input.verifier.parsedAnswer ?? bareAnswer;
-  const semanticProgress = candidateAnswer == null
-    ? 0
-    : answerProgress(candidateAnswer, input.task.expectedAnswer);
-  const requiredTools = new Set(input.task.queryPlan.map((item) => item.tool));
-  const successfulRequiredTools = new Set(
-    input.trajectory.steps.flatMap((step) =>
-      step.kind === "tool_result" &&
-      step.ok &&
-      requiredTools.has(step.name)
-        ? [step.name]
-        : []),
-  );
-  const requiredToolEvidence = requiredTools.size
-    ? roundReward((successfulRequiredTools.size / requiredTools.size) * 0.15)
-    : 0.15;
-  const responseContract = input.verifier.parsedAnswer != null
-    ? 0.25
-    : 0;
-  const semanticAnswer = roundReward(semanticProgress * 0.6);
-  const reward = roundReward(
-    Math.min(1, semanticAnswer + responseContract + requiredToolEvidence),
-  );
-  return {
-    eligible: true,
-    raw: reward,
-    normalized: reward,
-    components: {
-      semanticAnswer,
-      responseContract,
-      requiredToolEvidence,
-    },
-  };
-}
-
-function answerProgress(actual: unknown, expected: unknown): number {
-  if (crossSystemAnswersEqual(actual, expected)) return 1;
-  return structuredSimilarity(actual, expected);
-}
-
-function structuredSimilarity(actual: unknown, expected: unknown): number {
-  if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) return 0;
-    if (!expected.length) return actual.length ? 0 : 1;
-    const expectedCounts = valueCounts(expected);
-    const actualCounts = valueCounts(actual);
-    let overlap = 0;
-    for (const [value, count] of expectedCounts) {
-      overlap += Math.min(count, actualCounts.get(value) ?? 0);
-    }
-    if (!overlap) return 0;
-    const precision = overlap / Math.max(1, actual.length);
-    const recall = overlap / expected.length;
-    return (2 * precision * recall) / (precision + recall);
-  }
-  if (expected && typeof expected === "object") {
-    if (!actual || typeof actual !== "object" || Array.isArray(actual)) return 0;
-    const expectedRecord = expected as Record<string, unknown>;
-    const actualRecord = actual as Record<string, unknown>;
-    const expectedKeys = Object.keys(expectedRecord);
-    if (!expectedKeys.length) return Object.keys(actualRecord).length ? 0 : 1;
-    const fieldScore = expectedKeys.reduce(
-      (sum, key) => sum + structuredSimilarity(actualRecord[key], expectedRecord[key]),
-      0,
-    ) / expectedKeys.length;
-    const extraKeys = Object.keys(actualRecord).filter(
-      (key) => !Object.hasOwn(expectedRecord, key),
-    ).length;
-    return fieldScore * (expectedKeys.length / (expectedKeys.length + extraKeys));
-  }
-  if (typeof expected === "string" && typeof actual === "string") {
-    return actual.normalize("NFC").trim() === expected.normalize("NFC").trim() ? 1 : 0;
-  }
-  return Object.is(actual, expected) ? 1 : 0;
-}
-
-function valueCounts(values: unknown[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const value of values) {
-    const key = stableJson(value);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return JSON.stringify(value.map(stableValue));
-  return JSON.stringify(stableValue(value));
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, item]) => [key, stableValue(item)]),
-    );
-  }
-  return typeof value === "string" ? value.normalize("NFC").trim() : value;
-}
-
-function bareJsonObject(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value.trim()) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function roundReward(value: number): number {
-  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function openAiMessage(message: HostedChatMessage): Record<string, unknown> {

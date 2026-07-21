@@ -37,6 +37,11 @@ export type ComposerCreateImproveRuntime = {
   onRevise?: (input: CreateImproveReviewActionInput, revision: string) => Promise<void>;
 };
 
+export type ComposerCreateImproveActions = Omit<
+  ComposerCreateImproveRuntime,
+  "run"
+>;
+
 export function ComposerCreateImproveStrip({
   runtime,
 }: {
@@ -214,7 +219,7 @@ export function ComposerCreateImproveStrip({
               }
             >
               <Check size={13} />
-              <span>{busyAction === "apply-candidate" ? "Merging" : "Merge change"}</span>
+              <span>{busyAction === "apply-candidate" ? "Applying" : "Apply update"}</span>
             </button>
             <button
               type="button"
@@ -228,14 +233,16 @@ export function ComposerCreateImproveStrip({
               }
             >
               <X size={13} />
-              <span>{busyAction === "reject-candidate" ? "Rejecting" : "Reject"}</span>
+              <span>{busyAction === "reject-candidate" ? "Keeping current version" : "Keep current version"}</span>
             </button>
           </div>
         </div>
       ) : run.state === "pull_request_open" && candidate && pullRequest ? (
         <div className="composer-create-status-body">
           <p>
-            An external review is open. Merge or close it, then refresh its status.
+            {run.target.kind === "agent"
+              ? "An Agent update review is open. Finish or close it, then refresh its status."
+              : "An external review is open. Merge or close it, then refresh its status."}
           </p>
           <div className="composer-create-actions">
             <button
@@ -282,7 +289,7 @@ export function ComposerCreateImproveStrip({
               }
             >
               <Play size={13} />
-              <span>{busyAction === "resume" ? "Continuing" : "Continue candidate"}</span>
+              <span>{busyAction === "resume" ? "Continuing" : "Continue update"}</span>
             </button>
           ) : run.state === "blocked" && candidate?.git?.pullRequest?.state === "merged" ? (
             <button
@@ -305,12 +312,12 @@ export function ComposerCreateImproveStrip({
         <div className="composer-create-status-body composer-create-status-body-reveals">
           <p>
             {run.state === "released"
-              ? "The Agent change merged and the active Profile passed its post-merge Evals."
+              ? "The Agent update is saved and its checks passed."
               : run.state === "rejected"
-                ? "The Agent candidate was rejected."
+                ? "The Agent update was not applied."
                 : run.state === "published_hosted"
                   ? "Published to the hosted Profile."
-                  : "The workproduct is ready."}
+                  : "The Agent and its actions are ready to use."}
           </p>
           <div className="composer-create-hover-details">
             <CreateImprovePlanFacts run={run} />
@@ -318,7 +325,7 @@ export function ComposerCreateImproveStrip({
         </div>
       ) : (
         <div className="composer-create-status-body">
-          <p>{createImproveProgressText(run.state)}</p>
+          <p>{createImproveProgressText(run)}</p>
           <CreateImprovePlanFacts run={run} />
           {run.executionPolicy.pauseAllowed && runtime.onPause ? (
             <button
@@ -348,10 +355,11 @@ function activeCreateImproveQuestion(run: CreateImproveRun): CreateImproveQuesti
 
 function CreateImprovePlanFacts({ run }: { run: CreateImproveRun }) {
   const plan = run.plan;
-  const source = run.sourceRefs[0] ?? plan?.sourcePlan[0]?.path ?? null;
+  const isAgent = run.target.kind === "agent";
+  const source = isAgent ? null : run.sourceRefs[0] ?? plan?.sourcePlan[0]?.path ?? null;
   const checks = run.checkRefs.length || plan?.checks.length || 0;
-  const requirements = plan?.requirements.length ?? 0;
-  const refs = [...run.sourceRefs, ...run.checkRefs].slice(0, 4);
+  const requirements = isAgent ? 0 : plan?.requirements.length ?? 0;
+  const refs = isAgent ? [] : [...run.sourceRefs, ...run.checkRefs].slice(0, 4);
   const actionShape = createImproveActionShapeFromMetadata(plan?.metadata);
   if (!source && checks === 0 && requirements === 0 && refs.length === 0 && !actionShape) {
     return null;
@@ -361,7 +369,7 @@ function CreateImprovePlanFacts({ run }: { run: CreateImproveRun }) {
       <div className="composer-create-facts">
         {actionShape ? <span title={actionShape.detail}>{actionShape.label}</span> : null}
         {source ? <span title={source}>{source}</span> : null}
-        {checks ? <span>{run.checkRefs.length ? `${run.checkRefs.length} check refs` : `${checks} checks`}</span> : null}
+        {checks ? <span>{isAgent ? `${checks} checks` : run.checkRefs.length ? `${run.checkRefs.length} check refs` : `${checks} checks`}</span> : null}
         {requirements ? <span>{requirements} setup rows</span> : null}
       </div>
       {refs.length ? (
@@ -374,17 +382,18 @@ function CreateImprovePlanFacts({ run }: { run: CreateImproveRun }) {
 }
 
 function createImproveTitle(run: CreateImproveRun): string {
+  const isAgent = run.target.kind === "agent";
   if (run.state === "awaiting_questions") return "Question";
   if (run.state === "awaiting_plan_approval") return "Plan";
-  if (run.state === "applying_source") return "Applying source";
+  if (run.state === "applying_source") return isAgent ? "Saving Agent" : "Applying source";
   if (run.state === "running_checks") return "Running checks";
-  if (run.state === "evaluating") return "Evaluating";
-  if (run.state === "awaiting_promotion") return "Candidate ready";
+  if (run.state === "evaluating") return isAgent ? "Checking Agent" : "Evaluating";
+  if (run.state === "awaiting_promotion") return isAgent ? "Update ready" : "Candidate ready";
   if (run.state === "opening_pull_request") return "Opening review";
   if (run.state === "pull_request_open") return "Review open";
-  if (run.state === "reconciling_release") return "Merging change";
-  if (run.state === "released") return "Released";
-  if (run.state === "rejected") return "Rejected";
+  if (run.state === "reconciling_release") return isAgent ? "Applying update" : "Merging change";
+  if (run.state === "released") return isAgent ? "Agent updated" : "Released";
+  if (run.state === "rejected") return isAgent ? "Current Agent kept" : "Rejected";
   if (run.state === "paused") return "Paused";
   if (run.state === "ready" || run.state === "ready_local") return "Ready";
   if (run.state === "published_hosted") return "Published";
@@ -394,11 +403,13 @@ function createImproveTitle(run: CreateImproveRun): string {
   return run.operation === "improve" ? "Improve" : "Create";
 }
 
-function createImproveProgressText(state: CreateImproveRun["state"]): string {
-  if (state === "applying_source") return "Applying the approved source changes.";
-  if (state === "running_checks") return "Running checks against the candidate.";
-  if (state === "evaluating") return "Evaluating the candidate against its Evals.";
-  if (state === "opening_pull_request") return "Opening the candidate review.";
+function createImproveProgressText(run: CreateImproveRun): string {
+  const state = run.state;
+  const isAgent = run.target.kind === "agent";
+  if (state === "applying_source") return isAgent ? "Saving the approved Agent plan." : "Applying the approved source changes.";
+  if (state === "running_checks") return isAgent ? "Running checks against the Agent." : "Running checks against the candidate.";
+  if (state === "evaluating") return isAgent ? "Checking the Agent's behavior." : "Evaluating the candidate against its Evals.";
+  if (state === "opening_pull_request") return isAgent ? "Preparing the Agent update review." : "Opening the candidate review.";
   if (state === "reconciling_release") return "Applying the change and verifying the active Profile.";
   if (state === "pushing_hosted") return "Pushing the Profile source.";
   if (state === "running_hosted_checks") return "Running hosted checks.";
@@ -441,5 +452,7 @@ function candidateComparisonText(run: CreateImproveRun, candidateId: string): st
   const result = (receipt: typeof active) => receipt?.summaryCounts
     ? `${receipt.summaryCounts.passed}/${receipt.summaryCounts.total}`
     : receipt?.status ?? "not run";
-  return `Base Evals: ${result(active)} passed. Candidate Evals: ${result(candidate)} passed.`;
+  return run.target.kind === "agent"
+    ? `Current Agent: ${result(active)} checks passed. Updated Agent: ${result(candidate)} checks passed.`
+    : `Base Evals: ${result(active)} passed. Candidate Evals: ${result(candidate)} passed.`;
 }

@@ -1,0 +1,65 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:09.252
+A trustworthy reward still has to become a learning signal. PPO and GRPO differ mainly in how they decide whether an outcome was better or worse than expected.
+
+2
+00:00:10.486 --> 00:00:24.899
+PPO means Proximal Policy Optimization. For the successful inspect, patch, and test trajectory, observed return is point eight. A learned critic expected point five. Their difference, positive point three, is the advantage.
+
+3
+00:00:26.133 --> 00:00:31.181
+PPO combines that advantage with a clipped probability ratio and updates the policy.
+
+4
+00:00:32.416 --> 00:00:47.240
+GRPO means Group Relative Policy Optimization. It keeps rollouts, rewards, probability ratios, and clipping, but removes the critic. Instead, it samples several patches for the same cancellation bug and compares their verifier scores.
+
+5
+00:00:48.474 --> 00:00:57.387
+Our six sibling patches produce rewards one, zero, zero, one, one, zero. The mean is one half and the standard deviation is one half.
+
+6
+00:00:58.622 --> 00:01:04.483
+Normalizing gives every passing patch advantage positive one and every failing patch negative one.
+
+7
+00:01:05.717 --> 00:01:15.082
+That comparison is useful but coarse. Raise Timeout Error and return None both failed, so binary GRPO treats them alike even if one was closer.
+
+8
+00:01:16.316 --> 00:01:20.541
+The group says which siblings did better; it does not explain why.
+
+9
+00:01:21.776 --> 00:01:31.962
+The clipping graph controls how much one sampled action can influence a single update. If its probability moves from point one zero to point one three, the ratio is one point three.
+
+10
+00:01:33.197 --> 00:01:43.013
+With a cap at one point two, additional positive credit stops growing. Clipping limits a local incentive; it does not guarantee that the whole policy stayed close.
+
+11
+00:01:44.247 --> 00:01:47.478
+A group teaches only when it contains contrast.
+
+12
+00:01:48.712 --> 00:02:01.169
+If one patch succeeds with probability p, a group of size G is mixed with probability one minus p to the G minus one minus p, all to the G. That subtracts all-success and all-failure groups.
+
+13
+00:02:02.403 --> 00:02:16.906
+Near zero success, almost every group fails. Near one, almost every group passes. Either case produces little relative signal. Larger groups widen the useful middle but require more patch generation and test execution.
+
+14
+00:02:18.140 --> 00:02:28.548
+This is why prompts need to sit near the learning frontier: difficult enough to fail, possible enough to solve. If every cancellation patch receives the same reward, normalized group advantage is zero.
+
+15
+00:02:29.782 --> 00:02:41.827
+Both PPO and GRPO need trajectories, rewards, behavior log-probabilities, clipped ratios, and gradients. PPO learns expected value with a critic. GRPO estimates a baseline from sibling patches.
+
+16
+00:02:43.061 --> 00:02:48.200
+The cancellation environment stays the same; only the baseline estimator changes.

@@ -71,6 +71,8 @@ export type SandboxProject = {
 
 export type SandboxActionCatalogEntry = {
   id: string;
+  agentId?: string | null;
+  sourceActionId?: string | null;
   name?: string | null;
   label?: string | null;
   description?: string | null;

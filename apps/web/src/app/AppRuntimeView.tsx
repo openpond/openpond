@@ -1,5 +1,5 @@
-import { type CSSProperties } from "react";
-import type { TerminalScope } from "@openpond/contracts";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import type { ConnectedAppIntegrationSkill, TerminalScope } from "@openpond/contracts";
 import { AppSettingsController, AppShellController } from "../components/app-shell/AppControllers";
 import { isDesktopShell, isMacPlatform } from "../components/app-shell/WindowControls";
 import { AppSplash } from "../components/splash/AppSplash";
@@ -9,6 +9,15 @@ import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
 import { AppToastProvider } from "./AppToastContext";
+import {
+  POST_TRAINING_LESSONS,
+  type PostTrainingCourseState,
+} from "../components/get-started/post-training-lessons";
+import {
+  getPostTrainingProgress,
+  startingPostTrainingLessonIndex,
+} from "../components/get-started/post-training-progress";
+import type { MakeAgentTutorialState } from "../components/get-started/make-agent-tutorial";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -67,11 +76,124 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     toggleProjectPinned, toggleSessionPinned, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
     openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
-    openLabSuggestions, closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
-    showRightPanelDiffTab, submitRightChatPrompt, updateRightChatModel, updateRightChatPrompt, updateRightChatProvider,
+    openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
+    closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
+    showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
+    updateRightChatModel, updateRightChatPrompt, updateRightChatProvider, updateRightChatScrollState,
     openProfileSettings, diagnosticEvents, toggleRightSidebar,
   } = secondary;
-if (!startup.ready) {
+  const [nativeSkillSidebar, setNativeSkillSidebar] = useState<ConnectedAppIntegrationSkill | null>(null);
+  const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<ConnectedAppIntegrationSkill | null>(null);
+  const [postTrainingCourse, setPostTrainingCourse] = useState<PostTrainingCourseState | null>(null);
+  const [makeAgentTutorial, setMakeAgentTutorial] = useState<MakeAgentTutorialState | null>(null);
+  const preCourseSidebarOpenRef = useRef<boolean | null>(null);
+  const openPostTrainingCourse = useCallback(() => {
+    if (preCourseSidebarOpenRef.current === null) {
+      preCourseSidebarOpenRef.current = diffPanelOpen;
+    }
+    setPostTrainingCourse({
+      autoplay: true,
+      lessonIndex: startingPostTrainingLessonIndex(
+        getPostTrainingProgress(),
+        POST_TRAINING_LESSONS.map((lesson) => lesson.id),
+      ),
+      panelView: "lessons",
+      playRequestId: 0,
+      scriptLessonIndex: null,
+    });
+    setMakeAgentTutorial(null);
+    setDiffPanelOpen(true);
+  }, [diffPanelOpen, setDiffPanelOpen]);
+  const closePostTrainingCourse = useCallback(() => {
+    const previousSidebarOpen = preCourseSidebarOpenRef.current;
+    preCourseSidebarOpenRef.current = null;
+    setPostTrainingCourse(null);
+    if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
+  }, [setDiffPanelOpen]);
+  const selectPostTrainingLesson = useCallback((lessonIndex: number) => {
+    setPostTrainingCourse((current) => current
+      ? {
+          ...current,
+          lessonIndex,
+          playRequestId: current.playRequestId + 1,
+        }
+      : current);
+  }, []);
+  const setPostTrainingAutoplay = useCallback((autoplay: boolean) => {
+    setPostTrainingCourse((current) => current ? { ...current, autoplay } : current);
+  }, []);
+  const openPostTrainingScript = useCallback((lessonIndex: number) => {
+    setPostTrainingCourse((current) => current
+      ? { ...current, panelView: "script", scriptLessonIndex: lessonIndex }
+      : current);
+  }, []);
+  const showPostTrainingLessons = useCallback(() => {
+    setPostTrainingCourse((current) => current ? { ...current, panelView: "lessons" } : current);
+  }, []);
+  const openMakeAgentTutorial = useCallback(() => {
+    if (preCourseSidebarOpenRef.current === null) {
+      preCourseSidebarOpenRef.current = diffPanelOpen;
+    }
+    setPostTrainingCourse(null);
+    setMakeAgentTutorial({ panelView: "steps" });
+    setDiffPanelOpen(true);
+  }, [diffPanelOpen, setDiffPanelOpen]);
+  const closeMakeAgentTutorial = useCallback(() => {
+    const previousSidebarOpen = preCourseSidebarOpenRef.current;
+    preCourseSidebarOpenRef.current = null;
+    setMakeAgentTutorial(null);
+    if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
+  }, [setDiffPanelOpen]);
+  const showMakeAgentTutorialSteps = useCallback(() => {
+    setMakeAgentTutorial((current) => current ? { ...current, panelView: "steps" } : current);
+  }, []);
+  const showMakeAgentTutorialScript = useCallback(() => {
+    setMakeAgentTutorial((current) => current ? { ...current, panelView: "script" } : current);
+  }, []);
+  useEffect(() => {
+    if (view === "get-started") return;
+    if (postTrainingCourse) closePostTrainingCourse();
+    else if (makeAgentTutorial) closeMakeAgentTutorial();
+  }, [closeMakeAgentTutorial, closePostTrainingCourse, makeAgentTutorial, postTrainingCourse, view]);
+  const openNativeSkillFromSettings = useCallback((skill: ConnectedAppIntegrationSkill) => {
+    setPendingNativeSkillSidebar(skill);
+    beginNewChat(null);
+    setSidebarOpen(true);
+  }, [beginNewChat, setSidebarOpen]);
+  useEffect(() => {
+    if (
+      !pendingNativeSkillSidebar ||
+      view !== "chat" ||
+      selectedSessionId ||
+      selectedProjectId ||
+      selectedAppId
+    ) return;
+    setNativeSkillSidebar(pendingNativeSkillSidebar);
+    setPendingNativeSkillSidebar(null);
+    setRightPanelMode("home");
+    setDiffPanelExpanded(false);
+    setDiffPanelOpen(true);
+  }, [
+    pendingNativeSkillSidebar,
+    selectedAppId,
+    selectedProjectId,
+    selectedSessionId,
+    setDiffPanelExpanded,
+    setDiffPanelOpen,
+    setRightPanelMode,
+    view,
+  ]);
+  useEffect(() => {
+    if (!nativeSkillSidebar) return;
+    if (view === "chat" && diffPanelOpen && rightPanelMode === "home") return;
+    setNativeSkillSidebar(null);
+  }, [diffPanelOpen, nativeSkillSidebar, rightPanelMode, view]);
+  const closeNativeSkillSidebar = useCallback(() => {
+    setNativeSkillSidebar(null);
+    setDiffPanelExpanded(false);
+    setDiffPanelOpen(false);
+  }, [setDiffPanelExpanded, setDiffPanelOpen]);
+  if (!startup.ready) {
     return <AppSplash startup={startup} />;
   }
 
@@ -88,6 +210,7 @@ if (!startup.ready) {
             onError: setError,
             onToast: showToast,
             onOpenSourceSession: openSessionInChat,
+            onOpenNativeSkill: openNativeSkillFromSettings,
             teamChatCurrentUserId: teamChat.currentUserId,
             teamChatEnabled: teamChatTeamId !== null,
             teamChatNotificationMode: teamChat.notificationMode,
@@ -125,6 +248,7 @@ if (!startup.ready) {
     view === "chat" ||
     view === "cloud" ||
     view === "labs" ||
+    (view === "get-started" && Boolean(postTrainingCourse || makeAgentTutorial)) ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -294,9 +418,15 @@ if (!startup.ready) {
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
-        rightSidebarOpen: diffPanelOpen,
+        rightSidebarOpen: view === "get-started"
+          ? Boolean(postTrainingCourse || makeAgentTutorial) && diffPanelOpen
+          : diffPanelOpen,
         onToggleDiffPanel: toggleRightSidebar,
-        onToggleRightSidebar: view === "team" && Boolean(teamAiThreadId) ? toggleTeamAiSidebar : toggleRightSidebar,
+        onToggleRightSidebar: view === "get-started"
+          ? () => setDiffPanelOpen((open) => !open)
+          : view === "team" && Boolean(teamAiThreadId)
+            ? toggleTeamAiSidebar
+            : toggleRightSidebar,
         onOpenSearch: () => {
           setSectionMenuOpen(null);
           setSearchOpen(true);
@@ -397,6 +527,9 @@ if (!startup.ready) {
         labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
         labCloseDetailKind: labDetailNavigation.closeDetailKind,
         labSuggestionsRequestId,
+        sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,
+        onSideChatTrainingLaunchHandled: (id) => setRightChatTrainingLaunchRequest((current) =>
+          current?.id === id ? null : current),
         steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
         mentionApps: chatMentionApps,
@@ -432,6 +565,9 @@ if (!startup.ready) {
         rightPanelMode,
         rightPanelTabRequest,
         rightChatPanels: rightChatPanelViews,
+        nativeSkillSidebar,
+        makeAgentTutorial,
+        postTrainingCourse,
         workspaceDiffPanelViewState,
         browserConversationId,
         terminalScope: viewTerminalScope,
@@ -471,6 +607,16 @@ if (!startup.ready) {
         chatHistoryLoading: selectedChatHistoryLoading,
         onDiffPanelResizeStart: startDiffPanelResize,
         onToggleDiffPanelExpanded: () => setDiffPanelExpanded((expanded) => !expanded),
+        onOpenPostTrainingCourse: openPostTrainingCourse,
+        onClosePostTrainingCourse: closePostTrainingCourse,
+        onOpenPostTrainingScript: openPostTrainingScript,
+        onSelectPostTrainingLesson: selectPostTrainingLesson,
+        onSetPostTrainingAutoplay: setPostTrainingAutoplay,
+        onShowPostTrainingLessons: showPostTrainingLessons,
+        onOpenMakeAgentTutorial: openMakeAgentTutorial,
+        onCloseMakeAgentTutorial: closeMakeAgentTutorial,
+        onShowMakeAgentTutorialSteps: showMakeAgentTutorialSteps,
+        onShowMakeAgentTutorialScript: showMakeAgentTutorialScript,
         onShowDiffPanel: showChangesPanel,
         onShowBrowserPanel: showBrowserPanel,
         onShowFilesPanel: () => showRightPanelDiffTab("files"),
@@ -481,16 +627,21 @@ if (!startup.ready) {
         },
         onShowRightChatPanel: showRightChatPanel,
         onAddRightChat: () => openRightChatPanel(null),
-        onOpenRightChatForSession: (sessionId) => {
-          const session = sidebarSessions.find((candidate) => candidate.id === sessionId) ?? null;
+        onOpenRightChatForSession: (sessionId, providedSession) => {
+          const session = providedSession
+            ?? sidebarSessions.find((candidate) => candidate.id === sessionId)
+            ?? null;
           if (session) openRightChatPanel(session, { preserveView: true });
         },
         onOpenLabSuggestions: openLabSuggestions,
         onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
         onTerminalTabsChange: setTerminalTabs,
         onCloseRightChatPanel: closeRightChatPanel,
+        onCloseNativeSkillSidebar: closeNativeSkillSidebar,
+        onActivateRightChatPanel: activateRightChatPanel,
         onRightChatModelChange: updateRightChatModel,
         onRightChatPromptChange: updateRightChatPrompt,
+        onRightChatScrollStateChange: updateRightChatScrollState,
         onRightChatProviderChange: updateRightChatProvider,
         onSubmitRightChat: submitRightChatPrompt,
         onStopRightChat: (sessionId) => stopTurn(sessionId),
@@ -517,6 +668,10 @@ if (!startup.ready) {
         },
         onOpenComputeSettings: () => {
           setSettingsSection("compute");
+          setView("settings");
+        },
+        onOpenDatasetStorageSettings: () => {
+          setSettingsSection("dataset-storage");
           setView("settings");
         },
         changeDraftProvider,

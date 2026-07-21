@@ -1,0 +1,143 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, test } from "vitest";
+
+const root = path.resolve(import.meta.dirname, "..");
+const manifest = JSON.parse(readFileSync(
+  path.join(root, "apps/web/src/components/get-started/how-to-make-an-agent.frames.json"),
+  "utf8",
+)) as {
+  frames: Array<{
+    id: string;
+    chapter: string;
+    caption: string;
+    file: string;
+    narration: string;
+    focus: { x: number; y: number; width: number; height: number; zoom: number };
+  }>;
+};
+const builder = readFileSync(
+  path.join(root, "scripts/tutorials/build-how-to-make-an-agent.mjs"),
+  "utf8",
+);
+const postTrainingSeriesBuilder = readFileSync(
+  path.join(root, "scripts/tutorials/build-post-training-series.mjs"),
+  "utf8",
+);
+const publicMediaVerifier = readFileSync(
+  path.join(root, "scripts/tutorials/verify-public-media.mjs"),
+  "utf8",
+);
+const publicVideoPreparer = readFileSync(
+  path.join(root, "scripts/tutorials/prepare-public-videos.mjs"),
+  "utf8",
+);
+const publicMediaPuller = readFileSync(
+  path.join(root, "scripts/tutorials/pull-public-videos.mjs"),
+  "utf8",
+);
+const webViteConfig = readFileSync(
+  path.join(root, "apps/web/vite.config.ts"),
+  "utf8",
+);
+
+describe("How to make an agent media contract", () => {
+  test("contains every acceptance frame exactly once in chapter order", () => {
+    const expected = [
+      ...Array.from({ length: 19 }, (_, index) => `C${String(index + 1).padStart(2, "0")}`)
+        .filter((id) => id !== "C03" && id !== "C05"),
+      ...Array.from({ length: 8 }, (_, index) => `I${String(index + 1).padStart(2, "0")}`),
+    ];
+
+    expect(manifest.frames.map((frame) => frame.id)).toEqual(expected);
+    expect(new Set(manifest.frames.map((frame) => frame.file)).size).toBe(expected.length);
+    expect(manifest.frames.every((frame) => frame.caption.length > 20)).toBe(true);
+    expect(manifest.frames.every((frame) => frame.narration === frame.caption)).toBe(true);
+    expect(manifest.frames.every((frame) => frame.narration.split(/(?<=[.!?])\s+/).length <= 2)).toBe(true);
+    expect(manifest.frames.every((frame) =>
+      frame.focus.x >= 0
+      && frame.focus.y >= 0
+      && frame.focus.width > 0
+      && frame.focus.height > 0
+      && frame.focus.x + frame.focus.width <= 1
+      && frame.focus.y + frame.focus.height <= 1
+      && frame.focus.zoom >= 1
+      && frame.focus.zoom <= 2
+    )).toBe(true);
+    expect(manifest.frames.filter((frame) => frame.chapter === "create")).toHaveLength(10);
+    expect(manifest.frames.filter((frame) => frame.chapter === "use")).toHaveLength(7);
+    expect(manifest.frames.filter((frame) => frame.chapter === "improve")).toHaveLength(8);
+  });
+
+  test("refuses failed reports and encodes the checked playback format", () => {
+    expect(builder).toContain("Refusing to build from a failed Account Health scenario report");
+    expect(builder).toContain('"-c:v", "libx264"');
+    expect(builder).toContain('"-pix_fmt", "yuv420p"');
+    expect(builder).toContain('"-movflags", "+faststart"');
+    expect(builder).toContain('"-c:a", "aac"');
+    expect(builder).toContain("prepareTutorialNarration");
+    expect(builder).toContain("zoompan=z=");
+    expect(builder).toContain("Expected one narrated audio stream");
+    expect(builder).not.toContain("`${frame.id}  ·  ${frame.label}`");
+    expect(builder).not.toContain("`${cue.id} · ${cue.caption}`");
+    expect(builder).toContain("25 * 1024 * 1024");
+    expect(builder).toContain("tutorial-contact-sheet.png");
+    expect(builder).toContain("visualQaStatus");
+    expect(builder).toContain("manifest.frames.length > 0");
+    expect(builder).toContain("screenshotByName.size >= manifest.frames.length");
+  });
+});
+
+describe("Post-training learning series media contract", () => {
+  test("packages every core chapter and the narrated appendix as fast-start, captioned lessons", () => {
+    expect(postTrainingSeriesBuilder.match(/chapterId: "Chapter\d\d\w+"/g)).toHaveLength(9);
+    expect(postTrainingSeriesBuilder).toContain("PostTrainingAdvancedAppendixNarrated.mp4");
+    expect(postTrainingSeriesBuilder).toContain('slug: "10-technical-appendix"');
+    expect(postTrainingSeriesBuilder).toContain("appendix_manifest.json");
+    expect(postTrainingSeriesBuilder).toContain('"-movflags"');
+    expect(postTrainingSeriesBuilder).toContain('"+faststart"');
+    expect(postTrainingSeriesBuilder).toContain("AI-generated narration");
+    expect(postTrainingSeriesBuilder).toContain("createCaptions(chapters, courseCaptions");
+    expect(postTrainingSeriesBuilder).toContain("createLessonScript(lesson, courseScript)");
+    expect(postTrainingSeriesBuilder).toContain("15 * 1024 * 1024");
+  });
+
+  test("ships a standalone LLM-ready Markdown script for every lesson", () => {
+    for (let lessonNumber = 1; lessonNumber <= 10; lessonNumber += 1) {
+      const fileName = `script_${String(lessonNumber).padStart(2, "0")}.md`;
+      const script = readFileSync(
+        path.join(root, "apps/web/public/courses/post-training/scripts", fileName),
+        "utf8",
+      );
+      expect(script).toContain("## Learning objective");
+      expect(script).toContain("## Using this with an LLM");
+      expect(script).toContain("## Visual context");
+      expect(script).toContain("## Narration transcript");
+      expect(script.length).toBeGreaterThan(500);
+    }
+    const appendixScript = readFileSync(
+      path.join(root, "apps/web/public/courses/post-training/scripts/script_10.md"),
+      "utf8",
+    );
+    expect(appendixScript).toContain("### GRPO details");
+    expect(appendixScript).toContain("### Distillation systems");
+    expect(appendixScript).toContain("### Paper details and SRPO");
+  });
+
+  test("publishes only manifest-tracked MP4s and gates production playback", () => {
+    expect(publicVideoPreparer).toContain('status: "draft"');
+    expect(publicVideoPreparer).toContain('id: "post-training-from-first-principles"');
+    expect(publicMediaVerifier).toContain('Range: "bytes=0-0"');
+    expect(publicMediaVerifier).toContain('"access-control-allow-origin"');
+    expect(publicMediaVerifier).toContain('includes("immutable")');
+    expect(publicMediaVerifier).toContain("content-range");
+    expect(publicMediaVerifier).toContain("public-video-manifest.json");
+    expect(publicMediaVerifier).toContain("media/videos/");
+    expect(publicMediaVerifier).not.toContain("-poster.webp");
+    expect(publicMediaVerifier).not.toContain(".vtt\"");
+    expect(publicMediaPuller).toContain("public-video-manifest.json");
+    expect(publicMediaPuller).toContain("Downloaded video failed its manifest checksum");
+    expect(webViteConfig).toContain("excludeLocalVideosFromProduction");
+    expect(webViteConfig).toContain("rmSync(resolve(outputRoot, video.localPath)");
+  });
+});

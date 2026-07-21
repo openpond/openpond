@@ -91,6 +91,7 @@ export function isChannelId(value: unknown): value is AgentChatInput["channel"] 
 
 export function normalizeInput(input: Record<string, unknown> | undefined): AgentChatInput {
   return {
+    ...(input ?? {}),
     prompt: typeof input?.prompt === "string" ? input.prompt : "",
     channel: isChannelId(input?.channel) ? input.channel : "openpond_chat",
     conversationId: typeof input?.conversationId === "string" ? input.conversationId : null,

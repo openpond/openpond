@@ -11,11 +11,22 @@ describe("UsageSettingsContent", () => {
   test("renders summary metrics, grouped tables, and recent requests", () => {
     const html = renderUsage();
 
-    expect(html).toContain("Usage");
+    expect(html).toContain("Detailed usage");
     expect(html).toContain("All calls");
-    expect(html).toContain("Total tokens");
+    expect(html).toContain("Lifetime tokens");
     expect(html).toContain("1,500");
-    expect(html).toContain("First token p95");
+    expect(html).toContain("Longest request");
+    expect(html).toContain("Current streak");
+    expect(html).toContain("Token activity");
+    expect(html).toContain("Activity insights");
+    expect(html).toContain("Model activity");
+    expect(html).toContain("Model colors");
+    expect(html).toContain("data-model-count=\"2\"");
+    expect(html).toContain("--usage-cell-gradient:");
+    expect(html).toContain("stored activity on Jul 4, 2026");
+    expect(html).not.toContain("--usage-model-color-soft");
+    expect(html).not.toContain("models recorded");
+    expect(html).not.toContain("Refresh activity");
     expect(html).toContain("Daily tokens");
     expect(html).toContain("Models");
     expect(html).toContain("anthropic/claude-sonnet-4");
@@ -57,6 +68,16 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("aria-label=\"Open request source\"");
     expect(html).not.toContain("OPEN");
   });
+
+  test("shows all recorded models together without a model picker", () => {
+    const html = renderUsage();
+
+    expect(html).toContain("anthropic/claude-sonnet-4");
+    expect(html).toContain("gpt-4.1");
+    expect(html).toContain("aria-label=\"Model colors\"");
+    expect(html).not.toContain("Only model in this activity");
+    expect(html).not.toContain("<option value=\"all\">All models</option>");
+  });
 });
 
 function renderUsage(input: {
@@ -70,13 +91,12 @@ function renderUsage(input: {
       recordsResponse: input.recordsResponse ?? usageRecords(),
       loading: false,
       error: null,
-      range: "30d",
+      range: "all",
       visibility: "all",
       status: "all",
       onRangeChange: () => undefined,
       onVisibilityChange: () => undefined,
       onStatusChange: () => undefined,
-      onRefresh: () => undefined,
       onOpenSourceSession: input.onOpenSourceSession,
     }),
   );
@@ -86,7 +106,7 @@ function usageSummary(): UsageSummaryResponse {
   return {
     generatedAt: NOW,
     range: { from: "2026-06-05T00:00:00.000Z", to: NOW, bucket: "day" },
-    filters: { visibility: "all", status: "all" },
+    filters: { visibility: "all", status: "all", provider: null, model: null },
     totals: {
       requests: 3,
       completedRequests: 2,
@@ -101,6 +121,11 @@ function usageSummary(): UsageSummaryResponse {
       p95FirstTokenMs: 120,
       failureRate: 0.3333,
       activeModelCount: 2,
+      peakDailyTokens: 1500,
+      longestRequestMs: 3000,
+      activeDays: 1,
+      currentStreakDays: 1,
+      longestStreakDays: 1,
     },
     daily: [
       {
@@ -140,6 +165,23 @@ function usageSummary(): UsageSummaryResponse {
         failureRate: 0,
         firstSeenAt: "2026-07-04T10:00:00.000Z",
         lastSeenAt: "2026-07-04T13:00:00.000Z",
+      },
+      {
+        provider: "openai",
+        model: "gpt-4.1",
+        route: "local_byok",
+        requests: 1,
+        promptTokens: 220,
+        completionTokens: 80,
+        totalTokens: 300,
+        averageLatencyMs: 3000,
+        p95LatencyMs: 3000,
+        averageFirstTokenMs: 100,
+        p95FirstTokenMs: 120,
+        failures: 1,
+        failureRate: 1,
+        firstSeenAt: "2026-07-04T12:00:00.000Z",
+        lastSeenAt: "2026-07-04T12:00:00.000Z",
       },
     ],
     threads: [
@@ -242,7 +284,14 @@ function usageRecords(): UsageRecordsResponse {
   return {
     generatedAt: NOW,
     range: { from: "2026-06-05T00:00:00.000Z", to: NOW, bucket: "day" },
-    filters: { visibility: "all", status: "all", sessionId: null, turnId: null },
+    filters: {
+      visibility: "all",
+      status: "all",
+      provider: null,
+      model: null,
+      sessionId: null,
+      turnId: null,
+    },
     limit: 100,
     hasMore: false,
     records: [usageRecord()],
@@ -266,6 +315,11 @@ function emptySummary(): UsageSummaryResponse {
       p95FirstTokenMs: null,
       failureRate: 0,
       activeModelCount: 0,
+      peakDailyTokens: 0,
+      longestRequestMs: null,
+      activeDays: 0,
+      currentStreakDays: 0,
+      longestStreakDays: 0,
     },
     daily: [],
     models: [],

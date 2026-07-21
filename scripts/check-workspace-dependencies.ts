@@ -47,7 +47,8 @@ async function main(): Promise<void> {
     ]);
     const files = (await Promise.all(sourceRoots.map(walkSourceFiles))).flat();
     for (const file of files) {
-      const production = file.includes(`${path.sep}src${path.sep}`) && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
+      const production = file.startsWith(`${path.join(packageDir, "src")}${path.sep}`)
+        && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
       const source = await fs.readFile(file, "utf8");
       for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
         const specifier = imported.fileName;

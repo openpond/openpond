@@ -17,6 +17,8 @@ export function parseDesktopHarnessArgs(argv: string[], env: NodeJS.ProcessEnv =
   let jsonPath: string | null = null;
   let timeoutMs: number | undefined;
   let keepHome = false;
+  let skipBuild = false;
+  let frozenRenderer = false;
   let appPath: string | null = null;
   let serverUrl: string | null = env.OPENPOND_APP_CURRENT_SERVER_URL ?? null;
   let token: string | null = env.OPENPOND_APP_CURRENT_SERVER_TOKEN ?? null;
@@ -43,6 +45,14 @@ export function parseDesktopHarnessArgs(argv: string[], env: NodeJS.ProcessEnv =
     }
     if (arg === "--keep-home") {
       keepHome = true;
+      continue;
+    }
+    if (arg === "--skip-build") {
+      skipBuild = true;
+      continue;
+    }
+    if (arg === "--frozen-renderer") {
+      frozenRenderer = true;
       continue;
     }
     if (arg === "--grep") {
@@ -130,6 +140,8 @@ export function parseDesktopHarnessArgs(argv: string[], env: NodeJS.ProcessEnv =
     jsonPath,
     timeoutMs,
     keepHome,
+    skipBuild,
+    frozenRenderer,
     appPath,
     serverUrl,
     token,
@@ -157,6 +169,8 @@ export function desktopHarnessUsage(): string {
     "  --grep <pattern>        Run scenarios whose names match the regex.",
     "  --timeout-ms <ms>       Scenario timeout.",
     "  --keep-home             Preserve temporary app home after isolated runs.",
+    "  --skip-build            Reuse existing server and desktop bundles for an isolated run.",
+    "  --frozen-renderer       Build the web UI once and serve it without hot reload.",
   ].join("\n");
 }
 

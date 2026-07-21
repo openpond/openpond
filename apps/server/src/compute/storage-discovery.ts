@@ -4,7 +4,10 @@ import path from "node:path";
 import type { ComputeStorageRoot } from "@openpond/contracts";
 import type { CommandProbe } from "./command-probe.js";
 
-export type StorageCandidate = Pick<ComputeStorageRoot, "kind" | "label" | "modelStorePath" | "path">;
+export type StorageCandidate = Pick<
+  ComputeStorageRoot,
+  "datasetStorePath" | "kind" | "label" | "modelStorePath" | "path"
+>;
 
 const NETWORK_FILE_SYSTEMS = new Set([
   "9p",
@@ -98,6 +101,9 @@ export function parseLinuxMountInfo(value: string, storeDir: string): StorageCan
       kind,
       label: driveLabel(mountPath, source, kind),
       modelStorePath: mountPath === "/" ? path.join(storeDir, "models") : mountPath,
+      datasetStorePath: mountPath === "/"
+        ? path.join(storeDir, "datasets")
+        : path.join(mountPath, "OpenPond", "datasets"),
       path: mountPath,
     });
   }
@@ -118,6 +124,9 @@ export function parseMacMountOutput(value: string, storeDir: string): StorageCan
       kind,
       label: driveLabel(mountPath, source, kind),
       modelStorePath: mountPath === "/" ? path.join(storeDir, "models") : mountPath,
+      datasetStorePath: mountPath === "/"
+        ? path.join(storeDir, "datasets")
+        : path.join(mountPath, "OpenPond", "datasets"),
       path: mountPath,
     });
   }
@@ -143,6 +152,9 @@ export function parseWindowsLogicalDisks(value: string, storeDir: string): Stora
       kind,
       label: volumeName || (root.toLowerCase() === storeRoot ? "System disk" : deviceId.toUpperCase()),
       modelStorePath: root.toLowerCase() === storeRoot ? path.win32.join(storeDir, "models") : root,
+      datasetStorePath: root.toLowerCase() === storeRoot
+        ? path.win32.join(storeDir, "datasets")
+        : path.win32.join(root, "OpenPond", "datasets"),
       path: root,
     } satisfies StorageCandidate];
   });
@@ -167,6 +179,7 @@ async function discoverGvfsCandidates(): Promise<StorageCandidate[]> {
       kind: "network",
       label: labelForGvfsMount(entry.name),
       modelStorePath: mountedPath,
+      datasetStorePath: path.join(mountedPath, "OpenPond", "datasets"),
       path: mountedPath,
     } satisfies StorageCandidate];
   });
@@ -178,6 +191,7 @@ function systemStorageCandidate(storeDir: string, platform: NodeJS.Platform): St
     kind: "local",
     label: "System disk",
     modelStorePath: path.join(storeDir, "models"),
+    datasetStorePath: path.join(storeDir, "datasets"),
     path: platform === "win32" ? root : root || "/",
   };
 }

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { ChatModelRefSchema } from "./providers.js";
 import { CodexReasoningEffortSchema } from "./settings.js";
 import { TrainingTacticSchema } from "./task-mining.js";
+import { DatasetArtifactManifestSchema, DatasetSplitSchema } from "./dataset-artifacts.js";
+import { ExternalDatasetSourceRefSchema } from "./dataset-sources.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -9,7 +11,7 @@ const HashSchema = z.string().trim().min(8).max(256);
 const MetadataSchema = z.record(z.string(), z.unknown()).default({});
 const NullableIdSchema = IdSchema.nullable();
 
-export const TasksetSplitSchema = z.enum(["train", "validation", "test", "frozen_eval"]);
+export const TasksetSplitSchema = DatasetSplitSchema;
 export const TasksetStatusSchema = z.enum([
   "draft",
   "awaiting_disclosure_approval",
@@ -59,6 +61,11 @@ export const TrainingSourceRefSchema = z.object({
   licensingStatus: z.enum(["pending", "approved", "review", "blocked"]),
   metadata: MetadataSchema,
 });
+
+export const TasksetSourceRefSchema = z.union([
+  TrainingSourceRefSchema,
+  ExternalDatasetSourceRefSchema,
+]);
 
 export const TrainingSourceEstimateSchema = z.object({
   schemaVersion: z.literal("openpond.trainingSourceEstimate.v1"),
@@ -325,6 +332,40 @@ export const BaselineRewardSummarySchema = z.object({
   variance: z.number().nonnegative().nullable(),
 });
 
+export const DatasetSelectionStrategySchema = z.enum([
+  "stable_hash_top_n",
+  "rft_easy_curriculum_v1",
+]);
+
+export const BaselineScopeSchema = z.object({
+  split: TasksetSplitSchema,
+  taskCount: z.number().int().positive().max(100_000),
+  attemptsPerTask: z.number().int().positive().max(64),
+  selectionSeed: z.number().int(),
+  selectionStrategy: DatasetSelectionStrategySchema,
+  taskIdsHash: HashSchema,
+  model: ChatModelRefSchema,
+  sampling: z.object({
+    maxOutputTokens: z.number().int().positive().max(32_768),
+    temperature: z.number().min(0).max(2),
+    topP: z.number().positive().max(1),
+  }),
+});
+
+export const BaselineRftSignalSchema = z.object({
+  requiredMixedRewardGroups: z.number().int().positive().max(100_000),
+  mixedRewardGroups: z.number().int().nonnegative(),
+  allCorrectRewardGroups: z.number().int().nonnegative(),
+  allIncorrectRewardGroups: z.number().int().nonnegative(),
+  unscoredGroups: z.number().int().nonnegative(),
+  infrastructureFailures: z.number().int().nonnegative(),
+  eligibleAttempts: z.number().int().nonnegative(),
+  correctAttempts: z.number().int().nonnegative(),
+  incorrectAttempts: z.number().int().nonnegative(),
+  parseableAttempts: z.number().int().nonnegative(),
+  passed: z.boolean(),
+});
+
 export const BaselineReportSchema = z.object({
   schemaVersion: z.literal("openpond.baselineReport.v1"),
   id: IdSchema,
@@ -340,7 +381,86 @@ export const BaselineReportSchema = z.object({
   userInterventions: z.number().int().nonnegative(),
   hackingChecksPassed: z.boolean(),
   leakageChecksPassed: z.boolean(),
+  scope: BaselineScopeSchema.nullable().default(null),
+  rftSignal: BaselineRftSignalSchema.nullable().default(null),
   createdAt: TimestampSchema,
+});
+
+export const TasksetBaselineRunSchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetBaselineRun.v1"),
+  id: IdSchema,
+  profileId: IdSchema,
+  targetModelId: IdSchema.nullable().default(null),
+  tasksetId: IdSchema,
+  tasksetHash: HashSchema,
+  status: z.enum([
+    "queued",
+    "preparing",
+    "running",
+    "cancelling",
+    "cancelled",
+    "succeeded",
+    "failed",
+  ]),
+  configuration: z.object({
+    split: TasksetSplitSchema,
+    taskLimit: z.number().int().positive().max(100_000),
+    attemptsPerTask: z.number().int().positive().max(64),
+    selectionSeed: z.number().int(),
+    selectionStrategy: DatasetSelectionStrategySchema,
+    model: ChatModelRefSchema,
+    sampling: z.object({
+      maxOutputTokens: z.number().int().positive().max(32_768),
+      temperature: z.number().min(0).max(2),
+      topP: z.number().positive().max(1),
+    }),
+  }),
+  scope: BaselineScopeSchema.nullable(),
+  progress: z.object({
+    stage: z.enum([
+      "queued",
+      "selecting",
+      "auditing",
+      "provisioning",
+      "running",
+      "persisting",
+      "cleaning_up",
+      "complete",
+    ]),
+    completedAttempts: z.number().int().nonnegative(),
+    totalAttempts: z.number().int().nonnegative(),
+    correctAttempts: z.number().int().nonnegative(),
+    incorrectAttempts: z.number().int().nonnegative(),
+    parseableAttempts: z.number().int().nonnegative(),
+    infrastructureFailures: z.number().int().nonnegative(),
+  }),
+  provider: z.object({
+    providerId: z.literal("fireworks"),
+    accountId: IdSchema,
+    deploymentId: IdSchema,
+    phase: z.enum([
+      "validating",
+      "creating",
+      "ready",
+      "deleting",
+      "deleted",
+      "failed",
+    ]),
+    state: z.string().trim().min(1).max(200).nullable(),
+    statusCode: z.string().trim().min(1).max(200).nullable(),
+    statusMessage: z.string().trim().min(1).max(5_000).nullable(),
+    createdAt: TimestampSchema,
+    readyAt: TimestampSchema.nullable(),
+    releasedAt: TimestampSchema.nullable(),
+  }).nullable(),
+  reportId: IdSchema.nullable(),
+  estimatedCostUsd: z.number().nonnegative().nullable(),
+  cancelRequested: z.boolean(),
+  error: z.string().trim().min(1).max(20_000).nullable(),
+  createdAt: TimestampSchema,
+  startedAt: TimestampSchema.nullable(),
+  completedAt: TimestampSchema.nullable(),
+  updatedAt: TimestampSchema,
 });
 
 export const GraderAuditReportSchema = z.object({
@@ -430,11 +550,12 @@ export const TasksetSchema = z.object({
   name: z.string().trim().min(1).max(500),
   objective: z.string().trim().min(1).max(20_000),
   status: TasksetStatusSchema,
-  sourceRefs: z.array(TrainingSourceRefSchema).min(1).max(100_000),
+  sourceRefs: z.array(TasksetSourceRefSchema).min(1).max(100_000),
+  datasetArtifact: DatasetArtifactManifestSchema.nullable().optional(),
   policy: TaskPolicyBoundarySchema,
   environment: TasksetEnvironmentContractSchema,
   capabilities: TasksetCapabilityManifestSchema,
-  tasks: z.array(TaskDataRecordSchema).min(1).max(1_000_000),
+  tasks: z.array(TaskDataRecordSchema).max(1_000_000),
   graders: z.array(GraderSpecSchema).min(1).max(1_000),
   graderFixtures: z.array(GraderFixtureSchema).min(1).max(100_000),
   learningSignals: LearningSignalInventorySchema,
@@ -444,6 +565,22 @@ export const TasksetSchema = z.object({
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   metadata: MetadataSchema,
+}).superRefine((taskset, context) => {
+  if (taskset.datasetArtifact && taskset.tasks.length > 0) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "Artifact-backed Tasksets may not duplicate canonical rows inline.",
+      path: ["tasks"],
+    });
+  }
+  if (!taskset.datasetArtifact && taskset.tasks.length === 0) {
+    context.addIssue({
+      code: "custom",
+      message: "A Taskset requires inline tasks or a Dataset artifact manifest.",
+      path: ["tasks"],
+    });
+  }
 });
 
 export const TaskDesignProposalSchema = z.object({
@@ -566,6 +703,7 @@ export const TaskCreationTranscriptSchema = z.object({
 });
 
 export type TrainingSourceRef = z.infer<typeof TrainingSourceRefSchema>;
+export type TasksetSourceRef = z.infer<typeof TasksetSourceRefSchema>;
 export type TrainingSourceEstimate = z.infer<typeof TrainingSourceEstimateSchema>;
 export type TrainingChatSearchRequest = z.infer<typeof TrainingChatSearchRequestSchema>;
 export type TrainingChatSearchEntry = z.infer<typeof TrainingChatSearchEntrySchema>;
@@ -585,7 +723,9 @@ export type TaskAttemptResult = z.infer<typeof TaskAttemptResultSchema>;
 export type TaskAttemptArtifact = z.infer<typeof TaskAttemptArtifactSchema>;
 export type GradeComponent = z.infer<typeof GradeComponentSchema>;
 export type GradeResult = z.infer<typeof GradeResultSchema>;
+export type DatasetSelectionStrategy = z.infer<typeof DatasetSelectionStrategySchema>;
 export type BaselineReport = z.infer<typeof BaselineReportSchema>;
+export type TasksetBaselineRun = z.infer<typeof TasksetBaselineRunSchema>;
 export type GraderAuditReport = z.infer<typeof GraderAuditReportSchema>;
 export type TrainingPathRecommendation = z.infer<typeof TrainingPathRecommendationSchema>;
 export type TasksetReadinessReport = z.infer<typeof TasksetReadinessReportSchema>;
@@ -599,3 +739,9 @@ export type TaskCreationTranscript = z.infer<typeof TaskCreationTranscriptSchema
 export type BaseModelPreference = z.infer<typeof BaseModelPreferenceSchema>;
 export type TaskCreationRequest = z.infer<typeof TaskCreationRequestSchema>;
 export type TaskCreationSnapshot = z.infer<typeof TaskCreationSnapshotSchema>;
+
+export function isTrainingSourceRef(
+  source: TasksetSourceRef,
+): source is TrainingSourceRef {
+  return source.schemaVersion === "openpond.trainingSource.v1";
+}

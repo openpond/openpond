@@ -1,0 +1,79 @@
+.native-skill-sidebar {
+  grid-template-rows: 41px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: #101010;
+}
+
+.native-skill-sidebar-topbar {
+  min-width: 0;
+}
+
+.native-skill-sidebar-topbar .workspace-diff-tabs {
+  min-width: 0;
+}
+
+.native-skill-sidebar-topbar .workspace-diff-tab {
+  min-width: 0;
+  max-width: min(280px, 60vw);
+}
+
+.native-skill-sidebar-topbar .workspace-diff-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-skill-sidebar-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: #404040 transparent;
+}
+
+.native-skill-source-header {
+  display: grid;
+  gap: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 18px 20px;
+}
+
+.native-skill-source-header h2 {
+  margin: 0;
+  color: #f5f5f5;
+  font-size: 16px;
+  font-weight: 620;
+}
+
+.native-skill-source-header p {
+  margin: 0;
+  color: #a3a3a3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.native-skill-source-header code {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  color: #8a8a8a;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-skill-markdown-source {
+  min-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  background: transparent;
+  color: #d4d4d4;
+  padding: 20px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  white-space: pre-wrap;
+}

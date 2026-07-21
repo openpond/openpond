@@ -86,14 +86,14 @@ describe("community UI", () => {
   });
 
   test("keeps community chat in a full-height Team-style conversation shell", async () => {
-    const [mainPane, communityView, communityCss, sidebarCss, conversationCss] = await Promise.all([
-      readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
+    const [mainPaneControls, communityView, communityCss, sidebarCss, conversationCss] = await Promise.all([
+      readFile("apps/web/src/components/app-shell/MainPaneControls.tsx", "utf8"),
       readFile("apps/web/src/components/community/CommunityView.tsx", "utf8"),
       readFile("apps/web/src/styles/community/community.css", "utf8"),
       readFile("apps/web/src/styles/sidebar/community-sidebar.css", "utf8"),
       readFile("apps/web/src/styles/chat/conversation-surface.css", "utf8"),
     ]);
-    expect(mainPane).toContain('view === "community"\n        ? "community-active"');
+    expect(mainPaneControls).toContain('if (view === "community") return "community-active"');
     expect(communityView).toContain('community-chat-main conversation-surface-main');
     expect(communityView).toContain('community-message-pane conversation-message-scroll');
     expect(communityView).toContain('community-composer-wrap conversation-composer-shell');

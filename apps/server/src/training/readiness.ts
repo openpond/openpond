@@ -21,25 +21,63 @@ export function buildTasksetReadiness(input: {
   const authoredTrainingMethod = trainingPathMethod(authoredMethod);
   const requiresApprovedDemonstrations = authoredTrainingMethod !== "grpo";
   const approvedDemonstrationTaskIds = new Set(input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved && signal.taskId).map((signal) => signal.taskId!));
+  const artifact = input.taskset.datasetArtifact;
+  const approvedArtifactSignals = new Set(
+    metadataStrings(input.taskset.metadata.approvedArtifactSignals),
+  );
+  const artifactHasExpectedOutput = Boolean(
+    artifact?.schema.fields.some((field) =>
+      field.semanticRole === "demonstration"
+      || field.semanticRole === "expected_output"
+      || field.semanticRole === "chosen"),
+  );
   const allTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput);
   const trainTasks = requiresApprovedDemonstrations
     ? allTrainTasks.filter((task) => approvedDemonstrationTaskIds.has(task.id))
     : allTrainTasks;
   const unapprovedTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput && !approvedDemonstrationTaskIds.has(task.id));
   const frozenTasks = input.taskset.tasks.filter((task) => task.split === "frozen_eval" && task.expectedOutput);
-  if (trainTasks.length === 0) {
+  const artifactTrainCount = artifact && artifactHasExpectedOutput
+    ? artifact.splitCounts.train ?? 0
+    : 0;
+  const artifactFrozenCount = artifact && artifactHasExpectedOutput
+    ? artifact.splitCounts.frozen_eval ?? 0
+    : 0;
+  const artifactSignalApproved = artifact
+    ? approvedArtifactSignals.has(authoredTrainingMethod ?? "")
+    : false;
+  const trainTaskCount = artifact
+    ? artifactSignalApproved ? artifactTrainCount : 0
+    : trainTasks.length;
+  const frozenTaskCount = artifact ? artifactFrozenCount : frozenTasks.length;
+  if (trainTaskCount === 0) {
     blockers.push(
       requiresApprovedDemonstrations
         ? { code: "sft_demonstrations_missing", message: "At least one explicitly approved training demonstration is required.", path: "learningSignals.demonstrations" }
         : { code: "grpo_training_tasks_missing", message: "At least one reward-bearing training task is required for GRPO.", path: "tasks" },
     );
   }
-  if (requiresApprovedDemonstrations && unapprovedTrainTasks.length) blockers.push({ code: "sft_demonstrations_unapproved", message: `${unapprovedTrainTasks.length} training example${unapprovedTrainTasks.length === 1 ? " is" : "s are"} not explicitly approved.`, path: "learningSignals.demonstrations" });
-  if (frozenTasks.length === 0) blockers.push({ code: "frozen_eval_missing", message: "At least one independent evaluation example is required.", path: "tasks" });
+  const unapprovedTrainCount = artifact
+    ? requiresApprovedDemonstrations && !artifactSignalApproved
+      ? artifactTrainCount
+      : 0
+    : unapprovedTrainTasks.length;
+  if (requiresApprovedDemonstrations && unapprovedTrainCount) blockers.push({ code: "sft_demonstrations_unapproved", message: `${unapprovedTrainCount} training example${unapprovedTrainCount === 1 ? " is" : "s are"} not explicitly approved.`, path: artifact ? "metadata.approvedArtifactSignals" : "learningSignals.demonstrations" });
+  if (frozenTaskCount === 0) blockers.push({ code: "frozen_eval_missing", message: "At least one independent evaluation example is required.", path: artifact ? "datasetArtifact.splitCounts.frozen_eval" : "tasks" });
   const trainClusters = new Set(trainTasks.map((task) => task.clusterKey));
   const frozenClusters = new Set(frozenTasks.map((task) => task.clusterKey));
-  if (trainClusters.size === 0 || frozenClusters.size === 0 || [...trainClusters].some((cluster) => frozenClusters.has(cluster))) blockers.push({ code: "independent_evaluation_missing", message: "Training and evaluation must use independent source-conversation clusters.", path: "tasks" });
-  if (input.taskset.tasks.some((task) => typeof task.metadata.exampleOrigin !== "string")) blockers.push({ code: "example_provenance_missing", message: "Every training and evaluation example must record whether it was extracted, corrected, synthetic, or expert-authored.", path: "tasks.metadata.exampleOrigin" });
+  const artifactSplitIsolation =
+    artifact && input.taskset.metadata.splitIsolationVerified === true;
+  if (
+    artifact
+      ? !artifactSplitIsolation || trainTaskCount === 0 || frozenTaskCount === 0
+      : trainClusters.size === 0 || frozenClusters.size === 0 || [...trainClusters].some((cluster) => frozenClusters.has(cluster))
+  ) blockers.push({ code: "independent_evaluation_missing", message: "Training and evaluation must use independent source clusters.", path: artifact ? "metadata.splitIsolationVerified" : "tasks" });
+  if (
+    artifact
+      ? input.taskset.metadata.artifactRowsVerified !== true
+      : input.taskset.tasks.some((task) => typeof task.metadata.exampleOrigin !== "string")
+  ) blockers.push({ code: "example_provenance_missing", message: "Every training and evaluation example must record whether it was extracted, corrected, synthetic, or expert-authored.", path: artifact ? "metadata.artifactRowsVerified" : "tasks.metadata.exampleOrigin" });
   const diagnosis = metadataRecord(input.taskset.metadata.diagnosis);
   if (!diagnosis || typeof diagnosis.summary !== "string" || !Array.isArray(diagnosis.stableBehavior)) blockers.push({ code: "capability_diagnosis_missing", message: "The Taskset must separate stable behavior from changing knowledge before training.", path: "metadata.diagnosis" });
   if (diagnosis?.trainingEligible === false) blockers.push({ code: "training_not_recommended", message: "The capability diagnosis does not recommend storing this behavior in model weights.", path: "metadata.diagnosis.trainingEligible" });
@@ -55,7 +93,7 @@ export function buildTasksetReadiness(input: {
   const baselineReward = currentBaseline?.reward;
   const hasRewardVariance = Boolean(baselineReward && (baselineReward.variance ?? 0) > 0 && (baselineReward.mean ?? 0) > 0.05 && (baselineReward.mean ?? 0) < 0.95);
   const recommendedMethod = authoredTrainingMethod
-    ?? (hasRewardVariance && hasRewardEligibleGrader && input.taskset.capabilities.compatibleMethods.includes("grpo") ? "grpo" : trainTasks.length > 0 && input.taskset.capabilities.compatibleMethods.includes("sft") ? "sft" : "none");
+    ?? (hasRewardVariance && hasRewardEligibleGrader && input.taskset.capabilities.compatibleMethods.includes("grpo") ? "grpo" : trainTaskCount > 0 && input.taskset.capabilities.compatibleMethods.includes("sft") ? "sft" : "none");
   const demonstrationRefs = input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved).map((signal) => signal.id);
   const trainingPath = recommendedMethod === "none" ? null : {
     primaryMethod: recommendedMethod,

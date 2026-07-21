@@ -16,7 +16,6 @@ import {
   ArrowLeft,
   ChevronRight,
   Lightbulb,
-  MoreHorizontal,
   PanelLeft,
   PanelRight,
   Search,
@@ -199,11 +198,6 @@ export function AppTopBar({
               {title}
             </strong>
             {workspaceName && <span>{workspaceName}</span>}
-            {showWorkspaceControls && (
-              <button className="titlebar-icon" title="More">
-                <MoreHorizontal size={17} />
-              </button>
-            )}
           </div>
         )}
       </div>

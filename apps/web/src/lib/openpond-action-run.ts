@@ -141,6 +141,16 @@ export function buildOpenPondProfileActionCommand(
   };
 }
 
+export function shouldRetainOpenPondProfileActionAfterSubmit(
+  action: SandboxActionCatalogEntry | null,
+): boolean {
+  return Boolean(
+    action
+    && openPondProfileActionInfo(action)
+    && action.sourceActionId === "chat",
+  );
+}
+
 export function openPondProfileActionInfo(
   action: SandboxActionCatalogEntry,
 ): OpenPondProfileActionInfo | null {

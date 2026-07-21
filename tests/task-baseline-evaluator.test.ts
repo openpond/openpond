@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vitest";
-import { readFile } from "node:fs/promises";
-import { computeTasksetHash, runBaseline } from "../packages/taskset-sdk/src";
+import { describe, expect, test, vi } from "vitest";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { computeTasksetHash, contentHash, runBaseline, sha256 } from "../packages/taskset-sdk/src";
 import {
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
   TasksetSchema,
@@ -19,6 +20,43 @@ import {
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("baseline evaluator", () => {
+  test("releases prepared provider resources even when cleanup status persistence fails", async () =>
+    withTrainingStore(async ({ store }) => {
+      const taskset = tasksetFixture();
+      await store.upsertTaskset(taskset);
+      const release = vi.fn(async () => ({ costUsd: 0.01 }));
+      const service = createTaskEvaluationService({
+        store,
+        runAttempt: async ({ task, seed, attempt }) => attemptFixture({
+          id: "cleanup_attempt",
+          tasksetId: taskset.id,
+          taskId: task.id,
+          split: task.split,
+          seed,
+          attempt,
+          output: task.expectedOutput ?? {},
+        }),
+        prepareBaselineModels: async (models) => ({ models, release }),
+      });
+
+      await expect(service.baseline({
+        tasksetId: taskset.id,
+        models: [{ providerId: "fireworks", modelId: "fixture" }],
+        seeds: [17],
+        attemptsPerTask: 1,
+        taskLimit: 1,
+        split: "frozen_eval",
+      }, {
+        onStage: (stage) => {
+          if (stage === "cleaning_up") {
+            throw new Error("cleanup status persistence failed");
+          }
+        },
+      })).rejects.toThrow("cleanup status persistence failed");
+      expect(release).toHaveBeenCalledOnce();
+      await service.close();
+    }));
+
   test("automatically audits deterministic graders and makes SFT ready without a baseline", async () => withTrainingStore(async ({ store }) => {
     const taskset = tasksetFixture();
     await store.upsertTaskset(taskset);
@@ -97,6 +135,214 @@ describe("baseline evaluator", () => {
     expect(result.report.totalCostUsd).toBeCloseTo(0.04);
     expect(result.report.userInterventions).toBe(2);
   });
+
+  test("records a training-aligned RFT signal receipt without replacing held-out readiness", async () =>
+    withTrainingStore(async ({ store }) => {
+      const base = tasksetFixture();
+      const train = base.tasks.find((task) => task.split === "train")!;
+      const trainTasks = Array.from({ length: 4 }, (_, index) => ({
+        ...train,
+        id: `signal_train_${index}`,
+        clusterKey: `signal_cluster_${index}`,
+        input: { prompt: `Solve signal task ${index}. Answer: expected` },
+      }));
+      const draft = TasksetSchema.parse({
+        ...base,
+        tasks: [
+          ...trainTasks,
+          ...base.tasks.filter((task) => task.split !== "train"),
+        ],
+        contentHash: "00000000",
+        readiness: null,
+      });
+      const taskset = TasksetSchema.parse({
+        ...draft,
+        contentHash: computeTasksetHash(draft),
+      });
+      await store.upsertTaskset(taskset);
+      const service = createTaskEvaluationService({
+        store,
+        runAttempt: async ({ task, seed, attempt, sampling }) =>
+          attemptFixture({
+            id: `signal_attempt_${task.id}_${attempt}`,
+            tasksetId: taskset.id,
+            taskId: task.id,
+            split: task.split,
+            seed,
+            attempt,
+            output: attempt === 0
+              ? task.expectedOutput ?? {}
+              : { text: "Answer: wrong" },
+            metadata: { sampling },
+          }),
+      });
+
+      const result = await service.baseline({
+        tasksetId: taskset.id,
+        models: [{ providerId: "fireworks", modelId: "qwen3-0p6b" }],
+        seeds: [17],
+        attemptsPerTask: 2,
+        taskLimit: 4,
+        selectionSeed: 17,
+        split: "train",
+        sampling: { maxOutputTokens: 256, temperature: 0.8, topP: 0.95 },
+      });
+
+      expect(result.report.scope).toMatchObject({
+        split: "train",
+        taskCount: 4,
+        attemptsPerTask: 2,
+        selectionSeed: 17,
+        selectionStrategy: "stable_hash_top_n",
+        model: { providerId: "fireworks", modelId: "qwen3-0p6b" },
+        sampling: { maxOutputTokens: 256, temperature: 0.8, topP: 0.95 },
+      });
+      expect(result.report.rftSignal).toMatchObject({
+        requiredMixedRewardGroups: 4,
+        mixedRewardGroups: 4,
+        infrastructureFailures: 0,
+        eligibleAttempts: 8,
+        correctAttempts: 4,
+        incorrectAttempts: 4,
+        parseableAttempts: 4,
+        passed: true,
+      });
+      expect(result.readiness.baselineReportId).toBeNull();
+      expect((await store.listBaselineReports(taskset.id))[0]?.id)
+        .toBe(result.report.id);
+    }));
+
+  test("projects a bounded private artifact sample before running the baseline", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const base = tasksetFixture();
+      const first = base.tasks[1]!;
+      const tasks = [
+        first,
+        {
+          ...first,
+          id: "task_eval_second",
+          clusterKey: "cluster_eval_second",
+          input: { prompt: "Say goodbye again" },
+        },
+      ];
+      const artifact = {
+        schemaVersion: "openpond.datasetArtifact.v1" as const,
+        id: "dataset_artifact_baseline",
+        tasksetId: base.id,
+        tasksetRevision: 1,
+        contentHash: "artifacthash0000",
+        format: "parquet" as const,
+        schema: {
+          schemaVersion: "openpond.datasetSemanticSchema.v1" as const,
+          fields: [{
+            name: "expected_output",
+            semanticRole: "expected_output",
+            logicalType: "string" as const,
+            nullable: false,
+            policy: "privileged" as const,
+          }],
+          schemaHash: "schemahash000000",
+        },
+        shards: [{
+          id: "shard_frozen",
+          split: "frozen_eval" as const,
+          path: "data/frozen.parquet",
+          contentHash: "shardhash000000",
+          schemaHash: "schemahash000000",
+          sizeBytes: 100,
+          rowCount: 2,
+          rowGroupCount: 1,
+        }],
+        rowCount: 2,
+        splitCounts: { train: 0, validation: 0, test: 0, frozen_eval: 2 },
+        sourceReceiptRefs: ["receipt_fixture"],
+        mappingHash: "mappinghash0000",
+        qualityReportHash: "qualityhash0000",
+        createdAt: "2026-07-20T00:00:00.000Z",
+      };
+      const draft = TasksetSchema.parse({
+        ...base,
+        tasks: [],
+        datasetArtifact: artifact,
+        graderFixtures: base.graderFixtures.map((fixture) => ({
+          ...fixture,
+          taskId: first.id,
+          metadata: { ...fixture.metadata, artifactSplit: "frozen_eval" },
+        })),
+        contentHash: "00000000",
+        readiness: null,
+      });
+      const taskset = TasksetSchema.parse({
+        ...draft,
+        contentHash: computeTasksetHash(draft),
+      });
+      await store.upsertTaskset(taskset);
+      let outputPath = "";
+      let attemptIndex = 0;
+      const service = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        resolveTask: async ({ taskId }) => {
+          const task = tasks.find((candidate) => candidate.id === taskId);
+          if (!task) throw new Error(`Missing fixture task ${taskId}.`);
+          return task;
+        },
+        projectDatasetArtifact: async (input) => {
+          outputPath = input.outputPath;
+          await mkdir(path.dirname(outputPath), { recursive: true });
+          const selected = tasks.slice(0, input.limit);
+          const bytes = Buffer.from(
+            `${selected.map((task) => JSON.stringify(task)).join("\n")}\n`,
+          );
+          await writeFile(outputPath, bytes);
+          return {
+            schemaVersion: "openpond.datasetProjectionResult.v1",
+            split: input.split,
+            mode: "baseline",
+            exampleCount: selected.length,
+            eligibleRows: tasks.length,
+            duplicateRows: 0,
+            selectionSeed: input.seed,
+            selectionStrategy: "stable_hash_top_n",
+            contentHash: sha256(bytes),
+            sizeBytes: bytes.byteLength,
+            taskIdsHash: contentHash(selected.map((task) => task.id)),
+            outputPath,
+          };
+        },
+        runAttempt: async ({ task, seed, attempt }) =>
+          attemptFixture({
+            id: `artifact_baseline_attempt_${attemptIndex}`,
+            tasksetId: taskset.id,
+            taskId: task.id,
+            split: task.split,
+            seed,
+            attempt,
+            output: attemptIndex++ % 2 === 0
+              ? task.expectedOutput ?? {}
+              : { text: "wrong" },
+          }),
+      });
+
+      const result = await service.baseline({
+        tasksetId: taskset.id,
+        models: [{ providerId: "fireworks", modelId: "qwen3-0p6b" }],
+        seeds: [17],
+        attemptsPerTask: 2,
+        taskLimit: 2,
+        selectionSeed: 17,
+        split: "frozen_eval",
+      });
+
+      expect(result.attempts).toHaveLength(4);
+      expect(result.report.reward).toMatchObject({
+        count: 4,
+        mean: 0.5,
+        variance: 0.25,
+      });
+      expect(result.readiness.baselineReportId).toBe(result.report.id);
+      await expect(readFile(outputPath)).rejects.toThrow();
+    }));
 
   test("excludes Cross-System schema and budget failures from baseline reward statistics", async () => {
     const { taskset } = crossSystemBaselineTaskset();
@@ -210,6 +456,40 @@ describe("baseline evaluator", () => {
       failureClass: "policy_failure",
     });
   }));
+
+  test("disables Fireworks reasoning for a training-aligned text baseline", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const taskset = tasksetFixture();
+      await store.upsertTaskset(taskset);
+      const trainTask = taskset.tasks.find((task) => task.split === "train")!;
+      let reasoningEffort: string | null | undefined;
+      const runner = createTrainingBaselineAttemptRunner({
+        store,
+        storeDir: directory,
+        modelText: async (request) => {
+          reasoningEffort = request.reasoningEffort;
+          return "Answer: 42";
+        },
+        crossSystemStream: async function* () {
+          throw new Error("The tool harness must not run for a text taskset.");
+        },
+      });
+
+      const result = await runner({
+        tasksetId: taskset.id,
+        task: trainTask,
+        model: {
+          providerId: "fireworks",
+          modelId: "accounts/fireworks/models/qwen3-0p6b",
+        },
+        seed: 17,
+        attempt: 0,
+        sampling: { maxOutputTokens: 64, temperature: 0.8, topP: 0.95 },
+      });
+
+      expect(reasoningEffort).toBe("none");
+      expect(result.output.text).toBe("Answer: 42");
+    }));
 
   test("runs Cross-System Taskset baselines through the bounded tool harness and preserves a runtime trace", async () => withTrainingStore(async ({ store, directory }) => {
     const { taskset, generatedTask } = crossSystemBaselineTaskset();

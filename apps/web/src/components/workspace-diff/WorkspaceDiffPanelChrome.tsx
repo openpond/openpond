@@ -22,7 +22,13 @@ import {
 } from "../icons";
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
-import type { DiffTab, WorkspaceDiffSideChatTab, WorkspaceFileSourceSwitcher } from "./workspace-diff-panel-model";
+import {
+  nextRovingTabIndex,
+  type DiffTab,
+  type RovingTabKey,
+  type WorkspaceDiffSideChatTab,
+  type WorkspaceFileSourceSwitcher,
+} from "./workspace-diff-panel-model";
 
 export function WorkspaceDiffTabs({
   addMenuOpen,
@@ -116,9 +122,39 @@ export function WorkspaceDiffTabs({
     if (event.key === "Enter" && filteredFiles[0]) onOpenFile(filteredFiles[0]);
   }
 
+  function handleTabListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || target.getAttribute("role") !== "tab") return;
+    const tabs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]'),
+    );
+    const currentIndex = tabs.indexOf(target);
+    if (currentIndex < 0 || tabs.length === 0) return;
+    event.preventDefault();
+    const nextIndex = nextRovingTabIndex(
+      currentIndex,
+      tabs.length,
+      event.key as RovingTabKey,
+    );
+    const next = tabs[nextIndex];
+    if (!next) return;
+    next.focus();
+    next.click();
+    const nextId = next.id;
+    if (nextId) {
+      window.requestAnimationFrame(() => document.getElementById(nextId)?.focus());
+    }
+  }
+
   return (
     <div className="workspace-diff-topbar">
-      <div className="workspace-diff-tabs" role="tablist" aria-label="Right sidebar views">
+      <div
+        className="workspace-diff-tabs"
+        role="tablist"
+        aria-label="Right sidebar views"
+        onKeyDown={handleTabListKeyDown}
+      >
         {goalDetailsAvailable ? (
           <button
             type="button"
@@ -147,7 +183,10 @@ export function WorkspaceDiffTabs({
           type="button"
           className={`workspace-diff-tab ${visibleTab === "files" ? "active" : ""}`}
           role="tab"
+          id="right-sidebar-files-tab"
+          aria-controls="right-sidebar-files-panel"
           aria-selected={visibleTab === "files"}
+          tabIndex={visibleTab === "files" ? 0 : -1}
           onClick={onSelectFiles}
         >
           <FolderOpen size={14} />
@@ -186,7 +225,10 @@ export function WorkspaceDiffTabs({
               type="button"
               className="workspace-diff-tab-main"
               role="tab"
+              id={`right-chat-tab-${chat.id}`}
+              aria-controls={`right-chat-panel-${chat.id}`}
               aria-selected={false}
+              tabIndex={-1}
               title={chat.title}
               onClick={() => onSelectSideChat?.(chat.id)}
             >

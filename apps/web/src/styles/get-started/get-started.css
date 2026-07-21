@@ -1,17 +1,19 @@
-.get-started-view {
-  display: grid;
-  align-content: start;
-  width: min(1040px, calc(100% - 56px));
-  min-width: 0;
-  justify-self: center;
-  padding: 34px 0 54px;
-  color: var(--text);
-}
-
-.get-started-shell {
+.get-started-guides {
   display: grid;
   min-width: 0;
   gap: 16px;
+}
+
+.get-started-section-heading {
+  display: grid;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 10px;
+}
+
+.get-started-section-heading h2 {
+  font-size: 22px;
+  line-height: 1.2;
 }
 
 .get-started-tabs {
@@ -790,6 +792,10 @@
     padding-top: 24px;
   }
 
+  .get-started-learning-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .get-started-deck-body {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
@@ -819,6 +825,40 @@
 }
 
 @media (max-width: 620px) {
+  .get-started-shell {
+    gap: 34px;
+  }
+
+  .get-started-learning-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .get-started-course-copy {
+    padding: 12px 0 8px;
+  }
+
+  .get-started-course-copy h1 {
+    font-size: 18px;
+  }
+
+  .get-started-course-play-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .get-started-course-player-backdrop {
+    padding: 10px;
+  }
+
+  .get-started-course-player-header {
+    min-height: 46px;
+    padding-bottom: 10px;
+  }
+
+  .get-started-course-player-copy span {
+    font-size: 11px;
+  }
+
   .get-started-tabs {
     grid-auto-columns: minmax(132px, 45vw);
   }
@@ -929,7 +969,10 @@
 @media (prefers-reduced-motion: reduce) {
   .get-started-progress-fill,
   .get-started-tabs button,
-  .get-started-icon-button {
+  .get-started-icon-button,
+  .get-started-course-poster,
+  .get-started-playlist-poster,
+  .get-started-course-play-icon {
     transition: none;
   }
 }

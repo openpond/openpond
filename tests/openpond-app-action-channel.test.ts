@@ -43,7 +43,9 @@ import {
 import {
   buildOpenPondAppActionRunInput,
   buildOpenPondAgentRunInput,
+  buildOpenPondProfileActionCommand,
   buildOpenPondProfileActionRunInput,
+  shouldRetainOpenPondProfileActionAfterSubmit,
 } from "../apps/web/src/lib/openpond-action-run";
 import { latestReadyLocalCreateImproveProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
@@ -151,6 +153,23 @@ function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
 }
 
 describe("OpenPond App action channel", () => {
+  test("retains profile chat actions for conversational follow-ups only", () => {
+    const chat = buildOpenPondProfileActionCommand({
+      id: "account-health-agent.chat",
+      sourceActionId: "chat",
+      label: "Account Health Agent",
+    });
+    const summarize = buildOpenPondProfileActionCommand({
+      id: "summarize-account",
+      sourceActionId: "summarize-account",
+      label: "Summarize Account",
+    });
+
+    expect(shouldRetainOpenPondProfileActionAfterSubmit(chat)).toBe(true);
+    expect(shouldRetainOpenPondProfileActionAfterSubmit(summarize)).toBe(false);
+    expect(shouldRetainOpenPondProfileActionAfterSubmit(null)).toBe(false);
+  });
+
   test("discovers built-in app commands from composer slash input", () => {
     expect(composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)).toEqual([
       "create",
@@ -596,7 +615,7 @@ describe("OpenPond App action channel", () => {
     expect(planHtml).toContain("Chat only");
     expect(planHtml).toContain("Confirm plan");
     expect(planHtml).not.toContain("Details");
-    expect(planHtml).toContain("agents/help-me-keep-track-of-open-customer-support-item");
+    expect(planHtml).not.toContain("agents/help-me-keep-track-of-open-customer-support-item");
 
     const ready = {
       ...snapshot,
@@ -619,10 +638,10 @@ describe("OpenPond App action channel", () => {
     );
     expect(readyHtml).toContain(">Ready<");
     expect(readyHtml).toContain("Chat only");
-    expect(readyHtml).toContain("profiles/default/agents/help-me-keep-track-of-open-customer-support-item");
-    expect(readyHtml).toContain("2 check refs");
-    expect(readyHtml).toContain(".openpond/agent-inspect.json");
-    expect(readyHtml).toContain(".openpond/eval-results.json");
+    expect(readyHtml).toContain("2 checks");
+    expect(readyHtml).not.toContain("profiles/default/agents/help-me-keep-track-of-open-customer-support-item");
+    expect(readyHtml).not.toContain(".openpond/agent-inspect.json");
+    expect(readyHtml).not.toContain(".openpond/eval-results.json");
 
     const detailsSnapshot: CreateImproveRun = {
       ...ready,
@@ -1461,7 +1480,7 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("Plan ready");
     expect(html).toContain("Create agent for: release notes agent");
     expect(html).toContain("Chat plus direct action");
-    expect(html).toContain("agents/release-notes-agent");
+    expect(html).not.toContain("agents/release-notes-agent");
     expect(html).toContain("4 checks");
     expect(html).not.toContain("Show progress");
     expect(html).not.toContain("Agent plan review");

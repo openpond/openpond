@@ -8,6 +8,7 @@ import type {
 } from "@openpond/contracts";
 import type { AppView, ChatMessage } from "../../lib/app-models";
 import type { ParsedComposerSlashCommand } from "../../lib/composer-slash-commands";
+import { latestCreateImproveRunProjection } from "../../lib/create-pipeline-runtime";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import type { ComposerCreateImproveRuntime } from "../chat/ComposerCreateImproveStrip";
 
@@ -130,12 +131,8 @@ export function easeInOutCubic(progress: number): number {
 export function latestCreatePipelineRuntime(
   messages: ChatMessage[],
 ): ComposerCreateImproveRuntime | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]!;
-    if (!message.createImproveRun || message.createImproveRun.state === "cancelled") continue;
-    return { run: message.createImproveRun };
-  }
-  return null;
+  const run = latestCreateImproveRunProjection({ messages });
+  return run ? { run } : null;
 }
 
 export function cloudProjectIdFromComposerTarget(value: string): string | null {

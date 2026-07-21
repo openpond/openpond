@@ -2,28 +2,36 @@ import { useMemo, useState } from "react";
 import type { Taskset, TrainingStateResponse } from "@openpond/contracts";
 
 import { X } from "../icons";
-import { trainingMethodLabel } from "../training/training-model-data";
+import { AppDialog } from "../dialogs/AppDialog";
 
 export function LabNewVersionDialog({
   state,
   initialTasksetId,
+  checking,
   onClose,
+  onCheck,
   onContinue,
+  onReview,
 }: {
   state: TrainingStateResponse | null;
   initialTasksetId: string | null;
+  checking: boolean;
   onClose: () => void;
+  onCheck: (tasksetId: string) => Promise<void>;
   onContinue: (selection: {
     taskset: Taskset;
-    method: "sft" | "grpo";
   }) => void;
+  onReview: (tasksetId: string) => void;
 }) {
   const datasets = useMemo(
     () =>
       (state?.tasksets ?? [])
-        .filter((taskset) => taskset.readiness?.ready)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-    [state?.tasksets],
+        .sort((left, right) => {
+          if (left.id === initialTasksetId) return -1;
+          if (right.id === initialTasksetId) return 1;
+          return right.updatedAt.localeCompare(left.updatedAt);
+        }),
+    [initialTasksetId, state?.tasksets],
   );
   const [tasksetId, setTasksetId] = useState(
     initialTasksetId &&
@@ -33,31 +41,19 @@ export function LabNewVersionDialog({
   );
   const selected =
     datasets.find((taskset) => taskset.id === tasksetId) ?? null;
-  const methods = selected ? selectableMethods(selected) : [];
-  const [method, setMethod] = useState<"sft" | "grpo">(
-    selected?.readiness?.recommendedMethod === "grpo" ? "grpo" : "sft",
-  );
-  const effectiveMethod = methods.includes(method)
-    ? method
-    : methods[0] ?? "sft";
+  const selectedReady = selected?.readiness?.ready === true;
 
   return (
-    <div
-      className="training-dialog-backdrop"
-      role="presentation"
-      onMouseDown={onClose}
+    <AppDialog
+      ariaLabel="New version"
+      className="training-dialog labs-new-version-dialog"
+      dismissDisabled={checking}
+      onClose={onClose}
     >
-      <section
-        aria-label="New version"
-        aria-modal="true"
-        className="training-dialog labs-new-version-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
         <div className="training-dialog-header">
           <div>
             <h2>New version</h2>
-            <p>Choose the immutable Dataset revision and training method.</p>
+            <p>Choose the immutable Dataset revision. Training setup comes next.</p>
           </div>
           <button aria-label="Close New version" type="button" onClick={onClose}>
             <X size={16} />
@@ -75,21 +71,12 @@ export function LabNewVersionDialog({
           <span>Dataset revision</span>
           <select
             value={tasksetId}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              setTasksetId(nextId);
-              const next = datasets.find((item) => item.id === nextId);
-              const nextMethods = next ? selectableMethods(next) : [];
-              setMethod(
-                nextMethods.includes(effectiveMethod)
-                  ? effectiveMethod
-                  : nextMethods[0] ?? "sft",
-              );
-            }}
+            onChange={(event) => setTasksetId(event.target.value)}
           >
             {datasets.map((taskset) => (
               <option key={taskset.id} value={taskset.id}>
                 {taskset.name} · revision {taskset.revision}
+                {taskset.readiness?.ready ? "" : " · needs review"}
               </option>
             ))}
           </select>
@@ -112,38 +99,38 @@ export function LabNewVersionDialog({
           </dl>
         ) : (
           <div className="training-run-placeholder">
-            No ready Dataset is available. Create or finish a Dataset first.
+            No Dataset is available. Create a Dataset first.
           </div>
         )}
-
-        <div className="labs-new-version-step">
-          <span className="labs-new-version-step-number">2</span>
-          <div>
-            <strong>Training method</strong>
-            <p>SFT and RFT create Versions of the same Model.</p>
+        {selected && !selectedReady ? (
+          <div className="training-banner warning labs-new-version-readiness">
+            <strong>This Dataset needs its local checks before training.</strong>
+            <p>
+              OpenPond verifies the grader, split boundary, and immutable
+              artifact before it can prepare a provider export.
+            </p>
+            <div className="training-dialog-actions">
+              <button
+                className="training-text-button"
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onReview(selected.id);
+                }}
+              >
+                Review Dataset
+              </button>
+              <button
+                className="training-button secondary"
+                disabled={checking}
+                type="button"
+                onClick={() => void onCheck(selected.id)}
+              >
+                {checking ? "Checking…" : "Run Dataset checks"}
+              </button>
+            </div>
           </div>
-        </div>
-        <div
-          aria-label="Version training method"
-          className="labs-method-tabs"
-          role="tablist"
-        >
-          {methods.map((candidate) => (
-            <button
-              aria-selected={candidate === effectiveMethod}
-              className={candidate === effectiveMethod ? "active" : ""}
-              key={candidate}
-              role="tab"
-              type="button"
-              onClick={() => setMethod(candidate)}
-            >
-              <span>
-                {candidate === "grpo" ? "Reinforcement" : "Supervised"}
-              </span>
-              <strong>{trainingMethodLabel(candidate)}</strong>
-            </button>
-          ))}
-        </div>
+        ) : null}
 
         <div className="training-dialog-actions">
           <button
@@ -155,40 +142,28 @@ export function LabNewVersionDialog({
           </button>
           <button
             className="training-button"
-            disabled={!selected || methods.length === 0}
+            disabled={!selectedReady}
             type="button"
             onClick={() => {
-              if (selected) {
-                onContinue({ taskset: selected, method: effectiveMethod });
+              if (selectedReady && selected) {
+                onContinue({ taskset: selected });
               }
             }}
           >
-            Continue
+            Configure training
           </button>
         </div>
-      </section>
-    </div>
+    </AppDialog>
   );
-}
-
-function selectableMethods(taskset: Taskset): Array<"sft" | "grpo"> {
-  const methods = new Set<"sft" | "grpo">();
-  for (const method of taskset.capabilities.compatibleMethods) {
-    if (method === "sft" || method === "grpo") methods.add(method);
-  }
-  if (taskset.readiness?.trainingPath?.bootstrap?.method === "sft") {
-    methods.add("sft");
-  }
-  if (taskset.readiness?.trainingPath?.primaryMethod === "grpo") {
-    methods.add("grpo");
-  }
-  return (["sft", "grpo"] as const).filter((method) => methods.has(method));
 }
 
 function splitCount(
   taskset: Taskset,
   split: Taskset["tasks"][number]["split"],
 ): number {
+  if (taskset.datasetArtifact) {
+    return taskset.datasetArtifact.splitCounts[split] ?? 0;
+  }
   return taskset.tasks.filter((task) => task.split === split).length;
 }
 

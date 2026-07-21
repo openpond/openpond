@@ -56,14 +56,25 @@ describe("compute probes", () => {
       platform: "linux",
       commandProbe,
       now: () => new Date("2026-07-12T12:00:00.000Z"),
-      storageCandidates: async () => [{ kind: "local", label: "System disk", path: "/", modelStorePath: path.join(storeDir, "models") }],
+      storageCandidates: async () => [{
+        kind: "local",
+        label: "System disk",
+        path: "/",
+        modelStorePath: path.join(storeDir, "models"),
+        datasetStorePath: path.join(storeDir, "datasets"),
+      }],
     });
     await service.updateSettings({ modelStorePath: modelStore, additionalModelPaths: [modelStore, modelStore] });
     const inventory = await service.scan();
     expect(inventory.host.platform).toBe("linux");
     expect(inventory.runtimes.find((runtime) => runtime.kind === "trl_peft")?.state).toBe("available");
     expect(inventory.storageRoots).toHaveLength(1);
-    expect(inventory.storageRoots[0]).toMatchObject({ label: "System disk", modelStorePath: modelStore, configured: true });
+    expect(inventory.storageRoots[0]).toMatchObject({
+      label: "System disk",
+      modelStorePath: modelStore,
+      datasetStorePath: path.join(storeDir, "datasets"),
+      configured: true,
+    });
     expect(JSON.parse(await readFile(path.join(storeDir, "compute", "inventory.json"), "utf8"))).toEqual(inventory);
   });
 });

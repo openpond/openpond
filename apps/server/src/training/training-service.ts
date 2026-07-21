@@ -13,7 +13,6 @@ import {
   type ComputeInventory,
   type GradeResult,
   type ModelBindingRole,
-  type Taskset,
   type TaskAttemptResult,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
@@ -42,6 +41,19 @@ import { createCrossSystemExpertBootstrapService } from "./cross-system-operatio
 import { createFireworksServingService } from "./fireworks-serving-service.js";
 import { selectPortableModelArtifacts } from "./training-artifact-package.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
+import {
+  createManagedModelBindingCoordinator,
+  type ManagedModelBindingCallbacks,
+} from "./managed-model-binding-coordinator.js";
+import {
+  createTrainingDatasetSelection,
+  toProjectedTrainingData,
+  type ProjectDatasetArtifact,
+} from "./training-dataset-selection.js";
+import {
+  assertArtifactIntegrity, isInside, matchingRftSignalGate,
+  requireFireworksApprovalActor, withAuthoritativeRecipeHashes,
+} from "./training-service-helpers.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
@@ -60,12 +72,25 @@ export function createTrainingService(deps: {
     taskId: string;
     attempt: TaskAttemptResult;
   }) => Promise<GradeResult>;
+  projectDatasetArtifact?: ProjectDatasetArtifact;
+  resolveDatasetTask?: (input: {
+    tasksetId: string;
+    taskId: string;
+    split: "train" | "frozen_eval";
+  }) => Promise<import("@openpond/contracts").TaskDataRecord>;
   fireworksRequest?: typeof fetch;
   provisionFireworksRftEvaluator?: FireworksRftEvaluatorProvisioner;
   fireworksRftPublicBaseUrl?: () => string | null;
-}) {
+} & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
   const resolveTaskset = (id: string) => deps.store.getTaskset(id);
+  const {
+    projectArtifactRows,
+    resolveTrainingSelection,
+  } = createTrainingDatasetSelection({
+    storeDir: deps.storeDir,
+    projectDatasetArtifact: deps.projectDatasetArtifact,
+  });
   registry.register(new ExportTrainingDestination(resolveTaskset));
   const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir, resolveModelPath: deps.resolveModelPath, modelArtifactStore: deps.modelArtifactStore });
   registry.register(localCpu);
@@ -78,12 +103,16 @@ export function createTrainingService(deps: {
     resolveCredential: deps.resolveFireworksCredential ?? (async () => null),
     recordCredentialValidation: deps.recordFireworksCredentialValidation,
     gradeAttempt: deps.gradeTaskAttempt,
+    resolveTrainingSelection,
+    resolveTask: deps.resolveDatasetTask,
     request: deps.fireworksRequest,
     provisionRftEvaluator: deps.provisionFireworksRftEvaluator,
     rftPublicBaseUrl: deps.fireworksRftPublicBaseUrl,
   });
   const fireworksRftEnvironment = createFireworksRftEnvironment({
     store: deps.store,
+    resolveTask: deps.resolveDatasetTask,
+    gradeAttempt: deps.gradeTaskAttempt,
     resolveCredential: deps.resolveFireworksCredential ?? (async () => null),
     request: deps.fireworksRequest,
     validateCallbackCredential: (input) =>
@@ -102,6 +131,12 @@ export function createTrainingService(deps: {
     resolveCredential: deps.resolveFireworksCredential ?? (async () => null),
     request: deps.fireworksRequest,
   });
+  const managedModelBindings = createManagedModelBindingCoordinator({
+    store: deps.store,
+    deactivateManagedBinding: deps.deactivateManagedBinding,
+    reactivateManagedBinding: deps.reactivateManagedBinding,
+    activateManagedBinding: deps.activateManagedBinding,
+  });
   registry.register(fireworks);
   registry.register(new HardwareGatedTrainingDestination("local_cuda", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
   registry.register(new HardwareGatedTrainingDestination("local_mlx", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
@@ -118,6 +153,12 @@ export function createTrainingService(deps: {
     if (!taskset) throw new Error("Taskset not found.");
     if (!taskset.readiness?.ready) throw new Error("Taskset is not ready for training. Resolve readiness blockers first.");
     const recipe = TrainingRecipeSchema.parse(withAuthoritativeRecipeHashes(taskset, input.recipe));
+    const rftSignalGate = recipe.method === "grpo"
+      ? matchingRftSignalGate(
+          await deps.store.listBaselineReports(taskset.id),
+          recipe,
+        )
+      : null;
     const destination = registry.get(input.destinationId);
     const capabilities = await destination.capabilities();
     const initial = createTrainingPlan({ taskset, destinationId: input.destinationId, recipe, exportApproved: input.exportApproved, retentionDays: input.retentionDays, region: input.region });
@@ -125,6 +166,7 @@ export function createTrainingService(deps: {
       ...initial,
       modelId: input.modelId ?? null,
       environmentPlacement: capabilities.environmentPlacements[0] ?? "none",
+      rftSignalGate,
     });
     const compatibility = await destination.validate(draft);
     const quote = compatibility.compatible
@@ -150,7 +192,16 @@ export function createTrainingService(deps: {
     const taskset = await deps.store.getTaskset(plan.tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
     const directory = path.join(deps.storeDir, "training", "bundles", plan.id);
-    const manifest = await buildTrainingBundle({ taskset, plan, directory });
+    const projected = taskset.datasetArtifact
+      ? await projectArtifactRows(taskset, plan, "train")
+      : null;
+    const projectedTrainingData = toProjectedTrainingData(projected);
+    const manifest = await buildTrainingBundle({
+      taskset,
+      plan,
+      directory,
+      projectedTrainingData,
+    });
     const validation = await validateTrainingBundle(directory);
     if (!validation.valid) throw new Error(`Training Bundle validation failed: ${validation.issues.join("; ")}`);
     await deps.store.saveTrainingBundle(manifest);
@@ -195,7 +246,7 @@ export function createTrainingService(deps: {
       throw new Error(`Training method ${recipe.method} has no executable approval contract.`);
     }
     const approvedBy = plan.destinationId === "fireworks"
-      ? await requireFireworksApprovalActor()
+      ? await requireFireworksApprovalActor(deps.resolveApprovalActor)
       : input.approvedBy ?? "local_user";
     const maximumCostUsd = input.maximumCostUsd ?? plan.estimatedCostUsd;
     const approvalId = `training_approval_${contentHash([
@@ -231,7 +282,7 @@ export function createTrainingService(deps: {
     const approval = await deps.store.getTrainingApproval(input.approvalId);
     if (!plan || !approval || approval.planId !== plan.id || approval.destinationId !== plan.destinationId) throw new Error("Training approval does not match this plan.");
     if (plan.destinationId === "fireworks") {
-      const currentActor = await requireFireworksApprovalActor();
+      const currentActor = await requireFireworksApprovalActor(deps.resolveApprovalActor);
       if (approval.approvedBy !== currentActor) {
         throw new Error(
           `Fireworks training was approved by ${approval.approvedBy}, but the signed-in OpenPond account is ${currentActor}. Re-approve before launch.`,
@@ -297,7 +348,7 @@ export function createTrainingService(deps: {
     }
     const bundle = await buildBundle(plan.id);
     const approvalActor = plan.destinationId === "fireworks"
-      ? await requireFireworksApprovalActor()
+      ? await requireFireworksApprovalActor(deps.resolveApprovalActor)
       : null;
     return TrainingPreparedStartSchema.parse({
       schemaVersion: "openpond.trainingPreparedStart.v1",
@@ -331,16 +382,6 @@ export function createTrainingService(deps: {
     await deps.revalidateCompute?.();
     const job = await launch({ planId: plan.id, approvalId: approval.id });
     return { plan, bundle, approval, job };
-  }
-
-  async function requireFireworksApprovalActor(): Promise<string> {
-    const actor = (await deps.resolveApprovalActor?.())?.trim() ?? "";
-    if (!actor) {
-      throw new Error(
-        "Fireworks training requires a signed-in OpenPond account profile with a handle.",
-      );
-    }
-    return actor;
   }
 
   async function state(profileId?: string) {
@@ -575,7 +616,7 @@ export function createTrainingService(deps: {
         evaluationArtifact.sizeBytes,
       ),
     ]);
-    const current = await deps.store.getActiveModelBinding({
+    let current = await deps.store.getActiveModelBinding({
       profileId: input.profileId,
       role,
       roleTargetId,
@@ -609,16 +650,19 @@ export function createTrainingService(deps: {
         artifactHash: artifact.sha256,
         trainingMethod: (await deps.store.getTrainingPlan(job.planId))?.recipe.method ?? null,
         evaluationThresholdPassed: true,
+        managedProjectionVersion: 1,
       },
     });
-    await deps.store.replaceActiveModelBinding({
-      profileId: input.profileId,
-      role,
-      roleTargetId,
-      expectedActiveBindingId: current?.id ?? null,
-      next: binding,
-      timestamp,
-    });
+    current = (
+      await managedModelBindings.replace({
+        profileId: input.profileId,
+        role,
+        roleTargetId,
+        current,
+        next: binding,
+        timestamp,
+      })
+    ).previous;
     await deps.store.saveModelArtifactLineage({ ...model, pinned: true });
     if (current) {
       const prior = await deps.store.getModelArtifactLineage(
@@ -644,7 +688,7 @@ export function createTrainingService(deps: {
     bindingId: string;
     rolledBackBy?: string;
   }) {
-    const binding = await deps.store.getModelBinding(input.bindingId);
+    let binding = await deps.store.getModelBinding(input.bindingId);
     if (!binding || binding.status !== "active") {
       throw new Error("Active Model binding not found.");
     }
@@ -681,17 +725,20 @@ export function createTrainingService(deps: {
             action: "rollback",
             rolledBackBindingId: binding.id,
             restoredFromBindingId: rollbackTarget.id,
+            managedProjectionVersion: 1,
           },
         })
       : null;
-    await deps.store.replaceActiveModelBinding({
-      profileId: binding.profileId,
-      role: binding.role,
-      roleTargetId: binding.roleTargetId,
-      expectedActiveBindingId: binding.id,
-      next: restored,
-      timestamp,
-    });
+    binding = (
+      await managedModelBindings.replace({
+        profileId: binding.profileId,
+        role: binding.role,
+        roleTargetId: binding.roleTargetId,
+        current: binding,
+        next: restored,
+        timestamp,
+      })
+    ).previous!;
     if (restored) {
       const restoredModel = await deps.store.getModelArtifactLineage(
         restored.modelArtifactLineageId,
@@ -947,38 +994,5 @@ export function createTrainingService(deps: {
         updatedAt: input.timestamp,
       }));
     }
-  }
-}
-
-function withAuthoritativeRecipeHashes(taskset: Taskset, recipe: unknown): unknown {
-  if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) return recipe;
-  const candidate = recipe as Record<string, unknown>;
-  if (candidate.method !== "grpo") return recipe;
-  const reward =
-    candidate.reward && typeof candidate.reward === "object" && !Array.isArray(candidate.reward)
-      ? candidate.reward as Record<string, unknown>
-      : {};
-  return {
-    ...candidate,
-    reward: {
-      ...reward,
-      graderHash: contentHash(taskset.graders),
-    },
-  };
-}
-
-function isInside(root: string, target: string) {
-  const relative = path.relative(root, target);
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-}
-
-async function assertArtifactIntegrity(
-  artifactPath: string,
-  expectedHash: string,
-  expectedSize: number,
-): Promise<void> {
-  const bytes = await readFile(artifactPath);
-  if (bytes.byteLength !== expectedSize || sha256(bytes) !== expectedHash) {
-    throw new Error("Model promotion refused an artifact that failed integrity verification.");
   }
 }

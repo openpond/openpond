@@ -6,6 +6,12 @@ export function publicAssetUrl(path: string): string {
 
 export const OPENPOND_ICON_URL = publicAssetUrl("openpond-icon.png");
 export const OPENPOND_WORDMARK_WHITE_URL = publicAssetUrl("openpond-wordlogo-white.png");
+export const MAKE_AGENT_TUTORIAL_POSTER_URL = publicAssetUrl(
+  "tutorials/how-to-make-an-agent-poster.png",
+);
+export const MAKE_AGENT_TUTORIAL_CAPTIONS_URL = publicAssetUrl(
+  "tutorials/how-to-make-an-agent.vtt",
+);
 
 const CONNECTED_APP_ICON_URLS = {
   github: publicAssetUrl("connected-apps/github.svg"),

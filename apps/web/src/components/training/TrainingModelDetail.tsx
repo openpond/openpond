@@ -25,6 +25,7 @@ export function TrainingModelDetail({
   connection,
   onDelete,
   onOpenTaskset,
+  onOpenProviderSettings,
   onOpenTasksetFiles,
   onSelectedJobIdChange,
   onToast,
@@ -34,11 +35,14 @@ export function TrainingModelDetail({
   connection: ClientConnection | null;
   onDelete: () => void;
   onOpenTaskset: () => void;
+  onOpenProviderSettings: () => void;
   onOpenTasksetFiles: () => void;
   onSelectedJobIdChange: (jobId: string | null) => void;
   onToast: ShowAppToast;
 }) {
   const state = training.payload;
+  const currentTaskset = state?.tasksets.find((candidate) =>
+    candidate.id === taskset.id) ?? taskset;
   const jobs = useMemo(() => jobsForTaskset(state, taskset.id), [state, taskset.id]);
   const [selectedJobId, setSelectedJobId] = useState(jobs[0]?.id ?? null);
   const [tab, setTab] = useState<"summary" | "details" | "configuration" | "settings">("summary");
@@ -53,8 +57,10 @@ export function TrainingModelDetail({
   const adapter = lineage ? state?.artifacts.find((artifact) => artifact.id === lineage.artifactId) ?? null : null;
   const detail = useTrainingRunDetail(connection, selectedJob?.id ?? null, selectedJob?.status ?? null);
   const method = tasksetMethod(taskset);
-  const approvedTrainingExamples = taskset.learningSignals.demonstrations.filter((demonstration) => demonstration.approved).length;
-  const evaluationExamples = taskset.tasks.filter((task) => task.split === "frozen_eval").length;
+  const approvedTrainingExamples = taskset.datasetArtifact?.splitCounts.train
+    ?? taskset.learningSignals.demonstrations.filter((demonstration) => demonstration.approved).length;
+  const evaluationExamples = taskset.datasetArtifact?.splitCounts.frozen_eval
+    ?? taskset.tasks.filter((task) => task.split === "frozen_eval").length;
   const canStart = !selectedJob || ["succeeded", "failed", "cancelled"].includes(selectedJob.status);
   const trainingPath = taskset.readiness?.trainingPath ?? null;
   const selectedRunLabel = trainingRunMethodLabel(taskset, plan);
@@ -121,7 +127,7 @@ export function TrainingModelDetail({
             {plan?.recipe.method === "sft" ? <dl className="training-configuration-list">
               <Config label="Method" value={plan.recipe.method.toUpperCase()}/><Config label="Base model" value={plan.recipe.baseModel.id}/><Config label="Revision" value={plan.recipe.baseModel.revision}/><Config label="Compute" value={destinationLabel(plan.destinationId)}/><Config label="LoRA rank" value={String(plan.recipe.lora.rank)}/><Config label="Learning rate" value={String(plan.recipe.optimizer.learningRate)}/><Config label="Maximum steps" value={String(plan.recipe.optimizer.maxSteps)}/><Config label="Batch size" value={String(plan.recipe.optimizer.batchSize)}/><Config label="Gradient accumulation" value={String(plan.recipe.optimizer.gradientAccumulationSteps)}/><Config label="Sequence length" value={String(plan.recipe.dataset.maxSequenceLength)}/><Config label="Seed" value={String(plan.recipe.optimizer.seed)}/>
             </dl> : plan?.recipe.method === "grpo" ? <dl className="training-configuration-list">
-              <Config label="Method" value="RFT"/><Config label="Loss method" value="GRPO"/><Config label="Base model" value={plan.recipe.baseModel.id}/><Config label="Revision" value={plan.recipe.baseModel.revision}/><Config label="Compute" value={destinationLabel(plan.destinationId)}/><Config label="LoRA rank" value={String(plan.recipe.lora.rank)}/><Config label="Rollouts per prompt" value={String(plan.recipe.rollout.groupSize)}/><Config label="Rollout concurrency" value={String(plan.recipe.rollout.concurrency)}/><Config label="Maximum turns" value={String(plan.recipe.rollout.maxTurns)}/><Config label="Maximum output" value={String(plan.recipe.rollout.maxOutputTokens)}/><Config label="Learning rate" value={String(plan.recipe.optimizer.learningRate)}/><Config label="Prompts per update" value={String(plan.recipe.optimizer.maxSteps)}/><Config label="Reward environment" value={`${plan.recipe.reward.environmentId}@${plan.recipe.reward.environmentVersion}`}/><Config label="Tool contract" value={plan.recipe.reward.toolContractHash}/>
+              <Config label="Method" value="RFT"/><Config label="Loss method" value={plan.recipe.loss.method === "gspo-token" ? "GSPO-token" : plan.recipe.loss.method.toUpperCase()}/><Config label="Base model" value={plan.recipe.baseModel.id}/><Config label="Revision" value={plan.recipe.baseModel.revision}/><Config label="Compute" value={destinationLabel(plan.destinationId)}/><Config label="LoRA rank" value={String(plan.recipe.lora.rank)}/><Config label="Rollouts per prompt" value={String(plan.recipe.rollout.groupSize)}/><Config label="Rollout concurrency" value={String(plan.recipe.rollout.concurrency)}/><Config label="Maximum turns" value={String(plan.recipe.rollout.maxTurns)}/><Config label="Maximum output" value={String(plan.recipe.rollout.maxOutputTokens)}/><Config label="Learning rate" value={String(plan.recipe.optimizer.learningRate)}/><Config label="Optimizer steps" value={String(plan.recipe.optimizer.maxSteps)}/><Config label="Reward environment" value={`${plan.recipe.reward.environmentId}@${plan.recipe.reward.environmentVersion}`}/><Config label="Tool contract" value={plan.recipe.reward.toolContractHash}/>
             </dl> : <div className="training-run-placeholder">No run configuration yet.</div>}
           </DetailSection>
           <DetailSection title="Lineage">
@@ -156,10 +162,20 @@ export function TrainingModelDetail({
       {startOpen ? <TrainingStartDialog
         baseModelCandidates={state?.baseModelCandidates ?? []}
         connection={connection}
-        taskset={taskset}
+        taskset={currentTaskset}
+        baselineReports={state?.baselineReports.filter((report) =>
+          report.tasksetId === currentTaskset.id
+          && report.tasksetHash === currentTaskset.contentHash) ?? []}
+        baselineRuns={state?.baselineRuns.filter((run) =>
+          run.tasksetId === currentTaskset.id) ?? []}
         destinations={state?.destinations ?? []}
-        busy={["prepare-training", "start-prepared-training", "start-training"].includes(training.busyAction ?? "")}
+        busy={["baseline", "prepare-training", "start-prepared-training", "start-training"].includes(training.busyAction ?? "")}
+        busyAction={training.busyAction}
         onClose={() => setStartOpen(false)}
+        onOpenProviderSettings={onOpenProviderSettings}
+        onRunBaseline={async (model, options) => Boolean(
+          await training.actions.baseline(currentTaskset.id, model, options),
+        )}
         onPrepare={(destinationId, recipe, approval) => training.actions.prepareTraining({
           tasksetId: taskset.id,
           destinationId,

@@ -100,6 +100,7 @@
 .composer-steer-row-icon-button[data-tooltip],
 .chat-scroll-control-button[data-tooltip],
 .send-button[data-tooltip],
+.app-tooltip[data-tooltip],
 .section-icon[data-tooltip],
 .sidebar-icon[data-tooltip],
 .sidebar-row-action[data-tooltip],
@@ -119,6 +120,7 @@
 .composer-steer-row-icon-button[data-tooltip]::after,
 .chat-scroll-control-button[data-tooltip]::after,
 .send-button[data-tooltip]::after,
+.app-tooltip[data-tooltip]::after,
 .section-icon[data-tooltip]::after,
 .sidebar-icon[data-tooltip]::after,
 .sidebar-row-action[data-tooltip]::after,
@@ -159,6 +161,7 @@
 .composer-steer-row-icon-button[data-tooltip]::before,
 .chat-scroll-control-button[data-tooltip]::before,
 .send-button[data-tooltip]::before,
+.app-tooltip[data-tooltip]::before,
 .section-icon[data-tooltip]::before,
 .sidebar-icon[data-tooltip]::before,
 .sidebar-row-action[data-tooltip]::before,
@@ -228,6 +231,10 @@
 .send-button[data-tooltip]:hover::before,
 .send-button[data-tooltip]:focus-visible::after,
 .send-button[data-tooltip]:focus-visible::before,
+.app-tooltip[data-tooltip]:hover::after,
+.app-tooltip[data-tooltip]:hover::before,
+.app-tooltip[data-tooltip]:focus-visible::after,
+.app-tooltip[data-tooltip]:focus-visible::before,
 .section-icon[data-tooltip]:hover::after,
 .section-icon[data-tooltip]:hover::before,
 .section-icon[data-tooltip]:focus-visible::after,
@@ -273,6 +280,8 @@
 .chat-scroll-control-button[data-tooltip]:focus-visible::before,
 .send-button[data-tooltip]:hover::before,
 .send-button[data-tooltip]:focus-visible::before,
+.app-tooltip[data-tooltip]:hover::before,
+.app-tooltip[data-tooltip]:focus-visible::before,
 .section-icon[data-tooltip]:hover::before,
 .section-icon[data-tooltip]:focus-visible::before,
 .sidebar-icon[data-tooltip]:hover::before,
@@ -291,6 +300,7 @@
   visibility: visible;
 }
 
+.app-tooltip-right[data-tooltip]::after,
 .sidebar-icon[data-tooltip]::after,
 .section-icon[data-tooltip]::after,
 .sidebar-row-action[data-tooltip]::after,
@@ -300,6 +310,7 @@
   transform: translate(0, 3px);
 }
 
+.app-tooltip-right[data-tooltip]::before,
 .sidebar-icon[data-tooltip]::before,
 .section-icon[data-tooltip]::before,
 .sidebar-row-action[data-tooltip]::before,
@@ -309,6 +320,8 @@
   transform: translate(0, 3px) rotate(45deg);
 }
 
+.app-tooltip-right[data-tooltip]:hover::after,
+.app-tooltip-right[data-tooltip]:focus-visible::after,
 .sidebar-icon[data-tooltip]:hover::after,
 .sidebar-icon[data-tooltip]:focus-visible::after,
 .section-icon[data-tooltip]:hover::after,
@@ -320,6 +333,8 @@
   transform: translate(0, 0);
 }
 
+.app-tooltip-right[data-tooltip]:hover::before,
+.app-tooltip-right[data-tooltip]:focus-visible::before,
 .sidebar-icon[data-tooltip]:hover::before,
 .sidebar-icon[data-tooltip]:focus-visible::before,
 .section-icon[data-tooltip]:hover::before,

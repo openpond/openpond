@@ -91,6 +91,7 @@ export type FireworksRftJob = {
     temperature?: number;
     topP?: number;
     responseCandidatesCount?: number;
+    extraBody?: string;
   };
   lossConfig?: { method?: string; klBeta?: number };
   maxConcurrentRollouts?: number;
@@ -159,6 +160,33 @@ export type FireworksDeploymentShapeVersion = {
     presetType?: string;
   };
 };
+
+export function fireworksRftChunkSize(
+  exampleCount: number,
+  targetOptimizerSteps: number,
+): number {
+  const examples = Math.max(1, Math.trunc(exampleCount));
+  const target = Math.max(1, Math.trunc(targetOptimizerSteps));
+  return Math.max(1, Math.min(10_000, Math.ceil(examples / target)));
+}
+
+export function fireworksRftOptimizerSteps(
+  exampleCount: number,
+  chunkSize: number,
+): number {
+  return Math.ceil(
+    Math.max(1, Math.trunc(exampleCount))
+      / Math.max(1, Math.trunc(chunkSize)),
+  );
+}
+
+export function fireworksRftRolloutCount(
+  exampleCount: number,
+  groupSize: number,
+): number {
+  return Math.max(1, Math.trunc(exampleCount))
+    * Math.max(1, Math.trunc(groupSize));
+}
 
 type FireworksFetch = typeof fetch;
 
@@ -297,12 +325,14 @@ export class FireworksApiClient {
     learningRate: number;
     maxContextLength: number;
     loraRank: number;
-    maxSteps: number;
+    chunkSize: number;
     groupSize: number;
     maxOutputTokens: number;
     temperature: number;
     topP: number;
     maxConcurrentRollouts: number;
+    lossMethod: "grpo" | "dapo" | "gspo-token";
+    klBeta: number | null;
   }): Promise<FireworksRftJob> {
     const query = new URLSearchParams({
       reinforcementFineTuningJobId: input.jobId,
@@ -331,9 +361,16 @@ export class FireworksApiClient {
             temperature: input.temperature,
             topP: input.topP,
             responseCandidatesCount: input.groupSize,
+            // Fireworks enables Qwen3 thinking by default. Keep provider-native
+            // rollouts identical to OpenPond's train-signal baseline so the
+            // output budget is spent on the answer that the grader consumes.
+            extraBody: JSON.stringify({ reasoning_effort: "none" }),
           },
-          chunkSize: Math.max(1, Math.min(10_000, input.maxSteps)),
-          lossConfig: { method: "GRPO" },
+          chunkSize: Math.max(1, Math.min(10_000, input.chunkSize)),
+          lossConfig: {
+            method: providerRftLossMethod(input.lossMethod),
+            ...(input.klBeta == null ? {} : { klBeta: input.klBeta }),
+          },
           maxConcurrentRollouts: input.maxConcurrentRollouts,
           maxConcurrentEvaluations: Math.min(4, input.maxConcurrentRollouts),
           purpose: "PURPOSE_PILOT",
@@ -665,6 +702,14 @@ function accountModelResource(accountId: string, modelId: string): string {
   const resource = qualifiedResource(modelId);
   if (resource.startsWith("accounts/")) return resource;
   return `accounts/${accountId}/models/${resourceId(resource)}`;
+}
+
+function providerRftLossMethod(
+  method: "grpo" | "dapo" | "gspo-token",
+): "GRPO" | "DAPO" | "GSPO_TOKEN" {
+  if (method === "dapo") return "DAPO";
+  if (method === "gspo-token") return "GSPO_TOKEN";
+  return "GRPO";
 }
 
 async function providerError(

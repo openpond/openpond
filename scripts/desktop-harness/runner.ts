@@ -211,6 +211,8 @@ async function createRuntime(options: DesktopHarnessRunOptions & {
       repoRoot: options.repoRoot,
       timeoutMs: options.timeoutMs,
       keepHome: options.keepHome,
+      skipBuild: options.skipBuild,
+      frozenRenderer: options.frozenRenderer,
     });
     return isolatedRuntime(isolated);
   }

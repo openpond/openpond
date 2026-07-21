@@ -5,6 +5,7 @@ import {
   CreateImproveRunSchema,
   CreateImproveWorkflowCaptureSchema,
   conciseWorkproductName,
+  isTrainingSourceRef,
   nextCreateImproveRunRevision,
   type BaseModelPreference,
   type CreateImproveRun,
@@ -148,7 +149,7 @@ export function createExistingTasksetModelCreateImproveRun(input: {
     profileId: input.profileId,
     objective: input.taskset.objective,
     sourceIds: input.taskset.sourceRefs.map((source) => source.id),
-    sources: input.taskset.sourceRefs,
+    sources: input.taskset.sourceRefs.filter(isTrainingSourceRef),
     targetIntent: {
       kind: "model",
       id: input.modelId ?? `model_${randomUUID()}`,

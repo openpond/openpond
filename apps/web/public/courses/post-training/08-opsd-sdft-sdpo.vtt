@@ -1,0 +1,61 @@
+WEBVTT
+
+1
+00:00:00.700 --> 00:00:11.660
+OPSD, SDFT, and SDPO share one mechanism. A frozen teacher scores the student's prefix while receiving additional evidence. The evidence source defines the method.
+
+2
+00:00:12.755 --> 00:00:22.661
+The student distribution is p theta given the issue and its prefix. Teacher target q scores the same next token at the same prefix, but also conditions on evidence e.
+
+3
+00:00:23.755 --> 00:00:28.754
+Training matches q into p; deployment removes e.
+
+4
+00:00:29.848 --> 00:00:39.173
+On-Policy Self-Distillation, or OPSD, gives the teacher a trusted solution. Here that is the verified repair: preserve cleanup and raise Cancelled Error.
+
+5
+00:00:40.267 --> 00:00:46.951
+The teacher uses it to guide the student's own prefix without placing the privileged patch in the deployed student's prompt.
+
+6
+00:00:48.046 --> 00:00:56.226
+The OPSD paper evaluated this mechanism on reasoning tasks; the animation maps the information flow onto our code case.
+
+7
+00:00:57.320 --> 00:01:09.003
+Self-Distillation Fine-Tuning, or SDFT, gives the teacher an expert demonstration. A related repair shows the sequence inspect the flag, run cleanup, then raise the exception.
+
+8
+00:01:10.098 --> 00:01:18.278
+Unlike offline imitation, SDFT scores the current student's return-None prefix, so the demonstration guides the state the student actually reached.
+
+9
+00:01:19.372 --> 00:01:33.785
+Self-Distillation Policy Optimization, or SDPO, gives the teacher feedback about the current failure. The scalar reward is zero, but the test trace says test-cancel failed, expected Cancelled Error, and return skipped cancellation.
+
+10
+00:01:34.880 --> 00:01:40.430
+The teacher converts that explanation into dense token probabilities along the failed prefix.
+
+11
+00:01:41.524 --> 00:01:53.026
+The choice follows the evidence. A trusted solution supports OPSD. A demonstration supports SDFT. An explanatory failure trace supports SDPO.
+
+12
+00:01:54.121 --> 00:02:03.124
+If all you have is a binary outcome, GRPO may be the honest baseline; inventing a generic “feedback” field would hide these different trust boundaries.
+
+13
+00:02:04.219 --> 00:02:14.035
+None of the dense methods is automatically safe. A privileged patch can leak. A demonstration can be irrelevant. A teacher can misread feedback and densify an error.
+
+14
+00:02:15.130 --> 00:02:23.591
+New capability can overwrite old behavior, entropy can collapse, and teacher forward passes can erase claimed efficiency savings.
+
+15
+00:02:24.685 --> 00:02:37.734
+So the durable comparison is not acronym against acronym. Hold the student prefix fixed, vary the evidence, record the cost, and measure both the cancellation repair and unrelated retained capability.

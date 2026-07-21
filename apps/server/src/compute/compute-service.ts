@@ -73,6 +73,9 @@ export function createComputeService(deps: ComputeServiceDeps) {
       ...current,
       ...patch,
       modelStorePath: patch.modelStorePath === undefined ? current.modelStorePath : normalizeOptionalPath(patch.modelStorePath),
+      datasetStorePath: patch.datasetStorePath === undefined
+        ? current.datasetStorePath
+        : normalizeOptionalPath(patch.datasetStorePath, "Dataset"),
       additionalModelPaths: patch.additionalModelPaths === undefined ? current.additionalModelPaths : uniquePaths(patch.additionalModelPaths),
       updatedAt: timestamp(),
     });
@@ -103,6 +106,7 @@ export function createComputeService(deps: ComputeServiceDeps) {
     return ComputeSettingsSchema.parse({
       schemaVersion: "openpond.computeSettings.v1",
       modelStorePath: null,
+      datasetStorePath: path.join(deps.storeDir, "datasets"),
       defaultDeviceIds: [],
       additionalModelPaths: [],
       updatedAt: timestamp(),
@@ -231,14 +235,52 @@ export function createComputeService(deps: ComputeServiceDeps) {
     const discovered = deps.storageCandidates
       ? await deps.storageCandidates()
       : await discoverStorageCandidates({ commandProbe, platform, storeDir: deps.storeDir });
-    const configuredPaths = new Set([currentSettings.modelStorePath, ...currentSettings.additionalModelPaths].filter((value): value is string => Boolean(value)).map(normalizedPath));
+    const configuredPaths = new Set(
+      [
+        currentSettings.modelStorePath,
+        currentSettings.datasetStorePath,
+        ...currentSettings.additionalModelPaths,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map(normalizedPath),
+    );
     const candidates: StorageCandidate[] = [...discovered];
     if (currentSettings.modelStorePath && !discovered.some((candidate) => normalizedPath(candidate.modelStorePath) === normalizedPath(currentSettings.modelStorePath!))) {
-      candidates.push({ path: currentSettings.modelStorePath, modelStorePath: currentSettings.modelStorePath, label: "Manual location", kind: storageKindForPath(currentSettings.modelStorePath) });
+      candidates.push({
+        path: currentSettings.modelStorePath,
+        modelStorePath: currentSettings.modelStorePath,
+        datasetStorePath: currentSettings.datasetStorePath
+          ?? path.join(path.dirname(currentSettings.modelStorePath), "datasets"),
+        label: "Manual location",
+        kind: storageKindForPath(currentSettings.modelStorePath),
+      });
+    }
+    if (
+      currentSettings.datasetStorePath
+      && !discovered.some(
+        (candidate) =>
+          normalizedPath(candidate.datasetStorePath)
+          === normalizedPath(currentSettings.datasetStorePath!),
+      )
+    ) {
+      candidates.push({
+        path: currentSettings.datasetStorePath,
+        modelStorePath: currentSettings.modelStorePath
+          ?? path.join(path.dirname(currentSettings.datasetStorePath), "models"),
+        datasetStorePath: currentSettings.datasetStorePath,
+        label: "Manual Dataset location",
+        kind: storageKindForPath(currentSettings.datasetStorePath),
+      });
     }
     for (const candidate of currentSettings.additionalModelPaths) {
       if (candidates.some((existing) => normalizedPath(existing.path) === normalizedPath(candidate) || normalizedPath(existing.modelStorePath) === normalizedPath(candidate))) continue;
-      candidates.push({ path: candidate, modelStorePath: candidate, label: path.basename(candidate) || candidate, kind: storageKindForPath(candidate) });
+      candidates.push({
+        path: candidate,
+        modelStorePath: candidate,
+        datasetStorePath: path.join(candidate, "OpenPond", "datasets"),
+        label: path.basename(candidate) || candidate,
+        kind: storageKindForPath(candidate),
+      });
     }
     return Promise.all(uniqueByPath(candidates).map(async (candidate) => {
       const resolved = path.resolve(candidate.path);
@@ -251,15 +293,20 @@ export function createComputeService(deps: ComputeServiceDeps) {
         mounted = true;
         totalBytes = safeBytes(stats.blocks, stats.bsize);
         freeBytes = safeBytes(stats.bavail, stats.bsize);
-        writable = await canWriteOrCreate(candidate.modelStorePath);
+        writable = await canWriteOrCreate(candidate.datasetStorePath)
+          && await canWriteOrCreate(candidate.modelStorePath);
       } catch { /* An absent or read-only configured root remains visible. */ }
       return {
         id: `storage:${pathId(resolved)}`,
         label: candidate.label,
         path: resolved,
         modelStorePath: path.resolve(candidate.modelStorePath),
+        datasetStorePath: path.resolve(candidate.datasetStorePath),
         kind: candidate.kind,
-        configured: configuredPaths.has(normalizedPath(candidate.modelStorePath)) || configuredPaths.has(normalizedPath(candidate.path)),
+        configured:
+          configuredPaths.has(normalizedPath(candidate.modelStorePath))
+          || configuredPaths.has(normalizedPath(candidate.datasetStorePath))
+          || configuredPaths.has(normalizedPath(candidate.path)),
         mounted,
         writable,
         totalBytes,
@@ -312,11 +359,16 @@ function portableCpu(vendor: ComputeDevice["vendor"] = "other"): ComputeDevice {
 async function readText(filePath: string): Promise<string | null> { try { return await readFile(filePath, "utf8"); } catch { return null; } }
 async function atomicJson(filePath: string, value: unknown): Promise<void> { await mkdir(path.dirname(filePath), { recursive: true }); const temporary = `${filePath}.${process.pid}.tmp`; await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8"); await rename(temporary, filePath); }
 function normalizedPlatform(platform: NodeJS.Platform): "darwin" | "linux" | "win32" | "other" { return platform === "darwin" || platform === "linux" || platform === "win32" ? platform : "other"; }
-function normalizeOptionalPath(value: string | null): string | null {
+function normalizeOptionalPath(
+  value: string | null,
+  label = "Model",
+): string | null {
   if (!value) return null;
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) throw new Error("Choose the mounted folder path instead of a network URL. Mount the share in your operating system first.");
   const expanded = value === "~" ? os.homedir() : value.startsWith(`~${path.sep}`) ? path.join(os.homedir(), value.slice(2)) : value;
-  if (!path.isAbsolute(expanded)) throw new Error("Model storage must be an absolute mounted folder path.");
+  if (!path.isAbsolute(expanded)) {
+    throw new Error(`${label} storage must be an absolute mounted folder path.`);
+  }
   return path.resolve(expanded);
 }
 function uniquePaths(values: string[]): string[] { return [...new Set(values.map((value) => path.resolve(value)))]; }

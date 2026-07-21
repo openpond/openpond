@@ -11,6 +11,7 @@ import {
 } from "../../lib/training-model-chat-handoff";
 import { Loader2, MessageSquare, X } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
+import { AppDialog } from "../dialogs/AppDialog";
 
 type TrainingController = ReturnType<typeof useTraining>;
 
@@ -73,18 +74,12 @@ export function ModelUseDialog({
   }
 
   return (
-    <div
-      className="training-dialog-backdrop"
-      role="presentation"
-      onMouseDown={busy ? undefined : onClose}
+    <AppDialog
+      ariaLabel={`Use ${taskset.name}`}
+      className="training-dialog training-model-use-dialog"
+      dismissDisabled={busy}
+      onClose={onClose}
     >
-      <section
-        aria-label={`Use ${taskset.name}`}
-        aria-modal="true"
-        className="training-dialog training-model-use-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
         <div className="training-dialog-header">
           <div>
             <h2>Use model</h2>
@@ -185,8 +180,7 @@ export function ModelUseDialog({
             </button>
           )}
         </div>
-      </section>
-    </div>
+    </AppDialog>
   );
 }
 

@@ -54,6 +54,8 @@ export async function launchIsolatedDesktopHarness(input: {
   repoRoot: string;
   timeoutMs: number;
   keepHome?: boolean;
+  skipBuild?: boolean;
+  frozenRenderer?: boolean;
 }): Promise<IsolatedDesktopHarness> {
   const appHome = await mkdtemp(path.join(os.tmpdir(), "openpond-desktop-harness-home-"));
   const userData = await mkdtemp(path.join(os.tmpdir(), "openpond-desktop-harness-user-data-"));
@@ -65,9 +67,14 @@ export async function launchIsolatedDesktopHarness(input: {
   let cdp: CdpClient | null = null;
 
   try {
-    runSetup(input.repoRoot, "bundle-server", [pnpmBinary(), "run", "bundle:server"]);
-    runSetup(input.repoRoot, "build-desktop", [pnpmBinary(), "run", "build:desktop"]);
-    renderer = startRenderer(input.repoRoot, webPort);
+    if (!input.skipBuild) {
+      runSetup(input.repoRoot, "bundle-server", [pnpmBinary(), "run", "bundle:server"]);
+      runSetup(input.repoRoot, "build-desktop", [pnpmBinary(), "run", "build:desktop"]);
+    }
+    if (input.frozenRenderer && !input.skipBuild) {
+      runSetup(input.repoRoot, "build-web", [pnpmBinary(), "--dir", "apps/web", "run", "build"]);
+    }
+    renderer = startRenderer(input.repoRoot, webPort, input.frozenRenderer ?? false);
     await waitForUrl(webUrl, input.timeoutMs);
     const startDesktop = async () => {
       desktop = launchDevElectron({
@@ -181,8 +188,11 @@ function runSetup(repoRoot: string, label: string, command: [string, ...string[]
   if (result.status !== 0) throw new Error(`${label} failed with code ${result.status ?? "unknown"}`);
 }
 
-function startRenderer(repoRoot: string, webPort: number): ProcessHandle {
-  const child = spawn(pnpmBinary(), ["--dir", "apps/web", "run", "dev"], {
+function startRenderer(repoRoot: string, webPort: number, frozen: boolean): ProcessHandle {
+  const args = frozen
+    ? ["--dir", "apps/web", "exec", "vite", "preview", "--host", "127.0.0.1", "--port", String(webPort), "--strictPort"]
+    : ["--dir", "apps/web", "run", "dev"];
+  const child = spawn(pnpmBinary(), args, {
     cwd: repoRoot,
     env: {
       ...process.env,

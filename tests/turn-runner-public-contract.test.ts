@@ -17,8 +17,6 @@ type ExpectedRunner = {
   interruptSessionTurn: PublicRunner["interruptSessionTurn"];
   interruptAll: PublicRunner["interruptAll"];
   close: PublicRunner["close"];
-  updateTurnCreatePipeline: PublicRunner["updateTurnCreatePipeline"];
-  resolveCreatePipelineApproval: PublicRunner["resolveCreatePipelineApproval"];
   resolveSubagentPatchApplyApproval: PublicRunner["resolveSubagentPatchApplyApproval"];
   runSubagentLifecycleAction: PublicRunner["runSubagentLifecycleAction"];
   cleanupExpiredRetainedSubagentWorkspace: PublicRunner["cleanupExpiredRetainedSubagentWorkspace"];

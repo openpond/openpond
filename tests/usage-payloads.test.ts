@@ -64,6 +64,11 @@ describe("usage API payloads", () => {
       p95FirstTokenMs: 100,
       failureRate: 0.3333,
       activeModelCount: 2,
+      peakDailyTokens: 1500,
+      longestRequestMs: 3000,
+      activeDays: 1,
+      currentStreakDays: 1,
+      longestStreakDays: 1,
     });
     expect(payload.daily).toEqual([
       {
@@ -136,6 +141,29 @@ describe("usage API payloads", () => {
     expect(payload.records.map((record) => record.requestId)).toEqual(["usage_3"]);
     expect(payload.filters.status).toBe("missing");
   });
+
+  test("filters summaries and records to one provider model", async () => {
+    const records = [
+      usageRecord({ requestId: "usage_codex", provider: "codex", model: "gpt-5.6", totalTokens: 800 }),
+      usageRecord({ requestId: "usage_openrouter", provider: "openrouter", model: "anthropic/claude-sonnet-4", totalTokens: 1200 }),
+    ];
+    const store = usageStore(records);
+    const summary = await usageSummaryPayload({
+      requestUrl: new URL("http://127.0.0.1/v1/usage?range=all&provider=codex&model=gpt-5.6"),
+      store,
+      now: new Date("2026-07-04T20:00:00.000Z"),
+    });
+    const recordPayload = await usageRecordsPayload({
+      requestUrl: new URL("http://127.0.0.1/v1/usage/records?range=all&provider=codex&model=gpt-5.6"),
+      store,
+      now: new Date("2026-07-04T20:00:00.000Z"),
+    });
+
+    expect(summary.filters).toMatchObject({ provider: "codex", model: "gpt-5.6" });
+    expect(summary.totals.requests).toBe(1);
+    expect(summary.models.map((row) => [row.provider, row.model])).toEqual([["codex", "gpt-5.6"]]);
+    expect(recordPayload.records.map((record) => record.requestId)).toEqual(["usage_codex"]);
+  });
 });
 
 function usageStore(records: ModelUsageRecord[]) {
@@ -143,6 +171,8 @@ function usageStore(records: ModelUsageRecord[]) {
     async listModelUsageRecords(query: {
       sessionId?: string | null;
       turnId?: string | null;
+      provider?: ModelUsageRecord["provider"] | null;
+      model?: string | null;
       startedAtFrom?: string | null;
       startedAtTo?: string | null;
       visibility?: string | null;
@@ -152,6 +182,8 @@ function usageStore(records: ModelUsageRecord[]) {
       const filtered = records
         .filter((record) => !query.sessionId || record.sessionId === query.sessionId)
         .filter((record) => !query.turnId || record.turnId === query.turnId)
+        .filter((record) => !query.provider || record.provider === query.provider)
+        .filter((record) => !query.model || record.model === query.model)
         .filter((record) => !query.startedAtFrom || record.startedAt >= query.startedAtFrom)
         .filter((record) => !query.startedAtTo || record.startedAt <= query.startedAtTo)
         .filter((record) => !query.visibility || query.visibility === "all" || record.visibility === query.visibility)

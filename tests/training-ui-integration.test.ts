@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { TrainingView } from "../apps/web/src/components/training/TrainingView";
 import { TrainingTasksetDetail } from "../apps/web/src/components/training/TrainingTasksetDetail";
 import {
+  defaultRftLossMethod,
   preserveBaseModelSelection,
   TrainingStartDialog,
   trainingRecipe,
@@ -65,14 +66,14 @@ describe("Training UI", () => {
     }));
     expect(html).toContain("AI suggestions");
     expect(html).toContain("No AI suggestions yet");
-    expect(html).toContain("Automated");
+    expect(html).toContain("Automatic");
   });
 
   test("shows the method and a plain evaluation preview without canned blocker copy", () => {
     const taskset = tasksetFixture();
     const controller = { payload: { tasksets: [taskset] }, busyAction: null, actions: actionStubs() } as any;
     const html = renderToStaticMarkup(createElement(TrainingTasksetDetail, { taskset, training: controller, onOpenChat: () => undefined }));
-    for (const label of ["Method", "SFT", "Training examples", "Test examples", "Evaluation", "Expected output match", "2 chats"]) expect(html).toContain(label);
+    for (const label of ["Method", "SFT", "Training examples", "Test examples", "Evaluation", "Expected output match", "2 sources"]) expect(html).toContain(label);
     expect(html).not.toContain("<h2>Fixture Taskset</h2>");
     expect(html).toContain("training-chat-link");
     expect(html).not.toContain("At least one approved training demonstration");
@@ -226,6 +227,7 @@ describe("Training UI", () => {
       }],
       busy: false,
       onClose: () => undefined,
+      onOpenProviderSettings: () => undefined,
       onPrepare: async () => null,
       onConfirmPrepared: async () => false,
       onStart: async () => true,
@@ -278,13 +280,129 @@ describe("Training UI", () => {
       onPrepare: async () => null,
       onConfirmPrepared: async () => false,
       onStart: async () => true,
+      onOpenProviderSettings: () => undefined,
+      onRunBaseline: async () => true,
     }));
 
     expect(html).toContain("RFT requires a public HTTPS callback");
     expect(html).toContain("/v1/training/fireworks/rft");
     expect(html).toContain("Launch fails closed before provider upload");
-    expect(html).toContain("Prompts per update");
+    expect(html).toContain("Manage Fireworks provider");
+    expect(html).toContain("Optimizer steps");
+    expect(html).toContain("Training examples");
     expect(html).toContain('value="8"');
+    expect(html).toContain('aria-label="RL loss"');
+    expect(html).toContain("Test the base model");
+    expect(html).toContain("Test base model");
+    expect(html).toContain("up to $1.17");
+    expect(html).not.toContain("grouped loss");
+    expect(html).toContain("Answers and grading stay inside OpenPond");
+  });
+
+  test("defaults artifact-backed RFT to the bounded train-signal canary", () => {
+    const base = tasksetFixture({ ready: true });
+    const taskset = TasksetSchema.parse({
+      ...base,
+      tasks: [],
+      datasetArtifact: {
+        schemaVersion: "openpond.datasetArtifact.v1",
+        id: "dataset_artifact_ui_rft",
+        tasksetId: base.id,
+        tasksetRevision: 1,
+        contentHash: "artifacthash-ui-rft",
+        format: "parquet",
+        schema: {
+          schemaVersion: "openpond.datasetSemanticSchema.v1",
+          fields: [{
+            name: "expected_output",
+            semanticRole: "expected_output",
+            logicalType: "string",
+            nullable: false,
+            policy: "privileged",
+          }],
+          schemaHash: "schemahash-ui-rft",
+        },
+        shards: [{
+          id: "dataset_shard_ui_rft",
+          split: "train",
+          path: "data/train.parquet",
+          contentHash: "shardhash-ui-rft",
+          schemaHash: "schemahash-ui-rft",
+          sizeBytes: 1_000,
+          rowCount: 100,
+          rowGroupCount: 1,
+        }],
+        rowCount: 120,
+        splitCounts: { train: 100, validation: 10, test: 0, frozen_eval: 10 },
+        sourceReceiptRefs: ["receipt_ui_rft"],
+        mappingHash: "mappinghash-ui-rft",
+        qualityReportHash: "qualityhash-ui-rft",
+        createdAt: "2026-07-20T00:00:00.000Z",
+      },
+      capabilities: { ...base.capabilities, compatibleMethods: ["grpo"] },
+      metadata: { ...base.metadata, trainingMethod: "grpo" },
+      readiness: {
+        ...base.readiness!,
+        recommendedMethod: "grpo",
+        trainingPath: { primaryMethod: "grpo", bootstrap: null },
+      },
+    });
+    const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
+      baseModelCandidates: [managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["grpo"])],
+      connection: null,
+      taskset,
+      destinations: [{
+        schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+        destinationId: "fireworks",
+        available: true,
+        methods: ["grpo"],
+        parameterizations: ["lora"],
+        modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
+        maxDatasetBytes: 1_000_000,
+        environmentPlacements: ["provider_native"],
+        nonProduction: false,
+        unavailableReason: null,
+        checkedAt: "2026-07-20T00:00:00.000Z",
+      }],
+      busy: false,
+      onClose: () => undefined,
+      onPrepare: async () => null,
+      onConfirmPrepared: async () => false,
+      onStart: async () => true,
+      onRunBaseline: async () => true,
+    }));
+
+    expect(html).toContain("Check train signal");
+    expect(html).toContain("Run 16 selected train prompts with 8 candidates each");
+    expect(html).toContain("At least 4 prompts must produce both correct and incorrect rewards");
+    expect(html).toContain("Run train-signal check");
+    expect(html).toContain('value="16"');
+    expect(html).toContain('value="512"');
+    expect(html).toContain("Maximum output");
+    expect(html).toContain('value="2048"');
+    expect(html).not.toContain("grouped loss");
+
+    const recipe = trainingRecipe({
+      method: "grpo",
+      taskset,
+      destinationId: "fireworks",
+      baseModelId: "accounts/fireworks/models/qwen3-0p6b",
+      maxSteps: 8,
+      sequenceLength: 2_048,
+      rank: 8,
+      learningRate: 0.0002,
+      model: null,
+      rolloutGroupSize: 8,
+      rolloutConcurrency: 4,
+      rolloutMaxOutputTokens: 2_048,
+      trainingExamples: 16,
+    });
+    expect(recipe.method === "grpo" && recipe.dataset.selectionStrategy)
+      .toBe("rft_easy_curriculum_v1");
+    expect(recipe.method === "grpo" && recipe.resourceLimits.maxRollouts)
+      .toBe(128);
+    expect(recipe.method === "grpo" && recipe.rollout.maxOutputTokens)
+      .toBe(2_048);
   });
 
   test("budgets every grouped RFT rollout and defaults to the supported 8B model", () => {
@@ -309,12 +427,14 @@ describe("Training UI", () => {
       model: null,
       rolloutGroupSize: 8,
       rolloutConcurrency: 4,
+      rolloutMaxOutputTokens: 2_048,
+      trainingExamples: 2,
     });
     expect(recipe.method).toBe("grpo");
     if (recipe.method !== "grpo") return;
-    expect(recipe.resourceLimits.maxRollouts).toBe(
-      taskset.tasks.filter((task) => task.split === "train").length * 8,
-    );
+    expect(recipe.resourceLimits.maxRollouts).toBe(2 * 8);
+    expect(recipe.dataset.maxExamples).toBe(2);
+    expect(recipe.loss.method).toBe("grpo");
 
     const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
       baseModelCandidates: [
@@ -348,6 +468,34 @@ describe("Training UI", () => {
     expect(html).toContain('value="managed_accounts/fireworks/models/qwen3-8b" selected="">Qwen3 8B · Fireworks');
   });
 
+  test("defaults DAPO-Math artifacts to the DAPO provider loss", () => {
+    const base = tasksetFixture({ ready: true });
+    const taskset = TasksetSchema.parse({
+      ...base,
+      sourceRefs: base.sourceRefs.map((source, index) =>
+        index === 0 ? { ...source, title: "DAPO-Math-17k" } : source),
+      contentHash: "taskset-ui-dapo-loss-v1",
+    });
+    expect(defaultRftLossMethod(taskset)).toBe("dapo");
+    const recipe = trainingRecipe({
+      method: "grpo",
+      taskset,
+      destinationId: "fireworks",
+      baseModelId: "accounts/fireworks/models/qwen3-0p6b",
+      maxSteps: 10,
+      sequenceLength: 8_192,
+      rank: 8,
+      learningRate: 0.00005,
+      model: null,
+      rolloutGroupSize: 8,
+      rolloutConcurrency: 4,
+      rolloutMaxOutputTokens: 4_096,
+      trainingExamples: 256,
+    });
+    expect(recipe.method).toBe("grpo");
+    if (recipe.method === "grpo") expect(recipe.loss.method).toBe("dapo");
+  });
+
   test("preserves a compatible base model and clears an incompatible destination change", () => {
     const candidate = managedCandidate(
       "accounts/fireworks/models/qwen3-8b",
@@ -377,6 +525,12 @@ describe("Training UI", () => {
     const css = await readFile("apps/web/src/styles/training/training.css", "utf8");
     expect(css).toContain(".training-run-workflow-step{height:min(680px,calc(100vh - 40px));overflow:hidden}");
     expect(css).toContain(".training-dialog-scroll-body{min-height:0;overflow:auto");
+  });
+
+  test("replaces Chromium's amber objective-field ring with the app focus color", async () => {
+    const css = await readFile("apps/web/src/styles/training/training.css", "utf8");
+    expect(css).toContain(".training-objective-field textarea:focus-visible{border-color:color-mix(in srgb,var(--cyan) 70%,var(--border))}");
+    expect(css).toContain("border-radius:6px;outline:0;background:var(--panel)");
   });
 
   test("does not discard an unsaved model configuration when Training polling returns equivalent data", async () => {

@@ -1,5 +1,6 @@
 import {
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  isTrainingSourceRef,
   type ChatModelRef,
   type Taskset,
 } from "@openpond/contracts";
@@ -121,7 +122,7 @@ function generatedChatTasks(taskset: Taskset): TrainingModelChatTask[] {
 }
 
 function uniqueSourceProjectId(taskset: Taskset): string | null {
-  const projectIds = new Set(taskset.sourceRefs.flatMap((source) => {
+  const projectIds = new Set(taskset.sourceRefs.filter(isTrainingSourceRef).flatMap((source) => {
     const id = source.workspaceId?.trim();
     return id ? [id] : [];
   }));

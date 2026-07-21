@@ -66,6 +66,11 @@ export function Sidebar(props: SidebarProps) {
 
       <UserAuthFooter
         account={props.account}
+        onOpenActivity={() => {
+          setSectionMenuOpen(null);
+          setSettingsSection("usage");
+          setView("settings");
+        }}
         onOpenSettings={() => {
           setSectionMenuOpen(null);
           setSettingsSection("account");
