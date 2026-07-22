@@ -10,6 +10,10 @@ import {
 } from "../apps/web/src/lib/app-models";
 
 describe("app model labels", () => {
+  test("defaults Save for later to collapsed", () => {
+    expect(DEFAULT_APP_PREFERENCES.sidebarSectionsCollapsed.savedForLater).toBe(true);
+  });
+
   test("labels the Codex login provider distinctly from OpenAI BYOK", () => {
     expect(chatProviderLabel("codex", null)).toBe("OpenAI Codex");
     expect(providerOptionsFromSettings(null).find((option) => option.value === "codex")?.label).toBe(

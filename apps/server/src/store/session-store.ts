@@ -5,6 +5,7 @@ import {
   OpenPondCommandAccessModeSchema,
   PatchSessionRequestSchema,
   type AppPreferences,
+  type PatchSessionRequest,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -57,6 +58,7 @@ export function createSessionStore(deps: {
       updatedAt: createdAt,
       status: "idle",
       pinned: false,
+      savedForLater: false,
       archived: false,
       order: sessionCount,
     };
@@ -76,11 +78,14 @@ export function createSessionStore(deps: {
   async function patchSession(sessionId: string, payload: unknown): Promise<Session> {
     const input = PatchSessionRequestSchema.parse(payload);
     const updated = await store.updateSession(sessionId, (session) =>
-      normalizeSessionCommandAccess({
-        ...session,
-        ...input,
-        updatedAt: session.updatedAt,
-      }),
+      normalizeSession(
+        {
+          ...session,
+          ...input,
+          updatedAt: session.updatedAt,
+        },
+        input,
+      ),
     );
     if (!updated) throw new Error("Session not found");
     return updated;
@@ -89,12 +94,12 @@ export function createSessionStore(deps: {
   async function getSession(sessionId: string): Promise<Session> {
     const session = await store.getSession(sessionId);
     if (!session) throw new Error("Session not found");
-    return normalizeSessionCommandAccess(session);
+    return normalizeSession(session);
   }
 
   async function updateSession(sessionId: string, patch: Partial<Session>): Promise<Session> {
     const updated = await store.updateSession(sessionId, (session) =>
-      normalizeSessionCommandAccess({
+      normalizeSession({
         ...session,
         ...patch,
         updatedAt: now(),
@@ -181,12 +186,39 @@ export function createSessionStore(deps: {
   };
 }
 
-function normalizeSessionCommandAccess(session: Session): Session {
+function normalizeSession(
+  session: Session,
+  sidebarPatch?: Pick<PatchSessionRequest, "archived" | "pinned" | "savedForLater">,
+): Session {
   const parsed = OpenPondCommandAccessModeSchema.safeParse(
     (session as Session & { openPondCommandAccessMode?: unknown }).openPondCommandAccessMode,
   );
+  let pinned = Boolean(session.pinned);
+  let savedForLater = Boolean(session.savedForLater);
+  let archived = Boolean(session.archived);
+  if (sidebarPatch?.archived === true) {
+    pinned = false;
+    savedForLater = false;
+    archived = true;
+  } else if (sidebarPatch?.savedForLater === true) {
+    pinned = false;
+    savedForLater = true;
+    archived = false;
+  } else if (sidebarPatch?.pinned === true) {
+    pinned = true;
+    savedForLater = false;
+    archived = false;
+  } else if (archived) {
+    pinned = false;
+    savedForLater = false;
+  } else if (savedForLater) {
+    pinned = false;
+  }
   return {
     ...session,
     openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    pinned,
+    savedForLater,
+    archived,
   };
 }

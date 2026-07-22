@@ -10,6 +10,7 @@ const CODEX_HISTORY_SIDEBAR_PREFERENCES_TYPE = "codex_history.sidebar_preference
 
 export type CodexHistorySidebarPreference = {
   pinned?: boolean;
+  savedForLater?: boolean;
   archived?: boolean;
   order?: number;
   title?: string;
@@ -69,6 +70,7 @@ export function applyCodexHistorySidebarPreference(
   return {
     ...session,
     ...(typeof preference.pinned === "boolean" ? { pinned: preference.pinned } : {}),
+    ...(typeof preference.savedForLater === "boolean" ? { savedForLater: preference.savedForLater } : {}),
     ...(typeof preference.archived === "boolean" ? { archived: preference.archived } : {}),
     ...(typeof preference.order === "number" ? { order: preference.order } : {}),
     ...(preference.title ? { title: preference.title } : {}),
@@ -81,12 +83,21 @@ function mergePreferencePatch(
 ): CodexHistorySidebarPreference {
   const next: CodexHistorySidebarPreference = { ...existing };
   if (typeof input.pinned === "boolean") next.pinned = input.pinned;
+  if (typeof input.savedForLater === "boolean") next.savedForLater = input.savedForLater;
   if (typeof input.archived === "boolean") next.archived = input.archived;
   if (typeof input.order === "number") next.order = input.order;
   if (typeof input.title === "string") next.title = input.title;
 
-  if (input.pinned === true) next.archived = false;
-  if (input.archived === true) next.pinned = false;
+  if (input.archived === true) {
+    next.pinned = false;
+    next.savedForLater = false;
+  } else if (input.savedForLater === true) {
+    next.pinned = false;
+    next.archived = false;
+  } else if (input.pinned === true) {
+    next.savedForLater = false;
+    next.archived = false;
+  }
 
   return next;
 }
@@ -97,7 +108,8 @@ function normalizePreference(value: unknown): CodexHistorySidebarPreference {
   const preference: CodexHistorySidebarPreference = {};
 
   if (typeof input.pinned === "boolean") preference.pinned = input.pinned;
-  if (typeof input.archived === "boolean") preference.archived = input.pinned === true ? false : input.archived;
+  if (typeof input.savedForLater === "boolean") preference.savedForLater = input.savedForLater;
+  if (typeof input.archived === "boolean") preference.archived = input.archived;
   if (typeof input.order === "number" && Number.isFinite(input.order)) preference.order = input.order;
   if (typeof input.title === "string") {
     const title = input.title.trim();
@@ -107,6 +119,13 @@ function normalizePreference(value: unknown): CodexHistorySidebarPreference {
     preference.updatedAt = input.updatedAt;
   }
 
-  if (preference.archived === true) preference.pinned = false;
+  if (preference.archived === true) {
+    preference.pinned = false;
+    preference.savedForLater = false;
+  } else if (preference.savedForLater === true) {
+    preference.pinned = false;
+  } else if (preference.pinned === true) {
+    preference.savedForLater = false;
+  }
   return preference;
 }

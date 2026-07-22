@@ -298,6 +298,15 @@
 .training-existing-dataset-list .training-choice-indicator{
   position:static;
 }
+.training-existing-dataset-empty{
+  display:grid;
+  gap:5px;
+  color:var(--muted);
+  text-align:center;
+}
+.training-existing-dataset-empty strong{
+  color:var(--text);
+}
 
 .dataset-import-dialog{width:min(760px,calc(100vw - 40px))}
 .dataset-import-locator{display:grid;align-content:start}

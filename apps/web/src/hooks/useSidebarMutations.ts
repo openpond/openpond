@@ -89,9 +89,18 @@ export function useSidebarMutations(params: {
     }
   }
 
+  function toggleSessionSavedForLater(session: Session) {
+    void patchSessionLocal(session, {
+      pinned: false,
+      savedForLater: !session.savedForLater,
+      archived: false,
+    });
+  }
+
   function toggleSessionPinned(session: Session) {
     void patchSessionLocal(session, {
       pinned: !session.pinned,
+      savedForLater: false,
       archived: false,
     });
   }
@@ -99,6 +108,7 @@ export function useSidebarMutations(params: {
   function archiveSession(session: Session) {
     void patchSessionLocal(session, {
       pinned: false,
+      savedForLater: false,
       archived: true,
     });
     if (selectedSessionId === session.id) {
@@ -124,5 +134,6 @@ export function useSidebarMutations(params: {
     restoreSession,
     toggleProjectPinned,
     toggleSessionPinned,
+    toggleSessionSavedForLater,
   };
 }

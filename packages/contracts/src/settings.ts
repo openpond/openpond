@@ -66,6 +66,7 @@ export const SidebarSectionsCollapsedSchema = z.object({
   projects: z.boolean().default(false),
   cloudProjects: z.boolean().default(false),
   chats: z.boolean().default(false),
+  savedForLater: z.boolean().default(true),
 });
 
 export type SidebarSectionsCollapsed = z.infer<typeof SidebarSectionsCollapsedSchema>;

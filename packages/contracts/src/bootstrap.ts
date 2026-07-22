@@ -8,6 +8,7 @@ import { RuntimeEventSchema } from "./runtime.js";
 import { ApprovalSchema } from "./approvals.js";
 import { PlaceholderPaneSchema } from "./placeholders.js";
 import { OpenPondProfileStateSchema, emptyOpenPondProfileState } from "./profile.js";
+import { SidebarFileBookmarkSchema } from "./sidebar-files.js";
 
 export const BootstrapEventWindowSchema = z.object({
   latestSequence: z.number().int().nonnegative(),
@@ -36,6 +37,7 @@ export const BootstrapPayloadSchema = z.object({
   profile: OpenPondProfileStateSchema.optional().default(emptyOpenPondProfileState),
   codexHistorySessions: z.array(SessionSchema).optional().default([]),
   sidebarAppPreferences: SidebarAppPreferencesSchema,
+  sidebarFileBookmarks: z.array(SidebarFileBookmarkSchema).optional().default([]),
   appsError: z.string().nullable(),
   appsMeta: CacheMetadataSchema,
   accountMeta: CacheMetadataSchema,

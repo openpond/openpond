@@ -100,6 +100,62 @@
   color: #f1f1f1;
 }
 
+.workspace-file-tree-row.file {
+  position: relative;
+  display: flex;
+  padding-right: 3px;
+}
+
+.workspace-file-tree-row-main {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+}
+
+.workspace-file-tree-bookmark-actions {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  gap: 1px;
+  border-radius: 6px;
+  background: #1b1b1b;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.workspace-file-tree-bookmark-actions button {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: #8f8f8f;
+}
+
+.workspace-file-tree-row.file:hover .workspace-file-tree-bookmark-actions,
+.workspace-file-tree-row.file:focus-within .workspace-file-tree-bookmark-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workspace-file-tree-bookmark-actions button:hover,
+.workspace-file-tree-bookmark-actions button:focus-visible,
+.workspace-file-tree-bookmark-actions button.active {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f1f1;
+}
+
 .workspace-file-tree-row.folder {
   color: #a9a9a9;
 }

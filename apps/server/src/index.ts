@@ -6,6 +6,7 @@ import {
   InsightsAskRequestSchema,
   PatchInsightRequestSchema,
   RunSessionCommandRequestSchema,
+  normalizeSidebarFilePath,
   type Approval,
   type ChatProvider,
   type ChatModelRef,
@@ -296,6 +297,8 @@ export async function createOpenPondServer(
     openCloudWorkItemPayload,
     applyCloudWorkItemLocalPatchPayload,
     patchSidebarAppPreference,
+    listSidebarFileBookmarksPayload,
+    patchSidebarFileBookmarkPayload,
     reorderSidebarApps,
     refreshOpenPondPayload,
     loadMoreOpenPondAppsPayload,
@@ -864,6 +867,52 @@ export async function createOpenPondServer(
     executeWebSearch: executeWebSearch ?? undefined,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
+    manageSidebarFile: async ({ session, action, path: requestedPath }) => {
+      if (action === "list") {
+        const response = await listSidebarFileBookmarksPayload();
+        return {
+          ...response,
+          changed: null,
+          nextStep: response.items.length === 0
+            ? "There are no pinned or saved files."
+            : `Listed ${response.items.length} sidebar file${response.items.length === 1 ? "" : "s"}.`,
+        };
+      }
+      const path = normalizeSidebarFilePath(requestedPath ?? "");
+      const workspaceId = session.workspaceId ?? session.localProjectId ?? session.appId;
+      if (!workspaceId) {
+        throw new Error("This chat is not attached to a workspace, so it cannot manage a workspace file.");
+      }
+      const workspaceKind = session.workspaceKind === "local_project" ? "local" : "sandbox";
+      const workspaceName = session.workspaceName ?? session.appName ?? session.title ?? workspaceId;
+      const response = await patchSidebarFileBookmarkPayload({
+        workspaceKind,
+        workspaceId,
+        workspaceName,
+        path,
+        status: action === "pin"
+          ? "pinned"
+          : action === "save_for_later"
+            ? "saved_for_later"
+            : "none",
+        sourceSessionId: session.id,
+      });
+      const changed = response.items.find((item) =>
+        item.workspaceKind === workspaceKind &&
+        item.workspaceId === workspaceId &&
+        item.path === path
+      ) ?? null;
+      const verb = action === "pin"
+        ? "Pinned"
+        : action === "save_for_later"
+          ? "Saved"
+          : "Removed";
+      return {
+        ...response,
+        changed,
+        nextStep: `${verb} ${path}${action === "save_for_later" ? " for later" : ""}.`,
+      };
+    },
     listIntegrationConnections: listSandboxIntegrationConnections,
     loadPersonalizationSoul: async () =>
       (await loadPersonalizationSettings(store, storeDir)).soul,
@@ -1621,6 +1670,8 @@ export async function createOpenPondServer(
       updatePersonalizationPayload,
       reorderSidebarApps,
       patchSidebarAppPreference,
+      listSidebarFileBookmarksPayload,
+      patchSidebarFileBookmarkPayload,
       workspaceStatePayload,
       createWorkspaceBranchPayload,
       checkoutWorkspaceBranchPayload,

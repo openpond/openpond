@@ -43,6 +43,7 @@ export const SessionSchema = z.object({
   updatedAt: z.string(),
   status: z.enum(["idle", "active", "failed", "closed"]),
   pinned: z.boolean(),
+  savedForLater: z.boolean().optional(),
   archived: z.boolean(),
   order: z.number(),
 });

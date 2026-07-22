@@ -42,14 +42,16 @@ describe("session state merging", () => {
   test("keeps newer local sidebar fields and status when stale history payloads arrive", () => {
     const current = session({
       updatedAt: newer,
-      pinned: true,
+      pinned: false,
+      savedForLater: true,
       archived: false,
       order: 2,
       status: "idle",
     });
     const stale = session({
       updatedAt: older,
-      pinned: false,
+      pinned: true,
+      savedForLater: false,
       archived: true,
       order: 10,
       status: "active",
@@ -59,7 +61,8 @@ describe("session state merging", () => {
       {
         ...stale,
         updatedAt: newer,
-        pinned: true,
+        pinned: false,
+        savedForLater: true,
         archived: false,
         order: 2,
         status: "idle",

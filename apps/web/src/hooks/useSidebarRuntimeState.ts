@@ -31,6 +31,7 @@ export function useSidebarRuntimeState(input: {
   locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
   pendingApproval: Approval | null;
   pinnedSessions: ReturnType<typeof useSidebarData>["pinnedSessions"];
+  savedForLaterSessions: ReturnType<typeof useSidebarData>["savedForLaterSessions"];
   projectSessionRowsByProjectId: ReturnType<typeof useSidebarData>["projectSessionRowsByProjectId"];
   rightChatHistoryEvents: Record<string, RuntimeEvent[]>;
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
@@ -54,6 +55,7 @@ export function useSidebarRuntimeState(input: {
     locallyActiveCodexHistorySessionIds,
     pendingApproval,
     pinnedSessions,
+    savedForLaterSessions,
     projectSessionRowsByProjectId,
     rightChatHistoryEvents,
     runtimeIndexes,
@@ -114,6 +116,7 @@ export function useSidebarRuntimeState(input: {
     }
 
     for (const session of pinnedSessions) addSession(session);
+    for (const session of savedForLaterSessions) addSession(session);
     for (const session of visibleChatRows) addSession(session);
 
     return [...ids.slice(0, activeCount), ...ids.slice(activeCount, activeCount + 8)].join("\n");
@@ -122,6 +125,7 @@ export function useSidebarRuntimeState(input: {
     expandedProjectIds,
     locallyActiveCodexHistorySessionIds,
     pinnedSessions,
+    savedForLaterSessions,
     projectSessionRowsByProjectId,
     selectedSessionId,
     visibleChatRows,

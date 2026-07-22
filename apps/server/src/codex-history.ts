@@ -272,6 +272,7 @@ export async function loadCodexHistoryThreads(options: {
         updatedAt: latestIso([tailStatus.latestMessageAt, updatedAt]),
         status: tailStatus.status,
         pinned: false,
+        savedForLater: false,
         archived: file.archived,
         order,
       },

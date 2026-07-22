@@ -53,6 +53,9 @@ export function createCapabilityCatalogRuntime(deps: {
       const handlers: CapabilityHandlers = {
         startCreateImprove: deps.handlers.startCreateImprove,
         startGoalControl: deps.handlers.startGoalControl,
+        ...(deps.handlers.manageSidebarFile
+          ? { manageSidebarFile: deps.handlers.manageSidebarFile }
+          : {}),
         ...(deps.handlers.startProfileSkillGoal
           ? { startProfileSkillGoal: deps.handlers.startProfileSkillGoal }
           : {}),

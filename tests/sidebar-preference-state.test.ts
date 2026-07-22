@@ -76,6 +76,7 @@ describe("sidebar section collapsed state merging", () => {
     projects: false,
     cloudProjects: false,
     chats: false,
+    savedForLater: true,
   };
 
   test("keeps recent local collapse changes when stale bootstrap preferences arrive", () => {

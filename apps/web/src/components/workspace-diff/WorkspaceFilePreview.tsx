@@ -83,6 +83,7 @@ export function FilePreview({
   error,
   file,
   hideWhiteSpace = false,
+  headerActions,
   imageSrc,
   loading,
   loadFullFiles,
@@ -108,6 +109,7 @@ export function FilePreview({
   error: string | null;
   file: WorkspaceDiffFile;
   hideWhiteSpace?: boolean;
+  headerActions?: ReactNode;
   imageSrc?: string | null;
   loading: boolean;
   loadFullFiles: boolean;
@@ -149,6 +151,7 @@ export function FilePreview({
             <span className="diff-addition">+{file.additions}</span>
             <span className="diff-deletion">-{file.deletions}</span>
           </div>
+          {headerActions}
         </div>
         <div className="workspace-file-image-stage">
           <button
@@ -172,6 +175,7 @@ export function FilePreview({
         onSelectBreadcrumbPath={onSelectBreadcrumbPath}
         wordDiffs={wordDiffs}
         wordWrap={wordWrap}
+        headerActions={headerActions}
         workspaceName={workspaceName}
         workspaceRootPath={workspaceRootPath}
       />
@@ -184,6 +188,7 @@ export function FilePreview({
         workspaceName={workspaceName}
         workspaceRootPath={workspaceRootPath}
         onSelectBreadcrumbPath={onSelectBreadcrumbPath}
+        headerActions={headerActions}
       />
     );
   }
@@ -200,7 +205,10 @@ export function FilePreview({
           <span className="diff-addition">+{file.additions}</span>
           <span className="diff-deletion">-{file.deletions}</span>
         </div>
-        {saving ? <span className="workspace-file-save-state">Saving</span> : null}
+        <span className="workspace-file-heading-end">
+          {saving ? <span className="workspace-file-save-state">Saving</span> : null}
+          {headerActions}
+        </span>
       </div>
       {!hasContent ? (
         <div className="workspace-diff-code-empty">{loading ? "Loading file content" : "No file content available."}</div>
@@ -247,6 +255,7 @@ export function UnifiedDiffPreview({
   workspaceName,
   workspaceRootPath,
   onSelectBreadcrumbPath,
+  headerActions,
 }: {
   collapsed?: boolean;
   file: WorkspaceDiffFile;
@@ -255,6 +264,7 @@ export function UnifiedDiffPreview({
   workspaceName?: string | null;
   workspaceRootPath?: string | null;
   onSelectBreadcrumbPath?: (path: string | null) => void;
+  headerActions?: ReactNode;
 }) {
   const rows = useMemo(() => parsePatchRows(file.patch, hideWhiteSpace), [file.patch, hideWhiteSpace]);
   const language = languageForPath(file.path);
@@ -271,6 +281,7 @@ export function UnifiedDiffPreview({
           <span className="diff-addition">+{file.additions}</span>
           <span className="diff-deletion">-{file.deletions}</span>
         </div>
+        {headerActions}
       </div>
       {collapsed ? (
         <div className="workspace-diff-code-empty">Diff collapsed</div>
@@ -312,6 +323,7 @@ export function SplitDiffPreview({
   workspaceName,
   workspaceRootPath,
   onSelectBreadcrumbPath,
+  headerActions,
 }: {
   collapsed: boolean;
   file: WorkspaceDiffFile;
@@ -321,6 +333,7 @@ export function SplitDiffPreview({
   workspaceName: string | null;
   workspaceRootPath?: string | null;
   onSelectBreadcrumbPath?: (path: string | null) => void;
+  headerActions?: ReactNode;
 }) {
   const rows = useMemo(() => parsePatchRows(file.patch, hideWhiteSpace), [file.patch, hideWhiteSpace]);
   const language = languageForPath(file.path);
@@ -337,7 +350,10 @@ export function SplitDiffPreview({
           <span className="diff-addition">+{file.additions}</span>
           <span className="diff-deletion">-{file.deletions}</span>
         </div>
-        <ChevronUp size={14} />
+        <span className="workspace-file-heading-end">
+          {headerActions}
+          <ChevronUp size={14} />
+        </span>
       </div>
       {collapsed ? (
         <div className="workspace-diff-code-empty">Diff collapsed</div>

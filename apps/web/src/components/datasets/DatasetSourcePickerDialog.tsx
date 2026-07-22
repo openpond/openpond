@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Boxes, DownloadCloud, UploadCloud, X } from "../icons";
 import { AppDialog } from "../dialogs/AppDialog";
 
@@ -34,6 +35,9 @@ export function DatasetSourcePickerDialog({
   onClose: () => void;
   onSelect: (source: DatasetCreateSource) => void;
 }) {
+  const [selectedSource, setSelectedSource] = useState<DatasetCreateSource | null>(null);
+  const selected = SOURCES.find((source) => source.id === selectedSource) ?? null;
+
   return (
     <AppDialog
       ariaLabel="New Dataset"
@@ -61,7 +65,7 @@ export function DatasetSourcePickerDialog({
         <div
           aria-label="How to create a Dataset"
           className="training-method-options training-start-mode-options"
-          role="list"
+          role="radiogroup"
         >
           {SOURCES.map((source) => {
             const Icon = source.icon;
@@ -71,9 +75,12 @@ export function DatasetSourcePickerDialog({
                 aria-describedby={
                   source.available ? undefined : `${source.id}-availability`
                 }
+                aria-checked={selectedSource === source.id}
+                className={selectedSource === source.id ? "selected" : undefined}
                 disabled={!source.available}
+                role="radio"
                 type="button"
-                onClick={() => onSelect(source.id)}
+                onClick={() => setSelectedSource(source.id)}
               >
                 <span className="training-start-mode-icon" aria-hidden="true">
                   <Icon size={18} />
@@ -95,6 +102,25 @@ export function DatasetSourcePickerDialog({
               </button>
             );
           })}
+        </div>
+        <div className="training-dialog-actions">
+          <button
+            className="training-button secondary"
+            type="button"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            className="training-button"
+            disabled={!selected}
+            type="button"
+            onClick={() => {
+              if (selected) onSelect(selected.id);
+            }}
+          >
+            {selectedSource === "build" ? "Create" : "Continue"}
+          </button>
         </div>
     </AppDialog>
   );

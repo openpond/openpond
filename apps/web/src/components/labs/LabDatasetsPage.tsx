@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   CreateImproveRun,
   Taskset,
@@ -15,13 +15,23 @@ import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 
 const PAGE_SIZE = 10;
+type DatasetDetailTab = "build" | "overview" | "data" | "evals" | "configuration";
+const DATASET_DETAIL_TABS: Array<{ id: DatasetDetailTab; label: string }> = [
+  { id: "build", label: "Build" },
+  { id: "overview", label: "Overview" },
+  { id: "data", label: "Data" },
+  { id: "evals", label: "Evals" },
+  { id: "configuration", label: "Configuration" },
+];
 
 export function LabDatasetsPage({
   state,
   runs,
   selectedId,
   onSelectedIdChange,
-  onCreate,
+  building = false,
+  buildContent = null,
+  onBuild,
   onOpenFiles,
   training,
   onToast,
@@ -30,18 +40,27 @@ export function LabDatasetsPage({
   runs: CreateImproveRun[];
   selectedId: string | null;
   onSelectedIdChange: (tasksetId: string | null) => void;
-  onCreate: () => void;
+  building?: boolean;
+  buildContent?: ReactNode;
+  onBuild: (tasksetId: string) => void;
   onOpenFiles: (tasksetId: string) => void;
   training: ReturnType<typeof useTraining>;
   onToast: ShowAppToast;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [detailTab, setDetailTab] = useState<DatasetDetailTab>(
+    () => building ? "build" : "overview",
+  );
   const tasksets = state?.tasksets ?? [];
   const selected = tasksets.find((taskset) => taskset.id === selectedId) ?? null;
-  const selectedArtifact = state?.datasetArtifacts.find(
-    (artifact) => artifact.tasksetId === selectedId,
-  ) ?? null;
+  const selectedArtifact = selected?.datasetArtifact
+    ? state?.datasetArtifacts.find(
+        (artifact) =>
+          artifact.tasksetId === selectedId
+          && artifact.tasksetRevision === selected.revision,
+      ) ?? null
+    : null;
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return tasksets;
@@ -66,34 +85,73 @@ export function LabDatasetsPage({
     return counts;
   }, [runs, state]);
 
-  if (selected) {
+  useEffect(() => {
+    setDetailTab(building ? "build" : "overview");
+  }, [building, selectedId]);
+
+  if (selected || building) {
+    const creating = !selected;
     return (
       <div className="labs-flat-body labs-datasets-page">
         <div className="labs-dataset-detail-heading">
-          <button
-            aria-label="Back to Datasets"
-            className="labs-back-button"
-            type="button"
-            onClick={() => onSelectedIdChange(null)}
-          >
-            <ArrowLeft size={15} />
-          </button>
+          {!building ? (
+            <button
+              aria-label="Back to Datasets"
+              className="labs-back-button"
+              type="button"
+              onClick={() => onSelectedIdChange(null)}
+            >
+              <ArrowLeft size={15} />
+            </button>
+          ) : <span aria-hidden="true" className="labs-dataset-heading-spacer" />}
           <div>
-            <h1>{selected.name}</h1>
-            <p>{selected.objective}</p>
+            <h1>{selected?.name ?? "New Dataset"}</h1>
+            <p>{selected?.objective ?? "Define the Dataset, review its tasks and Evals, then save an immutable first version."}</p>
           </div>
           <LabStatusBadge
-            label={datasetStatus(selected)}
-            value={selected.status}
+            label={selected ? datasetStatus(selected) : "Draft"}
+            value={selected?.status ?? "planning"}
           />
         </div>
-        <LabModelDataset
-          artifact={selectedArtifact}
-          taskset={selected}
-          onOpenFiles={() => onOpenFiles(selected.id)}
-          training={training}
-        />
-        {selected.metadata.flagship === "cross-system-operations" ? (
+        <div
+          className="training-detail-tabs"
+          role="tablist"
+          aria-label="Dataset detail"
+        >
+          {DATASET_DETAIL_TABS.map((tab) => (
+            <button
+              aria-selected={detailTab === tab.id}
+              className={detailTab === tab.id ? "active" : undefined}
+              disabled={creating && tab.id !== "build"}
+              key={tab.id}
+              role="tab"
+              type="button"
+              onClick={() => {
+                setDetailTab(tab.id);
+                if (tab.id === "build" && selected && !building) {
+                  onBuild(selected.id);
+                }
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {buildContent ? (
+          <div hidden={detailTab !== "build"}>{buildContent}</div>
+        ) : detailTab === "build" ? (
+          <div className="training-empty">Preparing the Dataset builder…</div>
+        ) : null}
+        {selected && detailTab !== "build" ? (
+          <LabModelDataset
+            artifact={selectedArtifact}
+            tab={detailTab}
+            taskset={selected}
+            onOpenFiles={() => onOpenFiles(selected.id)}
+            training={training}
+          />
+        ) : null}
+        {selected && detailTab === "evals" && selected.metadata.flagship === "cross-system-operations" ? (
           <LabExpertBootstrap
             busyAction={training.busyAction}
             taskset={selected}
@@ -110,11 +168,6 @@ export function LabDatasetsPage({
 
   return (
     <div className="labs-flat-body labs-datasets-page">
-      <div className="labs-resource-actions">
-        <button className="training-button" type="button" onClick={onCreate}>
-          Create Dataset
-        </button>
-      </div>
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />
@@ -184,9 +237,13 @@ function splitCount(
   state: TrainingStateResponse | null,
   split: Taskset["tasks"][number]["split"],
 ): number {
-  const artifact = state?.datasetArtifacts.find(
-    (candidate) => candidate.tasksetId === taskset.id,
-  );
+  const artifact = taskset.datasetArtifact
+    ? state?.datasetArtifacts.find(
+        (candidate) =>
+          candidate.tasksetId === taskset.id
+          && candidate.tasksetRevision === taskset.revision,
+      )
+    : null;
   if (artifact) return artifact.splitCounts[split] ?? 0;
   return taskset.tasks.filter((task) => task.split === split).length;
 }

@@ -137,6 +137,8 @@ export type HttpRouteDeps = {
     appId: string,
     payload: unknown
   ) => Promise<unknown>;
+  listSidebarFileBookmarksPayload: () => Promise<unknown>;
+  patchSidebarFileBookmarkPayload: (payload: unknown) => Promise<unknown>;
   workspaceStatePayload: (
     appId: string,
     ensureWorkspace: boolean

@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { File, Folder, FolderOpen } from "../icons";
-import type { WorkspaceDiffFile } from "@openpond/contracts";
+import type { SidebarFileStatus, WorkspaceDiffFile } from "@openpond/contracts";
 import { buildFileTree, type FileTreeNode } from "./workspace-diff-summary-model";
+import { WorkspaceFileBookmarkActions } from "./WorkspaceFileBookmarkActions";
 
 export function WorkspaceFileTree({
   changedByPath,
@@ -9,7 +10,9 @@ export function WorkspaceFileTree({
   rootPath,
   repoFiles,
   selectedPath,
+  getFileBookmarkStatus,
   onOpenFile,
+  onSetFileBookmarkStatus,
   onToggleFolder,
 }: {
   changedByPath: Map<string, WorkspaceDiffFile>;
@@ -17,7 +20,12 @@ export function WorkspaceFileTree({
   rootPath?: string | null;
   repoFiles: string[];
   selectedPath?: string | null;
+  getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
   onOpenFile: (path: string) => void;
+  onSetFileBookmarkStatus?: (
+    path: string,
+    status: SidebarFileStatus | "none",
+  ) => void;
   onToggleFolder: (path: string) => void;
 }) {
   const tree = useMemo(() => buildFileTree(repoFiles), [repoFiles]);
@@ -38,7 +46,9 @@ export function WorkspaceFileTree({
             node={node}
             rootPath={rootPath}
             selectedPath={selectedPath}
+            getFileBookmarkStatus={getFileBookmarkStatus}
             onOpenFile={onOpenFile}
+            onSetFileBookmarkStatus={onSetFileBookmarkStatus}
             onToggleFolder={onToggleFolder}
           />
         ))}
@@ -54,7 +64,9 @@ function FileTreeNodeRow({
   node,
   rootPath,
   selectedPath,
+  getFileBookmarkStatus,
   onOpenFile,
+  onSetFileBookmarkStatus,
   onToggleFolder,
 }: {
   changedByPath: Map<string, WorkspaceDiffFile>;
@@ -63,7 +75,12 @@ function FileTreeNodeRow({
   node: FileTreeNode;
   rootPath?: string | null;
   selectedPath?: string | null;
+  getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
   onOpenFile: (path: string) => void;
+  onSetFileBookmarkStatus?: (
+    path: string,
+    status: SidebarFileStatus | "none",
+  ) => void;
   onToggleFolder: (path: string) => void;
 }) {
   const resolvedPath = rootPath ? `${rootPath}/${node.path}` : node.path;
@@ -94,7 +111,9 @@ function FileTreeNodeRow({
               node={child}
               rootPath={rootPath}
               selectedPath={selectedPath}
+              getFileBookmarkStatus={getFileBookmarkStatus}
               onOpenFile={onOpenFile}
+              onSetFileBookmarkStatus={onSetFileBookmarkStatus}
               onToggleFolder={onToggleFolder}
             />
           ))}
@@ -102,20 +121,32 @@ function FileTreeNodeRow({
     );
   }
   return (
-    <button
-      type="button"
+    <div
       className={`workspace-file-tree-row file ${changed ? "changed" : ""} ${selectedPath === resolvedPath ? "selected" : ""}`}
       style={{ paddingLeft: rowPaddingLeft }}
-      onClick={() => onOpenFile(resolvedPath)}
     >
-      <File size={13} />
-      <span>{node.name}</span>
-      {changed && (
-        <small>
-          <span className="diff-addition">+{changed.additions}</span>
-          <span className="diff-deletion">-{changed.deletions}</span>
-        </small>
-      )}
-    </button>
+      <button
+        type="button"
+        className="workspace-file-tree-row-main"
+        title={resolvedPath}
+        onClick={() => onOpenFile(resolvedPath)}
+      >
+        <File size={13} />
+        <span>{node.name}</span>
+        {changed && (
+          <small>
+            <span className="diff-addition">+{changed.additions}</span>
+            <span className="diff-deletion">-{changed.deletions}</span>
+          </small>
+        )}
+      </button>
+      {onSetFileBookmarkStatus ? (
+        <WorkspaceFileBookmarkActions
+          className="workspace-file-tree-bookmark-actions"
+          currentStatus={getFileBookmarkStatus?.(resolvedPath) ?? null}
+          onSetStatus={(status) => onSetFileBookmarkStatus(resolvedPath, status)}
+        />
+      ) : null}
+    </div>
   );
 }

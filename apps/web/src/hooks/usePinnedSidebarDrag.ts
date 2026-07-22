@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { Dispatch, DragEvent, SetStateAction } from "react";
-import type { Session, SidebarAppPreferences } from "@openpond/contracts";
+import type { Session, SidebarAppPreferences, SidebarFileBookmark } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import {
   getSidebarDropPosition,
@@ -19,6 +19,8 @@ type UsePinnedSidebarDragInput = {
   setAppPreferences: Dispatch<SetStateAction<SidebarAppPreferences>>;
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
   setSessions: Dispatch<SetStateAction<Session[]>>;
+  sidebarFileBookmarks: SidebarFileBookmark[];
+  setSidebarFileBookmarks: Dispatch<SetStateAction<SidebarFileBookmark[]>>;
   setError: (message: string | null) => void;
 };
 
@@ -48,6 +50,8 @@ export function usePinnedSidebarDrag({
   setAppPreferences,
   setCodexHistorySessions,
   setSessions,
+  sidebarFileBookmarks,
+  setSidebarFileBookmarks,
   setError,
 }: UsePinnedSidebarDragInput) {
   const [dragItem, setDragItem] = useState<SidebarDragItem | null>(null);
@@ -96,6 +100,7 @@ export function usePinnedSidebarDrag({
 
     const previousPreferences = appPreferences;
     const previousSessionById = new Map(sessions.map((session) => [session.id, session]));
+    const previousSidebarFileBookmarks = sidebarFileBookmarks;
     const itemByKey = new Map(pinnedItems.map((item) => [item.key, item]));
 
     setAppPreferences((current) => {
@@ -127,15 +132,35 @@ export function usePinnedSidebarDrag({
     };
     setSessions(applySessionOrder);
     setCodexHistorySessions(applySessionOrder);
+    setSidebarFileBookmarks((current) => {
+      const orderById = new Map<string, number>();
+      nextKeys.forEach((key, order) => {
+        const item = itemByKey.get(key);
+        if (item?.type === "file") orderById.set(item.id, order);
+      });
+      return current.map((file) => {
+        const order = orderById.get(file.id);
+        return order === undefined ? file : { ...file, order };
+      });
+    });
 
     void Promise.all(
-      nextKeys.flatMap((key, order) => {
+      nextKeys.map((key, order) => {
         const item = itemByKey.get(key);
-        if (!item) return [];
+        if (!item) return Promise.resolve(null);
         if (item.type === "project") {
-          return [api.patchSidebarAppPreference(connection, item.id, { pinned: true, archived: false, order })];
+          return api.patchSidebarAppPreference(connection, item.id, { pinned: true, archived: false, order });
         }
-        return [api.patchSession(connection, item.id, { order })];
+        if (item.type === "session") return api.patchSession(connection, item.id, { order });
+        return api.patchSidebarFile(connection, {
+          workspaceKind: item.file.workspaceKind,
+          workspaceId: item.file.workspaceId,
+          workspaceName: item.file.workspaceName,
+          path: item.file.path,
+          status: "pinned",
+          order,
+          sourceSessionId: item.file.sourceSessionId,
+        });
       })
     ).catch((reorderError) => {
       setError(reorderError instanceof Error ? reorderError.message : String(reorderError));
@@ -144,6 +169,7 @@ export function usePinnedSidebarDrag({
         current.map((session) => previousSessionById.get(session.id) ?? session);
       setSessions(rollbackSessionOrder);
       setCodexHistorySessions(rollbackSessionOrder);
+      setSidebarFileBookmarks(previousSidebarFileBookmarks);
     });
   }
 

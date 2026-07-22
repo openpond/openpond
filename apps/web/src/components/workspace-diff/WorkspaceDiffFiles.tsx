@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { WorkspaceDiffSummary } from "@openpond/contracts";
+import type { SidebarFileStatus, WorkspaceDiffSummary } from "@openpond/contracts";
 import { WorkspaceFileTree } from "./WorkspaceFileTree";
 
 export function WorkspaceDiffFiles({
@@ -8,7 +8,9 @@ export function WorkspaceDiffFiles({
   rootPath,
   repoFiles,
   selectedPath,
+  getFileBookmarkStatus,
   onOpenFile,
+  onSetFileBookmarkStatus,
   onToggleFolder,
 }: {
   diff: WorkspaceDiffSummary | null;
@@ -16,7 +18,12 @@ export function WorkspaceDiffFiles({
   rootPath?: string | null;
   repoFiles: string[];
   selectedPath?: string | null;
+  getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
   onOpenFile: (path: string) => void;
+  onSetFileBookmarkStatus?: (
+    path: string,
+    status: SidebarFileStatus | "none",
+  ) => void;
   onToggleFolder: (path: string) => void;
 }) {
   const files = diff?.files ?? [];
@@ -39,7 +46,9 @@ export function WorkspaceDiffFiles({
         rootPath={normalizedRootPath}
         repoFiles={visibleRepoFiles}
         selectedPath={selectedPath}
+        getFileBookmarkStatus={getFileBookmarkStatus}
         onOpenFile={onOpenFile}
+        onSetFileBookmarkStatus={onSetFileBookmarkStatus}
         onToggleFolder={onToggleFolder}
       />
     </div>

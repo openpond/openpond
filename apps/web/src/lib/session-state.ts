@@ -12,6 +12,7 @@ export function mergeSessionPreservingLocalSidebarState(
   const merged = isNewerIso(current.updatedAt, incoming.updatedAt) ? {
     ...incoming,
     pinned: current.pinned,
+    savedForLater: current.savedForLater,
     archived: current.archived,
     order: current.order,
     status: current.status,
@@ -29,6 +30,7 @@ export function mergeSessionPreservingLocalSidebarStateAndRecency(
     ? {
         ...merged,
         pinned: current.pinned,
+        savedForLater: current.savedForLater,
         archived: current.archived,
         order: current.order,
         updatedAt: current.updatedAt,
@@ -182,6 +184,7 @@ function mergeRecentLocalSessionSidebarState(
   return {
     ...incoming,
     pinned: current.pinned,
+    savedForLater: current.savedForLater,
     archived: current.archived,
     order: current.order,
   };
@@ -190,6 +193,7 @@ function mergeRecentLocalSessionSidebarState(
 function sameSessionSidebarState(left: Session, right: Session): boolean {
   return (
     left.pinned === right.pinned &&
+    left.savedForLater === right.savedForLater &&
     left.archived === right.archived &&
     left.order === right.order
   );

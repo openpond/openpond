@@ -145,6 +145,7 @@ export type ComposerProps = {
   showProjectFooter?: boolean;
   autoFocus?: boolean;
   focusRequestId?: number;
+  attachmentRequest?: { id: number; file: File } | null;
   connection: ClientConnection | null;
   providerSettings?: ProviderSettings | null;
   provider: ChatProvider;
@@ -444,6 +445,7 @@ export function Composer({
   showProjectFooter = true,
   autoFocus = false,
   focusRequestId = 0,
+  attachmentRequest = null,
   connection,
   providerSettings = null,
   provider,
@@ -528,6 +530,12 @@ export function Composer({
     setAttachmentError,
     stageAttachmentsForSubmit,
   } = useComposerAttachments();
+  const attachmentRequestAppliedRef = useRef(0);
+  useEffect(() => {
+    if (!attachmentRequest || attachmentRequestAppliedRef.current === attachmentRequest.id) return;
+    attachmentRequestAppliedRef.current = attachmentRequest.id;
+    addFiles([attachmentRequest.file]);
+  }, [addFiles, attachmentRequest]);
   const placeholder =
     surface === "team"
       ? "Message team"

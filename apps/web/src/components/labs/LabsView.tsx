@@ -94,50 +94,41 @@ export function LabsView({
               type="button"
               aria-expanded={createOpen}
               aria-haspopup="menu"
-              aria-label="Create workproduct"
-              title="Create workproduct"
+              aria-label="Create"
+              title="Create"
               onClick={() => setCreateOpen((open) => !open)}
             >
-              <Plus size={15} />
+              <Plus size={13} />
+              <span>Create</span>
             </button>
             {createOpen ? (
               <div className="labs-create-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onCreateAgent();
-                  }}
-                >
-                  <Bot size={15} />
-                  <span><strong>New agent</strong><small>Describe the agent in the shared Create flow.</small></span>
-                </button>
-                <button disabled type="button" role="menuitem">
-                  <BookOpenText size={15} />
-                  <span>
-                    <strong>New skill</strong>
-                    <small>Coming soon</small>
-                  </span>
-                </button>
-                <button disabled type="button" role="menuitem">
-                  <Plug size={15} />
-                  <span>
-                    <strong>New extension</strong>
-                    <small>Coming soon</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onCreateModel();
-                  }}
-                >
-                  <ChartColumnStacked size={15} />
-                  <span><strong>New model</strong><small>Build the data and Evals, then choose training.</small></span>
-                </button>
+                {activeTab !== "datasets" ? (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setCreateOpen(false);
+                        onCreateAgent();
+                      }}
+                    >
+                      <Bot size={13} />
+                      <span><strong>Agent</strong><small>Describe the agent in the shared Create flow.</small></span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setCreateOpen(false);
+                        onCreateModel();
+                      }}
+                    >
+                      <ChartColumnStacked size={13} />
+                      <span><strong>Model</strong><small>Build the data and Evals, then choose training.</small></span>
+                    </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   role="menuitem"
@@ -146,9 +137,27 @@ export function LabsView({
                     onCreateDataset();
                   }}
                 >
-                  <Boxes size={15} />
-                  <span><strong>New Dataset</strong><small>Create a reusable Taskset without creating a Model.</small></span>
+                  <Boxes size={13} />
+                  <span><strong>Dataset</strong><small>Create a reusable Taskset without creating a Model.</small></span>
                 </button>
+                {activeTab !== "datasets" ? (
+                  <>
+                    <button disabled type="button" role="menuitem">
+                      <BookOpenText size={13} />
+                      <span>
+                        <strong>Skill</strong>
+                        <small>Coming soon</small>
+                      </span>
+                    </button>
+                    <button disabled type="button" role="menuitem">
+                      <Plug size={13} />
+                      <span>
+                        <strong>Extension</strong>
+                        <small>Coming soon</small>
+                      </span>
+                    </button>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>

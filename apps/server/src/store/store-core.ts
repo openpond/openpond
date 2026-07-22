@@ -19,6 +19,7 @@ import {
   deduplicateFireworksMetricArtifacts,
 } from "./store-continuous-improvement-schema.js";
 import { createDatasetImportTables as ensureDatasetImportTables } from "./store-dataset-schema.js";
+import { createSidebarFileBookmarkTables as ensureSidebarFileBookmarkTables } from "./store-sidebar-file-bookmark-schema.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
@@ -260,6 +261,10 @@ export class SqliteStoreCore {
 
   async createSchema(): Promise<void> {
     await this.exec(SQLITE_CREATE_SCHEMA_SQL);
+  }
+
+  async createSidebarFileBookmarkTables(): Promise<void> {
+    await ensureSidebarFileBookmarkTables((sql) => this.exec(sql));
   }
 
   async createHotQueryIndexes(): Promise<void> {

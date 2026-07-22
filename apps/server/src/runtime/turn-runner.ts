@@ -117,6 +117,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWebSearch,
     executeConnectedAppTool,
     browserToolExecutor,
+    manageSidebarFile,
     listIntegrationConnections,
     loadPersonalizationSoul,
     loadAppPreferences = async () => AppPreferencesSchema.parse({}),
@@ -572,6 +573,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       cancelSubagent: cancelSubagentFromModelTool,
       followupSubagent: followupSubagentFromModelTool,
       sendSubagentMessage: sendSubagentMessageFromModelTool,
+      ...(manageSidebarFile
+        ? {
+            manageSidebarFile: (context, input) => manageSidebarFile({
+              session: context.session,
+              action: input.action,
+              path: input.path,
+            }),
+          }
+        : {}),
     },
     subagentToolsAvailable,
     hostedToolFlags,

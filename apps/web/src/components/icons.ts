@@ -14,6 +14,8 @@ export { default as BadgeCheck } from "lucide-react/dist/esm/icons/badge-check.j
 export { default as Bell } from "lucide-react/dist/esm/icons/bell.js";
 export { default as BellOff } from "lucide-react/dist/esm/icons/bell-off.js";
 export { default as Ban } from "lucide-react/dist/esm/icons/ban.js";
+export { default as Bookmark } from "lucide-react/dist/esm/icons/bookmark.js";
+export { default as BookmarkX } from "lucide-react/dist/esm/icons/bookmark-x.js";
 export { default as BookOpenText } from "lucide-react/dist/esm/icons/book-open-text.js";
 export { default as Bot } from "lucide-react/dist/esm/icons/bot.js";
 export { default as Boxes } from "lucide-react/dist/esm/icons/boxes.js";

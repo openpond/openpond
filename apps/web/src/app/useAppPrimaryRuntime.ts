@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RuntimeEvent, SubagentDelegationMode, WorkspaceState, TerminalScope } from "@openpond/contracts";
+import type { RuntimeEvent, SidebarFileBookmark, SubagentDelegationMode, WorkspaceState, TerminalScope } from "@openpond/contracts";
 import { localPathWorkspaceId } from "@openpond/contracts";
 import { useProjectConfirmDialog } from "../components/app-shell/ProjectConfirmDialog";
 import type { CloudSetupDialogState } from "../components/workspace/CloudSetupDialog";
@@ -48,6 +48,7 @@ import { useTeamChatIncomingToast } from "../hooks/useTeamChatIncomingToast";
 import { useCommunityController } from "../hooks/useCommunityController";
 import { useOpenPondOrganizations } from "../hooks/useOpenPondOrganizations";
 import { useConnectedAppStatusRows } from "../hooks/useConnectedAppStatusRows";
+import { api } from "../api";
 
 export function useAppPrimaryRuntime() {
 const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: appState } = useAppState();
@@ -56,6 +57,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
   const [trainingDetailTasksetId, setTrainingDetailTasksetId] = useState<string | null>(null);
   const [mentionedAppId, setMentionedAppId] = useState<string | null>(null);
+  const [sidebarFileBookmarks, setSidebarFileBookmarks] = useState<SidebarFileBookmark[]>([]);
   const [cloudSetupDialog, setCloudSetupDialog] = useState<CloudSetupDialogState | null>(null);
   const [rightPanelTabRequest, setRightPanelTabRequest] = useState<WorkspaceDiffTabRequest | null>(
     null,
@@ -199,6 +201,55 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     setSelectedSessionId,
   });
   connectionRef.current = connection;
+  useEffect(() => {
+    if (bootstrap) setSidebarFileBookmarks(bootstrap.sidebarFileBookmarks ?? []);
+  }, [bootstrap?.sidebarFileBookmarks]);
+  const latestSidebarFileToolEvent = useMemo(
+    () => [...events].reverse().find((item) =>
+      item.name === "tool.completed" && item.action === "manage_sidebar_file"
+    ) ?? null,
+    [events],
+  );
+  const refreshedSidebarFileToolEventRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !connection ||
+      !latestSidebarFileToolEvent ||
+      refreshedSidebarFileToolEventRef.current === latestSidebarFileToolEvent.id
+    ) return;
+    refreshedSidebarFileToolEventRef.current = latestSidebarFileToolEvent.id;
+    void api.sidebarFiles(connection)
+      .then((response) => setSidebarFileBookmarks(response.items))
+      .catch((refreshError) => setError(
+        refreshError instanceof Error ? refreshError.message : String(refreshError),
+      ));
+  }, [connection, latestSidebarFileToolEvent, setError]);
+  const setSidebarFileStatus = useCallback(async (
+    file: SidebarFileBookmark,
+    status: "pinned" | "saved_for_later" | "none",
+  ) => {
+    if (!connection) return;
+    const previous = sidebarFileBookmarks;
+    setSidebarFileBookmarks((current) => status === "none"
+      ? current.filter((item) => item.id !== file.id)
+      : current.some((item) => item.id === file.id)
+        ? current.map((item) => item.id === file.id ? { ...item, status } : item)
+        : [...current, { ...file, status }]);
+    try {
+      const response = await api.patchSidebarFile(connection, {
+        workspaceKind: file.workspaceKind,
+        workspaceId: file.workspaceId,
+        workspaceName: file.workspaceName,
+        path: file.path,
+        status,
+        sourceSessionId: file.sourceSessionId,
+      });
+      setSidebarFileBookmarks(response.items);
+    } catch (patchError) {
+      setSidebarFileBookmarks(previous);
+      setError(patchError instanceof Error ? patchError.message : String(patchError));
+    }
+  }, [connection, setError, sidebarFileBookmarks]);
   const connectedAppRows = useConnectedAppStatusRows(connection);
   const insights = useInsights({ connection });
   const training = useTraining({
@@ -219,6 +270,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
+    savedForLaterCollapsed,
     sidebarWidth,
     sidebarResizing,
     diffPanelWidth,
@@ -227,6 +279,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
+    toggleSavedForLaterCollapsed,
     startSidebarResize,
     startDiffPanelResize,
   } = useLayoutPreferences({
@@ -556,6 +609,9 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     activeSessions,
     pinnedProjects,
     pinnedSessions,
+    savedForLaterSessions,
+    pinnedFiles,
+    savedForLaterFiles,
     pinnedItems,
     projectRows,
     localProjectRows,
@@ -584,6 +640,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     archivedChatsOpen,
     projectsExpanded,
     chatRowsVisibleCount,
+    sidebarFileBookmarks,
   });
   const {
     clearPendingChatUserMessage,
@@ -636,6 +693,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     locallyActiveCodexHistorySessionIds,
     pendingApproval,
     pinnedSessions,
+    savedForLaterSessions,
     projectSessionRowsByProjectId,
     rightChatHistoryEvents,
     runtimeIndexes,
@@ -666,6 +724,8 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     setAppPreferences,
     setCodexHistorySessions,
     setSessions,
+    sidebarFileBookmarks,
+    setSidebarFileBookmarks,
     setError,
   });
   const { commandProjectRows, contextWindowStatus, pinnedRows, sidebarWorkspaceAppIds } =
@@ -783,9 +843,9 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     setCommitNextStep, setCommitDraft, setBranchDialogOpen, setBranchDialogName, setError, showToast,
     appPreferences, applyBootstrapPayload, bootstrap, connection, events, sessions,
     startup, setAppPreferences, setCodexHistorySessions, setEvents, setSessions, insights,
-    training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed, chatsCollapsed, sidebarWidth,
+    training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed, chatsCollapsed, savedForLaterCollapsed, sidebarWidth,
     sidebarResizing, diffPanelWidth, diffPanelResizing, togglePinnedCollapsed, toggleProjectsCollapsed, toggleCloudProjectsCollapsed,
-    toggleChatsCollapsed, startSidebarResize, startDiffPanelResize, revealProjectsSection, cloudProjectById, localProjectById,
+    toggleChatsCollapsed, toggleSavedForLaterCollapsed, startSidebarResize, startDiffPanelResize, revealProjectsSection, cloudProjectById, localProjectById,
     selectedApp, selectedCloudProject, selectedProject, selectedProjectLinkedApp, selectedProjectLinkedOpenPondApp, selectedSession,
     sidebarSessions, runtimeIndexes, chatMentionApps, connectedAppMentions, pendingApproval, codexHistoryEvents,
     setCodexHistoryEvents, account, accountPending, accountSignedOut, activeModel, activeProvider,
@@ -799,7 +859,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     createCloudWork, handleCloudWorkItemBackground, openCloudHome, selectCloudWorkItem, sendCloudWorkItemMessage, setCloudError,
     changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode, resolveApproval, beginNewChat, advanceTrainingModelChatAfterTurn,
     beginNewChatWithTrainingModel, bindTrainingModelChatSession, dismissTrainingChatHandoff, trainingChatHandoff, prepareTrainingModelChatTurn, selectTrainingChatTaskForComposer,
-    chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, projectRows,
+    chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, pinnedFiles, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
     localProjectRows, visibleProjectRows, cloudProjectRows, cloudWorkItemsByProjectId, projectSessionRowsByProjectId, childSessionRowsByParentId,
     sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, chatMessages, goalRuntime,
     subagentRuntime, clearPendingChatUserMessage, pendingChatUserMessages, recordPendingChatUserMessage, visibleChatMessages, activeTerminalScope,

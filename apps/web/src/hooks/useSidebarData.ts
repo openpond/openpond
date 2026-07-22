@@ -5,6 +5,7 @@ import type {
   LocalProject,
   Session,
   SidebarAppPreferences,
+  SidebarFileBookmark,
 } from "@openpond/contracts";
 import { buildCachedChatMessages } from "../lib/chat-messages";
 import {
@@ -43,6 +44,7 @@ type UseSidebarDataInput = {
   archivedChatsOpen: boolean;
   projectsExpanded: boolean;
   chatRowsVisibleCount: number;
+  sidebarFileBookmarks: SidebarFileBookmark[];
 };
 
 export function useSidebarData({
@@ -57,6 +59,7 @@ export function useSidebarData({
   archivedChatsOpen,
   projectsExpanded,
   chatRowsVisibleCount,
+  sidebarFileBookmarks = [],
 }: UseSidebarDataInput) {
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -83,6 +86,10 @@ export function useSidebarData({
     [sessions, visibleLocalProjectIds],
   );
   const pinnedSessions = useMemo(() => activeSessions.filter((session) => session.pinned), [activeSessions]);
+  const savedForLaterSessions = useMemo(
+    () => activeSessions.filter((session) => Boolean(session.savedForLater)),
+    [activeSessions],
+  );
   const archivedSessions = useMemo(
     () => sessions.filter((session) => session.archived && !session.hiddenFromDefaultSidebar),
     [sessions],
@@ -115,6 +122,7 @@ export function useSidebarData({
         (session) =>
           !cloudWorkSessionIds.has(session.id) &&
           !session.pinned &&
+          !session.savedForLater &&
           !session.appId &&
           !sidebarProjectIdBySessionId[session.id]
       ),
@@ -133,7 +141,7 @@ export function useSidebarData({
   const projectSessionRowsByProjectId = useMemo(() => {
     const rows: Record<string, Session[]> = {};
     for (const session of activeSessions) {
-      if (session.pinned) continue;
+      if (session.pinned || session.savedForLater) continue;
       const projectId = sidebarProjectIdBySessionId[session.id];
       if (!projectId) continue;
       const projectRows = rows[projectId];
@@ -215,6 +223,14 @@ export function useSidebarData({
     [cloudOnlyProjectRows, localProjectRows],
   );
   const pinnedProjects = useMemo(() => allProjectRows.filter((item) => item.pinned), [allProjectRows]);
+  const pinnedFiles = useMemo(
+    () => sidebarFileBookmarks.filter((item) => item.status === "pinned"),
+    [sidebarFileBookmarks],
+  );
+  const savedForLaterFiles = useMemo(
+    () => sidebarFileBookmarks.filter((item) => item.status === "saved_for_later"),
+    [sidebarFileBookmarks],
+  );
   const projectRows = useMemo(() => allProjectRows.filter((item) => !item.pinned), [allProjectRows]);
   const visibleProjectRows = useMemo(
     () => visibleSidebarProjectRows(projectRows, projectsExpanded, selectedProjectId),
@@ -259,19 +275,32 @@ export function useSidebarData({
           session,
           order: session.order,
         })),
+        ...pinnedFiles.map((file, index) => ({
+          type: "file" as const,
+          key: sidebarDragKey({ type: "file", id: file.id }),
+          id: file.id,
+          file,
+          order: file.order ?? pinnedProjects.length + pinnedSessions.length + index,
+        })),
       ].sort((left, right) => {
         if (left.order !== right.order) return left.order - right.order;
         if (left.type !== right.type) {
-          const priority = { project: 0, session: 1 };
+          const priority = { project: 0, session: 1, file: 2 };
           return priority[left.type] - priority[right.type];
         }
-        const leftLabel =
-          left.type === "project" ? left.item.project.name : left.session.title;
-        const rightLabel =
-          right.type === "project" ? right.item.project.name : right.session.title;
+        const leftLabel = left.type === "project"
+          ? left.item.project.name
+          : left.type === "session"
+            ? left.session.title
+            : left.file.path;
+        const rightLabel = right.type === "project"
+          ? right.item.project.name
+          : right.type === "session"
+            ? right.session.title
+            : right.file.path;
         return leftLabel.localeCompare(rightLabel);
       }),
-    [pinnedProjects, pinnedSessions]
+    [pinnedFiles, pinnedProjects, pinnedSessions]
   );
   const chatRows = useMemo(
     () => (archivedChatsOpen ? [...chatSessions, ...archivedChatSessions] : chatSessions),
@@ -293,6 +322,9 @@ export function useSidebarData({
   return {
     activeSessions,
     pinnedSessions,
+    savedForLaterSessions,
+    pinnedFiles,
+    savedForLaterFiles,
     chatSessions,
     archivedSessions,
     pinnedProjects,

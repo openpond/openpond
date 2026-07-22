@@ -30,6 +30,35 @@
   min-width: 0;
 }
 
+.workspace-file-heading-end,
+.workspace-file-bookmark-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.workspace-file-bookmark-actions button {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.workspace-file-heading-actions button {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  color: #8f8f8f;
+}
+
+.workspace-file-heading-actions button:hover,
+.workspace-file-heading-actions button.active {
+  background: #2c2c2c;
+  color: #f1f1f1;
+}
+
 .workspace-diff-file-heading div > span:first-child {
   min-width: 0;
   overflow: hidden;

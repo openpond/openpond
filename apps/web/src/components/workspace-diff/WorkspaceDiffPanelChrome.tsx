@@ -20,8 +20,9 @@ import {
   Undo2,
   X,
 } from "../icons";
-import type { WorkspaceDiffFile } from "@openpond/contracts";
+import type { SidebarFileStatus, WorkspaceDiffFile } from "@openpond/contracts";
 import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
+import { WorkspaceFileBookmarkActions } from "./WorkspaceFileBookmarkActions";
 import {
   nextRovingTabIndex,
   type DiffTab,
@@ -45,6 +46,7 @@ export function WorkspaceDiffTabs({
   sourceStatus,
   sourceSwitcher,
   visibleTab,
+  getFileBookmarkStatus,
   onCloseFileTab,
   onCloseSideChat,
   onCloseSearch,
@@ -53,6 +55,7 @@ export function WorkspaceDiffTabs({
   onOpenSearch,
   onOpenSideChat,
   onSearchQueryChange,
+  onSetFileBookmarkStatus,
   onSelectFile,
   onSelectFiles,
   onSelectGoal,
@@ -75,6 +78,7 @@ export function WorkspaceDiffTabs({
   sourceStatus?: { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null;
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   visibleTab: DiffTab;
+  getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
   onCloseFileTab: (path: string, event: MouseEvent<HTMLButtonElement>) => void;
   onCloseSideChat?: (panelId: string) => void;
   onCloseSearch: () => void;
@@ -83,6 +87,10 @@ export function WorkspaceDiffTabs({
   onOpenSearch: () => void;
   onOpenSideChat?: () => void;
   onSearchQueryChange: (value: string) => void;
+  onSetFileBookmarkStatus?: (
+    path: string,
+    status: SidebarFileStatus | "none",
+  ) => void;
   onSelectFile: (path: string) => void;
   onSelectFiles: () => void;
   onSelectGoal: () => void;
@@ -209,6 +217,13 @@ export function WorkspaceDiffTabs({
               {dirtyFilePaths.has(file.path) && <span className="workspace-diff-tab-dirty" aria-hidden="true" />}
               <span>{file.path.split("/").pop()}</span>
             </button>
+            {onSetFileBookmarkStatus ? (
+              <WorkspaceFileBookmarkActions
+                className="workspace-diff-tab-bookmark-actions"
+                currentStatus={getFileBookmarkStatus?.(file.path) ?? null}
+                onSetStatus={(status) => onSetFileBookmarkStatus(file.path, status)}
+              />
+            ) : null}
             <button
               type="button"
               className="workspace-diff-tab-close"

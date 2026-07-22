@@ -8,6 +8,7 @@ import type {
   SubagentRunStatus,
   SubagentRoleSettings,
   SubagentToolPolicy,
+  SidebarFileBookmark,
 } from "@openpond/contracts";
 import { SUBAGENT_ROLE_PRESETS } from "@openpond/contracts";
 import type {
@@ -142,6 +143,17 @@ export type OpenPondSubagentMessageToolResult = {
   nextStep: string;
 };
 
+export type ManageSidebarFileToolInput = {
+  action: "pin" | "save_for_later" | "remove" | "list";
+  path?: string | null;
+};
+
+export type ManageSidebarFileToolResult = {
+  items: SidebarFileBookmark[];
+  changed: SidebarFileBookmark | null;
+  nextStep: string;
+};
+
 export function createOpenPondCapabilityModelToolDefinitions(deps: {
   startCreateImprove: (
     context: ModelToolExecutionContext,
@@ -179,6 +191,10 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     context: ModelToolExecutionContext,
     input: OpenPondSubagentMessageToolInput,
   ) => Promise<OpenPondSubagentMessageToolResult>;
+  manageSidebarFile?: (
+    context: ModelToolExecutionContext,
+    input: ManageSidebarFileToolInput,
+  ) => Promise<ManageSidebarFileToolResult>;
   subagentRoles?: readonly SubagentRoleSettings[];
 }): ModelToolDefinition[] {
   const enabledSubagentRoles = (deps.subagentRoles ?? []).filter((role) => role.enabled);
@@ -263,6 +279,35 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
       },
     },
   ];
+  if (deps.manageSidebarFile) {
+    definitions.push({
+      name: "manage_sidebar_file",
+      description:
+        "Pin, save for later, remove, or list workspace files in the user's sidebar. Use only when the user explicitly asks to manage a file in the sidebar.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          action: {
+            type: "string",
+            enum: ["pin", "save_for_later", "remove", "list"],
+            description: "The sidebar file action to perform.",
+          },
+          path: {
+            type: "string",
+            minLength: 1,
+            description: "Workspace-relative file path. Required unless action is list.",
+          },
+        },
+        required: ["action"],
+      },
+      execute: async (context) => {
+        const input = manageSidebarFileToolInput(context.args);
+        const result = await deps.manageSidebarFile!(context, input);
+        return manageSidebarFileToolResult(context.callId, result);
+      },
+    });
+  }
   if (deps.startSubagent) {
     definitions.push({
       name: "openpond_subagent_start",
@@ -531,6 +576,43 @@ function goalControlToolInput(args: Record<string, unknown>): OpenPondGoalContro
     ...(targetGoalId ? { targetGoalId } : {}),
     ...(mode ? { mode } : {}),
     reason: stringArg(args, "reason"),
+  };
+}
+
+function manageSidebarFileToolInput(args: Record<string, unknown>): ManageSidebarFileToolInput {
+  const action = args.action;
+  if (
+    action !== "pin" &&
+    action !== "save_for_later" &&
+    action !== "remove" &&
+    action !== "list"
+  ) {
+    throw new Error("action must be pin, save_for_later, remove, or list");
+  }
+  const path = optionalStringArg(args, "path");
+  if (action !== "list" && !path) throw new Error("path is required for this action");
+  return { action, ...(path ? { path } : {}) };
+}
+
+function manageSidebarFileToolResult(
+  callId: string,
+  result: ManageSidebarFileToolResult,
+): NativeModelToolResult {
+  return {
+    toolCallId: callId,
+    name: "manage_sidebar_file",
+    ok: true,
+    contentText: JSON.stringify(
+      {
+        ok: true,
+        action: "manage_sidebar_file",
+        output: result.nextStep,
+        data: result,
+      },
+      null,
+      2,
+    ),
+    data: result,
   };
 }
 

@@ -399,6 +399,19 @@
   color: var(--text);
 }
 
+.sidebar-file-row.unavailable {
+  color: #b89a72;
+}
+
+.sidebar-file-row.unavailable .row-label {
+  text-decoration: line-through;
+  text-decoration-color: rgba(184, 154, 114, 0.55);
+}
+
+.sidebar-row.sidebar-file-row {
+  padding-left: 25px;
+}
+
 .sidebar-row:hover,
 .sidebar-row:focus-within,
 .sidebar-row.selected,

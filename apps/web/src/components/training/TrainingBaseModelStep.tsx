@@ -4,6 +4,7 @@ import { Boxes, Loader2, RefreshCw } from "../icons";
 export function TrainingBaseModelStep({
   busy,
   candidates,
+  continueLabel = "Continue",
   value,
   onChange,
   onContinue,
@@ -12,6 +13,7 @@ export function TrainingBaseModelStep({
 }: {
   busy: boolean;
   candidates: BaseModelCandidate[];
+  continueLabel?: string;
   value: string | null;
   onChange: (selectionKey: string) => void;
   onContinue: () => void;
@@ -101,7 +103,7 @@ export function TrainingBaseModelStep({
           disabled={!selected}
           onClick={onContinue}
         >
-          Continue
+          {continueLabel}
         </button>
       </div>
     </>

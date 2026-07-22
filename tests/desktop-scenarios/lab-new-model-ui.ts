@@ -42,9 +42,9 @@ export default desktopScenario({
     await reloadRenderer(harness);
     await openLab(harness);
     harness.recordAssertion("labOpened", true);
-    await clickByAriaLabel(harness, "Create workproduct");
+    await clickByAriaLabel(harness, "Create");
     harness.recordAssertion("createMenuOpened", true);
-    await clickButtonContainingText(harness, "New model");
+    await clickButtonContainingText(harness, "Model");
     await harness.renderer.assertText("How do you want to start?", {
       label: "New Model start step",
     });
@@ -188,8 +188,8 @@ export default desktopScenario({
       timeoutMs: 30_000,
     });
 
-    await clickByAriaLabel(harness, "Create workproduct");
-    await clickButtonContainingText(harness, "New model");
+    await clickByAriaLabel(harness, "Create");
+    await clickButtonContainingText(harness, "Model");
     await clickButtonContainingText(harness, "Automatic", "[aria-label='New model']");
     await clickButtonByText(harness, "Continue", "[aria-label='New model']");
     await harness.renderer.assertText("Find repeated work", {

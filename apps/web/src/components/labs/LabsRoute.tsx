@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type {
-  ChatModelRef,
-  CreateImproveCandidate,
-  CreateImproveRun,
-  TaskCreationSnapshot,
-  WorkspaceDiffSummary,
+import {
+  isTrainingSourceRef,
+  type ChatModelRef,
+  type CreateImproveCandidate,
+  type CreateImproveRun,
+  type Taskset,
+  type TaskCreationSnapshot,
+  type WorkspaceDiffSummary,
+  type TrainingSourceRef,
 } from "@openpond/contracts";
 
 import type { InsightsViewProps } from "../insights/InsightsView";
@@ -182,6 +185,11 @@ export function LabsRoute({
   const [datasetCreateRoute, setDatasetCreateRoute] = useState<
     "source" | DatasetCreateSource | null
   >(null);
+  const [datasetCreateOrigin, setDatasetCreateOrigin] = useState<
+    "datasets" | "model"
+  >("datasets");
+  const [datasetBuildTargetId, setDatasetBuildTargetId] = useState<string | null>(null);
+  const [initialModelDatasetId, setInitialModelDatasetId] = useState<string | null>(null);
   const [agentRename, setAgentRename] = useState<{
     id: string;
     name: string;
@@ -366,15 +374,53 @@ export function LabsRoute({
     );
   }
 
+  function openDatasetCreation(origin: "datasets" | "model") {
+    setDatasetCreateOrigin(origin);
+    setDatasetBuildTargetId(null);
+    setDatasetCreateRoute("source");
+    setSelectedDatasetId(null);
+    setActiveTab("datasets");
+  }
+
+  function closeDatasetCreation() {
+    setDatasetCreateRoute(null);
+    setDatasetBuildTargetId(null);
+    if (datasetCreateOrigin === "model") setActiveTab("workproducts");
+  }
+
+  function openDatasetBuild(tasksetId: string) {
+    setDatasetCreateOrigin("datasets");
+    setDatasetBuildTargetId(tasksetId);
+    setDatasetCreateRoute("build");
+    setSelectedDatasetId(tasksetId);
+    setActiveTab("datasets");
+  }
+
+  function finishDatasetCreation(tasksetId: string | null) {
+    setDatasetCreateRoute(null);
+    setDatasetBuildTargetId(null);
+    setSelectedKey(null);
+    if (datasetCreateOrigin === "model") {
+      setInitialModelDatasetId(tasksetId);
+      setActiveTab("workproducts");
+      return;
+    }
+    setActiveTab("datasets");
+    setSelectedDatasetId(tasksetId);
+  }
+
   return (
     <LabsView
       activeTab={activeTab}
-      showHeader={!selected && !selectedDatasetId}
+      showHeader={!selected && !selectedDatasetId && datasetCreateRoute !== "build"}
       suggestionCount={suggestionCount}
       onTabChange={changePrimaryTab}
       onCreateAgent={() => setAgentCreateOpen(true)}
-      onCreateDataset={() => setDatasetCreateRoute("source")}
-      onCreateModel={onNewModel}
+      onCreateDataset={() => openDatasetCreation("datasets")}
+      onCreateModel={() => {
+        setInitialModelDatasetId(null);
+        onNewModel();
+      }}
     >
       {activeTab === "suggestions" ? (
         <SuggestionsTab
@@ -386,6 +432,34 @@ export function LabsRoute({
         />
       ) : activeTab === "datasets" ? (
         <LabDatasetsPage
+          building={datasetCreateRoute === "build"}
+          buildContent={datasetCreateRoute === "build" ? (
+            <DatasetBuildEditor
+              key={datasetBuildTargetId ?? "new-dataset"}
+              taskset={training.training.payload?.tasksets.find(
+                (candidate) => candidate.id === datasetBuildTargetId,
+              ) ?? null}
+              createImproveRefresh={createImprove.refresh}
+              defaultModel={training.defaultModel}
+              localProjects={training.localProjects ?? []}
+              onBack={() => {
+                if (datasetBuildTargetId) {
+                  closeDatasetCreation();
+                  return;
+                }
+                setDatasetCreateRoute("source");
+              }}
+              onClose={closeDatasetCreation}
+              onCreated={finishDatasetCreation}
+              onOpenComputeSettings={training.onOpenComputeSettings}
+              preferences={training.preferences}
+              providerSettings={training.providerSettings}
+              reasoningEffort={training.reasoningEffort}
+              sessions={training.sessions}
+              sources={training.training.payload?.sources ?? []}
+              training={training.training}
+            />
+          ) : null}
           runs={createImprove.runs}
           selectedId={selectedDatasetId}
           state={training.training.payload}
@@ -394,7 +468,7 @@ export function LabsRoute({
             profileView.onToast?.(message, tone) ?? 0
           }
           onSelectedIdChange={setSelectedDatasetId}
-          onCreate={() => setDatasetCreateRoute("source")}
+          onBuild={openDatasetBuild}
           onOpenFiles={(tasksetId) => {
             training.onSelectedTasksetIdChange(tasksetId);
             training.onOpenTasksetFiles();
@@ -485,15 +559,20 @@ export function LabsRoute({
         </div>
       )}
 
-      {training.launchRequest && training.training.payload ? (
+      {training.launchRequest
+      && training.training.payload
+      && !(datasetCreateOrigin === "model" && datasetCreateRoute !== null) ? (
         <CreateImproveAuthoringDialog
           defaultModel={training.defaultModel}
+          initialExistingTasksetId={initialModelDatasetId}
           initialObjective={training.launchRequest.objective}
           initialSessionIds={training.launchRequest.initialSessionIds ?? []}
           localProjects={training.localProjects ?? []}
           onClose={() => training.onLaunchHandled(training.launchRequest!.id)}
+          onCreateDataset={() => openDatasetCreation("model")}
           onOpenComputeSettings={training.onOpenComputeSettings}
           onModelCreatedFromTaskset={async (taskset, run) => {
+            setInitialModelDatasetId(null);
             training.onLaunchHandled(training.launchRequest!.id);
             training.onSelectedTasksetIdChange(taskset.id);
             training.onDetailTasksetIdChange(taskset.id);
@@ -560,51 +639,17 @@ export function LabsRoute({
       ) : null}
       {datasetCreateRoute === "source" ? (
         <DatasetSourcePickerDialog
-          onClose={() => setDatasetCreateRoute(null)}
+          onClose={closeDatasetCreation}
           onSelect={setDatasetCreateRoute}
-        />
-      ) : null}
-      {datasetCreateRoute === "build" ? (
-        <CreateImproveAuthoringDialog
-          datasetBuildMode
-          defaultModel={training.defaultModel}
-          initialObjective={null}
-          localProjects={training.localProjects ?? []}
-          onBackToDatasetSources={() => setDatasetCreateRoute("source")}
-          onClose={() => setDatasetCreateRoute(null)}
-          onOpenComputeSettings={training.onOpenComputeSettings}
-          onTasksetCreated={async (creation) => {
-            setDatasetCreateRoute(null);
-            setSelectedKey(null);
-            setActiveTab("datasets");
-            setSelectedDatasetId(creation.materializedTasksetId);
-            await createImprove.refresh();
-          }}
-          preferences={training.preferences}
-          providerSettings={training.providerSettings}
-          reasoningEffort={training.reasoningEffort}
-          resourceIntent="dataset"
-          sessions={training.sessions}
-          sources={training.training.payload?.sources ?? []}
-          targetIntent={{
-            kind: null,
-            id: null,
-            displayName: null,
-            operation: "create",
-          }}
-          training={training.training}
         />
       ) : null}
       {datasetCreateRoute === "huggingface" ? (
         <HuggingFaceDatasetImportDialog
           onBack={() => setDatasetCreateRoute("source")}
-          onClose={() => setDatasetCreateRoute(null)}
+          onClose={closeDatasetCreation}
           onImported={async (tasksetId) => {
-            setDatasetCreateRoute(null);
-            setSelectedKey(null);
-            setActiveTab("datasets");
-            setSelectedDatasetId(tasksetId);
             await training.training.refresh();
+            finishDatasetCreation(tasksetId);
           }}
           onOpenDatasetStorageSettings={() => {
             setDatasetCreateRoute(null);
@@ -732,5 +777,75 @@ export function LabsRoute({
         />
       ) : null}
     </LabsView>
+  );
+}
+
+function DatasetBuildEditor({
+  taskset,
+  createImproveRefresh,
+  defaultModel,
+  localProjects,
+  onBack,
+  onClose,
+  onCreated,
+  onOpenComputeSettings,
+  preferences,
+  providerSettings,
+  reasoningEffort,
+  sessions,
+  sources,
+  training,
+}: {
+  taskset: Taskset | null;
+  createImproveRefresh: () => Promise<unknown>;
+  defaultModel: ChatModelRef;
+  localProjects: NonNullable<TrainingViewProps["localProjects"]>;
+  onBack: () => void;
+  onClose: () => void;
+  onCreated: (tasksetId: string | null) => void;
+  onOpenComputeSettings: TrainingViewProps["onOpenComputeSettings"];
+  preferences: TrainingViewProps["preferences"];
+  providerSettings: TrainingViewProps["providerSettings"];
+  reasoningEffort: TrainingViewProps["reasoningEffort"];
+  sessions: TrainingViewProps["sessions"];
+  sources: TrainingSourceRef[];
+  training: TrainingViewProps["training"];
+}) {
+  const initialSessionIds = taskset?.sourceRefs
+    .filter(isTrainingSourceRef)
+    .map((source) => source.sessionId) ?? [];
+
+  return (
+    <CreateImproveAuthoringDialog
+      datasetBuildBackLabel={taskset
+        ? "Back to Dataset overview"
+        : "Back to Dataset sources"}
+      datasetBuildMode
+      defaultModel={defaultModel}
+      initialObjective={taskset?.objective ?? null}
+      initialSessionIds={initialSessionIds}
+      localProjects={localProjects}
+      onBackToDatasetSources={onBack}
+      onClose={onClose}
+      onOpenComputeSettings={onOpenComputeSettings}
+      onTasksetCreated={async (creation) => {
+        await Promise.all([training.refresh(), createImproveRefresh()]);
+        onCreated(creation.materializedTasksetId);
+      }}
+      preferences={preferences}
+      presentation="embedded"
+      providerSettings={providerSettings}
+      reasoningEffort={reasoningEffort}
+      resourceIntent="dataset"
+      sessions={sessions}
+      sources={sources}
+      targetIntent={{
+        kind: null,
+        id: taskset?.id ?? null,
+        displayName: taskset?.name ?? null,
+        operation: taskset ? "improve" : "create",
+      }}
+      training={training}
+    />
   );
 }

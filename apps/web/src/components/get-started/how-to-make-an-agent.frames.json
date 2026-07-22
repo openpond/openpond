@@ -53,9 +53,9 @@
       "file": "C01-account-agent-lab-create-menu.png",
       "chapter": "create",
       "label": "Start in Lab",
-      "caption": "Open Lab, choose New agent, and start the guided creation flow.",
+      "caption": "Open Lab, choose Agent, and start the guided creation flow.",
       "placement": "bottom-left",
-      "narration": "Open Lab, choose New agent, and start the guided creation flow.",
+      "narration": "Open Lab, choose Agent, and start the guided creation flow.",
       "focus": {
         "x": 0.84,
         "y": 0.06,

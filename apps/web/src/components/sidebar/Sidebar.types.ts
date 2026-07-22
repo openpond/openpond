@@ -5,6 +5,7 @@ import type {
   CloudWorkItem,
   OpenPondApp,
   Session,
+  SidebarFileBookmark,
   TeamChatMember,
   TeamChatThread,
   CommunityChannel,
@@ -50,6 +51,7 @@ export type SidebarProps = {
   projectsCollapsed: boolean;
   cloudProjectsCollapsed: boolean;
   chatsCollapsed: boolean;
+  savedForLaterCollapsed: boolean;
   archivedChatsOpen: boolean;
   projectsExpanded: boolean;
   cloudProjectsExpanded: boolean;
@@ -57,6 +59,8 @@ export type SidebarProps = {
   dragItem: SidebarDragItem | null;
   pinnedRows: PinnedSidebarItem[];
   pinnedSessions: Session[];
+  savedForLaterSessions: Session[];
+  savedForLaterFiles: SidebarFileBookmark[];
   projectRows?: SidebarProjectItem[];
   visibleProjectRows: SidebarProjectItem[];
   localProjectRows: SidebarProjectItem[];
@@ -90,6 +94,7 @@ export type SidebarProps = {
   onToggleProjectsCollapsed: () => void;
   onToggleCloudProjectsCollapsed: () => void;
   onToggleChatsCollapsed: () => void;
+  onToggleSavedForLaterCollapsed: () => void;
   setArchivedChatsOpen: Dispatch<SetStateAction<boolean>>;
   setProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
@@ -115,10 +120,15 @@ export type SidebarProps = {
   toggleProjectPinned: (item: SidebarProjectItem) => void;
   toggleSystemProjectVisibility: (item: SidebarProjectItem) => void;
   toggleSessionPinned: (session: Session) => void;
+  toggleSessionSavedForLater: (session: Session) => void;
+  openSidebarFile: (file: SidebarFileBookmark) => void;
+  setSidebarFileStatus: (
+    file: SidebarFileBookmark,
+    status: "pinned" | "saved_for_later" | "none",
+  ) => void;
   archiveSession: (session: Session) => void;
   restoreSession: (session: Session) => void;
   renameSession: (session: Session, title: string) => void;
-  addSessionToTraining: (session: Session) => void;
   expandProject: (projectId: string) => void;
   toggleProjectExpanded: (projectId: string) => void;
   startPinnedDrag: (event: DragEvent<HTMLDivElement>, item: SidebarDragItem) => void;

@@ -31,6 +31,7 @@ import {
   LabModelBaselineProgress,
 } from "../apps/web/src/components/labs/LabModelBaseline";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
+import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
 import {
   LabModelVersionDetailPage,
   LabModelVersionsPage,
@@ -43,6 +44,45 @@ import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
 const noop = () => undefined;
 
 describe("Lab Phase 1", () => {
+  test("hosts Dataset Build in detail tabs without a duplicate list action", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        building: true,
+        buildContent: createElement("div", null, "Embedded Dataset builder"),
+        runs: [],
+        selectedId: null,
+        state: null,
+        training: {} as any,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onBuild: noop,
+        onOpenFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("New Dataset");
+    expect(markup).toContain('aria-selected="true" class="active" role="tab" type="button">Build</button>');
+    expect(markup).toContain('aria-selected="false" disabled="" role="tab" type="button">Overview</button>');
+    expect(markup).toContain("Embedded Dataset builder");
+    expect(markup.indexOf(">Build</button>")).toBeLessThan(
+      markup.indexOf(">Overview</button>"),
+    );
+
+    const listMarkup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        runs: [],
+        selectedId: null,
+        state: null,
+        training: {} as any,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onBuild: noop,
+        onOpenFiles: noop,
+      }),
+    );
+    expect(listMarkup).not.toContain("Create Dataset");
+  });
+
   test("reviews exact expert trajectories in a normal-cased approval dialog", () => {
     const preview = CrossSystemExpertBootstrapPreviewSchema.parse({
       schemaVersion: "openpond.crossSystemExpertBootstrapPreview.v1",
@@ -142,12 +182,13 @@ describe("Lab Phase 1", () => {
   });
 
   test("routes Agent create, Agent improve, Model, and Dataset through one authoring shell", async () => {
-    const [route, dialog] = await Promise.all([
+    const [route, dialog, datasetsPage] = await Promise.all([
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
       readFile(
         "apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx",
         "utf8"
       ),
+      readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
     ]);
     expect(route.match(/<CreateImproveAuthoringDialog/g)).toHaveLength(5);
     expect(route).toContain("initialCreation={resumedModelCreation}");
@@ -156,6 +197,8 @@ describe("Lab Phase 1", () => {
     );
     expect(route).toContain('operation: "improve"');
     expect(route).toContain('resourceIntent="dataset"');
+    expect(route).toContain('presentation="embedded"');
+    expect(route).toContain('operation: taskset ? "improve" : "create"');
     expect(route).toContain("kind: null");
     expect(route).not.toContain("LabAgentCreateDialog");
     expect(route).not.toContain("LabAgentImproveDialog");
@@ -163,6 +206,10 @@ describe("Lab Phase 1", () => {
     expect(route).not.toContain("onCreateGeneric");
     expect(dialog).not.toContain("window.confirm");
     expect(dialog).not.toContain("current selections will be discarded");
+    expect(datasetsPage.indexOf('{ id: "build", label: "Build" }')).toBeLessThan(
+      datasetsPage.indexOf('{ id: "overview", label: "Overview" }'),
+    );
+    expect(datasetsPage).toContain("buildContent");
   });
 
   test("uses solid semantic status tones", () => {
@@ -362,16 +409,29 @@ describe("Lab Phase 1", () => {
         } as any,
       }),
     );
+    const dataMarkup = renderToStaticMarkup(
+      createElement(LabModelDataset, {
+        artifact: null,
+        tab: "data",
+        taskset,
+        onOpenFiles: noop,
+        training: {
+          actions: {
+            datasetRows: async () => null,
+          },
+        } as any,
+      }),
+    );
 
     expect(markup).toContain(">Dataset<");
     expect(markup).toContain("uses no raw chats or customer data");
-    expect(markup).toContain('aria-label="Dataset splits"');
-    expect(markup).toContain(">Training<");
-    expect(markup).toContain("Say hello");
-    expect(markup).toContain("Generated scenario");
-    expect(markup).toContain("Approved answer");
-    expect(markup).toContain("Hello friend");
-    expect(markup).toContain('class="labs-dataset-example"');
+    expect(dataMarkup).toContain('aria-label="Dataset splits"');
+    expect(dataMarkup).toContain(">Training<");
+    expect(dataMarkup).toContain("Say hello");
+    expect(dataMarkup).toContain("Generated scenario");
+    expect(dataMarkup).toContain("Approved answer");
+    expect(dataMarkup).toContain("Hello friend");
+    expect(dataMarkup).toContain('class="labs-dataset-example"');
     expect(markup).not.toContain(">Evidence<");
   });
 
@@ -427,6 +487,7 @@ describe("Lab Phase 1", () => {
     const markup = renderToStaticMarkup(
       createElement(LabModelDataset, {
         artifact: null,
+        tab: "evals",
         taskset,
         onOpenFiles: noop,
         training: {
@@ -1233,7 +1294,7 @@ describe("Lab Phase 1", () => {
     expect(route).toContain("onUseSkill");
     expect(route).not.toContain('"Search profile"');
     expect(route).not.toContain('"Filter workproduct type"');
-    expect(route).toContain("showHeader={!selected && !selectedDatasetId}");
+    expect(route).toContain('showHeader={!selected && !selectedDatasetId && datasetCreateRoute !== "build"}');
     expect(route).toContain('className="labs-home-models"');
     expect(route).not.toContain("homeModels.length ?");
     expect(detail).toContain("labWorkproductProgression");
@@ -1252,10 +1313,21 @@ describe("Lab Phase 1", () => {
     expect(detail).toContain("`Change ${changeCommit.slice(0, 8)}`");
     expect(detail).toContain('className="labs-change-index"');
     expect(changes).toContain('className="labs-change-page"');
-    expect(view).toContain('aria-label="Create workproduct"');
+    expect(view).toContain('aria-label="Create"');
+    expect(view).toContain('<span>Create</span>');
     expect(view).not.toContain("<strong>New change</strong>");
-    expect(view).toContain("<strong>New skill</strong>");
-    expect(view).toContain("<strong>New extension</strong>");
+    expect(view).not.toContain("<strong>New agent</strong>");
+    expect(view).not.toContain("<strong>New model</strong>");
+    expect(view).not.toContain("<strong>New Dataset</strong>");
+    expect(view).toContain("<strong>Skill</strong>");
+    expect(view).toContain("<strong>Extension</strong>");
+    expect(view.indexOf("<strong>Agent</strong>")).toBeLessThan(
+      view.indexOf("<strong>Model</strong>"),
+    );
+    expect(view.indexOf("<strong>Model</strong>")).toBeLessThan(
+      view.indexOf("<strong>Dataset</strong>"),
+    );
+    expect(view).toContain('activeTab !== "datasets"');
     expect(view.match(/<small>Coming soon<\/small>/g)).toHaveLength(2);
     expect(view.match(/<button disabled type="button" role="menuitem">/g)).toHaveLength(2);
     expect(detail).toContain("Improve agent");

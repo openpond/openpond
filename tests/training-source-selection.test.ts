@@ -15,7 +15,7 @@ describe("Training source selection UI", () => {
       readFile("apps/web/src/components/training/TrainingChatPicker.tsx", "utf8"),
       readFile("apps/web/src/hooks/useTraining.ts", "utf8"),
     ]);
-    expect(rows).toContain('label="Add to training"');
+    expect(rows).not.toContain('label="Add to training"');
     expect(view).not.toContain("New model");
     expect(labs).toContain("onCreateModel");
     expect(pane).toContain("setTrainingLaunchRequest");
@@ -34,7 +34,8 @@ describe("Training source selection UI", () => {
     expect(startStep).toContain("Choose a setup");
     expect(startStep).toContain("Automatic");
     expect(startStep).toContain("Manual");
-    expect(startStep).toContain("Existing Dataset");
+    expect(dialog).toContain('? "existing_dataset"');
+    expect(dialog).toContain("onCreateDataset");
     expect(sourceStep).toContain("Build the Dataset");
     expect(sourceStep).toContain("onObjectiveChange");
     expect(sourceStep).toContain("required");
