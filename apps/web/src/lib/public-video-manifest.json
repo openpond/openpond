@@ -131,9 +131,9 @@
     {
       "id": "make-agent-tutorial",
       "localPath": "tutorials/how-to-make-an-agent.mp4",
-      "objectKey": "media/videos/8e01863e0236afdb05c39f0e37273b567f8ede41e1c76b322c7d99c7d3684d5d.mp4",
-      "sha256": "8e01863e0236afdb05c39f0e37273b567f8ede41e1c76b322c7d99c7d3684d5d",
-      "sizeBytes": 17524067,
+      "objectKey": "media/videos/252d2f27076c904d85c9854c2f4c494fe9e92b3cea7d2c58ffbaa0323c17f255.mp4",
+      "sha256": "252d2f27076c904d85c9854c2f4c494fe9e92b3cea7d2c58ffbaa0323c17f255",
+      "sizeBytes": 17339101,
       "durationSeconds": 273.067
     },
     {
@@ -147,17 +147,17 @@
     {
       "id": "make-agent-tutorial-use",
       "localPath": "tutorials/how-to-make-an-agent-use.mp4",
-      "objectKey": "media/videos/3a83e0a942a5ddde9008af26745e75aea3c1a021a4083fb01af9b807c3b132fd.mp4",
-      "sha256": "3a83e0a942a5ddde9008af26745e75aea3c1a021a4083fb01af9b807c3b132fd",
-      "sizeBytes": 5201326,
+      "objectKey": "media/videos/6e28bb710f90de8968fa18f996973b869e6748797739dd93cce49d8fbba564c1.mp4",
+      "sha256": "6e28bb710f90de8968fa18f996973b869e6748797739dd93cce49d8fbba564c1",
+      "sizeBytes": 5084394,
       "durationSeconds": 75.1
     },
     {
       "id": "make-agent-tutorial-improve",
       "localPath": "tutorials/how-to-make-an-agent-improve.mp4",
-      "objectKey": "media/videos/17e5dd326685b6cd04fe964fbebeb6a8074e0cf2dac75dbe3720ec2a62b873ac.mp4",
-      "sha256": "17e5dd326685b6cd04fe964fbebeb6a8074e0cf2dac75dbe3720ec2a62b873ac",
-      "sizeBytes": 6334783,
+      "objectKey": "media/videos/fe8b62bf6ed5f5b933b0023dfdd9a06e69b5b352d4c702b671ec7677b395d58d.mp4",
+      "sha256": "fe8b62bf6ed5f5b933b0023dfdd9a06e69b5b352d4c702b671ec7677b395d58d",
+      "sizeBytes": 6255324,
       "durationSeconds": 108.634
     }
   ]

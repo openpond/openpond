@@ -122,4 +122,4 @@ Commit the final Agent source with a clear Git message so the exact Profile vers
 
 I10
 00:04:17.096 --> 00:04:30.334
-Confirm sync publishes this committed version so teammates can use the Agent in chat and hosted sandboxes can attach the same source.
+Open Sync to review the committed Profile changes. Confirm sync publishes this version so teammates can use the Agent in chat and hosted sandboxes can attach the same source.
