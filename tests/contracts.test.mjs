@@ -621,6 +621,7 @@ describe("contracts", () => {
       projects: false,
       cloudProjects: false,
       chats: false,
+      savedForLater: true,
     });
     assert.deepEqual(payload.providers, {
       version: 1,
