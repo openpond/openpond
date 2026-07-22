@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
 const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const ROOT_PACKAGE_PATH = "package.json";
 const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
+const LATEST_STABLE_TAG_SCRIPT_PATH = "scripts/latest-stable-release-tag.sh";
 
 describe("release workflow", () => {
   test("keeps packaged desktop smoke wired for Linux and macOS release builds while Windows is disabled", () => {
@@ -140,6 +142,40 @@ describe("release workflow", () => {
       /release_smoke:[\s\S]*?actions\/download-artifact@[0-9a-f]{40} # v8[\s\S]*?path: \./,
     );
     expect(ciWorkflow).not.toContain("OPENPOND_SKIP_CI_LONG_CLI_TESTS");
+  });
+
+  test("ignores prerelease tags when resolving the latest stable release", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "openpond-stable-release-tags-"));
+    const resolver = join(process.cwd(), LATEST_STABLE_TAG_SCRIPT_PATH);
+
+    try {
+      execFileSync("git", ["init"], { cwd: repo, stdio: "ignore" });
+      execFileSync("git", ["config", "user.email", "release-test@openpond.ai"], { cwd: repo });
+      execFileSync("git", ["config", "user.name", "OpenPond Release Test"], { cwd: repo });
+      await writeFile(join(repo, "README.md"), "release tag fixture\n");
+      execFileSync("git", ["add", "README.md"], { cwd: repo });
+      execFileSync("git", ["commit", "-m", "fixture"], { cwd: repo, stdio: "ignore" });
+
+      for (const tag of [
+        "v0.0.33",
+        "v0.0.34",
+        "v0.0.35-nightly.20260721.1",
+        "v0.0.35-rc.1",
+      ]) {
+        execFileSync("git", ["tag", tag], { cwd: repo });
+      }
+
+      expect(execFileSync("bash", [resolver], { cwd: repo, encoding: "utf8" }).trim()).toBe(
+        "v0.0.34",
+      );
+
+      execFileSync("git", ["tag", "v0.0.35"], { cwd: repo });
+      expect(execFileSync("bash", [resolver], { cwd: repo, encoding: "utf8" }).trim()).toBe(
+        "v0.0.35",
+      );
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
   });
 
   test("keeps protected master writes out of the local release command", () => {
