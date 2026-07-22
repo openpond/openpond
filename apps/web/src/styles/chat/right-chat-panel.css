@@ -104,11 +104,6 @@
   gap: 5px;
 }
 
-.right-chat-composer .composer-create-control {
-  max-width: 86px;
-  padding: 0 9px;
-}
-
 .right-chat-composer .permission-select-placeholder {
   display: none;
 }

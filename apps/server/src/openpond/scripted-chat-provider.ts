@@ -100,16 +100,6 @@ function* streamTwoTurnChat(input: HostedChatTurnInput): Generator<HostedChatTur
   }
   const userTurns = input.messages.filter((message) => message.role === "user").length;
   const latest = latestUserText(input.messages);
-  const accountHealthContext = input.messages
-    .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => typeof message.content === "string" ? message.content : "")
-    .join("\n");
-  const accountHealthResponse = latest ? scriptedAccountHealthResponse(latest, accountHealthContext) : null;
-  if (accountHealthResponse) {
-    yield textDelta(accountHealthResponse);
-    yield finishDelta("stop");
-    return;
-  }
   yield textDelta(`scripted turn ${Math.max(1, userTurns)} response`);
   if (latest) yield textDelta(` for: ${latest.slice(0, 80)}`);
   yield finishDelta("stop");
@@ -130,45 +120,10 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
     ? run.objective.trim()
     : "Create a useful Profile Agent.";
   const target = record(run.target);
-  const accountHealth = /account health|renewal risk|weekly account review/i.test(objective);
-  const questions = Array.isArray(run.questions)
-    ? run.questions.filter((question) => record(question).status === "answered")
-    : [];
-  const operation = run.operation === "improve" ? "improve" : "create";
-  if (accountHealth && operation === "create" && questions.length === 0) {
-    return JSON.stringify({
-      schemaVersion: "openpond.createImprove.plannerDecision.v1",
-      decision: "questions",
-      summary: "Confirm how conflicting account-health signals should be prioritized.",
-      questions: [{
-        id: "account_health_priority",
-        kind: "single_choice",
-        title: "Risk priority",
-        prompt: "When signals conflict, which blockers should the Account Health Agent rank first?",
-        required: true,
-        options: [
-          {
-            id: "billing_support_first",
-            label: "Billing and P1 first",
-            value: "Rank overdue or disputed billing and open P1 support blockers before adoption decline.",
-            description: "Escalate urgent commercial and support blockers before usage signals.",
-          },
-          {
-            id: "adoption_first",
-            label: "Adoption first",
-            value: "Rank usage and adoption decline before billing and support blockers.",
-            description: "Treat engagement changes as the leading risk signal.",
-          },
-        ],
-      }],
-    });
-  }
-  const targetId = accountHealth
-    ? "account-health-agent"
-    : typeof target.id === "string" && target.id.trim()
-      ? target.id.trim()
-      : scriptedAgentId(objective);
-  const targetName = accountHealth ? "Account Health Agent" : targetId
+  const targetId = typeof target.id === "string" && target.id.trim()
+    ? target.id.trim()
+    : scriptedAgentId(objective);
+  const targetName = targetId
     .split(/[-_.]+/)
     .filter(Boolean)
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
@@ -182,18 +137,12 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
       summary: `Create ${targetName} as a Profile Agent.`,
       capturedContextSummary: "Lab-authored Agent objective.",
       actionShape: {
-        mode: accountHealth ? "chat_and_direct_actions" : "chat",
-        label: accountHealth ? "Account health chat and reviews" : "Chat",
-        detail: accountHealth
-          ? "Answer source-backed account questions and expose repeatable account summary, renewal triage, and weekly review actions."
-          : "Use the Agent through its default chat action.",
+        mode: "chat",
+        label: "Chat",
+        detail: "Use the Agent through its default chat action.",
         defaultActionKey: `${targetId}.chat`,
-        directActionHint: accountHealth
-          ? "Expose summarize-account {accountId}, triage-renewal-risk {accountId, asOfDate}, and build-weekly-account-review {asOfDate, minimumRisk}; the weekly review must write Markdown and JSON artifacts."
-          : null,
-        artifactPolicy: accountHealth
-          ? "Persist source-backed Agent SDK traces, Eval receipts, and weekly-review Markdown and JSON artifacts."
-          : "Persist Agent SDK traces and Eval receipts.",
+        directActionHint: null,
+        artifactPolicy: "Persist Agent SDK traces and Eval receipts.",
       },
       defaultChatAction: {
         key: `${targetId}.chat`,
@@ -212,23 +161,6 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
       ],
     },
   });
-}
-
-function scriptedAccountHealthResponse(prompt: string, context: string): string | null {
-  if (!/account health|acme|northstar|glacier|renewal|billing|p1|weekly review|correction/i.test(context)) return null;
-  if (/correction|billing and p1/i.test(prompt)) {
-    return "For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline, while citing each supporting source.";
-  }
-  if (/acme/i.test(prompt) || (/what should|who owns|do first/i.test(prompt) && /acme/i.test(context))) {
-    return "Acme is high risk. Renewal is in 21 days; active seats are down 31%; a disputed invoice is 19 days overdue; and a P1 support case is open. Resolve the billing dispute and P1 first. Owner: Revenue Operations with Support.";
-  }
-  if (/northstar/i.test(prompt)) {
-    return "Northstar is an expansion opportunity. Renewal is in 87 days, active seats are up 18%, there is no overdue balance, and the customer requested 25 additional seats. Owner: Account Executive for expansion follow-up.";
-  }
-  if (/glacier/i.test(prompt)) {
-    return "Glacier is medium risk. Renewal is in 43 days, usage is flat, there is no P1 support case, and the account owner is missing. Assign an owner before the weekly review.";
-  }
-  return "Account health evidence recorded with source-backed facts and explicit ownership.";
 }
 
 function scriptedAgentId(objective: string): string {

@@ -144,9 +144,6 @@ export function MainPane({
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,
-  subagentDelegationDefaultMode,
-  subagentDelegationMode,
-  subagentDelegationAvailable,
   pendingApproval,
   activeWorkspaceAppId,
   activeWorkspaceId,
@@ -225,7 +222,6 @@ export function MainPane({
   changeCodexPermissionMode,
   changeCodexReasoningEffort,
   changeOpenPondCommandAccessMode,
-  changeSubagentDelegationMode,
   resolveApproval,
   answerCreateImproveQuestion,
   approveCreateImproveRun,
@@ -1656,8 +1652,6 @@ export function MainPane({
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
                 openPondCommandAccessMode={openPondCommandAccessMode}
-                subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
-                subagentDelegationMode={subagentDelegationMode}
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1666,7 +1660,6 @@ export function MainPane({
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
-                onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
@@ -1681,13 +1674,15 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
-            <h1>{startMessage}</h1>
-            {canSyncWorkspace && (
-              <WorkspaceSyncButton
-                busy={workspaceBusy}
-                onSync={() => void syncWorkspaceLocally()}
-              />
-            )}
+            <div className="start-welcome">
+              <h1>{startMessage}</h1>
+              {canSyncWorkspace && (
+                <WorkspaceSyncButton
+                  busy={workspaceBusy}
+                  onSync={() => void syncWorkspaceLocally()}
+                />
+              )}
+            </div>
             <div className="composer-stack start">
               {trainingChatHandoffBar}
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
@@ -1720,8 +1715,6 @@ export function MainPane({
                 codexPermissionMode={codexPermissionMode}
                 codexReasoningEffort={codexReasoningEffort}
                 openPondCommandAccessMode={openPondCommandAccessMode}
-                subagentDelegationDefaultMode={subagentDelegationAvailable ? subagentDelegationDefaultMode : undefined}
-                subagentDelegationMode={subagentDelegationMode}
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
@@ -1730,7 +1723,6 @@ export function MainPane({
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
                 onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
-                onSubagentDelegationModeChange={subagentDelegationAvailable ? changeSubagentDelegationMode : undefined}
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}

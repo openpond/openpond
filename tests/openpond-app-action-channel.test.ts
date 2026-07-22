@@ -638,7 +638,7 @@ describe("OpenPond App action channel", () => {
     );
     expect(readyHtml).toContain(">Ready<");
     expect(readyHtml).toContain("Chat only");
-    expect(readyHtml).toContain("2 checks");
+    expect(readyHtml).toContain("2 Evals");
     expect(readyHtml).not.toContain("profiles/default/agents/help-me-keep-track-of-open-customer-support-item");
     expect(readyHtml).not.toContain(".openpond/agent-inspect.json");
     expect(readyHtml).not.toContain(".openpond/eval-results.json");
@@ -1481,7 +1481,7 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("Create agent for: release notes agent");
     expect(html).toContain("Chat plus direct action");
     expect(html).not.toContain("agents/release-notes-agent");
-    expect(html).toContain("4 checks");
+    expect(html).toContain("4 Evals");
     expect(html).not.toContain("Show progress");
     expect(html).not.toContain("Agent plan review");
     expect(html).not.toContain("Debug details");

@@ -37,7 +37,7 @@ export default desktopScenario({
     await clickAriaButton(harness, "Close video player");
 
     await clickAriaButton(harness, "Open Agents playlist");
-    await waitForTutorialMetadata(harness, "Create an Agent", 80, 90);
+    await waitForTutorialMetadata(harness, "Create an Agent", 95, 105);
     await harness.renderer.assertText("Lessons", { label: "walkthrough Lessons sidebar" });
     await harness.renderer.assertText("Script", { label: "walkthrough Script sidebar" });
     await harness.renderer.assertText("Create an Agent", { label: "Create lesson" });
@@ -49,21 +49,21 @@ export default desktopScenario({
     );
     if (hasInternalStepIds) throw new Error("Walkthrough sidebar exposes internal frame IDs.");
     await clickAriaButton(harness, "Play full video: How to make an agent");
-    await waitForTutorialMetadata(harness, "How to make an agent", 200);
+    await waitForTutorialMetadata(harness, "How to make an agent", 260, 280);
     await seekTutorial(harness, "How to make an agent", 50);
     const fullVideoMedia = await tutorialMetadata(harness, "How to make an agent");
     await screenshot(harness, "T03", "get-started-make-agent-play-all");
 
     await clickAriaButton(harness, "Play lesson 1: Create an Agent");
-    await waitForTutorialMetadata(harness, "Create an Agent", 80, 90);
+    await waitForTutorialMetadata(harness, "Create an Agent", 95, 105);
     await screenshot(harness, "T04", "get-started-make-agent-create");
 
     await clickAriaButton(harness, "Play lesson 2: Use the Agent");
-    await waitForTutorialMetadata(harness, "Use the Agent", 60, 70);
+    await waitForTutorialMetadata(harness, "Use the Agent", 70, 80);
     await screenshot(harness, "T05", "get-started-make-agent-use");
 
     await clickAriaButton(harness, "Play lesson 3: Improve the Agent");
-    await waitForTutorialMetadata(harness, "Improve the Agent", 65, 75);
+    await waitForTutorialMetadata(harness, "Improve the Agent", 100, 115);
     await screenshot(harness, "T06", "get-started-make-agent-improve");
 
     await clickButton(harness, "Script", '[aria-label="Agents walkthrough panel"]');
@@ -78,7 +78,7 @@ export default desktopScenario({
       "narrow Get Started page without horizontal overflow",
     );
     await clickAriaButton(harness, "Open Agents playlist");
-    await waitForTutorialMetadata(harness, "Create an Agent", 80, 90);
+    await waitForTutorialMetadata(harness, "Create an Agent", 95, 105);
     await screenshot(harness, "T08", "get-started-make-agent-playlist-narrow");
 
     const media = await tutorialMetadata(harness, "Create an Agent");

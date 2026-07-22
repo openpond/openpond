@@ -95,6 +95,48 @@ export async function clearTransientFocus(
   );
 }
 
+export async function fillComposerPrompt(
+  harness: DesktopHarness,
+  prompt: string,
+): Promise<void> {
+  await waitForRendererCondition(
+    harness,
+    `(() => {
+      const inputs = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')];
+      const input = inputs.find((candidate) =>
+        candidate instanceof HTMLElement &&
+        candidate.offsetParent !== null &&
+        candidate.querySelector('[data-inline-token="true"]'))
+        ?? inputs.find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null);
+      if (!(input instanceof HTMLElement)) return false;
+      const token = input.querySelector('[data-inline-token="true"]');
+      for (const child of [...input.childNodes]) {
+        if (child !== token) child.remove();
+      }
+      input.focus();
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', ${JSON.stringify(prompt)});
+      input.dispatchEvent(new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData,
+      }));
+      const form = input.closest('form.composer');
+      const send = form?.querySelector('.send-button');
+      return (input.textContent ?? '').includes(${JSON.stringify(prompt)}) &&
+        send instanceof HTMLButtonElement && !send.disabled;
+    })()`,
+    "visible composer prompt",
+    { timeoutMs: 10_000 },
+  );
+}
+
 export async function clickTab(
   harness: DesktopHarness,
   text: string,
@@ -235,7 +277,7 @@ export async function chooseComposerAction(
       const button = root && [...root.querySelectorAll('button')].find((item) =>
         item.textContent?.includes(${JSON.stringify(label)}));
       if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
-      button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+      button.click();
       return true;
     })()`,
     `${label} action option`,

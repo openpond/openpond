@@ -52,9 +52,9 @@ const webViteConfig = readFileSync(
 describe("How to make an agent media contract", () => {
   test("contains every acceptance frame exactly once in chapter order", () => {
     const expected = [
-      ...Array.from({ length: 19 }, (_, index) => `C${String(index + 1).padStart(2, "0")}`)
-        .filter((id) => id !== "C03" && id !== "C05"),
-      ...Array.from({ length: 8 }, (_, index) => `I${String(index + 1).padStart(2, "0")}`),
+      "C01", "C02", "C04", "C06", "C07", "C08", "C09", "C09A", "C09B", "C10", "C11", "C12",
+      "C13Q", "C13", "C14", "C15", "C16", "C17", "C18", "C19",
+      "I00", "I01", "I02", "I03", "I04", "I05", "I06", "I07", "I08", "I09", "I10",
     ];
 
     expect(manifest.frames.map((frame) => frame.id)).toEqual(expected);
@@ -72,9 +72,9 @@ describe("How to make an agent media contract", () => {
       && frame.focus.zoom >= 1
       && frame.focus.zoom <= 2
     )).toBe(true);
-    expect(manifest.frames.filter((frame) => frame.chapter === "create")).toHaveLength(10);
-    expect(manifest.frames.filter((frame) => frame.chapter === "use")).toHaveLength(7);
-    expect(manifest.frames.filter((frame) => frame.chapter === "improve")).toHaveLength(8);
+    expect(manifest.frames.filter((frame) => frame.chapter === "create")).toHaveLength(12);
+    expect(manifest.frames.filter((frame) => frame.chapter === "use")).toHaveLength(8);
+    expect(manifest.frames.filter((frame) => frame.chapter === "improve")).toHaveLength(11);
   });
 
   test("refuses failed reports and encodes the checked playback format", () => {
@@ -99,8 +99,14 @@ describe("How to make an agent media contract", () => {
     expect(builder).toContain('slug: `how-to-make-an-agent-${chapter.id}`');
     expect(builder).toContain("contactSheets");
     expect(builder).toContain("variants: results.map");
-    expect(builder).toContain("renderTutorialIntro");
+    expect(builder).toContain("renderTutorialTwoBeatIntro");
+    expect(builder).toContain("renderTutorialTitleOnlyPoster");
+    expect(builder).not.toContain("renderTutorialIntro");
+    expect(builder).toContain("chapterIndex > 0");
+    expect(builder).not.toContain("drawText(0, 365, tutorialTitle)");
     expect(tutorialTitleSequence).toContain("renderTutorialIdentityReveal");
+    expect(tutorialTitleSequence).toContain("WALKTHROUGH_IDENTITY_HOLD_SECONDS");
+    expect(tutorialTitleSequence).toContain('"[v0][v1]concat=n=2:v=1:a=0[outv]"');
     expect(tutorialTitleSequence).toContain("IDENTITY_PREFIXES");
     expect(tutorialTitleSequence).toContain("IDENTITY_DURATIONS");
     expect(tutorialTitleSequence).not.toContain('identityOnly ? "+635+484" : "+795+190"');
@@ -115,9 +121,11 @@ describe("How to make an agent media contract", () => {
     expect(agentOverviewBuilder).toContain('id: "overview-entrypoints"');
     expect(agentOverviewBuilder).toContain('id: "overview-surfaces"');
     expect(agentOverviewBuilder).toContain('id: "overview-example"');
-    expect(agentOverviewBuilder).toContain('id: "overview-checks"');
+    expect(agentOverviewBuilder).toContain('id: "overview-evals"');
     expect(agentOverviewBuilder).toContain('id: "overview-lifecycle"');
-    expect(agentOverviewBuilder).toContain("renderTutorialIntro");
+    expect(agentOverviewBuilder).toContain("renderTutorialTwoBeatIntro");
+    expect(agentOverviewBuilder).toContain("renderTutorialTitleOnlyPoster");
+    expect(agentOverviewBuilder).not.toContain("renderTutorialIntro");
     expect(tutorialTitleSequence).toContain('stage: "title"');
     expect(agentOverviewBuilder).toContain("prepareTutorialNarration");
     expect(agentOverviewBuilder).toContain('"-movflags", "+faststart"');

@@ -399,6 +399,9 @@ function ProfileSyncDialog({
           <UploadCloud size={18} />
         </div>
         <h2 id="profile-sync-dialog-title">Sync profile</h2>
+        <p className="profile-sync-explainer">
+          Sync publishes this committed Profile source for your team, so its Agents can be shared in team chat and attached to hosted sandboxes.
+        </p>
         <div className="profile-dialog-summary">
           <strong>{outOfSyncCount} {outOfSyncCount === 1 ? "item" : "items"} out of sync</strong>
           <span>

@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { prepareTutorialNarration } from "./tutorial-narration.mjs";
 import {
-  renderTutorialIntro,
-  renderTutorialTitlePoster,
+  renderTutorialTitleOnlyPoster,
+  renderTutorialTwoBeatIntro,
 } from "./tutorial-title-sequence.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -56,7 +56,7 @@ const slides = [
     id: "overview-profile",
     eyebrow: "PROFILE",
     title: "Agents live in your Profile",
-    narration: "An OpenPond Agent is a reusable capability that lives in your Profile. Its source defines its purpose, the actions people can run, and the checks that protect its behavior.",
+    narration: "An OpenPond Agent is a reusable capability that lives in your Profile. Its source defines its purpose, the actions people can run, and the Evals that protect its behavior.",
     kind: "profile",
   },
   {
@@ -81,11 +81,11 @@ const slides = [
     kind: "example",
   },
   {
-    id: "overview-checks",
-    eyebrow: "CHECKS",
+    id: "overview-evals",
+    eyebrow: "EVALS",
     title: "Improve behavior with evidence",
-    narration: "Checks run repeatable scenarios against the Agent's behavior and outputs. During Improve, OpenPond compares the candidate with the active Agent and only releases the change after the required checks pass.",
-    kind: "checks",
+    narration: "Evals run repeatable scenarios against the Agent's behavior and outputs. During Improve, OpenPond compares the candidate with the active Agent and only releases the change after the required Evals pass.",
+    kind: "evals",
   },
   {
     id: "overview-lifecycle",
@@ -102,8 +102,8 @@ try {
   await mkdir(reportDir, { recursive: true });
 
   const introPath = path.join(workDir, "intro.mp4");
-  await renderTutorialTitlePoster({ outputPath: posterPath, subtitle, title });
-  await renderTutorialIntro({ outputPath: introPath, posterPath, repoRoot, subtitle, title });
+  await renderTutorialTitleOnlyPoster({ outputPath: posterPath, title });
+  await renderTutorialTwoBeatIntro({ outputPath: introPath, posterPath, repoRoot });
 
   const renderedSlides = [];
   for (const slide of slides) {
@@ -267,7 +267,7 @@ function slideContent(kind) {
     return `
       ${panel(180, 390, 690, 460, "PROFILE SOURCE", "Owned, versioned, and reusable", ["agent/agent.ts", "agent/actions/*", "agent/evals/*"], "#17212b")}
       ${arrow(900, 620, 1015, 620)}
-      ${panel(1050, 390, 690, 460, "AGENT", "Purpose + action catalog + checks", ["chat", "direct actions", "required checks"], "#10252d")}
+      ${panel(1050, 390, 690, 460, "AGENT", "Purpose + action catalog + Evals", ["chat", "direct actions", "required Evals"], "#10252d")}
     `;
   }
   if (kind === "entrypoints") {
@@ -303,13 +303,13 @@ function slideContent(kind) {
       <text x="245" y="815" fill="#7f8997" font-family="DejaVu Sans" font-size="22">Direct actions use explicit inputs and return reviewable results.</text>
     `;
   }
-  if (kind === "checks") {
+  if (kind === "evals") {
     return `
       ${checkCard(180, 410, "1", "Run repeatable scenarios", "Use known inputs and expected behavior")}
-      ${arrow(650, 625, 770, 625)}
-      ${checkCard(775, 410, "2", "Compare active and candidate", "Review behavior, outputs, and regressions")}
-      ${arrow(1245, 625, 1365, 625)}
-      ${checkCard(1370, 410, "3", "Release after checks pass", "Keep the Profile on verified behavior")}
+      ${arrow(650, 625, 745, 625)}
+      ${checkCard(750, 410, "2", "Compare active and candidate", "Review behavior, outputs, and regressions")}
+      ${arrow(1220, 625, 1315, 625)}
+      ${checkCard(1320, 410, "3", "Release after Evals pass", "Keep the Profile on verified behavior")}
     `;
   }
   return `

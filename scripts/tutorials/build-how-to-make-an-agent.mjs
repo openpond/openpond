@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { prepareTutorialNarration } from "./tutorial-narration.mjs";
 import {
-  renderTutorialIntro,
-  renderTutorialTitlePoster,
+  renderTutorialTitleOnlyPoster,
+  renderTutorialTwoBeatIntro,
 } from "./tutorial-title-sequence.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -91,17 +91,14 @@ try {
     const posterPath = path.join(stagedDir, `${variant.slug}-poster.png`);
     const introPath = path.join(workDir, `${variant.slug}-intro.mp4`);
     const outroPath = path.join(workDir, `${variant.slug}-outro.png`);
-    await renderTutorialTitlePoster({
+    await renderTutorialTitleOnlyPoster({
       outputPath: posterPath,
       title: variant.title,
-      subtitle: variant.subtitle,
     });
-    await renderTutorialIntro({
+    await renderTutorialTwoBeatIntro({
       outputPath: introPath,
       posterPath,
       repoRoot,
-      title: variant.title,
-      subtitle: variant.subtitle,
     });
     await renderSplashCard({
       outputPath: outroPath,
@@ -114,7 +111,7 @@ try {
   const chapterCardPaths = new Map();
   for (const chapter of manifest.chapters) {
     const chapterCardPath = path.join(workDir, `chapter-${chapter.id}.png`);
-    await renderChapterCard(chapterCardPath, chapter.title, manifest.tutorial.title);
+    await renderChapterCard(chapterCardPath, chapter.title);
     chapterCardPaths.set(chapter.id, chapterCardPath);
   }
 
@@ -172,11 +169,11 @@ try {
   }));
   const playAll = results.find((result) => result.id === "play-all");
   assert(playAll, "The checked tutorial build is missing the Play all variant.");
-  const chapterTimes = Object.fromEntries(
-    playAll.timeline
-      .filter((segment) => segment.kind === "chapter")
-      .map((segment) => [segment.chapter, segment.start]),
-  );
+  const chapterTimes = Object.fromEntries(manifest.chapters.map((chapter) => {
+    const firstSegment = playAll.timeline.find((segment) => segment.chapter === chapter.id);
+    assert(firstSegment, `The Play all timeline is missing chapter ${chapter.id}.`);
+    return [chapter.id, firstSegment.start];
+  }));
   const stagedOutputs = results.flatMap((result) => result.stagedOutputs);
   const playAllVideoOutput = playAll.outputs.find((output) => output.file.endsWith(".mp4"));
   assert(playAllVideoOutput, "The Play all output metadata is missing its MP4.");
@@ -343,8 +340,8 @@ function createTimeline({
     inputType: "video",
     duration: 4,
   }];
-  for (const chapter of variant.chapters) {
-    if (variant.includeChapterCards) {
+  for (const [chapterIndex, chapter] of variant.chapters.entries()) {
+    if (variant.includeChapterCards && chapterIndex > 0) {
       segments.push({
         kind: "chapter",
         id: `chapter-${chapter.id}`,
@@ -447,7 +444,7 @@ async function renderSplashCard({ outputPath, title, subtitle }) {
   }
 }
 
-async function renderChapterCard(outputPath, chapter, tutorialTitle) {
+async function renderChapterCard(outputPath, chapter) {
   const icon = path.join(repoRoot, "apps/web/public/openpond-icon.png");
   const resizedIcon = `${outputPath}.icon.png`;
   const baseCard = `${outputPath}.base.png`;
@@ -455,11 +452,10 @@ async function renderChapterCard(outputPath, chapter, tutorialTitle) {
     await execFileAsync("convert", [icon, "-resize", "76x76", resizedIcon]);
     await execFileAsync("convert", [
       "-size", "1920x1080", "xc:#101010",
-      "-gravity", "North", "-font", "DejaVu-Sans", "-fill", "#22d3ee", "-pointsize", "26", "-draw", drawText(0, 365, tutorialTitle),
-      "-fill", "#f7f7f8", "-pointsize", "72", "-draw", drawText(0, 430, chapter),
+      "-gravity", "North", "-font", "DejaVu-Sans", "-fill", "#f7f7f8", "-pointsize", "72", "-draw", drawText(0, 470, chapter),
       baseCard,
     ]);
-    await execFileAsync("composite", ["-geometry", "+922+250", resizedIcon, baseCard, outputPath]);
+    await execFileAsync("composite", ["-geometry", "+922+315", resizedIcon, baseCard, outputPath]);
   } finally {
     await Promise.all([
       rm(resizedIcon, { force: true }),

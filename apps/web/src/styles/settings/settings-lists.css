@@ -121,6 +121,13 @@
   width: min(520px, calc(100vw - 34px));
 }
 
+.profile-sync-explainer {
+  margin: 0;
+  color: #b8b8b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .profile-dialog-summary {
   display: grid;
   gap: 4px;

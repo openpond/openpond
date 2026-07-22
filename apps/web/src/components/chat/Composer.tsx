@@ -18,7 +18,6 @@ import type {
   OpenPondApp,
   OpenPondProfileSkill,
   ProviderSettings,
-  SubagentDelegationMode,
   TeamChatMember,
 } from "@openpond/contracts";
 import {
@@ -85,12 +84,18 @@ import {
   type ComposerSteerDraft,
   type ComposerSteerDraftScopeState,
 } from "./composer-steer-queue";
-import { slashMenuAnchorStyle } from "./ComposerLayout";
+import { addMenuAnchorStyle, slashMenuAnchorStyle } from "./ComposerLayout";
 import {
   ComposerInlineInput,
   type ComposerInlineInputHandle,
   type ComposerInlineToken,
 } from "./ComposerInlineInput";
+import {
+  ComposerCommandMenu,
+  filterComposerCommandMenuSections,
+  type ComposerCommandMenuItem,
+  type ComposerCommandMenuSection,
+} from "./ComposerCommandMenu";
 import { ComposerMentionMenu, type ComposerMentionMenuItem } from "./ComposerMentionMenu";
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
 import { ComposerSkillMenu, type ComposerSkillMenuItem } from "./ComposerSkillMenu";
@@ -151,8 +156,6 @@ export type ComposerProps = {
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
-  subagentDelegationDefaultMode?: SubagentDelegationMode;
-  subagentDelegationMode?: SubagentDelegationMode | null;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
@@ -161,7 +164,6 @@ export type ComposerProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
-  onSubagentDelegationModeChange?: (mode: SubagentDelegationMode | null) => void;
   onPromptChange: (value: string) => void;
   onMentionAppSelect?: (appId: string | null) => void;
   showToast: ShowAppToast;
@@ -269,6 +271,54 @@ function slashAppContextMatchesForQuery(apps: OpenPondApp[], query: string): Ope
     .slice(0, 8);
 }
 
+function mentionMenuMatchesForQuery({
+  actionCatalog,
+  connectedAppMentions,
+  mentionApps,
+  query,
+  surface,
+  teamMentionMembers,
+}: {
+  actionCatalog: SandboxActionCatalogEntry[];
+  connectedAppMentions: ConnectedAppMentionOption[];
+  mentionApps: OpenPondApp[];
+  query: string;
+  surface: "chat" | "team";
+  teamMentionMembers: TeamChatMember[];
+}): ComposerMentionMenuItem[] {
+  const needle = query.toLowerCase();
+  if (surface === "team") {
+    const memberMatches = teamMentionMembers
+      .filter((member) => {
+        if (!needle) return true;
+        return [member.name, member.handle ?? ""]
+          .map(normalizeMentionToken)
+          .some((token) => token.includes(needle));
+      })
+      .map((member) => ({ kind: "team-member" as const, member }));
+    const teamActionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
+      .map((action) => ({ kind: "action" as const, action }));
+    return [...memberMatches, ...teamActionMatches].slice(0, 8);
+  }
+  const appMatches = mentionApps
+    .filter((app) => {
+      if (!needle) return true;
+      const tokens = [
+        normalizeMentionToken(app.id),
+        normalizeMentionToken(app.name),
+        app.gitRepo ? normalizeMentionToken(app.gitRepo) : "",
+        mentionTokenForChatApp(app),
+      ];
+      return tokens.some((token) => token.includes(needle));
+    })
+    .map((app) => ({ kind: "app" as const, app }));
+  const actionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
+    .map((action) => ({ kind: "action" as const, action }));
+  const connectedAppMatches = connectedAppMentionMatchesForQuery(connectedAppMentions, needle)
+    .map((app) => ({ kind: "connected-app" as const, app }));
+  return [...appMatches, ...connectedAppMatches, ...actionMatches].slice(0, 8);
+}
+
 export function promptWithSelectedInvocationText(
   prompt: string,
   invocationText: string | null,
@@ -289,6 +339,49 @@ function synthesizedActionMentionText(action: SandboxActionCatalogEntry): string
   return token ? `@${token}` : null;
 }
 
+export function humanizeSelectedActionInput(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return prompt;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") return prompt;
+    const parts = Object.entries(parsed)
+      .filter(([, value]) => value !== undefined && value !== null && value !== "")
+      .map(([key, value]) => `${actionInputLabel(key)}: ${actionInputValue(key, value)}`);
+    return parts.length ? parts.join(" · ") : prompt;
+  } catch {
+    return prompt;
+  }
+}
+
+function actionInputLabel(key: string): string {
+  const words = key
+    .replace(/Id$/, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase();
+  return words ? `${words[0]!.toUpperCase()}${words.slice(1)}` : "Input";
+}
+
+function actionInputValue(key: string, value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => actionInputValue(key, item)).join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([nestedKey, nestedValue]) => `${actionInputLabel(nestedKey)}: ${actionInputValue(nestedKey, nestedValue)}`)
+      .join(" · ");
+  }
+  const text = String(value);
+  if (/Id$/.test(key) && /^[a-z0-9_-]+$/i.test(text)) {
+    return text
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((part) => `${part[0]!.toUpperCase()}${part.slice(1)}`)
+      .join(" ");
+  }
+  return text;
+}
+
 export function selectedActionDisplayPrompt({
   action,
   prompt,
@@ -306,7 +399,7 @@ export function selectedActionDisplayPrompt({
     ? explicitMention
     : synthesizedActionMentionText(action);
   return mentionText
-    ? promptWithSelectedInvocationText(prompt, mentionText, selectedInvocationPosition)
+    ? promptWithSelectedInvocationText(humanizeSelectedActionInput(prompt), mentionText, selectedInvocationPosition)
     : null;
 }
 
@@ -362,8 +455,6 @@ export function Composer({
   codexPermissionMode,
   codexReasoningEffort,
   openPondCommandAccessMode,
-  subagentDelegationDefaultMode,
-  subagentDelegationMode,
   onProviderChange,
   onProviderSetupOpen,
   onProjectTargetChange,
@@ -372,7 +463,6 @@ export function Composer({
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
-  onSubagentDelegationModeChange,
   onPromptChange,
   onMentionAppSelect,
   showToast,
@@ -381,9 +471,12 @@ export function Composer({
   onPauseGoal,
 }: ComposerProps) {
   const composerRef = useRef<HTMLFormElement | null>(null);
+  const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const addMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const addMenuQueryStartRef = useRef(0);
   const initialRequestedAction = requestedAction
     && actionCatalog.some((action) => action.id === requestedAction.actionId)
     ? requestedAction
@@ -399,11 +492,15 @@ export function Composer({
   const [mentionIndex, setMentionIndex] = useState(0);
   const [skillIndex, setSkillIndex] = useState(0);
   const [actionIndex, setActionIndex] = useState(0);
+  const [addMenuIndex, setAddMenuIndex] = useState(0);
+  const [addMenuQuery, setAddMenuQuery] = useState("");
+  const [mentionMenuDismissedPrompt, setMentionMenuDismissedPrompt] = useState<string | null>(null);
   const [actionMenuDismissedPrompt, setActionMenuDismissedPrompt] = useState<string | null>(null);
   const [skillMenuDismissedPrompt, setSkillMenuDismissedPrompt] = useState<string | null>(null);
   const [mentionMenuStyle, setMentionMenuStyle] = useState<CSSProperties>({});
   const [skillMenuStyle, setSkillMenuStyle] = useState<CSSProperties>({});
   const [actionMenuStyle, setActionMenuStyle] = useState<CSSProperties>({});
+  const [addMenuStyle, setAddMenuStyle] = useState<CSSProperties>({});
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(
     initialRequestedAction?.actionId ?? null,
@@ -439,6 +536,7 @@ export function Composer({
         : "Ask for follow-up changes";
   const modelValue = normalizeChatModel(provider, model, providerSettings);
   const dropdownPlacement = mode === "dock" || showProjectFooter ? "top" : "bottom";
+  const addMenuId = useId();
   const contextStatusTooltipId = useId();
   const goalDetailsId = useId();
   const contextStatusStyle = {
@@ -574,41 +672,40 @@ export function Composer({
     () => activeMentionQuery(prompt, Math.min(cursorIndex, prompt.length)),
     [cursorIndex, prompt],
   );
+  const activeMentionKey = mentionContext
+    ? `${prompt}:${mentionContext.start}:${Math.min(cursorIndex, prompt.length)}`
+    : null;
   const mentionMatches = useMemo<ComposerMentionMenuItem[]>(() => {
     if (!mentionContext) return [];
-    const needle = mentionContext.query;
-    if (surface === "team") {
-      const memberMatches = teamMentionMembers
-        .filter((member) => {
-          if (!needle) return true;
-          return [member.name, member.handle ?? ""]
-            .map(normalizeMentionToken)
-            .some((token) => token.includes(needle));
-        })
-        .map((member) => ({ kind: "team-member" as const, member }));
-      const teamActionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
-        .map((action) => ({ kind: "action" as const, action }));
-      return [...memberMatches, ...teamActionMatches].slice(0, 8);
-    }
-    const appMatches = mentionApps
-      .filter((app) => {
-        if (!needle) return true;
-        const tokens = [
-          normalizeMentionToken(app.id),
-          normalizeMentionToken(app.name),
-          app.gitRepo ? normalizeMentionToken(app.gitRepo) : "",
-          mentionTokenForChatApp(app),
-        ];
-        return tokens.some((token) => token.includes(needle));
-      })
-      .map((app) => ({ kind: "app" as const, app }));
-    const actionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
-      .map((action) => ({ kind: "action" as const, action }));
-    const connectedAppMatches = connectedAppMentionMatchesForQuery(connectedAppMentions, needle)
-      .map((app) => ({ kind: "connected-app" as const, app }));
-    return [...appMatches, ...connectedAppMatches, ...actionMatches].slice(0, 8);
+    return mentionMenuMatchesForQuery({
+      actionCatalog,
+      connectedAppMentions,
+      mentionApps,
+      query: mentionContext.query,
+      surface,
+      teamMentionMembers,
+    });
   }, [actionCatalog, connectedAppMentions, mentionApps, mentionContext, surface, teamMentionMembers]);
-  const showMentionMenu = Boolean(!inputDisabled && mentionContext && mentionMatches.length > 0);
+  const addMenuMentionItems = useMemo<ComposerMentionMenuItem[]>(() => {
+    return surface === "team"
+      ? []
+      : mentionMenuMatchesForQuery({
+          actionCatalog,
+          connectedAppMentions,
+          mentionApps,
+          query: "",
+          surface,
+          teamMentionMembers,
+        });
+  }, [actionCatalog, connectedAppMentions, mentionApps, surface, teamMentionMembers]);
+  const showMentionMenu = Boolean(
+    !addMenuOpen &&
+    !inputDisabled &&
+    mentionContext &&
+    activeMentionKey &&
+    mentionMenuDismissedPrompt !== activeMentionKey &&
+    mentionMatches.length > 0,
+  );
   const activeSkillContext = useMemo(
     () => activeProfileSkillInvocationContext(prompt, Math.min(cursorIndex, prompt.length)),
     [cursorIndex, prompt],
@@ -622,6 +719,7 @@ export function Composer({
       : [];
   }, [activeSkillContext, profileSkills]);
   const showSkillMenu = Boolean(
+    !addMenuOpen &&
     !inputDisabled &&
     activeSkillContext &&
     activeSkillKey &&
@@ -656,11 +754,50 @@ export function Composer({
     [actionMatches, appContextMatches, commandMatches],
   );
   const showActionMenu = Boolean(
+    !addMenuOpen &&
     !inputDisabled &&
     activeSlashContext &&
     activeSlashKey &&
     actionMenuDismissedPrompt !== activeSlashKey,
   );
+  const addMenuSlashItems = useMemo<SlashMenuItem[]>(() => [
+    ...COMPOSER_SLASH_COMMANDS.map((command) => ({ kind: "command" as const, command })),
+    ...slashAppContextMatchesForQuery(mentionApps, "")
+      .map((app) => ({ kind: "app-context" as const, app })),
+    ...slashActionMatchesForQuery(actionCatalog, "")
+      .map((action) => ({ kind: "action" as const, action })),
+  ], [actionCatalog, mentionApps]);
+  const addMenuSections = useMemo<ComposerCommandMenuSection[]>(() => [
+    {
+      id: "add",
+      items: [{ kind: "files" }],
+      label: "Add",
+    },
+    {
+      id: "slash",
+      items: addMenuSlashItems.map((item) => ({ kind: "slash", item })),
+      label: "/",
+    },
+    {
+      emptyLabel: "No mentions available",
+      id: "mentions",
+      items: addMenuMentionItems.map((item) => ({ kind: "mention", item })),
+      label: "@",
+    },
+  ], [addMenuMentionItems, addMenuSlashItems]);
+  const filteredAddMenuSections = useMemo(
+    () => filterComposerCommandMenuSections(addMenuSections, addMenuQuery),
+    [addMenuQuery, addMenuSections],
+  );
+  const addMenuItems = useMemo(
+    () => filteredAddMenuSections.flatMap((section) => section.items),
+    [filteredAddMenuSections],
+  );
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    setAddMenuIndex((current) => current < addMenuItems.length ? current : 0);
+  }, [addMenuItems.length, addMenuOpen]);
 
   const showGoalRuntime = Boolean(goalRuntime);
   const activeGoalRuntime = showGoalRuntime && goalRuntime?.tone === "active";
@@ -791,10 +928,56 @@ export function Composer({
   useEffect(() => {
     if (!addMenuOpen) return;
     function handlePointerDown(event: PointerEvent) {
-      if (!addMenuRef.current?.contains(event.target as Node)) setAddMenuOpen(false);
+      const target = event.target as Node;
+      const inputArea = inputRef.current?.element?.parentElement;
+      if (
+        !addMenuRef.current?.contains(target) &&
+        !addMenuPanelRef.current?.contains(target) &&
+        !inputArea?.contains(target)
+      ) {
+        setAddMenuOpen(false);
+        setAddMenuQuery("");
+        setMentionMenuDismissedPrompt(activeMentionKey);
+        setActionMenuDismissedPrompt(activeSlashKey);
+        setSkillMenuDismissedPrompt(activeSkillKey);
+      }
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setAddMenuOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setAddMenuOpen(false);
+        setAddMenuQuery("");
+        setMentionMenuDismissedPrompt(activeMentionKey);
+        setActionMenuDismissedPrompt(activeSlashKey);
+        setSkillMenuDismissedPrompt(activeSkillKey);
+        return;
+      }
+      if (addMenuItems.length === 0) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setAddMenuIndex((current) => (current + 1) % addMenuItems.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setAddMenuIndex((current) => (current - 1 + addMenuItems.length) % addMenuItems.length);
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        setAddMenuIndex(0);
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        setAddMenuIndex(addMenuItems.length - 1);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const item = addMenuItems[addMenuIndex] ?? addMenuItems[0];
+        if (item) selectAddMenuItem(item);
+      }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -802,7 +985,33 @@ export function Composer({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [addMenuOpen]);
+  }, [
+    activeMentionKey,
+    activeSkillKey,
+    activeSlashKey,
+    addMenuIndex,
+    addMenuItems,
+    addMenuOpen,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!addMenuOpen) return;
+    const inputShell = inputShellRef.current;
+    if (!inputShell) return;
+    const inputShellElement = inputShell;
+
+    function updateAddMenuPosition() {
+      setAddMenuStyle(addMenuAnchorStyle(inputShellElement));
+    }
+
+    updateAddMenuPosition();
+    window.addEventListener("resize", updateAddMenuPosition);
+    window.addEventListener("scroll", updateAddMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateAddMenuPosition);
+      window.removeEventListener("scroll", updateAddMenuPosition, true);
+    };
+  }, [addMenuOpen, attachments.length, createImproveRuntime, goalRuntime]);
 
   useLayoutEffect(() => {
     if (!showActionMenu) return;
@@ -917,6 +1126,7 @@ export function Composer({
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(nextCursor);
     });
+    return nextCursor;
   }
 
   function selectMentionApp(app: OpenPondApp) {
@@ -925,29 +1135,43 @@ export function Composer({
     insertPlanningAppMention(app, { start: mentionContext.start, end: cursor });
   }
 
-  function selectMentionAction(action: SandboxActionCatalogEntry) {
-    if (!mentionContext) return;
+  function insertSelectedAction(
+    action: SandboxActionCatalogEntry,
+    range?: { end: number; start: number },
+    selectedMentionText: string | null = null,
+  ) {
     const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
-    const start = Math.max(0, Math.min(mentionContext.start, prompt.length));
-    const end = Math.max(start, Math.min(cursor, prompt.length));
-    const mentionText = prompt.slice(start, end).trim();
+    const start = range ? Math.max(0, Math.min(range.start, prompt.length)) : cursor;
+    const end = range ? Math.max(start, Math.min(range.end, prompt.length)) : start;
     const nextPrompt = `${prompt.slice(0, start)}${prompt.slice(end)}`;
     setSelectedActionId(action.id);
     setSelectedCommandId(null);
     setSelectedInvocationPosition(start);
-    setSelectedActionMentionText(mentionText.startsWith("@") ? mentionText : null);
+    setSelectedActionMentionText(selectedMentionText?.startsWith("@") ? selectedMentionText : null);
+    setActionMenuDismissedPrompt(null);
     onPromptChange(nextPrompt);
     setCursorIndex(start);
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(start, { afterToken: true });
     });
+    return start;
   }
 
-  function selectConnectedAppMention(app: ConnectedAppMentionOption) {
+  function selectMentionAction(action: SandboxActionCatalogEntry) {
     if (!mentionContext) return;
     const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
     const start = Math.max(0, Math.min(mentionContext.start, prompt.length));
     const end = Math.max(start, Math.min(cursor, prompt.length));
+    insertSelectedAction(action, { start, end }, prompt.slice(start, end).trim());
+  }
+
+  function insertConnectedAppMention(
+    app: ConnectedAppMentionOption,
+    range?: { end: number; start: number },
+  ) {
+    const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+    const start = range ? Math.max(0, Math.min(range.start, prompt.length)) : cursor;
+    const end = range ? Math.max(start, Math.min(range.end, prompt.length)) : start;
     const before = prompt.slice(0, start);
     const after = prompt.slice(end);
     const prefix = before && !/\s$/.test(before) ? " " : "";
@@ -961,21 +1185,41 @@ export function Composer({
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(nextCursor);
     });
+    return nextCursor;
+  }
+
+  function selectConnectedAppMention(app: ConnectedAppMentionOption) {
+    if (!mentionContext) return;
+    const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+    insertConnectedAppMention(app, { start: mentionContext.start, end: cursor });
+  }
+
+  function insertTeamMemberMention(
+    member: TeamChatMember,
+    range?: { end: number; start: number },
+  ) {
+    const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+    const start = range ? Math.max(0, Math.min(range.start, prompt.length)) : cursor;
+    const end = range ? Math.max(start, Math.min(range.end, prompt.length)) : start;
+    const token = member.handle || normalizeMentionToken(member.name);
+    const before = prompt.slice(0, start);
+    const after = prompt.slice(end);
+    const prefix = before && !/\s$/.test(before) ? " " : "";
+    const suffix = after && !/^\s/.test(after) ? " " : "";
+    const inserted = `${prefix}@${token} ${suffix}`;
+    const nextPrompt = `${before}${inserted}${after}`;
+    const nextCursor = before.length + inserted.length;
+    onPromptChange(nextPrompt);
+    setCursorIndex(nextCursor);
+    window.requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(nextCursor));
+    return nextCursor;
   }
 
   function selectMentionItem(item: ComposerMentionMenuItem) {
     if (item.kind === "team-member") {
       if (!mentionContext) return;
       const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
-      const token = item.member.handle || normalizeMentionToken(item.member.name);
-      const before = prompt.slice(0, mentionContext.start);
-      const after = prompt.slice(cursor);
-      const inserted = `@${token} `;
-      const nextPrompt = `${before}${inserted}${after}`;
-      const nextCursor = before.length + inserted.length;
-      onPromptChange(nextPrompt);
-      setCursorIndex(nextCursor);
-      window.requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(nextCursor));
+      insertTeamMemberMention(item.member, { start: mentionContext.start, end: cursor });
       return;
     }
     if (item.kind === "app") {
@@ -1000,37 +1244,36 @@ export function Composer({
 
   function selectSlashAction(action: SandboxActionCatalogEntry) {
     if (!activeSlashContext) return;
-    const nextPrompt = `${prompt.slice(0, activeSlashContext.start)}${prompt.slice(activeSlashContext.end)}`;
-    const nextCursor = activeSlashContext.start;
-    setSelectedActionId(action.id);
-    setSelectedCommandId(null);
-    setSelectedInvocationPosition(nextCursor);
-    setSelectedActionMentionText(null);
-    setActionMenuDismissedPrompt(null);
-    onPromptChange(nextPrompt);
-    setCursorIndex(nextCursor);
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(nextCursor, { afterToken: true });
-    });
+    insertSelectedAction(action, activeSlashContext);
   }
 
-  function selectSlashCommand(command: ComposerSlashCommand) {
-    if (!activeSlashContext) return;
-    const nextPrompt = `${prompt.slice(0, activeSlashContext.start)}${prompt.slice(activeSlashContext.end)}`;
-    const nextCursor = activeSlashContext.start;
+  function insertSlashCommand(
+    command: ComposerSlashCommand,
+    range?: { end: number; start: number },
+  ) {
+    const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+    const start = range ? Math.max(0, Math.min(range.start, prompt.length)) : cursor;
+    const end = range ? Math.max(start, Math.min(range.end, prompt.length)) : start;
+    const nextPrompt = `${prompt.slice(0, start)}${prompt.slice(end)}`;
     setSelectedCommandId(command.id);
     setSelectedActionId(null);
-    setSelectedInvocationPosition(nextCursor);
+    setSelectedInvocationPosition(start);
     setSelectedActionMentionText(null);
     setActionMenuDismissedPrompt(null);
     onPromptChange(nextPrompt);
-    setCursorIndex(nextCursor);
+    setCursorIndex(start);
     if (command.id === "submit-issue") {
       openSubmitIssueDialog(nextPrompt);
     }
     window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(nextCursor, { afterToken: true });
+      inputRef.current?.focusAtPromptIndex(start, { afterToken: true });
     });
+    return start;
+  }
+
+  function selectSlashCommand(command: ComposerSlashCommand) {
+    if (!activeSlashContext) return;
+    insertSlashCommand(command, activeSlashContext);
   }
 
   function selectSlashMenuItem(item: SlashMenuItem) {
@@ -1057,24 +1300,60 @@ export function Composer({
   }
 
   function openFilePicker() {
-    setAddMenuOpen(false);
     fileInputRef.current?.click();
   }
 
-  function selectCreateAsAgent() {
-    setAddMenuOpen(false);
-    setSelectedCommandId("create");
-    setSelectedActionId(null);
-    setSelectedInvocationPosition(0);
-    setSelectedActionMentionText(null);
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(0, { afterToken: true });
-    });
+  function resetAddMenuQuery(cursor: number) {
+    addMenuQueryStartRef.current = cursor;
+    setAddMenuQuery("");
+    setAddMenuIndex(0);
   }
 
-  function selectPlanningAppFromAddMenu(app: OpenPondApp) {
-    setAddMenuOpen(false);
-    insertPlanningAppMention(app);
+  function addMenuSelectionRange(): { end: number; start: number } {
+    const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+    const queryStart = Math.max(0, Math.min(addMenuQueryStartRef.current, prompt.length));
+    return cursor >= queryStart
+      ? { start: queryStart, end: cursor }
+      : { start: cursor, end: cursor };
+  }
+
+  function selectAddMenuItem(item: ComposerCommandMenuItem) {
+    const range = addMenuSelectionRange();
+    if (item.kind === "files") {
+      if (range.start !== range.end) {
+        const nextPrompt = `${prompt.slice(0, range.start)}${prompt.slice(range.end)}`;
+        onPromptChange(nextPrompt);
+        setCursorIndex(range.start);
+      }
+      resetAddMenuQuery(range.start);
+      openFilePicker();
+      return;
+    }
+    if (item.kind === "slash") {
+      if (item.item.kind === "command") {
+        resetAddMenuQuery(insertSlashCommand(item.item.command, range));
+        return;
+      }
+      if (item.item.kind === "app-context") {
+        resetAddMenuQuery(insertPlanningAppMention(item.item.app, range));
+        return;
+      }
+      resetAddMenuQuery(insertSelectedAction(item.item.action, range));
+      return;
+    }
+    if (item.item.kind === "team-member") {
+      resetAddMenuQuery(insertTeamMemberMention(item.item.member, range));
+      return;
+    }
+    if (item.item.kind === "app") {
+      resetAddMenuQuery(insertPlanningAppMention(item.item.app, range));
+      return;
+    }
+    if (item.item.kind === "connected-app") {
+      resetAddMenuQuery(insertConnectedAppMention(item.item.app, range));
+      return;
+    }
+    resetAddMenuQuery(insertSelectedAction(item.item.action, range));
   }
 
   function queueCurrentSteerDraft() {
@@ -1327,7 +1606,7 @@ export function Composer({
   return (
     <form
       ref={composerRef}
-      className={`composer ${mode} ${createImproveRuntime ? "has-create-runtime" : ""} ${showGoalRuntime ? "has-goal-runtime" : ""} ${steering ? "is-steering" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${selectedAction || selectedCommand ? "has-selected-action" : ""} ${attachmentError ? "has-attachment-error" : ""}`}
+      className={`composer ${mode} ${createImproveRuntime ? "has-create-runtime" : ""} ${showGoalRuntime ? "has-goal-runtime" : ""} ${steering ? "is-steering" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${selectedAction || selectedCommand ? "has-selected-action" : ""} ${attachmentError ? "has-attachment-error" : ""} ${addMenuOpen ? "has-add-menu" : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
         void submitComposer();
@@ -1368,6 +1647,24 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
+      {showProjectFooter && (
+        <div className="composer-footer">
+          <ComposerProjectTargetControl
+            busy={busy || projectTarget.busy}
+            placement={dropdownPlacement}
+            state={projectTarget}
+            onChange={onProjectTargetChange}
+          />
+          {showWorkspaceFooterControls ? (
+            <WorkspaceActionControl
+              busy={busy}
+              placement={dropdownPlacement}
+              state={workspaceTarget}
+              onChange={onWorkspaceTargetChange}
+            />
+          ) : null}
+        </div>
+      )}
       {createImproveRuntime ? (
         <Suspense fallback={null}>
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />
@@ -1402,7 +1699,21 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
-      <div className="composer-input-shell">
+      <div className="composer-input-shell" ref={inputShellRef}>
+        {addMenuOpen && surface !== "team" && (
+          <ComposerCommandMenu
+            id={addMenuId}
+            ariaLabel="Add to message"
+            className="composer-add-command-menu"
+            menuIndex={addMenuIndex}
+            menuRef={addMenuPanelRef}
+            sections={filteredAddMenuSections}
+            style={addMenuStyle}
+            variant="add"
+            onSelect={selectAddMenuItem}
+            onSelectIndex={setAddMenuIndex}
+          />
+        )}
         {attachments.length > 0 && (
           <div className="composer-attachments" aria-label="Selected attachments">
             {attachments.map((attachment) => (
@@ -1431,6 +1742,13 @@ export function Composer({
             disabled={inputDisabled}
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
+              if (
+                addMenuOpen &&
+                ["ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape"].includes(event.key)
+              ) {
+                event.preventDefault();
+                return;
+              }
               if (showMentionMenu) {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
@@ -1449,7 +1767,7 @@ export function Composer({
                 }
                 if (event.key === "Escape") {
                   event.preventDefault();
-                  setCursorIndex(-1);
+                  setMentionMenuDismissedPrompt(activeMentionKey);
                   return;
                 }
               }
@@ -1512,6 +1830,18 @@ export function Composer({
               }
             }}
             onPromptChange={(nextValue, nextPromptCursor) => {
+              if (addMenuOpen) {
+                const queryStart = Math.max(
+                  0,
+                  Math.min(addMenuQueryStartRef.current, nextValue.length),
+                );
+                if (nextPromptCursor < queryStart) {
+                  addMenuQueryStartRef.current = nextPromptCursor;
+                  setAddMenuQuery("");
+                } else {
+                  setAddMenuQuery(nextValue.slice(queryStart, nextPromptCursor));
+                }
+              }
               const completedCommand =
                 surface === "team"
                   ? null
@@ -1558,6 +1888,7 @@ export function Composer({
           teamUseModelLocked={teamUseModelLocked}
           onTeamUseModelChange={onTeamUseModelChange}
           addFiles={addFiles}
+          addMenuId={addMenuId}
           addMenuOpen={addMenuOpen}
           addMenuRef={addMenuRef}
           busy={busy}
@@ -1570,7 +1901,6 @@ export function Composer({
           disabled={controlsDisabled}
           dropdownPlacement={dropdownPlacement}
           fileInputRef={fileInputRef}
-          mentionApps={mentionApps}
           modelValue={modelValue}
           modelOptions={modelOptions}
           openPondCommandAccessMode={openPondCommandAccessMode}
@@ -1579,13 +1909,22 @@ export function Composer({
           onOpenPondCommandAccessModeChange={onOpenPondCommandAccessModeChange}
           onModelChange={onModelChange}
           onOpenFilePicker={openFilePicker}
-          onCreateAsAgent={selectCreateAsAgent}
-          onPlanningAppSelect={selectPlanningAppFromAddMenu}
           onProviderChange={onProviderChange}
           onProviderSetupOpen={onProviderSetupOpen}
           onQueueDraft={queueCurrentSteerDraft}
           onStop={stopCurrentTurn}
-          onToggleAddMenu={() => setAddMenuOpen((open) => !open)}
+          onToggleAddMenu={() => {
+            const nextCursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+            if (!addMenuOpen) {
+              addMenuQueryStartRef.current = nextCursor;
+              setAddMenuQuery("");
+              setAddMenuIndex(0);
+              setAddMenuOpen(true);
+            }
+            window.requestAnimationFrame(() => {
+              inputRef.current?.focusAtPromptIndex(nextCursor);
+            });
+          }}
           onTranscript={insertDictationTranscript}
           provider={provider}
           providerSettings={providerSettings}
@@ -1595,34 +1934,12 @@ export function Composer({
           running={running && !hasComposerInput}
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
-          selectedMentionAppId={selectedMentionAppId}
-          subagentDelegationDefaultMode={subagentDelegationDefaultMode}
-          subagentDelegationMode={subagentDelegationMode}
-          onSubagentDelegationModeChange={onSubagentDelegationModeChange}
           showToast={showToast}
           stopIcon={stopControlIcon}
           stopLabel={stopControlLabel}
           steering={steering}
         />
       </div>
-      {showProjectFooter && (
-        <div className="composer-footer">
-          <ComposerProjectTargetControl
-            busy={busy || projectTarget.busy}
-            placement={dropdownPlacement}
-            state={projectTarget}
-            onChange={onProjectTargetChange}
-          />
-          {showWorkspaceFooterControls ? (
-            <WorkspaceActionControl
-              busy={busy}
-              placement={dropdownPlacement}
-              state={workspaceTarget}
-              onChange={onWorkspaceTargetChange}
-            />
-          ) : null}
-        </div>
-      )}
     </form>
   );
 }

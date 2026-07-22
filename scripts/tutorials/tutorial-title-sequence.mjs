@@ -7,9 +7,45 @@ const execFileAsync = promisify(execFile);
 const BACKGROUND = "#0d0f14";
 const IDENTITY_PREFIXES = ["", "O", "Op", "Ope", "Open", "OpenP", "OpenPo", "OpenPon", "OpenPond"];
 const IDENTITY_DURATIONS = [0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1];
+const WALKTHROUGH_IDENTITY_HOLD_SECONDS = 0.7;
+const WALKTHROUGH_TITLE_SECONDS = 2;
 
 export async function renderTutorialTitlePoster({ outputPath, title, subtitle }) {
   await renderTutorialTitleFrame({ outputPath, stage: "full", subtitle, title });
+}
+
+export async function renderTutorialTitleOnlyPoster({ outputPath, title }) {
+  await renderTutorialTitleFrame({ outputPath, stage: "title", title });
+}
+
+export async function renderTutorialTwoBeatIntro({ outputPath, posterPath, repoRoot }) {
+  const identityPath = `${outputPath}.identity.mp4`;
+  const identityDuration = IDENTITY_DURATIONS.reduce((total, duration) => total + duration, 0)
+    + WALKTHROUGH_IDENTITY_HOLD_SECONDS;
+  try {
+    await renderTutorialIdentityReveal({
+      completedHoldSeconds: WALKTHROUGH_IDENTITY_HOLD_SECONDS,
+      outputPath: identityPath,
+      repoRoot,
+    });
+    await execFileAsync("ffmpeg", [
+      "-hide_banner", "-loglevel", "error", "-y",
+      "-i", identityPath,
+      "-loop", "1", "-t", String(WALKTHROUGH_TITLE_SECONDS), "-i", posterPath,
+      "-filter_complex",
+      [
+        `[0:v]fps=30,format=yuv420p,setsar=1,trim=duration=${identityDuration},setpts=PTS-STARTPTS[v0]`,
+        `[1:v]fps=30,format=yuv420p,setsar=1,trim=duration=${WALKTHROUGH_TITLE_SECONDS},setpts=PTS-STARTPTS[v1]`,
+        "[v0][v1]concat=n=2:v=1:a=0[outv]",
+      ].join(";"),
+      "-map", "[outv]", "-an",
+      "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+      "-pix_fmt", "yuv420p", "-r", "30", "-t", "4", "-movflags", "+faststart",
+      outputPath,
+    ], { maxBuffer: 8 * 1024 * 1024 });
+  } finally {
+    await rm(identityPath, { force: true });
+  }
 }
 
 export async function renderTutorialIntro({ outputPath, posterPath, repoRoot, title, subtitle }) {
@@ -52,9 +88,15 @@ export async function renderTutorialIntro({ outputPath, posterPath, repoRoot, ti
   }
 }
 
-export async function renderTutorialIdentityReveal({ outputPath, repoRoot }) {
+export async function renderTutorialIdentityReveal({ completedHoldSeconds = 0, outputPath, repoRoot }) {
   const icon = path.join(repoRoot, "apps/web/public/openpond-icon.png");
   const resizedIcon = `${outputPath}.icon.png`;
+  const identityDurations = IDENTITY_DURATIONS.map((duration, index) => (
+    index === IDENTITY_DURATIONS.length - 1
+      ? duration + completedHoldSeconds
+      : duration
+  ));
+  const identityDuration = identityDurations.reduce((total, duration) => total + duration, 0);
   const stagePaths = IDENTITY_PREFIXES.map((_, index) => `${outputPath}.stage-${index}.png`);
   try {
     await execFileAsync("convert", [icon, "-resize", "104x104", resizedIcon]);
@@ -104,18 +146,18 @@ export async function renderTutorialIdentityReveal({ outputPath, repoRoot }) {
     }));
 
     const filters = stagePaths.map((_, index) =>
-      `[${index}:v]fps=30,format=yuv420p,setsar=1,trim=duration=${IDENTITY_DURATIONS[index]},setpts=PTS-STARTPTS[v${index}]`
+      `[${index}:v]fps=30,format=yuv420p,setsar=1,trim=duration=${identityDurations[index]},setpts=PTS-STARTPTS[v${index}]`
     );
     filters.push(`${stagePaths.map((_, index) => `[v${index}]`).join("")}concat=n=${stagePaths.length}:v=1:a=0[identity]`);
     await execFileAsync("ffmpeg", [
       "-hide_banner", "-loglevel", "error", "-y",
       ...stagePaths.flatMap((stagePath, index) => [
-        "-loop", "1", "-t", String(IDENTITY_DURATIONS[index]), "-i", stagePath,
+        "-loop", "1", "-t", String(identityDurations[index]), "-i", stagePath,
       ]),
       "-filter_complex", filters.join(";"),
       "-map", "[identity]", "-an",
       "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-      "-pix_fmt", "yuv420p", "-r", "30", "-t", "1.3",
+      "-pix_fmt", "yuv420p", "-r", "30", "-t", String(identityDuration),
       outputPath,
     ], { maxBuffer: 8 * 1024 * 1024 });
   } finally {
