@@ -173,14 +173,14 @@ describe("OpenPond App action channel", () => {
   test("discovers built-in app commands from composer slash input", () => {
     expect(composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)).toEqual([
       "create",
-      "edit",
       "skill",
       "goal",
+      "insights",
+      "submit-issue",
+      "edit",
       "goal-remote",
       "goal-local",
       "train",
-      "insights",
-      "submit-issue",
       "sync-cloud",
     ]);
     expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual(["create"]);

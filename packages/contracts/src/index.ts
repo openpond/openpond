@@ -19,6 +19,7 @@ export * from "./workspace-capabilities.js";
 export * from "./sandbox-template.js";
 export * from "./remote-access.js";
 export * from "./profile.js";
+export * from "./skills.js";
 export * from "./create-pipeline.js";
 export * from "./insights.js";
 export * from "./goal-status.js";

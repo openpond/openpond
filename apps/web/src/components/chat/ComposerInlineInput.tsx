@@ -19,7 +19,7 @@ const INLINE_REPO_LINK_SELECTOR = "[data-inline-repo-link='true']";
 const INLINE_CONNECTED_APP_MENTION_SELECTOR = "[data-inline-connected-app-mention='true']";
 
 export type ComposerInlineToken = {
-  icon: "bot" | "plus" | "workflow";
+  icon: "bot" | "plus" | "skill" | "workflow";
   key: string;
   label: string;
   onRemove: () => void;
@@ -233,6 +233,9 @@ function iconSvg(icon: ComposerInlineToken["icon"]): string {
   }
   if (icon === "bot") {
     return '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>';
+  }
+  if (icon === "skill") {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V5a2 2 0 0 1 2-2h5a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3Z"></path><path d="M21 18a1 1 0 0 0 1-1V5a2 2 0 0 0-2-2h-5a3 3 0 0 0-3 3v15a3 3 0 0 1 3-3Z"></path></svg>';
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></svg>';
 }

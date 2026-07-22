@@ -616,6 +616,54 @@ describe("Lab Phase 1", () => {
     });
   });
 
+  test("lists packaged Codex skills separately from OpenPond profile skills", () => {
+    const profile = {
+      ...emptyOpenPondProfileState(),
+      skills: [{
+        name: "make-openpond-video",
+        description: "Profile instructions.",
+        path: "skills/make-openpond-video/SKILL.md",
+        scope: "profile" as const,
+        enabled: true,
+        sourcePath: "/profile",
+        charCount: 100,
+        sourceHash: "profile-hash",
+        validationStatus: "valid" as const,
+        validationMessages: [],
+      }],
+    };
+
+    const workproducts = labWorkproductProjection({
+      profile,
+      codexPersonalSkills: [{
+        name: "make-openpond-video",
+        description: "Packaged renderer.",
+        path: "/home/user/.codex/skills/make-openpond-video/SKILL.md",
+        sourcePath: "/home/user/.codex/skills/make-openpond-video",
+        enabled: true,
+        charCount: 800,
+        sourceHash: "codex-hash",
+        validationStatus: "valid",
+        validationMessages: [],
+        resourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
+        updatedAt: "2026-07-22T12:00:00.000Z",
+      }],
+      training: null,
+      runs: [],
+    });
+
+    expect(workproducts).toHaveLength(2);
+    expect(workproducts.map((item) => item.key).sort()).toEqual([
+      "skill:codex:make-openpond-video",
+      "skill:make-openpond-video",
+    ]);
+    expect(workproducts.find((item) => item.skillSource === "codex")).toMatchObject({
+      status: "Ready",
+      skillResourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
+      skillSourceHash: "codex-hash",
+    });
+  });
+
   test("projects concise model names and keeps the full objective as the description", () => {
     const objective =
       "Reconcile CRM billing and support records with exact cited customer evidence.";

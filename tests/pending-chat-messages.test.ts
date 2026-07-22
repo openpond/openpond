@@ -24,6 +24,25 @@ describe("pending chat user messages", () => {
     expect(appendPendingUserChatMessage(realMessages, pending)).toBe(realMessages);
   });
 
+  test("restores a pending Codex row when a stale history refresh replaces its optimistic event", () => {
+    const pending = createPendingUserChatMessage({
+      attachments: [],
+      content: "Is Codex available?",
+      sessionId: "codex_history_1",
+    });
+    pending.timestamp = "2026-07-22T15:06:00.000Z";
+    const optimisticMessages = [
+      userMessage(
+        "codex_history_optimistic_1",
+        "Is Codex available?",
+        "2026-07-22T15:06:00.000Z",
+      ),
+    ];
+
+    expect(appendPendingUserChatMessage(optimisticMessages, pending)).toBe(optimisticMessages);
+    expect(appendPendingUserChatMessage([], pending)).toEqual([pending]);
+  });
+
   test("keeps a repeated pending prompt when only an older real message matches", () => {
     const realMessages = [
       userMessage("turn_old", "Try again", "2026-07-01T10:00:00.000Z"),

@@ -29,6 +29,10 @@ import {
   runsForWorkproduct,
   workproductKey,
 } from "./lab-workproducts";
+import {
+  labSkillSourceSelection,
+  type LabSkillSourceSelection,
+} from "./lab-skill-source";
 import type {
   LabDetailKind,
   LabDetailLocation,
@@ -75,6 +79,7 @@ export type LabsRouteProps = {
   ) => Promise<CreateImproveRun>;
   onOpenRunConversation: (conversationId: string) => void;
   onDetailOpenChange: (location: LabDetailLocation | null) => void;
+  onSkillSelectionChange: (selection: LabSkillSourceSelection | null) => void;
   profileView: ProfileViewProps;
   insights: InsightsViewProps;
   training: Omit<TrainingViewProps, "section" | "onSectionChange">;
@@ -135,6 +140,7 @@ export function LabsRoute({
   onCandidateReviewChange,
   onCreateAgent,
   onDetailOpenChange,
+  onSkillSelectionChange,
   onImproveAgent,
   onNewModel,
   onOpenPullRequest,
@@ -209,10 +215,11 @@ export function LabsRoute({
     () =>
       labWorkproductProjection({
         profile,
+        codexPersonalSkills: profileView.payload?.codexPersonalSkills ?? [],
         training: training.training.payload,
         runs: createImprove.runs,
       }),
-    [createImprove.runs, profile, training.training.payload]
+    [createImprove.runs, profile, profileView.payload?.codexPersonalSkills, training.training.payload]
   );
   const progressionByKey = useMemo(() => {
     const tasksets = new Map(
@@ -247,10 +254,30 @@ export function LabsRoute({
   );
   const selected =
     workproducts.find((workproduct) => workproduct.key === selectedKey) ?? null;
+  const selectedSkillSource = useMemo(
+    () => labSkillSourceSelection(selected),
+    [selected],
+  );
   const suggestionCount =
     insights.items.filter((item) => item.status === "active").length +
     (training.training.payload?.candidates.length ?? 0);
 
+  useEffect(() => {
+    if (!profileView.connection) return;
+    let cancelled = false;
+    void api.bootstrap(profileView.connection)
+      .then((payload) => {
+        if (!cancelled) profileView.onPayload(payload);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          profileView.onError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileView.connection, profileView.onError, profileView.onPayload]);
   useEffect(() => {
     if (!modelRunSyncKey) return;
     void createImprove.refresh();
@@ -284,6 +311,9 @@ export function LabsRoute({
       setSelectedKey(null);
     }
   }, [selectedKey, workproducts]);
+  useEffect(() => {
+    onSkillSelectionChange(selectedSkillSource);
+  }, [onSkillSelectionChange, selectedSkillSource]);
   useEffect(() => {
     if (closeDetailRequestId <= 0) return;
     setSelectedKey(null);
@@ -532,8 +562,11 @@ export function LabsRoute({
             onSelect={setSelectedKey}
             onUseAgent={onUseAgent}
             onUseModel={useModel}
-            onUseSkill={(skillName) =>
-              profileView.onSkillCommand?.(`$${skillName} `)
+            onUseSkill={(skill) =>
+              profileView.onSkillCommand?.(
+                `$${skill.name} `,
+                skill.skillSource === "codex" ? "codex" : "openpond",
+              )
             }
           />
           <Pagination

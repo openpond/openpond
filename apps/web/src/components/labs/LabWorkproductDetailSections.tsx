@@ -106,28 +106,52 @@ export function WorkproductConfiguration({
     );
   }
   if (workproduct.kind === "skill") {
-    const skill =
-      profile?.skills.find((item) => item.name === workproduct.id) ?? null;
+    const profileSkill = workproduct.skillSource === "codex"
+      ? null
+      : profile?.skills.find((item) => item.name === workproduct.id) ?? null;
+    const validationStatus = workproduct.skillValidationStatus
+      ?? profileSkill?.validationStatus
+      ?? "error";
+    const validationMessages = workproduct.skillValidationMessages
+      ?? profileSkill?.validationMessages
+      ?? [];
+    const resourceFiles = workproduct.skillResourceFiles ?? [];
     return (
       <DetailSection title="Skill">
         <dl className="training-configuration-list">
-          <Config label="Enabled" value={skill?.enabled ? "Yes" : "No"} />
+          <Config
+            label="Scope"
+            value={workproduct.skillSource === "codex" ? "Codex personal" : "OpenPond profile"}
+          />
+          <Config label="Enabled" value={workproduct.enabled ? "Yes" : "No"} />
           <Config
             label="Validation"
-            value={skill?.validationStatus ?? "Draft"}
+            value={validationStatus}
           />
+          <Config label="Source" value={workproduct.path ?? "Not available"} />
           <Config
             label="Source hash"
-            value={skill?.sourceHash ?? "Not available"}
+            value={workproduct.skillSourceHash ?? profileSkill?.sourceHash ?? "Not available"}
           />
           <Config
             label="Characters"
-            value={skill ? String(skill.charCount) : "Not available"}
+            value={String(workproduct.skillCharCount ?? profileSkill?.charCount ?? "Not available")}
           />
+          {workproduct.skillSource === "codex" ? (
+            <Config label="Packaged resources" value={String(resourceFiles.length)} />
+          ) : null}
         </dl>
-        {skill?.validationMessages.length ? (
+        {resourceFiles.length ? (
+          <div className="labs-source-evals">
+            <strong>Packaged resources</strong>
+            <ul>
+              {resourceFiles.map((file) => <li key={file}><code>{file}</code></li>)}
+            </ul>
+          </div>
+        ) : null}
+        {validationMessages.length ? (
           <ul className="labs-validation-list">
-            {skill.validationMessages.map((message) => (
+            {validationMessages.map((message) => (
               <li key={message}>{message}</li>
             ))}
           </ul>

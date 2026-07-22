@@ -44,6 +44,18 @@ describe("profile skill composer invocations", () => {
     expect(profileSkillInvocationMatchesForQuery(matches, "change").map((skill) => skill.name)).toEqual(["release-notes"]);
   });
 
+  test("accepts a packaged Codex skill in the same invocation menu", () => {
+    const matches = profileSkillInvocationMatchesForQuery([{
+      name: "make-openpond-video",
+      description: "Render a branded video",
+      path: "/home/user/.codex/skills/make-openpond-video/SKILL.md",
+      enabled: true,
+      validationStatus: "valid",
+    }], "video");
+
+    expect(matches.map((skill) => skill.name)).toEqual(["make-openpond-video"]);
+  });
+
   test("lists the full enabled skill set by default", () => {
     const skills = Array.from({ length: 10 }, (_, index) =>
       profileSkill({ name: `skill-${String(index).padStart(2, "0")}` })

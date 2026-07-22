@@ -49,6 +49,8 @@ import type {
   SaveOpenPondAccountRequest,
   SendTurnRequest,
   Session,
+  SkillSourceFile,
+  SkillSourceScope,
   SidebarAppPreference,
   SidebarAppPreferences,
   SidebarFileBookmarksResponse,
@@ -183,6 +185,15 @@ export const api = {
   ...communityApi,
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  skillSourceFile: (
+    connection: ClientConnection,
+    scope: SkillSourceScope,
+    skillName: string,
+    filePath: string,
+  ) => apiFetch<SkillSourceFile>(
+    connection,
+    `/v1/skills/${scope}/${encodeURIComponent(skillName)}/source?path=${encodeURIComponent(filePath)}`,
+  ),
   teamChatMembers: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ members: TeamChatMember[] }>(
       connection,

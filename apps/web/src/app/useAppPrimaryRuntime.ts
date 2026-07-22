@@ -649,7 +649,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     visibleChatMessages,
   } = usePendingChatMessages({
     chatMessages,
-    runtimeIndexes,
+    runtimeIndexes: selectedRuntimeIndexes,
     selectedSessionId,
     serverId: bootstrap?.server.id,
   });

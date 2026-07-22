@@ -154,7 +154,12 @@ function parseProfileSkillCommand(
       if (!name || !changeRequest) return { action: "help" };
       return { action: "edit", name, changeRequest };
     }
-    return { action: "help" };
+    const named = splitOptionalSkillName(rest);
+    return {
+      action: "create",
+      objective: named.objective,
+      requestedName: named.name,
+    };
   }
   return null;
 }

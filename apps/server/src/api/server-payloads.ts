@@ -67,6 +67,11 @@ import {
 import { normalizeAppPreferences } from "../preferences.js";
 import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
 import {
+  loadCodexPersonalSkills,
+  readCodexPersonalSkillFile,
+  readSkillSourceFile,
+} from "../codex-personal-skills.js";
+import {
   mergeProviderConfigPatch,
   normalizeProvidersFile,
   readProvidersFile,
@@ -682,6 +687,26 @@ export function createServerPayloads(deps: {
     }
   }
 
+  async function skillSourceFilePayload(
+    scope: "codex" | "profile",
+    skillName: string,
+    filePath: string,
+  ) {
+    if (scope === "codex") {
+      return readCodexPersonalSkillFile(skillName, filePath);
+    }
+    const profile = await loadBootstrapProfile(false);
+    const skill = profile.skills.find((candidate) => candidate.name === skillName);
+    if (!skill) throw new Error(`Profile skill not found: ${skillName}`);
+    const absoluteSkillPath = path.resolve(skill.sourcePath, skill.path);
+    return readSkillSourceFile({
+      skillName,
+      scope,
+      packageRoot: path.dirname(absoluteSkillPath),
+      relativeFilePath: filePath,
+    });
+  }
+
   async function refreshCloudProjects(scope: string): Promise<CloudProject[]> {
     const existing = cloudProjectRefreshes.get(scope);
     if (existing) return existing;
@@ -744,6 +769,7 @@ export function createServerPayloads(deps: {
       personalization,
       localProjects,
       profile,
+      codexPersonalSkills,
     ] = await Promise.all([
       store.sessionShells(),
       store.recentRuntimeEventWindow(BOOTSTRAP_EVENT_WINDOW_LIMIT),
@@ -754,6 +780,7 @@ export function createServerPayloads(deps: {
       loadPersonalizationSettings(store, storeDir),
       listLocalProjects(store),
       loadBootstrapProfile(Boolean(bootstrapOptions.ensureProfile)),
+      loadCodexPersonalSkills(),
     ]);
     const codex = getCodexStatus();
     const providers = providerSettingsBootstrapSummary(await loadProviderSettings({
@@ -801,6 +828,7 @@ export function createServerPayloads(deps: {
       localProjects: linkedLocalProjects,
       cloudProjects,
       profile,
+      codexPersonalSkills,
       codexHistorySessions: validBootstrapSessions(
         codexHistorySessionsWithLiveStatus(
           applyCodexHistorySidebarPreferences(codexHistorySessions, codexHistorySidebarPreferences),
@@ -1872,6 +1900,7 @@ export function createServerPayloads(deps: {
     recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
+    skillSourceFilePayload,
     findOpenPondApp,
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,

@@ -44,6 +44,11 @@ export type HttpRouteDeps = {
     forceOpenPond?: boolean;
     ensureProfile?: boolean;
   }) => Promise<BootstrapPayload>;
+  skillSourceFilePayload: (
+    scope: "codex" | "profile",
+    skillName: string,
+    filePath: string,
+  ) => Promise<unknown>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
   usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;

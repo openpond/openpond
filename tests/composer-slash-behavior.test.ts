@@ -23,6 +23,11 @@ import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
 import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-commands";
 import { buildOpenPondAgentSlashCommand } from "../apps/web/src/lib/openpond-action-run";
 import { openPondActionProjectTarget } from "../apps/web/src/lib/openpond-action-project";
+import {
+  codexSkillPromptForComposer,
+  profileSkillPromptForComposer,
+  skillPromptForComposer,
+} from "../apps/web/src/lib/profile-skill-composer";
 import type { SandboxAgent } from "../apps/web/src/lib/sandbox-types";
 import type { WorkspaceTargetState } from "../apps/web/src/lib/workspace-location";
 
@@ -343,6 +348,7 @@ describe("composer slash behavior", () => {
 
   test("plus menu combines add, slash, and mention rows", () => {
     const createCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create")!;
+    const skillCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "skill")!;
     const app = planningApp();
     const markup = renderToStaticMarkup(
       createElement(ComposerCommandMenu, {
@@ -352,9 +358,14 @@ describe("composer slash behavior", () => {
         sections: [
           { id: "add", items: [{ kind: "files" }], label: "Add" },
           {
-            id: "slash",
-            items: [{ kind: "slash", item: { kind: "command", command: createCommand } }],
-            label: "/",
+            id: "openpond",
+            items: [createCommand, skillCommand].map((command) => ({
+              kind: "slash" as const,
+              item: { kind: "command" as const, command },
+            })),
+            label: "OpenPond",
+            grid: true,
+            queryScope: "slash",
           },
           {
             id: "mention",
@@ -370,10 +381,13 @@ describe("composer slash behavior", () => {
 
     expect(markup).toContain('role="menu"');
     expect(markup).toContain('aria-label="Add"');
-    expect(markup).toContain('aria-label="/"');
+    expect(markup).toContain('aria-label="OpenPond"');
+    expect(markup).toContain("composer-command-section-grid");
     expect(markup).toContain('aria-label="@"');
     expect(markup).toContain("Files and folders");
     expect(markup).toContain("/create Make Agent");
+    expect(markup).toContain("/skill Manage skills");
+    expect(markup).toContain("lucide-book-open-text");
     expect(markup).toContain('data-app-context-id="app_alpha"');
     expect(markup).toContain("Alpha Bot");
     expect(markup).toContain("Summarizes release activity.");
@@ -385,12 +399,14 @@ describe("composer slash behavior", () => {
     const sections: ComposerCommandMenuSection[] = [
       { id: "add", items: [{ kind: "files" }], label: "Add" },
       {
-        id: "slash",
+        id: "openpond",
         items: [createCommand, goalCommand].map((command) => ({
           kind: "slash" as const,
           item: { kind: "command" as const, command },
         })),
-        label: "/",
+        label: "OpenPond",
+        grid: true,
+        queryScope: "slash",
       },
       {
         id: "mentions",
@@ -400,7 +416,7 @@ describe("composer slash behavior", () => {
     ];
 
     expect(filterComposerCommandMenuSections(sections, "/").map((section) => section.id)).toEqual([
-      "slash",
+      "openpond",
     ]);
     expect(filterComposerCommandMenuSections(sections, "/goal")[0]?.items).toEqual([
       { kind: "slash", item: { kind: "command", command: goalCommand } },
@@ -413,6 +429,29 @@ describe("composer slash behavior", () => {
       emptyLabel: "No commands match",
       items: [],
     });
+  });
+
+  test("routes skill requests to the provider-appropriate skill system", () => {
+    expect(profileSkillPromptForComposer("")).toBe("/skill");
+    expect(profileSkillPromptForComposer("list")).toBe("/skill list");
+    expect(profileSkillPromptForComposer("create release notes")).toBe("/skill create release notes");
+    expect(profileSkillPromptForComposer("make a reusable FFmpeg workflow")).toBe(
+      "/skill create make a reusable FFmpeg workflow",
+    );
+    expect(codexSkillPromptForComposer("")).toContain("$skill-creator");
+    expect(codexSkillPromptForComposer("list")).toContain("~/.codex/skills");
+    expect(codexSkillPromptForComposer("create a reusable FFmpeg workflow")).toBe(
+      "$skill-creator Create a personal Codex skill using this conversation as source material. Requirements: a reusable FFmpeg workflow",
+    );
+    expect(codexSkillPromptForComposer("make a reusable FFmpeg workflow")).toContain(
+      "Requirements: make a reusable FFmpeg workflow",
+    );
+    expect(skillPromptForComposer("create a reusable FFmpeg workflow", "codex")).toContain(
+      "$skill-creator",
+    );
+    expect(skillPromptForComposer("create a reusable FFmpeg workflow", "openpond")).toBe(
+      "/skill create a reusable FFmpeg workflow",
+    );
   });
 
   test("regular chat composer renders contextual notices", () => {

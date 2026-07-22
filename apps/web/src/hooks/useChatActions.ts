@@ -772,9 +772,16 @@ export function useChatActions({
       }
       let session = selectedSessionForTurn;
       if (session && isCodexHistorySessionId(session.id)) {
+        pendingUserMessage = createPendingUserChatMessage({
+          afterMessageId: turnChatMessages.at(-1)?.id ?? null,
+          attachments,
+          content: value,
+          sessionId: session.id,
+        });
         clearPromptForTurn();
         turnSessionId = session.id;
         activeTurnSessionIdsRef.current.add(turnSessionId);
+        onPendingUserMessage?.(pendingUserMessage);
         onCodexHistoryTurnActivityChange?.(turnSessionId, true);
         const optimisticStartedEvent = optimisticCodexHistoryTurnStartedEvent(session.id, value);
         const applyOptimisticEvent = (event: RuntimeEvent) => {
@@ -810,6 +817,8 @@ export function useChatActions({
           upsertSessionPreservingLocalSidebarState(current, payload.session),
         );
         onCodexHistoryTurnPayload?.(payload);
+        const refreshedBootstrap = await api.bootstrap(connection);
+        applyBootstrapPayload(refreshedBootstrap);
         return true;
       }
       const selectedMentionedSandboxApp = mentionedAppIdForTurn

@@ -716,6 +716,29 @@ describe("local profile control invariants", () => {
         },
       });
 
+      const conversational = await runProfileSkillCommandFromPrompt(
+        "/skill can you make a reusable workflow for polishing product videos?",
+      );
+      expect(conversational).toMatchObject({
+        handled: false,
+        action: "goal",
+        goal: {
+          kind: "profile_skill_create",
+          userObjective: "can you make a reusable workflow for polishing product videos?",
+        },
+      });
+      if (!conversational || conversational.handled) {
+        throw new Error("Expected conversational /skill request to create a profile skill goal.");
+      }
+      const conversationalExecution = await executeProfileSkillGoalRequest(conversational.goal);
+      const conversationalSkill = await readFile(
+        path.join(conversational.goal.profileSourcePath, conversationalExecution.skillPath),
+        "utf8",
+      );
+      expect(conversationalSkill).toContain(
+        "can you make a reusable workflow for polishing product videos?",
+      );
+
       const list = await runProfileSkillCommandFromPrompt("/skill list");
       expect(list).toMatchObject({
         handled: true,

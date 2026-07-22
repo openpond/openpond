@@ -10,20 +10,35 @@ import { NativeSkillSidebar } from "../apps/web/src/components/app-shell/NativeS
 import { SkillsSettingsSection } from "../apps/web/src/components/settings/SkillsSettingsSection";
 
 describe("native skills settings", () => {
-  test("lists only the hardcoded OpenPond skill catalog", () => {
+  test("separates personal Codex skills from bundled app integration skills", () => {
     const markup = renderToStaticMarkup(
       createElement(SkillsSettingsSection, {
+        personalSkills: [{
+          name: "make-openpond-video",
+          description: "Render a branded product video.",
+          path: "/home/user/.codex/skills/make-openpond-video/SKILL.md",
+          sourcePath: "/home/user/.codex/skills/make-openpond-video",
+          enabled: true,
+          charCount: 800,
+          sourceHash: "hash",
+          validationStatus: "valid",
+          validationMessages: [],
+          resourceFiles: ["scripts/render.py"],
+          updatedAt: "2026-07-22T12:00:00.000Z",
+        }],
         onOpenNativeSkill: () => undefined,
       }),
     );
 
-    expect(markup).toContain("Native skills");
+    expect(markup).toContain("Personal Codex skills");
+    expect(markup).toContain("make-openpond-video");
+    expect(markup).toContain("1 packaged resource");
+    expect(markup).toContain("App integration skills");
     expect(markup).not.toContain(`${CONNECTED_APP_INTEGRATION_SKILLS.length} built in`);
     for (const skill of CONNECTED_APP_INTEGRATION_SKILLS) {
       expect(markup).toContain(skill.name);
       expect(markup).toContain(skill.path);
     }
-    expect(markup).not.toContain("Profile skills");
     expect(markup).not.toContain("Create");
   });
 

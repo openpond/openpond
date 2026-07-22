@@ -1,10 +1,12 @@
 import type { CSSProperties } from "react";
 import { useEffect, useRef } from "react";
-import type { OpenPondProfileSkill } from "@openpond/contracts";
 import { Check, FileText } from "../icons";
-import { profileSkillInvocationText } from "../../lib/profile-skill-invocations";
+import {
+  profileSkillInvocationText,
+  type ComposerInvocableSkill,
+} from "../../lib/profile-skill-invocations";
 
-export type ComposerSkillMenuItem = OpenPondProfileSkill;
+export type ComposerSkillMenuItem = ComposerInvocableSkill;
 
 function skillMenuDetail(skill: ComposerSkillMenuItem): string {
   return skill.description || skill.path;
@@ -33,7 +35,7 @@ export function ComposerSkillMenu({
     <div
       className="composer-project-menu composer-slash-menu composer-skill-menu"
       role="listbox"
-      aria-label="OpenPond profile skills"
+      aria-label="Available skills"
       style={style}
     >
       {items.length > 0 ? (
@@ -64,7 +66,7 @@ export function ComposerSkillMenu({
         })
       ) : (
         <div className="composer-menu-empty" role="option" aria-selected="false">
-          No matching profile skills
+          No matching skills
         </div>
       )}
     </div>

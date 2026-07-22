@@ -27,6 +27,20 @@
   background: rgba(255, 255, 255, 0.018);
 }
 
+.personal-skill-row {
+  cursor: default;
+}
+
+.personal-skill-row:hover {
+  background: transparent;
+}
+
+.skills-settings-empty {
+  padding: 18px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .native-skill-row {
   display: grid;
   grid-template-columns: 34px minmax(220px, 1.2fr) minmax(180px, 0.8fr) auto 16px;
@@ -112,6 +126,11 @@
   font-size: 10px;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.native-skill-status.invalid {
+  background: rgba(248, 113, 113, 0.09);
+  color: #fca5a5;
 }
 
 .native-skill-row > svg {

@@ -1,6 +1,7 @@
 import {
   CONNECTED_APP_INTEGRATION_SKILLS,
   connectedAppBundleByProvider,
+  type CodexPersonalSkill,
   type ConnectedAppIntegrationSkill,
 } from "@openpond/contracts";
 import { ChevronRight, FileText } from "../icons";
@@ -8,8 +9,10 @@ import "../../styles/settings/skills-settings.css";
 
 export function SkillsSettingsSection({
   onOpenNativeSkill,
+  personalSkills,
 }: {
   onOpenNativeSkill: (skill: ConnectedAppIntegrationSkill) => void;
+  personalSkills: CodexPersonalSkill[];
 }) {
   return (
     <section className="account-settings skills-settings" aria-labelledby="skills-settings-title">
@@ -17,14 +20,46 @@ export function SkillsSettingsSection({
         <div>
           <h1 id="skills-settings-title">Skills</h1>
           <p>
-            Read-only operating instructions that ship with OpenPond and are loaded when an agent uses the matching app.
+            Personal Codex skill packages and the read-only app instructions bundled with OpenPond.
           </p>
         </div>
       </header>
 
       <div className="account-list native-skills-list">
         <div className="account-list-heading">
-          <span>Native skills</span>
+          <span>Personal Codex skills</span>
+          <small>Discovered from your local Codex skills folder</small>
+        </div>
+        {personalSkills.length ? personalSkills.map((skill) => (
+          <div className="native-skill-row personal-skill-row" key={skill.sourcePath}>
+            <span className="native-skill-icon" aria-hidden="true">
+              <FileText size={17} />
+            </span>
+            <span className="native-skill-identity">
+              <strong>{skill.name}</strong>
+              <span>{skill.description || "Packaged Codex skill"}</span>
+            </span>
+            <span className="native-skill-provider">
+              <strong>
+                {skill.resourceFiles.length
+                  ? `${skill.resourceFiles.length} packaged resource${skill.resourceFiles.length === 1 ? "" : "s"}`
+                  : "Instructions only"}
+              </strong>
+              <span>{skill.sourcePath}</span>
+            </span>
+            <span className={`native-skill-status ${skill.validationStatus === "valid" ? "" : "invalid"}`}>
+              {skill.validationStatus === "valid" ? "Ready" : "Needs attention"}
+            </span>
+            <span aria-hidden="true" />
+          </div>
+        )) : (
+          <div className="skills-settings-empty">No personal Codex skills found.</div>
+        )}
+      </div>
+
+      <div className="account-list native-skills-list">
+        <div className="account-list-heading">
+          <span>App integration skills</span>
           <small>Bundled with this OpenPond build</small>
         </div>
         {CONNECTED_APP_INTEGRATION_SKILLS.map((skill) => {

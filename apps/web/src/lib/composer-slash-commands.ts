@@ -35,16 +35,10 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     description: "Start the guided Agent creation flow.",
   },
   {
-    id: "edit",
-    command: "/edit",
-    label: "Edit selected agent",
-    description: "Refine the current project agent or workflow.",
-  },
-  {
     id: "skill",
     command: "/skill",
     label: "Manage skills",
-    description: "Manage profile-backed reusable skill instructions.",
+    description: "Create, edit, and use reusable skills for the selected provider.",
     subcommands: ["create", "edit", "list", "help"],
   },
   {
@@ -52,6 +46,24 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/goal",
     label: "Run a goal",
     description: "Run a durable task for OpenPond or Codex to pursue.",
+  },
+  {
+    id: "insights",
+    command: "/insights",
+    label: "Open insights",
+    description: "Scan agent flow health.",
+  },
+  {
+    id: "submit-issue",
+    command: "/submit-issue",
+    label: "Submit issue",
+    description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
+  },
+  {
+    id: "edit",
+    command: "/edit",
+    label: "Edit selected agent",
+    description: "Refine the current project agent or workflow.",
   },
   {
     id: "goal-remote",
@@ -70,18 +82,6 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/train",
     label: "Create training task",
     description: "Create a training plan from this chat or select chats in Training.",
-  },
-  {
-    id: "insights",
-    command: "/insights",
-    label: "Open insights",
-    description: "Scan agent flow health.",
-  },
-  {
-    id: "submit-issue",
-    command: "/submit-issue",
-    label: "Submit issue",
-    description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
   },
   {
     id: "sync-cloud",

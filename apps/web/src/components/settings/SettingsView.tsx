@@ -240,7 +240,10 @@ export function SettingsView({
             onToast={onToast}
           />
         ) : section === "skills" ? (
-          <SkillsSettingsSection onOpenNativeSkill={onOpenNativeSkill} />
+          <SkillsSettingsSection
+            personalSkills={payload?.codexPersonalSkills ?? []}
+            onOpenNativeSkill={onOpenNativeSkill}
+          />
         ) : section === "providers" ? (
           <ProviderSettingsSection
             account={payload?.account ?? null}

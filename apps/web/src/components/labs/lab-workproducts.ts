@@ -1,4 +1,5 @@
 import type {
+  CodexPersonalSkill,
   CreateImproveRun,
   CrossSystemFrontierBaselineRun,
   OpenPondProfileState,
@@ -28,6 +29,12 @@ export type LabWorkproductSummary = {
   trainingRunCount: number;
   evaluationStatus: "not_run" | "passed" | "failed";
   useActionId: string | null;
+  skillSource?: "profile" | "codex";
+  skillValidationStatus?: "valid" | "warning" | "error";
+  skillValidationMessages?: string[];
+  skillSourceHash?: string;
+  skillCharCount?: number;
+  skillResourceFiles?: string[];
 };
 
 const COMPLETED_RUN_STATES = new Set<CreateImproveRun["state"]>([
@@ -41,6 +48,7 @@ const COMPLETED_RUN_STATES = new Set<CreateImproveRun["state"]>([
 
 export function labWorkproductProjection(input: {
   profile: OpenPondProfileState | null;
+  codexPersonalSkills?: CodexPersonalSkill[];
   training: TrainingStateResponse | null;
   runs: CreateImproveRun[];
 }): LabWorkproductSummary[] {
@@ -101,6 +109,40 @@ export function labWorkproductProjection(input: {
       trainingRunCount: 0,
       evaluationStatus: "not_run",
       useActionId: null,
+      skillSource: "profile",
+      skillValidationStatus: skill.validationStatus,
+      skillValidationMessages: skill.validationMessages,
+      skillSourceHash: skill.sourceHash,
+      skillCharCount: skill.charCount,
+      skillResourceFiles: [],
+    });
+  }
+
+  for (const skill of input.codexPersonalSkills ?? []) {
+    const key = `skill:codex:${skill.name}`;
+    byKey.set(key, {
+      key,
+      kind: "skill",
+      id: skill.name,
+      name: skill.name,
+      description: skill.description || "Packaged Codex skill",
+      status: skill.validationStatus === "valid" ? "Ready" : "Needs attention",
+      updatedAt: skill.updatedAt ?? timestamp,
+      path: skill.path,
+      enabled: skill.enabled,
+      runIds: [],
+      conversationId: null,
+      tasksetId: null,
+      frontierBaselineRunId: null,
+      trainingRunCount: 0,
+      evaluationStatus: "not_run",
+      useActionId: null,
+      skillSource: "codex",
+      skillValidationStatus: skill.validationStatus,
+      skillValidationMessages: skill.validationMessages,
+      skillSourceHash: skill.sourceHash,
+      skillCharCount: skill.charCount,
+      skillResourceFiles: skill.resourceFiles,
     });
   }
 

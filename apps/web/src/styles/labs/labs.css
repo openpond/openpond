@@ -176,6 +176,12 @@
   padding: 8px 0 56px;
 }
 
+.labs-datasets-page {
+  box-sizing: border-box;
+  min-height: 100%;
+  align-content: start;
+}
+
 .labs-dataset-detail-heading h1 {
   margin: 0;
   font-size: 20px;
