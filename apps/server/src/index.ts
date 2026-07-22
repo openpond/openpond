@@ -62,7 +62,6 @@ import {
   checkWorkspaceGitAvailability,
   startMacOSCommandLineToolsInstall,
 } from "./workspace/workspaces.js";
-import { readLocalImageFile, readLocalVideoFile } from "./workspace/workspace-common.js";
 import { loadGitCommitDiffAtPath } from "./workspace/workspace-diff.js";
 import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
@@ -102,7 +101,6 @@ import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
-import { readChatAttachmentImageFile } from "./chat-attachments.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
 import { organizationRequestPayload } from "./openpond/organizations.js";
@@ -138,6 +136,7 @@ import { createDatasetImportService } from "./training/dataset-imports/import-se
 import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
 import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
+import { createMediaPayloads } from "./api/media-payloads.js";
 import { normalizeAppPreferences } from "./preferences.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
@@ -1697,27 +1696,7 @@ export async function createOpenPondServer(
       workspaceFilePayload,
       saveWorkspaceFilePayload,
       workspaceImagePayload,
-      localImagePayload: async (filePath) => {
-        const image = await readLocalImageFile(filePath);
-        if (!image) throw new Error("Image not found");
-        return image;
-      },
-      localVideoPayload: async (filePath) => {
-        const video = await readLocalVideoFile(filePath);
-        if (!video) throw new Error("Video not found");
-        return video;
-      },
-      chatAttachmentImagePayload: async (input) => {
-        const image = await readChatAttachmentImageFile({
-          attachmentRootDir,
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          storageName: input.storageName,
-          contentType: input.contentType,
-        });
-        if (!image) throw new Error("Image not found");
-        return image;
-      },
+      ...createMediaPayloads(attachmentRootDir),
       workspaceLspTouchPayload,
       workspaceLspActionPayload,
       workspaceLspSettingsStatusPayload,

@@ -27,7 +27,10 @@ type ReadyPayload = {
 };
 
 const MiB = 1024 * 1024;
-const MAX_NPM_PACKAGE_FILES = 260;
+// Keep a broad guard against accidentally publishing an entire source tree.
+// Vite's hashed, code-split assets legitimately fluctuate as lazy routes evolve,
+// so this should not act as a per-feature file-count ratchet.
+const MAX_NPM_PACKAGE_FILES = 500;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tempRoots: string[] = [];
 
