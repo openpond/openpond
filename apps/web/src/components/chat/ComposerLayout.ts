@@ -2,6 +2,9 @@ import type { CSSProperties } from "react";
 
 const COMPOSER_MAX_VISIBLE_LINES = 10;
 const SLASH_MENU_WIDTH_PX = 340;
+const ADD_MENU_MAX_HEIGHT_PX = 320;
+const ADD_MENU_MIN_HEIGHT_PX = 160;
+const ADD_MENU_VIEWPORT_TOP_PX = 56;
 
 function cssPixelValue(value: string, fallback = 0): number {
   const parsed = Number.parseFloat(value);
@@ -44,5 +47,16 @@ export function slashMenuAnchorStyle(textarea: HTMLElement, root: HTMLElement): 
     left,
     top,
     width: menuWidth,
+  };
+}
+
+export function addMenuAnchorStyle(root: HTMLElement): CSSProperties {
+  const rootRect = root.getBoundingClientRect();
+  const availableHeight = Math.floor(rootRect.top - ADD_MENU_VIEWPORT_TOP_PX);
+  return {
+    maxHeight: Math.max(
+      ADD_MENU_MIN_HEIGHT_PX,
+      Math.min(ADD_MENU_MAX_HEIGHT_PX, availableHeight),
+    ),
   };
 }

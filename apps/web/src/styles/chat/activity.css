@@ -543,10 +543,22 @@
 }
 
 .start-panel {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.start-welcome {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
   display: grid;
-  gap: 20px;
+  justify-items: center;
   width: min(730px, calc(100% - 96px));
-  margin-bottom: 46px;
+  transform: translate(-50%, -50%);
 }
 
 .start-panel h1 {

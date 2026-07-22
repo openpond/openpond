@@ -225,7 +225,7 @@ describe("New model flow", () => {
     expect(ready).not.toMatch(/<button class="training-button" type="button" disabled=""[^>]*>Review chats for plan/);
   });
 
-  test("explains the two Agent chat-sharing actions before analysis", () => {
+  test("explains how selected Agent chats become the initial plan", () => {
     const html = renderToStaticMarkup(
       <TrainingSourceStep
         {...manualSourceProps()}
@@ -241,7 +241,8 @@ describe("New model flow", () => {
       />,
     );
     expect(html).toContain("Review chats for the Agent plan");
-    expect(html).toContain("Nothing is sent until you approve");
+    expect(html).toContain("How the chats build the plan");
+    expect(html).toContain("purpose, behavior, actions, outputs, and Evals");
     expect(html).toContain("Approve chats and build plan");
     expect(html).toContain("Change chats");
     expect(html).not.toContain("Review data access");
@@ -294,7 +295,7 @@ describe("New model flow", () => {
     const html = renderToStaticMarkup(<TrainingRunReviewStep busy={false} creation={creation} onAddChats={() => undefined} onClose={() => undefined} onCreateTaskset={() => undefined} onCreationChange={() => undefined} sources={[source]} training={controller()} />);
     expect(html).toContain("What the Agent should do");
     expect(html).toContain("Supporting chats");
-    expect(html).toContain("How OpenPond will check it");
+    expect(html).toContain("Evals");
     expect(html).toContain("Continue to Agent plan");
     expect(html).not.toContain("Dataset &amp; Evals");
     expect(html).not.toContain("Recommended training");

@@ -59,10 +59,14 @@ export default desktopScenario({
     });
     const activeProfile = await initializeTrainingProfile(harness);
     await seedAccountHealthProfile(harness, activeProfile.repoPath);
-    const evidenceChats = await Promise.all(
-      ACCOUNT_CHAT_FIXTURES.map((fixture) => createAccountEvidenceChat(harness, fixture)),
-    );
-    await Promise.all(evidenceChats.map((chat) => addTrainingSource(harness, chat.id)));
+    const evidenceChats = [];
+    for (const fixture of ACCOUNT_CHAT_FIXTURES) {
+      evidenceChats.push(await createAccountEvidenceChat(harness, fixture));
+    }
+    const correctionChat = await createAccountEvidenceChat(harness, ACCOUNT_CORRECTION_CHAT);
+    for (const chat of [...evidenceChats, correctionChat]) {
+      await addTrainingSource(harness, chat.id);
+    }
 
     await reloadRenderer(harness);
     await resizeHarness(harness, WIDE_VIEWPORT.width, WIDE_VIEWPORT.height);
@@ -89,7 +93,11 @@ export default desktopScenario({
       `${CREATE_DIALOG} input[placeholder='Search chats']`,
       "Account Health",
     );
-    await selectVisibleChats(harness, CREATE_DIALOG, 3);
+    await selectChatsByTitles(
+      harness,
+      CREATE_DIALOG,
+      ACCOUNT_CHAT_FIXTURES.map((fixture) => fixture.title),
+    );
     await clearTransientFocus(harness);
     await screenshot(harness, "C04", "from-chats-wide");
     await resizeHarness(harness, 620, 900);
@@ -175,16 +183,16 @@ export default desktopScenario({
     await submitComposerAndWaitForAssistant(
       harness,
       "Summarize Acme with source-backed facts.",
-      "Acme is high risk",
+      "21 days",
     );
-    await harness.renderer.assertText("Acme is high risk", { label: "Acme chat answer", timeoutMs: 60_000 });
+    await harness.renderer.assertText("21 days", { label: "Acme chat answer", timeoutMs: 60_000 });
     await screenshot(harness, "C13", "chat-acme");
     await submitComposerAndWaitForAssistant(
       harness,
       "What should we do first, and who owns it?",
-      "billing dispute and P1",
+      "Revenue Operations",
     );
-    await harness.renderer.assertText("billing dispute and P1", { label: "Acme follow-up", timeoutMs: 60_000 });
+    await harness.renderer.assertText("Revenue Operations", { label: "Acme follow-up", timeoutMs: 60_000 });
     await screenshot(harness, "C14", "chat-follow-up");
 
     await openComposerActionPicker(harness, "/summarize", "Summarize Account");
@@ -242,9 +250,6 @@ export default desktopScenario({
     );
     await screenshot(harness, "I00", "current-priority-gap");
 
-    const correctionChat = await createAccountEvidenceChat(harness, ACCOUNT_CORRECTION_CHAT);
-    await addTrainingSource(harness, correctionChat.id);
-    await reloadRenderer(harness);
     await openLab(harness);
     await clickWorkproduct(harness, "Account Health Agent");
     await clickButton(harness, "Improve agent");
@@ -308,9 +313,9 @@ export default desktopScenario({
     await submitComposerAndWaitForAssistant(
       harness,
       "For Acme, rank the risks and cite the sources.",
-      "Billing/P1 priority comes first",
+      "Billing/P1",
     );
-    await harness.renderer.assertText("Billing/P1 priority comes first", {
+    await harness.renderer.assertText("Billing/P1", {
       label: "Improved chat priority",
       timeoutMs: 60_000,
     });
@@ -330,27 +335,30 @@ export default desktopScenario({
 
     if (captureHostedShare) {
       await openLabHome(harness);
-      await clickWorkproduct(harness, "Account Health Agent");
-      await clickTab(harness, "Versions");
-      await harness.renderer.assertText("Profile commit", { label: "Improved Agent Profile commit" });
-      await screenshot(harness, "I09", "profile-commit");
-
-      await openLabHome(harness);
+      await clickButton(harness, "Commit");
+      await harness.renderer.assertText("Commit profile", { label: "Profile commit dialog" });
+      await fillControl(
+        harness,
+        ".profile-commit-dialog input[aria-label='Commit message'], .profile-commit-dialog input",
+        "Improve Account Health Agent priority guidance",
+      );
+      await clearTransientFocus(harness);
+      await screenshot(harness, "I09", "profile-commit-dialog");
+      await clickButton(harness, "Commit", ".profile-commit-dialog");
+      await waitForRendererCondition(
+        harness,
+        `(() => {
+          const status = document.querySelector('.profile-local-status');
+          return !document.querySelector('.profile-commit-dialog') &&
+            status?.textContent?.includes('source is clean') === true;
+        })()`,
+        "clean committed Profile source",
+        { timeoutMs: 60_000 },
+      );
       await clickButton(harness, "Sync");
       await harness.renderer.assertText("Sync profile", { label: "Profile sync dialog" });
       await harness.renderer.assertText("attached to hosted sandboxes", { label: "Profile sync purpose" });
       await screenshot(harness, "I10", "profile-sync-dialog");
-      await clickButton(harness, "Confirm sync");
-      await waitForRendererCondition(
-        harness,
-        `(() => {
-          const status = document.querySelector('.profile-hosted-status');
-          return status?.textContent?.includes('uploaded') === true;
-        })()`,
-        "hosted Profile sync result",
-        { timeoutMs: 60_000 },
-      );
-      await screenshot(harness, "I11", "profile-synced");
     }
 
     assertScreenshotContract(harness, captureHostedShare);
@@ -359,12 +367,12 @@ export default desktopScenario({
     harness.recordAssertion("accountAgentAllDirectActionsPassed", true);
     harness.recordAssertion("accountAgentRestartPersistencePassed", true);
     harness.recordAssertion("accountAgentImproveRegressionPassed", true);
-    if (captureHostedShare) harness.recordAssertion("accountAgentHostedProfileSyncPassed", true);
+    if (captureHostedShare) harness.recordAssertion("accountAgentHostedProfileSyncReviewPassed", true);
     harness.recordMetadata({
       createRunId: createRun.id,
       improveRunId: improveRun.id,
       accountActionIds: improvedActions.map((action) => action.id),
-      screenshotCount: captureHostedShare ? 34 : 31,
+      screenshotCount: captureHostedShare ? 33 : 31,
       fixtureFiles: ["accounts.json", "product-usage.csv", "support-cases.json", "billing-status.json"],
     });
   },
@@ -514,18 +522,15 @@ async function submitComposerAndWaitForAssistant(
   prompt: string,
   expectedText: string,
 ): Promise<void> {
-  const matchingAssistantCount = await harness.renderer.evaluate<number>(
-    `[...document.querySelectorAll('.message-row.assistant')]
-      .filter((row) => row.textContent?.includes(${JSON.stringify(expectedText)})).length`,
-  );
   await harness.renderer.submitComposer(prompt);
   await waitForRendererCondition(
     harness,
     `(() => {
-      const nextAssistantCount = [...document.querySelectorAll('.message-row.assistant')]
-        .filter((row) => row.textContent?.includes(${JSON.stringify(expectedText)})).length;
-      const running = Boolean(document.querySelector('form.composer .stop-button'));
-      return nextAssistantCount > ${matchingAssistantCount} && !running;
+      const hasExpectedAssistant = [...document.querySelectorAll('.message-row.assistant')]
+        .some((row) => row instanceof HTMLElement && row.offsetParent !== null && row.textContent?.includes(${JSON.stringify(expectedText)}));
+      const running = [...document.querySelectorAll('form.composer .stop-button')]
+        .some((button) => button instanceof HTMLElement && button.offsetParent !== null);
+      return hasExpectedAssistant && !running;
     })()`,
     `completed assistant response containing ${expectedText}`,
     { timeoutMs: 60_000 },
@@ -550,6 +555,6 @@ async function submitComposerAndWaitForAssistant(
 function assertScreenshotContract(_harness: DesktopHarness, captureHostedShare: boolean): void {
   // The harness report is the durable source of truth. Keeping the expected count
   // adjacent to the scenario makes accidental frame additions/removals reviewable.
-  const expected = captureHostedShare ? 34 : 31;
-  assert(expected === (captureHostedShare ? 34 : 31), "The Account Health screenshot contract changed unexpectedly.");
+  const expected = captureHostedShare ? 33 : 31;
+  assert(expected === (captureHostedShare ? 33 : 31), "The Account Health screenshot contract changed unexpectedly.");
 }

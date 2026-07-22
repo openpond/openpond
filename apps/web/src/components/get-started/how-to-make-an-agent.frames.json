@@ -40,9 +40,9 @@
       "id": "improve",
       "label": "Improve",
       "title": "Improve the Agent",
-      "subtitle": "Use real run evidence and checks to make the Account Health Agent better.",
+      "subtitle": "Use real run evidence and Evals to make the Account Health Agent better.",
       "outroTitle": "Account Health Agent improved",
-      "outroSubtitle": "The updated agent passed its checks. · AI-generated narration",
+      "outroSubtitle": "The updated agent passed its Evals. · AI-generated narration",
       "cardDuration": 1.5
     }
   ],
@@ -375,7 +375,7 @@
       "label": "Identify the behavior gap",
       "caption": "The current Agent finds the right facts, but buries the priority after the account summary. Improve will make the billing and P1 decision lead every high-risk result.",
       "placement": "top-left",
-      "narration": "The current Agent finds the right facts, but buries the priority after the account summary. Improve will make the billing and P one decision lead every high-risk result.",
+      "narration": "The current Agent finds the right facts, but buries the priority after the account summary. Improve will make the billing and P1 decision lead every high-risk result.",
       "focus": {
         "x": 0.18,
         "y": 0.07,
@@ -407,7 +407,7 @@
       "label": "Add the correction chat",
       "caption": "Choose From chats, ask every high-risk response to lead with the billing and P1 decision, and attach the correction conversation that demonstrates it.",
       "placement": "top-left",
-      "narration": "Choose From chats, ask every high-risk response to lead with the billing and P one decision, and attach the correction conversation that demonstrates it.",
+      "narration": "Choose From chats, ask every high-risk response to lead with the billing and P1 decision, and attach the correction conversation that demonstrates it.",
       "focus": {
         "x": 0.31,
         "y": 0.2,
@@ -514,7 +514,7 @@
     },
     {
       "id": "I09",
-      "file": "I09-profile-commit.png",
+      "file": "I09-profile-commit-dialog.png",
       "chapter": "improve",
       "label": "Commit the Profile source",
       "caption": "Commit the final Agent source with a clear Git message so the exact Profile version remains reviewable and shareable.",
@@ -533,31 +533,15 @@
       "file": "I10-profile-sync-dialog.png",
       "chapter": "improve",
       "label": "Review the hosted sync",
-      "caption": "Open Sync to review the committed Profile changes before publishing them to the hosted Profile repo.",
+      "caption": "Confirm sync publishes this committed version so teammates can use the Agent in chat and hosted sandboxes can attach the same source.",
       "placement": "bottom-left",
-      "narration": "Open Sync to review the committed Profile changes before publishing them to the hosted Profile repo.",
+      "narration": "Open Sync to review the committed Profile changes. Confirm sync publishes this version so teammates can use the Agent in chat and hosted sandboxes can attach the same source.",
       "focus": {
-        "x": 0.34,
-        "y": 0.2,
-        "width": 0.32,
-        "height": 0.6,
-        "zoom": 1.32
-      }
-    },
-    {
-      "id": "I11",
-      "file": "I11-profile-synced.png",
-      "chapter": "improve",
-      "label": "Share and use in sandboxes",
-      "caption": "After sync, the hosted Profile records this commit so teammates can use the Agent and hosted sandboxes can attach the same source.",
-      "placement": "bottom-left",
-      "narration": "After sync, the hosted Profile records this commit so teammates can use the Agent and hosted sandboxes can attach the same source.",
-      "focus": {
-        "x": 0.18,
-        "y": 0.08,
-        "width": 0.52,
-        "height": 0.35,
-        "zoom": 1.3
+        "x": 0.39,
+        "y": 0.54,
+        "width": 0.22,
+        "height": 0.14,
+        "zoom": 1.52
       }
     }
   ],

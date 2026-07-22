@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createElement, createRef } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CloudProject, LocalProject, OpenPondApp } from "@openpond/contracts";
 
@@ -14,7 +14,11 @@ import {
 } from "../apps/web/src/components/chat/Composer";
 import { SubmitIssueDialog } from "../apps/web/src/components/chat/SubmitIssueDialog";
 import { workspaceTargetOptionStatusText } from "../apps/web/src/components/chat/ComposerControls";
-import { ComposerPrimaryControls } from "../apps/web/src/components/chat/ComposerPrimaryControls";
+import {
+  ComposerCommandMenu,
+  filterComposerCommandMenuSections,
+  type ComposerCommandMenuSection,
+} from "../apps/web/src/components/chat/ComposerCommandMenu";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
 import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-commands";
 import { buildOpenPondAgentSlashCommand } from "../apps/web/src/lib/openpond-action-run";
@@ -329,63 +333,86 @@ describe("composer slash behavior", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="Add photos and files"');
+    expect(markup).toContain('aria-label="Add to message"');
     expect(markup).not.toContain("composer-create-control");
     expect(markup).not.toContain('aria-label="Make Agent"');
     expect(markup).not.toContain("composer-delegation-trigger");
     expect(markup).not.toContain(">SUB<");
+    expect(markup.indexOf("composer-footer")).toBeLessThan(markup.indexOf("composer-input-shell"));
   });
 
-  test("plus menu lists connected apps as planning context", () => {
+  test("plus menu combines add, slash, and mention rows", () => {
+    const createCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create")!;
+    const app = planningApp();
     const markup = renderToStaticMarkup(
-      createElement(ComposerPrimaryControls, {
-        addFiles: noop,
-        addMenuOpen: true,
-        addMenuRef: createRef<HTMLDivElement>(),
-        busy: false,
-        codexPermissionMode: "default",
-        codexReasoningEffort: "medium",
-        connection: null,
-        contextStatusStyle: {
-          "--context-fill": "0deg",
-          "--context-bar-fill": "0%",
-        },
-        contextStatusTooltipId: "context-tooltip",
-        contextWindowStatus,
-        disabled: false,
-        dropdownPlacement: "bottom",
-        fileInputRef: createRef<HTMLInputElement>(),
-        mentionApps: [planningApp()],
-        modelValue: "openpond-chat",
-        onCodexPermissionModeChange: noop,
-        onCodexReasoningEffortChange: noop,
-        onModelChange: noop,
-        onCreateAsAgent: noop,
-        onOpenFilePicker: noop,
-        onPlanningAppSelect: noop,
-        onProviderChange: noop,
-        onQueueDraft: noop,
-        onStop: noop,
-        onToggleAddMenu: noop,
-        onTranscript: noop,
-        provider: "openpond",
-        providerOptions: [{ value: "openpond", label: "OpenPond" }],
-        queueDraftDisabled: true,
-        queueDraftTooltip: "Queue steer draft",
-        running: false,
-        sendDisabled: false,
-        sendTooltip: "Send",
-        selectedMentionAppId: "app_alpha",
-        showToast: noop,
-        steering: false,
+      createElement(ComposerCommandMenu, {
+        ariaLabel: "Add to message",
+        className: "composer-add-command-menu",
+        menuIndex: 0,
+        sections: [
+          { id: "add", items: [{ kind: "files" }], label: "Add" },
+          {
+            id: "slash",
+            items: [{ kind: "slash", item: { kind: "command", command: createCommand } }],
+            label: "/",
+          },
+          {
+            id: "mention",
+            items: [{ kind: "mention", item: { kind: "app", app } }],
+            label: "@",
+          },
+        ],
+        variant: "add",
+        onSelect: noop,
+        onSelectIndex: noop,
       }),
     );
 
     expect(markup).toContain('role="menu"');
-    expect(markup).toContain("Make Agent");
+    expect(markup).toContain('aria-label="Add"');
+    expect(markup).toContain('aria-label="/"');
+    expect(markup).toContain('aria-label="@"');
+    expect(markup).toContain("Files and folders");
+    expect(markup).toContain("/create Make Agent");
     expect(markup).toContain('data-app-context-id="app_alpha"');
     expect(markup).toContain("Alpha Bot");
-    expect(markup).toContain("Selected planning context");
+    expect(markup).toContain("Summarizes release activity.");
+  });
+
+  test("filters the persistent plus menu by text, slash, or mention scope", () => {
+    const createCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create")!;
+    const goalCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "goal")!;
+    const sections: ComposerCommandMenuSection[] = [
+      { id: "add", items: [{ kind: "files" }], label: "Add" },
+      {
+        id: "slash",
+        items: [createCommand, goalCommand].map((command) => ({
+          kind: "slash" as const,
+          item: { kind: "command" as const, command },
+        })),
+        label: "/",
+      },
+      {
+        id: "mentions",
+        items: [{ kind: "mention", item: { kind: "app", app: planningApp() } }],
+        label: "@",
+      },
+    ];
+
+    expect(filterComposerCommandMenuSections(sections, "/").map((section) => section.id)).toEqual([
+      "slash",
+    ]);
+    expect(filterComposerCommandMenuSections(sections, "/goal")[0]?.items).toEqual([
+      { kind: "slash", item: { kind: "command", command: goalCommand } },
+    ]);
+    expect(filterComposerCommandMenuSections(sections, "@alpha")[0]?.items).toEqual([
+      { kind: "mention", item: { kind: "app", app: planningApp() } },
+    ]);
+    expect(filterComposerCommandMenuSections(sections, "files")[0]?.id).toBe("add");
+    expect(filterComposerCommandMenuSections(sections, "missing")[0]).toMatchObject({
+      emptyLabel: "No commands match",
+      items: [],
+    });
   });
 
   test("regular chat composer renders contextual notices", () => {
@@ -891,7 +918,7 @@ describe("composer slash behavior", () => {
     expect(markup).not.toContain("composer-footer");
     expect(markup).toContain('class="composer-textarea-frame"');
     expect(markup).not.toContain('aria-label="Working in"');
-    expect(markup).toContain('aria-label="Add photos and files"');
+    expect(markup).toContain('aria-label="Add to message"');
   });
 
   test("regular chat composer shows built-in commands before agents or actions load", () => {

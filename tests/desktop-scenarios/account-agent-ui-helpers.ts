@@ -277,7 +277,7 @@ export async function chooseComposerAction(
       const button = root && [...root.querySelectorAll('button')].find((item) =>
         item.textContent?.includes(${JSON.stringify(label)}));
       if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
-      button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+      button.click();
       return true;
     })()`,
     `${label} action option`,

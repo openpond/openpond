@@ -1,33 +1,45 @@
 WEBVTT
 
+I00
+00:00:03.670 --> 00:00:14.365
+The current Agent finds the right facts, but buries the priority after the account summary. Improve will make the billing and P1 decision lead every high-risk result.
+
 I01
-00:00:03.670 --> 00:00:11.693
-Improve Agent lets you describe a change directly or include chats that demonstrate the correction.
+00:00:14.085 --> 00:00:23.707
+Open Improve agent on the existing Agent, then choose whether to describe the correction directly or include a chat that demonstrates it.
 
 I02
-00:00:11.413 --> 00:00:19.614
-Choose From chats, describe the billing-first change, and attach the correction conversation to show the new behavior.
+00:00:23.427 --> 00:00:33.853
+Choose From chats, ask every high-risk response to lead with the billing and P1 decision, and attach the correction conversation that demonstrates it.
 
 I03
-00:00:19.334 --> 00:00:27.218
-Check the billing-first correction, the behaviors that must stay intact, and the checks OpenPond will rerun.
+00:00:33.573 --> 00:00:43.156
+Review the new lead-with-priority behavior, the existing capabilities that must stay intact, and the Evals OpenPond will rerun.
 
 I04
-00:00:26.938 --> 00:00:33.212
+00:00:42.876 --> 00:00:49.468
 Review the planned change and confirm that it preserves citations and every existing action.
 
 I05
-00:00:32.932 --> 00:00:42.157
-Compare both versions with the same checks: the current Agent passes four of five, while the updated Agent passes all six.
+00:00:49.188 --> 00:00:58.900
+The same locked Evals make the decision clear: the current Agent misses the new lead sentence, while the updated Agent passes every original and new Eval.
 
 I06
-00:00:41.877 --> 00:00:49.850
-Apply the update only after that comparison. The existing Agent updates in place, with the successful checks recorded.
+00:00:58.620 --> 00:01:07.666
+Apply the update only after that comparison. The existing Agent updates in place, with the successful Evals recorded.
 
 I07
-00:00:49.570 --> 00:00:58.924
+00:01:07.386 --> 00:01:16.879
 The improved chat now places disputed billing and the open P1 case ahead of adoption decline while preserving source citations.
 
 I08
-00:00:58.644 --> 00:01:07.371
+00:01:16.599 --> 00:01:25.069
 The direct triage action repeats the billing-first result, proving the change works outside chat without breaking the existing workflow.
+
+I09
+00:01:24.789 --> 00:01:32.940
+Commit the final Agent source with a clear Git message so the exact Profile version remains reviewable and shareable.
+
+I10
+00:01:32.660 --> 00:01:45.898
+Confirm sync publishes this committed version so teammates can use the Agent in chat and hosted sandboxes can attach the same source.

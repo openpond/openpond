@@ -2,21 +2,17 @@ import type { CSSProperties, RefObject } from "react";
 import {
   ArrowUp,
   ArrowUpRight,
-  AtSign,
-  Bot,
   Pause,
   Plus,
   Shield,
   SquareTerminal,
   Square,
-  Upload,
 } from "../icons";
 import type {
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
-  OpenPondApp,
   ProviderSettings,
 } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
@@ -53,6 +49,7 @@ export function ComposerPrimaryControls({
   teamUseModelLocked = false,
   onTeamUseModelChange,
   addFiles,
+  addMenuId,
   addMenuOpen,
   addMenuRef,
   busy,
@@ -65,7 +62,6 @@ export function ComposerPrimaryControls({
   disabled,
   dropdownPlacement,
   fileInputRef,
-  mentionApps,
   modelValue,
   modelOptions = [],
   openPondCommandAccessMode,
@@ -73,9 +69,7 @@ export function ComposerPrimaryControls({
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
   onModelChange,
-  onCreateAsAgent,
   onOpenFilePicker,
-  onPlanningAppSelect,
   onProviderChange,
   onProviderSetupOpen,
   onQueueDraft,
@@ -90,7 +84,6 @@ export function ComposerPrimaryControls({
   running,
   sendDisabled,
   sendTooltip,
-  selectedMentionAppId,
   showToast,
   stopIcon = "stop",
   stopLabel = "Stop response",
@@ -101,6 +94,7 @@ export function ComposerPrimaryControls({
   teamUseModelLocked?: boolean;
   onTeamUseModelChange?: (value: boolean) => void;
   addFiles: (files: File[]) => void;
+  addMenuId?: string;
   addMenuOpen: boolean;
   addMenuRef: RefObject<HTMLDivElement | null>;
   busy: boolean;
@@ -113,7 +107,6 @@ export function ComposerPrimaryControls({
   disabled: boolean;
   dropdownPlacement: "top" | "bottom";
   fileInputRef: RefObject<HTMLInputElement | null>;
-  mentionApps: OpenPondApp[];
   modelValue: string;
   modelOptions?: DropdownOption[];
   openPondCommandAccessMode: OpenPondCommandAccessMode;
@@ -121,9 +114,7 @@ export function ComposerPrimaryControls({
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
   onModelChange: (value: string) => void;
-  onCreateAsAgent: () => void;
   onOpenFilePicker: () => void;
-  onPlanningAppSelect: (app: OpenPondApp) => void;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onQueueDraft: () => void;
@@ -138,7 +129,6 @@ export function ComposerPrimaryControls({
   running: boolean;
   sendDisabled: boolean;
   sendTooltip: string;
-  selectedMentionAppId: string | null;
   showToast: ShowAppToast;
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
@@ -256,52 +246,16 @@ export function ComposerPrimaryControls({
         <button
           type="button"
           className={`composer-icon ${addMenuOpen ? "active" : ""}`}
-          aria-label="Add photos and files"
+          aria-label="Add to message"
           aria-haspopup="menu"
           aria-expanded={addMenuOpen}
+          aria-controls={addMenuOpen ? addMenuId : undefined}
           disabled={disabled}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={onToggleAddMenu}
         >
           <Plus size={18} />
         </button>
-        {addMenuOpen && (
-          <div className="composer-add-menu" role="menu" aria-label="Add context">
-            <button type="button" role="menuitem" onClick={onOpenFilePicker}>
-              <Upload size={13} />
-              <span>
-                <strong>Add photos & files</strong>
-              </span>
-            </button>
-            <button type="button" role="menuitem" onClick={onCreateAsAgent}>
-              <Bot size={13} />
-              <span>
-                <strong>Make Agent</strong>
-              </span>
-            </button>
-            {mentionApps.length > 0 && (
-              <div className="composer-add-menu-divider" role="presentation" />
-            )}
-            {mentionApps.map((app) => (
-              <button
-                type="button"
-                role="menuitem"
-                data-app-context-id={app.id}
-                key={app.id}
-                onClick={() => onPlanningAppSelect(app)}
-              >
-                <AtSign size={13} />
-                <span>
-                  <strong>{app.name}</strong>
-                  <small>
-                    {selectedMentionAppId === app.id
-                      ? "Selected planning context"
-                      : "Use as planning context"}
-                  </small>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
         <input
           ref={fileInputRef}
           className="composer-file-input"

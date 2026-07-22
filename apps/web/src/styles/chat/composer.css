@@ -606,6 +606,10 @@
   min-width: 0;
 }
 
+.composer.has-add-menu .composer-input-shell {
+  z-index: 5;
+}
+
 .composer-notice {
   display: flex;
   align-items: center;
@@ -821,13 +825,11 @@
   padding-top: 101px;
 }
 
-.composer.has-goal-runtime .composer-textarea-frame,
 .composer.has-create-runtime .composer-textarea-frame {
   border-radius: 21px;
   padding: 13px 28px 49px;
 }
 
-.composer.has-goal-runtime.has-attachments .composer-textarea-frame,
 .composer.has-create-runtime.has-attachments .composer-textarea-frame {
   padding-top: 101px;
 }
@@ -851,7 +853,6 @@
   scrollbar-width: thin;
 }
 
-.composer.has-goal-runtime .composer-attachments,
 .composer.has-create-runtime .composer-attachments {
   right: 28px;
   left: 28px;
@@ -1007,7 +1008,6 @@
   padding-top: 7px;
 }
 
-.composer.has-goal-runtime .composer-attachment-error,
 .composer.has-create-runtime .composer-attachment-error {
   padding-right: 28px;
   padding-left: 28px;

@@ -7,7 +7,7 @@ import type { LearningVideo } from "./LearningVideoCard";
 
 export const OPENPOND_AGENT_OVERVIEW: LearningVideo = {
   captionsUrl: OPENPOND_AGENT_OVERVIEW_CAPTIONS_URL,
-  description: "See how Profile Agents combine chat, direct actions, shared runtime surfaces, and Checks.",
+  description: "See how Profile Agents combine chat, direct actions, shared runtime surfaces, and Evals.",
   duration: "1:16",
   eyebrow: "Agent overview",
   id: "openpond-agent-overview",

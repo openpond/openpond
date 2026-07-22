@@ -632,7 +632,7 @@ export function useChatActions({
                 cloudProjectId: selectedAgent.projectId,
                 cloudTeamId: selectedAgent.teamId,
                 cwd: null,
-                title: actionPromptForRun.slice(0, 64),
+                title: displayPromptForTurn.slice(0, 64),
               });
               setSessions((current) => [session!, ...current]);
               options.onSessionCreated?.(session);
@@ -684,7 +684,7 @@ export function useChatActions({
                 cloudProjectId: null,
                 cloudTeamId: null,
                 cwd: null,
-                title: actionPromptForRun.slice(0, 64),
+                title: displayPromptForTurn.slice(0, 64),
               });
             setSessions((current) => [session!, ...current]);
             options.onSessionCreated?.(session);
@@ -729,7 +729,7 @@ export function useChatActions({
               cloudProjectId: actionProjectTarget.id,
               cloudTeamId: actionProjectTarget.teamId,
               cwd: null,
-              title: actionPromptForRun.slice(0, 64),
+              title: displayPromptForTurn.slice(0, 64),
             });
           setSessions((current) => [session!, ...current]);
           options.onSessionCreated?.(session);

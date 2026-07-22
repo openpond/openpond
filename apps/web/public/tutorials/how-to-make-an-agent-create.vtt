@@ -1,41 +1,49 @@
 WEBVTT
 
 C01
-00:00:03.670 --> 00:00:09.319
+00:00:03.670 --> 00:00:09.855
 Open Lab, choose New agent, and start the guided creation flow.
 
 C02
-00:00:09.039 --> 00:00:18.125
+00:00:09.575 --> 00:00:17.817
 Choose From prompt to describe the Agent directly, or From chats to include examples of the work it should handle.
 
 C04
-00:00:17.845 --> 00:00:26.712
-For this Account Health Agent, state its purpose and select three chats that show the facts, risks, and answer format it should use.
+00:00:17.537 --> 00:00:27.159
+This synthetic example starts with three chats: Acme has renewal blockers, Northstar is expanding, and the team needs a weekly account review. Add them with the Agent purpose.
 
 C06
-00:00:26.432 --> 00:00:34.991
-The first button only opens this review. Nothing is shared until you approve the selected chats on this screen.
+00:00:26.879 --> 00:00:36.819
+Review the selected excerpts as examples. OpenPond turns their recurring goals, decisions, corrections, and answer patterns into the first Agent plan.
 
 C07
-00:00:34.711 --> 00:00:43.797
-Check the Agent's purpose, expected behavior, supporting chats, and the checks OpenPond will run before continuing to its plan.
+00:00:36.539 --> 00:00:46.658
+The draft converts those examples into the Agent's purpose, chat behavior, runnable actions, output formats, and Evals for your review.
 
 C08
-00:00:43.517 --> 00:00:49.434
+00:00:46.378 --> 00:00:52.652
 The right side panel asks how the Agent should prioritize conflicting account risks.
 
 C09
-00:00:49.154 --> 00:00:57.931
-Review the proposed name, chat behavior, direct actions, and outputs, then confirm or edit the plan.
+00:00:52.372 --> 00:01:00.753
+Before creation, review the proposed name, chat endpoint, runnable actions, Evals, and output formats.
+
+C09A
+00:01:00.473 --> 00:01:09.071
+If the plan misses a requirement, open Edit plan and describe the change in plain language before any Agent source is created.
+
+C09B
+00:01:08.791 --> 00:01:16.049
+Review the revised plan, then click Confirm plan to create the Agent and run its Evals.
 
 C10
-00:00:57.651 --> 00:01:08.167
-OpenPond checks the Agent against the Account Health examples, so saving it depends on verified behavior instead of a plausible-looking draft.
+00:01:15.769 --> 00:01:24.189
+This is the creation result: OpenPond built the Agent and passed its behavior Evals against the Account Health examples.
 
 C11
-00:01:07.887 --> 00:01:14.568
-After the checks pass, the Agent is saved to your Profile and is ready to use.
+00:01:23.909 --> 00:01:31.346
+After the Evals pass, the Agent is saved to your Profile and is ready to use.
 
 C12
-00:01:14.288 --> 00:01:20.791
+00:01:31.066 --> 00:01:37.658
 The Agent page shows its purpose, chat entrypoint, and runnable account actions.

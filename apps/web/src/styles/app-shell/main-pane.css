@@ -49,7 +49,7 @@
 }
 
 .main-pane.chat-start.diff-open .start-panel {
-  place-self: center;
+  place-self: stretch;
 }
 
 .main-pane.diff-expanded {
@@ -70,8 +70,8 @@
 }
 
 .main-pane.chat-start {
-  place-items: center;
-  padding: 42px;
+  place-items: stretch;
+  padding: 0;
 }
 
 .main-pane.chat-start.terminal-open {
@@ -83,7 +83,7 @@
 .main-pane.chat-start.terminal-open .start-panel {
   grid-column: 1;
   grid-row: 1;
-  place-self: center;
+  place-self: stretch;
 }
 
 .sync-local-button {

@@ -217,7 +217,7 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
 function scriptedAccountHealthResponse(prompt: string, context: string): string | null {
   if (!/account health|acme|northstar|glacier|renewal|billing|p1|weekly review|correction/i.test(context)) return null;
   if (/correction|billing and p1/i.test(prompt)) {
-    return "For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline, while citing each supporting source.";
+    return "Billing/P1 priority comes first. For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline. Sources: billing-status.json, support-cases.json.";
   }
   if (/acme/i.test(prompt) || (/what should|who owns|do first/i.test(prompt) && /acme/i.test(context))) {
     return "Acme is high risk. Renewal is in 21 days; active seats are down 31%; a disputed invoice is 19 days overdue; and a P1 support case is open. Resolve the billing dispute and P1 first. Owner: Revenue Operations with Support.";

@@ -46,7 +46,7 @@ export const ACCOUNT_CORRECTION_CHAT = {
   prompt:
     "Correction: for high-risk accounts, lead the response with 'Billing/P1 priority comes first' before the account summary, with source citations.",
   expected:
-    "For high-risk accounts, begin chat and triage results with 'Billing/P1 priority comes first,' then give the account facts and supporting source citations.",
+    "Billing/P1 priority comes first. For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline. Sources: billing-status.json, support-cases.json.",
 } as const;
 
 export async function createAccountEvidenceChat(
@@ -57,9 +57,7 @@ export async function createAccountEvidenceChat(
     providerId: "openpond" as const,
     modelId: "openpond-scripted-chat-two-turns",
   };
-  const session = await harness.api.createSession<{
-    id: string;
-  }>({
+  const session = await harness.api.createSession<{ id: string }>({
     provider: "openpond",
     modelRef,
     title: fixture.title,
@@ -248,12 +246,12 @@ async function seedPreparedAgentTemplates(input: {
     improvedRuntime.replace(
       promptMarker,
       `${promptMarker}
-  if (/^Correction:\\s*for high-risk accounts,/i.test(prompt)) {
+  if (/^Correction:/i.test(prompt)) {
     ctx.trace.event("account-health.priority-policy-corrected", {
       priority: "billing-and-p1-before-adoption",
     });
     return {
-      text: "For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline, while citing each supporting source.",
+      text: "Billing/P1 priority comes first. For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline. Sources: billing-status.json, support-cases.json.",
       intent: "account-health-chat",
       metadata: {
         approvedObjective: approvedSourceContext.objective,
@@ -283,6 +281,7 @@ async function seedPreparedAgentTemplates(input: {
         t.expectTextIncludes("Billing/P1 priority comes first");
         t.expectTextIncludes("billing-status.json");
         t.expectTextIncludes("support-cases.json");
+        t.expectTraceEvent("account-health.priority-policy-corrected");
       },
     }),
 `;
