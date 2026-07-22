@@ -48,7 +48,6 @@ export type SettingsSection =
   | "notifications"
   | "profile"
   | "skills"
-  | "wallet"
   | "defaults"
   | "goals"
   | "context"

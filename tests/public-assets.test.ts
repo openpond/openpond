@@ -5,7 +5,6 @@ import {
   OPENPOND_ICON_URL,
   OPENPOND_WORDMARK_WHITE_URL,
   publicAssetUrl,
-  TOKEN_ICON_URLS,
 } from "../apps/web/src/lib/public-assets";
 import {
   MAKE_AGENT_TUTORIAL_VIDEO_URL,
@@ -24,7 +23,6 @@ describe("web public asset URLs", () => {
       OPENPOND_AGENT_OVERVIEW_VIDEO_URL,
       MAKE_AGENT_TUTORIAL_VIDEO_URL,
       connectedAppIconUrl("github"),
-      TOKEN_ICON_URLS.ETH,
     ];
 
     for (const assetUrl of assetUrls) {

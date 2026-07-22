@@ -29,9 +29,10 @@ describe("SettingsNavigation", () => {
       }),
     );
 
-    expect(markup.indexOf("Wallet")).toBeLessThan(markup.indexOf("Activity"));
+    expect(markup.indexOf("Dataset Storage")).toBeLessThan(markup.indexOf("Activity"));
     expect(markup.indexOf("Activity")).toBeLessThan(markup.indexOf("Defaults"));
     expect(markup.indexOf("Activity")).toBeLessThan(markup.indexOf("Harness"));
+    expect(markup).not.toContain("Wallet");
   });
 
   test("shows providers in the top settings group", () => {
@@ -44,7 +45,7 @@ describe("SettingsNavigation", () => {
     );
 
     expect(markup.indexOf("Notifications")).toBeLessThan(markup.indexOf("Providers"));
-    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Wallet"));
+    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Activity"));
     expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Harness"));
   });
 
@@ -78,7 +79,7 @@ describe("SettingsNavigation", () => {
       markup.indexOf("Dataset Storage"),
     );
     expect(markup.indexOf("Dataset Storage")).toBeLessThan(
-      markup.indexOf("Wallet"),
+      markup.indexOf("Activity"),
     );
     expect(markup).toContain('class="settings-nav-item active"');
   });

@@ -550,7 +550,7 @@ describe("contracts", () => {
     assert.equal(message.createImproveRun.command, "/create");
   });
 
-  test("bootstrap contract requires account balance placeholder", () => {
+  test("bootstrap contract accepts a signed-out account", () => {
     const now = new Date().toISOString();
     const payload = BootstrapPayloadSchema.parse({
       server: {
@@ -571,7 +571,6 @@ describe("contracts", () => {
         environment: null,
         baseUrl: null,
         apiBaseUrl: "https://api.openpond.ai",
-        balanceLabel: "$0.00",
         creditsLabel: null,
         profile: null,
         products: [],
@@ -607,7 +606,7 @@ describe("contracts", () => {
       placeholders: createPlaceholderPanes(),
       diagnostics: [],
     });
-    assert.equal(payload.account.balanceLabel, "$0.00");
+    assert.equal(payload.account.state, "signed_out");
     assert.equal(payload.preferences.defaultChatProvider, "openpond");
     assert.equal(payload.preferences.defaultChatModel, "openpond-chat");
     assert.equal(payload.preferences.codexReasoningEffort, "high");

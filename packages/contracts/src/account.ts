@@ -40,8 +40,6 @@ export const AccountProfileSchema = z.object({
   dailyAgentAppId: z.string().nullable(),
   dailyAgentDeploymentId: z.string().nullable(),
   credits: z.string().nullable(),
-  turnkeyWalletAddress: z.string().nullable(),
-  turnkeyOperatingWalletAddress: z.string().nullable(),
 });
 
 export type AccountProfile = z.infer<typeof AccountProfileSchema>;
@@ -53,32 +51,6 @@ export const ActiveProfileSelectorSchema = z.object({
 
 export type ActiveProfileSelector = z.infer<typeof ActiveProfileSelectorSchema>;
 
-export const AccountBalanceSchema = z
-  .object({
-    balanceKind: z.string(),
-    balanceUsd: z.string().nullable(),
-    balanceUsdCents: z.number().nullable(),
-    currency: z.string(),
-    asOf: z.string(),
-    stale: z.boolean(),
-    error: z.string().nullable(),
-    breakdown: z.array(
-      z
-        .object({
-          wallet: z.string(),
-          chain: z.string(),
-          chainId: z.number().nullable(),
-          asset: z.string(),
-          amount: z.string().nullable(),
-          usdValue: z.string().nullable(),
-        })
-        .passthrough()
-    ),
-  })
-  .passthrough();
-
-export type AccountBalance = z.infer<typeof AccountBalanceSchema>;
-
 export const AccountStateSchema = z.object({
   state: z.enum(["signed_out", "signed_in", "loading", "switching", "auth_error"]),
   activeProfile: ActiveProfileSelectorSchema.nullable(),
@@ -89,8 +61,6 @@ export const AccountStateSchema = z.object({
   baseUrl: z.string().nullable(),
   apiBaseUrl: z.string().nullable(),
   chatApiBaseUrl: z.string().nullable().optional().default(null),
-  balanceLabel: z.string(),
-  balance: AccountBalanceSchema.nullable().optional().default(null),
   creditsLabel: z.string().nullable(),
   profile: AccountProfileSchema.nullable(),
   products: z.array(AccountProductSchema),

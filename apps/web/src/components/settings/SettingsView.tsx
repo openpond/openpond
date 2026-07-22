@@ -5,7 +5,6 @@ import "../../styles/settings/settings-lists.css";
 import "../../styles/settings/remote-access.css";
 import "../../styles/settings/compute-settings.css";
 import "../../styles/settings/notifications-settings.css";
-import "../../styles/wallet/wallet.css";
 import type {
   BootstrapPayload,
   OpenPondExtension,
@@ -37,7 +36,6 @@ import { SkillsSettingsSection } from "./SkillsSettingsSection";
 import { TrainingSettingsSection } from "./TrainingSettingsSection";
 import { ComputeSettingsSection } from "./ComputeSettingsSection";
 import { DatasetStorageSettingsSection } from "./DatasetStorageSettingsSection";
-import { WalletView } from "../wallet/WalletView";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
 import { useDiagnosticsSettings } from "./useDiagnosticsSettings";
@@ -239,8 +237,6 @@ export function SettingsView({
             onModeChange={onTeamChatNotificationModeChange}
             onThreadMuteChange={onTeamChatThreadMuteChange}
           />
-        ) : section === "wallet" ? (
-          <WalletView payload={payload} />
         ) : section === "profile" ? (
           <ProfileSettingsSection
             payload={payload}

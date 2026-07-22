@@ -1,11 +1,10 @@
 import type {
   ConfiguredProfile,
-  OpenPondAccountBalanceResponse,
   OpenPondAccountProduct,
   OpenPondAccountResponse,
   OpenPondApiHealth,
 } from "@openpond/cloud";
-import type { AccountApiHealth, AccountBalance, AccountProduct, AccountProfile, AccountState } from "@openpond/contracts";
+import type { AccountApiHealth, AccountProduct, AccountProfile, AccountState } from "@openpond/contracts";
 import type { RuntimeLocalAccount, RuntimeLocalConfig } from "./types.js";
 import {
   normalizeActiveProfile,
@@ -51,8 +50,6 @@ function normalizeProfile(response: OpenPondAccountResponse | null): AccountProf
     dailyAgentAppId: account.dailyAgentAppId ?? null,
     dailyAgentDeploymentId: account.dailyAgentDeploymentId ?? null,
     credits: account.credits ?? null,
-    turnkeyWalletAddress: account.turnkeyWalletAddress ?? null,
-    turnkeyOperatingWalletAddress: account.turnkeyOperatingWalletAddress ?? null,
   };
 }
 
@@ -68,30 +65,6 @@ function normalizeProducts(products: OpenPondAccountProduct[] | undefined): Acco
     currency: product.currency ?? null,
     credits: product.credits ?? null,
   }));
-}
-
-function normalizeBalance(
-  response: OpenPondAccountBalanceResponse | null | undefined,
-  error?: string | null
-): AccountBalance | null {
-  if (!response) return null;
-  return {
-    balanceKind: response.balanceKind,
-    balanceUsd: response.balanceUsd ?? null,
-    balanceUsdCents: response.balanceUsdCents ?? null,
-    currency: response.currency,
-    asOf: response.asOf,
-    stale: response.stale ?? Boolean(error),
-    error: error ?? null,
-    breakdown: (response.breakdown ?? []).map((item: OpenPondAccountBalanceResponse["breakdown"][number]) => ({
-      wallet: item.wallet,
-      chain: item.chain,
-      chainId: item.chainId ?? null,
-      asset: item.asset,
-      amount: item.amount ?? null,
-      usdValue: item.usdValue ?? null,
-    })),
-  };
 }
 
 function isEmptyDefaultProfile(profile: ConfiguredProfile): boolean {
@@ -110,12 +83,10 @@ export function toAccountState(input: {
   token: string | null;
   apiBaseUrl: string;
   accountResponse?: OpenPondAccountResponse | null;
-  balanceResponse?: OpenPondAccountBalanceResponse | null;
   accountProfiles?: Record<string, { response?: OpenPondAccountResponse | null; authFailed?: boolean }>;
   health?: OpenPondApiHealth | null;
   authFailed?: boolean;
   error?: string | null;
-  balanceError?: string | null;
 }): AccountState {
   const {
     config,
@@ -124,16 +95,13 @@ export function toAccountState(input: {
     token,
     apiBaseUrl,
     accountResponse,
-    balanceResponse,
     accountProfiles,
     health,
     authFailed,
     error,
-    balanceError,
   } = input;
   const chatApiBaseUrl = resolveHostedChatApiBaseUrl(account, config, apiBaseUrl);
   const profile = normalizeProfile(accountResponse ?? null);
-  const balance = normalizeBalance(balanceResponse, balanceError);
   const configActiveProfile = normalizeActiveProfile(config.activeProfile);
   const accountSelector = account ? selectorFromAccount(account) : null;
   const activeSelector = accountSelector ?? configActiveProfile;
@@ -180,8 +148,6 @@ export function toAccountState(input: {
     baseUrl,
     apiBaseUrl,
     chatApiBaseUrl,
-    balanceLabel: balanceResponse?.balanceLabel ?? "$0.00",
-    balance,
     creditsLabel: profile?.credits ?? null,
     profile,
     products: normalizeProducts(accountResponse?.products),

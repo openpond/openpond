@@ -18,7 +18,6 @@ import {
   getDeploymentStatus,
   getLatestDeploymentForApp,
   getOpenPondAccount,
-  getOpenPondAccountBalance,
   getOpenToolRecipe,
   getOpenToolRules,
   getTemplateStatus,
@@ -37,7 +36,6 @@ import {
   startAppSchedules,
   stopAppSchedules,
   stopCurrentAppSchedules,
-  submitPositionsTx,
   type AgentCreateRequest,
   type AppListItem,
   type DeploymentDetail,
@@ -74,7 +72,6 @@ export type {
   DeploymentDetail,
   DeploymentLogEntry,
   OpenPondAccount,
-  OpenPondAccountBalanceResponse,
   OpenPondAccountProduct,
   OpenPondAccountResponse,
   OpenPondApiHealth,
@@ -189,7 +186,6 @@ export {
   getDeploymentStatus,
   getLatestDeploymentForApp,
   getOpenPondAccount,
-  getOpenPondAccountBalance,
   getOpenToolRecipe,
   getOpenToolRules,
   getTemplateStatus,
@@ -211,7 +207,6 @@ export {
   startAppSchedules,
   stopAppSchedules,
   stopCurrentAppSchedules,
-  submitPositionsTx,
 } from "./api.js";
 export {
   DEFAULT_OPENPOND_API_BASE_URL,
@@ -303,7 +298,6 @@ export type {
   AppDeployOptions,
   AppPromotePreviewOptions,
   AppStartOptions,
-  PositionsTxOptions,
 } from "./client-types.js";
 import type {
   OpenPondClientOptions,
@@ -588,7 +582,6 @@ export function createClient(options: OpenPondClientOptions): OpenPondClient {
     apiKey,
     account: {
       get: async () => getOpenPondAccount(apiUrl, apiKey),
-      balance: async () => getOpenPondAccountBalance(apiUrl, apiKey),
       health: async () => checkOpenPondApiHealth(apiUrl, apiKey),
     },
     chat: {
@@ -872,26 +865,6 @@ export function createClient(options: OpenPondClientOptions): OpenPondClient {
       envSet: async (input) => {
         return updateAppEnvironment(apiUrl, apiKey, input.appId, {
           envVars: input.envVars,
-        });
-      },
-      positionsTx: async (input) => {
-        const method = input?.method ?? "POST";
-        if (method !== "GET" && method !== "POST") {
-          throw new Error("method must be GET or POST");
-        }
-        let query = input?.query;
-        if (!query && input?.params) {
-          query = {};
-          for (const [key, value] of Object.entries(input.params)) {
-            if (value === undefined) continue;
-            query[key] =
-              typeof value === "string" ? value : JSON.stringify(value);
-          }
-        }
-        return submitPositionsTx(apiUrl, apiKey, {
-          method,
-          body: method === "POST" ? input?.body : undefined,
-          query,
         });
       },
     },

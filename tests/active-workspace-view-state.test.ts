@@ -13,8 +13,6 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
     baseUrl: "https://staging.openpond.ai",
     apiBaseUrl: "https://staging.openpond.ai/api",
     chatApiBaseUrl: "https://staging.openpond.ai/api",
-    balanceLabel: "$0.00",
-    balance: null,
     creditsLabel: null,
     profile: null,
     products: [],
@@ -45,8 +43,6 @@ describe("accountWelcomeIdentity", () => {
         dailyAgentAppId: null,
         dailyAgentDeploymentId: null,
         credits: null,
-        turnkeyWalletAddress: null,
-        turnkeyOperatingWalletAddress: null,
       },
     }))).toBe("Sam Cesario");
   });

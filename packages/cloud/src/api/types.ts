@@ -203,28 +203,6 @@ export type AppRuntimeSummary = {
       error: string | null;
     } | null;
   };
-  wallet: {
-    personalWalletAddress: string | null;
-    operatingWalletAddress: string | null;
-    arbitrum: {
-      eth: { raw: string; formatted: string } | null;
-      usdc: { raw: string; formatted: string } | null;
-    };
-    hyperliquid: {
-      mainnet: {
-        accountValue: number | null;
-        withdrawable: number | null;
-        totalMarginUsed: number | null;
-        error?: string;
-      };
-      testnet: {
-        accountValue: number | null;
-        withdrawable: number | null;
-        totalMarginUsed: number | null;
-        error?: string;
-      };
-    };
-  };
   asOf: string;
 };
 
@@ -531,7 +509,6 @@ export type OpenPondAccountProduct = {
   duration: number | null;
   restrictedModels: string[] | null;
   gatewayEntitlements: unknown | null;
-  duckHoldings: number | null;
   isActive: boolean | null;
 };
 
@@ -542,8 +519,6 @@ export type OpenPondAccount = {
   handle: string | null;
   image: string | null;
   timezone: string | null;
-  turnkeyWalletAddress: string | null;
-  turnkeyOperatingWalletAddress: string | null;
   isAdmin: boolean;
   isVerified: boolean;
   dailyAgentAppId: string | null;
@@ -555,27 +530,6 @@ export type OpenPondAccountResponse = {
   account: OpenPondAccount;
   products: OpenPondAccountProduct[];
   asOf: string;
-};
-
-export type OpenPondAccountBalanceBreakdownItem = {
-  wallet: "operating" | "personal" | string;
-  chain: string;
-  chainId: number | null;
-  asset: string;
-  amount: string | null;
-  usdValue: string | null;
-};
-
-export type OpenPondAccountBalanceResponse = {
-  balanceKind: "openpond_funding" | string;
-  balanceUsd: string | null;
-  balanceUsdCents: number | null;
-  balanceLabel: string;
-  currency: "USD" | string;
-  asOf: string;
-  stale?: boolean;
-  credits?: string | null;
-  breakdown: OpenPondAccountBalanceBreakdownItem[];
 };
 
 export type OpenPondApiHealthResponse = {

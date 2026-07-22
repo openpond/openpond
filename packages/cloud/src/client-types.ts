@@ -12,7 +12,6 @@ import type {
   CreateRepoRequest,
   CreateRepoResponse,
   DeploymentLogEntry,
-  OpenPondAccountBalanceResponse,
   OpenPondAccountResponse,
   OpenPondApiHealth,
   OpenToolRecipe,
@@ -90,7 +89,6 @@ export type OpenPondClient = {
   apiKey: string;
   account: {
     get: () => Promise<OpenPondAccountResponse>;
-    balance: () => Promise<OpenPondAccountBalanceResponse>;
     health: () => Promise<OpenPondApiHealth>;
   };
   chat: {
@@ -212,7 +210,6 @@ export type OpenPondClient = {
     envSet: (
       input: AppEnvironmentSetOptions
     ) => Promise<AppEnvironmentUpdateResponse>;
-    positionsTx: (input?: PositionsTxOptions) => Promise<unknown>;
   };
   repo: {
     create: (
@@ -353,10 +350,3 @@ export type AppPromotePreviewOptions = {
 export type AppStartOptions = {
   appId: string;
 } & StartAppLifecycleRequest;
-
-export type PositionsTxOptions = {
-  method?: "GET" | "POST";
-  body?: unknown;
-  params?: Record<string, unknown>;
-  query?: Record<string, string>;
-};
