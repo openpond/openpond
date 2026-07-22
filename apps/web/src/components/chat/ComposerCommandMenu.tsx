@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import type { OpenPondApp, TeamChatMember } from "@openpond/contracts";
 import {
   AtSign,
+  BookOpenText,
   Bot,
   Check,
   Paperclip,
@@ -46,6 +47,8 @@ export type ComposerCommandMenuSection = {
   id: string;
   items: ComposerCommandMenuItem[];
   label: string;
+  grid?: boolean;
+  queryScope?: "mentions" | "slash";
 };
 
 function isAgentAction(action: SandboxActionCatalogEntry): boolean {
@@ -132,7 +135,9 @@ export function filterComposerCommandMenuSections(
   const query = rawQuery.trimStart();
   const scope = query.startsWith("/") ? "slash" : query.startsWith("@") ? "mentions" : null;
   const searchQuery = scope ? query.slice(1).trimStart() : query;
-  const scopedSections = scope ? sections.filter((section) => section.id === scope) : sections;
+  const scopedSections = scope
+    ? sections.filter((section) => section.id === scope || section.queryScope === scope)
+    : sections;
   if (!searchQuery) return scopedSections;
 
   const matches = scopedSections
@@ -160,7 +165,9 @@ function menuItemIcon(item: ComposerCommandMenuItem) {
   if (item.kind === "slash") {
     const slashItem = item.item;
     if (slashItem.kind === "command") {
-      return slashItem.command.id === "create" ? <Plus size={14} /> : <Workflow size={14} />;
+      if (slashItem.command.id === "create") return <Plus size={14} />;
+      if (slashItem.command.id === "skill") return <BookOpenText size={14} />;
+      return <Workflow size={14} />;
     }
     if (slashItem.kind === "app-context") return <AtSign size={14} />;
     return isAgentAction(slashItem.action) ? <Bot size={14} /> : <Workflow size={14} />;
@@ -238,7 +245,7 @@ export function ComposerCommandMenu({
         itemOffset += section.items.length;
         return (
           <div
-            className="composer-command-section"
+            className={`composer-command-section ${section.grid ? "composer-command-section-grid" : ""}`.trim()}
             key={section.id}
             role="group"
             aria-label={section.label}

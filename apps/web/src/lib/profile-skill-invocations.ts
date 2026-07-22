@@ -1,4 +1,10 @@
-import type { OpenPondProfileSkill } from "@openpond/contracts";
+export type ComposerInvocableSkill = {
+  name: string;
+  description: string;
+  path: string;
+  enabled: boolean;
+  validationStatus: "valid" | "warning" | "error";
+};
 
 export type ActiveProfileSkillInvocationContext = {
   end: number;
@@ -22,14 +28,14 @@ export function activeProfileSkillInvocationContext(
   };
 }
 
-export function profileSkillInvocationText(skill: Pick<OpenPondProfileSkill, "name">): string {
+export function profileSkillInvocationText(skill: Pick<ComposerInvocableSkill, "name">): string {
   return `$${skill.name}`;
 }
 
 export function replaceActiveProfileSkillInvocation(
   input: string,
   context: ActiveProfileSkillInvocationContext,
-  skill: Pick<OpenPondProfileSkill, "name">,
+  skill: Pick<ComposerInvocableSkill, "name">,
 ): { cursor: number; value: string } {
   const start = Math.max(0, Math.min(context.start, input.length));
   const end = Math.max(start, Math.min(context.end, input.length));
@@ -46,10 +52,10 @@ export function replaceActiveProfileSkillInvocation(
 }
 
 export function profileSkillInvocationMatchesForQuery(
-  skills: OpenPondProfileSkill[],
+  skills: ComposerInvocableSkill[],
   query: string,
   limit?: number,
-): OpenPondProfileSkill[] {
+): ComposerInvocableSkill[] {
   const needle = query.trim().toLowerCase();
   const matches = skills
     .filter((skill) => skill.enabled && skill.validationStatus === "valid")

@@ -32,6 +32,44 @@ describe("server HTTP route table", () => {
         name: "profileCurrentPayload",
       });
       await expect(
+        expectJsonRequest(origin, "GET", "/v1/extensions", 200)
+      ).resolves.toMatchObject({
+        name: "extensionCatalogPayload",
+      });
+      await expect(
+        expectJsonRequest(
+          origin,
+          "GET",
+          "/v1/skills/extension/duckailabs%2Fducky-capital-skills/source?path=README.md",
+          200
+        )
+      ).resolves.toMatchObject({
+        name: "skillSourceFilePayload",
+        args: ["extension", "duckailabs/ducky-capital-skills", "README.md"],
+      });
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/extensions", 201, {
+          source: "owner/repo",
+        })
+      ).resolves.toMatchObject({
+        name: "extensionAddPayload",
+        args: [{ source: "owner/repo" }],
+      });
+      await expect(
+        expectJsonRequest(origin, "POST", "/v1/extensions/github/owner/repo/update", 200, {
+          ref: "v2",
+        })
+      ).resolves.toMatchObject({
+        name: "extensionUpdatePayload",
+        args: [{ source: "owner/repo", ref: "v2" }],
+      });
+      await expect(
+        expectJsonRequest(origin, "DELETE", "/v1/extensions/github/owner/repo", 200)
+      ).resolves.toMatchObject({
+        name: "extensionRemovePayload",
+        args: ["owner/repo"],
+      });
+      await expect(
         expectJsonRequest(
           origin,
           "PATCH",
@@ -231,6 +269,11 @@ describe("server HTTP route table", () => {
 
       expect(calls.map((call) => call.name)).toEqual([
         "profileCurrentPayload",
+        "extensionCatalogPayload",
+        "skillSourceFilePayload",
+        "extensionAddPayload",
+        "extensionUpdatePayload",
+        "extensionRemovePayload",
         "profileRenameAgentPayload",
         "organizationPayload",
         "sandboxPayload",

@@ -3,6 +3,7 @@ import type {
   BootstrapPayload,
   ChatAttachment,
   ChatProvider,
+  CodexPersonalSkill,
   CodexPermissionMode,
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
@@ -41,6 +42,7 @@ export function RightChatPane({
   connection,
   connectedAppMentions,
   mentionApps,
+  codexPersonalSkills,
   profileSkills,
   projectTarget,
   providerSettings,
@@ -77,6 +79,7 @@ export function RightChatPane({
   connection: ClientConnection | null;
   connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
+  codexPersonalSkills: CodexPersonalSkill[];
   profileSkills: OpenPondProfileSkill[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
@@ -213,7 +216,7 @@ export function RightChatPane({
           prompt={panel.prompt}
           mentionApps={mentionApps}
           connectedAppMentions={connectedAppMentions}
-          profileSkills={profileSkills}
+          profileSkills={panel.provider === "codex" ? codexPersonalSkills : profileSkills}
           selectedMentionAppId={null}
           contextWindowStatus={panel.contextWindowStatus}
           goalRuntime={panel.goalRuntime}

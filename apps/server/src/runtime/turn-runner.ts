@@ -112,6 +112,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     finalizeCrossSystemTurn,
     loadOpenPondProfileState,
     readOpenPondProfileSkill,
+    loadOpenPondExtensionCatalog,
+    readOpenPondExtensionSkill,
     executeProfileSkillCommand,
     executeProfileSkillGoal,
     executeWebSearch,
@@ -316,6 +318,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = createProfileSkillCatalogRuntime({
     loadProfileState: loadOpenPondProfileState,
     readProfileSkill: readOpenPondProfileSkill,
+    loadExtensionCatalog: loadOpenPondExtensionCatalog,
+    readExtensionSkill: readOpenPondExtensionSkill,
     appendRuntimeEvent,
     nativeToolsEnabledForProvider,
     hostedToolFlags,
@@ -677,7 +681,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.cwd ??
       (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: false })) ??
       session.cwd ??
-      defaultSessionCwd(session.appId);
+      (session.appId || activeProvider === "codex" ? defaultSessionCwd(session.appId) : null);
     session = await updateSession(sessionId, {
       provider: activeProvider,
       modelRef: turnModelRef,

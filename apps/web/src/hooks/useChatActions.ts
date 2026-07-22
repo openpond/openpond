@@ -122,7 +122,6 @@ type UseChatActionsInput = {
   onCodexHistoryTurnActivityChange?: (sessionId: string, active: boolean) => void;
   onCodexHistoryTurnPayload?: (payload: CodexHistoryTurnPayload) => void;
   onPendingUserMessage?: (message: PendingChatUserMessage) => void;
-  onClearPendingUserMessage?: (sessionId: string, messageId: string) => void;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
@@ -301,7 +300,6 @@ export function useChatActions({
   onCodexHistoryTurnActivityChange,
   onCodexHistoryTurnPayload,
   onPendingUserMessage,
-  onClearPendingUserMessage,
   setEvents,
   setSelectedAppId,
   setSelectedProjectId,
@@ -772,9 +770,16 @@ export function useChatActions({
       }
       let session = selectedSessionForTurn;
       if (session && isCodexHistorySessionId(session.id)) {
+        pendingUserMessage = createPendingUserChatMessage({
+          afterMessageId: turnChatMessages.at(-1)?.id ?? null,
+          attachments,
+          content: value,
+          sessionId: session.id,
+        });
         clearPromptForTurn();
         turnSessionId = session.id;
         activeTurnSessionIdsRef.current.add(turnSessionId);
+        onPendingUserMessage?.(pendingUserMessage);
         onCodexHistoryTurnActivityChange?.(turnSessionId, true);
         const optimisticStartedEvent = optimisticCodexHistoryTurnStartedEvent(session.id, value);
         const applyOptimisticEvent = (event: RuntimeEvent) => {
@@ -810,6 +815,8 @@ export function useChatActions({
           upsertSessionPreservingLocalSidebarState(current, payload.session),
         );
         onCodexHistoryTurnPayload?.(payload);
+        const refreshedBootstrap = await api.bootstrap(connection);
+        applyBootstrapPayload(refreshedBootstrap);
         return true;
       }
       const selectedMentionedSandboxApp = mentionedAppIdForTurn
@@ -982,9 +989,6 @@ export function useChatActions({
       }
       return true;
     } catch (sendError) {
-      if (pendingUserMessage) {
-        onClearPendingUserMessage?.(pendingUserMessage.sessionId, pendingUserMessage.id);
-      }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
       return false;
     } finally {

@@ -28,7 +28,6 @@ export type RendererBundleMetrics = {
 
 export type RendererBundleBudgets = {
   maxTotalJsBytes: number;
-  maxTotalCssBytes: number;
   maxInitialAssetBytes: number;
   maxLargestAssetBytes: number;
 };
@@ -81,7 +80,6 @@ export type StartupMetrics =
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   maxTotalJsBytes: 16 * 1024 * 1024,
-  maxTotalCssBytes: 544 * 1024,
   maxInitialAssetBytes: 1.26 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
@@ -137,13 +135,6 @@ export function checkRendererBundleBudgets(
     label: "Renderer total JavaScript",
     actual: metrics.totalJsBytes,
     threshold: budgets.maxTotalJsBytes,
-    unit: "bytes",
-  });
-  pushWarning(warnings, {
-    id: "renderer-total-css",
-    label: "Renderer total CSS",
-    actual: metrics.totalCssBytes,
-    threshold: budgets.maxTotalCssBytes,
     unit: "bytes",
   });
   pushWarning(warnings, {

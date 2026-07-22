@@ -27,6 +27,7 @@ export const OpenPondProfileSkillSchema = z.object({
   sourceHash: z.string(),
   validationStatus: z.enum(["valid", "warning", "error"]),
   validationMessages: z.array(z.string()),
+  resourceFiles: z.array(z.string()).optional().default([]),
 });
 
 export const OpenPondProfileEvalSchema = z.object({

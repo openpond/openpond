@@ -63,6 +63,7 @@ export function sidebarProjectIdForSession(
   ) {
     return null;
   }
+  if (!shouldInferLocalProjectFromCwd(session)) return null;
 
   const cwd = normalizeSidebarPath(session.cwd);
   if (!cwd) return null;
@@ -107,6 +108,7 @@ export function sidebarProjectKeyForSession(
   ) {
     return null;
   }
+  if (!shouldInferLocalProjectFromCwd(session)) return null;
 
   const cwd = normalizeSidebarPath(session.cwd);
   if (!cwd) return null;
@@ -130,6 +132,12 @@ function localProjectIdForSidebarPath(
   }
 
   return null;
+}
+
+function shouldInferLocalProjectFromCwd(session: Session): boolean {
+  return session.workspaceKind === "local_project" ||
+    session.provider === "codex" ||
+    isCodexHistorySessionId(session.id);
 }
 
 export function isSidebarCloudWorkSession(

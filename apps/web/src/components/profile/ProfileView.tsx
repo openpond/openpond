@@ -1,4 +1,4 @@
-import type { BootstrapPayload } from "@openpond/contracts";
+import type { BootstrapPayload, ChatProvider } from "@openpond/contracts";
 import type { ReactNode } from "react";
 import type { ClientConnection } from "../../api";
 import "../../styles/settings/settings-layout.css";
@@ -15,7 +15,7 @@ export type ProfileViewProps = {
   onPayload: (payload: BootstrapPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
-  onSkillCommand?: (command: string) => void;
+  onSkillCommand?: (command: string, provider?: ChatProvider) => void;
   overviewContent?: ReactNode;
 };
 

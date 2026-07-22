@@ -10,6 +10,7 @@ import type {
   BootstrapPayload,
   ChatAttachment,
   ChatProvider,
+  CodexPersonalSkill,
   CodexPermissionMode,
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
@@ -43,6 +44,7 @@ export function RightChatPanelStack({
   connection,
   connectedAppMentions,
   mentionApps,
+  codexPersonalSkills,
   profileSkills,
   projectTarget,
   providerSettings,
@@ -83,6 +85,7 @@ export function RightChatPanelStack({
   connection: ClientConnection | null;
   connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
+  codexPersonalSkills: CodexPersonalSkill[];
   profileSkills: OpenPondProfileSkill[];
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
@@ -339,6 +342,7 @@ export function RightChatPanelStack({
             connectedAppMentions={connectedAppMentions}
             key={activePanel.id}
             mentionApps={mentionApps}
+            codexPersonalSkills={codexPersonalSkills}
             profileSkills={profileSkills}
             panel={activePanel}
             initialScrollState={{

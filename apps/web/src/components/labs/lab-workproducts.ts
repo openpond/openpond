@@ -28,6 +28,12 @@ export type LabWorkproductSummary = {
   trainingRunCount: number;
   evaluationStatus: "not_run" | "passed" | "failed";
   useActionId: string | null;
+  skillSource?: "profile" | "codex";
+  skillValidationStatus?: "valid" | "warning" | "error";
+  skillValidationMessages?: string[];
+  skillSourceHash?: string;
+  skillCharCount?: number;
+  skillResourceFiles?: string[];
 };
 
 const COMPLETED_RUN_STATES = new Set<CreateImproveRun["state"]>([
@@ -101,6 +107,12 @@ export function labWorkproductProjection(input: {
       trainingRunCount: 0,
       evaluationStatus: "not_run",
       useActionId: null,
+      skillSource: "profile",
+      skillValidationStatus: skill.validationStatus,
+      skillValidationMessages: skill.validationMessages,
+      skillSourceHash: skill.sourceHash,
+      skillCharCount: skill.charCount,
+      skillResourceFiles: skill.resourceFiles,
     });
   }
 

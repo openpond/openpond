@@ -22,6 +22,9 @@ export const MakeAgentTutorialLearningPanel = lazy(() =>
 export const LabsRoute = lazy(() =>
   import("../labs/LabsRoute").then((module) => ({ default: module.LabsRoute })),
 );
+export const LabSkillSidebar = lazy(() =>
+  import("../labs/LabSkillSidebar").then((module) => ({ default: module.LabSkillSidebar })),
+);
 export const BrowserSidebar = lazy(() =>
   import("../browser/BrowserSidebar").then((module) => ({ default: module.BrowserSidebar })),
 );

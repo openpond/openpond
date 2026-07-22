@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld("openpond", {
       return () => ipcRenderer.removeListener("openpond:browser:reveal", listener);
     },
   },
+  files: {
+    reveal: (payload: unknown) => ipcRenderer.invoke("openpond:file:reveal", payload),
+  },
   retryStartup: () => ipcRenderer.invoke("openpond:startup:retry"),
   openLogsFolder: () => ipcRenderer.invoke("openpond:logs:open"),
   readRecentLogs: (lineLimit?: number) => ipcRenderer.invoke("openpond:logs:readRecent", { lineLimit }),

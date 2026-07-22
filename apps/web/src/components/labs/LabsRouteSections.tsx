@@ -115,7 +115,7 @@ export function WorkproductsTable({
   onSelect: (key: string) => void;
   onUseAgent: (actionId: string, agentName: string) => void;
   onUseModel: (tasksetId: string) => void;
-  onUseSkill: (skillName: string) => void;
+  onUseSkill: (skill: LabWorkproductSummary) => void;
 }) {
   if (loading)
     return (
@@ -206,7 +206,7 @@ export function WorkproductsTable({
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          onUseSkill(item.name);
+                          onUseSkill(item);
                         }}
                       >
                         Use

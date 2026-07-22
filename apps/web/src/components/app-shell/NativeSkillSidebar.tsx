@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { ConnectedAppIntegrationSkill } from "@openpond/contracts";
 import { FileText, Maximize2, Minimize2, X } from "../icons";
+import type { SkillSourceDocument } from "./skill-source-document";
 import "../../styles/app-shell/native-skill-sidebar.css";
 
 export function NativeSkillSidebar({
@@ -11,7 +11,7 @@ export function NativeSkillSidebar({
   onToggleExpanded,
 }: {
   expanded: boolean;
-  skill: ConnectedAppIntegrationSkill;
+  skill: SkillSourceDocument;
   onClose: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
@@ -21,7 +21,7 @@ export function NativeSkillSidebar({
   return (
     <aside
       className={`workspace-diff-panel native-skill-sidebar ${expanded ? "expanded" : ""}`}
-      aria-label={`Native skill source: ${skill.name}`}
+      aria-label={`Skill source: ${skill.name}`}
     >
       {!expanded ? (
         <div

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   buildDevRunnerPlan,
+  isReusableOpenPondHealth,
   parseDevRunnerArgs,
   type DevRunnerPlan,
 } from "../scripts/dev-runner";
@@ -11,6 +12,12 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("dev runner", () => {
+  test("only reuses a healthy OpenPond app server", () => {
+    expect(isReusableOpenPondHealth({ ok: true, server: "openpond-app-server" })).toBe(true);
+    expect(isReusableOpenPondHealth({ ok: false, server: "openpond-app-server" })).toBe(false);
+    expect(isReusableOpenPondHealth({ ok: true, server: "another-service" })).toBe(false);
+  });
+
   test("plans desktop dev with a watched server plus renderer and desktop processes", () => {
     const options = parseDevRunnerArgs(["desktop"], {
       OPENPOND_APP_CHANNEL: "stable",

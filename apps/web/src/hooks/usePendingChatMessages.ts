@@ -7,30 +7,17 @@ export function usePendingChatMessages(input: {
   chatMessages: ReturnType<typeof buildCachedChatMessages>;
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
   selectedSessionId: string | null;
-  serverId: string | null | undefined;
 }) {
-  const { chatMessages, runtimeIndexes, selectedSessionId, serverId } = input;
+  const { chatMessages, runtimeIndexes, selectedSessionId } = input;
   const [pendingChatUserMessages, setPendingChatUserMessages] = useState<
     Record<string, PendingChatUserMessage>
   >({});
-
-  useEffect(() => {
-    setPendingChatUserMessages({});
-  }, [serverId]);
 
   const recordPendingChatUserMessage = useCallback((message: PendingChatUserMessage) => {
     setPendingChatUserMessages((current) => ({
       ...current,
       [message.sessionId]: message,
     }));
-  }, []);
-  const clearPendingChatUserMessage = useCallback((sessionId: string, messageId: string) => {
-    setPendingChatUserMessages((current) => {
-      if (current[sessionId]?.id !== messageId) return current;
-      const next = { ...current };
-      delete next[sessionId];
-      return next;
-    });
   }, []);
   useEffect(() => {
     setPendingChatUserMessages((current) => {
@@ -56,7 +43,6 @@ export function usePendingChatMessages(input: {
   );
 
   return {
-    clearPendingChatUserMessage,
     pendingChatUserMessages,
     recordPendingChatUserMessage,
     visibleChatMessages,

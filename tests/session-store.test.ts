@@ -51,6 +51,36 @@ describe("session store patches", () => {
     }
   });
 
+  test("preserves an explicit null cwd for a workspace-free chat", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const store = new SqliteStore(storeDir);
+
+    try {
+      const { createSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+      });
+
+      const workspaceFree = await createSession({
+        provider: "openpond",
+        title: "General chat",
+        cwd: null,
+      });
+      const defaulted = await createSession({
+        provider: "openpond",
+        title: "Default workspace chat",
+      });
+
+      expect(workspaceFree.cwd).toBeNull();
+      expect((await store.getSession(workspaceFree.id))?.cwd).toBeNull();
+      expect(defaulted.cwd).toBe("/tmp/openpond");
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("persists session metadata through create and patch", async () => {
     const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
     const store = new SqliteStore(storeDir);

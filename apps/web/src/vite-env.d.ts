@@ -275,6 +275,9 @@ interface Window {
       onState: (callback: (state: BrowserConversationState) => void) => () => void;
       onRevealRequest: (callback: (request: BrowserRevealRequest) => void) => () => void;
     };
+    files?: {
+      reveal: (input: { path: string }) => Promise<{ ok: boolean; error?: string }>;
+    };
     retryStartup?: () => Promise<{ ok: boolean; error?: string }>;
     openLogsFolder?: () => Promise<{ ok: boolean; error?: string }>;
     readRecentLogs?: (lineLimit?: number) => Promise<

@@ -4,6 +4,7 @@ import { now } from "../../utils.js";
 import {
   signedChatAttachmentImageUrlPayload,
   signedLocalImageUrlPayload,
+  signedLocalVideoUrlPayload,
   signedWorkspaceImageUrlPayload,
 } from "../signed-workspace-image.js";
 export async function handleEventRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
@@ -55,6 +56,10 @@ export async function handleEventRoutes({ deps, request, requestUrl, response }:
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/assets/local-image-url") {
     sendJson(response, 200, signedLocalImageUrlPayload(await readJson(request), requestUrl, token));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/assets/local-video-url") {
+    sendJson(response, 200, signedLocalVideoUrlPayload(await readJson(request), requestUrl, token));
     return true;
   }
   return false;

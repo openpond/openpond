@@ -553,7 +553,7 @@ describe("model tool registry", () => {
     expect(gitDiffResult.contentText).toContain("diff --git");
   });
 
-  test("gates OpenPond exec_command to non-Codex local cwd sessions", async () => {
+  test("gates OpenPond exec_command to non-Codex, non-sandbox sessions", async () => {
     const tool = createCommandModelToolDefinition({
       executeCommand: async (input) => ({
         ok: true,
@@ -576,6 +576,19 @@ describe("model tool registry", () => {
         workspaceId: "project_1",
         cwd: "/tmp/project",
         openPondCommandAccessMode: "ask",
+      }),
+      provider: "openrouter",
+      model: "test/model",
+      mentionedApps: [],
+    })).toBe(true);
+    expect(tool.enabled?.({
+      session: baseSession({
+        provider: "openrouter",
+        workspaceKind: undefined,
+        workspaceId: null,
+        localProjectId: null,
+        cwd: null,
+        openPondCommandAccessMode: "full-access",
       }),
       provider: "openrouter",
       model: "test/model",

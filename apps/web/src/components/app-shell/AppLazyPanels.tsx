@@ -32,7 +32,8 @@ export function AppSettingsRoute({
   onToast,
   onBack,
   onOpenSourceSession,
-  onOpenNativeSkill,
+  onOpenSkill,
+  onOpenExtension,
   teamChatCurrentUserId,
   teamChatEnabled,
   teamChatNotificationMode,
@@ -52,7 +53,8 @@ export function AppSettingsRoute({
         onToast={onToast}
         onBack={onBack}
         onOpenSourceSession={onOpenSourceSession}
-        onOpenNativeSkill={onOpenNativeSkill}
+        onOpenSkill={onOpenSkill}
+        onOpenExtension={onOpenExtension}
         teamChatCurrentUserId={teamChatCurrentUserId}
         teamChatEnabled={teamChatEnabled}
         teamChatNotificationMode={teamChatNotificationMode}

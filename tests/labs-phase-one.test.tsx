@@ -616,6 +616,40 @@ describe("Lab Phase 1", () => {
     });
   });
 
+  test("lists packaged OpenPond profile skills with their resources", () => {
+    const profile = {
+      ...emptyOpenPondProfileState(),
+      skills: [{
+        name: "make-openpond-video",
+        description: "Profile instructions.",
+        path: "skills/make-openpond-video/SKILL.md",
+        scope: "profile" as const,
+        enabled: true,
+        sourcePath: "/profile",
+        charCount: 100,
+        sourceHash: "profile-hash",
+        validationStatus: "valid" as const,
+        validationMessages: [],
+        resourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
+      }],
+    };
+
+    const workproducts = labWorkproductProjection({
+      profile,
+      training: null,
+      runs: [],
+    });
+
+    expect(workproducts).toHaveLength(1);
+    expect(workproducts[0]).toMatchObject({
+      key: "skill:make-openpond-video",
+      skillSource: "profile",
+      status: "Ready",
+      skillResourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
+      skillSourceHash: "profile-hash",
+    });
+  });
+
   test("projects concise model names and keeps the full objective as the description", () => {
     const objective =
       "Reconcile CRM billing and support records with exact cited customer evidence.";

@@ -312,7 +312,7 @@ function primaryClauses(counters: ActivityCounters): string[] {
   if (counters.testsOrChecks > 0) clauses.push(counters.testsOrChecks === 1 ? "ran checks" : `ran ${counters.testsOrChecks} checks`);
   if (counters.webSearches > 0) clauses.push("searched web");
   if (counters.imageCount > 0) clauses.push(countClause("read", counters.imageCount, "image"));
-  if (counters.reasoningCount > 0) clauses.push("reasoned");
+  if (counters.reasoningCount > 0 && clauses.length === 0) clauses.push("thought through the request");
   if (counters.approvals > 0) clauses.push("requested approval");
   clauses.push(...controlClauses(counters));
   return clauses;

@@ -28,6 +28,7 @@ import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { normalizeChatFilePath } from "../../lib/chat-file-links";
+import { absoluteLocalVideoPath } from "../../lib/local-video";
 import {
   buildChatTimelineRows,
   shouldShowThinkingIndicator,
@@ -46,6 +47,9 @@ import {
   hasGitHubIssueSubmitConnection,
 } from "../../lib/submit-issue-command";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
+import {
+  skillPromptForComposer,
+} from "../../lib/profile-skill-composer";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { trainingCreationForSession } from "../training/training-flow";
@@ -87,6 +91,7 @@ import {
 } from "./MainPaneControls";
 import type { MainPaneProps } from "./main-pane-types";
 import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
+import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 
 import {
   AppsView,
@@ -94,6 +99,7 @@ import {
   CloudWorkView,
   GetStartedView,
   LabsRoute,
+  LabSkillSidebar,
   MakeAgentTutorialLearningPanel,
   NativeSkillSidebar,
   PostTrainingLearningPanel,
@@ -166,6 +172,7 @@ export function MainPane({
   rightPanelTabRequest,
   rightChatPanels,
   nativeSkillSidebar,
+  extensionSkillSidebar,
   makeAgentTutorial,
   postTrainingCourse,
   workspaceDiffPanelViewState,
@@ -310,6 +317,7 @@ export function MainPane({
   );
   const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{ id: number; path: string } | null>(null);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] = useState<RightSidebarFileSource | null>(null);
+  const [labSkillSource, setLabSkillSource] = useState<LabSkillSourceSelection | null>(null);
   const [trainingLaunchRequest, setTrainingLaunchRequest] = useState<TrainingLaunchRequest | null>(null);
   const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<string | null>(null);
   const [selectedTrainingJobId, setSelectedTrainingJobId] = useState<string | null>(null);
@@ -379,6 +387,17 @@ export function MainPane({
     }
     onShowDiffPanel();
   }, [labCandidateReview.openFile, labCandidateReview.selection?.initialPath, onShowDiffPanel]);
+  const handleLabSkillSelectionChange = useCallback((selection: LabSkillSourceSelection | null) => {
+    setLabSkillSource(selection);
+    if (selection) onShowDiffPanel();
+  }, [onShowDiffPanel]);
+  const handleCloseLabSkillSource = useCallback(() => {
+    setLabSkillSource(null);
+    if (diffPanelExpanded) onToggleDiffPanelExpanded();
+  }, [diffPanelExpanded, onToggleDiffPanelExpanded]);
+  useEffect(() => {
+    if (view !== "labs") setLabSkillSource(null);
+  }, [view]);
   const handleUseAgent = useCallback((actionId: string, agentName: string) => {
     const requestId = Date.now();
     const existingAction = actionCatalog.find((action) => action.id === actionId) ?? null;
@@ -488,6 +507,11 @@ export function MainPane({
   const latestCreateRuntime = useMemo(() => latestCreatePipelineRuntime(chatMessages), [chatMessages]);
   const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime) || Boolean(subagentRuntime);
   const showLabCandidateDiffPanel = view === "labs" && Boolean(labCandidateReview.selection);
+  const showLabSkillPanel =
+    view === "labs"
+    && diffPanelOpen
+    && rightPanelMode === "changes"
+    && Boolean(labSkillSource);
   const showCloudDiffPanel =
     view === "cloud" &&
     diffPanelOpen &&
@@ -541,6 +565,7 @@ export function MainPane({
     setRightSidebarSourceOverride(null);
   }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, showCloudDiffPanel, workspaceTarget.value]);
   const showDiffPanel =
+    !showLabSkillPanel &&
     (showLabCandidateDiffPanel || showLocalDiffPanel || showCloudDiffPanel || showChatSandboxDiffPanel) &&
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
@@ -552,6 +577,7 @@ export function MainPane({
     rightChatPanels.length > 0;
   const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
   const showNativeSkillPanel = view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
+  const showExtensionSkillPanel = view === "chat" && diffPanelOpen && Boolean(extensionSkillSidebar);
   const showPostTrainingPanel =
     view === "get-started" && diffPanelOpen && Boolean(postTrainingCourse);
   const showMakeAgentTutorialPanel =
@@ -568,6 +594,7 @@ export function MainPane({
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
+      showLabSkillPanel ||
       showBrowserPanel ||
       showRightChatPanel ||
       showTrainingDraftPanel ||
@@ -577,6 +604,7 @@ export function MainPane({
   });
   const showRightPanel =
     showDiffPanel ||
+    showLabSkillPanel ||
     showBrowserPanel ||
     showRightChatPanel ||
     showTrainingDraftPanel ||
@@ -741,7 +769,14 @@ export function MainPane({
               view,
             })
           ) {
-            return sendPrompt([], null, promptForAppSlashCommand(command), {
+            const skillPrompt = command.command === "skill"
+              ? skillPromptForComposer(
+                  command.args,
+                  activeProvider,
+                  bootstrap?.profile.sourcePath ?? null,
+                )
+              : promptForAppSlashCommand(command);
+            return sendPrompt([], null, skillPrompt, {
               clearPrompt: options.preservePrompt ? () => undefined : undefined,
               usageAttribution: usageAttributionForComposerSlashCommand(
                 command,
@@ -1081,11 +1116,20 @@ export function MainPane({
     : workspaceState?.repoPath ?? null;
   const handleOpenFileInSidebar = useCallback(
     (path: string) => {
+      const videoPath = absoluteLocalVideoPath(path, workspaceRootPath);
+      if (videoPath && connection) {
+        void api.signLocalVideoUrl(connection, { path: videoPath })
+          .then(({ url }) => handleOpenBrowserLink(url))
+          .catch((error) => {
+            showToast(error instanceof Error ? error.message : "Could not open this video.", "error");
+          });
+        return;
+      }
       const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
       onShowDiffPanel();
       setOpenDiffFileRequest({ id: Date.now(), path: normalizedFile?.path ?? path });
     },
-    [onShowDiffPanel, workspaceRootPath],
+    [connection, handleOpenBrowserLink, onShowDiffPanel, showToast, workspaceRootPath],
   );
   useLayoutEffect(() => {
     if (view !== "chat" || !showChatThread || typeof window === "undefined") return undefined;
@@ -1308,6 +1352,7 @@ export function MainPane({
       connection={connection}
       connectedAppMentions={connectedAppMentions}
       mentionApps={mentionApps}
+      codexPersonalSkills={bootstrap?.codexPersonalSkills ?? []}
       profileSkills={profileSkills}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
@@ -1377,6 +1422,26 @@ export function MainPane({
       onToggleExpanded={onToggleDiffPanelExpanded}
     />
   ) : null;
+  const extensionSkillPanel = showExtensionSkillPanel && extensionSkillSidebar ? (
+    <LabSkillSidebar
+      connection={connection}
+      expanded={diffPanelExpanded}
+      selection={extensionSkillSidebar}
+      onClose={onCloseNativeSkillSidebar}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
+    />
+  ) : null;
+  const labSkillPanel = showLabSkillPanel && labSkillSource ? (
+    <LabSkillSidebar
+      connection={connection}
+      expanded={diffPanelExpanded}
+      selection={labSkillSource}
+      onClose={handleCloseLabSkillSource}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
+    />
+  ) : null;
   const postTrainingPanel = showPostTrainingPanel && postTrainingCourse ? (
     <PostTrainingLearningPanel
       activeLessonIndex={postTrainingCourse.lessonIndex}
@@ -1411,6 +1476,8 @@ export function MainPane({
     teamAiThreadPanel ??
     rightChatPanel ??
     nativeSkillPanel ??
+    extensionSkillPanel ??
+    labSkillPanel ??
     diffPanel ??
     browserPanel ??
     trainingDraftPanel ??
@@ -1521,6 +1588,7 @@ export function MainPane({
                 onCreateAgent={createAgentFromLab}
                 onImproveAgent={improveAgentFromLab}
                 onDetailOpenChange={onLabDetailOpenChange}
+                onSkillSelectionChange={handleLabSkillSelectionChange}
                 onOpenRunConversation={onOpenRightChatForSession}
                 onAnswerQuestion={answerCreateImproveQuestion}
                 onApplyCandidate={applyCreateImproveCandidate}
@@ -1545,10 +1613,14 @@ export function MainPane({
                   onPayload,
                   onError,
                   onToast: showToast,
-                  onSkillCommand: (command) => {
+                  onSkillCommand: (command, provider) => {
                     composerDraftStore.set(command);
                     setMentionedAppId(null);
-                    setView("chat");
+                    if (provider) {
+                      changeDraftProvider(provider);
+                    } else {
+                      setView("chat");
+                    }
                   },
                 }}
                 insights={{
@@ -1667,7 +1739,7 @@ export function MainPane({
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
-                profileSkills={profileSkills}
+                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : profileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1732,7 +1804,7 @@ export function MainPane({
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
-                profileSkills={profileSkills}
+                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : profileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}

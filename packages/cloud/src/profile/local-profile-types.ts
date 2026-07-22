@@ -24,6 +24,7 @@ export type OpenPondProfileSkill = {
   sourceHash: string;
   validationStatus: "valid" | "warning" | "error";
   validationMessages: string[];
+  resourceFiles: string[];
 };
 
 export type OpenPondProfileEval = {

@@ -24,6 +24,9 @@ import type {
   ComputeStateResponse,
   ComputeSettings,
   ModelDownloadJob,
+  OpenPondExtension,
+  OpenPondExtensionCatalog,
+  OpenPondExtensionPreview,
   LocalAgentSchedulesResponse,
   LocalAgentScheduleRunsResponse,
   LocalAgentScheduleRunResponse,
@@ -49,6 +52,8 @@ import type {
   SaveOpenPondAccountRequest,
   SendTurnRequest,
   Session,
+  SkillSourceFile,
+  SkillSourceScope,
   SidebarAppPreference,
   SidebarAppPreferences,
   SidebarFileBookmarksResponse,
@@ -159,6 +164,16 @@ export type RuntimeEventPagePayload = {
   remainingMatchingEvents: number;
 };
 
+export type ExtensionMutationPayload = {
+  extension: OpenPondExtension;
+  catalog: OpenPondExtensionCatalog;
+};
+
+export type ExtensionRemovalPayload = {
+  removed: OpenPondExtension;
+  catalog: OpenPondExtensionCatalog;
+};
+
 export {
   openEventStream,
   terminalWebSocketProtocols,
@@ -183,6 +198,54 @@ export const api = {
   ...communityApi,
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  extensionCatalog: (connection: ClientConnection) =>
+    apiFetch<OpenPondExtensionCatalog>(connection, "/v1/extensions"),
+  extensionPreview: (
+    connection: ClientConnection,
+    input: { source: string; ref?: string },
+  ) => apiFetch<OpenPondExtensionPreview>(connection, "/v1/extensions/preview", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  extensionAdd: (
+    connection: ClientConnection,
+    input: { source: string; ref?: string },
+  ) => apiFetch<ExtensionMutationPayload>(connection, "/v1/extensions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  extensionUpdate: (
+    connection: ClientConnection,
+    extension: Pick<OpenPondExtension, "owner" | "repo">,
+    input: { ref?: string } = {},
+  ) => apiFetch<ExtensionMutationPayload>(
+    connection,
+    `/v1/extensions/github/${encodeURIComponent(extension.owner)}/${encodeURIComponent(extension.repo)}/update`,
+    { method: "POST", body: JSON.stringify(input) },
+  ),
+  extensionUpdateAll: (connection: ClientConnection) => apiFetch<{
+    updated: OpenPondExtension[];
+    unchanged: OpenPondExtension[];
+    failed: Array<{ id: string; error: string }>;
+    catalog: OpenPondExtensionCatalog;
+  }>(connection, "/v1/extensions/update-all", { method: "POST" }),
+  extensionRemove: (
+    connection: ClientConnection,
+    extension: Pick<OpenPondExtension, "owner" | "repo">,
+  ) => apiFetch<ExtensionRemovalPayload>(
+    connection,
+    `/v1/extensions/github/${encodeURIComponent(extension.owner)}/${encodeURIComponent(extension.repo)}`,
+    { method: "DELETE" },
+  ),
+  skillSourceFile: (
+    connection: ClientConnection,
+    scope: SkillSourceScope,
+    skillName: string,
+    filePath: string,
+  ) => apiFetch<SkillSourceFile>(
+    connection,
+    `/v1/skills/${scope}/${encodeURIComponent(skillName)}/source?path=${encodeURIComponent(filePath)}`,
+  ),
   teamChatMembers: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ members: TeamChatMember[] }>(
       connection,
@@ -1159,6 +1222,15 @@ export const api = {
     apiFetch<{ url: string; expiresAt: number }>(
       connection,
       "/v1/assets/local-image-url",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
+  signLocalVideoUrl: (connection: ClientConnection, input: { path: string }) =>
+    apiFetch<{ url: string; expiresAt: number }>(
+      connection,
+      "/v1/assets/local-video-url",
       {
         method: "POST",
         body: JSON.stringify(input),

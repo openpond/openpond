@@ -18,6 +18,12 @@ export type WorkspaceImagePayload = {
   sizeBytes: number;
 };
 
+export type LocalVideoPayload = {
+  path: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
 export type ChatAttachmentImagePayloadRequest = {
   sessionId: string;
   turnId: string;
@@ -44,6 +50,17 @@ export type HttpRouteDeps = {
     forceOpenPond?: boolean;
     ensureProfile?: boolean;
   }) => Promise<BootstrapPayload>;
+  skillSourceFilePayload: (
+    scope: "codex" | "profile" | "extension",
+    skillName: string,
+    filePath: string,
+  ) => Promise<unknown>;
+  extensionCatalogPayload: () => Promise<unknown>;
+  extensionPreviewPayload: (payload: unknown) => Promise<unknown>;
+  extensionAddPayload: (payload: unknown) => Promise<unknown>;
+  extensionUpdatePayload: (payload: unknown) => Promise<unknown>;
+  extensionUpdateAllPayload: () => Promise<unknown>;
+  extensionRemovePayload: (source: string) => Promise<unknown>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
   usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;
@@ -165,6 +182,7 @@ export type HttpRouteDeps = {
     filePath: string | null
   ) => Promise<WorkspaceImagePayload>;
   localImagePayload: (filePath: string) => Promise<WorkspaceImagePayload>;
+  localVideoPayload: (filePath: string) => Promise<LocalVideoPayload>;
   chatAttachmentImagePayload: (
     input: ChatAttachmentImagePayloadRequest
   ) => Promise<WorkspaceImagePayload>;

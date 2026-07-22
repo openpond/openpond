@@ -25,6 +25,9 @@ import {
   UploadLocalProjectCloudSourceRequestSchema,
   UpdatePersonalizationRequestSchema,
   UpdateProviderSettingsRequestSchema,
+  OpenPondExtensionSourceRequestSchema,
+  CONNECTED_APP_INTEGRATION_SKILLS,
+  SHIPPED_OPENPOND_SKILL_NAMES,
   ProviderModelCacheSchema,
   createPlaceholderPanes,
   type AccountState,
@@ -58,7 +61,12 @@ import {
   switchOpenPondAccount,
   updateOpenPondAccountConfig,
 } from "@openpond/runtime";
-import { emptyProfileState, initLocalProfileRepo, loadOpenPondProfileState } from "@openpond/cloud";
+import {
+  createGithubExtensionManager,
+  emptyProfileState,
+  initLocalProfileRepo,
+  loadOpenPondProfileState,
+} from "@openpond/cloud";
 import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
 import {
@@ -66,6 +74,11 @@ import {
 } from "../create-pipeline-guards.js";
 import { normalizeAppPreferences } from "../preferences.js";
 import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
+import {
+  loadCodexPersonalSkills,
+  readCodexPersonalSkillFile,
+  readSkillSourceFile,
+} from "../codex-personal-skills.js";
 import {
   mergeProviderConfigPatch,
   normalizeProvidersFile,
@@ -236,6 +249,16 @@ export function createServerPayloads(deps: {
     },
   });
   const providerDiagnostics = new ProviderDiagnosticsTracker();
+  const extensionManager = createGithubExtensionManager({
+    reservedSkillNames: async () => {
+      const profile = await loadOpenPondProfileState();
+      return [
+        ...SHIPPED_OPENPOND_SKILL_NAMES,
+        ...CONNECTED_APP_INTEGRATION_SKILLS.map((skill) => skill.name),
+        ...profile.skills.map((skill) => skill.name),
+      ];
+    },
+  });
   let appPreferencesUpdateQueue: Promise<void> = Promise.resolve();
   const {
     codexHistorySessionsWithLiveStatus,
@@ -682,6 +705,35 @@ export function createServerPayloads(deps: {
     }
   }
 
+  async function skillSourceFilePayload(
+    scope: "codex" | "profile" | "extension",
+    skillName: string,
+    filePath: string,
+  ) {
+    if (scope === "codex") {
+      return readCodexPersonalSkillFile(skillName, filePath);
+    }
+    if (scope === "extension") {
+      const extension = await extensionManager.inspect(skillName);
+      return readSkillSourceFile({
+        skillName,
+        scope,
+        packageRoot: extension.sourcePath,
+        relativeFilePath: filePath,
+      });
+    }
+    const profile = await loadBootstrapProfile(false);
+    const skill = profile.skills.find((candidate) => candidate.name === skillName);
+    if (!skill) throw new Error(`Profile skill not found: ${skillName}`);
+    const absoluteSkillPath = path.resolve(skill.sourcePath, skill.path);
+    return readSkillSourceFile({
+      skillName,
+      scope,
+      packageRoot: path.dirname(absoluteSkillPath),
+      relativeFilePath: filePath,
+    });
+  }
+
   async function refreshCloudProjects(scope: string): Promise<CloudProject[]> {
     const existing = cloudProjectRefreshes.get(scope);
     if (existing) return existing;
@@ -744,6 +796,8 @@ export function createServerPayloads(deps: {
       personalization,
       localProjects,
       profile,
+      codexPersonalSkills,
+      extensionCatalog,
     ] = await Promise.all([
       store.sessionShells(),
       store.recentRuntimeEventWindow(BOOTSTRAP_EVENT_WINDOW_LIMIT),
@@ -754,6 +808,8 @@ export function createServerPayloads(deps: {
       loadPersonalizationSettings(store, storeDir),
       listLocalProjects(store),
       loadBootstrapProfile(Boolean(bootstrapOptions.ensureProfile)),
+      loadCodexPersonalSkills(),
+      extensionManager.list(),
     ]);
     const codex = getCodexStatus();
     const providers = providerSettingsBootstrapSummary(await loadProviderSettings({
@@ -801,6 +857,8 @@ export function createServerPayloads(deps: {
       localProjects: linkedLocalProjects,
       cloudProjects,
       profile,
+      codexPersonalSkills,
+      extensionCatalog,
       codexHistorySessions: validBootstrapSessions(
         codexHistorySessionsWithLiveStatus(
           applyCodexHistorySidebarPreferences(codexHistorySessions, codexHistorySidebarPreferences),
@@ -898,6 +956,34 @@ export function createServerPayloads(deps: {
     loadAppPreferences,
     bootstrapPayload,
   });
+
+  async function extensionCatalogPayload() {
+    return extensionManager.list();
+  }
+
+  async function extensionPreviewPayload(payload: unknown) {
+    return extensionManager.preview(OpenPondExtensionSourceRequestSchema.parse(payload));
+  }
+
+  async function extensionAddPayload(payload: unknown) {
+    const extension = await extensionManager.add(OpenPondExtensionSourceRequestSchema.parse(payload));
+    return { extension, catalog: await extensionManager.list() };
+  }
+
+  async function extensionUpdatePayload(payload: unknown) {
+    const extension = await extensionManager.update(OpenPondExtensionSourceRequestSchema.parse(payload));
+    return { extension, catalog: await extensionManager.list() };
+  }
+
+  async function extensionUpdateAllPayload() {
+    const result = await extensionManager.updateAll();
+    return { ...result, catalog: await extensionManager.list() };
+  }
+
+  async function extensionRemovePayload(source: string) {
+    const removed = await extensionManager.remove(source);
+    return { removed, catalog: await extensionManager.list() };
+  }
 
   async function previewLocalProjectCloudSourcePayload(
     projectId: string,
@@ -1872,6 +1958,15 @@ export function createServerPayloads(deps: {
     recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
+    extensionCatalogPayload,
+    extensionPreviewPayload,
+    extensionAddPayload,
+    extensionUpdatePayload,
+    extensionUpdateAllPayload,
+    extensionRemovePayload,
+    loadExtensionCatalog: extensionManager.list,
+    readExtensionSkill: extensionManager.readSkill,
+    skillSourceFilePayload,
     findOpenPondApp,
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,

@@ -33,8 +33,6 @@ export function createProfileSkillGoalRuntime(deps: {
     }
     const objective = input.objective.trim();
     if (!objective) throw new Error("objective is required");
-    const unsupported = profileSkillAgentRequirementReason(`${objective} ${input.changeRequest ?? ""}`);
-    if (unsupported) throw new Error(`${unsupported} Create an agent instead of a single-file profile skill.`);
     const command = await deps.executeProfileSkillGoal({
       operation: input.operation,
       objective,
@@ -149,36 +147,4 @@ function profileSkillGoalToolResultFromExecution(
     validationMessages: executed.validationMessages,
     invocation: executed.invocation,
   };
-}
-
-function profileSkillAgentRequirementReason(value: string): string | null {
-  const normalized = value.toLowerCase();
-  const unsupported = [
-    ["script", /\bscripts?\b/g],
-    ["reference file", /\breference\s+files?\b/g],
-    ["references/", /\breferences\//g],
-    ["asset", /\bassets?\b/g],
-    ["tool dependency", /\btool\s+dependencies?\b/g],
-    ["mcp", /\bmcp\b/g],
-    ["setup file", /\bsetup\s+files?\b/g],
-    ["setup command", /\bsetup\s+commands?\b/g],
-    ["eval", /\bevals?\b/g],
-    ["external system", /\bexternal\s+systems?\b/g],
-    ["webhook", /\bwebhooks?\b/g],
-    ["api integration", /\bapi\s+integrations?\b/g],
-  ] as const;
-  for (const [label, pattern] of unsupported) {
-    pattern.lastIndex = 0;
-    for (const match of normalized.matchAll(pattern)) {
-      if (!isNegatedRequirement(normalized, match.index ?? 0)) {
-        return `Profile skills are single-file instructions and cannot include ${label}.`;
-      }
-    }
-  }
-  return null;
-}
-
-function isNegatedRequirement(value: string, matchIndex: number): boolean {
-  const prefix = value.slice(Math.max(0, matchIndex - 36), matchIndex);
-  return /\b(?:no|not|without|exclude|excluding|avoid|avoiding|never|cannot|can't|do not|don't)\s+(?:any\s+)?(?:extra\s+|additional\s+)?$/.test(prefix);
 }

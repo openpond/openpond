@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -52,6 +53,10 @@ type ProcessExit = {
   id: string;
   code: number | null;
   signal: NodeJS.Signals | null;
+};
+
+type DevServerLock = {
+  release(): Promise<void>;
 };
 
 const READY_PREFIX = "OPENPOND_APP_SERVER_READY ";
@@ -195,12 +200,32 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
   const serverProcess = plan.processes.find((processPlan) => processPlan.id === "server");
   const rendererProcess = plan.processes.find((processPlan) => processPlan.id === "renderer");
   const desktopProcess = plan.processes.find((processPlan) => processPlan.id === "desktop");
+  let serverLock: DevServerLock | null = null;
+  let reusedServer = false;
 
   try {
     if (serverProcess) {
-      const server = startProcess(serverProcess, { captureReady: true });
-      running.push({ id: serverProcess.id, child: server.child });
-      const serverReady = await server.ready;
+      serverLock = await acquireDevServerLock(plan);
+      let serverReady: ReadyPayload;
+      if (!serverLock) {
+        serverReady = await waitForReusableServer(plan.urls.server);
+        reusedServer = true;
+      } else {
+        const reusable = await probeReusableServer(plan.urls.server);
+        if (reusable === "compatible") {
+          serverReady = { url: plan.urls.server, tokenFile: tokenFilePath() };
+          reusedServer = true;
+          await serverLock.release();
+          serverLock = null;
+        } else {
+          if (reusable === "incompatible") {
+            throw new Error(`${plan.urls.server} is already occupied by a different service.`);
+          }
+          const server = startProcess(serverProcess, { captureReady: true });
+          running.push({ id: serverProcess.id, child: server.child });
+          serverReady = await server.ready;
+        }
+      }
       const token = await readToken(serverReady.tokenFile);
       if (!token) throw new Error(`OpenPond App server did not write a capability token at ${serverReady.tokenFile ?? tokenFilePath()}`);
       const serverUrl = serverReady.url ?? plan.urls.server;
@@ -213,7 +238,7 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
         desktopProcess.env.OPENPOND_APP_TOKEN = token;
         desktopProcess.env.OPENPOND_REUSE_SERVER = "1";
       }
-      console.log(`OpenPond server ready at ${serverUrl}`);
+      console.log(`${reusedServer ? "Reusing" : "OpenPond"} server ready at ${serverUrl}`);
     }
 
     if (rendererProcess) {
@@ -228,7 +253,7 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
       running.push({ id: desktopProcess.id, child: desktop.child });
     }
 
-    if (running.length === 0) throw new Error(`No dev processes were configured for mode ${plan.mode}`);
+    if (running.length === 0 && !reusedServer) throw new Error(`No dev processes were configured for mode ${plan.mode}`);
     const exit = await waitForExitOrSignal(running);
     if (exit.id === "supervisor") {
       process.exitCode = exit.code ?? 0;
@@ -238,7 +263,87 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
     if (exit.signal) throw new Error(`${exit.id} exited with signal ${exit.signal}`);
   } finally {
     await stopRunningProcesses(running);
+    await serverLock?.release();
   }
+}
+
+async function acquireDevServerLock(plan: DevRunnerPlan): Promise<DevServerLock | null> {
+  const lockPath = devServerLockPath(plan);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const handle = await fs.open(lockPath, "wx", 0o600);
+      await handle.writeFile(JSON.stringify({ pid: process.pid, root: plan.root, port: plan.ports.server }));
+      await handle.close();
+      let released = false;
+      return {
+        release: async () => {
+          if (released) return;
+          released = true;
+          await fs.unlink(lockPath).catch(() => undefined);
+        },
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const owner = await readDevServerLock(lockPath);
+      if (owner && processIsAlive(owner.pid)) return null;
+      await fs.unlink(lockPath).catch(() => undefined);
+    }
+  }
+  return null;
+}
+
+async function readDevServerLock(lockPath: string): Promise<{ pid: number } | null> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(lockPath, "utf8")) as { pid?: unknown };
+    return typeof parsed.pid === "number" && Number.isInteger(parsed.pid) ? { pid: parsed.pid } : null;
+  } catch {
+    return null;
+  }
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function devServerLockPath(plan: DevRunnerPlan): string {
+  const scope = createHash("sha256")
+    .update(`${plan.root}\0${plan.host}\0${plan.ports.server}`)
+    .digest("hex")
+    .slice(0, 16);
+  return path.join(os.tmpdir(), `openpond-dev-server-${scope}.lock`);
+}
+
+async function waitForReusableServer(url: string, timeoutMs = 15_000): Promise<ReadyPayload> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await probeReusableServer(url);
+    if (result === "compatible") return { url, tokenFile: tokenFilePath() };
+    if (result === "incompatible") throw new Error(`${url} is already occupied by a different service.`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`Another OpenPond dev runner owns ${url}, but its server did not become healthy in time.`);
+}
+
+async function probeReusableServer(url: string): Promise<"compatible" | "incompatible" | "unavailable"> {
+  try {
+    const response = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1_000) });
+    if (!response.ok) return "incompatible";
+    const payload = await response.json();
+    return isReusableOpenPondHealth(payload) ? "compatible" : "incompatible";
+  } catch {
+    return "unavailable";
+  }
+}
+
+export function isReusableOpenPondHealth(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const record = payload as Record<string, unknown>;
+  return record.ok === true && record.server === "openpond-app-server";
 }
 
 function runSetupCommand(setup: DevRunnerCommand): void {

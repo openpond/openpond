@@ -43,7 +43,7 @@ export function createTurnRunnerLifecycle(deps: {
     if (closing) active.controller.abort();
   }
 
-  function interruptAll(reason = "Server shutting down"): Promise<Turn[]> {
+  function interruptAll(reason = "Interrupted because the local app server stopped."): Promise<Turn[]> {
     if (interruptAllPromise) return interruptAllPromise;
     const operation = (async () => {
       const active = [...deps.activeTurns.values()];

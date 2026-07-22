@@ -10,6 +10,7 @@ export async function handleCoreRoutes({
   const {
     refreshCodexStatus,
     bootstrapPayload,
+    skillSourceFilePayload,
     profileCurrentPayload,
     profileCatalogPayload,
     profileInitPayload,
@@ -49,6 +50,23 @@ export async function handleCoreRoutes({
       codex: payload.codex,
       account: payload.account,
     });
+    return true;
+  }
+  const skillSourceFileMatch = /^\/v1\/skills\/(codex|profile|extension)\/([^/]+)\/source$/.exec(
+    requestUrl.pathname,
+  );
+  if (request.method === "GET" && skillSourceFileMatch) {
+    const filePath = requestUrl.searchParams.get("path");
+    if (!filePath) throw new Error("Skill source path is required.");
+    sendJson(
+      response,
+      200,
+      await skillSourceFilePayload(
+        skillSourceFileMatch[1] as "codex" | "profile" | "extension",
+        decodeURIComponent(skillSourceFileMatch[2]!),
+        filePath,
+      ),
+    );
     return true;
   }
   if (requestUrl.pathname === "/v1/profile") {

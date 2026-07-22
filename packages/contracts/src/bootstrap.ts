@@ -9,6 +9,8 @@ import { ApprovalSchema } from "./approvals.js";
 import { PlaceholderPaneSchema } from "./placeholders.js";
 import { OpenPondProfileStateSchema, emptyOpenPondProfileState } from "./profile.js";
 import { SidebarFileBookmarkSchema } from "./sidebar-files.js";
+import { CodexPersonalSkillSchema } from "./skills.js";
+import { OpenPondExtensionCatalogSchema } from "./extensions.js";
 
 export const BootstrapEventWindowSchema = z.object({
   latestSequence: z.number().int().nonnegative(),
@@ -35,6 +37,13 @@ export const BootstrapPayloadSchema = z.object({
   localProjects: z.array(LocalProjectSchema).optional().default([]),
   cloudProjects: z.array(CloudProjectSchema).optional().default([]),
   profile: OpenPondProfileStateSchema.optional().default(emptyOpenPondProfileState),
+  codexPersonalSkills: z.array(CodexPersonalSkillSchema).optional().default([]),
+  extensionCatalog: OpenPondExtensionCatalogSchema.optional().default({
+    rootPath: "",
+    registryPath: "",
+    extensions: [],
+    error: null,
+  }),
   codexHistorySessions: z.array(SessionSchema).optional().default([]),
   sidebarAppPreferences: SidebarAppPreferencesSchema,
   sidebarFileBookmarks: z.array(SidebarFileBookmarkSchema).optional().default([]),

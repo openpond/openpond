@@ -154,7 +154,12 @@ function parseProfileSkillCommand(
       if (!name || !changeRequest) return { action: "help" };
       return { action: "edit", name, changeRequest };
     }
-    return { action: "help" };
+    const named = splitOptionalSkillName(rest);
+    return {
+      action: "create",
+      objective: named.objective,
+      requestedName: named.name,
+    };
   }
   return null;
 }
@@ -172,7 +177,7 @@ function profileSkillHelp(profile: OpenPondProfileState): ProfileSkillCommandRes
       "- /skill create --name <skill-name> <what the skill should help with>",
       "- /skill edit <skill-name> <change request>",
       "",
-      "Create/edit starts a profile-skill goal in the active profile repo. Skills are single-file profile instructions. If the workflow needs scripts, references, tools, or assets, create an agent instead.",
+      "Create/edit starts a profile-skill goal in the active profile repo. Skills may include SKILL.md plus focused scripts, references, and assets. Use an agent when the workflow needs durable autonomy, schedules, identity, or its own model loop.",
     ].join("\n"),
   };
 }
@@ -330,10 +335,11 @@ function profileSkillGoalPrompt(goal: ProfileSkillGoalRequest): string {
     "",
     "Rules:",
     modeLine,
-    "- Keep the skill package single-file: only SKILL.md.",
+    "- Keep SKILL.md as the required entry point. Add only scripts, references, assets, or agents/openai.yaml that directly support the workflow.",
     "- SKILL.md must include YAML frontmatter with required name and description fields, followed by a markdown body.",
     "- The body should describe the reusable workflow clearly enough for future chats to apply it.",
-    "- Do not add references, scripts, assets, tool dependencies, or setup files. If those are needed, explain that this should be an agent instead.",
+    "- Use scripts for deterministic repeated operations, references for detailed knowledge, and assets for files consumed by outputs.",
+    "- Do not add README, changelog, installation guide, or other auxiliary documentation.",
     "- Validate the resulting file by reading it back and checking name, description, body, and path consistency.",
     "- Report the final skill name, path, validation status, and explicit invocation such as $skill-name only after the file is written or updated.",
     "- Ask only for missing details that materially change the skill.",

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import type { ConnectedAppIntegrationSkill, SidebarFileBookmark, TerminalScope } from "@openpond/contracts";
+import type {
+  BootstrapPayload,
+  OpenPondExtension,
+  OpenPondProfileSkill,
+  SidebarFileBookmark,
+  TerminalScope,
+} from "@openpond/contracts";
 import { AppSettingsController, AppShellController } from "../components/app-shell/AppControllers";
 import { isDesktopShell, isMacPlatform } from "../components/app-shell/WindowControls";
 import { AppSplash } from "../components/splash/AppSplash";
@@ -10,6 +16,9 @@ import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
 import { projectSelectionKey } from "../lib/app-models";
 import type { SidebarFileOpenRequest } from "../lib/sidebar-files";
+import type { SkillSourceDocument } from "../components/app-shell/skill-source-document";
+import type { SkillPackageSourceSelection } from "../components/app-shell/skill-package-source";
+import { extensionSourceSelection } from "../components/settings/extension-source-selection";
 import { AppToastProvider } from "./AppToastContext";
 import {
   POST_TRAINING_LESSONS,
@@ -27,6 +36,32 @@ import type {
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
   secondary: AppSecondaryRuntime;
+}
+
+function harnessSkillsForComposer(bootstrap: BootstrapPayload | null): OpenPondProfileSkill[] {
+  const skills = new Map(
+    (bootstrap?.profile?.skills ?? []).map((skill) => [skill.name, skill]),
+  );
+  for (const extension of bootstrap?.extensionCatalog.extensions ?? []) {
+    if (extension.validationStatus !== "valid") continue;
+    for (const skill of extension.skills) {
+      if (skill.validationStatus !== "valid" || skills.has(skill.name)) continue;
+      skills.set(skill.name, {
+        name: skill.name,
+        description: skill.description,
+        path: skill.relativePath,
+        scope: "profile",
+        enabled: true,
+        sourcePath: extension.sourcePath,
+        charCount: skill.charCount,
+        sourceHash: skill.sourceHash,
+        validationStatus: "valid",
+        validationMessages: [],
+        resourceFiles: skill.resourceFiles,
+      });
+    }
+  }
+  return [...skills.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
@@ -87,8 +122,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     updateRightChatModel, updateRightChatPrompt, updateRightChatProvider, updateRightChatScrollState,
     openProfileSettings, diagnosticEvents, toggleRightSidebar,
   } = secondary;
-  const [nativeSkillSidebar, setNativeSkillSidebar] = useState<ConnectedAppIntegrationSkill | null>(null);
-  const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<ConnectedAppIntegrationSkill | null>(null);
+  const [nativeSkillSidebar, setNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
+  const [extensionSkillSidebar, setExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
+  const harnessSkills = harnessSkillsForComposer(bootstrap);
+  const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
+  const [pendingExtensionSkillSidebar, setPendingExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
   const [postTrainingCourse, setPostTrainingCourse] = useState<PostTrainingCourseState | null>(null);
   const [makeAgentTutorial, setMakeAgentTutorial] = useState<MakeAgentTutorialState | null>(null);
   const [sidebarFileOpenRequest, setSidebarFileOpenRequest] = useState<SidebarFileOpenRequest | null>(null);
@@ -186,26 +224,36 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     if (postTrainingCourse) closePostTrainingCourse();
     else if (makeAgentTutorial) closeMakeAgentTutorial();
   }, [closeMakeAgentTutorial, closePostTrainingCourse, makeAgentTutorial, postTrainingCourse, view]);
-  const openNativeSkillFromSettings = useCallback((skill: ConnectedAppIntegrationSkill) => {
+  const openSkillFromSettings = useCallback((skill: SkillSourceDocument) => {
     setPendingNativeSkillSidebar(skill);
+    setPendingExtensionSkillSidebar(null);
+    beginNewChat(null);
+    setSidebarOpen(true);
+  }, [beginNewChat, setSidebarOpen]);
+  const openExtensionFromSettings = useCallback((extension: OpenPondExtension) => {
+    setPendingExtensionSkillSidebar(extensionSourceSelection(extension));
+    setPendingNativeSkillSidebar(null);
     beginNewChat(null);
     setSidebarOpen(true);
   }, [beginNewChat, setSidebarOpen]);
   useEffect(() => {
     if (
-      !pendingNativeSkillSidebar ||
+      (!pendingNativeSkillSidebar && !pendingExtensionSkillSidebar) ||
       view !== "chat" ||
       selectedSessionId ||
       selectedProjectId ||
       selectedAppId
     ) return;
     setNativeSkillSidebar(pendingNativeSkillSidebar);
+    setExtensionSkillSidebar(pendingExtensionSkillSidebar);
     setPendingNativeSkillSidebar(null);
+    setPendingExtensionSkillSidebar(null);
     setRightPanelMode("home");
     setDiffPanelExpanded(false);
     setDiffPanelOpen(true);
   }, [
     pendingNativeSkillSidebar,
+    pendingExtensionSkillSidebar,
     selectedAppId,
     selectedProjectId,
     selectedSessionId,
@@ -215,12 +263,14 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     view,
   ]);
   useEffect(() => {
-    if (!nativeSkillSidebar) return;
+    if (!nativeSkillSidebar && !extensionSkillSidebar) return;
     if (view === "chat" && diffPanelOpen && rightPanelMode === "home") return;
     setNativeSkillSidebar(null);
-  }, [diffPanelOpen, nativeSkillSidebar, rightPanelMode, view]);
+    setExtensionSkillSidebar(null);
+  }, [diffPanelOpen, extensionSkillSidebar, nativeSkillSidebar, rightPanelMode, view]);
   const closeNativeSkillSidebar = useCallback(() => {
     setNativeSkillSidebar(null);
+    setExtensionSkillSidebar(null);
     setDiffPanelExpanded(false);
     setDiffPanelOpen(false);
   }, [setDiffPanelExpanded, setDiffPanelOpen]);
@@ -289,7 +339,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onError: setError,
             onToast: showToast,
             onOpenSourceSession: openSessionInChat,
-            onOpenNativeSkill: openNativeSkillFromSettings,
+            onOpenSkill: openSkillFromSettings,
+            onOpenExtension: openExtensionFromSettings,
             teamChatCurrentUserId: teamChat.currentUserId,
             teamChatEnabled: teamChatTeamId !== null,
             teamChatNotificationMode: teamChat.notificationMode,
@@ -613,7 +664,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         steerAutoDispatchReady: selectedSteerAutoDispatchReady,
         mentionApps: chatMentionApps,
         connectedAppMentions,
-        profileSkills: bootstrap?.profile?.skills ?? [],
+        profileSkills: harnessSkills,
         selectedMentionAppId: mentionedAppId,
         busy,
         turnRunning: selectedSessionRunning,
@@ -642,6 +693,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         rightPanelTabRequest,
         rightChatPanels: rightChatPanelViews,
         nativeSkillSidebar,
+        extensionSkillSidebar,
         makeAgentTutorial,
         postTrainingCourse,
         workspaceDiffPanelViewState,

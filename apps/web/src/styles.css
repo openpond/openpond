@@ -25,4 +25,5 @@
 @import "./styles/dropdown-select.css";
 @import "./styles/chat/context-status.css";
 @import "./styles/chat/composer-actions.css";
+@import "./styles/workspace/git-dialogs.css";
 @import "./styles/responsive.css";

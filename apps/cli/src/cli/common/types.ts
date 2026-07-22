@@ -35,6 +35,7 @@ export type Command =
   | "run"
   | "extend"
   | "edit"
+  | "extension"
   | "sandbox-template"
   | "organization"
   | "organizations"

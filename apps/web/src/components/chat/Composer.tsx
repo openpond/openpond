@@ -16,7 +16,6 @@ import type {
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
   OpenPondApp,
-  OpenPondProfileSkill,
   ProviderSettings,
   TeamChatMember,
 } from "@openpond/contracts";
@@ -130,7 +129,7 @@ export type ComposerProps = {
   composeNotice?: ComposerNotice | null;
   mentionApps?: OpenPondApp[];
   connectedAppMentions?: ConnectedAppMentionOption[];
-  profileSkills?: OpenPondProfileSkill[];
+  profileSkills?: ComposerSkillMenuItem[];
   selectedMentionAppId?: string | null;
   contextWindowStatus: ContextWindowStatus;
   goalRuntime?: GoalRuntimeStatus | null;
@@ -575,7 +574,11 @@ export function Composer({
     const position = Math.max(0, Math.min(selectedInvocationPosition ?? 0, prompt.length));
     if (selectedCommand) {
       return {
-        icon: selectedCommand.id === "create" ? "plus" : "workflow",
+        icon: selectedCommand.id === "create"
+          ? "plus"
+          : selectedCommand.id === "skill"
+            ? "skill"
+            : "workflow",
         key: `command:${selectedCommand.id}`,
         label: selectedCommand.id === "create" ? "Make Agent" : selectedCommand.id,
         position,
@@ -768,31 +771,46 @@ export function Composer({
     activeSlashKey &&
     actionMenuDismissedPrompt !== activeSlashKey,
   );
+  const addMenuOpenPondItems = useMemo<SlashMenuItem[]>(() =>
+    COMPOSER_SLASH_COMMANDS.map((command) => ({ kind: "command" as const, command })),
+  []);
   const addMenuSlashItems = useMemo<SlashMenuItem[]>(() => [
-    ...COMPOSER_SLASH_COMMANDS.map((command) => ({ kind: "command" as const, command })),
     ...slashAppContextMatchesForQuery(mentionApps, "")
       .map((app) => ({ kind: "app-context" as const, app })),
     ...slashActionMatchesForQuery(actionCatalog, "")
       .map((action) => ({ kind: "action" as const, action })),
   ], [actionCatalog, mentionApps]);
-  const addMenuSections = useMemo<ComposerCommandMenuSection[]>(() => [
-    {
-      id: "add",
-      items: [{ kind: "files" }],
-      label: "Add",
-    },
-    {
-      id: "slash",
-      items: addMenuSlashItems.map((item) => ({ kind: "slash", item })),
-      label: "/",
-    },
-    {
+  const addMenuSections = useMemo<ComposerCommandMenuSection[]>(() => {
+    const sections: ComposerCommandMenuSection[] = [
+      {
+        id: "add",
+        items: [{ kind: "files" }],
+        label: "Add",
+      },
+      {
+        id: "openpond",
+        items: addMenuOpenPondItems.map((item) => ({ kind: "slash", item })),
+        label: "OpenPond",
+        grid: true,
+        queryScope: "slash",
+      },
+    ];
+    if (addMenuSlashItems.length > 0) {
+      sections.push({
+        id: "slash",
+        items: addMenuSlashItems.map((item) => ({ kind: "slash", item })),
+        label: "Agents and actions",
+        queryScope: "slash",
+      });
+    }
+    sections.push({
       emptyLabel: "No mentions available",
       id: "mentions",
       items: addMenuMentionItems.map((item) => ({ kind: "mention", item })),
       label: "@",
-    },
-  ], [addMenuMentionItems, addMenuSlashItems]);
+    });
+    return sections;
+  }, [addMenuMentionItems, addMenuOpenPondItems, addMenuSlashItems]);
   const filteredAddMenuSections = useMemo(
     () => filterComposerCommandMenuSections(addMenuSections, addMenuQuery),
     [addMenuQuery, addMenuSections],
@@ -1327,6 +1345,8 @@ export function Composer({
 
   function selectAddMenuItem(item: ComposerCommandMenuItem) {
     const range = addMenuSelectionRange();
+    setAddMenuOpen(false);
+    setAddMenuQuery("");
     if (item.kind === "files") {
       if (range.start !== range.end) {
         const nextPrompt = `${prompt.slice(0, range.start)}${prompt.slice(range.end)}`;

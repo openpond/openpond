@@ -119,6 +119,7 @@ describe("OpenPond action catalog context", () => {
             sourceHash: "a".repeat(64),
             validationStatus: "valid",
             validationMessages: [],
+            resourceFiles: [],
           },
         ],
       },
@@ -165,7 +166,7 @@ describe("OpenPond action catalog context", () => {
     expect(prompt).toContain("OpenPond capabilities:");
     expect(prompt).toContain("- workspace_context: use resource_search and resource_read");
     expect(prompt).toContain("- create_pipeline: create or edit source-backed agents and workflows");
-    expect(prompt).toContain("- profile_skill_goal: create or edit profile-backed single-file skills");
+    expect(prompt).toContain("- profile_skill_goal: create or edit profile-backed skill packages");
     expect(prompt).toContain("- goal_control: start, restart, pause, resume, or stop OpenPond goals");
     expect(prompt).toContain("- Capability names are not slash commands.");
     expect(prompt.indexOf("OpenPond capabilities:")).toBeLessThan(prompt.indexOf("OpenPond profile skills:"));

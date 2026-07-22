@@ -26,6 +26,8 @@ export type OpenPondProfileSkillReadResult = {
   sourcePath: string;
   sourceHash: string;
   charCount: number;
+  packagePath: string;
+  resourceFiles: string[];
 };
 
 type ParsedSkillMarkdown = {
@@ -142,6 +144,8 @@ export async function readProfileSkill(input: {
     sourcePath: skill.sourcePath,
     sourceHash: skill.sourceHash,
     charCount: skill.charCount,
+    packagePath: path.dirname(absolutePath),
+    resourceFiles: skill.resourceFiles,
   };
 }
 
@@ -164,11 +168,8 @@ async function loadProfileSkillDirectory(
   const relativePath = path.join(PROFILE_SKILLS_DIR, directoryName, PROFILE_SKILL_FILE).replace(/\\/g, "/");
   const absolutePath = path.join(profileSourcePath, relativePath);
   const messages: string[] = [];
-  const entries = await readdir(path.join(profileSourcePath, PROFILE_SKILLS_DIR, directoryName), { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === PROFILE_SKILL_FILE && entry.isFile()) continue;
-    messages.push(`Profile skills only support ${PROFILE_SKILL_FILE}; unsupported entry: ${entry.name}`);
-  }
+  const packageRoot = path.join(profileSourcePath, PROFILE_SKILLS_DIR, directoryName);
+  const packageFiles = await listPackageFiles(packageRoot);
 
   let contents = "";
   if (!existsSync(absolutePath)) {
@@ -202,7 +203,25 @@ async function loadProfileSkillDirectory(
     sourceHash: sha256Hex(contents),
     validationStatus: messages.length > 0 ? "error" : "valid",
     validationMessages: messages,
+    resourceFiles: packageFiles.filter((file) => file !== PROFILE_SKILL_FILE),
   };
+}
+
+async function listPackageFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  async function visit(directory: string, prefix: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true });
+    await Promise.all(entries.map(async (entry) => {
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await visit(path.join(directory, entry.name), relativePath);
+      } else if (entry.isFile()) {
+        files.push(relativePath);
+      }
+    }));
+  }
+  await visit(root, "");
+  return files.sort();
 }
 
 function markDuplicateSkillNames(skills: OpenPondProfileSkill[]): void {
@@ -227,9 +246,13 @@ async function latestSkillMtime(
 ): Promise<string | null> {
   let latest = 0;
   for (const skill of skills) {
-    const fileStat = await stat(path.join(profileSourcePath, skill.path)).catch(() => null);
-    if (!fileStat?.isFile()) continue;
-    latest = Math.max(latest, fileStat.mtimeMs);
+    const packageRoot = path.dirname(path.join(profileSourcePath, skill.path));
+    const packageFiles = [PROFILE_SKILL_FILE, ...skill.resourceFiles];
+    for (const file of packageFiles) {
+      const fileStat = await stat(path.join(packageRoot, file)).catch(() => null);
+      if (!fileStat?.isFile()) continue;
+      latest = Math.max(latest, fileStat.mtimeMs);
+    }
   }
   return latest > 0 ? new Date(latest).toISOString() : null;
 }

@@ -128,9 +128,9 @@ describe("Insights sidebar visibility", () => {
     });
 
     expect(rendered).toContain("active=2");
-    expect(rendered).toContain(";chats=;");
-    expect(rendered).toContain(";visibleChats=;");
-    expect(rendered).toContain("projectSessions=local:local_visible=terminal_plain,terminal_project");
+    expect(rendered).toContain(";chats=terminal_plain;");
+    expect(rendered).toContain(";visibleChats=terminal_plain;");
+    expect(rendered).toContain("projectSessions=local:local_visible=terminal_project");
   });
 
   test("groups hidden subagent child conversations under their parent chat", () => {

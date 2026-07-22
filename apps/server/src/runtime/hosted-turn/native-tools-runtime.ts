@@ -42,6 +42,7 @@ export function createNativeToolRuntime(deps: {
   updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
   throwIfInterrupted(signal: AbortSignal): void;
 }) {
+  const maxImageInspectionsPerTurn = 12;
   const maxRepeatedInvalidToolRequests = deps.maxRepeatedInvalidToolRequests;
   const appendRuntimeEvent = deps.appendRuntimeEvent;
   const updateStoredTurn = deps.updateTurn;
@@ -94,6 +95,29 @@ export function createNativeToolRuntime(deps: {
         await appendNativeToolCompleted(params.session, params.turnId, result);
         results.push(result);
         continue;
+      }
+
+      if (toolCall.name === "view_image") {
+        const budgetKey = "budget:view_image";
+        const count = (params.invalidRequestCounts.get(budgetKey) ?? 0) + 1;
+        params.invalidRequestCounts.set(budgetKey, count);
+        if (count > maxImageInspectionsPerTurn) {
+          const result: NativeModelToolResult = {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            ok: false,
+            contentText: JSON.stringify({
+              ok: false,
+              action: toolCall.name,
+              output: `This turn already inspected ${maxImageInspectionsPerTurn} images. Stop frame-by-frame inspection; create one contact sheet for any remaining frames, inspect it once, then finish the task.`,
+            }, null, 2),
+            data: { limit: maxImageInspectionsPerTurn, reason: "image_inspection_budget" },
+          };
+          await appendNativeToolStarted(params.session, params.turnId, toolCall, nativeToolEventArgs(toolCall.name, args));
+          await appendNativeToolCompleted(params.session, params.turnId, result);
+          results.push(result);
+          continue;
+        }
       }
 
       const profileSkillName = toolCall.name === "profile_skill_read" ? stringFromRecord(args, "name") : null;
@@ -459,6 +483,8 @@ export function createNativeToolRuntime(deps: {
       body: skill.body,
       path: skill.path,
       sourceHash: skill.sourceHash,
+      packagePath: skill.packagePath,
+      resourceFiles: skill.resourceFiles,
     };
   }
 
@@ -475,7 +501,20 @@ export function createNativeToolRuntime(deps: {
     const sourceHash = stringFromRecord(record, "sourceHash");
     const charCount = typeof record.charCount === "number" ? record.charCount : null;
     if (!name || !description || !body || !path || !sourceHash || charCount === null) return null;
-    return { name, description, body, path, sourceHash, charCount };
+    const packagePath = stringFromRecord(record, "packagePath");
+    const resourceFiles = Array.isArray(record.resourceFiles)
+      ? record.resourceFiles.filter((file): file is string => typeof file === "string")
+      : [];
+    return {
+      name,
+      description,
+      body,
+      path,
+      sourceHash,
+      charCount,
+      ...(packagePath ? { packagePath } : {}),
+      resourceFiles,
+    };
   }
 
   function connectedAppSkillFromNativeResult(result: NativeModelToolResult): ConnectedAppIntegrationSkill | null {

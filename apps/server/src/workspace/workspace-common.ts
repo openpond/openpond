@@ -88,6 +88,12 @@ const WORKSPACE_IMAGE_CONTENT_TYPES = new Map<string, string>([
   [".png", "image/png"],
   [".webp", "image/webp"],
 ]);
+const LOCAL_VIDEO_CONTENT_TYPES = new Map<string, string>([
+  [".m4v", "video/x-m4v"],
+  [".mov", "video/quicktime"],
+  [".mp4", "video/mp4"],
+  [".webm", "video/webm"],
+]);
 
 function safeAppSegment(appId: string): string {
   return appId.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 120) || "app";
@@ -157,8 +163,18 @@ export type WorkspaceImageFile = {
   sizeBytes: number;
 };
 
+export type LocalVideoFile = {
+  path: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
 export function workspaceImageContentType(filePath: string): string | null {
   return WORKSPACE_IMAGE_CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) ?? null;
+}
+
+export function localVideoContentType(filePath: string): string | null {
+  return LOCAL_VIDEO_CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) ?? null;
 }
 
 
@@ -185,7 +201,7 @@ export async function readWorkspaceImageFile(repoPath: string, filePath: string)
 }
 
 export async function readLocalImageFile(filePath: string): Promise<WorkspaceImageFile | null> {
-  const cleanedPath = cleanLocalImagePath(filePath);
+  const cleanedPath = cleanLocalAssetPath(filePath);
   if (!cleanedPath) return null;
   const contentType = workspaceImageContentType(cleanedPath);
   if (!contentType) return null;
@@ -204,7 +220,22 @@ export async function readLocalImageFile(filePath: string): Promise<WorkspaceIma
   }
 }
 
-function cleanLocalImagePath(value: string): string | null {
+export async function readLocalVideoFile(filePath: string): Promise<LocalVideoFile | null> {
+  const cleanedPath = cleanLocalAssetPath(filePath);
+  if (!cleanedPath) return null;
+  const contentType = localVideoContentType(cleanedPath);
+  if (!contentType) return null;
+  const target = path.resolve(cleanedPath);
+  try {
+    const stat = await fs.lstat(target);
+    if (!stat.isFile()) return null;
+    return { path: target, contentType, sizeBytes: stat.size };
+  } catch {
+    return null;
+  }
+}
+
+function cleanLocalAssetPath(value: string): string | null {
   let cleaned = value.trim();
   if (!cleaned) return null;
   cleaned = cleaned.replace(/^['"`]+|['"`]+$/g, "");
