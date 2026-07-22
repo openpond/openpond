@@ -40,8 +40,3 @@ export function connectedAppIconUrl(appId: string): string {
   return CONNECTED_APP_ICON_URLS[appId as keyof typeof CONNECTED_APP_ICON_URLS]
     ?? CONNECTED_APP_ICON_URLS.mcp;
 }
-
-export const TOKEN_ICON_URLS = {
-  ETH: publicAssetUrl("tokens/eth.svg"),
-  USDC: publicAssetUrl("tokens/usdc.svg"),
-} as const;

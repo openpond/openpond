@@ -29,7 +29,7 @@ try {
 
   const bootstrap = await api<BootstrapPayload>(instance.url, instance.token, "/v1/bootstrap?refreshCodex=1");
   assert(bootstrap.server.port === instance.status.port, "bootstrap should report the actual server port");
-  assert(bootstrap.account.balanceLabel === "$0.00", "account chip balance placeholder should be $0.00");
+  assert(bootstrap.account.state === "signed_out", "bootstrap should include signed-out account state");
   assert(bootstrap.codex.available, "Codex CLI should be detected");
   assert(Array.isArray(bootstrap.apps), "OpenPond apps should be represented as a list");
   assert(bootstrap.placeholders.length >= 9, "workspace placeholder panes should be present");

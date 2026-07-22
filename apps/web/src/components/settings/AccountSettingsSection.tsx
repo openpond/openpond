@@ -110,7 +110,7 @@ export function AccountSettingsSection({
     : authError
       ? account?.error ?? "Reconnect this account to restore OpenPond cloud features."
       : signedOut
-        ? "Cloud projects, hosted agents, wallet, and team defaults are disabled until you sign in."
+        ? "Cloud projects, hosted agents, and team defaults are disabled until you sign in."
         : "Checking account status.";
   const showAccountList = accounts.length > 0;
   const formTitle = signedOut ? "Sign in to OpenPond" : authError ? "Reconnect account" : "Add or update account";
@@ -371,7 +371,7 @@ export function AccountSettingsSection({
             <strong>{signedOut ? "Connect this app to your OpenPond account" : "Refresh the saved OpenPond credential"}</strong>
             <span>
               {signedOut
-                ? "Local projects stay available without sign-in; cloud agents, wallet, teams, and hosted runs need an account."
+                ? "Local projects stay available without sign-in; cloud agents, teams, and hosted runs need an account."
                 : "The saved credential could not authenticate. Replace it to resume cloud features."}
             </span>
           </div>

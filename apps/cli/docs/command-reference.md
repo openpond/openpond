@@ -691,7 +691,7 @@ Options:
 
 ```text
 Usage:
-  openpond apps <list|code-visibility|tools|deploy|env get|env set|performance|summary|assistant|store events|trade-facts|agent create|positions tx> [args]
+  openpond apps <list|code-visibility|tools|deploy|env get|env set|performance|summary|assistant|agent create> [args]
 
 Options:
   --app-id <string>

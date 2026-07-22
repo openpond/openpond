@@ -2,7 +2,6 @@ import {
   checkOpenPondApiHealth,
   createRepo,
   getOpenPondAccount,
-  getOpenPondAccountBalance,
   listApps,
 } from "@openpond/cloud";
 import type { CreateRepoRequest, CreateRepoResponse, OpenPondAccountResponse } from "@openpond/cloud";
@@ -169,10 +168,9 @@ export async function loadOpenPondApps(options: LoadOpenPondAppsOptions = {}): P
     };
   }
 
-  const [healthResult, accountResult, balanceResult, appsResult, accountProfilesResult] = await Promise.allSettled([
+  const [healthResult, accountResult, appsResult, accountProfilesResult] = await Promise.allSettled([
     checkOpenPondApiHealth(context.apiBaseUrl, context.token),
     getOpenPondAccount(context.apiBaseUrl, context.token),
-    getOpenPondAccountBalance(context.apiBaseUrl, context.token),
     listApps(context.apiBaseUrl, context.token, {
       handle: context.account?.handle,
       limit: options.limit ?? 20,
@@ -183,7 +181,6 @@ export async function loadOpenPondApps(options: LoadOpenPondAppsOptions = {}): P
   ]);
   const health = healthResult.status === "fulfilled" ? healthResult.value : null;
   const accountResponse = accountResult.status === "fulfilled" ? accountResult.value : null;
-  const balanceResponse = balanceResult.status === "fulfilled" ? balanceResult.value : null;
   const accountProfiles = accountProfilesResult.status === "fulfilled" ? accountProfilesResult.value : {};
   if (accountResult.status === "fulfilled" && context.account) {
     accountProfiles[profileKey(context.account.handle, context.account.baseUrl)] = {
@@ -216,12 +213,10 @@ export async function loadOpenPondApps(options: LoadOpenPondAppsOptions = {}): P
     account: toAccountState({
       ...context,
       accountResponse,
-      balanceResponse,
       accountProfiles,
       health: effectiveHealth,
       authFailed: Boolean(authError),
       error: authError ?? profileError,
-      balanceError: balanceResult.status === "rejected" ? errorMessage(balanceResult.reason) : null,
     }),
     apps:
       appsResult.status === "fulfilled"

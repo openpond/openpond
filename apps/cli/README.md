@@ -69,7 +69,6 @@ openpond apps env set <handle>/<repo> --env '{"OPENTOOL_PUBLIC_HL_SIGNAL_BOT_CON
 openpond apps performance [--app-id <id>]
 openpond apps agent create --prompt "Build a daily digest agent"
 openpond apps tools execute <appId> <deploymentId> <tool> --body '{"foo":"bar"}'
-openpond apps positions tx --method GET --params '{"status":"open"}'
 openpond opentool init --dir .
 ```
 
@@ -106,7 +105,6 @@ Command reference:
 - `openpond apps performance [--app-id <id>]`: fetch performance summary, optionally scoped to an app.
 - `openpond apps agent create --prompt <text> [--template-id <id>]`: create an agent from a prompt (streams deploy logs by default).
 - `openpond apps tools execute <appId> <deploymentId> <tool> [--body <json>] [--method <METHOD>] [--headers <json>]`: execute a tool for a specific deployment.
-- `openpond apps positions tx [--method <GET|POST>] [--body <json>] [--params <json>]`: read or submit positions.
 - `openpond opentool <init|validate|build> [args]`: run OpenTool CLI commands via `npx opentool`.
 
 Agent source/edit status:
@@ -136,7 +134,6 @@ const result = await client.tool.run("handle/repo", "myTool", {
 
 const apps = await client.apps.list();
 const account = await client.account.get();
-const balance = await client.account.balance();
 const health = await client.account.health();
 const accountTools = await client.apps.tools();
 const performance = await client.apps.performance({ appId: "app_123" });

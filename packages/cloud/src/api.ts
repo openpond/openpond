@@ -18,7 +18,6 @@ import type {
   HeadlessAppRequest,
   HeadlessAppsResponse,
   OpenPondAccount,
-  OpenPondAccountBalanceResponse,
   OpenPondAccountResponse,
   OpenPondApiHealth,
   OpenPondApiHealthResponse,
@@ -88,7 +87,6 @@ export type {
   HeadlessAppResponse,
   HeadlessAppsResponse,
   OpenPondAccount,
-  OpenPondAccountBalanceResponse,
   OpenPondAccountProduct,
   OpenPondAccountResponse,
   OpenPondApiHealth,
@@ -766,22 +764,6 @@ export async function getOpenPondAccount(
   return (await response.json()) as OpenPondAccountResponse;
 }
 
-export async function getOpenPondAccountBalance(
-  baseUrl: string,
-  token: string
-): Promise<OpenPondAccountBalanceResponse> {
-  const response = await apiFetch(baseUrl, token, "/account/balance", {
-    method: "GET",
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(
-      `Account balance lookup failed: ${response.status} ${text}`
-    );
-  }
-  return (await response.json()) as OpenPondAccountBalanceResponse;
-}
-
 export async function checkOpenPondApiHealth(
   baseUrl: string,
   token?: string | null
@@ -910,33 +892,6 @@ export async function executeUserTool(
     status: response.status,
     data: payload,
   };
-}
-
-export async function submitPositionsTx(
-  baseUrl: string,
-  token: string,
-  params: {
-    method: "GET" | "POST";
-    body?: unknown;
-    query?: Record<string, string>;
-  }
-): Promise<unknown> {
-  const qs =
-    params.query && Object.keys(params.query).length > 0
-      ? `?${new URLSearchParams(params.query).toString()}`
-      : "";
-  const response = await apiFetch(baseUrl, token, `/apps/positions/tx${qs}`, {
-    method: params.method,
-    body:
-      params.method === "POST" && params.body !== undefined
-        ? JSON.stringify(params.body)
-        : undefined,
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Positions request failed: ${response.status} ${text}`);
-  }
-  return (await response.json()) as unknown;
 }
 
 export async function submitBacktestRun(

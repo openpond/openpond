@@ -16,8 +16,6 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
     baseUrl: "https://openpond.ai",
     apiBaseUrl: "https://api.openpond.ai",
     chatApiBaseUrl: "https://opchat.openpond.ai",
-    balanceLabel: "$0.00",
-    balance: null,
     creditsLabel: null,
     profile: {
       id: "user_ada",
@@ -31,8 +29,6 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
       dailyAgentAppId: null,
       dailyAgentDeploymentId: null,
       credits: null,
-      turnkeyWalletAddress: null,
-      turnkeyOperatingWalletAddress: null,
     },
     products: [],
     apiHealth: null,

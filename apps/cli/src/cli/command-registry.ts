@@ -358,7 +358,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "apps",
-    usage: "openpond apps <list|code-visibility|tools|deploy|env get|env set|performance|summary|assistant|store events|trade-facts|agent create|positions tx> [args]",
+    usage: "openpond apps <list|code-visibility|tools|deploy|env get|env set|performance|summary|assistant|agent create> [args]",
     optionSchema: {
       appId: "string",
       body: "json",
@@ -591,12 +591,9 @@ async function runAppsCommand({ options, rest }: CliCommandContext): Promise<voi
     runAppsEnvSet,
     runAppsList,
     runAppsPerformance,
-    runAppsPositionsTx,
-    runAppsStoreEvents,
     runAppsSummary,
     runAppsTools,
     runAppsToolsExecute,
-    runAppsTradeFacts,
   } = await import("./apps");
   const subcommand = rest[0];
   if (subcommand === "list") {
@@ -678,23 +675,11 @@ async function runAppsCommand({ options, rest }: CliCommandContext): Promise<voi
     await runAppsAssistant(options, mode, target, rest.slice(3));
     return;
   }
-  if (subcommand === "store" && rest[1] === "events") {
-    await runAppsStoreEvents(options);
-    return;
-  }
-  if (subcommand === "trade-facts") {
-    await runAppsTradeFacts(options);
-    return;
-  }
   if (subcommand === "agent" && rest[1] === "create") {
     await runAppsAgentCreate(options, rest.slice(2));
     return;
   }
-  if (subcommand === "positions" && rest[1] === "tx") {
-    await runAppsPositionsTx(options);
-    return;
-  }
   throw new Error(
-    "usage: apps <list|code-visibility|tools|deploy|env get|env set|performance|summary|assistant|store events|trade-facts|agent create|positions tx> [args]"
+    "usage: apps <list|code-visibility|tools|deploy|env get|env set|performance|summary|assistant|agent create> [args]"
   );
 }

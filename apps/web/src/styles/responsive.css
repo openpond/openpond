@@ -21,22 +21,6 @@
     padding: 0;
   }
 
-  .wallet-view {
-    width: calc(100% - 28px);
-  }
-
-  .wallet-credit-card {
-    min-height: 224px;
-  }
-
-  .wallet-content-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .wallet-card-bottom {
-    grid-template-columns: 1fr;
-  }
-
   .chat-thread {
     padding: 68px 20px var(--chat-composer-reserve, 132px);
   }

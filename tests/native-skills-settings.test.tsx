@@ -29,10 +29,10 @@ describe("native skills settings", () => {
       validationStatus: "valid",
       validationMessages: [],
       skills: [{
-        name: "review-ethereum-transaction",
-        description: "Review an Ethereum transaction.",
-        relativePath: "skills/review-ethereum-transaction/SKILL.md",
-        sourcePath: "/home/user/.openpond/extensions/github/duckailabs/ducky-capital-skills/current/skills/review-ethereum-transaction/SKILL.md",
+        name: "review-database-transaction",
+        description: "Review a database transaction.",
+        relativePath: "skills/review-database-transaction/SKILL.md",
+        sourcePath: "/home/user/.openpond/extensions/github/example/review-skills/current/skills/review-database-transaction/SKILL.md",
         charCount: 500,
         sourceHash: "skill-hash",
         resourceFiles: ["references/example.md"],
@@ -87,8 +87,8 @@ describe("native skills settings", () => {
       scope: "extension",
       files: [
         "README.md",
-        "skills/review-ethereum-transaction/SKILL.md",
-        "skills/review-ethereum-transaction/references/example.md",
+        "skills/review-database-transaction/SKILL.md",
+        "skills/review-database-transaction/references/example.md",
       ],
     });
   });

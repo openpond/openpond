@@ -8,7 +8,6 @@ import {
   runAssistantMode,
   submitBacktestDetail,
   submitBacktestTx,
-  submitPositionsTx,
   updateAppCodeVisibility,
   updateAppEnvironment,
 } from "../api";
@@ -452,109 +451,6 @@ export async function runAppsDeploy(
   });
 }
 
-export async function runAppsPositionsTx(
-  options: Record<string, string | boolean>
-): Promise<void> {
-  const config = await loadConfig();
-  const uiBase = resolveBaseUrl(config);
-  const apiKey = await ensureApiKey(config, uiBase);
-  const apiBase = resolvePublicApiBaseUrl(config);
-  const methodRaw =
-    typeof options.method === "string"
-      ? String(options.method).toUpperCase()
-      : "POST";
-  const method = methodRaw === "GET" ? "GET" : "POST";
-  if (methodRaw !== "GET" && methodRaw !== "POST") {
-    throw new Error("method must be GET or POST");
-  }
-  let query: Record<string, string> | undefined;
-  if (method === "GET" && typeof options.params === "string") {
-    const parsed = parseJsonOption(String(options.params), "params");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("params must be a JSON object");
-    }
-    query = {};
-    for (const [key, value] of Object.entries(
-      parsed as Record<string, unknown>
-    )) {
-      if (value === undefined) continue;
-      query[key] = typeof value === "string" ? value : JSON.stringify(value);
-    }
-  }
-  const body =
-    method === "POST" && typeof options.body === "string"
-      ? parseJsonOption(String(options.body), "body")
-      : undefined;
-  const result = await submitPositionsTx(apiBase, apiKey, {
-    method,
-    body,
-    query,
-  });
-  console.log(JSON.stringify(result, null, 2));
-}
-
-export function resolveStoreEventsParams(
-  options: Record<string, string | boolean>
-): Record<string, string> | undefined {
-  let params: Record<string, string> = {};
-  if (typeof options.params === "string") {
-    const parsed = parseJsonOption(String(options.params), "params");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("params must be a JSON object");
-    }
-    for (const [key, value] of Object.entries(
-      parsed as Record<string, unknown>
-    )) {
-      if (value === undefined) continue;
-      params[key] = typeof value === "string" ? value : JSON.stringify(value);
-    }
-  }
-
-  const addParam = (key: string, value: string | undefined) => {
-    if (value === undefined || value === "") return;
-    params[key] = value;
-  };
-
-  addParam(
-    "source",
-    typeof options.source === "string" ? options.source.trim() : undefined
-  );
-  addParam(
-    "walletAddress",
-    typeof options.walletAddress === "string"
-      ? options.walletAddress.trim()
-      : undefined
-  );
-  addParam(
-    "symbol",
-    typeof options.symbol === "string" ? options.symbol.trim() : undefined
-  );
-  addParam(
-    "cursor",
-    typeof options.cursor === "string" ? options.cursor.trim() : undefined
-  );
-  addParam(
-    "status",
-    typeof options.status === "string" ? options.status.trim() : undefined
-  );
-  addParam("since", parseTimeOption(options.since, "since"));
-  addParam("until", parseTimeOption(options.until, "until"));
-
-  if (typeof options.limit === "string" && options.limit.trim().length > 0) {
-    const parsed = Number.parseInt(options.limit, 10);
-    if (!Number.isFinite(parsed)) {
-      throw new Error("limit must be a number");
-    }
-    addParam("limit", String(parsed));
-  }
-
-  if (options.history !== undefined) {
-    addParam("history", parseBooleanOption(options.history) ? "true" : "false");
-  }
-
-  return Object.keys(params).length ? params : undefined;
-}
-
 export function resolveBacktestEventsParams(
   options: Record<string, string | boolean>
 ): Record<string, string> | undefined {
@@ -580,12 +476,6 @@ export function resolveBacktestEventsParams(
   addParam(
     "source",
     typeof options.source === "string" ? options.source.trim() : undefined
-  );
-  addParam(
-    "walletAddress",
-    typeof options.walletAddress === "string"
-      ? options.walletAddress.trim()
-      : undefined
   );
   addParam(
     "symbol",
@@ -619,21 +509,6 @@ export function resolveBacktestEventsParams(
   }
 
   return Object.keys(params).length ? params : undefined;
-}
-
-export async function runAppsStoreEvents(
-  options: Record<string, string | boolean>
-): Promise<void> {
-  const config = await loadConfig();
-  const uiBase = resolveBaseUrl(config);
-  const apiKey = await ensureApiKey(config, uiBase);
-  const apiBase = resolvePublicApiBaseUrl(config);
-  const query = resolveStoreEventsParams(options);
-  const result = await submitPositionsTx(apiBase, apiKey, {
-    method: "GET",
-    query,
-  });
-  console.log(JSON.stringify(result, null, 2));
 }
 
 export async function runBacktestEvents(
@@ -680,27 +555,4 @@ export async function runBacktestGet(
     runId,
   });
   console.log(JSON.stringify(result, null, 2));
-}
-
-export async function runAppsTradeFacts(
-  options: Record<string, string | boolean>
-): Promise<void> {
-  const config = await loadConfig();
-  const uiBase = resolveBaseUrl(config);
-  const apiKey = await ensureApiKey(config, uiBase);
-  const apiBase = resolvePublicApiBaseUrl(config);
-  const appId = typeof options.appId === "string" ? options.appId : undefined;
-  const performance = await getUserPerformance(apiBase, apiKey, { appId });
-  if (
-    performance &&
-    typeof performance === "object" &&
-    "trades" in performance &&
-    Array.isArray((performance as { trades?: unknown }).trades)
-  ) {
-    console.log(
-      JSON.stringify((performance as { trades: unknown }).trades, null, 2)
-    );
-    return;
-  }
-  console.log(JSON.stringify(performance, null, 2));
 }

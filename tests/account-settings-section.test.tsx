@@ -22,8 +22,6 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
     baseUrl: null,
     apiBaseUrl: "https://api.openpond.ai",
     chatApiBaseUrl: "https://opchat.openpond.ai",
-    balanceLabel: "$0.00",
-    balance: null,
     creditsLabel: null,
     profile: null,
     products: [],
@@ -118,7 +116,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("not signed in");
     expect(html).toContain("Sign in to OpenPond");
     expect(html).toContain("Connect this app to your OpenPond account");
-    expect(html).toContain("Cloud projects, hosted agents, wallet, and team defaults are disabled until you sign in.");
+    expect(html).toContain("Cloud projects, hosted agents, and team defaults are disabled until you sign in.");
     expect(html).toContain("https://openpond.ai/settings/api-keys");
     expect(html).toContain(">Create key<");
     expect(html).toContain("Environment");
