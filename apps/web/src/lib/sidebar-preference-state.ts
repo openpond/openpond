@@ -12,7 +12,13 @@ export type LayoutWidthPreferenceChange = {
   changedAt: number;
 };
 
-const SIDEBAR_SECTION_KEYS: SidebarSectionKey[] = ["pinned", "projects", "cloudProjects", "chats"];
+const SIDEBAR_SECTION_KEYS: SidebarSectionKey[] = [
+  "pinned",
+  "projects",
+  "cloudProjects",
+  "chats",
+  "savedForLater",
+];
 
 export function recordSidebarAppPreferenceChanges(
   changeTimes: SidebarAppPreferenceChangeTimes,

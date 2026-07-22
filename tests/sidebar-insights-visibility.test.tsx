@@ -159,6 +159,31 @@ describe("Insights sidebar visibility", () => {
     expect(rendered).toContain("childSessions=parent_chat=child_research");
     expect(rendered).not.toContain("chats=parent_chat,child_research");
   });
+
+  test("moves saved chats out of Chats and project children", () => {
+    const project = localProject({ id: "saved_project", name: "Saved Project" });
+    const regular = session({ id: "regular_chat", title: "Regular", cwd: "/tmp/general" });
+    const pinnedChat = session({ id: "pinned_chat", title: "Pinned", pinned: true });
+    const savedChat = session({ id: "saved_chat", title: "Saved", savedForLater: true });
+    const savedProjectChat = session({
+      id: "saved_project_chat",
+      title: "Saved project chat",
+      localProjectId: project.id,
+      workspaceId: project.id,
+      savedForLater: true,
+    });
+
+    const rendered = renderSidebarDataProbe({
+      projects: [project],
+      sessions: [regular, pinnedChat, savedChat, savedProjectChat],
+      selectedSessionId: regular.id,
+    });
+
+    expect(rendered).toContain("chats=regular_chat");
+    expect(rendered).toContain("pinned=pinned_chat");
+    expect(rendered).toContain("saved=saved_chat,saved_project_chat");
+    expect(rendered).not.toContain("projectSessions=local:saved_project=saved_project_chat");
+  });
 });
 
 function renderSidebarDataProbe(input: {
@@ -199,6 +224,8 @@ function SidebarDataProbe({
       `active=${data.activeSessions.length}`,
       `chats=${data.chatRows.map((row) => row.id).join(",")}`,
       `visibleChats=${data.visibleChatRows.map((row) => row.id).join(",")}`,
+      `pinned=${data.pinnedSessions.map((row) => row.id).join(",")}`,
+      `saved=${data.savedForLaterSessions.map((row) => row.id).join(",")}`,
       `projectSessions=${Object.entries(data.projectSessionRowsByProjectId)
         .map(([projectId, rows]) => `${projectId}=${rows.map((row) => row.id).join(",")}`)
         .join("|")}`,

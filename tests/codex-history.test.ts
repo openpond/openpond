@@ -859,10 +859,18 @@ describe("codex history", () => {
       expect(applied.status).toBe("active");
       expect(applied.updatedAt).toBe(baseSession.updatedAt);
 
-      await patchCodexHistorySidebarPreference(store, sessionId, { pinned: false, archived: true });
+      await patchCodexHistorySidebarPreference(store, sessionId, { savedForLater: true });
+      preferences = await loadCodexHistorySidebarPreferences(store);
+      applied = applyCodexHistorySidebarPreference(baseSession, preferences);
+      expect(applied.savedForLater).toBe(true);
+      expect(applied.pinned).toBe(false);
+      expect(applied.archived).toBe(false);
+
+      await patchCodexHistorySidebarPreference(store, sessionId, { archived: true });
       preferences = await loadCodexHistorySidebarPreferences(store);
       applied = applyCodexHistorySidebarPreference(baseSession, preferences);
       expect(applied.pinned).toBe(false);
+      expect(applied.savedForLater).toBe(false);
       expect(applied.archived).toBe(true);
       expect(applied.order).toBe(2);
       expect(applied.updatedAt).toBe(baseSession.updatedAt);

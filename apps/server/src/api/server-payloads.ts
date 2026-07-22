@@ -11,6 +11,7 @@ import {
   ListCloudWorkItemsRequestSchema,
   OpenCloudWorkItemRequestSchema,
   PatchSidebarAppPreferenceRequestSchema,
+  PatchSidebarFileBookmarkRequestSchema,
   RecordClientDiagnosticRequestSchema,
   RecordPreflightTurnFailureRequestSchema,
   PreviewLocalProjectCloudSourceRequestSchema,
@@ -44,7 +45,11 @@ import {
   type Session,
   type SidebarAppPreference,
   type SidebarAppPreferences,
+  type SidebarFileBookmark,
+  type SidebarFileBookmarksResponse,
+  type PatchSidebarFileBookmarkRequest,
   type WorkspaceState,
+  normalizeSidebarFilePath,
 } from "@openpond/contracts";
 import {
   loadOpenPondAccountContext,
@@ -773,7 +778,10 @@ export function createServerPayloads(deps: {
     ]);
     const linkedLocalProjects = await inferLocalProjectOpenPondLinks(localProjects, openPond.apps);
     const scope = openPondCacheScope(openPond.account);
-    const sidebarAppPreferences = await store.getSidebarAppPreferences(scope);
+    const [sidebarAppPreferences, sidebarFileBookmarks] = await Promise.all([
+      store.getSidebarAppPreferences(scope),
+      listSidebarFileBookmarksForScope(scope),
+    ]);
     const payload: BootstrapPayload = {
       server: {
         id: serverId,
@@ -799,6 +807,7 @@ export function createServerPayloads(deps: {
         ),
       ),
       sidebarAppPreferences,
+      sidebarFileBookmarks,
       appsError: openPond.appsError,
       appsMeta: openPond.appsMeta,
       accountMeta: openPond.accountMeta,
@@ -1688,6 +1697,48 @@ export function createServerPayloads(deps: {
     return openPondCacheScope(context.accountState);
   }
 
+  async function resolveSidebarFileAvailability(item: SidebarFileBookmark): Promise<boolean> {
+    try {
+      if (item.workspaceKind === "local") {
+        await workspacePayloads.workspaceFilePayload(item.workspaceId, item.path);
+      } else {
+        await sandboxRequestPayload({
+          type: "stat_file",
+          sandboxId: item.workspaceId,
+          payload: { path: item.path },
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function listSidebarFileBookmarksForScope(scope: string): Promise<SidebarFileBookmark[]> {
+    const items = await store.listSidebarFileBookmarks(scope);
+    return Promise.all(items.map(async (item) => ({
+      ...item,
+      available: await resolveSidebarFileAvailability(item),
+    })));
+  }
+
+  async function listSidebarFileBookmarksPayload(): Promise<SidebarFileBookmarksResponse> {
+    return { items: await listSidebarFileBookmarksForScope(await currentSidebarScope()) };
+  }
+
+  async function patchSidebarFileBookmarkPayload(
+    payload: unknown,
+  ): Promise<SidebarFileBookmarksResponse> {
+    const parsed = PatchSidebarFileBookmarkRequestSchema.parse(payload);
+    const input: PatchSidebarFileBookmarkRequest = {
+      ...parsed,
+      path: normalizeSidebarFilePath(parsed.path),
+    };
+    const scope = await currentSidebarScope();
+    await store.patchSidebarFileBookmark(scope, input);
+    return { items: await listSidebarFileBookmarksForScope(scope) };
+  }
+
   async function patchSidebarAppPreference(appId: string, payload: unknown): Promise<SidebarAppPreference> {
     const input = PatchSidebarAppPreferenceRequestSchema.parse(payload);
     return store.patchSidebarAppPreference(await currentSidebarScope(), appId, input);
@@ -1839,6 +1890,8 @@ export function createServerPayloads(deps: {
     openCloudWorkItemPayload,
     applyCloudWorkItemLocalPatchPayload,
     patchSidebarAppPreference,
+    listSidebarFileBookmarksPayload,
+    patchSidebarFileBookmarkPayload,
     reorderSidebarApps,
     refreshOpenPondPayload,
     loadMoreOpenPondAppsPayload,

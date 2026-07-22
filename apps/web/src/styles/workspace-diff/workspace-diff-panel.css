@@ -190,6 +190,46 @@
   padding-left: 8px;
 }
 
+.workspace-diff-tab-bookmark-actions {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  z-index: 2;
+  gap: 1px;
+  border-radius: 5px;
+  background: #252525;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.workspace-diff-tab-bookmark-actions button {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: #a8a8a8;
+}
+
+.workspace-diff-tab.file:hover .workspace-diff-tab-bookmark-actions,
+.workspace-diff-tab.file:focus-within .workspace-diff-tab-bookmark-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workspace-diff-tab-bookmark-actions button:hover,
+.workspace-diff-tab-bookmark-actions button:focus-visible,
+.workspace-diff-tab-bookmark-actions button.active {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f1f1;
+}
+
+.workspace-diff-tab.file:hover .workspace-diff-tab-main,
+.workspace-diff-tab.file:focus-within .workspace-diff-tab-main {
+  padding-right: 39px;
+}
+
 .workspace-diff-tab.active,
 .workspace-diff-tab:hover,
 .workspace-diff-add-tab:hover {
@@ -226,11 +266,13 @@
 }
 
 .workspace-diff-tab.file:hover .workspace-diff-tab-close,
+.workspace-diff-tab.file:focus-within .workspace-diff-tab-close,
 .workspace-diff-tab.review:hover .workspace-diff-tab-close {
   opacity: 1;
 }
 
 .workspace-diff-tab.file:hover .workspace-diff-tab-icon,
+.workspace-diff-tab.file:focus-within .workspace-diff-tab-icon,
 .workspace-diff-tab.review:hover .workspace-diff-tab-icon {
   opacity: 0;
 }

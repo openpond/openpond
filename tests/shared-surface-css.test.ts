@@ -56,7 +56,7 @@ describe("shared surface stylesheet ownership", () => {
   test("loads shared table and dialog styles with the Lab surface", async () => {
     const [component, dialog, sharedCss] = await Promise.all([
       source("apps/web/src/components/labs/LabsView.tsx"),
-      source("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx"),
+      source("apps/web/src/components/create-improve/CreateImproveAuthoringShell.tsx"),
       source("apps/web/src/styles/training/training.css"),
     ]);
 

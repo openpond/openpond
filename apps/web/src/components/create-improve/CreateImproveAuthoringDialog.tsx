@@ -24,9 +24,8 @@ import type {
 } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
 import { normalizeChatModel } from "../../lib/app-models";
-import { ArrowLeft, Loader2, X } from "../icons";
+import { Loader2 } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
-import { AppDialog } from "../dialogs/AppDialog";
 import { shouldRevealMinerCandidates, trainingAuthoringModel, type NewModelStep } from "../training/training-flow";
 import { TrainingAutomaticCandidatesStep } from "../training/TrainingAutomaticCandidatesStep";
 import { TrainingAutomaticScopeStep } from "../training/TrainingAutomaticScopeStep";
@@ -41,6 +40,7 @@ import {
   type NewModelSetup,
 } from "../training/TrainingStartModeStep";
 import { shouldCancelCreationOnDialogDismiss } from "./create-improve-authoring-cancellation";
+import { CreateImproveAuthoringShell } from "./CreateImproveAuthoringShell";
 import {
   aggregateEstimate,
   authoringFailureCopy,
@@ -62,13 +62,16 @@ export type { CreateImproveAuthoringTarget } from "./create-improve-authoring-mo
 export function CreateImproveAuthoringDialog({
   datasetBuildMode = false,
   defaultModel,
+  datasetBuildBackLabel = "Back to Dataset sources",
   initialCreation = null,
+  initialExistingTasksetId = null,
   initialObjective,
   initialSessionIds = [],
   onClose,
   onAgentPromptSubmitted,
   onBackToDatasetSources,
   onOpenComputeSettings,
+  onCreateDataset,
   onModelCreatedFromTaskset,
   onTasksetCreated,
   preferences,
@@ -79,10 +82,13 @@ export function CreateImproveAuthoringDialog({
   sources,
   training,
   targetIntent = { kind: "model", id: null, displayName: null, operation: "create" },
+  presentation = "dialog",
 }: {
   datasetBuildMode?: boolean;
+  datasetBuildBackLabel?: string;
   defaultModel: ChatModelRef;
   initialCreation?: TaskCreationSnapshot | null;
+  initialExistingTasksetId?: string | null;
   initialObjective: string | null;
   initialSessionIds?: string[];
   onClose: () => void;
@@ -92,6 +98,7 @@ export function CreateImproveAuthoringDialog({
   }) => void | Promise<void>;
   onBackToDatasetSources?: () => void;
   onOpenComputeSettings: () => void;
+  onCreateDataset?: () => void;
   onModelCreatedFromTaskset?: (
     taskset: Taskset,
     run: CreateImproveRun,
@@ -106,26 +113,34 @@ export function CreateImproveAuthoringDialog({
   sources: TrainingSourceRef[];
   training: TrainingController;
   targetIntent?: CreateImproveAuthoringTarget;
+  presentation?: "dialog" | "embedded";
 }) {
   const initialAuthoringModel = trainingAuthoringModel(preferences, defaultModel);
   const baseModelCandidates = training.payload?.baseModelCandidates ?? [];
+  const isAgentAuthoring =
+    resourceIntent === "workproduct" && targetIntent.kind === "agent";
+  const usesBaseModelStep =
+    resourceIntent === "workproduct" && targetIntent.kind === "model";
   const restoredSessionIds = sources
     .filter((source) => initialCreation?.request.sourceIds.includes(source.id))
     .map((source) => source.sessionId);
   const [step, setStep] = useState<NewModelStep>(() =>
     initialCreation
       ? initialCreationStep(initialCreation)
-      : datasetBuildMode ? "evidence" : "start",
+      : datasetBuildMode
+        ? "evidence"
+        : usesBaseModelStep
+          ? "existing_dataset"
+          : "start",
   );
-  const isAgentAuthoring =
-    resourceIntent === "workproduct" && targetIntent.kind === "agent";
   const [setup, setSetup] = useState<NewModelSetup | null>(() => {
     if (initialCreation && isAgentAuthoring) {
       return initialCreation.request.sourceIds.length > 0
         ? "from_chats"
         : "from_prompt";
     }
-    return initialCreation?.request.entryMode ?? (datasetBuildMode ? "manual" : null);
+    return initialCreation?.request.entryMode
+      ?? (datasetBuildMode ? "manual" : usesBaseModelStep ? "existing_dataset" : null);
   });
   const mode: NewModelMode | null =
     setup === "automated" || setup === "manual" ? setup : null;
@@ -139,7 +154,7 @@ export function CreateImproveAuthoringDialog({
       initialCreation?.request.preferredBaseModelId ?? null,
     )?.selectionKey ?? null,
   );
-  const [selectedExistingTasksetId, setSelectedExistingTasksetId] = useState<string | null>(null);
+  const [selectedExistingTasksetId, setSelectedExistingTasksetId] = useState<string | null>(initialExistingTasksetId);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(initialCreation?.request.candidateId ?? null);
   const [authoringProvider, setAuthoringProvider] = useState<ChatProvider>(
     initialCreation?.request.analysisModel?.providerId ?? initialAuthoringModel.providerId,
@@ -230,7 +245,6 @@ export function CreateImproveAuthoringDialog({
   const busy = analyzing || preparingScan || Boolean(training.busyAction);
   const selectsChats = step === "automatic_scope"
     || (step === "evidence" && setup !== "from_prompt");
-  const usesBaseModelStep = resourceIntent === "workproduct" && targetIntent.kind === "model";
   const preferredBaseModelCandidate = useMemo(
     () => baseModelCandidates.find(
       (candidate) => candidate.selectionKey === preferredBaseModelKey,
@@ -386,7 +400,7 @@ export function CreateImproveAuthoringDialog({
   function continueFromBaseModel() {
     if (usesBaseModelStep && !preferredBaseModelCandidate?.available) return;
     if (setup === "existing_dataset") {
-      setStep("existing_dataset");
+      void createModelFromExistingTaskset();
       return;
     }
     if (agentSourceMode) {
@@ -616,8 +630,21 @@ export function CreateImproveAuthoringDialog({
     setEvidenceChanged(true);
   }
 
+  async function returnToDatasetSources() {
+    const activeCreation = creation;
+    try {
+      if (shouldCancelCreationOnDialogDismiss(activeCreation)) {
+        await training.actions.cancelCreation(activeCreation.id);
+      }
+    } finally {
+      onBackToDatasetSources?.();
+    }
+  }
+
   function goBack() {
-    if (step === "base_model") setStep("start");
+    if (step === "base_model") {
+      setStep(setup === "existing_dataset" ? "existing_dataset" : "start");
+    }
     else if (step === "existing_dataset") setStep("base_model");
     else if (step === "automatic_scope") {
       setStep(datasetBuildMode
@@ -626,11 +653,11 @@ export function CreateImproveAuthoringDialog({
     }
     else if (step === "automatic_candidates") setStep("automatic_scope");
     else if (step === "evidence") {
-      if (creation?.state === "awaiting_disclosure_approval") void declineDisclosure();
       if (datasetBuildMode && onBackToDatasetSources) {
-        onBackToDatasetSources();
+        void returnToDatasetSources();
         return;
       }
+      if (creation?.state === "awaiting_disclosure_approval") void declineDisclosure();
       setStep(mode === "automated"
         ? "automatic_candidates"
         : usesBaseModelStep ? "base_model" : "start");
@@ -675,31 +702,22 @@ export function CreateImproveAuthoringDialog({
   }
 
   return (
-    <AppDialog
+    <CreateImproveAuthoringShell
       ariaLabel={dialogTitle(targetIntent, resourceIntent)}
-      className={`training-dialog training-run-dialog ${step === "start" ? "training-run-start-step" : "training-run-workflow-step"}`}
-      initialFocusKey={step}
+      backAriaLabel={datasetBuildMode && step === "evidence"
+        ? datasetBuildBackLabel
+        : datasetBuildMode && (step === "automatic_scope" || step === "recommendation")
+          ? "Back to Dataset build"
+        : backLabel(step, usesBaseModelStep, mode)}
+      presentation={presentation}
+      showBack={step !== "start" && step !== "existing_dataset"}
+      step={step}
+      title={step === "recommendation"
+        ? reviewTitle(targetIntent, resourceIntent)
+        : dialogTitle(targetIntent, resourceIntent)}
+      onBack={goBack}
       onClose={() => void closeDialog()}
     >
-        <div className="training-dialog-header">
-          <div className="training-run-dialog-title">
-            {step !== "start" ? (
-              <button
-                className="training-icon-button"
-                type="button"
-                aria-label={datasetBuildMode && step === "evidence"
-                  ? "Back to Dataset sources"
-                  : backLabel(step, usesBaseModelStep, mode)}
-                onClick={goBack}
-              >
-                <ArrowLeft size={16} />
-              </button>
-            ) : null}
-            <h2>{step === "recommendation" ? reviewTitle(targetIntent, resourceIntent) : dialogTitle(targetIntent, resourceIntent)}</h2>
-          </div>
-          <button className="training-icon-button" type="button" aria-label="Close" onClick={() => void closeDialog()}><X size={16} /></button>
-        </div>
-
         {step === "start" ? (
           <TrainingStartModeStep
             allowExistingDataset={usesBaseModelStep && Boolean(onModelCreatedFromTaskset)}
@@ -713,6 +731,7 @@ export function CreateImproveAuthoringDialog({
           <TrainingBaseModelStep
             busy={training.busyAction === "scan-base-models"}
             candidates={baseModelCandidates}
+            continueLabel={setup === "existing_dataset" ? "Create model" : "Continue"}
             value={preferredBaseModelKey}
             onChange={setPreferredBaseModelKey}
             onContinue={continueFromBaseModel}
@@ -725,7 +744,8 @@ export function CreateImproveAuthoringDialog({
             selectedTasksetId={selectedExistingTasksetId}
             state={training.payload}
             onChange={setSelectedExistingTasksetId}
-            onCreate={() => void createModelFromExistingTaskset()}
+            onContinue={() => setStep("base_model")}
+            onCreateDataset={onCreateDataset}
           />
         ) : step === "automatic_scope" ? (
           <TrainingAutomaticScopeStep
@@ -859,6 +879,6 @@ export function CreateImproveAuthoringDialog({
             {creation?.state === "failed" ? <><h3>Analysis failed</h3><p>{creation.blockedReason}</p></> : <><Loader2 className="spin" size={18} /><p>{isAgentAuthoring ? "Preparing the Agent review…" : "Preparing the recommendation…"}</p></>}
           </div>
         )}
-    </AppDialog>
+    </CreateImproveAuthoringShell>
   );
 }

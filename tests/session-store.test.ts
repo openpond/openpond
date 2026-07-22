@@ -164,6 +164,18 @@ describe("session store patches", () => {
       expect(pinned.archived).toBe(false);
       expect(pinned.updatedAt).toBe(baseSession.updatedAt);
 
+      const saved = await patchSession(baseSession.id, { savedForLater: true });
+
+      expect(saved.savedForLater).toBe(true);
+      expect(saved.pinned).toBe(false);
+      expect(saved.archived).toBe(false);
+      expect(saved.updatedAt).toBe(baseSession.updatedAt);
+
+      const archived = await patchSession(baseSession.id, { archived: true });
+
+      expect(archived.savedForLater).toBe(false);
+      expect(archived.archived).toBe(true);
+
       const reordered = await patchSession(baseSession.id, { order: 7 });
 
       expect(reordered.order).toBe(7);

@@ -14,6 +14,7 @@ import type {
   ProviderModel,
   ProviderSettings,
   Session,
+  SidebarFileBookmark,
   SubagentRoleId,
   SubagentRoleSettings,
   WorkspaceDiffSummary,
@@ -260,6 +261,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     projects: false,
     cloudProjects: false,
     chats: false,
+    savedForLater: true,
   },
   editor: {
     languageServers: "auto",
@@ -423,7 +425,7 @@ export function parseProjectSelection(value: string | null | undefined): Project
 }
 
 export type SidebarDragItem = {
-  type: "project" | "session";
+  type: "project" | "session" | "file";
   id: string;
 };
 
@@ -440,6 +442,13 @@ export type PinnedSidebarItem =
       key: string;
       id: string;
       session: Session;
+      order: number;
+    }
+  | {
+      type: "file";
+      key: string;
+      id: string;
+      file: SidebarFileBookmark;
       order: number;
     };
 
@@ -736,6 +745,9 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
       chats:
         preferences?.sidebarSectionsCollapsed?.chats ??
         DEFAULT_APP_PREFERENCES.sidebarSectionsCollapsed.chats,
+      savedForLater:
+        preferences?.sidebarSectionsCollapsed?.savedForLater ??
+        DEFAULT_APP_PREFERENCES.sidebarSectionsCollapsed.savedForLater,
     },
     editor: {
       languageServers:

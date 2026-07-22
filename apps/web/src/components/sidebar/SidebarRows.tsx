@@ -1,15 +1,18 @@
 import { useCallback, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import type { CloudProject, CloudWorkItem, LocalProject, Session, WorkspaceState } from "@openpond/contracts";
+import type { CloudProject, CloudWorkItem, LocalProject, Session, SidebarFileBookmark, WorkspaceState } from "@openpond/contracts";
 import {
   Archive,
   ArchiveRestore,
-  ChartColumnStacked,
+  Bookmark,
+  BookmarkX,
   ChevronDown,
   ChevronRight,
   Cloud,
+  CircleAlert,
   EyeOff,
   Folder,
   FolderGit2,
+  FileText,
   MessageSquare,
   MoreHorizontal,
   PanelRight,
@@ -181,9 +184,9 @@ export function SidebarSessionRow({
   onSelect,
   onToggleChildSessions,
   onTogglePin,
+  onToggleSaveForLater,
   onDockRight,
   onArchive,
-  onAddToTraining,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -207,9 +210,9 @@ export function SidebarSessionRow({
   onSelect: () => void;
   onToggleChildSessions?: () => void;
   onTogglePin: () => void;
+  onToggleSaveForLater?: () => void;
   onDockRight?: () => void;
   onArchive: () => void;
-  onAddToTraining?: () => void;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
@@ -228,7 +231,7 @@ export function SidebarSessionRow({
     : goalRunning && goalRuntime
       ? sidebarGoalRuntimeTooltip(goalRuntime)
       : "Running";
-  const rowClassName = [onDockRight && onAddToTraining ? "actions-4" : onDockRight || onAddToTraining ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
+  const rowClassName = [onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
     .filter(Boolean)
     .join(" ");
   const rowShellRef = useRef<HTMLDivElement | null>(null);
@@ -315,17 +318,20 @@ export function SidebarSessionRow({
           )}
         </span>
         <div className="sidebar-row-actions">
-          <SidebarRowAction label={session.pinned ? "Unpin chat" : "Pin chat"} onClick={onTogglePin}>
-            {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-          </SidebarRowAction>
           {onDockRight ? (
             <SidebarRowAction label="Open in right panel" onClick={onDockRight}>
               <PanelRight size={13} />
             </SidebarRowAction>
           ) : null}
-          {onAddToTraining ? (
-            <SidebarRowAction label="Add to training" onClick={onAddToTraining}>
-              <ChartColumnStacked size={13} />
+          <SidebarRowAction label={session.pinned ? "Unpin chat" : "Pin chat"} onClick={onTogglePin}>
+            {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+          </SidebarRowAction>
+          {onToggleSaveForLater ? (
+            <SidebarRowAction
+              label={session.savedForLater ? "Remove from Save for later" : "Save for later"}
+              onClick={onToggleSaveForLater}
+            >
+              {session.savedForLater ? <BookmarkX size={13} /> : <Bookmark size={13} />}
             </SidebarRowAction>
           ) : null}
           <SidebarRowAction label={archived ? "Restore chat" : "Archive chat"} onClick={onArchive}>
@@ -363,6 +369,66 @@ export function SidebarSessionRow({
         subagentRuntime={subagentRunning ? subagentRuntime ?? null : null}
       />
     </div>
+  );
+}
+
+export function SidebarFileRow({
+  file,
+  selected = false,
+  placeholder,
+  onSelect,
+  onTogglePin,
+  onToggleSaveForLater,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
+}: {
+  file: SidebarFileBookmark;
+  selected?: boolean;
+  placeholder?: boolean;
+  onSelect: () => void;
+  onTogglePin: () => void;
+  onToggleSaveForLater: () => void;
+  onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+  onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (event: DragEvent<HTMLDivElement>) => void;
+}) {
+  const filename = file.path.split("/").at(-1) ?? file.path;
+  const location = `${file.workspaceName} · ${file.path}`;
+  return (
+    <SidebarInteractiveRow
+      selected={selected}
+      placeholder={placeholder}
+      className={`sidebar-file-row actions-2${file.available ? "" : " unavailable"}`}
+      onSelect={onSelect}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
+      {file.available ? <FileText size={15} /> : <CircleAlert size={15} />}
+      <span className="row-label-shell" title={location}>
+        <span className="row-label">{filename}</span>
+      </span>
+      <div className="row-meta">
+        <div className="sidebar-row-actions">
+          <SidebarRowAction
+            label={file.status === "pinned" ? "Unpin file" : "Pin file"}
+            onClick={onTogglePin}
+          >
+            {file.status === "pinned" ? <PinOff size={13} /> : <Pin size={13} />}
+          </SidebarRowAction>
+          <SidebarRowAction
+            label={file.status === "saved_for_later" ? "Remove from Save for later" : "Save file for later"}
+            onClick={onToggleSaveForLater}
+          >
+            {file.status === "saved_for_later" ? <BookmarkX size={13} /> : <Bookmark size={13} />}
+          </SidebarRowAction>
+        </div>
+      </div>
+    </SidebarInteractiveRow>
   );
 }
 

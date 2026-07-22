@@ -13,30 +13,52 @@ import { TrainingRunReviewStep } from "../apps/web/src/components/training/Train
 import { proposalFixture, sourceFixture, tasksetFixture } from "./helpers/training-fixtures";
 
 describe("New model flow", () => {
-  test("starts from user intent rather than asking for an optimizer", () => {
+  test("starts from reusable Datasets rather than Dataset-authoring modes", () => {
     const html = renderToStaticMarkup(<CreateImproveAuthoringDialog {...dialogProps()} initialObjective={null} />);
-    expect(html).toContain("Choose a setup");
-    expect(html).toContain("Automatic");
-    expect(html).toContain("Manual");
-    expect(html).toContain("selected chats");
+    expect(html).toContain("Choose a Dataset");
+    expect(html).not.toContain(">Automatic<");
+    expect(html).not.toContain(">Manual<");
     for (const title of ["Supervised fine-tuning", "Preference tuning", "Reinforcement learning"]) expect(html).not.toContain(title);
     expect(html).not.toContain('placeholder="Search chats"');
     expect(html).not.toContain('aria-label="Back');
   });
 
-  test("offers an existing approved Dataset as a separate Model setup", () => {
+  test("offers Dataset creation from the Model Dataset picker", () => {
     const html = renderToStaticMarkup(
-      <TrainingStartModeStep
-        allowExistingDataset
-        mode="existing_dataset"
+      <TrainingDatasetStep
+        busy={false}
+        selectedTasksetId={null}
+        state={null}
         onChange={() => undefined}
         onContinue={() => undefined}
+        onCreateDataset={() => undefined}
       />,
     );
-    expect(html).toContain("Existing Dataset");
-    expect(html).toContain("without changing its tasks, graders, or held-out Evals");
-    expect(html).toContain("training-start-mode-copy");
-    expect(html).toContain("training-choice-indicator");
+    expect(html).toContain("Create new Dataset");
+    expect(html).toContain("No reusable Datasets are ready yet");
+    expect(html).toContain(
+      'class="training-dialog-actions"><button class="training-button secondary"',
+    );
+    expect(html.indexOf("Create new Dataset")).toBeLessThan(html.indexOf("Continue"));
+  });
+
+  test("renders Dataset Build as an editor embedded in the Dataset detail tabs", () => {
+    const html = renderToStaticMarkup(
+      <CreateImproveAuthoringDialog
+        {...dialogProps()}
+        datasetBuildMode
+        initialObjective={null}
+        presentation="embedded"
+        resourceIntent="dataset"
+        targetIntent={{ kind: null, id: null, displayName: null, operation: "create" }}
+      />,
+    );
+    expect(html).toContain("labs-dataset-build-editor");
+    expect(html).toContain('aria-label="New Dataset"');
+    expect(html).toContain("Back to Dataset sources");
+    expect(html).toContain("Build the Dataset");
+    expect(html).not.toContain("training-dialog-backdrop");
+    expect(html).not.toContain("labs-dataset-builder-page");
   });
 
   test("presents base models as choices instead of a form dropdown", () => {
@@ -106,7 +128,7 @@ describe("New model flow", () => {
         selectedTasksetId={null}
         state={{ tasksets: [taskset] } as any}
         onChange={() => undefined}
-        onCreate={() => undefined}
+        onContinue={() => undefined}
       />,
     );
 
@@ -115,10 +137,11 @@ describe("New model flow", () => {
     expect(html).not.toContain("No reusable Datasets are ready yet");
   });
 
-  test("pre-populated objectives still start at the explicit intent choice", () => {
+  test("pre-populated objectives still start at Dataset selection", () => {
     const html = renderToStaticMarkup(<CreateImproveAuthoringDialog {...dialogProps()} initialObjective="Reconcile billing and support risk." initialSessionIds={["session_fixture"]} />);
-    expect(html).toContain("Automatic");
-    expect(html).toContain("Manual");
+    expect(html).toContain("Choose a Dataset");
+    expect(html).not.toContain(">Automatic<");
+    expect(html).not.toContain(">Manual<");
     expect(html).not.toContain("Reconcile billing and support risk.");
     expect(html).not.toContain("Approved support workflow");
   });

@@ -230,6 +230,28 @@ describe("terminal websocket scope validation", () => {
 });
 
 describe("sidebar terminal indicators", () => {
+  test("renders save-for-later next to archive without the training action", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture({ savedForLater: true }),
+        selected: false,
+        hideIcon: true,
+        onSelect: () => undefined,
+        onDockRight: () => undefined,
+        onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
+        onArchive: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Remove from Save for later"');
+    expect(markup).toContain('aria-label="Open in right panel"');
+    expect(markup).toContain('aria-label="Pin chat"');
+    expect(markup).toContain('aria-label="Archive chat"');
+    expect(markup.indexOf('aria-label="Open in right panel"')).toBeLessThan(markup.indexOf('aria-label="Pin chat"'));
+    expect(markup).not.toContain("Add to training");
+  });
+
   test("renders accessible terminal state on chat rows", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarSessionRow, {
@@ -239,6 +261,7 @@ describe("sidebar terminal indicators", () => {
         terminalIndicator: { status: "running", label: "Terminal running" },
         onSelect: () => undefined,
         onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
       }),
     );
@@ -269,11 +292,12 @@ describe("sidebar terminal indicators", () => {
         },
         onSelect: () => undefined,
         onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
       }),
     );
 
-    expect(markup).toContain("sidebar-row has-running-dot");
+    expect(markup).toContain("has-running-dot");
     expect(markup).toContain("sidebar-running-dot goal");
     expect(markup).toContain("sidebar-project-locations-popover sidebar-session-running-popover");
     expect(markup).toContain("Pursuing goal");
@@ -304,6 +328,7 @@ describe("sidebar terminal indicators", () => {
         },
         onSelect: () => undefined,
         onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
       }),
     );
@@ -336,6 +361,7 @@ describe("sidebar terminal indicators", () => {
         },
         onSelect: () => undefined,
         onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
       }),
     );
@@ -368,6 +394,7 @@ describe("sidebar terminal indicators", () => {
         subagentRuntime: subagentRuntimeFixture(),
         onSelect: () => undefined,
         onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
       }),
     );
@@ -402,7 +429,7 @@ function terminalTab(
   };
 }
 
-function sessionFixture(): Session {
+function sessionFixture(overrides: Partial<Session> = {}): Session {
   return {
     id: "session_1",
     provider: "openpond",
@@ -424,6 +451,7 @@ function sessionFixture(): Session {
     pinned: false,
     archived: false,
     order: 0,
+    ...overrides,
   };
 }
 

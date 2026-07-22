@@ -1,19 +1,21 @@
 import type { Taskset, TrainingStateResponse } from "@openpond/contracts";
 
-import { Boxes } from "../icons";
+import { Boxes, Plus } from "../icons";
 
 export function TrainingDatasetStep({
   state,
   selectedTasksetId,
   busy,
   onChange,
-  onCreate,
+  onContinue,
+  onCreateDataset,
 }: {
   state: TrainingStateResponse | null;
   selectedTasksetId: string | null;
   busy: boolean;
   onChange: (tasksetId: string) => void;
-  onCreate: () => void;
+  onContinue: () => void;
+  onCreateDataset?: () => void;
 }) {
   const datasets = availableDatasets(state);
   const selected = datasets.find((taskset) => taskset.id === selectedTasksetId) ?? null;
@@ -48,14 +50,15 @@ export function TrainingDatasetStep({
                   <strong>{taskset.name}</strong>
                   <small>{taskset.objective}</small>
                 </span>
-                <DatasetSplitSummary taskset={taskset} />
+                <DatasetSplitSummary state={state} taskset={taskset} />
                 <span className="training-choice-indicator" aria-hidden="true" />
               </button>
             );
           })}
           {!datasets.length ? (
             <div className="training-empty training-existing-dataset-empty">
-              No reusable Datasets are ready yet. Create a Dataset from the Lab menu, then return here.
+              <strong>No reusable Datasets are ready yet.</strong>
+              <span>Create a Dataset, then return here to configure the Model.</span>
             </div>
           ) : null}
         </div>
@@ -66,33 +69,58 @@ export function TrainingDatasetStep({
         ) : null}
       </div>
       <div className="training-dialog-actions">
+        {onCreateDataset ? (
+          <button
+            className="training-button secondary"
+            type="button"
+            onClick={onCreateDataset}
+          >
+            <Plus size={14} />
+            Create new Dataset
+          </button>
+        ) : null}
         <button
           className="training-button"
           disabled={!selected || busy}
           type="button"
-          onClick={onCreate}
+          onClick={onContinue}
         >
-          Create model
+          Continue
         </button>
       </div>
     </>
   );
 }
 
-function DatasetSplitSummary({ taskset }: { taskset: Taskset }) {
+function DatasetSplitSummary({
+  state,
+  taskset,
+}: {
+  state: TrainingStateResponse | null;
+  taskset: Taskset;
+}) {
   return (
     <span className="training-existing-dataset-splits">
-      <span>{splitCount(taskset, "train")} train</span>
-      <span>{splitCount(taskset, "validation")} validation</span>
-      <span>{splitCount(taskset, "frozen_eval")} frozen Eval</span>
+      <span>{splitCount(state, taskset, "train")} train</span>
+      <span>{splitCount(state, taskset, "validation")} validation</span>
+      <span>{splitCount(state, taskset, "frozen_eval")} frozen Eval</span>
     </span>
   );
 }
 
 function splitCount(
+  state: TrainingStateResponse | null,
   taskset: Taskset,
   split: Taskset["tasks"][number]["split"],
 ): number {
+  const artifact = taskset.datasetArtifact
+    ? state?.datasetArtifacts?.find(
+        (candidate) =>
+          candidate.tasksetId === taskset.id
+          && candidate.tasksetRevision === taskset.revision,
+      )
+    : null;
+  if (artifact) return artifact.splitCounts[split] ?? 0;
   return taskset.tasks.filter((task) => task.split === split).length;
 }
 

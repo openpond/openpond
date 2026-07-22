@@ -8,6 +8,8 @@ export async function handleWorkspaceRoutes({ deps, request, requestUrl, respons
     restartWorkspaceLspPayload,
     reorderSidebarApps,
     patchSidebarAppPreference,
+    listSidebarFileBookmarksPayload,
+    patchSidebarFileBookmarkPayload,
     workspaceStatePayload,
     createWorkspaceBranchPayload,
     checkoutWorkspaceBranchPayload,
@@ -32,6 +34,14 @@ export async function handleWorkspaceRoutes({ deps, request, requestUrl, respons
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/sidebar/apps/reorder") {
     sendJson(response, 200, await reorderSidebarApps(await readJson(request)));
+    return true;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/sidebar/files") {
+    sendJson(response, 200, await listSidebarFileBookmarksPayload());
+    return true;
+  }
+  if (request.method === "PATCH" && requestUrl.pathname === "/v1/sidebar/files") {
+    sendJson(response, 200, await patchSidebarFileBookmarkPayload(await readJson(request)));
     return true;
   }
   const sidebarAppPatchMatch = /^\/v1\/sidebar\/apps\/([^/]+)$/.exec(requestUrl.pathname);

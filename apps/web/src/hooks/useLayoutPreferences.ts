@@ -49,6 +49,7 @@ export function useLayoutPreferences({
     projects: projectsCollapsed,
     cloudProjects: cloudProjectsCollapsed,
     chats: chatsCollapsed,
+    savedForLater: savedForLaterCollapsed,
   } = sidebarSectionsCollapsed;
 
   useEffect(() => {
@@ -158,6 +159,11 @@ export function useLayoutPreferences({
     updateSidebarSectionsCollapsed({ ...current, chats: !current.chats });
   }, [updateSidebarSectionsCollapsed]);
 
+  const toggleSavedForLaterCollapsed = useCallback(() => {
+    const current = sidebarSectionsCollapsedRef.current;
+    updateSidebarSectionsCollapsed({ ...current, savedForLater: !current.savedForLater });
+  }, [updateSidebarSectionsCollapsed]);
+
   const startSidebarResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!sidebarOpen) return;
@@ -221,6 +227,7 @@ export function useLayoutPreferences({
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
+    savedForLaterCollapsed,
     sidebarWidth,
     sidebarResizing,
     diffPanelWidth,
@@ -229,6 +236,7 @@ export function useLayoutPreferences({
     toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
+    toggleSavedForLaterCollapsed,
     startSidebarResize,
     startDiffPanelResize,
   };
@@ -242,6 +250,7 @@ function sidebarSectionsCollapsedEqual(
     left.pinned === right.pinned &&
     left.projects === right.projects &&
     left.cloudProjects === right.cloudProjects &&
-    left.chats === right.chats
+    left.chats === right.chats &&
+    left.savedForLater === right.savedForLater
   );
 }

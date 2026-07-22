@@ -347,6 +347,7 @@ export const PatchSessionRequestSchema = z.object({
   modelRef: ChatModelRefSchema.nullable().optional(),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
   pinned: z.boolean().optional(),
+  savedForLater: z.boolean().optional(),
   archived: z.boolean().optional(),
   order: z.number().optional(),
   title: z.string().optional(),

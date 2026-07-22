@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { RuntimeEvent, SubagentLifecycleAction, WorkspaceDiffFile, WorkspaceDiffSummary, WorkspaceEditorPreferences, WorkspaceKind, WorkspaceLspActionResponse, WorkspaceLspDiagnostic, WorkspaceLspServerStatus } from "@openpond/contracts";
+import type { RuntimeEvent, SidebarFileBookmark, SidebarFileStatus, SubagentLifecycleAction, WorkspaceDiffFile, WorkspaceDiffSummary, WorkspaceEditorPreferences, WorkspaceKind, WorkspaceLspActionResponse, WorkspaceLspDiagnostic, WorkspaceLspServerStatus } from "@openpond/contracts";
+import { normalizeSidebarFilePath, sidebarFileBookmarkId } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import { DEFAULT_APP_PREFERENCES } from "../../lib/app-models";
@@ -13,6 +14,7 @@ import { TrainingRunSidebarSummary, type TrainingSidebarSummary } from "../train
 import { WorkspaceDiffFiles } from "./WorkspaceDiffFiles";
 import { WorkspaceDiffTabs, WorkspaceDiffToolbar } from "./WorkspaceDiffPanelChrome";
 import { FilePreview } from "./WorkspaceFilePreview";
+import { WorkspaceFileBookmarkActions } from "./WorkspaceFileBookmarkActions";
 import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, sandboxSourceReadbackDiffFromEvents, saveSandboxFile } from "./workspace-diff-file-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
 import { useErrorToast } from "../../app/AppToastContext";
@@ -44,6 +46,7 @@ const EMPTY_REPO_FILES: string[] = [];
 
 export function WorkspaceDiffPanel({
   appId,
+  workspaceId,
   workspaceKind,
   connection,
   runtimeEvents,
@@ -73,6 +76,9 @@ export function WorkspaceDiffPanel({
   goalDetails,
   sandboxFileSource,
   trainingSummary,
+  sidebarFileBookmarks = [],
+  sidebarFileSourceSessionId = null,
+  onSetSidebarFileStatus,
 }: {
   appId: string | null;
   workspaceId: string | null;
@@ -106,10 +112,17 @@ export function WorkspaceDiffPanel({
   goalDetails?: WorkspaceGoalDetails | null;
   sandboxFileSource?: SandboxFileSource | null;
   trainingSummary?: TrainingSidebarSummary | null;
+  sidebarFileBookmarks?: SidebarFileBookmark[];
+  sidebarFileSourceSessionId?: string | null;
+  onSetSidebarFileStatus?: (
+    file: SidebarFileBookmark,
+    status: "pinned" | "saved_for_later" | "none",
+  ) => void;
 }) {
   return (
     <WorkspaceDiffPanelInner
       appId={appId}
+      workspaceId={workspaceId}
       workspaceKind={workspaceKind}
       connection={connection}
       runtimeEvents={runtimeEvents ?? []}
@@ -139,6 +152,9 @@ export function WorkspaceDiffPanel({
       goalDetails={goalDetails ?? null}
       sandboxFileSource={sandboxFileSource ?? null}
       trainingSummary={trainingSummary ?? null}
+      sidebarFileBookmarks={sidebarFileBookmarks}
+      sidebarFileSourceSessionId={sidebarFileSourceSessionId}
+      onSetSidebarFileStatus={onSetSidebarFileStatus}
     />
   );
 }
@@ -235,6 +251,7 @@ function folderPathAncestors(path: string): string[] {
 
 function WorkspaceDiffPanelInner({
   appId,
+  workspaceId,
   workspaceKind,
   connection,
   runtimeEvents,
@@ -264,8 +281,12 @@ function WorkspaceDiffPanelInner({
   goalDetails,
   sandboxFileSource,
   trainingSummary,
+  sidebarFileBookmarks,
+  sidebarFileSourceSessionId,
+  onSetSidebarFileStatus,
 }: {
   appId: string | null;
+  workspaceId: string | null;
   workspaceKind: WorkspaceKind | null;
   connection: ClientConnection | null;
   runtimeEvents: RuntimeEvent[];
@@ -295,6 +316,12 @@ function WorkspaceDiffPanelInner({
   goalDetails: WorkspaceGoalDetails | null;
   sandboxFileSource: SandboxFileSource | null;
   trainingSummary: TrainingSidebarSummary | null;
+  sidebarFileBookmarks: SidebarFileBookmark[];
+  sidebarFileSourceSessionId: string | null;
+  onSetSidebarFileStatus?: (
+    file: SidebarFileBookmark,
+    status: "pinned" | "saved_for_later" | "none",
+  ) => void;
 }) {
   const initialViewState = viewState ?? defaultWorkspaceDiffPanelViewState();
   const [activeTab, setActiveTab] = useState<DiffTab>(initialViewState.activeTab);
@@ -1169,6 +1196,80 @@ function WorkspaceDiffPanelInner({
     },
     [connection, onRefresh],
   );
+  const sidebarFileWorkspaceKind = sandboxMode
+    ? "sandbox" as const
+    : workspaceKind === "local_project"
+      ? "local" as const
+      : null;
+  const sidebarFileBookmarksByPath = useMemo(() => {
+    const items = new Map<string, SidebarFileBookmark>();
+    if (!sidebarFileWorkspaceKind || !workspaceId) return items;
+    for (const item of sidebarFileBookmarks) {
+      if (item.workspaceKind !== sidebarFileWorkspaceKind || item.workspaceId !== workspaceId) continue;
+      items.set(item.path, item);
+    }
+    return items;
+  }, [sidebarFileBookmarks, sidebarFileWorkspaceKind, workspaceId]);
+  const getSidebarFileStatus = useCallback((path: string): SidebarFileStatus | null => {
+    try {
+      return sidebarFileBookmarksByPath.get(normalizeSidebarFilePath(path))?.status ?? null;
+    } catch {
+      return null;
+    }
+  }, [sidebarFileBookmarksByPath]);
+  const setSidebarFileStatusForPath = useCallback((
+    path: string,
+    status: SidebarFileStatus | "none",
+  ) => {
+    if (
+      !sidebarFileWorkspaceKind ||
+      !workspaceId ||
+      !workspaceName ||
+      !onSetSidebarFileStatus
+    ) return;
+    let filePath: string;
+    try {
+      filePath = normalizeSidebarFilePath(path);
+    } catch {
+      return;
+    }
+    const existing = sidebarFileBookmarksByPath.get(filePath);
+    const timestamp = new Date().toISOString();
+    const file = existing ?? {
+      id: sidebarFileBookmarkId({
+        workspaceKind: sidebarFileWorkspaceKind,
+        workspaceId,
+        path: filePath,
+      }),
+      workspaceKind: sidebarFileWorkspaceKind,
+      workspaceId,
+      workspaceName,
+      path: filePath,
+      status: "pinned" as const,
+      order: null,
+      sourceSessionId: sidebarFileSourceSessionId,
+      available: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    onSetSidebarFileStatus(file, status);
+  }, [
+    onSetSidebarFileStatus,
+    sidebarFileBookmarksByPath,
+    sidebarFileSourceSessionId,
+    sidebarFileWorkspaceKind,
+    workspaceId,
+    workspaceName,
+  ]);
+  const canManageSidebarFiles = Boolean(
+    sidebarFileWorkspaceKind && workspaceId && workspaceName && onSetSidebarFileStatus,
+  );
+  const sidebarFileHeaderActions = selectedPath && canManageSidebarFiles ? (
+    <WorkspaceFileBookmarkActions
+      currentStatus={getSidebarFileStatus(selectedPath)}
+      onSetStatus={(status) => setSidebarFileStatusForPath(selectedPath, status)}
+    />
+  ) : null;
   const selectedFilePreview = selectedPath ? (
     <FilePreview
       diagnostics={editorLspEnabled ? lspDiagnosticsByPath[selectedPath] ?? [] : []}
@@ -1179,6 +1280,7 @@ function WorkspaceDiffPanelInner({
       file={fileForPath(selectedPath)}
       collapsed={collapsed}
       hideWhiteSpace={hideWhiteSpace}
+      headerActions={sidebarFileHeaderActions}
       imageSrc={selectedImageSrc}
       loading={fileLoadingPath === selectedPath}
       loadFullFiles={loadFullFiles}
@@ -1231,6 +1333,7 @@ function WorkspaceDiffPanelInner({
         sourceStatus={sourceStatus}
         sourceSwitcher={sourceSwitcher}
         visibleTab={visibleTab}
+        getFileBookmarkStatus={canManageSidebarFiles ? getSidebarFileStatus : undefined}
         onCloseFileTab={closeFileTab}
         onCloseSideChat={onCloseSideChat}
         onCloseSearch={() => setSearchOpen(false)}
@@ -1254,6 +1357,7 @@ function WorkspaceDiffPanelInner({
             : undefined
         }
         onSearchQueryChange={setSearchQuery}
+        onSetFileBookmarkStatus={canManageSidebarFiles ? setSidebarFileStatusForPath : undefined}
         onSelectFile={(path) => {
           setSelectedPath(path);
           setActiveTab("file");
@@ -1329,7 +1433,9 @@ function WorkspaceDiffPanelInner({
                 rootPath={fileRootPath}
                 repoFiles={repoFiles}
                 selectedPath={selectedPath}
+                getFileBookmarkStatus={canManageSidebarFiles ? getSidebarFileStatus : undefined}
                 onOpenFile={openFile}
+                onSetFileBookmarkStatus={canManageSidebarFiles ? setSidebarFileStatusForPath : undefined}
                 onToggleFolder={toggleFileTreeFolder}
               />
               {selectedFilePreview ?? (
@@ -1343,7 +1449,9 @@ function WorkspaceDiffPanelInner({
               rootPath={fileRootPath}
               repoFiles={repoFiles}
               selectedPath={selectedPath}
+              getFileBookmarkStatus={canManageSidebarFiles ? getSidebarFileStatus : undefined}
               onOpenFile={openFile}
+              onSetFileBookmarkStatus={canManageSidebarFiles ? setSidebarFileStatusForPath : undefined}
               onToggleFolder={toggleFileTreeFolder}
             />
           ))}

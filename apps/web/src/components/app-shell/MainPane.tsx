@@ -12,6 +12,7 @@ import {
 import type {
   ChatAttachment,
   ChatProvider,
+  SidebarFileBookmark,
 } from "@openpond/contracts";
 import { api } from "../../api";
 import { normalizePreferences } from "../../lib/app-models";
@@ -85,6 +86,7 @@ import {
   shouldShowRightSidebarHomePanel,
 } from "./MainPaneControls";
 import type { MainPaneProps } from "./main-pane-types";
+import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 
 import {
   AppsView,
@@ -167,6 +169,9 @@ export function MainPane({
   makeAgentTutorial,
   postTrainingCourse,
   workspaceDiffPanelViewState,
+  sidebarFileOpenRequest,
+  sidebarFileBookmarks,
+  onSetSidebarFileStatus,
   browserConversationId,
   terminalScope,
   terminalTabs,
@@ -285,6 +290,7 @@ export function MainPane({
   onApplyCloudWorkItemPatchLocally,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
+  const [composerAttachmentRequest, setComposerAttachmentRequest] = useState<ComposerAttachmentRequest | null>(null);
   const chatThreadRef = useRef<HTMLElement | null>(null);
   const composerStackRef = useRef<HTMLDivElement | null>(null);
   const stickyChatScrollRef = useRef(true);
@@ -315,6 +321,34 @@ export function MainPane({
     SandboxActionCatalogEntry[]
   >([]);
   const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
+  useEffect(() => {
+    if (!sidebarFileOpenRequest) return;
+    const { file, id } = sidebarFileOpenRequest;
+    setOpenDiffFileRequest({ id, path: file.path });
+    if (!connection) return;
+    let cancelled = false;
+    const loadFile = file.workspaceKind === "local"
+      ? api.workspaceFile(connection, file.workspaceId, file.path).then((response) => response.content ?? "")
+      : api.sandboxDownloadFile(connection, file.workspaceId, file.path).then((response) => {
+          if (response.file.isBinary) throw new Error("Binary files cannot be attached to chat.");
+          return response.contents;
+        });
+    void loadFile.then((contents) => {
+      if (cancelled) return;
+      const filename = file.path.split("/").at(-1) ?? file.path;
+      setComposerAttachmentRequest({
+        id,
+        file: new File([contents], filename, { type: sidebarFileMediaType(file) }),
+      });
+    }).catch((fileError) => {
+      if (!cancelled) {
+        showToast(fileError instanceof Error ? fileError.message : String(fileError), "error");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
     const byId = new Map(actionCatalog.map((action) => [action.id, action]));
     for (const action of profileActionCatalogOverride) byId.set(action.id, action);
@@ -1201,6 +1235,9 @@ export function MainPane({
       editorPreferences={bootstrap?.preferences.editor ?? null}
       loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
       openFileRequest={showLabCandidateDiffPanel ? labCandidateReview.openFileRequest : openDiffFileRequest}
+      sidebarFileBookmarks={sidebarFileBookmarks}
+      sidebarFileSourceSessionId={selectedSessionId}
+      onSetSidebarFileStatus={onSetSidebarFileStatus}
       readOnly={showLabCandidateDiffPanel}
       sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
       sourceSwitcher={showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher}
@@ -1625,6 +1662,7 @@ export function MainPane({
               ) : null}
               <DraftBoundComposer
                 draftStore={composerDraftStore}
+                attachmentRequest={composerAttachmentRequest}
                 mode="dock"
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
@@ -1688,6 +1726,7 @@ export function MainPane({
               <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
               <DraftBoundComposer
                 draftStore={composerDraftStore}
+                attachmentRequest={composerAttachmentRequest}
                 mode="start"
                 autoFocus
                 focusRequestId={mainComposerFocusRequestId}
@@ -1739,3 +1778,11 @@ export function MainPane({
 }
 
 export { shouldShowRightSidebarHomePanel };
+
+function sidebarFileMediaType(file: SidebarFileBookmark): string {
+  const lowerPath = file.path.toLowerCase();
+  if (lowerPath.endsWith(".md") || lowerPath.endsWith(".mdx")) return "text/markdown";
+  if (lowerPath.endsWith(".json")) return "application/json";
+  if (lowerPath.endsWith(".yaml") || lowerPath.endsWith(".yml")) return "application/yaml";
+  return "text/plain";
+}

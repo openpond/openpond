@@ -14,6 +14,7 @@ import { LabStatusBadge } from "./LabStatusBadge";
 import { LabDatasetRuns } from "./LabDatasetRuns";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
+type DatasetDetailTab = "overview" | "data" | "evals" | "configuration";
 type Task = Taskset["tasks"][number];
 
 const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
@@ -25,11 +26,13 @@ const INITIAL_EXAMPLE_COUNT = 10;
 
 export function LabModelDataset({
   artifact,
+  tab = "overview",
   taskset,
   onOpenFiles,
   training,
 }: {
   artifact: DatasetArtifactSummary | null;
+  tab?: DatasetDetailTab;
   taskset: Taskset;
   onOpenFiles: () => void;
   training: ReturnType<typeof useTraining>;
@@ -62,7 +65,7 @@ export function LabModelDataset({
     [taskset.sourceRefs],
   );
   useEffect(() => {
-    if (!artifact) return undefined;
+    if (tab !== "data" || !artifact) return undefined;
     let cancelled = false;
     setRowsLoading(true);
     setRowsError(null);
@@ -86,7 +89,7 @@ export function LabModelDataset({
     return () => {
       cancelled = true;
     };
-  }, [artifact, cursor, split, taskset.id, training.actions]);
+  }, [artifact, cursor, split, tab, taskset.id, training.actions]);
 
   const visibleTasks = artifact
     ? artifactRows
@@ -107,15 +110,10 @@ export function LabModelDataset({
   const baselineRuns = training.payload?.baselineRuns.filter((run) =>
     run.tasksetId === taskset.id) ?? [];
 
-  return (
-    <>
+  if (tab === "overview") {
+    return (
       <DetailSection
         title="Dataset"
-        actions={(
-          <button className="training-button secondary" type="button" onClick={onOpenFiles}>
-            Open files
-          </button>
-        )}
       >
         <p className="labs-detail-copy labs-dataset-summary">
           {datasetDescription({
@@ -132,13 +130,55 @@ export function LabModelDataset({
           <Fact label="Approved demonstrations" value={String(approvedDemonstrations)} />
         </dl>
       </DetailSection>
+    );
+  }
 
+  if (tab === "evals") {
+    return (
+      <>
       <LabDatasetRuns
         runs={baselineRuns}
         taskset={taskset}
         onCancel={training.actions.cancelBaselineRun}
       />
+        <DetailSection title="Graders">
+          <div className="labs-dataset-grader-list">
+            {taskset.graders.map((grader) => (
+              <div key={grader.id}>
+                <strong>{grader.label}</strong>
+                <small>{titleCase(grader.kind)}</small>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      </>
+    );
+  }
 
+  if (tab === "configuration") {
+    return (
+      <DetailSection
+        title="Configuration"
+        actions={(
+          <button className="training-button secondary" type="button" onClick={onOpenFiles}>
+            Open files
+          </button>
+        )}
+      >
+        <dl className="training-configuration-list">
+          <Fact label="Dataset ID" value={taskset.id} />
+          <Fact label="Revision" value={String(taskset.revision)} />
+          <Fact label="Format" value={artifact?.format.toUpperCase() ?? "Inline Taskset"} />
+          <Fact label="Rows" value={String(artifact?.rowCount ?? taskset.tasks.length)} />
+          <Fact label="Storage" value={artifact ? formatBytes(artifact.sizeBytes) : "Managed inline"} />
+          <Fact label="Availability" value={artifact?.available === false ? artifact.unavailableReason ?? "Unavailable" : "Available"} />
+          <Fact label="Content hash" value={artifact?.contentHash ?? taskset.contentHash} />
+        </dl>
+      </DetailSection>
+    );
+  }
+
+  return (
       <DetailSection title="Examples">
         <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Dataset splits">
           {SPLITS.map((item) => (
@@ -213,7 +253,6 @@ export function LabModelDataset({
           ) : null}
         </div>
       </DetailSection>
-    </>
   );
 }
 
@@ -419,6 +458,13 @@ function countBy(values: string[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
   return counts;
+}
+
+function formatBytes(value: number): string {
+  if (value < 1_024) return `${value} B`;
+  if (value < 1_048_576) return `${(value / 1_024).toFixed(1)} KB`;
+  if (value < 1_073_741_824) return `${(value / 1_048_576).toFixed(1)} MB`;
+  return `${(value / 1_073_741_824).toFixed(1)} GB`;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

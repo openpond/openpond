@@ -19,6 +19,7 @@ import type {
   ResolveApprovalRequest,
   RuntimeEvent,
   Session,
+  SidebarFileBookmark,
   TerminalScope,
   UsageRequestAttribution,
   WorkspaceDiffSummary,
@@ -63,6 +64,7 @@ import type {
   WorkspaceDiffTabRequest,
 } from "../workspace-diff/workspace-diff-panel-model";
 import type { RightChatPanelView } from "./RightChatPanelStack";
+import type { SidebarFileOpenRequest } from "../../lib/sidebar-files";
 
 export type MainPaneProps = {
   view: AppView;
@@ -118,6 +120,12 @@ export type MainPaneProps = {
   makeAgentTutorial: MakeAgentTutorialState | null;
   postTrainingCourse: PostTrainingCourseState | null;
   workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;
+  sidebarFileOpenRequest: SidebarFileOpenRequest | null;
+  sidebarFileBookmarks: SidebarFileBookmark[];
+  onSetSidebarFileStatus: (
+    file: SidebarFileBookmark,
+    status: "pinned" | "saved_for_later" | "none",
+  ) => void;
   browserConversationId: string;
   terminalScope: TerminalScope;
   terminalTabs: TerminalTab[];

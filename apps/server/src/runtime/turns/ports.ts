@@ -307,6 +307,15 @@ export type TurnRunnerDependencies = {
   executeWebSearch?: WebSearchExecutor;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
+  manageSidebarFile?: (input: {
+    session: Session;
+    action: "pin" | "save_for_later" | "remove" | "list";
+    path?: string | null;
+  }) => Promise<{
+    items: import("@openpond/contracts").SidebarFileBookmark[];
+    changed: import("@openpond/contracts").SidebarFileBookmark | null;
+    nextStep: string;
+  }>;
   listIntegrationConnections?: (input: {
     teamId?: string;
     status?: "active" | "revoked" | "error" | "all";

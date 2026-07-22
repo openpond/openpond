@@ -4,6 +4,7 @@ export * from "./apps.js";
 export * from "./connected-apps.js";
 export * from "./connected-app-tool-calls.js";
 export * from "./workspaces.js";
+export * from "./sidebar-files.js";
 export * from "./account.js";
 export * from "./providers.js";
 export * from "./settings.js";

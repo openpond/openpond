@@ -149,6 +149,13 @@ describe("Task Creator pipeline", () => {
       mode: "defaults",
       objective: "Reproduce approved research updates.",
       createImproveRunId: "create_improve_task_creator_pipeline",
+      resourceIntent: "dataset",
+      targetIntent: {
+        kind: null,
+        id: null,
+        displayName: null,
+        operation: "create",
+      },
     });
     expect(creation.state).toBe("awaiting_materialization_approval");
     expect(await store.getTaskCreationTranscript(creation.id)).toMatchObject({ creationId: creation.id, messages: expect.any(Array) });
@@ -164,6 +171,37 @@ describe("Task Creator pipeline", () => {
     await access(path.join(root, "taskset.json"));
     await access(path.join(root, "environment", "taskset.ts"));
     expect(await readFile(path.join(root, "fixtures", "grader-fixtures.json"), "utf8")).toContain("prompt_injection");
+
+    const revisedCreation = await service.start({
+      profileId: "default",
+      sourceIds: [first.id, second.id],
+      surface: "training_page",
+      mode: "defaults",
+      objective: "Reproduce the revised approved research updates.",
+      resourceIntent: "dataset",
+      targetIntent: {
+        kind: null,
+        id: taskset!.id,
+        displayName: taskset!.name,
+        operation: "improve",
+      },
+    });
+    const revisedReady = await service.approveMaterialization(revisedCreation.id, true);
+    const revised = await store.getTaskset(revisedReady.materializedTasksetId!);
+    expect(revised).toMatchObject({
+      id: taskset!.id,
+      revision: 2,
+      createdAt: taskset!.createdAt,
+      metadata: {
+        previousRevision: 1,
+        previousContentHash: taskset!.contentHash,
+      },
+    });
+    expect(revised?.contentHash).not.toBe(taskset!.contentHash);
+    expect(await store.getTasksetRevision(taskset!.id, 1, taskset!.contentHash)).toMatchObject({
+      id: taskset!.id,
+      revision: 1,
+    });
   }));
 
   test("does not materialize a trainable Taskset without an independent test chat", async () => withTrainingStore(async ({ store, directory }) => {

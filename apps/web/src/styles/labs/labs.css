@@ -38,20 +38,26 @@
 }
 
 .labs-create-button {
-  display: inline-grid;
-  width: 32px;
-  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
   flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--border);
+  padding: 0 9px;
+  border: 1px solid #fff;
   border-radius: 7px;
-  background: transparent;
-  color: var(--text);
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
   cursor: pointer;
 }
 
 .labs-create-button:hover {
-  background: var(--panel-soft);
+  background: #f1f1f1;
+  border-color: #f1f1f1;
 }
 
 .labs-primary-tabs {
@@ -95,58 +101,63 @@
 .labs-create-menu {
   position: absolute;
   z-index: 50;
-  top: calc(100% + 7px);
+  top: calc(100% + 4px);
   right: 0;
-  display: grid;
-  width: 270px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--panel);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+  min-width: 174px;
+  border: 0;
+  border-radius: 8px;
+  background: #1d1d1d;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  padding: 4px;
 }
 
 .labs-create-menu button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
   background: transparent;
-  color: var(--text);
-  padding: 12px;
+  color: var(--muted-strong);
+  padding: 0 9px;
   text-align: left;
+  text-decoration: none;
+  font-size: 13px;
   cursor: pointer;
 }
 
-.labs-create-menu button:last-child {
-  border-bottom: 0;
+.labs-create-menu button svg {
+  flex: 0 0 auto;
 }
 
-.labs-create-menu button:hover {
-  background: var(--panel-soft);
+.labs-create-menu button:hover,
+.labs-create-menu button:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
 }
 
 .labs-create-menu button:disabled {
-  background: transparent;
   color: var(--muted);
-  cursor: not-allowed;
+  cursor: default;
   opacity: 0.62;
 }
 
-.labs-create-menu button > span {
-  display: grid;
-  gap: 3px;
+.labs-create-menu button:disabled:hover,
+.labs-create-menu button:disabled:focus-visible {
+  background: transparent;
+  color: var(--muted);
 }
 
 .labs-create-menu strong {
-  font-size: 12px;
+  font-size: inherit;
+  font-weight: 400;
 }
 
 .labs-create-menu small {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.4;
+  display: none;
 }
 
 .labs-panel {
@@ -163,12 +174,6 @@
   width: min(1180px, calc(100% - 56px));
   margin-inline: auto;
   padding: 8px 0 56px;
-}
-
-.labs-resource-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 0 4px;
 }
 
 .labs-dataset-detail-heading h1 {
@@ -190,6 +195,20 @@
   align-items: start;
   gap: 12px;
   padding: 12px 0 6px;
+}
+
+.labs-datasets-page > .training-detail-tabs {
+  padding: 0;
+}
+
+.labs-datasets-page > .training-detail-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.labs-dataset-heading-spacer {
+  width: 31px;
+  height: 31px;
 }
 
 .labs-back-button {
@@ -859,4 +878,69 @@
 
 .labs-status-dot.negative {
   background: #c45e62;
+}
+
+.labs-dataset-build-editor {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.labs-dataset-build-back {
+  align-self: flex-start;
+  margin-top: 16px;
+}
+
+.labs-dataset-builder-workspace {
+  display: flex;
+  min-height: 520px;
+  flex: 1;
+  flex-direction: column;
+  padding-top: 12px;
+}
+
+.labs-dataset-builder-workspace > .training-dialog-scroll-body,
+.labs-dataset-builder-workspace > .training-evidence-required > .training-dialog-scroll-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.labs-dataset-builder-workspace > .training-dialog-actions,
+.labs-dataset-builder-workspace > .training-evidence-required > .training-dialog-actions {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.labs-dataset-builder-workspace .training-source-options {
+  max-height: 440px;
+}
+
+.labs-dataset-grader-list {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.labs-dataset-grader-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.labs-dataset-grader-list > div:last-child {
+  border-bottom: 0;
+}
+
+.labs-dataset-grader-list strong {
+  font-size: 12px;
+}
+
+.labs-dataset-grader-list small {
+  color: var(--muted);
+  font-size: 10px;
 }

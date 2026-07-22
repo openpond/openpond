@@ -242,6 +242,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     projectsCollapsed: false,
     cloudProjectsCollapsed: false,
     chatsCollapsed: false,
+    savedForLaterCollapsed: true,
     archivedChatsOpen: false,
     projectsExpanded: false,
     cloudProjectsExpanded: false,
@@ -249,6 +250,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     dragItem: null,
     pinnedRows: [],
     pinnedSessions: [],
+    savedForLaterSessions: [],
     visibleProjectRows: [...localProjectRows, ...cloudProjectRows],
     localProjectRows,
     insightsSystemProjectHidden: true,
@@ -276,6 +278,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     onToggleProjectsCollapsed: noop,
     onToggleCloudProjectsCollapsed: noop,
     onToggleChatsCollapsed: noop,
+    onToggleSavedForLaterCollapsed: noop,
     setArchivedChatsOpen: noopDispatch,
     setProjectsExpanded: noopDispatch,
     setCloudProjectsExpanded: noopDispatch,
@@ -295,6 +298,7 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     toggleInsightsSystemProjectVisibility: noop,
     toggleProjectPinned: noop,
     toggleSessionPinned: noop,
+    toggleSessionSavedForLater: noop,
     archiveSession: noop,
     restoreSession: noop,
     expandProject: noop,
@@ -329,6 +333,15 @@ function cloudProjectSidebarRows(projects: CloudProject[]): SidebarProjectItem[]
 }
 
 describe("Cloud native UI", () => {
+  test("places Save for later below Chats and keeps it collapsed", () => {
+    const markup = renderToStaticMarkup(createElement(SidebarSectionList, sidebarProps({ view: "chat" })));
+
+    expect(markup.indexOf(">Chats<")).toBeGreaterThan(-1);
+    expect(markup.indexOf(">Save for later<")).toBeGreaterThan(markup.indexOf(">Chats<"));
+    expect(markup).toContain('aria-label="Expand Save for later"');
+    expect(markup).toContain(">Pinned<");
+  });
+
   test("renders the general Team channel with one channel marker", () => {
     const markup = renderToStaticMarkup(
       createElement(
@@ -519,7 +532,9 @@ describe("Cloud native UI", () => {
     expect(markup).not.toContain("lucide-cloud-upload");
     expect(markup).toContain('data-tooltip="Open in right panel"');
     expect(markup).toContain("actions-4");
-    expect(markup).toContain('data-tooltip="Add to training"');
+    expect(markup).toContain('data-tooltip="Pin chat"');
+    expect(markup).toContain('data-tooltip="Save for later"');
+    expect(markup).not.toContain('data-tooltip="Add to training"');
     expect(markup).not.toContain("All tasks");
     expect(markup).not.toContain("Start from GitHub repo");
     expect(markup).not.toContain("Start from template");

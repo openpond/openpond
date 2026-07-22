@@ -23,6 +23,7 @@ import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import {
   SidebarCloudWorkItemRow,
   SidebarProjectRow,
+  SidebarFileRow,
   SidebarSection,
   SidebarSectionMenu,
   SidebarSessionRow,
@@ -55,7 +56,6 @@ export function previousSidebarChatVisibleCount(currentCount: number, totalCount
 
 export function SidebarSectionList({
   addProjectFolder,
-  addSessionToTraining,
   archivedChatsOpen,
   archiveSession,
   beginNewChat,
@@ -76,6 +76,7 @@ export function SidebarSectionList({
   onToggleChatsCollapsed,
   onTogglePinnedCollapsed,
   onToggleProjectsCollapsed,
+  onToggleSavedForLaterCollapsed,
   openCloudHome,
   createCloudEnvironment,
   pinnedCollapsed,
@@ -91,6 +92,9 @@ export function SidebarSectionList({
   restoreSession,
   renameSession,
   runningSessionIds,
+  savedForLaterCollapsed,
+  savedForLaterSessions,
+  savedForLaterFiles = [],
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
   sectionMenuOpen,
@@ -137,6 +141,9 @@ export function SidebarSectionList({
   toggleSystemProjectVisibility,
   toggleProjectExpanded,
   toggleSessionPinned,
+  toggleSessionSavedForLater,
+  openSidebarFile,
+  setSidebarFileStatus,
   visibleChatRows,
   visibleProjectRows,
   view,
@@ -305,8 +312,8 @@ export function SidebarSectionList({
               onToggleChildSessions={() => toggleChildSessions(session.id)}
               onSelect={() => selectSession(session)}
               onTogglePin={() => toggleSessionPinned(session)}
+              onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
               onDockRight={() => dockSessionRight(session)}
-              onAddToTraining={() => addSessionToTraining(session)}
               onArchive={() => archiveSession(session)}
               onRename={renameSession}
             />
@@ -412,7 +419,6 @@ export function SidebarSectionList({
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
             onDockRight={() => dockSessionRight(session)}
-            onAddToTraining={() => addSessionToTraining(session)}
             onArchive={() => archiveSession(session)}
             onRename={renameSession}
           />
@@ -495,7 +501,7 @@ export function SidebarSectionList({
               </div>
             );
           }
-          return (
+          if (row.type === "session") return (
             <div key={row.key} className="sidebar-session-group">
               <SidebarSessionRow
                 session={row.session}
@@ -511,8 +517,8 @@ export function SidebarSectionList({
                 onToggleChildSessions={() => toggleChildSessions(row.session.id)}
                 onSelect={() => selectSession(row.session)}
                 onTogglePin={() => toggleSessionPinned(row.session)}
+                onToggleSaveForLater={() => toggleSessionSavedForLater(row.session)}
                 onDockRight={() => dockSessionRight(row.session)}
-                onAddToTraining={() => addSessionToTraining(row.session)}
                 onArchive={() => archiveSession(row.session)}
                 onRename={renameSession}
                 onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
@@ -531,6 +537,35 @@ export function SidebarSectionList({
               />
               {!isDraggedRow && renderChildSessionRows(row.session)}
             </div>
+          );
+          return (
+            <SidebarFileRow
+              key={row.key}
+              file={row.file}
+              placeholder={isDraggedRow}
+              onSelect={() => openSidebarFile(row.file)}
+              onTogglePin={() => setSidebarFileStatus(
+                row.file,
+                row.file.status === "pinned" ? "none" : "pinned",
+              )}
+              onToggleSaveForLater={() => setSidebarFileStatus(
+                row.file,
+                row.file.status === "saved_for_later" ? "none" : "saved_for_later",
+              )}
+              onDragStart={(event) => startPinnedDrag(event, { type: "file", id: row.id })}
+              onDragEnd={clearSidebarDrag}
+              onDragOver={(event) => {
+                if (isDraggedRow) return;
+                previewPinnedDrop(event, { type: "file", id: row.id });
+              }}
+              onDrop={(event) => {
+                if (isDraggedRow) {
+                  commitPinnedPreviewDrop();
+                  return;
+                }
+                commitPinnedDrop(event, { type: "file", id: row.id });
+              }}
+            />
           );
         })}
       </SidebarSection>
@@ -756,8 +791,8 @@ export function SidebarSectionList({
                   selectSession(session);
                 }}
                 onTogglePin={() => toggleSessionPinned(session)}
+                onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
                 onDockRight={() => dockSessionRight(session)}
-                onAddToTraining={() => addSessionToTraining(session)}
                 onArchive={() => restoreSession(session)}
                 onRename={renameSession}
               />
@@ -778,8 +813,8 @@ export function SidebarSectionList({
                 onToggleChildSessions={() => toggleChildSessions(session.id)}
                 onSelect={() => selectSession(session)}
                 onTogglePin={() => toggleSessionPinned(session)}
+                onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
                 onDockRight={() => dockSessionRight(session)}
-                onAddToTraining={() => addSessionToTraining(session)}
                 onArchive={() => archiveSession(session)}
                 onRename={renameSession}
               />
@@ -797,6 +832,48 @@ export function SidebarSectionList({
             {canShowLessChats ? <SidebarShowMoreButton onClick={showLessChats}>Show less</SidebarShowMoreButton> : null}
           </div>
         )}
+      </SidebarSection>
+
+      <SidebarSection
+        label="Save for later"
+        collapsed={savedForLaterCollapsed}
+        onToggleCollapsed={onToggleSavedForLaterCollapsed}
+      >
+        {savedForLaterSessions.map((session) => (
+          <div key={session.id} className="sidebar-session-group">
+            <SidebarSessionRow
+              session={session}
+              selected={view === "chat" && selectedSessionId === session.id}
+              hideIcon
+              running={runningSessionIds.has(session.id)}
+              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+              subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+              terminalIndicator={terminalIndicatorForSession(session.id)}
+              childSessionCount={childSessionsFor(session).length}
+              childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+              onToggleChildSessions={() => toggleChildSessions(session.id)}
+              onSelect={() => selectSession(session)}
+              onTogglePin={() => toggleSessionPinned(session)}
+              onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
+              onDockRight={() => dockSessionRight(session)}
+              onArchive={() => archiveSession(session)}
+              onRename={renameSession}
+            />
+            {renderChildSessionRows(session)}
+          </div>
+        ))}
+        {savedForLaterFiles.map((file) => (
+          <SidebarFileRow
+            key={file.id}
+            file={file}
+            onSelect={() => openSidebarFile(file)}
+            onTogglePin={() => setSidebarFileStatus(file, "pinned")}
+            onToggleSaveForLater={() => setSidebarFileStatus(file, "none")}
+          />
+        ))}
+        {savedForLaterSessions.length === 0 && savedForLaterFiles.length === 0
+          ? <div className="empty-row">No saved items</div>
+          : null}
       </SidebarSection>
     </div>
   );

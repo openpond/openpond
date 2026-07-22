@@ -215,6 +215,33 @@ describe("OpenPond capability tool registry", () => {
       })),
     ).rejects.toThrow("priority must be normal or interrupt");
   });
+
+  test("exposes file sidebar management as a native chat tool", async () => {
+    const calls: unknown[] = [];
+    const definitions = createOpenPondCapabilityModelToolDefinitions({
+      ...requiredHandlers(),
+      manageSidebarFile: async (_context, input) => {
+        calls.push(input);
+        return { items: [], changed: null, nextStep: "Saved docs/plan.md for later." };
+      },
+    });
+    const tool = requireTool(definitions, "manage_sidebar_file");
+
+    const result = await tool.execute(context({
+      action: "save_for_later",
+      path: "docs/plan.md",
+    }));
+
+    expect(calls).toEqual([{ action: "save_for_later", path: "docs/plan.md" }]);
+    expect(result).toMatchObject({
+      name: "manage_sidebar_file",
+      ok: true,
+      data: { items: [], changed: null, nextStep: "Saved docs/plan.md for later." },
+    });
+    await expect(
+      tool.execute(context({ action: "pin" })),
+    ).rejects.toThrow("path is required for this action");
+  });
 });
 
 function requiredHandlers() {

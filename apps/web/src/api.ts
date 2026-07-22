@@ -33,6 +33,7 @@ import type {
   UpdateLocalProjectAgentSetupRequest,
   PatchSessionRequest,
   PatchSidebarAppPreferenceRequest,
+  PatchSidebarFileBookmarkRequest,
   ProviderCredentialDeleteRequest,
   ProviderCredentialWriteRequest,
   ProviderModelsRefreshRequest,
@@ -50,6 +51,7 @@ import type {
   Session,
   SidebarAppPreference,
   SidebarAppPreferences,
+  SidebarFileBookmarksResponse,
   SwitchOpenPondAccountRequest,
   SubagentLifecycleActionRequest,
   SubagentLifecycleActionResponse,
@@ -1065,6 +1067,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  sidebarFiles: (connection: ClientConnection) =>
+    apiFetch<SidebarFileBookmarksResponse>(connection, "/v1/sidebar/files"),
+  patchSidebarFile: (
+    connection: ClientConnection,
+    input: PatchSidebarFileBookmarkRequest,
+  ) => apiFetch<SidebarFileBookmarksResponse>(connection, "/v1/sidebar/files", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  }),
   workspaceStatus: (
     connection: ClientConnection,
     appId: string,

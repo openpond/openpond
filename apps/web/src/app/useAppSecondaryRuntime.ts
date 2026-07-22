@@ -390,6 +390,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     renameSession,
     toggleProjectPinned,
     toggleSessionPinned,
+    toggleSessionSavedForLater,
   } = useSidebarMutations({
     appPreferences,
     connection,
@@ -727,7 +728,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     applyCreateImproveCandidate, approveCreateImproveRun, cancelCreateImproveRun, changeDraftProvider, openCreateImprovePullRequest,
     reconcileCreateImprovePullRequest, rejectCreateImproveCandidate, pauseCreateImproveRun, resumeCreateImproveRun, reviseCreateImproveRun,
     sendPrompt, pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
-    toggleProjectPinned, toggleSessionPinned, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
+    toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
     openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
     openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,

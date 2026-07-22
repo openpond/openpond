@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 27;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 28;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -109,6 +109,23 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   );
 
   CREATE INDEX IF NOT EXISTS sidebar_app_preferences_scope_idx ON sidebar_app_preferences(scope);
+
+  CREATE TABLE IF NOT EXISTS sidebar_file_bookmarks (
+    scope TEXT NOT NULL,
+    workspace_kind TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    workspace_name TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    sort_order INTEGER,
+    source_session_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (scope, workspace_kind, workspace_id, file_path)
+  );
+
+  CREATE INDEX IF NOT EXISTS sidebar_file_bookmarks_scope_status_order_idx
+    ON sidebar_file_bookmarks(scope, status, sort_order, updated_at);
 
   CREATE TABLE IF NOT EXISTS insight_items (
     id TEXT PRIMARY KEY,

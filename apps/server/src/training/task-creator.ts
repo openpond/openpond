@@ -70,8 +70,9 @@ export function createTaskCreatorService(deps: {
     for (const snapshot of snapshots) {
       if (!(["planning", "materializing", "validating"] as const).includes(snapshot.state as "planning" | "materializing" | "validating")) continue;
       if ((snapshot.state === "materializing" || snapshot.state === "validating") && snapshot.proposal) {
-        const tasksetId = safeTasksetId(snapshot.proposal.name, snapshot.id);
-        if (await deps.store.getTaskset(tasksetId)) {
+        const tasksetId = materializedTasksetId(snapshot, snapshot.proposal);
+        const taskset = await deps.store.getTaskset(tasksetId);
+        if (taskset?.metadata.creationSnapshotId === snapshot.id) {
           await persist({
             ...snapshot,
             state: "ready",
@@ -172,6 +173,20 @@ export function createTaskCreatorService(deps: {
     createImproveRunId?: string | null;
     targetIntent?: TaskCreationRequest["targetIntent"];
   }): Promise<TaskCreationSnapshot> {
+    if (
+      input.resourceIntent === "dataset"
+      && input.targetIntent?.operation === "improve"
+    ) {
+      const targetId = input.targetIntent.id;
+      if (!targetId) {
+        throw new Error("Editing a Dataset requires its existing Dataset ID.");
+      }
+      const target = await deps.store.getTaskset(targetId);
+      if (!target) throw new Error(`Dataset ${targetId} was not found.`);
+      if (target.profileId !== input.profileId) {
+        throw new Error("Dataset profile does not match the active Profile.");
+      }
+    }
     const sources = await requireSources(input.profileId, input.sourceIds);
     assertSourcesEligible(sources);
     const timestamp = now();
@@ -409,10 +424,22 @@ export function createTaskCreatorService(deps: {
     const tasks = taskRecords(proposal, sources);
     const agentTarget = snapshot.request.targetIntent.kind === "agent";
     const timestamp = now();
-    const tasksetId = safeTasksetId(proposal.name, snapshot.id);
+    const tasksetId = materializedTasksetId(snapshot, proposal);
+    const existingTaskset = snapshot.request.resourceIntent === "dataset"
+      && snapshot.request.targetIntent.operation === "improve"
+      ? await deps.store.getTaskset(tasksetId)
+      : null;
+    if (
+      snapshot.request.resourceIntent === "dataset"
+      && snapshot.request.targetIntent.operation === "improve"
+      && !existingTaskset
+    ) {
+      throw new Error(`Dataset ${tasksetId} was not found.`);
+    }
     const draft = {
       schemaVersion: "openpond.taskset.v1" as const,
       id: tasksetId,
+      revision: existingTaskset ? existingTaskset.revision + 1 : 1,
       profileId: snapshot.request.profileId,
       createImproveRunId: snapshot.request.createImproveRunId,
       name: proposal.name,
@@ -495,10 +522,14 @@ export function createTaskCreatorService(deps: {
       authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1" as const, model: snapshot.request.analysisModel, modelConfig: snapshot.request.analysisReasoningEffort ? { reasoningEffort: snapshot.request.analysisReasoningEffort } : {}, skillHash: deps.authoringSkillHash, promptTemplateVersion: "task-authoring.v2", evidenceHashes: sources.map((source) => source.sourceHash), tasksetSdkVersion: "0.0.1", sourceCommit: profile.git?.head ?? null, repairHistory: snapshot.repairHistory, createdAt: timestamp },
       readiness: null,
       contentHash: "",
-      createdAt: timestamp,
+      createdAt: existingTaskset?.createdAt ?? timestamp,
       updatedAt: timestamp,
       metadata: {
         creationSnapshotId: snapshot.id,
+        ...(existingTaskset ? {
+          previousRevision: existingTaskset.revision,
+          previousContentHash: existingTaskset.contentHash,
+        } : {}),
         resourceIntent: snapshot.request.resourceIntent,
         targetIntent: snapshot.request.targetIntent,
         privateMaterialManaged: true,
@@ -842,4 +873,20 @@ function conciseName(objective: string): string {
     "Training Taskset",
   );
 }
+function materializedTasksetId(
+  snapshot: TaskCreationSnapshot,
+  proposal: TaskDesignProposal,
+): string {
+  if (
+    snapshot.request.resourceIntent === "dataset"
+    && snapshot.request.targetIntent.operation === "improve"
+  ) {
+    if (!snapshot.request.targetIntent.id) {
+      throw new Error("Editing a Dataset requires its existing Dataset ID.");
+    }
+    return snapshot.request.targetIntent.id;
+  }
+  return safeTasksetId(proposal.name, snapshot.id);
+}
+
 function safeTasksetId(name: string, snapshotId: string): string { const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "taskset"; return `${slug}-${contentHash(snapshotId).slice(0, 8)}`; }

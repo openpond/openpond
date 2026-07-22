@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import "../../styles/command/command-menu.css";
 import type { ReactNode } from "react";
 import type { Session } from "@openpond/contracts";
-import { Cloud, Folder, MessageSquare, Pin, Search, SquarePen } from "../icons";
+import { Bookmark, Cloud, Folder, MessageSquare, Pin, Search, SquarePen } from "../icons";
 import { isCloudSidebarProjectItem, isLocalSidebarProjectItem, type SidebarProjectItem } from "../../lib/app-models";
 import { relativeAge } from "../../lib/chat-messages";
 
@@ -97,7 +97,7 @@ export function CommandMenu({
           <CommandResultGroup label="Chats">
             {sessionMatches.map((session) => (
               <button className="command-result" key={session.id} onClick={() => onOpenSession(session)}>
-                {session.pinned ? <Pin size={15} /> : <MessageSquare size={15} />}
+                {session.pinned ? <Pin size={15} /> : session.savedForLater ? <Bookmark size={15} /> : <MessageSquare size={15} />}
                 <span>{session.title}</span>
                 <small>{session.appName ?? relativeAge(session.updatedAt)}</small>
               </button>

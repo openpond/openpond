@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import type { ConnectedAppIntegrationSkill, TerminalScope } from "@openpond/contracts";
+import type { ConnectedAppIntegrationSkill, SidebarFileBookmark, TerminalScope } from "@openpond/contracts";
 import { AppSettingsController, AppShellController } from "../components/app-shell/AppControllers";
 import { isDesktopShell, isMacPlatform } from "../components/app-shell/WindowControls";
 import { AppSplash } from "../components/splash/AppSplash";
@@ -8,6 +8,8 @@ import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
+import { projectSelectionKey } from "../lib/app-models";
+import type { SidebarFileOpenRequest } from "../lib/sidebar-files";
 import { AppToastProvider } from "./AppToastContext";
 import {
   POST_TRAINING_LESSONS,
@@ -45,8 +47,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setCommitDialogOpen, setCommitMessage, setCommitIncludeUnstaged, setCommitNextStep, setCommitDraft, setBranchDialogOpen,
     setBranchDialogName, setError, showToast, applyBootstrapPayload, bootstrap, connection,
     startup, insights, training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed,
-    chatsCollapsed, sidebarWidth, sidebarResizing, diffPanelWidth, diffPanelResizing, togglePinnedCollapsed,
-    toggleProjectsCollapsed, toggleCloudProjectsCollapsed, toggleChatsCollapsed, startSidebarResize, startDiffPanelResize, selectedApp,
+    chatsCollapsed, savedForLaterCollapsed, sidebarWidth, sidebarResizing, diffPanelWidth, diffPanelResizing, togglePinnedCollapsed,
+    toggleProjectsCollapsed, toggleCloudProjectsCollapsed, toggleChatsCollapsed, toggleSavedForLaterCollapsed, startSidebarResize, startDiffPanelResize, selectedApp,
     selectedProject, selectedProjectLinkedApp, selectedSession, sidebarSessions, runtimeIndexes, chatMentionApps,
     connectedAppMentions, pendingApproval, account, activeModel, activeProvider,
     appDefaults, startMessage, teamChatOrganization,
@@ -57,7 +59,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     selectedCloudWorkItemLocalProject, applyCloudWorkItemPatchLocally, cancelCloudWorkItemCreatePipeline, cancelCloudWorkItemTask, createCloudWork, handleCloudWorkItemBackground,
     openCloudHome, selectCloudWorkItem, sendCloudWorkItemMessage, changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode,
     resolveApproval, beginNewChat, beginNewChatWithTrainingModel, dismissTrainingChatHandoff, trainingChatHandoff, selectTrainingChatTaskForComposer,
-    chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, projectRows,
+    chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
     localProjectRows, visibleProjectRows, cloudProjectRows, cloudWorkItemsByProjectId, projectSessionRowsByProjectId, childSessionRowsByParentId,
     sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, goalRuntime,
     subagentRuntime, visibleChatMessages, activeTerminalScope, terminalSummaries, runningSessionIds, selectedSessionRunning,
@@ -76,7 +78,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     applyCreateImproveCandidate, approveCreateImproveRun, cancelCreateImproveRun, changeDraftProvider, openCreateImprovePullRequest,
     reconcileCreateImprovePullRequest, rejectCreateImproveCandidate, pauseCreateImproveRun, resumeCreateImproveRun, reviseCreateImproveRun,
     pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
-    toggleProjectPinned, toggleSessionPinned, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
+    toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
     openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
     openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
@@ -89,6 +91,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<ConnectedAppIntegrationSkill | null>(null);
   const [postTrainingCourse, setPostTrainingCourse] = useState<PostTrainingCourseState | null>(null);
   const [makeAgentTutorial, setMakeAgentTutorial] = useState<MakeAgentTutorialState | null>(null);
+  const [sidebarFileOpenRequest, setSidebarFileOpenRequest] = useState<SidebarFileOpenRequest | null>(null);
   const preCourseSidebarOpenRef = useRef<boolean | null>(null);
   const openPostTrainingCourse = useCallback(() => {
     if (preCourseSidebarOpenRef.current === null) {
@@ -221,6 +224,54 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setDiffPanelExpanded(false);
     setDiffPanelOpen(false);
   }, [setDiffPanelExpanded, setDiffPanelOpen]);
+  const openSidebarFile = useCallback((file: SidebarFileBookmark) => {
+    if (file.workspaceKind === "local") {
+      const projectId = projectSelectionKey("local", file.workspaceId);
+      setSelectedAppId(null);
+      setSelectedProjectId(projectId);
+      setSelectedSessionId(null);
+      expandProject(projectId);
+      setView("chat");
+    } else {
+      const sourceSession = sidebarSessions.find((session) =>
+        session.id === file.sourceSessionId || session.workspaceId === file.workspaceId
+      );
+      if (!sourceSession) {
+        showToast("This saved file's cloud chat is no longer available.", "error");
+        return;
+      }
+      openSessionInChat(sourceSession.id);
+    }
+    setRightPanelMode("changes");
+    setDiffPanelOpen(true);
+    setSidebarFileOpenRequest({ id: Date.now(), file });
+    if (!file.available) showToast(`File unavailable: ${file.path}`, "error");
+  }, [
+    expandProject,
+    openSessionInChat,
+    setDiffPanelOpen,
+    setRightPanelMode,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+    setView,
+    showToast,
+    sidebarSessions,
+  ]);
+  useEffect(() => {
+    if (!sidebarFileOpenRequest) return;
+    const timer = window.setTimeout(() => {
+      setRightPanelMode("changes");
+      setDiffPanelOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    selectedProjectId,
+    selectedSessionId,
+    setDiffPanelOpen,
+    setRightPanelMode,
+    sidebarFileOpenRequest,
+  ]);
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
   }
@@ -334,6 +385,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         projectsCollapsed,
         cloudProjectsCollapsed,
         chatsCollapsed,
+        savedForLaterCollapsed,
         archivedChatsOpen,
         projectsExpanded,
         cloudProjectsExpanded,
@@ -341,6 +393,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         dragItem,
         pinnedRows,
         pinnedSessions,
+        savedForLaterSessions,
+        savedForLaterFiles,
         projectRows,
         visibleProjectRows,
         localProjectRows,
@@ -374,6 +428,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onToggleProjectsCollapsed: toggleProjectsCollapsed,
         onToggleCloudProjectsCollapsed: toggleCloudProjectsCollapsed,
         onToggleChatsCollapsed: toggleChatsCollapsed,
+        onToggleSavedForLaterCollapsed: toggleSavedForLaterCollapsed,
         setArchivedChatsOpen,
         setProjectsExpanded,
         setCloudProjectsExpanded,
@@ -407,16 +462,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         toggleProjectPinned,
         toggleSystemProjectVisibility,
         toggleSessionPinned,
+        toggleSessionSavedForLater,
+        openSidebarFile,
+        setSidebarFileStatus: (file, status) => void setSidebarFileStatus(file, status),
         archiveSession,
         restoreSession,
         renameSession,
-        addSessionToTraining: (session) => {
-          void training.actions.addSource(session.id).then((source) => {
-            if (!source) return;
-            setView("labs");
-            showToast("Added chat to training sources.", "info");
-          });
-        },
         expandProject,
         toggleProjectExpanded,
         startPinnedDrag,
@@ -594,6 +645,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         makeAgentTutorial,
         postTrainingCourse,
         workspaceDiffPanelViewState,
+        sidebarFileOpenRequest,
+        sidebarFileBookmarks,
+        onSetSidebarFileStatus: (file, status) => void setSidebarFileStatus(file, status),
         browserConversationId,
         terminalScope: viewTerminalScope,
         terminalTabs,
