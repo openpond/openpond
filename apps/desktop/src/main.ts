@@ -513,6 +513,16 @@ function registerIpcHandlers(): void {
     if (result.canceled || !result.filePaths[0]) return { canceled: true, path: null };
     return { canceled: false, path: result.filePaths[0] };
   });
+  handleTrackedIpc("openpond:file:reveal", (_event, payload) => {
+    const rawPath = payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>).path
+      : null;
+    if (typeof rawPath !== "string" || !path.isAbsolute(rawPath)) {
+      return { ok: false, error: "An absolute local file path is required." };
+    }
+    shell.showItemInFolder(path.resolve(rawPath));
+    return { ok: true };
+  });
   handleTrackedIpc("openpond:microphone:request", () => requestMicrophoneAccess());
   handleTrackedIpc("openpond:renderer:error", (_event, payload) => {
     desktopLogger().error("renderer error", { payload });

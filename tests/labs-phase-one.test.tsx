@@ -616,7 +616,7 @@ describe("Lab Phase 1", () => {
     });
   });
 
-  test("lists packaged Codex skills separately from OpenPond profile skills", () => {
+  test("lists packaged OpenPond profile skills with their resources", () => {
     const profile = {
       ...emptyOpenPondProfileState(),
       skills: [{
@@ -630,37 +630,23 @@ describe("Lab Phase 1", () => {
         sourceHash: "profile-hash",
         validationStatus: "valid" as const,
         validationMessages: [],
+        resourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
       }],
     };
 
     const workproducts = labWorkproductProjection({
       profile,
-      codexPersonalSkills: [{
-        name: "make-openpond-video",
-        description: "Packaged renderer.",
-        path: "/home/user/.codex/skills/make-openpond-video/SKILL.md",
-        sourcePath: "/home/user/.codex/skills/make-openpond-video",
-        enabled: true,
-        charCount: 800,
-        sourceHash: "codex-hash",
-        validationStatus: "valid",
-        validationMessages: [],
-        resourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
-        updatedAt: "2026-07-22T12:00:00.000Z",
-      }],
       training: null,
       runs: [],
     });
 
-    expect(workproducts).toHaveLength(2);
-    expect(workproducts.map((item) => item.key).sort()).toEqual([
-      "skill:codex:make-openpond-video",
-      "skill:make-openpond-video",
-    ]);
-    expect(workproducts.find((item) => item.skillSource === "codex")).toMatchObject({
+    expect(workproducts).toHaveLength(1);
+    expect(workproducts[0]).toMatchObject({
+      key: "skill:make-openpond-video",
+      skillSource: "profile",
       status: "Ready",
       skillResourceFiles: ["scripts/render.py", "assets/wordmark.svg"],
-      skillSourceHash: "codex-hash",
+      skillSourceHash: "profile-hash",
     });
   });
 

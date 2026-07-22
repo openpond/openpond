@@ -8,7 +8,6 @@ import type {
   CloudWorkItemDetail,
   CodexPermissionMode,
   CodexReasoningEffort,
-  ConnectedAppIntegrationSkill,
   InsightItem,
   InsightRun,
   InsightRunTrigger,
@@ -65,6 +64,8 @@ import type {
 } from "../workspace-diff/workspace-diff-panel-model";
 import type { RightChatPanelView } from "./RightChatPanelStack";
 import type { SidebarFileOpenRequest } from "../../lib/sidebar-files";
+import type { SkillSourceDocument } from "./skill-source-document";
+import type { SkillPackageSourceSelection } from "./skill-package-source";
 
 export type MainPaneProps = {
   view: AppView;
@@ -116,7 +117,8 @@ export type MainPaneProps = {
   rightPanelMode: RightPanelMode;
   rightPanelTabRequest: WorkspaceDiffTabRequest | null;
   rightChatPanels: RightChatPanelView[];
-  nativeSkillSidebar: ConnectedAppIntegrationSkill | null;
+  nativeSkillSidebar: SkillSourceDocument | null;
+  extensionSkillSidebar: SkillPackageSourceSelection | null;
   makeAgentTutorial: MakeAgentTutorialState | null;
   postTrainingCourse: PostTrainingCourseState | null;
   workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;

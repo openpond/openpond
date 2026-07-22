@@ -7,6 +7,7 @@ import {
   createOpenPondCapabilityModelToolDefinitions,
 } from "../../openpond/capability-tool-registry.js";
 import { createBrowserModelToolDefinitions } from "../../openpond/browser-tool-registry.js";
+import { createLocalImageModelToolDefinition } from "../../openpond/local-image-tool-registry.js";
 import { createConnectedAppProviderModelToolDefinitions } from "../../openpond/connected-app-tool-registry.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
 import {
@@ -83,6 +84,7 @@ export function createCapabilityCatalogRuntime(deps: {
     definitions.push(...createBrowserModelToolDefinitions(deps.browserToolExecutor));
     if (deps.executeOpenPondCommand) {
       definitions.push(createCommandModelToolDefinition({ executeCommand: deps.executeOpenPondCommand }));
+      definitions.push(createLocalImageModelToolDefinition());
     }
     if (deps.hostedToolFlags.resourceTools) {
       definitions.push(...createResourceModelToolDefinitions({

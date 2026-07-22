@@ -28,6 +28,7 @@ import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { normalizeChatFilePath } from "../../lib/chat-file-links";
+import { absoluteLocalVideoPath } from "../../lib/local-video";
 import {
   buildChatTimelineRows,
   shouldShowThinkingIndicator,
@@ -171,6 +172,7 @@ export function MainPane({
   rightPanelTabRequest,
   rightChatPanels,
   nativeSkillSidebar,
+  extensionSkillSidebar,
   makeAgentTutorial,
   postTrainingCourse,
   workspaceDiffPanelViewState,
@@ -575,6 +577,7 @@ export function MainPane({
     rightChatPanels.length > 0;
   const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
   const showNativeSkillPanel = view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
+  const showExtensionSkillPanel = view === "chat" && diffPanelOpen && Boolean(extensionSkillSidebar);
   const showPostTrainingPanel =
     view === "get-started" && diffPanelOpen && Boolean(postTrainingCourse);
   const showMakeAgentTutorialPanel =
@@ -767,7 +770,11 @@ export function MainPane({
             })
           ) {
             const skillPrompt = command.command === "skill"
-              ? skillPromptForComposer(command.args, activeProvider)
+              ? skillPromptForComposer(
+                  command.args,
+                  activeProvider,
+                  bootstrap?.profile.sourcePath ?? null,
+                )
               : promptForAppSlashCommand(command);
             return sendPrompt([], null, skillPrompt, {
               clearPrompt: options.preservePrompt ? () => undefined : undefined,
@@ -1109,11 +1116,20 @@ export function MainPane({
     : workspaceState?.repoPath ?? null;
   const handleOpenFileInSidebar = useCallback(
     (path: string) => {
+      const videoPath = absoluteLocalVideoPath(path, workspaceRootPath);
+      if (videoPath && connection) {
+        void api.signLocalVideoUrl(connection, { path: videoPath })
+          .then(({ url }) => handleOpenBrowserLink(url))
+          .catch((error) => {
+            showToast(error instanceof Error ? error.message : "Could not open this video.", "error");
+          });
+        return;
+      }
       const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
       onShowDiffPanel();
       setOpenDiffFileRequest({ id: Date.now(), path: normalizedFile?.path ?? path });
     },
-    [onShowDiffPanel, workspaceRootPath],
+    [connection, handleOpenBrowserLink, onShowDiffPanel, showToast, workspaceRootPath],
   );
   useLayoutEffect(() => {
     if (view !== "chat" || !showChatThread || typeof window === "undefined") return undefined;
@@ -1406,6 +1422,16 @@ export function MainPane({
       onToggleExpanded={onToggleDiffPanelExpanded}
     />
   ) : null;
+  const extensionSkillPanel = showExtensionSkillPanel && extensionSkillSidebar ? (
+    <LabSkillSidebar
+      connection={connection}
+      expanded={diffPanelExpanded}
+      selection={extensionSkillSidebar}
+      onClose={onCloseNativeSkillSidebar}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
+    />
+  ) : null;
   const labSkillPanel = showLabSkillPanel && labSkillSource ? (
     <LabSkillSidebar
       connection={connection}
@@ -1450,6 +1476,7 @@ export function MainPane({
     teamAiThreadPanel ??
     rightChatPanel ??
     nativeSkillPanel ??
+    extensionSkillPanel ??
     labSkillPanel ??
     diffPanel ??
     browserPanel ??

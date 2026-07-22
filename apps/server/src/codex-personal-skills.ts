@@ -58,7 +58,6 @@ export async function readSkillSourceFile(input: {
   packageRoot: string;
   relativeFilePath: string;
 }): Promise<SkillSourceFile> {
-  assertSkillName(input.skillName);
   const normalizedPath = normalizeSkillFilePath(input.relativeFilePath);
   const packageRoot = await realpath(input.packageRoot);
   const absolutePath = await realpath(path.join(packageRoot, normalizedPath));

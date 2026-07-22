@@ -2,17 +2,33 @@ import {
   CONNECTED_APP_INTEGRATION_SKILLS,
   connectedAppBundleByProvider,
   type CodexPersonalSkill,
-  type ConnectedAppIntegrationSkill,
+  type OpenPondExtension,
+  type OpenPondExtensionCatalog,
 } from "@openpond/contracts";
+import type { ClientConnection } from "../../api";
 import { ChevronRight, FileText } from "../icons";
+import { GithubExtensionsSettings } from "./GithubExtensionsSettings";
+import type { SkillSourceDocument } from "../app-shell/skill-source-document";
 import "../../styles/settings/skills-settings.css";
 
 export function SkillsSettingsSection({
-  onOpenNativeSkill,
+  onOpenSkill,
+  onOpenExtension,
   personalSkills,
+  extensionCatalog,
+  connection,
+  onExtensionCatalog,
+  onError,
+  onToast,
 }: {
-  onOpenNativeSkill: (skill: ConnectedAppIntegrationSkill) => void;
+  onOpenSkill: (skill: SkillSourceDocument) => void;
+  onOpenExtension: (extension: OpenPondExtension) => void;
   personalSkills: CodexPersonalSkill[];
+  extensionCatalog: OpenPondExtensionCatalog;
+  connection: ClientConnection | null;
+  onExtensionCatalog: (catalog: OpenPondExtensionCatalog) => void;
+  onError: (message: string | null) => void;
+  onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 }) {
   return (
     <section className="account-settings skills-settings" aria-labelledby="skills-settings-title">
@@ -20,10 +36,19 @@ export function SkillsSettingsSection({
         <div>
           <h1 id="skills-settings-title">Skills</h1>
           <p>
-            Personal Codex skill packages and the read-only app instructions bundled with OpenPond.
+            Install third-party GitHub packs, inspect personal Codex skills, and view instructions bundled with OpenPond.
           </p>
         </div>
       </header>
+
+      <GithubExtensionsSettings
+        catalog={extensionCatalog}
+        connection={connection}
+        onCatalog={onExtensionCatalog}
+        onError={onError}
+        onOpenExtension={onOpenExtension}
+        onToast={onToast}
+      />
 
       <div className="account-list native-skills-list">
         <div className="account-list-heading">
@@ -69,7 +94,7 @@ export function SkillsSettingsSection({
               className="native-skill-row"
               key={skill.name}
               type="button"
-              onClick={() => onOpenNativeSkill(skill)}
+              onClick={() => onOpenSkill(skill)}
             >
               <span className="native-skill-icon" aria-hidden="true">
                 <FileText size={17} />

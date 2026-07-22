@@ -142,15 +142,14 @@ describe("chat message projection", () => {
       "user",
       "activity_group",
       "activity_group",
-      "activity_group",
     ]);
-    expect(messages[1]?.activities?.[0]?.subagentMessage).toBeUndefined();
+    expect(messages[1]?.activities).toHaveLength(2);
+    expect(messages[1]?.activities?.every((activity) => !activity.subagentMessage)).toBe(true);
     expect(messages[2]?.activities?.[0]?.subagentMessage).toMatchObject({
       direction: "received",
       roleId: "review",
       childSessionId: "session_child_review",
     });
-    expect(messages[3]?.activities?.[0]?.subagentMessage).toBeUndefined();
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
@@ -341,7 +340,7 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Subagent running");
   });
 
-  test("renders assistant reasoning as first-class text separate from tools and answer content", () => {
+  test("shows live reasoning inside the work trace and keeps answer content separate", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -373,20 +372,26 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "reasoning", "assistant"]);
+    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
     expect(messages[1]).toMatchObject({
-      role: "reasoning",
-      content: "The user is greeting Z.ai. It should answer briefly.",
+      role: "activity_group",
+      traceState: "running",
     });
+    expect(messages[1]?.activities).toMatchObject([
+      {
+        kind: "reasoning",
+        content: "The user is greeting Z.ai. It should answer briefly.",
+      },
+    ]);
     expect(messages[2]).toMatchObject({
       role: "assistant",
       content: "Hello z.ai",
     });
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    expect(html).toContain("Show thinking");
-    expect(html).not.toContain("The user is greeting Z.ai.");
-    expect(html).not.toContain("Reasoning");
+    expect(html).toContain("Working…");
+    expect(html).toContain("The user is greeting Z.ai.");
+    expect(html).toContain("Reasoning");
     expect(html).not.toContain("Hello z.ai");
 
     const assistantHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[2]! }));
@@ -394,7 +399,7 @@ describe("chat message projection", () => {
     expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
   });
 
-  test("keeps reasoning text separate when tool runs occur between reasoning deltas", () => {
+  test("groups reasoning and actions across alternating tool runs", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -442,25 +447,36 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         output: "I found the chat files.",
       }),
+      runtimeEvent({
+        id: "turn_completed",
+        name: "turn.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+      }),
     ]);
 
     expect(messages.map((message) => message.role)).toEqual([
       "user",
-      "reasoning",
       "activity_group",
-      "reasoning",
       "assistant",
     ]);
-    expect(messages[1]?.content).toBe("I need to find the relevant files.");
-    expect(messages[2]?.activities?.map((activity) => activity.label)).toEqual([
-      "Searching resources",
+    expect(messages[1]?.traceState).toBe("completed");
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
+      "Reasoning",
       "Searched resources",
+      "Reasoning",
     ]);
-    expect(messages[3]?.content).toBe("Now I can inspect the candidate.");
-    expect(messages[4]?.content).toBe("I found the chat files.");
+    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
+      "I need to find the relevant files.",
+      "Found 2 resources.",
+      "Now I can inspect the candidate.",
+    ]);
+    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe("Searched code");
+    expect(messages[2]?.content).toBe("I found the chat files.");
   });
 
-  test("keeps rendered reasoning muted by default while preserving raw content", () => {
+  test("collapses completed reasoning into a deterministic work summary", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -478,18 +494,24 @@ describe("chat message projection", () => {
           'I found the branch in `app-state.ts`.\n```ts\nconst prompt = String(nextValue);\n```\n' +
           `${"This is progress context. ".repeat(45)}\nNow I need to find \`setPrompt(\"\")\`.`,
       }),
+      runtimeEvent({
+        id: "turn_completed",
+        name: "turn.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+      }),
     ]);
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    expect(html).toContain("assistant-reasoning-message collapsed");
-    expect(html).toContain("Show thinking");
+    expect(html).toContain("Thought through the request");
+    expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("I found the branch");
     expect(html).not.toContain("app-state.ts");
     expect(html).not.toContain("const prompt");
     expect(html).not.toContain("setPrompt");
-    expect(html).not.toContain("Reasoning");
-    expect(messages[1]?.content).toContain("const prompt");
-    expect(messages[1]?.content).toContain("setPrompt");
+    expect(messages[1]?.activities?.[0]?.content).toContain("const prompt");
+    expect(messages[1]?.activities?.[0]?.content).toContain("setPrompt");
   });
 
   test("renders Insights scan prompts as compact evidence cards", () => {
@@ -1316,19 +1338,18 @@ describe("chat message projection", () => {
 
     expect(messages[1]?.role).toBe("activity_group");
     expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
-      "Starting Create Pipeline",
       "Started Create Pipeline",
-      "Creating profile skill",
       "Created profile skill",
-      "Updating goal",
       "Updated goal",
     ]);
     expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
       "Create a support triage agent.",
-      "Create Pipeline plan is ready for review.",
       "Draft reusable release notes.",
-      "Started profile skill goal: Create release notes.",
       "User asked to restart this goal.",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual([
+      "Create Pipeline plan is ready for review.",
+      "Started profile skill goal: Create release notes.",
       "OpenPond goal restarted.",
     ]);
   });
@@ -1379,15 +1400,15 @@ describe("chat message projection", () => {
 
     expect(messages[1]?.role).toBe("activity_group");
     expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
-      "Opening browser",
       "Opened browser",
-      "Typing in browser",
       "Typed in browser",
     ]);
     expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
       "https://example.com/login?[redacted]",
-      "Opened browser.",
       "Text redacted",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual([
+      "Opened browser.",
       "Typed in browser.",
     ]);
   });
@@ -1439,14 +1460,11 @@ describe("chat message projection", () => {
     const messages = buildChatMessages(events);
 
     expect(messages[1]?.role).toBe("activity_group");
-    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
-      "X search",
-      "X search",
-    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual(["X search"]);
     expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
       "x.search.posts / 1 capability",
-      "search / 1 capability",
     ]);
+    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual(["search / 1 capability"]);
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
     expect(html).toContain("X search");
@@ -1583,7 +1601,7 @@ describe("chat message projection", () => {
       }),
     );
     expect(html).toContain("Searched code");
-    expect(html).not.toContain("activityGroupSummary");
+    expect(html).toContain("activityGroupSummary");
   });
 
   test("merges workspace action results into the started activity row", () => {
@@ -1813,6 +1831,64 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Made edits and ran checks");
   });
 
+  test("keeps completed command artifacts visible when a turn is interrupted", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Render the video" },
+      }),
+      commandStarted("render_1", "turn_1", "ffmpeg -i input.mp4 output.mp4"),
+      runtimeEvent({
+        id: "render_done",
+        name: "tool.completed",
+        turnId: "turn_1",
+        action: "exec_command",
+        status: "completed",
+        data: {
+          toolCallId: "render_1",
+          result: {
+            artifacts: [{
+              artifactRef: "/tmp/output.mp4",
+              path: "/tmp/output.mp4",
+              title: "output.mp4",
+              contentType: "video/mp4",
+              sizeBytes: 1024,
+              binary: true,
+            }],
+          },
+        },
+      }),
+      runtimeEvent({
+        id: "interrupted",
+        name: "turn.interrupted",
+        turnId: "turn_1",
+        output: "Interrupted because the local app server stopped.",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+      "status_divider",
+    ]);
+    expect(messages[1]?.activities?.[0]?.artifacts).toEqual([
+      expect.objectContaining({ path: "/tmp/output.mp4", contentType: "video/mp4", sizeBytes: 1024 }),
+    ]);
+    expect(messages[1]?.deliverables).toEqual([
+      expect.objectContaining({ path: "/tmp/output.mp4", contentType: "video/mp4", sizeBytes: 1024 }),
+    ]);
+    expect(messages[2]).toMatchObject({
+      content: "Interrupted by app restart",
+      statusKind: "interruption",
+    });
+    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    expect(html).toContain("activity-artifact");
+    expect(html).toContain("output.mp4");
+    expect(html).toContain("1.0 KB");
+  });
+
   test("renders Codex control prompts as activity rows", () => {
     const messages = buildChatMessages([
       runtimeEvent({
@@ -1830,12 +1906,17 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(messages[0]?.role).toBe("activity_group");
-    expect(messages[0]?.activities?.map((activity) => activity.label)).toEqual(["Goal context", "Turn aborted"]);
+    expect(messages[0]?.activities?.map((activity) => activity.label)).toEqual(["Goal context"]);
     expect(messages[0]?.activities?.[0]?.content).toBe("Keep the sidebar work in scope.");
-    expect(messages[0]?.activities?.[1]?.content).toBe("The user interrupted the previous turn.");
-    expect(activityGroupSummary(messages[0]?.activities ?? [])).toBe("Goal context updated and turn interrupted");
+    expect(messages[1]).toMatchObject({
+      role: "status_divider",
+      content: "The user interrupted the previous turn.",
+      statusKind: "interruption",
+      statusState: "failed",
+      statusTone: "danger",
+    });
   });
 
   test("summarizes single Codex control outcomes without generic context wording", () => {
@@ -1858,6 +1939,10 @@ describe("chat message projection", () => {
     ]);
 
     expect(activityGroupSummary(goalContextMessages[0]?.activities ?? [])).toBe("Goal context updated");
-    expect(activityGroupSummary(interruptedMessages[0]?.activities ?? [])).toBe("Turn interrupted");
+    expect(interruptedMessages[0]).toMatchObject({
+      role: "status_divider",
+      content: "The user interrupted the previous turn.",
+      statusKind: "interruption",
+    });
   });
 });

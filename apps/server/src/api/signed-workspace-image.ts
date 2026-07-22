@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import path from "node:path";
-import { normalizeWorkspaceFilePath, workspaceImageContentType } from "../workspace/workspace-common.js";
+import {
+  localVideoContentType,
+  normalizeWorkspaceFilePath,
+  workspaceImageContentType,
+} from "../workspace/workspace-common.js";
 
 const SIGNED_WORKSPACE_IMAGE_TTL_MS = 5 * 60 * 1000;
 const CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"]);
@@ -13,6 +17,11 @@ type SignedWorkspaceImageClaims = {
 };
 
 type SignedLocalImageClaims = {
+  path: string;
+  expiresAt: number;
+};
+
+type SignedLocalVideoClaims = {
   path: string;
   expiresAt: number;
 };
@@ -57,6 +66,22 @@ export function signedLocalImageUrlPayload(input: unknown, requestUrl: URL, toke
   url.searchParams.set("path", claims.path);
   url.searchParams.set("expiresAt", String(claims.expiresAt));
   url.searchParams.set("signature", signLocalImageClaims(claims, token));
+  return { url: url.toString(), expiresAt };
+}
+
+export function signedLocalVideoUrlPayload(input: unknown, requestUrl: URL, token: string): {
+  url: string;
+  expiresAt: number;
+} {
+  const rawPath = requiredSignedAssetString(inputRecord(input).path, "path", 4096);
+  const videoPath = normalizeSignedLocalVideoPath(rawPath);
+  if (!videoPath) throw new Error("Local video path is invalid.");
+  const expiresAt = Date.now() + SIGNED_WORKSPACE_IMAGE_TTL_MS;
+  const claims = { path: videoPath, expiresAt };
+  const url = new URL("/v1/assets/local-video", requestUrl.origin);
+  url.searchParams.set("path", claims.path);
+  url.searchParams.set("expiresAt", String(claims.expiresAt));
+  url.searchParams.set("signature", signLocalVideoClaims(claims, token));
   return { url: url.toString(), expiresAt };
 }
 
@@ -134,6 +159,29 @@ export function verifySignedLocalImageRequest(
   return { ok: true, claims };
 }
 
+export function verifySignedLocalVideoRequest(
+  requestUrl: URL,
+  token: string,
+): { ok: true; claims: SignedLocalVideoClaims } | { ok: false; status: 401 | 404; error: string } {
+  const rawPath = requiredSearchParam(requestUrl, "path");
+  const expiresRaw = requiredSearchParam(requestUrl, "expiresAt");
+  const signature = requiredSearchParam(requestUrl, "signature");
+  if (!rawPath || !expiresRaw || !signature) {
+    return { ok: false, status: 401, error: "Signed asset URL is missing required claims." };
+  }
+  const videoPath = normalizeSignedLocalVideoPath(rawPath);
+  const expiresAt = Number(expiresRaw);
+  if (!videoPath || !Number.isInteger(expiresAt)) {
+    return { ok: false, status: 401, error: "Signed asset URL is invalid." };
+  }
+  if (expiresAt < Date.now()) return { ok: false, status: 401, error: "Signed asset URL expired." };
+  const claims = { path: videoPath, expiresAt };
+  if (!safeSignatureEqual(signature, signLocalVideoClaims(claims, token))) {
+    return { ok: false, status: 401, error: "Signed asset URL signature is invalid." };
+  }
+  return { ok: true, claims };
+}
+
 export function verifySignedChatAttachmentImageRequest(
   requestUrl: URL,
   token: string,
@@ -197,6 +245,18 @@ function normalizeSignedWorkspaceImagePath(value: string): string | null {
 }
 
 function normalizeSignedLocalImagePath(value: string): string | null {
+  const cleaned = normalizeSignedLocalAssetPath(value);
+  if (!cleaned || !workspaceImageContentType(cleaned)) return null;
+  return cleaned;
+}
+
+function normalizeSignedLocalVideoPath(value: string): string | null {
+  const cleaned = normalizeSignedLocalAssetPath(value);
+  if (!cleaned || !localVideoContentType(cleaned)) return null;
+  return cleaned;
+}
+
+function normalizeSignedLocalAssetPath(value: string): string | null {
   let cleaned = value.trim().replace(/^['"`]+|['"`]+$/g, "");
   if (!cleaned) return null;
   if (cleaned.startsWith("file://")) {
@@ -207,9 +267,7 @@ function normalizeSignedLocalImagePath(value: string): string | null {
     }
   }
   if (!path.isAbsolute(cleaned)) return null;
-  cleaned = path.resolve(cleaned);
-  if (!workspaceImageContentType(cleaned)) return null;
-  return cleaned;
+  return path.resolve(cleaned);
 }
 
 function normalizeSignedChatAttachmentStorageName(value: string): string | null {
@@ -236,6 +294,12 @@ function signLocalImageClaims(claims: SignedLocalImageClaims, token: string): st
   return createHmac("sha256", token)
     .update(`${claims.path}
 ${claims.expiresAt}`)
+    .digest("base64url");
+}
+
+function signLocalVideoClaims(claims: SignedLocalVideoClaims, token: string): string {
+  return createHmac("sha256", token)
+    .update(`video\n${claims.path}\n${claims.expiresAt}`)
     .digest("base64url");
 }
 

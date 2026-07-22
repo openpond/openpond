@@ -1,6 +1,9 @@
 import { once } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
@@ -8,10 +11,12 @@ import {
   createHttpRequestHandler,
   signedChatAttachmentImageUrlPayload,
   signedLocalImageUrlPayload,
+  signedLocalVideoUrlPayload,
   type HttpRouteDeps,
   signedWorkspaceImageUrlPayload,
   verifySignedChatAttachmentImageRequest,
   verifySignedLocalImageRequest,
+  verifySignedLocalVideoRequest,
   verifySignedWorkspaceImageRequest,
 } from "../apps/server/src/api/http-routes";
 
@@ -19,6 +24,7 @@ const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
 );
+const VIDEO_BYTES = Buffer.from("0123456789abcdef", "utf8");
 
 describe("signed workspace image URLs", () => {
   test("mints scoped URLs without exposing the server capability token", () => {
@@ -191,6 +197,51 @@ describe("signed workspace image URLs", () => {
     });
   });
 
+  test("mints scoped local video URLs without exposing the server capability token", () => {
+    const token = "server-capability-secret";
+    const response = signedLocalVideoUrlPayload(
+      { path: "/tmp/demo.mp4" },
+      new URL("http://127.0.0.1:17876/v1/assets/local-video-url"),
+      token,
+    );
+    const url = new URL(response.url);
+
+    expect(url.pathname).toBe("/v1/assets/local-video");
+    expect(url.searchParams.get("path")).toBe("/tmp/demo.mp4");
+    expect(response.url).not.toContain(token);
+    expect(verifySignedLocalVideoRequest(url, token)).toEqual({
+      ok: true,
+      claims: { path: "/tmp/demo.mp4", expiresAt: response.expiresAt },
+    });
+    expect(() => signedLocalVideoUrlPayload(
+      { path: "/tmp/readme.txt" },
+      new URL("http://127.0.0.1:17876/v1/assets/local-video-url"),
+      token,
+    )).toThrow("Local video path is invalid.");
+  });
+
+  test("streams signed local videos with byte-range support", async () => {
+    await withSignedImageServer(async ({ baseUrl, token, videoPath }) => {
+      const mintResponse = await fetch(`${baseUrl}/v1/assets/local-video-url`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path: videoPath }),
+      });
+      expect(mintResponse.status).toBe(200);
+      const minted = (await mintResponse.json()) as { url: string };
+
+      const videoResponse = await fetch(minted.url, { headers: { Range: "bytes=4-9" } });
+      expect(videoResponse.status).toBe(206);
+      expect(videoResponse.headers.get("accept-ranges")).toBe("bytes");
+      expect(videoResponse.headers.get("content-range")).toBe(`bytes 4-9/${VIDEO_BYTES.byteLength}`);
+      expect(videoResponse.headers.get("content-type")).toBe("video/mp4");
+      expect(Buffer.from(await videoResponse.arrayBuffer()).toString("utf8")).toBe("456789");
+    });
+  });
+
   test("mints scoped chat attachment image URLs without exposing the server capability token", () => {
     const token = "server-capability-secret";
     const response = signedChatAttachmentImageUrlPayload(
@@ -307,8 +358,13 @@ describe("signed workspace image URLs", () => {
   });
 });
 
-async function withSignedImageServer<T>(fn: (input: { baseUrl: string; token: string }) => Promise<T>): Promise<T> {
+async function withSignedImageServer<T>(
+  fn: (input: { baseUrl: string; token: string; videoPath: string }) => Promise<T>,
+): Promise<T> {
   const token = "route-token";
+  const mediaRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-signed-video-"));
+  const videoPath = path.join(mediaRoot, "demo.mp4");
+  await writeFile(videoPath, VIDEO_BYTES);
   const server = createServer(
     createHttpRequestHandler({
       host: "127.0.0.1",
@@ -343,6 +399,14 @@ async function withSignedImageServer<T>(fn: (input: { baseUrl: string; token: st
           sizeBytes: PNG_BYTES.byteLength,
         };
       },
+      localVideoPayload: async (filePath: string) => {
+        if (filePath !== videoPath) throw new Error("Video not found");
+        return {
+          path: filePath,
+          contentType: "video/mp4",
+          sizeBytes: VIDEO_BYTES.byteLength,
+        };
+      },
       chatAttachmentImagePayload: async (input) => {
         if (
           input.sessionId !== "session_1" ||
@@ -365,9 +429,10 @@ async function withSignedImageServer<T>(fn: (input: { baseUrl: string; token: st
   await once(server, "listening");
   const address = server.address() as AddressInfo;
   try {
-    return await fn({ baseUrl: `http://127.0.0.1:${address.port}`, token });
+    return await fn({ baseUrl: `http://127.0.0.1:${address.port}`, token, videoPath });
   } finally {
     server.close();
     await once(server, "close");
+    await rm(mediaRoot, { recursive: true, force: true });
   }
 }

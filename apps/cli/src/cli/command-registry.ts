@@ -149,6 +149,18 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options, rest }) => (await import("./extend")).runOpenPondEditCommand(options, rest),
   },
   {
+    name: "extension",
+    usage: "openpond extension <add|preview|list|inspect|update|remove> [owner/repo]",
+    usages: [
+      "openpond extension add <owner/repo> [--ref <branch|tag|sha>] [--json]",
+      "openpond extension update <owner/repo> [--ref <branch|tag|sha>] [--json]",
+      "openpond extension update --all [--json]",
+      "openpond extension remove <owner/repo> [--json]",
+    ],
+    optionSchema: { all: "boolean", json: "boolean", ref: "string" },
+    handler: async ({ options, rest }) => (await import("./extension")).runOpenPondExtensionCommand(options, rest),
+  },
+  {
     name: "profiles",
     usage: "openpond profiles [args]",
     optionSchema: { json: "boolean" },

@@ -1,13 +1,16 @@
-import { useState, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ChevronDown,
   CircleAlert,
   Bot,
   FileText,
+  FolderOpen,
   Globe2,
   ImageIcon,
   ListFilter,
   Lightbulb,
+  PanelRight,
+  Play,
   Search,
   SquarePen,
   SquareTerminal,
@@ -15,6 +18,7 @@ import {
 } from "../icons";
 import type { ClientConnection } from "../../api";
 import { useLocalImageUrl } from "../../hooks/useLocalImageUrl";
+import { useLocalVideoUrl } from "../../hooks/useLocalVideoUrl";
 import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { ActivityItem, ChatMessage } from "../../lib/app-models";
 import {
@@ -22,8 +26,11 @@ import {
   summarizeShellCommand,
   type ActivityGroupSummaryKind,
 } from "../../lib/chat-activity-summary";
+import { formatWorkTraceDuration, workTracePresentation } from "../../lib/chat-work-trace";
 import { workspaceFileName } from "../../lib/workspace-images";
+import { revealLocalFile } from "../../lib/desktop-files";
 import { ImageLightbox } from "../common/ImageLightbox";
+import { MarkdownText } from "./MarkdownText";
 
 const COMMAND_OUTPUT_VISIBLE_LINES = 5;
 const MAX_SUMMARY_SUBAGENT_AVATARS = 4;
@@ -36,20 +43,34 @@ export function ActivityGroup({
   activeWorkspaceAppId,
   connection,
   message,
+  onOpenBrowserLink,
+  onOpenFileInSidebar,
   onOpenSession,
+  workspaceRootPath,
 }: {
   activeWorkspaceAppId: string | null;
   connection: ClientConnection | null;
   message: ChatMessage;
+  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenFileInSidebar?: (path: string) => void;
   onOpenSession?: (sessionId: string) => void;
+  workspaceRootPath?: string | null;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
   const [openImage, setOpenImage] = useState<ActivityItem["imagePreview"] | null>(null);
   const activities = message.activities ?? [];
-  const summary = summarizeActivityGroup(activities);
+  const summary = useMemo(() => summarizeActivityGroup(activities), [activities]);
+  const presentation = useMemo(
+    () => workTracePresentation(activities, message.traceState, manualExpanded),
+    [activities, manualExpanded, message.traceState],
+  );
   const summaryImage = activities.find((activity) => activity.imagePreview)?.imagePreview ?? null;
+  const artifacts = message.deliverables ?? [];
   const openImageSrc = useActivityImageUrl(openImage, connection, activeWorkspaceAppId);
-  const danger = activities.some((activity) => activity.controlKind === "turn_aborted");
+  const running = message.traceState === "running";
+  const danger = message.traceState === "failed" || message.traceState === "interrupted";
+  const duration = formatWorkTraceDuration(message.traceStartedAt, message.traceCompletedAt);
+  const summaryText = workTraceSummaryText(summary.text, message.traceState);
   const summaryOpenSessions = subagentOpenSessions(activities);
   const childMessageSummary = activities.length > 0 && activities.every((activity) => activity.subagentMessage);
 
@@ -62,44 +83,63 @@ export function ActivityGroup({
   }
 
   return (
-    <article className="activity-group">
+    <article className={`activity-group work-trace ${running ? "running" : "settled"}`}>
       <div className="activity-summary-row">
         <button
           type="button"
-          aria-expanded={expanded}
-          className={`activity-summary ${danger ? "danger" : ""}`}
-          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={presentation.expanded}
+          className={`activity-summary ${danger ? "danger" : ""} ${running ? "working" : ""}`}
+          onClick={() => setManualExpanded(!presentation.expanded)}
         >
           {summaryImage ? (
             <ActivitySummaryImage activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} image={summaryImage} />
           ) : (
             <ActivitySummaryIcon kind={summary.kind} />
           )}
-          <ActivitySummaryText summary={summary.text} />
-          <ChevronDown className={`activity-summary-toggle ${expanded ? "expanded" : ""}`} size={14} />
+          <ActivitySummaryText duration={duration} summary={summaryText} />
+          <ChevronDown className={`activity-summary-toggle ${presentation.expanded ? "expanded" : ""}`} size={14} />
         </button>
         {summaryOpenSessions.length > 0 && onOpenSession ? (
           <SubagentAvatarGroup
             onOpenSession={onOpenSession}
-            onShowAll={() => setExpanded(true)}
+            onShowAll={() => setManualExpanded(true)}
             sessions={summaryOpenSessions}
           />
         ) : null}
       </div>
-      {expanded && (
+      {artifacts.length > 0 ? (
+        <ActivityArtifacts
+          artifacts={artifacts}
+          connection={connection}
+          onOpenFileInSidebar={onOpenFileInSidebar}
+        />
+      ) : null}
+      {running && presentation.hiddenCount > 0 ? (
+        <button
+          type="button"
+          className="work-trace-earlier-toggle"
+          onClick={() => setManualExpanded(true)}
+        >
+          Show earlier work ({presentation.hiddenCount})
+        </button>
+      ) : null}
+      {presentation.visibleActivities.length > 0 ? (
         <div className="activity-details">
-          {activities.map((activity) => (
+          {presentation.visibleActivities.map((activity) => (
             <ActivityDetailRow
               activeWorkspaceAppId={activeWorkspaceAppId}
               activity={activity}
               connection={connection}
               key={activity.id}
+              onOpenBrowserLink={onOpenBrowserLink}
+              onOpenFileInSidebar={onOpenFileInSidebar}
               onOpenImage={setOpenImage}
               onOpenSession={onOpenSession}
+              workspaceRootPath={workspaceRootPath}
             />
           ))}
         </div>
-      )}
+      ) : null}
       <ImageLightbox
         open={Boolean(openImageSrc)}
         src={openImageSrc}
@@ -114,14 +154,20 @@ function ActivityDetailRow({
   activeWorkspaceAppId,
   activity,
   connection,
+  onOpenBrowserLink,
+  onOpenFileInSidebar,
   onOpenImage,
   onOpenSession,
+  workspaceRootPath,
 }: {
   activeWorkspaceAppId: string | null;
   activity: ActivityItem;
   connection: ClientConnection | null;
+  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenFileInSidebar?: (path: string) => void;
   onOpenImage: (image: ActivityItem["imagePreview"] | null) => void;
   onOpenSession?: (sessionId: string) => void;
+  workspaceRootPath?: string | null;
 }) {
   const imageSrc = useActivityImageUrl(activity.imagePreview ?? null, connection, activeWorkspaceAppId);
   if (activity.subagentMessage) {
@@ -141,6 +187,17 @@ function ActivityDetailRow({
         {activity.content && (
           activity.kind === "command" ? (
             <ShellCommandCode className="activity-detail-command" command={activity.content} />
+          ) : activity.kind === "reasoning" ? (
+            <div className="work-trace-reasoning">
+              <MarkdownText
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                connection={connection}
+                content={activity.content}
+                onOpenBrowserLink={onOpenBrowserLink}
+                onOpenFileInSidebar={onOpenFileInSidebar}
+                workspaceRootPath={workspaceRootPath}
+              />
+            </div>
           ) : isMultilineActivity(activity.content) ? (
             <pre className="activity-detail-output">{activity.content}</pre>
           ) : (
@@ -176,6 +233,144 @@ function ActivityDetailRow({
       </div>
     </div>
   );
+}
+
+function ActivityArtifacts({
+  artifacts,
+  connection,
+  onOpenFileInSidebar,
+}: {
+  artifacts: NonNullable<ActivityItem["artifacts"]>;
+  connection: ClientConnection | null;
+  onOpenFileInSidebar?: (path: string) => void;
+}) {
+  return (
+    <div className="activity-artifact-list">
+      {artifacts.map((artifact) => {
+        if (artifact.contentType.startsWith("video/")) {
+          return (
+            <ActivityVideoArtifact
+              artifact={artifact}
+              connection={connection}
+              key={artifact.path}
+              onOpenFileInSidebar={onOpenFileInSidebar}
+            />
+          );
+        }
+        if (artifact.contentType.startsWith("image/")) {
+          return <ActivityImageArtifact artifact={artifact} connection={connection} key={artifact.path} />;
+        }
+        return (
+          <div className="activity-artifact" key={artifact.path} title={artifact.path}>
+            <FileText aria-hidden size={14} />
+            <span>
+              <strong>{artifact.title}</strong>
+              <code>{artifact.path}</code>
+            </span>
+            <small>{artifact.sizeBytes == null ? artifact.contentType : formatArtifactSize(artifact.sizeBytes)}</small>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivityImageArtifact({
+  artifact,
+  connection,
+}: {
+  artifact: NonNullable<ActivityItem["artifacts"]>[number];
+  connection: ClientConnection | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const src = useLocalImageUrl(connection, artifact.path);
+  return (
+    <div className="activity-artifact-image" title={artifact.path}>
+      <button type="button" disabled={!src} onClick={() => setOpen(true)} title={`Open ${artifact.title}`}>
+        {src ? (
+          <img alt={artifact.title} decoding="async" loading="lazy" src={src} />
+        ) : (
+          <ImageIcon aria-hidden size={20} />
+        )}
+      </button>
+      <strong>{artifact.title}</strong>
+      <ImageLightbox open={open && Boolean(src)} src={src} title={artifact.title} onClose={() => setOpen(false)} />
+    </div>
+  );
+}
+
+function ActivityVideoArtifact({
+  artifact,
+  connection,
+  onOpenFileInSidebar,
+}: {
+  artifact: NonNullable<ActivityItem["artifacts"]>[number];
+  connection: ClientConnection | null;
+  onOpenFileInSidebar?: (path: string) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [started, setStarted] = useState(false);
+  const src = useLocalVideoUrl(connection, artifact.path);
+  const startPlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    void video.play().then(() => setStarted(true)).catch(() => undefined);
+  };
+  return (
+    <div className="activity-artifact-video" title={artifact.path}>
+      <div className="activity-artifact-video-stage">
+        {src ? (
+          <video
+            controls
+            onPlay={() => setStarted(true)}
+            preload="metadata"
+            ref={videoRef}
+            src={src}
+          />
+        ) : (
+          <div className="activity-artifact-video-loading">Preparing video…</div>
+        )}
+        {src && !started ? (
+          <button type="button" className="activity-artifact-video-play" onClick={startPlayback} aria-label={`Play ${artifact.title}`}>
+            <Play aria-hidden fill="currentColor" size={22} />
+          </button>
+        ) : null}
+      </div>
+      <div className="activity-artifact-video-footer">
+        <button
+          type="button"
+          className="activity-artifact-video-file"
+          onClick={() => void revealLocalFile(artifact.path)}
+          title={`Show ${artifact.path} in its folder`}
+        >
+          <FolderOpen aria-hidden size={13} />
+          <span>
+            <strong>{artifact.title}</strong>
+            <code>{artifact.path}</code>
+          </span>
+          <small>{artifact.sizeBytes == null ? artifact.contentType : formatArtifactSize(artifact.sizeBytes)}</small>
+        </button>
+        {onOpenFileInSidebar ? (
+          <button
+            type="button"
+            className="activity-artifact-video-sidebar"
+            onClick={() => onOpenFileInSidebar(artifact.path)}
+            title="Open video in sidebar"
+          >
+            <PanelRight aria-hidden size={13} />
+            Open in sidebar
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function formatArtifactSize(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(1)} GB`;
 }
 
 function SubagentMessageDetailRow({
@@ -283,8 +478,22 @@ export function subagentMessageNeedsCollapse(body: string): boolean {
   return body.length > SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS || body.split(/\r?\n/).length > SUBAGENT_MESSAGE_VISIBLE_LINES;
 }
 
-function ActivitySummaryText({ summary }: { summary: string }) {
-  return <span className="activity-summary-text">{summary}</span>;
+function ActivitySummaryText({ duration, summary }: { duration: string | null; summary: string }) {
+  return (
+    <span className="activity-summary-text">
+      <span>{summary}</span>
+      {duration ? <small>{duration}</small> : null}
+    </span>
+  );
+}
+
+function workTraceSummaryText(summary: string, traceState: ChatMessage["traceState"]): string {
+  if (traceState === "running") {
+    return summary === "Thought through the request" ? "Working…" : `Working… · ${summary}`;
+  }
+  if (traceState === "failed") return `Failed · ${summary}`;
+  if (traceState === "interrupted") return `Interrupted · ${summary}`;
+  return summary;
 }
 
 function ShellCommandCode({ className, command }: { className: string; command: string }) {

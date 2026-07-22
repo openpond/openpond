@@ -48,6 +48,7 @@ export function shouldShowThinkingIndicator(messages: ChatMessage[]): boolean {
   if (latest.role === "assistant" || latest.role === "error") return false;
   if (latest.role === "status_divider" && latest.statusState === "running") return false;
   if (latest.role === "activity_group") {
+    if (latest.traceState === "running") return false;
     const latestActivity = latest.activities?.[latest.activities.length - 1] ?? null;
     return latestActivity?.state !== "running" && latestActivity?.state !== "pending";
   }

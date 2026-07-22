@@ -11,15 +11,26 @@ export { activityGroupSummary, summarizeActivityGroup } from "./chat-activity-su
 
 export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEvent): void {
   const activity = activityFromEvent(item);
-  const previous = messages[messages.length - 1];
-  if (
-    previous?.role === "activity_group" &&
-    previous.turnId === item.turnId &&
-    !activity.subagentMessage &&
-    !previous.activities?.some((candidate) => candidate.subagentMessage)
-  ) {
-    previous.activities = appendActivityToList(previous.activities ?? [], item, activity);
-    previous.timestamp = item.timestamp;
+  if (activity.subagentMessage) {
+    messages.push({
+      id: item.id,
+      role: "activity_group",
+      activities: [activity],
+      timestamp: item.timestamp,
+      turnId: item.turnId,
+    });
+    return;
+  }
+  const existing = findLast(
+    messages,
+    (candidate) =>
+      candidate.role === "activity_group" &&
+      candidate.turnId === item.turnId &&
+      !candidate.activities?.some((entry) => entry.subagentMessage),
+  );
+  if (existing) {
+    existing.activities = appendActivityToList(existing.activities ?? [], item, activity);
+    existing.timestamp = item.timestamp;
     return;
   }
 
@@ -29,7 +40,58 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
     activities: [activity],
     timestamp: item.timestamp,
     turnId: item.turnId,
+    traceState: "running",
+    traceStartedAt: item.timestamp,
   });
+}
+
+export function completeActivityGroup(
+  messages: ChatMessage[],
+  item: RuntimeEvent,
+  traceState: NonNullable<ChatMessage["traceState"]>,
+): void {
+  if (!item.turnId) return;
+  const activityGroup = findLast(
+    messages,
+    (candidate) =>
+      candidate.role === "activity_group" &&
+      candidate.turnId === item.turnId &&
+      !candidate.activities?.some((entry) => entry.subagentMessage),
+  );
+  if (!activityGroup) return;
+  activityGroup.traceState = traceState;
+  activityGroup.traceCompletedAt = item.timestamp;
+  activityGroup.timestamp = item.timestamp;
+}
+
+export function appendInterruptionStatus(messages: ChatMessage[], item: RuntimeEvent): void {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const candidate = messages[index];
+    if (candidate?.turnId !== item.turnId || candidate.role !== "activity_group") continue;
+    const activities = candidate.activities?.filter((activity) => activity.controlKind !== "turn_aborted") ?? [];
+    if (activities.length === candidate.activities?.length) continue;
+    if (activities.length === 0) messages.splice(index, 1);
+    else candidate.activities = activities;
+  }
+  completeActivityGroup(messages, item, "interrupted");
+  messages.push({
+    id: item.id,
+    role: "status_divider",
+    content: interruptionStatusText(item),
+    timestamp: item.timestamp,
+    turnId: item.turnId,
+    statusKind: "interruption",
+    statusState: "failed",
+    statusTone: "danger",
+  });
+}
+
+function interruptionStatusText(item: RuntimeEvent): string {
+  const reason = item.output?.trim() || item.error?.trim();
+  if (!reason) return "Turn interrupted";
+  if (/server shutting down|app restart|local app server stopped/i.test(reason)) return "Interrupted by app restart";
+  if (/stopped by user|cancelled by user/i.test(reason)) return "Stopped by user";
+  return reason;
 }
 
 export function appendActivityToList(
@@ -40,6 +102,7 @@ export function appendActivityToList(
   const next = [...activities];
   if (mergeStreamedTextActivity(next, item, activity)) return next;
   if (mergeCommandActivity(next, item, activity)) return next;
+  if (mergeToolActivity(next, item, activity)) return next;
   if (mergeWorkspaceActionActivity(next, item, activity)) return next;
   return [...next, activity];
 }
@@ -112,12 +175,13 @@ function compactionReason(item: RuntimeEvent): "auto" | "manual" {
 
 function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const imagePreview = activityImagePreview(item);
-  const kind = commandActivityKind(item);
+  const kind = item.name === "assistant.reasoning.delta" ? "reasoning" : commandActivityKind(item);
   const controlKind = controlActivityKind(item);
   const receipt = activityReceipt(item);
   const meta = activityMeta(item);
   const openSession = activityOpenSession(item);
   const subagentMessage = activitySubagentMessage(item);
+  const artifacts = activityArtifacts(item);
   return {
     id: item.id,
     label: subagentMessage
@@ -128,8 +192,11 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     content: subagentMessage?.summary ?? activityContent(item, imagePreview),
     timestamp: item.timestamp,
     ...(kind ? { kind } : {}),
+    ...(item.action ? { action: item.action } : {}),
     ...(controlKind ? { kind: "control" as const, controlKind } : {}),
-    ...(kind ? { callId: activityCallId(item) ?? undefined } : {}),
+    ...(item.name === "tool.started" || item.name === "tool.completed" || kind === "command"
+      ? { callId: activityCallId(item) ?? undefined }
+      : {}),
     ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
@@ -137,6 +204,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(subagentMessage ? { subagentMessage } : {}),
     state: activityState(item),
     ...(imagePreview ? { imagePreview } : {}),
+    ...(artifacts.length > 0 ? { artifacts } : {}),
   };
 }
 
@@ -147,6 +215,7 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
     existing.label = item.status === "failed" ? "Failed" : "Ran";
     existing.state = activity.state;
     existing.timestamp = item.timestamp;
+    existing.artifacts = activity.artifacts;
     const output = cleanCommandOutput(item.output ?? "");
     if (output && output !== existing.content) existing.detail = appendCommandOutput(existing.detail, output);
     return true;
@@ -163,6 +232,34 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   }
 
   return false;
+}
+
+function mergeToolActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
+  if (item.name !== "tool.completed" || activity.kind === "command") return false;
+  const callId = activityCallId(item);
+  const existing = findLast(
+    activities,
+    (candidate) =>
+      candidate.state === "running" &&
+      candidate.kind !== "command" &&
+      (callId ? candidate.callId === callId : Boolean(item.action) && candidate.action === item.action),
+  );
+  if (!existing) return false;
+  const completedContent = activity.content.trim();
+  existing.id = activity.id;
+  existing.label = activity.label;
+  existing.timestamp = activity.timestamp;
+  existing.state = activity.state;
+  if (completedContent && completedContent !== existing.content.trim()) {
+    if (existing.content.trim() === existing.action) existing.content = completedContent;
+    else existing.detail = appendCommandOutput(existing.detail, completedContent);
+  }
+  if (activity.detail) existing.detail = appendCommandOutput(existing.detail, activity.detail);
+  existing.meta = activity.meta;
+  existing.receipt = activity.receipt;
+  existing.imagePreview = activity.imagePreview ?? existing.imagePreview;
+  existing.artifacts = activity.artifacts;
+  return true;
 }
 
 function mergeWorkspaceActionActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
@@ -182,9 +279,9 @@ function mergeWorkspaceActionActivity(activities: ActivityItem[], item: RuntimeE
 }
 
 function mergeStreamedTextActivity(activities: ActivityItem[], item: RuntimeEvent, activity: ActivityItem): boolean {
-  if (item.name !== "assistant.delta" && item.name !== "assistant.reasoning.delta") return false;
+  if (item.name !== "assistant.reasoning.delta") return false;
   const previous = activities[activities.length - 1];
-  if (!previous || previous.label !== activity.label || previous.kind || previous.controlKind) return false;
+  if (!previous || previous.kind !== "reasoning" || activity.kind !== "reasoning") return false;
   previous.content = `${previous.content}${activity.content}`;
   previous.timestamp = item.timestamp;
   return true;
@@ -699,6 +796,41 @@ function activityImagePreview(item: RuntimeEvent): ActivityItem["imagePreview"] 
     appId: item.appId ?? null,
     title: workspaceFileName(fallbackPath),
   };
+}
+
+function activityArtifacts(item: RuntimeEvent): NonNullable<ActivityItem["artifacts"]> {
+  if (item.name !== "tool.completed" && item.name !== "workspace_action_result") return [];
+  const artifacts: NonNullable<ActivityItem["artifacts"]> = [];
+  const seen = new Set<string>();
+  collectActivityArtifacts(item.data, artifacts, seen);
+  return artifacts.slice(0, 12);
+}
+
+function collectActivityArtifacts(
+  value: unknown,
+  output: NonNullable<ActivityItem["artifacts"]>,
+  seen: Set<string>,
+  depth = 0,
+): void {
+  if (depth > 7 || value == null) return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectActivityArtifacts(item, output, seen, depth + 1);
+    return;
+  }
+  const record = asRecord(value);
+  if (!record) return;
+  const path = stringValue(record, ["path", "artifactRef"]);
+  const contentType = stringValue(record, ["contentType", "mimeType"]);
+  if (path && contentType && !seen.has(path)) {
+    seen.add(path);
+    output.push({
+      path,
+      title: stringValue(record, ["title", "name"]) ?? workspaceFileName(path),
+      contentType,
+      sizeBytes: typeof record.sizeBytes === "number" ? record.sizeBytes : null,
+    });
+  }
+  for (const child of Object.values(record)) collectActivityArtifacts(child, output, seen, depth + 1);
 }
 
 function isViewImageEvent(item: RuntimeEvent): boolean {

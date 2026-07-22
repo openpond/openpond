@@ -409,7 +409,7 @@ describe("local profile control invariants", () => {
     }
   });
 
-  test("marks unsupported profile skill files invalid", async () => {
+  test("discovers bundled profile skill resources", async () => {
     const tempRoot = await mkdtemp(
       path.join(os.tmpdir(), "openpond-profile-skill-invalid-")
     );
@@ -432,16 +432,19 @@ describe("local profile control invariants", () => {
         ].join("\n"),
         "utf8"
       );
+      await writeFile(
+        path.join(sourcePath, "skills", "release-notes", "references", "style.md"),
+        "# Release-note style\n",
+        "utf8",
+      );
 
       const result = await loadProfileSkills(sourcePath);
       expect(result.skills[0]).toMatchObject({
         name: "release-notes",
-        enabled: false,
-        validationStatus: "error",
+        enabled: true,
+        validationStatus: "valid",
+        resourceFiles: ["references/style.md"],
       });
-      expect(result.skills[0]?.validationMessages.join("\n")).toContain(
-        "unsupported entry: references"
-      );
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -680,7 +683,7 @@ describe("local profile control invariants", () => {
         "Goal: Create a profile-backed skill named support-handoff-summaries"
       );
       expect(created?.prompt).toContain(
-        "Keep the skill package single-file: only SKILL.md."
+        "Keep SKILL.md as the required entry point."
       );
 
       const namedFlag = await runProfileSkillCommandFromPrompt(
@@ -797,7 +800,7 @@ describe("local profile control invariants", () => {
         },
       });
       expect(structured?.prompt).toContain(
-        "Keep the skill package single-file: only SKILL.md."
+        "Keep SKILL.md as the required entry point."
       );
 
       const inferredName = await runProfileSkillGoalCommand({

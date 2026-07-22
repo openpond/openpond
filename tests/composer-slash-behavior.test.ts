@@ -24,7 +24,7 @@ import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-comm
 import { buildOpenPondAgentSlashCommand } from "../apps/web/src/lib/openpond-action-run";
 import { openPondActionProjectTarget } from "../apps/web/src/lib/openpond-action-project";
 import {
-  codexSkillPromptForComposer,
+  codexProfileSkillPromptForComposer,
   profileSkillPromptForComposer,
   skillPromptForComposer,
 } from "../apps/web/src/lib/profile-skill-composer";
@@ -438,16 +438,22 @@ describe("composer slash behavior", () => {
     expect(profileSkillPromptForComposer("make a reusable FFmpeg workflow")).toBe(
       "/skill create make a reusable FFmpeg workflow",
     );
-    expect(codexSkillPromptForComposer("")).toContain("$skill-creator");
-    expect(codexSkillPromptForComposer("list")).toContain("~/.codex/skills");
-    expect(codexSkillPromptForComposer("create a reusable FFmpeg workflow")).toBe(
-      "$skill-creator Create a personal Codex skill using this conversation as source material. Requirements: a reusable FFmpeg workflow",
+    const profileSourcePath = "/home/user/.openpond/profiles/default";
+    expect(codexProfileSkillPromptForComposer("", profileSourcePath)).toContain("$skill-creator");
+    expect(codexProfileSkillPromptForComposer("list", profileSourcePath)).toContain(
+      "/home/user/.openpond/profiles/default/skills",
     );
-    expect(codexSkillPromptForComposer("make a reusable FFmpeg workflow")).toContain(
+    expect(codexProfileSkillPromptForComposer("list", profileSourcePath)).toContain(
+      "Do not list personal Codex skills",
+    );
+    expect(codexProfileSkillPromptForComposer("create a reusable FFmpeg workflow", profileSourcePath)).toContain(
+      "Create an OpenPond profile skill package",
+    );
+    expect(codexProfileSkillPromptForComposer("make a reusable FFmpeg workflow", profileSourcePath)).toContain(
       "Requirements: make a reusable FFmpeg workflow",
     );
-    expect(skillPromptForComposer("create a reusable FFmpeg workflow", "codex")).toContain(
-      "$skill-creator",
+    expect(skillPromptForComposer("create a reusable FFmpeg workflow", "codex", profileSourcePath)).toContain(
+      "Do not write it to ~/.codex/skills",
     );
     expect(skillPromptForComposer("create a reusable FFmpeg workflow", "openpond")).toBe(
       "/skill create a reusable FFmpeg workflow",

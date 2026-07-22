@@ -52,7 +52,7 @@ export function createSessionStore(deps: {
       cloudProjectId: input.cloudProjectId ?? null,
       cloudTeamId: input.cloudTeamId ?? null,
       ...(input.metadata ? { metadata: input.metadata } : {}),
-      cwd: input.cwd ?? defaultSessionCwd(input.appId),
+      cwd: input.cwd === undefined ? defaultSessionCwd(input.appId) : input.cwd,
       codexThreadId: null,
       createdAt,
       updatedAt: createdAt,

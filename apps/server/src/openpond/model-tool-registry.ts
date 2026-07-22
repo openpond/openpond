@@ -28,6 +28,7 @@ import {
 } from "./resources.js";
 import type { WebSearchExecutor, WebSearchResult, WebSearchResultItem } from "./web-search.js";
 import { isSandboxExecutionTarget, resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
+import { discoverCommandArtifacts } from "./command-artifacts.js";
 
 export type ToolVisibilityContext = {
   session: Session;
@@ -69,6 +70,8 @@ export type ProfileSkillReadResult = {
   path: string;
   sourceHash: string;
   charCount: number;
+  packagePath?: string;
+  resourceFiles?: string[];
 };
 
 export type ConnectedAppSkillToolSource = {
@@ -551,7 +554,7 @@ export function createCommandModelToolDefinition(deps: {
   return {
     name: "exec_command",
     description:
-      "Run a bounded local shell command in the selected local project. Requires OpenPond command access and may pause for user approval.",
+      "Run a bounded local shell command in the selected local project, or in an explicit absolute cwd supplied by a loaded skill or attachment workflow. Requires OpenPond command access and may pause for user approval.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -578,7 +581,7 @@ export function createCommandModelToolDefinition(deps: {
       if (context.provider === "codex" || context.session.provider === "codex") return false;
       if (context.session.openPondCommandAccessMode === "disabled") return false;
       const target = resolveWorkspaceExecutionTarget({ session: context.session });
-      return target.target === "local" && Boolean(target.cwd || target.projectPath || context.session.cwd);
+      return target.target !== "sandbox";
     },
     execute: async (context) => {
       const result = await deps.executeCommand({
@@ -591,6 +594,7 @@ export function createCommandModelToolDefinition(deps: {
         source: "model_tool",
         signal: context.signal,
       });
+      const artifacts = result.ok ? await discoverCommandArtifacts(result) : [];
       return {
         toolCallId: context.callId,
         name: "exec_command",
@@ -606,6 +610,7 @@ export function createCommandModelToolDefinition(deps: {
           timeoutSeconds: result.timeoutSeconds,
           truncated: result.truncated,
           blockedReason: result.blockedReason,
+          ...(artifacts.length > 0 ? { artifacts } : {}),
         },
       };
     },
@@ -862,7 +867,7 @@ export function createOpenPondProfileSkillModelToolDefinitions(deps: {
     {
       name: "profile_skill_read",
       description:
-        "Read the full body of one enabled OpenPond profile skill by name before following that skill's workflow. This loads instructions only; it does not run the skill, grant permissions, or create command execution tools.",
+        "Read one enabled OpenPond profile skill package by name before following its workflow. The result includes its instructions, package path, and bundled resource files. Loading a skill does not grant permissions or create tools.",
       parameters: {
         type: "object",
         additionalProperties: false,

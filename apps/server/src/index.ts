@@ -62,7 +62,7 @@ import {
   checkWorkspaceGitAvailability,
   startMacOSCommandLineToolsInstall,
 } from "./workspace/workspaces.js";
-import { readLocalImageFile } from "./workspace/workspace-common.js";
+import { readLocalImageFile, readLocalVideoFile } from "./workspace/workspace-common.js";
 import { loadGitCommitDiffAtPath } from "./workspace/workspace-diff.js";
 import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
@@ -315,6 +315,14 @@ export async function createOpenPondServer(
     profileCommitPayload,
     profilePushPayload,
     profileRunPayload,
+    extensionCatalogPayload,
+    extensionPreviewPayload,
+    extensionAddPayload,
+    extensionUpdatePayload,
+    extensionUpdateAllPayload,
+    extensionRemovePayload,
+    loadExtensionCatalog,
+    readExtensionSkill,
     recordPreflightTurnFailure,
     waitForOpenPondRefresh,
   } = createServerPayloads({
@@ -862,6 +870,8 @@ export async function createOpenPondServer(
     finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
     readOpenPondProfileSkill: readProfileSkill,
+    loadOpenPondExtensionCatalog: loadExtensionCatalog,
+    readOpenPondExtensionSkill: readExtensionSkill,
     executeProfileSkillCommand: ({ prompt }) =>
       runProfileSkillCommandFromPrompt(prompt),
     executeProfileSkillGoal: (input) => runProfileSkillGoalCommand(input),
@@ -1625,6 +1635,12 @@ export async function createOpenPondServer(
       refreshCodexStatus,
       bootstrapPayload,
       skillSourceFilePayload,
+      extensionCatalogPayload,
+      extensionPreviewPayload,
+      extensionAddPayload,
+      extensionUpdatePayload,
+      extensionUpdateAllPayload,
+      extensionRemovePayload,
       eventPagePayload,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
@@ -1685,6 +1701,11 @@ export async function createOpenPondServer(
         const image = await readLocalImageFile(filePath);
         if (!image) throw new Error("Image not found");
         return image;
+      },
+      localVideoPayload: async (filePath) => {
+        const video = await readLocalVideoFile(filePath);
+        if (!video) throw new Error("Video not found");
+        return video;
       },
       chatAttachmentImagePayload: async (input) => {
         const image = await readChatAttachmentImageFile({

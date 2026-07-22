@@ -81,6 +81,19 @@
   min-width: 0;
 }
 
+.activity-summary-text > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-summary-text > small {
+  flex: 0 0 auto;
+  color: #6f6f6f;
+  font-size: 10px;
+}
+
 .activity-summary-text strong {
   color: #d7e2ee;
   font-weight: 650;
@@ -128,7 +141,8 @@
   font-size: 11px;
 }
 
-.thinking-summary span {
+.thinking-summary span,
+.activity-summary.working .activity-summary-text > span {
   background: linear-gradient(90deg, #818181 0%, #e7e7e7 42%, #818181 84%);
   background-size: 220% 100%;
   color: transparent;
@@ -148,7 +162,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thinking-summary span {
+  .thinking-summary span,
+  .activity-summary.working .activity-summary-text > span {
     animation: none;
     color: #9b9b9b;
   }
@@ -283,6 +298,24 @@
   padding-left: 20px;
 }
 
+.work-trace-earlier-toggle {
+  width: fit-content;
+  margin-left: 20px;
+  border: 0;
+  background: transparent;
+  color: #7f8892;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.work-trace-earlier-toggle:hover,
+.work-trace-earlier-toggle:focus-visible {
+  outline: 0;
+  color: #d0d6de;
+}
+
 .activity-detail-row {
   display: grid;
   grid-template-columns: 142px minmax(0, 1fr);
@@ -305,6 +338,22 @@
   gap: 7px;
   min-width: 0;
   justify-items: start;
+}
+
+.work-trace-reasoning {
+  max-width: min(720px, 100%);
+  color: #aeb7c4;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.work-trace-reasoning > :first-child {
+  margin-top: 0;
+}
+
+.work-trace-reasoning > :last-child {
+  margin-bottom: 0;
 }
 
 .activity-detail-row code {
@@ -354,6 +403,213 @@
   color: #777;
   font-size: 11px;
   line-height: 1.3;
+}
+
+.activity-artifact-list {
+  display: grid;
+  gap: 6px;
+  width: min(720px, 100%);
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+
+.activity-artifact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 8px 9px;
+  grid-column: 1 / -1;
+}
+
+.activity-artifact > span {
+  display: grid;
+  min-width: 0;
+  color: var(--text);
+}
+
+.activity-artifact strong,
+.activity-artifact code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-artifact strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.activity-artifact code,
+.activity-artifact small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.activity-artifact-image {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.activity-artifact-image > button {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: #171717;
+  color: var(--muted);
+  padding: 0;
+}
+
+.activity-artifact-image > button:not(:disabled):hover {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.activity-artifact-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.activity-artifact-image > strong {
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-artifact-video {
+  display: grid;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #171717;
+}
+
+.activity-artifact-video-stage {
+  position: relative;
+  min-height: 180px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #090909;
+}
+
+.activity-artifact-video-stage video,
+.activity-artifact-video-loading {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.activity-artifact-video-stage video {
+  object-fit: contain;
+}
+
+.activity-artifact-video-loading {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.activity-artifact-video-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border: 0;
+  background: rgba(0, 0, 0, 0.12);
+  color: #f4f4f4;
+  padding: 0;
+}
+
+.activity-artifact-video-play svg {
+  box-sizing: content-box;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.78);
+  padding: 13px;
+  backdrop-filter: blur(8px);
+}
+
+.activity-artifact-video-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.activity-artifact-video-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+  text-align: left;
+}
+
+.activity-artifact-video-file:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.activity-artifact-video-file > span {
+  display: grid;
+  min-width: 0;
+}
+
+.activity-artifact-video-file strong,
+.activity-artifact-video-file code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-artifact-video-file strong {
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.activity-artifact-video-file code,
+.activity-artifact-video-file small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.activity-artifact-video-sidebar {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted-strong);
+  padding: 5px 7px;
+  font-size: 10px;
+}
+
+.activity-artifact-video-sidebar:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
 }
 
 .activity-child-message-group {
@@ -522,8 +778,8 @@
 
 .activity-image-preview {
   display: block;
-  width: 112px;
-  height: 78px;
+  width: 96px;
+  aspect-ratio: 1;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;

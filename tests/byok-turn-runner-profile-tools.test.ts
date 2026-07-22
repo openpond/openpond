@@ -202,6 +202,13 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
         ].join("\n"),
         "utf8",
       );
+      const skillPackagePath = path.dirname(skillPath);
+      await mkdir(path.join(skillPackagePath, "scripts"), { recursive: true });
+      await writeFile(
+        path.join(skillPackagePath, "scripts", "render.py"),
+        "print('render')\n",
+        "utf8",
+      );
 
       const useTurn = await runner.sendTurn("session_use", {
         prompt: "Use $support-handoff-summaries for this customer escalation.",
@@ -212,6 +219,8 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
       expect(capturedSystemOptions?.loadedProfileSkills?.[0]).toMatchObject({
         name: "support-handoff-summaries",
         body: expect.stringContaining("support handoff summaries"),
+        packagePath: skillPackagePath,
+        resourceFiles: ["scripts/render.py"],
       });
       expect(events.some((event) =>
         event.sessionId === "session_use" &&
@@ -977,7 +986,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     }
   });
 
-  test("rejects native profile skill goals that need agent-style assets or setup", async () => {
+  test("accepts native profile skill goals that describe packaged resources or setup", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-agent-reject-"));
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -1000,25 +1009,33 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
       });
 
       expect(turn.status).toBe("completed");
-      expect(harness.sessions.get("session_1")?.cwd).not.toBe(repoPath);
+      expect(harness.sessions.get("session_1")?.cwd).toBe(repoPath);
       const completed = harness.events.find(
         (event) => event.name === "tool.completed" && event.action === "openpond_profile_skill_goal",
       );
       expect(completed).toMatchObject({
-        status: "failed",
+        status: "completed",
       });
-      expect(completed?.output).toContain("Profile skills are single-file instructions");
-      expect(completed?.output).toContain("Create an agent instead");
+      expect((completed?.data as any)?.result).toMatchObject({
+        operation: "create",
+        targetSkillName: "external-workflow",
+        status: "completed",
+        validationStatus: "valid",
+        invocation: "$external-workflow",
+      });
       expect(harness.events.some(
         (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
-      )).toBe(false);
+      )).toBe(true);
       expect(harness.streamInputs[1].messages).toContainEqual(
         expect.objectContaining({
           role: "tool",
           tool_call_id: "call_profile_skill_goal",
-          content: expect.stringContaining("\"ok\": false"),
+          content: expect.stringContaining("\"status\": \"completed\""),
         }),
       );
+      await expect(
+        readFile(path.join(profileSourcePath, "skills", "external-workflow", "SKILL.md"), "utf8"),
+      ).resolves.toContain("references/ files and a setup command");
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

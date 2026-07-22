@@ -52,7 +52,7 @@ export async function handleCoreRoutes({
     });
     return true;
   }
-  const skillSourceFileMatch = /^\/v1\/skills\/(codex|profile)\/([^/]+)\/source$/.exec(
+  const skillSourceFileMatch = /^\/v1\/skills\/(codex|profile|extension)\/([^/]+)\/source$/.exec(
     requestUrl.pathname,
   );
   if (request.method === "GET" && skillSourceFileMatch) {
@@ -62,7 +62,7 @@ export async function handleCoreRoutes({
       response,
       200,
       await skillSourceFilePayload(
-        skillSourceFileMatch[1] as "codex" | "profile",
+        skillSourceFileMatch[1] as "codex" | "profile" | "extension",
         decodeURIComponent(skillSourceFileMatch[2]!),
         filePath,
       ),

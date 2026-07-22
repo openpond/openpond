@@ -97,6 +97,34 @@ describe("OpenPond command access service", () => {
     }
   });
 
+  test("runs a skill command from an explicit absolute cwd in a general chat", async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "openpond-command-access-skill-"));
+    const service = createOpenPondCommandAccessService({
+      upsertApproval: async (_approval) => undefined,
+      appendRuntimeEvent: async (_event) => undefined,
+    });
+
+    try {
+      const result = await service.executeCommand({
+        session: session({
+          workspaceKind: undefined,
+          workspaceId: null,
+          localProjectId: null,
+          cwd: null,
+          openPondCommandAccessMode: "full-access",
+        }),
+        cwd,
+        command: `${JSON.stringify(process.execPath)} -e "console.log(process.cwd())"`,
+        source: "model_tool",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.stdout.trim()).toBe(await realpath(cwd));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("terminates descendant processes when a command times out", async () => {
     if (process.platform === "win32") return;
     const cwd = await mkdtemp(path.join(os.tmpdir(), "openpond-command-timeout-"));

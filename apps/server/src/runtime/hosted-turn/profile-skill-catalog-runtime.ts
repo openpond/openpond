@@ -1,5 +1,7 @@
 import type {
   ChatProvider,
+  OpenPondExtensionCatalog,
+  OpenPondProfileSkill,
   OpenPondProfileState,
   RuntimeEvent,
   Session,
@@ -19,6 +21,8 @@ import { event, textFromUnknown } from "../../utils.js";
 export function createProfileSkillCatalogRuntime(deps: {
   loadProfileState?: (() => Promise<OpenPondProfileState>) | null;
   readProfileSkill?: ((input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>) | null;
+  loadExtensionCatalog?: (() => Promise<OpenPondExtensionCatalog>) | null;
+  readExtensionSkill?: ((name: string) => Promise<ProfileSkillReadResult>) | null;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   nativeToolsEnabledForProvider(provider: ChatProvider): boolean;
   hostedToolFlags: HostedToolRolloutFlags;
@@ -38,6 +42,8 @@ export function createProfileSkillCatalogRuntime(deps: {
 }) {
   const loadOpenPondProfileState = deps.loadProfileState;
   const readOpenPondProfileSkill = deps.readProfileSkill;
+  const loadOpenPondExtensionCatalog = deps.loadExtensionCatalog;
+  const readOpenPondExtensionSkill = deps.readExtensionSkill;
   const appendRuntimeEvent = deps.appendRuntimeEvent;
   const nativeToolsEnabledForProvider = deps.nativeToolsEnabledForProvider;
   const hostedToolFlags = deps.hostedToolFlags;
@@ -59,36 +65,91 @@ export function createProfileSkillCatalogRuntime(deps: {
     session: Session;
     turnId: string;
   }): Promise<ProfileSkillRuntime> {
-    if (!loadOpenPondProfileState || !readOpenPondProfileSkill) {
-      return { profileSourcePath: null, skills: [], readSkill: null };
+    const [profileResult, extensionResult] = await Promise.allSettled([
+      loadOpenPondProfileState && readOpenPondProfileSkill
+        ? loadOpenPondProfileState()
+        : Promise.resolve(null),
+      loadOpenPondExtensionCatalog && readOpenPondExtensionSkill
+        ? loadOpenPondExtensionCatalog()
+        : Promise.resolve(null),
+    ]);
+    const profile = profileResult.status === "fulfilled" ? profileResult.value : null;
+    const extensionCatalog = extensionResult.status === "fulfilled" ? extensionResult.value : null;
+    if (profileResult.status === "rejected") {
+      await appendSkillCatalogDiagnostic(input, "profile", profileResult.reason);
+    } else if (profile?.error) {
+      await appendSkillCatalogDiagnostic(input, "profile", profile.error);
     }
-    try {
-      const profile = await loadOpenPondProfileState();
-      if (profile.error || !profile.sourcePath) {
-        return { profileSourcePath: profile.sourcePath, skills: [], readSkill: null };
+    if (extensionResult.status === "rejected") {
+      await appendSkillCatalogDiagnostic(input, "extension", extensionResult.reason);
+    } else if (extensionCatalog?.error) {
+      await appendSkillCatalogDiagnostic(input, "extension", extensionCatalog.error);
+    }
+
+    const skills: OpenPondProfileSkill[] = [];
+    const readers = new Map<string, () => Promise<ProfileSkillReadResult>>();
+    if (profile?.sourcePath && !profile.error && readOpenPondProfileSkill) {
+      for (const skill of profile.skills) {
+        if (!skill.enabled || skill.validationStatus !== "valid") continue;
+        skills.push(skill);
+        readers.set(skill.name, () => readOpenPondProfileSkill({
+          profileSourcePath: profile.sourcePath!,
+          name: skill.name,
+        }));
       }
-      const skills = profile.skills
-        .filter((skill) => skill.enabled && skill.validationStatus === "valid")
-        .sort((left, right) => left.name.localeCompare(right.name));
-      return {
-        profileSourcePath: profile.sourcePath,
-        skills,
-        readSkill: (name) => readOpenPondProfileSkill({ profileSourcePath: profile.sourcePath!, name }),
-      };
-    } catch (error) {
-      await appendRuntimeEvent(
-        event({
-          sessionId: input.session.id,
-          turnId: input.turnId,
-          name: "diagnostic",
-          source: "server",
-          appId: input.session.appId,
-          status: "failed",
-          output: `Failed to load OpenPond profile skills: ${textFromUnknown(error) || "Unknown error"}`,
-        }),
-      );
-      return { profileSourcePath: null, skills: [], readSkill: null };
     }
+    if (extensionCatalog && !extensionCatalog.error && readOpenPondExtensionSkill) {
+      for (const extension of extensionCatalog.extensions) {
+        if (extension.validationStatus !== "valid") continue;
+        for (const skill of extension.skills) {
+          if (skill.validationStatus !== "valid" || readers.has(skill.name)) continue;
+          skills.push({
+            name: skill.name,
+            description: skill.description,
+            path: skill.relativePath,
+            scope: "profile",
+            enabled: true,
+            sourcePath: extension.sourcePath,
+            charCount: skill.charCount,
+            sourceHash: skill.sourceHash,
+            validationStatus: "valid",
+            validationMessages: [],
+            resourceFiles: skill.resourceFiles,
+          });
+          readers.set(skill.name, () => readOpenPondExtensionSkill(skill.name));
+        }
+      }
+    }
+    skills.sort((left, right) => left.name.localeCompare(right.name));
+    return {
+      profileSourcePath: profile?.sourcePath ?? null,
+      skills,
+      readSkill: readers.size > 0
+        ? (name) => {
+            const read = readers.get(name);
+            if (!read) throw new Error(`OpenPond harness skill not found: ${name}`);
+            return read();
+          }
+        : null,
+    };
+  }
+
+  async function appendSkillCatalogDiagnostic(
+    input: { session: Session; turnId: string },
+    kind: "profile" | "extension",
+    error: unknown,
+  ): Promise<void> {
+    await appendRuntimeEvent(
+      event({
+        sessionId: input.session.id,
+        turnId: input.turnId,
+        name: "diagnostic",
+        source: "server",
+        appId: input.session.appId,
+        status: "failed",
+        output: `Failed to load OpenPond ${kind} skills: ${textFromUnknown(error) || "Unknown error"}`,
+      }),
+    );
   }
 
   async function preloadExplicitProfileSkills(input: {

@@ -91,10 +91,21 @@ describe("sidebar session project inference", () => {
     expect(resolve(session({ cwd: "/tmp/project/packages/api" }), projects)).toBe("parent");
   });
 
-  test("infers non-Codex local sessions from cwd", () => {
+  test("keeps workspace-free non-Codex sessions in Chats despite a fallback cwd", () => {
     const projects = [project({ id: "project_1" })];
 
-    expect(resolve(session({ provider: "openai", cwd: "/tmp/project" }), projects)).toBe("project_1");
+    expect(resolve(session({ provider: "openai", cwd: "/tmp/project" }), projects)).toBeNull();
+  });
+
+  test("infers explicitly local-project sessions from cwd when the project id is missing", () => {
+    const projects = [project({ id: "project_1" })];
+
+    expect(resolve(session({
+      provider: "openai",
+      workspaceKind: "local_project",
+      workspaceId: null,
+      cwd: "/tmp/project",
+    }), projects)).toBe("project_1");
   });
 
   test("does not infer sandbox app sessions from cwd", () => {

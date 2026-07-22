@@ -1,14 +1,7 @@
-import type { SkillSourceScope } from "@openpond/contracts";
-
 import type { LabWorkproductSummary } from "./lab-workproducts";
+import type { SkillPackageSourceSelection } from "../app-shell/skill-package-source";
 
-export type LabSkillSourceSelection = {
-  name: string;
-  description: string;
-  scope: SkillSourceScope;
-  packagePath: string;
-  files: string[];
-};
+export type LabSkillSourceSelection = SkillPackageSourceSelection;
 
 export function labSkillSourceSelection(
   workproduct: LabWorkproductSummary | null,

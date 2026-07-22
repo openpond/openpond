@@ -215,11 +215,10 @@ export function LabsRoute({
     () =>
       labWorkproductProjection({
         profile,
-        codexPersonalSkills: profileView.payload?.codexPersonalSkills ?? [],
         training: training.training.payload,
         runs: createImprove.runs,
       }),
-    [createImprove.runs, profile, profileView.payload?.codexPersonalSkills, training.training.payload]
+    [createImprove.runs, profile, training.training.payload]
   );
   const progressionByKey = useMemo(() => {
     const tasksets = new Map(

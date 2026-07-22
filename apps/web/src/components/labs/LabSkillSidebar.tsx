@@ -11,7 +11,7 @@ import {
   Minimize2,
   X,
 } from "../icons";
-import type { LabSkillSourceSelection } from "./lab-skill-source";
+import type { SkillPackageSourceSelection } from "../app-shell/skill-package-source";
 import "../../styles/labs/lab-skill-sidebar.css";
 
 export function LabSkillSidebar({
@@ -24,7 +24,7 @@ export function LabSkillSidebar({
 }: {
   connection: ClientConnection | null;
   expanded: boolean;
-  selection: LabSkillSourceSelection;
+  selection: SkillPackageSourceSelection;
   onClose: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
@@ -134,7 +134,7 @@ export function LabSkillSidebar({
           <header className="native-skill-source-header">
             <div className="lab-skill-source-title-row">
               <h2>{selection.name}</h2>
-              <span>{selection.scope === "codex" ? "Codex skill" : "OpenPond skill"}</span>
+              <span>{skillSourceLabel(selection.scope)}</span>
             </div>
             <p>{selection.description}</p>
             <code>{selection.packagePath}</code>
@@ -157,6 +157,12 @@ export function LabSkillSidebar({
       </div>
     </aside>
   );
+}
+
+function skillSourceLabel(scope: SkillPackageSourceSelection["scope"]): string {
+  if (scope === "codex") return "Codex skill";
+  if (scope === "extension") return "GitHub extension";
+  return "OpenPond skill";
 }
 
 function FileIcon({ path }: { path: string }) {

@@ -8,6 +8,7 @@ import type {
   ModelUsageRecord,
   OpenPondActionCatalogEntry,
   OpenPondApp,
+  OpenPondExtensionCatalog,
   OpenPondProfileSkill,
   OpenPondProfileState,
   ProviderSettings,
@@ -302,6 +303,8 @@ export type TurnRunnerDependencies = {
   }) => Promise<{ attemptId: string; gradeId: string; generatedTaskId: string } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
   readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
+  loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
+  readOpenPondExtensionSkill?: (name: string) => Promise<ProfileSkillReadResult>;
   executeProfileSkillCommand?: (input: { prompt: string }) => Promise<ProfileSkillCommandResult | null>;
   executeProfileSkillGoal?: (input: ProfileSkillGoalCommandInput) => Promise<ProfileSkillCommandResult>;
   executeWebSearch?: WebSearchExecutor;

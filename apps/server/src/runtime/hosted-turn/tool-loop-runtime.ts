@@ -40,9 +40,7 @@ import {
   modelToolDefinitionToHostedTool,
   type ModelToolDefinition,
 } from "../../openpond/model-tool-registry.js";
-import type {
-  ProfileSkillInstructionMode,
-} from "../../openpond/hosted-turn-helpers.js";
+import type { ProfileSkillInstructionMode } from "../../openpond/hosted-turn-helpers.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
 import { event } from "../../utils.js";
 import { requiresWorkspaceToolForPrompt } from "../workspace-tool-requirements.js";

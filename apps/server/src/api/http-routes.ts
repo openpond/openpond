@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { createReadStream } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { HttpBodyError, applyCorsHeaders, hasAuth, readJson, sendBinary, sendJson, sendText } from "./http.js";
 import type { HttpRouteDeps } from "./http-route-types.js";
@@ -7,6 +8,7 @@ import { AUTHENTICATED_ROUTE_TABLE } from "./routes/index.js";
 import {
   verifySignedChatAttachmentImageRequest,
   verifySignedLocalImageRequest,
+  verifySignedLocalVideoRequest,
   verifySignedWorkspaceImageRequest,
 } from "./signed-workspace-image.js";
 
@@ -14,9 +16,11 @@ export type { HttpRouteDeps } from "./http-route-types.js";
 export {
   signedChatAttachmentImageUrlPayload,
   signedLocalImageUrlPayload,
+  signedLocalVideoUrlPayload,
   signedWorkspaceImageUrlPayload,
   verifySignedChatAttachmentImageRequest,
   verifySignedLocalImageRequest,
+  verifySignedLocalVideoRequest,
   verifySignedWorkspaceImageRequest,
 } from "./signed-workspace-image.js";
 
@@ -35,6 +39,7 @@ export function createHttpRequestHandler(
     slowRouteThresholdMs,
     chatAttachmentImagePayload,
     localImagePayload,
+    localVideoPayload,
     workspaceImagePayload,
   } = deps;
 
@@ -147,6 +152,20 @@ export function createHttpRequestHandler(
         }
         return;
       }
+      if (request.method === "GET" && requestUrl.pathname === "/v1/assets/local-video") {
+        const signedVideo = verifySignedLocalVideoRequest(requestUrl, token);
+        if (!signedVideo.ok) {
+          sendJson(response, signedVideo.status, { error: signedVideo.error });
+          return;
+        }
+        try {
+          const video = await localVideoPayload(signedVideo.claims.path);
+          sendLocalVideo(request, response, video);
+        } catch {
+          sendJson(response, 404, { error: "Video not found" });
+        }
+        return;
+      }
       if (!hasAuth(request, requestUrl, token)) {
         sendJson(response, 401, { error: "Unauthorized" });
         return;
@@ -170,6 +189,65 @@ export function createHttpRequestHandler(
       sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
     });
   };
+}
+
+function sendLocalVideo(
+  request: IncomingMessage,
+  response: ServerResponse,
+  video: { path: string; contentType: string; sizeBytes: number },
+): void {
+  const range = parseByteRange(request.headers.range, video.sizeBytes);
+  if (range === "invalid") {
+    response.writeHead(416, {
+      "Accept-Ranges": "bytes",
+      "Content-Range": `bytes */${video.sizeBytes}`,
+    });
+    response.end();
+    return;
+  }
+  const start = range?.start ?? 0;
+  const end = range?.end ?? Math.max(0, video.sizeBytes - 1);
+  const contentLength = video.sizeBytes === 0 ? 0 : end - start + 1;
+  response.writeHead(range ? 206 : 200, {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=300",
+    "Content-Length": contentLength,
+    "Content-Type": video.contentType,
+    ...(range ? { "Content-Range": `bytes ${start}-${end}/${video.sizeBytes}` } : {}),
+  });
+  if (video.sizeBytes === 0) {
+    response.end();
+    return;
+  }
+  const stream = createReadStream(video.path, { start, end });
+  stream.on("error", () => response.destroy());
+  stream.pipe(response);
+}
+
+function parseByteRange(
+  value: string | string[] | undefined,
+  sizeBytes: number,
+): { start: number; end: number } | "invalid" | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return null;
+  if (sizeBytes <= 0 || raw.includes(",")) return "invalid";
+  const match = /^bytes=(\d*)-(\d*)$/.exec(raw.trim());
+  if (!match || (!match[1] && !match[2])) return "invalid";
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return "invalid";
+    return { start: Math.max(0, sizeBytes - suffixLength), end: sizeBytes - 1 };
+  }
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : sizeBytes - 1;
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(requestedEnd) ||
+    start < 0 ||
+    start >= sizeBytes ||
+    requestedEnd < start
+  ) return "invalid";
+  return { start, end: Math.min(requestedEnd, sizeBytes - 1) };
 }
 
 function trackResponseBytes(response: ServerResponse): () => number {

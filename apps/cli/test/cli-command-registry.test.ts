@@ -49,6 +49,16 @@ describe("CLI command registry", () => {
     }
   });
 
+  test("registers GitHub extension lifecycle commands", () => {
+    const definition = getCliCommandDefinition("extension");
+    expect(definition?.usage).toContain("add|preview|list|inspect|update|remove");
+    expect(definition?.optionSchema).toMatchObject({
+      all: "boolean",
+      json: "boolean",
+      ref: "string",
+    });
+  });
+
   test("documents the headless chat contract in registry and top-level help", () => {
     const definition = getCliCommandDefinition("chat");
     expect(definition?.usage).toContain("--message-file <path>|--message <text>|--stdin");

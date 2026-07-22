@@ -50,23 +50,22 @@ describe("performance budget helpers", () => {
     expect(metrics.largestAssets[0]).toEqual({ path: "assets/lazy.js", bytes: 200 });
   });
 
-  test("reports warning-only renderer budget overages", async () => {
+  test("enforces renderer delivery budgets while keeping total CSS informational", async () => {
     const root = await tempDir();
     await mkdir(join(root, "assets"), { recursive: true });
     await writeFile(join(root, "index.html"), '<script src="/assets/index.js"></script>', "utf8");
     await writeFile(join(root, "assets", "index.js"), "x".repeat(100), "utf8");
+    await writeFile(join(root, "assets", "lazy.css"), "x".repeat(500), "utf8");
     const metrics = await collectRendererBundleMetrics(root);
     const budgets: RendererBundleBudgets = {
       maxTotalJsBytes: 50,
-      maxTotalCssBytes: 10,
       maxInitialAssetBytes: 80,
-      maxLargestAssetBytes: 90,
+      maxLargestAssetBytes: 600,
     };
 
     expect(checkRendererBundleBudgets(metrics, budgets).map((warning) => warning.id)).toEqual([
       "renderer-total-js",
       "renderer-initial-assets",
-      "renderer-largest-asset",
     ]);
   });
 

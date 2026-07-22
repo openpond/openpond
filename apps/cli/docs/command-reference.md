@@ -177,6 +177,21 @@ Usage:
 Options:
   --cwd <string>
 ```
+## extension
+
+```text
+Usage:
+  openpond extension <add|preview|list|inspect|update|remove> [owner/repo]
+  openpond extension add <owner/repo> [--ref <branch|tag|sha>] [--json]
+  openpond extension update <owner/repo> [--ref <branch|tag|sha>] [--json]
+  openpond extension update --all [--json]
+  openpond extension remove <owner/repo> [--json]
+
+Options:
+  --all
+  --json
+  --ref <string>
+```
 ## profiles
 
 ```text

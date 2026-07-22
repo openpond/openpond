@@ -11,11 +11,14 @@ import { appendActionRunMessage, actionRunSummaryFromEvent } from "./chat-action
 import {
   appendActivityMessage,
   appendCompactionStatus,
+  appendInterruptionStatus,
   codexControlMessage,
+  completeActivityGroup,
   isCodexGoalContextEvent,
   isCompactionEvent,
 } from "./chat-activities";
 import { classifyChatError } from "./chat-errors";
+import { attachTurnDeliverables } from "./chat-deliverables";
 import { insightsRunPromptSummaryFromTurnStarted } from "./chat-insights";
 import { asRecord, findLast } from "./chat-message-utils";
 import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
@@ -126,11 +129,17 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
 
     if (item.name === "assistant.reasoning.delta") {
-      appendReasoningMessage(messages, item);
+      appendActivityMessage(messages, item);
+      continue;
+    }
+
+    if (item.name === "turn.completed") {
+      completeActivityGroup(messages, item, "completed");
       continue;
     }
 
     if (item.name === "turn.failed") {
+      completeActivityGroup(messages, item, "failed");
       const content = item.error ?? "Turn failed";
       const errorKind = classifyChatError(content, item.data);
       messages.push({
@@ -141,6 +150,11 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
         timestamp: item.timestamp,
         turnId: item.turnId,
       });
+      continue;
+    }
+
+    if (item.name === "turn.interrupted") {
+      appendInterruptionStatus(messages, item);
       continue;
     }
 
@@ -159,7 +173,6 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       item.name === "workspace_action" ||
       item.name === "workspace_action_result" ||
       item.name === "approval.requested" ||
-      item.name === "turn.interrupted" ||
       item.name.startsWith("subagent.") ||
       isCodexGoalContextEvent(item)
     ) {
@@ -192,6 +205,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
   }
 
+  attachTurnDeliverables(messages);
   return messages;
 }
 
@@ -218,24 +232,6 @@ function takePendingSources(
   const sources = pendingSourcesByTurnId.get(turnId);
   if (sources) pendingSourcesByTurnId.delete(turnId);
   return sources;
-}
-
-function appendReasoningMessage(messages: ChatMessage[], item: RuntimeEvent): void {
-  const content = item.output ?? "";
-  if (!content) return;
-  const previous = messages[messages.length - 1];
-  if (previous?.role === "reasoning" && previous.turnId === item.turnId) {
-    previous.content = `${previous.content ?? ""}${content}`;
-    previous.timestamp = item.timestamp;
-    return;
-  }
-  messages.push({
-    id: item.id,
-    role: "reasoning",
-    content,
-    timestamp: item.timestamp,
-    turnId: item.turnId,
-  });
 }
 
 function isCreatePlanApprovalEvent(item: RuntimeEvent): boolean {

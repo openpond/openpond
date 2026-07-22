@@ -643,7 +643,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     sidebarFileBookmarks,
   });
   const {
-    clearPendingChatUserMessage,
     pendingChatUserMessages,
     recordPendingChatUserMessage,
     visibleChatMessages,
@@ -651,7 +650,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     chatMessages,
     runtimeIndexes: selectedRuntimeIndexes,
     selectedSessionId,
-    serverId: bootstrap?.server.id,
   });
   const activeTerminalScope = useMemo<TerminalScope>(
     () => terminalScopeForSelection({ selectedAppId, selectedProjectId, selectedSessionId }),
@@ -862,7 +860,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, pinnedFiles, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
     localProjectRows, visibleProjectRows, cloudProjectRows, cloudWorkItemsByProjectId, projectSessionRowsByProjectId, childSessionRowsByParentId,
     sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, chatMessages, goalRuntime,
-    subagentRuntime, clearPendingChatUserMessage, pendingChatUserMessages, recordPendingChatUserMessage, visibleChatMessages, activeTerminalScope,
+    subagentRuntime, pendingChatUserMessages, recordPendingChatUserMessage, visibleChatMessages, activeTerminalScope,
     terminalSummaries, runningSessionIds, selectedSessionRunning, selectedSteerAutoDispatchBlocked, selectedSteerAutoDispatchReady, sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId, dragItem, startPinnedDrag, clearSidebarDrag, previewPinnedDrop, commitPinnedDrop,
     commitPinnedPreviewDrop, commandProjectRows, contextWindowStatus, pinnedRows, workspaceStates, workspaceBusy,

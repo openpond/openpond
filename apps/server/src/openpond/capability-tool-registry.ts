@@ -509,7 +509,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_profile_skill_goal",
       description:
-        "Start the OpenPond profile-skill goal workflow to create or edit a single-file profile-backed SKILL.md after deciding that a skill is appropriate.",
+        "Start the OpenPond profile-skill goal workflow to create or edit a profile-backed skill package after deciding that a reusable skill is appropriate. Every package has SKILL.md and may include focused scripts, references, and assets.",
       parameters: {
         type: "object",
         additionalProperties: false,

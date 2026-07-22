@@ -68,7 +68,8 @@ export type ActivityItem = {
   label: string;
   content: string;
   timestamp: string;
-  kind?: "command" | "control";
+  kind?: "command" | "control" | "reasoning";
+  action?: string;
   controlKind?: "goal_context" | "turn_aborted";
   callId?: string;
   detail?: string;
@@ -115,6 +116,12 @@ export type ActivityItem = {
     appId: string | null;
     title: string;
   };
+  artifacts?: Array<{
+    path: string;
+    title: string;
+    contentType: string;
+    sizeBytes: number | null;
+  }>;
 };
 
 export type ChatSource = {
@@ -192,16 +199,20 @@ export type InsightsRunPromptSummary = {
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "reasoning" | "activity_group" | "error" | "status_divider";
+  role: "user" | "assistant" | "activity_group" | "error" | "status_divider";
   content?: string;
   errorKind?: "opchat_quota_exceeded";
   attachments?: ChatAttachmentSummary[];
   timestamp: string;
   turnId?: string;
   activities?: ActivityItem[];
+  deliverables?: NonNullable<ActivityItem["artifacts"]>;
+  traceState?: "running" | "completed" | "failed" | "interrupted";
+  traceStartedAt?: string;
+  traceCompletedAt?: string;
   sources?: ChatSource[];
   changeSummary?: WorkspaceDiffSummary;
-  statusKind?: "compaction";
+  statusKind?: "compaction" | "interruption";
   statusState?: "running" | "completed" | "failed";
   statusTone?: "info" | "success" | "danger";
   actionRun?: ActionRunSummary;

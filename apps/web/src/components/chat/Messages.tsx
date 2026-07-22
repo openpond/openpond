@@ -58,19 +58,9 @@ export const MessageRow = memo(function MessageRow({
         activeWorkspaceAppId={activeWorkspaceAppId}
         connection={connection}
         message={message}
-        onOpenSession={onOpenSession}
-      />
-    );
-  }
-
-  if (message.role === "reasoning") {
-    return (
-      <ReasoningMessage
-        activeWorkspaceAppId={activeWorkspaceAppId}
-        connection={connection}
-        message={message}
         onOpenBrowserLink={onOpenBrowserLink}
         onOpenFileInSidebar={onOpenFileInSidebar}
+        onOpenSession={onOpenSession}
         workspaceRootPath={workspaceRootPath}
       />
     );
@@ -516,49 +506,6 @@ export const ThinkingIndicator = memo(function ThinkingIndicator() {
     </article>
   );
 });
-
-function ReasoningMessage({
-  activeWorkspaceAppId,
-  connection,
-  message,
-  onOpenBrowserLink,
-  onOpenFileInSidebar,
-  workspaceRootPath,
-}: Pick<
-  MessageRowProps,
-  "activeWorkspaceAppId" | "connection" | "message" | "onOpenBrowserLink" | "onOpenFileInSidebar" | "workspaceRootPath"
->) {
-  const content = message.content?.trim() ?? "";
-  const [expanded, setExpanded] = useState(false);
-  if (!content) return null;
-  return (
-    <article className="message-row assistant reasoning-row">
-      <div className={`assistant-reasoning-message ${expanded ? "expanded" : "collapsed"}`}>
-        <button
-          type="button"
-          className="assistant-reasoning-toggle"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          <span>{expanded ? "Hide thinking" : "Show thinking"}</span>
-        </button>
-        {expanded ? (
-          <div className="assistant-reasoning-content">
-            <MarkdownText
-              activeWorkspaceAppId={activeWorkspaceAppId}
-              connection={connection}
-              content={content}
-              onOpenBrowserLink={onOpenBrowserLink}
-              onOpenFileInSidebar={onOpenFileInSidebar}
-              workspaceRootPath={workspaceRootPath}
-            />
-          </div>
-        ) : null}
-      </div>
-    </article>
-  );
-}
 
 function StatusDivider({ message }: { message: ChatMessage }) {
   const tone = message.statusTone ?? "info";

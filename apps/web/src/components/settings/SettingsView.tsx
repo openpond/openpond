@@ -8,7 +8,7 @@ import "../../styles/settings/notifications-settings.css";
 import "../../styles/wallet/wallet.css";
 import type {
   BootstrapPayload,
-  ConnectedAppIntegrationSkill,
+  OpenPondExtension,
   ProviderSettings,
   RuntimeEvent,
   TeamChatThread,
@@ -48,6 +48,7 @@ import { useRemoteAccessSettings } from "./useRemoteAccessSettings";
 import { useComputeSettings } from "./useComputeSettings";
 import { useDatasetStorageSettings } from "./useDatasetStorageSettings";
 import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/WindowControls";
+import type { SkillSourceDocument } from "../app-shell/skill-source-document";
 
 const UsageSettingsSection = lazy(() =>
   import("./UsageSettingsSection").then((module) => ({ default: module.UsageSettingsSection })),
@@ -62,7 +63,8 @@ export function SettingsView({
   onToast,
   onBack,
   onOpenSourceSession,
-  onOpenNativeSkill,
+  onOpenSkill,
+  onOpenExtension,
   teamChatCurrentUserId,
   teamChatEnabled,
   teamChatNotificationMode,
@@ -79,7 +81,8 @@ export function SettingsView({
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onBack: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
-  onOpenNativeSkill: (skill: ConnectedAppIntegrationSkill) => void;
+  onOpenSkill: (skill: SkillSourceDocument) => void;
+  onOpenExtension: (extension: OpenPondExtension) => void;
   teamChatCurrentUserId: string | null;
   teamChatEnabled: boolean;
   teamChatNotificationMode: TeamChatNotificationMode;
@@ -105,6 +108,13 @@ export function SettingsView({
     (preferencesPayload: PreferencesPayload) => {
       if (!payload) return;
       onPayload({ ...payload, preferences: preferencesPayload.preferences });
+    },
+    [onPayload, payload],
+  );
+  const applyExtensionCatalog = useCallback(
+    (extensionCatalog: BootstrapPayload["extensionCatalog"]) => {
+      if (!payload) return;
+      onPayload({ ...payload, extensionCatalog });
     },
     [onPayload, payload],
   );
@@ -242,7 +252,18 @@ export function SettingsView({
         ) : section === "skills" ? (
           <SkillsSettingsSection
             personalSkills={payload?.codexPersonalSkills ?? []}
-            onOpenNativeSkill={onOpenNativeSkill}
+            extensionCatalog={payload?.extensionCatalog ?? {
+              rootPath: "",
+              registryPath: "",
+              extensions: [],
+              error: null,
+            }}
+            connection={connection}
+            onExtensionCatalog={applyExtensionCatalog}
+            onError={onError}
+            onToast={onToast}
+            onOpenSkill={onOpenSkill}
+            onOpenExtension={onOpenExtension}
           />
         ) : section === "providers" ? (
           <ProviderSettingsSection

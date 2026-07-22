@@ -49,6 +49,9 @@ openpond profiles use production
 openpond profiles save secondary --api-key opk_...
 openpond account
 openpond health
+openpond extension add owner/repo
+openpond extension list
+openpond extension update --all
 openpond --account production apps list
 openpond tool list <handle>/<repo>
 openpond tool run <handle>/<repo> <tool> --body '{"foo":"bar"}'
@@ -86,6 +89,7 @@ Command reference:
 - `openpond profiles save <name> --api-key <key> [--base-url <url>] [--environment <name>]`: save or update a local profile API key.
 - `openpond account`: fetch current account/profile fields and active products for the selected API key.
 - `openpond health`: check public API reachability and selected API-key auth health when a key is configured.
+- `openpond extension <add|preview|list|inspect|update|remove>`: manage Agent Skills-compatible GitHub packs installed under `~/.openpond/extensions`. Repositories use standard `SKILL.md` packages and do not need an OpenPond-specific manifest.
 - `openpond tool list <handle>/<repo>`: list tools for the latest deployment.
 - `openpond tool run <handle>/<repo> <tool> [--body <json>] [--method <METHOD>]`: run a tool on the latest deployment.
 - `openpond deploy watch <handle>/<repo> [--branch <branch>]`: stream deployment logs for the latest deployment.

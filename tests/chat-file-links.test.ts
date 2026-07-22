@@ -83,4 +83,15 @@ describe("chat file links", () => {
     expect(normalizeChatFilePath("example.com")).toBeNull();
     expect(normalizeChatFilePath("not-a-file")).toBeNull();
   });
+
+  test("recognizes local video files as file links", () => {
+    expect(normalizeChatFilePath("/home/glu/Videos/demo.mp4")).toEqual({
+      displayPath: "/home/glu/Videos/demo.mp4",
+      path: "/home/glu/Videos/demo.mp4",
+    });
+    expect(normalizeChatFilePath("demo.webm")).toEqual({
+      displayPath: "demo.webm",
+      path: "demo.webm",
+    });
+  });
 });

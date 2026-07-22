@@ -16,7 +16,7 @@ export const CodexPersonalSkillSchema = z.object({
 
 export type CodexPersonalSkill = z.infer<typeof CodexPersonalSkillSchema>;
 
-export const SkillSourceScopeSchema = z.enum(["codex", "profile"]);
+export const SkillSourceScopeSchema = z.enum(["codex", "profile", "extension"]);
 
 export const SkillSourceFileSchema = z.object({
   skillName: z.string(),

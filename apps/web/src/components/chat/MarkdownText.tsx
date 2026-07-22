@@ -15,6 +15,7 @@ import {
   type OpenBrowserLink,
   type OpenFileLink,
 } from "./MarkdownInline";
+import { revealLocalFile } from "../../lib/desktop-files";
 
 export function MarkdownText({
   activeWorkspaceAppId = null,
@@ -245,6 +246,16 @@ function MarkdownLinkMenu({
           }}
         >
           Open in sidebar
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            void revealLocalFile(menu.path);
+            onClose();
+          }}
+        >
+          Open externally
         </button>
         <button
           type="button"

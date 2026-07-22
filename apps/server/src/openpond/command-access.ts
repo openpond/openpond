@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { parse as parseShellCommand } from "shell-quote";
 import {
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -74,7 +75,8 @@ export function createOpenPondCommandAccessService(deps: {
     const timeoutSeconds = normalizedTimeout(input.timeoutSeconds);
     const target = resolveWorkspaceExecutionTarget({ session: input.session });
     const cwd = resolveCommandCwd({ requestedCwd: input.cwd, session: input.session });
-    if (target.target !== "local" || !cwd) {
+    const explicitCwd = Boolean(input.cwd?.trim() && path.isAbsolute(input.cwd.trim()));
+    if (target.target === "sandbox" || !cwd || (target.target !== "local" && !explicitCwd)) {
       return blockedCommandResult(command, cwd, SELECT_PROJECT_MESSAGE, timeoutSeconds);
     }
 
@@ -308,7 +310,10 @@ function commandRiskLabel(command: string): "read" | "write" | "danger" {
 
 function resolveCommandCwd(input: { requestedCwd?: string | null; session: Session }): string | null {
   const requested = input.requestedCwd?.trim();
-  if (requested) return requested;
+  if (requested) {
+    if (path.isAbsolute(requested)) return path.resolve(requested);
+    return input.session.cwd ? path.resolve(input.session.cwd, requested) : null;
+  }
   return input.session.cwd?.trim() || null;
 }
 
