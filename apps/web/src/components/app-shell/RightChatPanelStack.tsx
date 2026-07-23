@@ -15,6 +15,8 @@ import type {
   CodexReasoningEffort,
   OpenPondCommandAccessMode,
   OpenPondApp,
+  OpenPondExtensionCatalog,
+  OpenPondProfileLibrary,
   OpenPondProfileSkill,
   ResolveApprovalRequest,
   Session,
@@ -25,10 +27,16 @@ import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { ComposerProjectTargetState, ComposerSubmitOptions } from "../chat/Composer";
+import type { ComposerProfileTargetState } from "../chat/ComposerControls";
 import type { ComposerCreateImproveActions } from "../chat/ComposerCreateImproveStrip";
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { FolderOpen, MessageSquare, Plus, X } from "../icons";
 import { mostRecentlyActivatedRightChatPanel } from "../../lib/right-chat-panels";
+import {
+  composerProfileTargetForLibrary,
+  composerSkillsForProfile,
+  profileStateForRef,
+} from "../../lib/profile-selection";
 import { RightChatPane } from "./RightChatPane";
 import type { RightChatPanelView } from "./right-chat-panel-types";
 
@@ -46,6 +54,8 @@ export function RightChatPanelStack({
   mentionApps,
   codexPersonalSkills,
   profileSkills,
+  profileLibrary,
+  extensionCatalog,
   projectTarget,
   providerSettings,
   accountBaseUrl,
@@ -66,6 +76,7 @@ export function RightChatPanelStack({
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
+  onProfileTargetChange,
   onScrollStateChange,
   onProjectTargetChange,
   onResolveApproval,
@@ -87,6 +98,8 @@ export function RightChatPanelStack({
   mentionApps: OpenPondApp[];
   codexPersonalSkills: CodexPersonalSkill[];
   profileSkills: OpenPondProfileSkill[];
+  profileLibrary: OpenPondProfileLibrary;
+  extensionCatalog: OpenPondExtensionCatalog | null;
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
   accountBaseUrl?: string | null;
@@ -107,6 +120,7 @@ export function RightChatPanelStack({
   onProviderChange: (panelId: string, provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (panelId: string, prompt: string) => void;
+  onProfileTargetChange: (sessionId: string | null, value: string) => void;
   onScrollStateChange: (
     panelId: string,
     state: { scrollTop: number; stickyToBottom: boolean },
@@ -140,6 +154,13 @@ export function RightChatPanelStack({
     new Map(panels.map((panel) => [panel.id, panel.activationVersion])),
   );
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels.at(-1) ?? null;
+  const activeProfileRef = activePanel?.session?.currentProfile ?? profileLibrary.lastUsed;
+  const activeProfileState = profileStateForRef(profileLibrary, activeProfileRef);
+  const activeProfileSkills = activeProfileState
+    ? composerSkillsForProfile(activeProfileState, extensionCatalog)
+    : profileSkills;
+  const profileTarget: ComposerProfileTargetState | null =
+    composerProfileTargetForLibrary(profileLibrary, activeProfileRef);
 
   useEffect(() => {
     const previousPanelIds = previousPanelIdsRef.current;
@@ -343,7 +364,8 @@ export function RightChatPanelStack({
             key={activePanel.id}
             mentionApps={mentionApps}
             codexPersonalSkills={codexPersonalSkills}
-            profileSkills={profileSkills}
+            profileSkills={activeProfileSkills}
+            profileTarget={activePanel.provider === "codex" ? null : profileTarget}
             panel={activePanel}
             initialScrollState={{
               scrollTop: activePanel.scrollTop,
@@ -366,6 +388,7 @@ export function RightChatPanelStack({
             onProviderChange={(provider) => onProviderChange(activePanel.id, provider)}
             onProviderSetupOpen={onProviderSetupOpen}
             onPromptChange={(prompt) => onPromptChange(activePanel.id, prompt)}
+            onProfileTargetChange={(value) => onProfileTargetChange(activePanel.sessionId, value)}
             onScrollStateChange={(state) => onScrollStateChange(activePanel.id, state)}
             onProjectTargetChange={onProjectTargetChange}
             onResolveApproval={onResolveApproval}

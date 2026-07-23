@@ -65,8 +65,10 @@ import {
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import {
   ComposerProjectTargetControl,
+  ComposerProfileTargetControl,
   WorkspaceActionControl,
   type ComposerProjectTargetState,
+  type ComposerProfileTargetState,
 } from "./ComposerControls";
 import { ComposerGoalStrip } from "./ComposerGoalStrip";
 import type { ComposerCreateImproveRuntime } from "./ComposerCreateImproveStrip";
@@ -150,6 +152,7 @@ export type ComposerProps = {
   provider: ChatProvider;
   model: string;
   projectTarget: ComposerProjectTargetState;
+  profileTarget?: ComposerProfileTargetState | null;
   actionCatalog?: SandboxActionCatalogEntry[];
   requestedAction?: { actionId: string; requestId: number } | null;
   workspaceTarget: WorkspaceTargetState;
@@ -159,6 +162,7 @@ export type ComposerProps = {
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
+  onProfileTargetChange?: (value: string) => void;
   onWorkspaceTargetChange: (value: WorkspaceTargetValue) => void;
   onModelChange: (value: string) => void;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
@@ -450,6 +454,7 @@ export function Composer({
   provider,
   model,
   projectTarget,
+  profileTarget = null,
   actionCatalog = [],
   requestedAction = null,
   workspaceTarget,
@@ -459,6 +464,7 @@ export function Composer({
   onProviderChange,
   onProviderSetupOpen,
   onProjectTargetChange,
+  onProfileTargetChange,
   onWorkspaceTargetChange,
   onModelChange,
   onCodexPermissionModeChange,
@@ -1677,12 +1683,22 @@ export function Composer({
       />
       {showProjectFooter && (
         <div className="composer-footer">
-          <ComposerProjectTargetControl
-            busy={busy || projectTarget.busy}
-            placement={dropdownPlacement}
-            state={projectTarget}
-            onChange={onProjectTargetChange}
-          />
+          {showProjectFooter ? (
+            <ComposerProjectTargetControl
+              busy={busy || projectTarget.busy}
+              placement={dropdownPlacement}
+              state={projectTarget}
+              onChange={onProjectTargetChange}
+            />
+          ) : null}
+          {profileTarget && onProfileTargetChange ? (
+            <ComposerProfileTargetControl
+              busy={busy}
+              placement={dropdownPlacement}
+              state={profileTarget}
+              onChange={onProfileTargetChange}
+            />
+          ) : null}
           {showWorkspaceFooterControls ? (
             <WorkspaceActionControl
               busy={busy}
@@ -1932,9 +1948,11 @@ export function Composer({
           modelValue={modelValue}
           modelOptions={modelOptions}
           openPondCommandAccessMode={openPondCommandAccessMode}
+          profileTarget={showProjectFooter ? null : profileTarget}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           onCodexReasoningEffortChange={onCodexReasoningEffortChange}
           onOpenPondCommandAccessModeChange={onOpenPondCommandAccessModeChange}
+          onProfileTargetChange={onProfileTargetChange}
           onModelChange={onModelChange}
           onOpenFilePicker={openFilePicker}
           onProviderChange={onProviderChange}

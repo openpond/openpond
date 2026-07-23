@@ -19,7 +19,7 @@ import {
 import { event, textFromUnknown } from "../../utils.js";
 
 export function createProfileSkillCatalogRuntime(deps: {
-  loadProfileState?: (() => Promise<OpenPondProfileState>) | null;
+  loadProfileState?: ((session: Session) => Promise<OpenPondProfileState>) | null;
   readProfileSkill?: ((input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>) | null;
   loadExtensionCatalog?: (() => Promise<OpenPondExtensionCatalog>) | null;
   readExtensionSkill?: ((name: string) => Promise<ProfileSkillReadResult>) | null;
@@ -64,10 +64,13 @@ export function createProfileSkillCatalogRuntime(deps: {
   async function loadProfileSkillRuntime(input: {
     session: Session;
     turnId: string;
+    profile?: OpenPondProfileState | null;
   }): Promise<ProfileSkillRuntime> {
     const [profileResult, extensionResult] = await Promise.allSettled([
-      loadOpenPondProfileState && readOpenPondProfileSkill
-        ? loadOpenPondProfileState()
+      input.profile
+        ? Promise.resolve(input.profile)
+        : loadOpenPondProfileState && readOpenPondProfileSkill
+          ? loadOpenPondProfileState(input.session)
         : Promise.resolve(null),
       loadOpenPondExtensionCatalog && readOpenPondExtensionSkill
         ? loadOpenPondExtensionCatalog()

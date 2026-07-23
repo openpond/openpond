@@ -32,6 +32,7 @@ export function normalizeSessionPayload(value: unknown): Session {
   return {
     ...session,
     openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    currentProfile: session.currentProfile ?? null,
   };
 }
 

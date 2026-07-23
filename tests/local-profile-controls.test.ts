@@ -20,12 +20,17 @@ import {
   hostedRunSummaryFromPayload,
   hostedSourceCheckStatusFromPayload,
   initLocalProfileRepo,
+  loadOpenPondProfileLibrary,
+  loadOpenPondProfileStateForRef,
   loadLocalProfileRepo,
   mergeActiveLocalProfileConfig,
   mergeProfileRepoManifestEntry,
+  registerLocalProfileRepo,
+  removeOpenPondProfile,
   renameActiveProfileAgent,
   runProfileCheck,
   runProfileSdkCommand,
+  selectOpenPondProfile,
 } from "../packages/cloud/src/profile/local-profile";
 import { executeProfileSkillGoalRequest } from "../packages/cloud/src/profile/profile-skill-goal-executor";
 import {
@@ -39,6 +44,97 @@ import {
 } from "../packages/cloud/src/profile/profile-skills";
 
 describe("local profile control invariants", () => {
+  test("catalogs multiple Profiles and resolves each by stable ref", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-library-"));
+    const originalConfig = await loadGlobalConfig();
+    try {
+      await saveConfig({});
+      await initLocalProfileRepo({ repoPath: path.join(tempRoot, "alpha"), profile: "alpha" });
+      await initLocalProfileRepo({ repoPath: path.join(tempRoot, "beta"), profile: "beta" });
+      const library = await loadOpenPondProfileLibrary();
+      expect(library.profiles.map((entry) => entry.name)).toEqual(["alpha", "beta"]);
+      expect(library.lastUsed?.profileId).toBe("beta");
+
+      const alpha = library.profiles.find((entry) => entry.name === "alpha")!;
+      expect((await loadOpenPondProfileStateForRef(alpha.ref)).activeProfile).toBe("alpha");
+      expect((await selectOpenPondProfile(alpha.ref)).activeProfile).toBe("alpha");
+      expect((await loadOpenPondProfileLibrary()).lastUsed).toEqual(alpha.ref);
+
+      const remaining = await removeOpenPondProfile(alpha.ref);
+      expect(remaining.profiles.map((entry) => entry.name)).toEqual(["beta"]);
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("registers an installed Profile without changing the last-used Profile", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-register-"));
+    const originalConfig = await loadGlobalConfig();
+    try {
+      await saveConfig({});
+      await initLocalProfileRepo({ repoPath: path.join(tempRoot, "active"), profile: "active" });
+      const installedRepo = path.join(tempRoot, "installed");
+      await initLocalProfileRepo({ repoPath: installedRepo, profile: "shared" });
+      const beforeRemoval = await loadOpenPondProfileLibrary();
+      const active = beforeRemoval.profiles.find((entry) => entry.name === "active")!;
+      const shared = beforeRemoval.profiles.find((entry) => entry.name === "shared")!;
+      await selectOpenPondProfile(active.ref);
+      await removeOpenPondProfile(shared.ref);
+
+      const registered = await registerLocalProfileRepo(installedRepo, "shared", {
+        source: "github",
+        repositoryId: "duckailabs/shared-profile",
+      });
+      const library = await loadOpenPondProfileLibrary();
+      expect(registered.activeProfile).toBe("shared");
+      expect(library.lastUsed).toEqual(active.ref);
+      expect(library.profiles).toContainEqual(expect.objectContaining({
+        ref: {
+          source: "github",
+          repositoryId: "duckailabs/shared-profile",
+          profileId: "shared",
+        },
+      }));
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("creates a blank Profile without an enabled starter Agent", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-blank-"));
+    const originalConfig = await loadGlobalConfig();
+    try {
+      await saveConfig({});
+      const repoPath = path.join(tempRoot, "profile-repo");
+      const state = await initLocalProfileRepo({
+        repoPath,
+        profile: "research",
+        template: "blank-profile",
+      });
+      expect(state.activeProfile).toBe("research");
+      expect(state.agents).toEqual([]);
+      expect(state.skills).toEqual([]);
+      expect(await readFile(
+        path.join(repoPath, "profiles/research/settings/profile.yaml"),
+        "utf8",
+      )).toContain("agents: []");
+      const manifest = JSON.parse(
+        await readFile(path.join(repoPath, "openpond-profile.json"), "utf8"),
+      ) as { profiles: Record<string, { enabledAgents?: string[] }> };
+      expect(manifest.profiles.research?.enabledAgents).toEqual([]);
+      await expect(initLocalProfileRepo({
+        repoPath,
+        profile: "research",
+        template: "blank-profile",
+      })).rejects.toThrow('Profile "research" already exists');
+    } finally {
+      await saveConfig(originalConfig);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("repeat init preserves enabled agents on an existing profile manifest entry", () => {
     expect(
       mergeProfileRepoManifestEntry(
@@ -227,6 +323,14 @@ describe("local profile control invariants", () => {
       mode: "local",
       lastCheck,
       lastPush,
+      profiles: [{
+        source: "local",
+        repositoryId: "/workspace/profile-repo",
+        repoPath: "/workspace/profile-repo",
+        profile: "default",
+        lastCheck,
+        lastPush,
+      }],
     });
   });
 
@@ -250,6 +354,25 @@ describe("local profile control invariants", () => {
       repoPath: "/workspace/profile-repo",
       profile: "support",
       mode: "local",
+      profiles: [
+        {
+          source: "local",
+          repositoryId: "/workspace/profile-repo",
+          repoPath: "/workspace/profile-repo",
+          profile: "default",
+          lastPush: {
+            status: "pushed",
+            pushedAt: "2026-06-28T18:13:28.572Z",
+            projectId: "project_123",
+          },
+        },
+        {
+          source: "local",
+          repositoryId: "/workspace/profile-repo",
+          repoPath: "/workspace/profile-repo",
+          profile: "support",
+        },
+      ],
     });
   });
 

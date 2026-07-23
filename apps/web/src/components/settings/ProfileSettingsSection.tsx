@@ -1,17 +1,26 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import type { BootstrapPayload, ChatProvider } from "@openpond/contracts";
+import type {
+  BootstrapPayload,
+  ChatProvider,
+  OpenPondProfileCatalogEntry,
+} from "@openpond/contracts";
 import {
   FileText,
   CloudUpload,
   FolderGit2,
   GitCommit,
   Plus,
+  RefreshCw,
+  Trash2,
   UploadCloud,
   X,
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
 import "../../styles/workspace/git-dialogs.css";
+import "../../styles/settings/profile-catalog.css";
+import { openPondProfileRefsEqual } from "../../lib/profile-selection";
+import { ProfilePublicationDialog } from "./ProfilePublicationDialog";
 
 type ProfileState = NonNullable<BootstrapPayload["profile"]>;
 type ProfileSkill = ProfileState["skills"][number];
@@ -49,9 +58,13 @@ export function ProfileSettingsSection({
 }: ProfileSettingsSectionProps) {
   const [profileCommitMessage, setProfileCommitMessage] = useState("");
   const [profileBusy, setProfileBusy] = useState<string | null>(null);
+  const [addProfileOpen, setAddProfileOpen] = useState(false);
+  const [removeProfileTarget, setRemoveProfileTarget] = useState<OpenPondProfileCatalogEntry | null>(null);
+  const [publicationTarget, setPublicationTarget] = useState<OpenPondProfileCatalogEntry | null>(null);
   const profile = payload?.profile ?? null;
   const selectedDefaultTeamId = payload?.preferences.defaultTeamId?.trim() || "";
   const showControls = section === "all" || section === "profile" || section === "controls";
+  const showCatalog = section === "all" || section === "profile";
   const showAgents = section === "all" || section === "agents";
   const showSkills = section === "all" || section === "profile";
 
@@ -106,12 +119,67 @@ export function ProfileSettingsSection({
     });
   }
 
+  function selectProfile(entry: OpenPondProfileCatalogEntry) {
+    void runProfileControl(`select:${entry.ref.profileId}`, async () => {
+      await api.profileSelect(connection!, entry.ref);
+      await refreshBootstrapAfterProfileChange(`Using ${entry.name}`);
+    });
+  }
+
+  function addProfile(input:
+    | { source: "blank"; path: string | null; profile: string }
+    | { source: "local"; path: string; profile: string | null }
+    | { source: "github" | "openpond_git"; repositoryId: string; profile: string | null }
+  ) {
+    void runProfileControl("add", async () => {
+      if (input.source === "blank") {
+        await api.profileInit(connection!, {
+          path: input.path,
+          profile: input.profile,
+          template: "blank-profile",
+        });
+      } else if (input.source === "local") await api.profileLoad(connection!, input);
+      else await api.profileInstall(connection!, input);
+      setAddProfileOpen(false);
+      await refreshBootstrapAfterProfileChange(
+        input.source === "blank" ? `${input.profile} created` : "Profile added",
+      );
+    });
+  }
+
+  function updateProfile(entry: OpenPondProfileCatalogEntry) {
+    void runProfileControl("update", async () => {
+      await api.profileUpdate(connection!, entry.ref);
+      await refreshBootstrapAfterProfileChange(`${entry.name} updated`);
+    });
+  }
+
+  function removeProfile(entry: OpenPondProfileCatalogEntry) {
+    void runProfileControl("remove", async () => {
+      await api.profileRemove(connection!, entry.ref);
+      setRemoveProfileTarget(null);
+      await refreshBootstrapAfterProfileChange("Profile removed from this device");
+    });
+  }
+
   return (
     <section className="account-settings">
       {profile?.mode === "local" ? (
         <>
           {showControls ? (
             <>
+              {showCatalog ? <ProfilesCatalog
+                busy={Boolean(profileBusy)}
+                library={payload?.profileLibrary ?? { lastUsed: null, profiles: [] }}
+                onAdd={() => setAddProfileOpen(true)}
+                onRefresh={() => void runProfileControl("refresh", async () => {
+                  await refreshBootstrapAfterProfileChange("Profiles refreshed");
+                })}
+                onRemove={setRemoveProfileTarget}
+                onPublish={setPublicationTarget}
+                onUpdate={updateProfile}
+                onSelect={selectProfile}
+              /> : null}
               <ProfileControls
                 connection={connection}
                 profile={profile}
@@ -162,8 +230,17 @@ export function ProfileSettingsSection({
             <small>Not loaded</small>
           </div>
           <div className="empty-account-list">
-            <strong>No local profile loaded</strong>
-            <span>OpenPond uses one Git-backed Profile in the default repo.</span>
+            <strong>No local Profile loaded</strong>
+            <span>Create an empty Profile, start with an Agent template, or add an existing repository.</span>
+            <button
+              className="settings-secondary"
+              disabled={!connection || Boolean(profileBusy)}
+              type="button"
+              onClick={() => setAddProfileOpen(true)}
+            >
+              <Plus size={14} />
+              <span>Create or add Profile</span>
+            </button>
             <button
               className="settings-secondary"
               disabled={!connection || Boolean(profileBusy)}
@@ -171,12 +248,283 @@ export function ProfileSettingsSection({
               onClick={submitProfileInit}
             >
               <Plus size={14} />
-              <span>{profileBusy === "init" ? "Creating" : "Create default Profile"}</span>
+              <span>{profileBusy === "init" ? "Creating" : "Create starter Profile"}</span>
             </button>
           </div>
         </div>
       )}
+      {addProfileOpen ? (
+        <AddProfileDialog
+          busy={Boolean(profileBusy)}
+          onClose={() => setAddProfileOpen(false)}
+          onSubmit={addProfile}
+        />
+      ) : null}
+      {removeProfileTarget ? (
+        <RemoveProfileDialog
+          busy={Boolean(profileBusy)}
+          entry={removeProfileTarget}
+          onClose={() => setRemoveProfileTarget(null)}
+          onConfirm={() => removeProfile(removeProfileTarget)}
+        />
+      ) : null}
+      {publicationTarget && connection ? (
+        <ProfilePublicationDialog
+          connection={connection}
+          entry={publicationTarget}
+          onClose={() => setPublicationTarget(null)}
+          onPublished={(message) => onToast?.(message, "success")}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function ProfilesCatalog({
+  busy,
+  library,
+  onAdd,
+  onRefresh,
+  onRemove,
+  onPublish,
+  onSelect,
+  onUpdate,
+}: {
+  busy: boolean;
+  library: BootstrapPayload["profileLibrary"];
+  onAdd: () => void;
+  onRefresh: () => void;
+  onRemove: (entry: OpenPondProfileCatalogEntry) => void;
+  onPublish: (entry: OpenPondProfileCatalogEntry) => void;
+  onSelect: (entry: OpenPondProfileCatalogEntry) => void;
+  onUpdate: (entry: OpenPondProfileCatalogEntry) => void;
+}) {
+  return (
+    <div className="account-list profile-catalog-list">
+      <div className="account-list-heading profile-agent-list-heading">
+        <span>Profiles</span>
+        <div className="profile-skill-heading-actions">
+          <small>{library.profiles.length} installed</small>
+          <button className="settings-secondary" disabled={busy} type="button" onClick={onRefresh}>
+            <RefreshCw size={14} />
+            <span>Refresh</span>
+          </button>
+          <button className="settings-secondary" disabled={busy} type="button" onClick={onAdd}>
+            <Plus size={14} />
+            <span>Add</span>
+          </button>
+        </div>
+      </div>
+      {library.profiles.map((entry) => {
+        const active = openPondProfileRefsEqual(entry.ref, library.lastUsed);
+        return (
+          <div
+            className={`product-row profile-catalog-row ${active ? "selected" : ""}`}
+            key={`${entry.ref.source}:${entry.ref.repositoryId}:${entry.ref.profileId}`}
+            role="button"
+            tabIndex={busy ? -1 : 0}
+            aria-disabled={busy}
+            onClick={() => { if (!busy) onSelect(entry); }}
+            onKeyDown={(event) => {
+              if (busy || (event.key !== "Enter" && event.key !== " ")) return;
+              event.preventDefault();
+              onSelect(entry);
+            }}
+          >
+            <div className="profile-agent-identity">
+              <FolderGit2 size={18} />
+              <div>
+                <strong>{entry.name}</strong>
+                <span title={entry.repoPath}>{entry.repoPath}</span>
+              </div>
+            </div>
+            <ProfileStatusText status={{
+              state: entry.state.error ? "warning" : "ready",
+              label: entry.state.error ? "error" : active ? "current" : "ready",
+            }} />
+            <span className="profile-catalog-source">{entry.ref.source.replace("_", " ")}</span>
+            <span className="profile-catalog-summary">{entry.state.summary.message}</span>
+            <span className="profile-catalog-actions">
+              {entry.ref.source !== "local" ? (
+                <span
+                  className="settings-secondary compact"
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => { event.stopPropagation(); onUpdate(entry); }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onUpdate(entry);
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  <span>Update</span>
+                </span>
+              ) : null}
+              <span
+                className="settings-secondary compact"
+                role="button"
+                tabIndex={0}
+                onClick={(event) => { event.stopPropagation(); onPublish(entry); }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onPublish(entry);
+                }}
+              >
+                <UploadCloud size={14} />
+                <span>Publish</span>
+              </span>
+              <span
+              className="settings-secondary compact profile-remove-button"
+              role="button"
+              tabIndex={0}
+              aria-label={`Remove ${entry.name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemove(entry);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                onRemove(entry);
+              }}
+            >
+              <Trash2 size={14} />
+              <span>Remove</span>
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AddProfileDialog({
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (input:
+    | { source: "blank"; path: string | null; profile: string }
+    | { source: "local"; path: string; profile: string | null }
+    | { source: "github" | "openpond_git"; repositoryId: string; profile: string | null }
+  ) => void;
+}) {
+  const [source, setSource] = useState<"blank" | "local" | "github" | "openpond_git">("blank");
+  const [repoPath, setRepoPath] = useState("");
+  const [repositoryId, setRepositoryId] = useState("");
+  const [profileName, setProfileName] = useState("");
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    if (source === "blank") {
+      const profile = profileName.trim();
+      if (!profile) return;
+      onSubmit({ source, path: repoPath.trim() || null, profile });
+      return;
+    }
+    if (source === "local") {
+      const localPath = repoPath.trim();
+      if (!localPath) return;
+      onSubmit({ source, path: localPath, profile: profileName.trim() || null });
+      return;
+    }
+    const repository = repositoryId.trim();
+    if (!repository) return;
+    onSubmit({ source, repositoryId: repository, profile: profileName.trim() || null });
+  }
+  return (
+    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <form className="git-dialog" role="dialog" aria-modal="true" aria-labelledby="add-profile-title" onMouseDown={(event) => event.stopPropagation()} onSubmit={submit}>
+        <button className="git-dialog-close" disabled={busy} type="button" aria-label="Close" onClick={onClose}><X size={14} /></button>
+        <div className="git-dialog-icon"><FolderGit2 size={18} /></div>
+        <h2 id="add-profile-title">Add Profile</h2>
+        <p>Create a blank Profile, add a local repository, or install a shareable Profile from Git.</p>
+        <div className="profile-add-source-options">
+          <label><input type="radio" checked={source === "blank"} onChange={() => setSource("blank")} />New blank</label>
+          <label><input type="radio" checked={source === "local"} onChange={() => setSource("local")} />Local</label>
+          <label><input type="radio" checked={source === "github"} onChange={() => setSource("github")} />GitHub</label>
+          <label><input type="radio" checked={source === "openpond_git"} onChange={() => setSource("openpond_git")} />OpenPond Git</label>
+        </div>
+        {source === "blank" ? (
+          <label className="git-dialog-field">
+            <span>Repository path (optional)</span>
+            <input disabled={busy} value={repoPath} placeholder="Uses the default local Profile repository" onChange={(event) => setRepoPath(event.currentTarget.value)} />
+          </label>
+        ) : source === "local" ? (
+          <label className="git-dialog-field">
+            <span>Repository path</span>
+            <input autoFocus disabled={busy} value={repoPath} placeholder="/path/to/profile-repo" onChange={(event) => setRepoPath(event.currentTarget.value)} />
+          </label>
+        ) : (
+          <label className="git-dialog-field">
+            <span>{source === "github" ? "GitHub" : "OpenPond Git"} repository</span>
+            <input autoFocus disabled={busy} value={repositoryId} placeholder="owner/repository" onChange={(event) => setRepositoryId(event.currentTarget.value)} />
+          </label>
+        )}
+        <label className="git-dialog-field">
+          <span>{source === "blank" ? "Profile name" : "Profile name (optional)"}</span>
+          <input
+            autoFocus={source === "blank"}
+            disabled={busy}
+            value={profileName}
+            placeholder={source === "blank" ? "research" : "Uses repository default"}
+            onChange={(event) => setProfileName(event.currentTarget.value)}
+          />
+        </label>
+        <div className="git-dialog-footer">
+          <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>Cancel</button>
+          <button
+            className="git-dialog-primary"
+            disabled={busy || !(
+              source === "blank"
+                ? profileName
+                : source === "local"
+                  ? repoPath
+                  : repositoryId
+            ).trim()}
+            type="submit"
+          >
+            {source === "blank" ? "Create Profile" : "Add Profile"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RemoveProfileDialog({
+  busy,
+  entry,
+  onClose,
+  onConfirm,
+}: {
+  busy: boolean;
+  entry: OpenPondProfileCatalogEntry;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="git-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="git-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-profile-title" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="git-dialog-close" disabled={busy} type="button" aria-label="Close" onClick={onClose}><X size={14} /></button>
+        <div className="git-dialog-icon"><Trash2 size={18} /></div>
+        <h2 id="remove-profile-title">Remove {entry.name}?</h2>
+        <p>This removes the Profile from OpenPond on this device. It does not delete the repository or any source files.</p>
+        <div className="profile-dialog-summary"><strong>{entry.name}</strong><span>{entry.repoPath}</span></div>
+        <div className="git-dialog-footer">
+          <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>Cancel</button>
+          <button className="git-dialog-primary danger" disabled={busy} type="button" onClick={onConfirm}>Remove</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

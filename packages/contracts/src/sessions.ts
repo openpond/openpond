@@ -8,6 +8,7 @@ import {
 } from "./settings.js";
 import { ChatModelRefSchema } from "./providers.js";
 import { SubagentDelegationModeSchema, SubagentRoleIdSchema } from "./subagents.js";
+import { OpenPondProfileRefSchema, OpenPondTurnProfileSnapshotSchema } from "./profile-ref.js";
 
 export const SystemSessionKindSchema = z.enum([
   "openpond.insights",
@@ -36,6 +37,7 @@ export const SessionSchema = z.object({
   localProjectId: z.string().nullable().optional(),
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
+  currentProfile: OpenPondProfileRefSchema.nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable(),
   codexThreadId: z.string().nullable(),
@@ -62,6 +64,7 @@ export const TurnSchema = z.object({
   error: z.string().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
   createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
+  profileSnapshot: OpenPondTurnProfileSnapshotSchema.nullable().optional(),
 });
 
 export type Turn = z.infer<typeof TurnSchema>;

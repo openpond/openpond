@@ -32,6 +32,108 @@ export type ComposerProjectTargetState = {
   busy: boolean;
 };
 
+export type ComposerProfileTargetState = {
+  value: string;
+  label: string;
+  options: Array<{ value: string; label: string; detail: string }>;
+};
+
+export function ComposerProfileTargetControl({
+  busy,
+  placement,
+  state,
+  onChange,
+}: {
+  busy: boolean;
+  placement: "bottom" | "top";
+  state: ComposerProfileTargetState;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const visibleOptions = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return state.options;
+    return state.options.filter((option) =>
+      `${option.label} ${option.detail}`.toLowerCase().includes(needle),
+    );
+  }, [query, state.options]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
+    }
+    function handlePointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  if (state.options.length <= 1) return null;
+  return (
+    <div className={`composer-profile-target ${placement === "top" ? "open-up" : ""}`} ref={menuRef}>
+      <button
+        type="button"
+        className={`composer-profile-trigger ${open ? "active" : ""}`}
+        disabled={busy}
+        aria-label="Profile"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>{state.label}</span>
+        <ChevronDown size={14} />
+      </button>
+      {open ? (
+        <div className="composer-project-menu" role="menu" aria-label="Profile">
+          <div className="composer-menu-search">
+            <input
+              autoFocus
+              value={query}
+              placeholder="Search profiles"
+              onChange={(event) => setQuery(event.currentTarget.value)}
+            />
+          </div>
+          <div className="composer-menu-items">
+            {visibleOptions.map((option) => {
+              const selected = option.value === state.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  className={`composer-project-option ${selected ? "selected" : ""}`}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span>
+                    <strong>{option.label}</strong>
+                    <small>{option.detail}</small>
+                  </span>
+                  {selected ? <Check size={14} /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ComposerProjectTargetControl({
   busy,
   placement,

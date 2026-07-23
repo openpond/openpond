@@ -15,6 +15,7 @@ import {
   loadGlobalConfig,
   saveGlobalConfig,
   type LocalOpenPondProfileCheckStatus,
+  type LocalOpenPondProfileCatalogEntry,
   type LocalOpenPondProfileConfig,
   type LocalOpenPondProfilePushStatus,
 } from "../config.js";
@@ -33,6 +34,8 @@ import {
   type OpenPondProfileGitFileChange,
   type OpenPondProfileGitState,
   type OpenPondProfileHostedBinding,
+  type OpenPondProfileLibrary,
+  type OpenPondProfileRef,
   type OpenPondProfileState,
   type OpenPondProfileSummary,
 } from "./local-profile-types.js";
@@ -78,6 +81,8 @@ export type {
   OpenPondProfileGitFileChange,
   OpenPondProfileGitState,
   OpenPondProfileHostedBinding,
+  OpenPondProfileLibrary,
+  OpenPondProfileRef,
   OpenPondProfileSetupGate,
   OpenPondProfileSetupRequirement,
   OpenPondProfileSkill,
@@ -136,22 +141,68 @@ export function mergeActiveLocalProfileConfig(
   repoPath: string,
   profile: string
 ): LocalOpenPondProfileConfig {
+  const previousEntries = profileConfigEntries(existing);
+  if (existing) {
+    const previousIndex = previousEntries.findIndex(
+      (entry) =>
+        path.resolve(entry.repoPath) === path.resolve(existing.repoPath) &&
+        entry.profile === existing.profile,
+    );
+    const previousEntry: LocalOpenPondProfileCatalogEntry = {
+      source: previousEntries[previousIndex]?.source ?? "local",
+      repositoryId:
+        previousEntries[previousIndex]?.repositoryId ?? path.resolve(existing.repoPath),
+      repoPath: path.resolve(existing.repoPath),
+      profile: existing.profile,
+      ...(existing.lastCheck ? { lastCheck: existing.lastCheck } : {}),
+      ...(existing.lastPush ? { lastPush: existing.lastPush } : {}),
+    };
+    if (previousIndex >= 0) previousEntries[previousIndex] = previousEntry;
+    else previousEntries.push(previousEntry);
+  }
+  const targetIndex = previousEntries.findIndex(
+    (entry) => path.resolve(entry.repoPath) === path.resolve(repoPath) && entry.profile === profile,
+  );
+  const target = targetIndex >= 0 ? previousEntries[targetIndex]! : {
+    source: "local" as const,
+    repositoryId: path.resolve(repoPath),
+    repoPath: path.resolve(repoPath),
+    profile,
+  };
+  if (targetIndex < 0) previousEntries.push(target);
   const next: LocalOpenPondProfileConfig = {
-    repoPath,
+    repoPath: path.resolve(repoPath),
     profile,
     mode: "local",
+    profiles: previousEntries,
+    ...(target.lastCheck ? { lastCheck: target.lastCheck } : {}),
+    ...(target.lastPush ? { lastPush: target.lastPush } : {}),
   };
-  if (!existing) return next;
+  return next;
+}
+
+function profileConfigEntries(
+  config: LocalOpenPondProfileConfig | undefined,
+): LocalOpenPondProfileCatalogEntry[] {
+  if (!config) return [];
+  const configured = config.profiles?.map((entry) => ({ ...entry })) ?? [];
   if (
-    path.resolve(existing.repoPath) !== path.resolve(repoPath) ||
-    existing.profile !== profile
+    !configured.some(
+      (entry) =>
+        path.resolve(entry.repoPath) === path.resolve(config.repoPath) &&
+        entry.profile === config.profile,
+    )
   ) {
-    return next;
+    configured.push({
+      source: "local",
+      repositoryId: path.resolve(config.repoPath),
+      repoPath: path.resolve(config.repoPath),
+      profile: config.profile,
+      ...(config.lastCheck ? { lastCheck: config.lastCheck } : {}),
+      ...(config.lastPush ? { lastPush: config.lastPush } : {}),
+    });
   }
-  return {
-    ...existing,
-    ...next,
-  };
+  return configured;
 }
 
 export type RunProfileCommandInput = {
@@ -206,24 +257,36 @@ export async function initLocalProfileRepo(
   const profile = normalizeProfileName(input.profile);
   const profilePath = path.join("profiles", profile);
   const profileSourcePath = path.join(repoPath, profilePath);
+  const template = input.template ?? "blank-agent";
+  const blankProfile = template === "blank-profile";
 
   await mkdir(repoPath, { recursive: true });
+  const manifestAlreadyExists = existsSync(path.join(repoPath, PROFILE_REPO_MANIFEST));
   const manifest = await readProfileManifest(repoPath).catch(() =>
     defaultProfileManifest(profile, profilePath)
   );
+  if (blankProfile && manifestAlreadyExists && manifest.profiles[profile]) {
+    throw new Error(`Profile "${profile}" already exists in ${repoPath}.`);
+  }
   manifest.defaultProfile = manifest.defaultProfile || profile;
   manifest.profiles[profile] = mergeProfileRepoManifestEntry(
     manifest.profiles[profile],
     profilePath
   );
+  if (blankProfile) manifest.profiles[profile].enabledAgents = [];
 
-  await ensureProfileSource(
-    profileSourcePath,
-    input.template ?? "blank-agent",
-    Boolean(input.force)
-  );
+  if (blankProfile) await mkdir(profileSourcePath, { recursive: true });
+  else {
+    await ensureProfileSource(
+      profileSourcePath,
+      template,
+      Boolean(input.force)
+    );
+  }
   await ensureProfileDependencies(profileSourcePath);
-  await ensureProfileScaffoldFiles(repoPath, profileSourcePath, profile);
+  await ensureProfileScaffoldFiles(repoPath, profileSourcePath, profile, {
+    includeDefaultAgent: !blankProfile,
+  });
   await writeProfileManifest(repoPath, manifest);
   await ensureProfileGitRepo(repoPath);
   const currentConfig = (await loadGlobalConfig()).openpondProfile;
@@ -239,21 +302,63 @@ export async function initLocalProfileRepo(
 
 export async function loadLocalProfileRepo(
   repoPathInput: string,
-  profileInput?: string
+  profileInput?: string,
+  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string },
 ): Promise<OpenPondProfileState> {
   const repoPath = path.resolve(repoPathInput);
   const manifest = await readProfileManifest(repoPath);
   const profile = normalizeProfileName(profileInput ?? manifest.defaultProfile);
   profileSourcePath(manifest, repoPath, profile);
   const currentConfig = (await loadGlobalConfig()).openpondProfile;
-  await saveGlobalConfig({
-    openpondProfile: mergeActiveLocalProfileConfig(
-      currentConfig,
-      repoPath,
-      profile
-    ),
-  });
+  const next = mergeActiveLocalProfileConfig(
+    currentConfig,
+    repoPath,
+    profile
+  );
+  applyProfileIdentity(next, repoPath, profile, identity);
+  await saveGlobalConfig({ openpondProfile: next });
   return loadOpenPondProfileState();
+}
+
+export async function registerLocalProfileRepo(
+  repoPathInput: string,
+  profileInput?: string,
+  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string },
+): Promise<OpenPondProfileState> {
+  const repoPath = path.resolve(repoPathInput);
+  const manifest = await readProfileManifest(repoPath);
+  const profile = normalizeProfileName(profileInput ?? manifest.defaultProfile);
+  profileSourcePath(manifest, repoPath, profile);
+  const currentConfig = (await loadGlobalConfig()).openpondProfile;
+  const next = mergeActiveLocalProfileConfig(currentConfig, repoPath, profile);
+  applyProfileIdentity(next, repoPath, profile, identity);
+  if (currentConfig) {
+    next.repoPath = currentConfig.repoPath;
+    next.profile = currentConfig.profile;
+    next.lastCheck = currentConfig.lastCheck;
+    next.lastPush = currentConfig.lastPush;
+  }
+  await saveGlobalConfig({ openpondProfile: next });
+  return loadOpenPondProfileStateForRef(openPondProfileRef({
+    repoPath,
+    profile,
+    source: identity?.source,
+    repositoryId: identity?.repositoryId,
+  }));
+}
+
+function applyProfileIdentity(
+  config: LocalOpenPondProfileConfig,
+  repoPath: string,
+  profile: string,
+  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string },
+): void {
+  if (!identity) return;
+  config.profiles = profileConfigEntries(config).map((entry) =>
+    path.resolve(entry.repoPath) === repoPath && entry.profile === profile
+      ? { ...entry, source: identity.source, repositoryId: identity.repositoryId }
+      : entry,
+  );
 }
 
 export async function renameActiveProfileAgent(
@@ -294,6 +399,146 @@ export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> 
   const config = await loadGlobalConfig();
   const active = config.openpondProfile;
   if (!active) return emptyProfileState();
+  return loadOpenPondProfileStateForConfig(active);
+}
+
+export function openPondProfileRef(input: {
+  source?: OpenPondProfileRef["source"];
+  repositoryId?: string;
+  repoPath: string;
+  profile: string;
+}): OpenPondProfileRef {
+  return {
+    source: input.source ?? "local",
+    repositoryId: input.repositoryId?.trim() || path.resolve(input.repoPath),
+    profileId: input.profile,
+  };
+}
+
+export async function loadOpenPondProfileLibrary(): Promise<OpenPondProfileLibrary> {
+  const active = (await loadGlobalConfig()).openpondProfile;
+  if (!active) return { lastUsed: null, profiles: [] };
+  const entries = profileConfigEntries(active);
+  const profiles = await Promise.all(
+    entries.map(async (entry) => {
+      const state = await loadOpenPondProfileStateForConfig({
+        repoPath: entry.repoPath,
+        profile: entry.profile,
+        mode: "local",
+        ...(entry.lastCheck ? { lastCheck: entry.lastCheck } : {}),
+        ...(entry.lastPush ? { lastPush: entry.lastPush } : {}),
+      });
+      return {
+        ref: openPondProfileRef(entry),
+        name: entry.profile,
+        repoPath: entry.repoPath,
+        sourcePath: state.sourcePath,
+        state,
+      };
+    }),
+  );
+  return {
+    lastUsed: openPondProfileRef({
+      repoPath: active.repoPath,
+      profile: active.profile,
+      source: profileConfigEntries(active).find(
+        (entry) =>
+          path.resolve(entry.repoPath) === path.resolve(active.repoPath) &&
+          entry.profile === active.profile,
+      )?.source,
+      repositoryId: profileConfigEntries(active).find(
+        (entry) =>
+          path.resolve(entry.repoPath) === path.resolve(active.repoPath) &&
+          entry.profile === active.profile,
+      )?.repositoryId,
+    }),
+    profiles,
+  };
+}
+
+export async function loadOpenPondProfileStateForRef(
+  ref: OpenPondProfileRef | null | undefined,
+): Promise<OpenPondProfileState> {
+  if (!ref) return loadOpenPondProfileState();
+  const active = (await loadGlobalConfig()).openpondProfile;
+  const entry = profileConfigEntries(active).find(
+    (candidate) =>
+      candidate.source === ref.source &&
+      candidate.repositoryId === ref.repositoryId &&
+      candidate.profile === ref.profileId,
+  );
+  if (!entry) {
+    return emptyProfileState(`Profile "${ref.profileId}" is not installed on this device.`);
+  }
+  return loadOpenPondProfileStateForConfig({
+    repoPath: entry.repoPath,
+    profile: entry.profile,
+    mode: "local",
+    ...(entry.lastCheck ? { lastCheck: entry.lastCheck } : {}),
+    ...(entry.lastPush ? { lastPush: entry.lastPush } : {}),
+  });
+}
+
+export async function selectOpenPondProfile(
+  ref: OpenPondProfileRef,
+): Promise<OpenPondProfileState> {
+  const config = (await loadGlobalConfig()).openpondProfile;
+  const entry = profileConfigEntries(config).find(
+    (candidate) =>
+      candidate.source === ref.source &&
+      candidate.repositoryId === ref.repositoryId &&
+      candidate.profile === ref.profileId,
+  );
+  if (!entry) throw new Error(`Profile "${ref.profileId}" is not installed on this device.`);
+  await saveGlobalConfig({
+    openpondProfile: mergeActiveLocalProfileConfig(config, entry.repoPath, entry.profile),
+  });
+  return loadOpenPondProfileState();
+}
+
+export async function removeOpenPondProfile(
+  ref: OpenPondProfileRef,
+): Promise<OpenPondProfileLibrary> {
+  const config = (await loadGlobalConfig()).openpondProfile;
+  if (!config) return { lastUsed: null, profiles: [] };
+  const remaining = profileConfigEntries(config).filter(
+    (candidate) =>
+      candidate.source !== ref.source ||
+      candidate.repositoryId !== ref.repositoryId ||
+      candidate.profile !== ref.profileId,
+  );
+  if (remaining.length === 0) {
+    await saveGlobalConfig({ openpondProfile: null } as unknown as Partial<Awaited<ReturnType<typeof loadGlobalConfig>>>);
+    return { lastUsed: null, profiles: [] };
+  }
+  const currentRemoved =
+    path.resolve(config.repoPath) === path.resolve(
+      profileConfigEntries(config).find(
+        (candidate) =>
+          candidate.source === ref.source &&
+          candidate.repositoryId === ref.repositoryId &&
+          candidate.profile === ref.profileId,
+      )?.repoPath ?? "",
+    ) && config.profile === ref.profileId;
+  const next = currentRemoved ? remaining[0]! : remaining.find(
+    (entry) => path.resolve(entry.repoPath) === path.resolve(config.repoPath) && entry.profile === config.profile,
+  ) ?? remaining[0]!;
+  await saveGlobalConfig({
+    openpondProfile: {
+      repoPath: next.repoPath,
+      profile: next.profile,
+      mode: "local",
+      profiles: remaining,
+      ...(next.lastCheck ? { lastCheck: next.lastCheck } : {}),
+      ...(next.lastPush ? { lastPush: next.lastPush } : {}),
+    },
+  });
+  return loadOpenPondProfileLibrary();
+}
+
+async function loadOpenPondProfileStateForConfig(
+  active: LocalOpenPondProfileConfig,
+): Promise<OpenPondProfileState> {
   try {
     const manifest = await readProfileManifest(active.repoPath);
     const sourcePath = profileSourcePath(
@@ -613,10 +858,16 @@ export async function saveProfilePushStatus(
 ): Promise<void> {
   const config = (await loadGlobalConfig()).openpondProfile;
   if (!config) return;
+  const profiles = profileConfigEntries(config).map((entry) =>
+    path.resolve(entry.repoPath) === path.resolve(config.repoPath) && entry.profile === config.profile
+      ? { ...entry, lastPush: status }
+      : entry,
+  );
   await saveGlobalConfig({
     openpondProfile: {
       ...config,
       lastPush: status,
+      profiles,
     },
   });
 }
@@ -628,16 +879,23 @@ async function saveProfileCheckStatus(
   const config = (await loadGlobalConfig()).openpondProfile;
   if (!config) return;
   const sourceHead = await profileGitHead(config.repoPath).catch(() => null);
+  const lastCheck: LocalOpenPondProfileCheckStatus = {
+    command,
+    status: exitCode === 0 ? "passed" : "failed",
+    checkedAt: new Date().toISOString(),
+    exitCode,
+    sourceHead,
+  };
+  const profiles = profileConfigEntries(config).map((entry) =>
+    path.resolve(entry.repoPath) === path.resolve(config.repoPath) && entry.profile === config.profile
+      ? { ...entry, lastCheck }
+      : entry,
+  );
   await saveGlobalConfig({
     openpondProfile: {
       ...config,
-      lastCheck: {
-        command,
-        status: exitCode === 0 ? "passed" : "failed",
-        checkedAt: new Date().toISOString(),
-        exitCode,
-        sourceHead,
-      },
+      lastCheck,
+      profiles,
     },
   });
 }
@@ -666,7 +924,8 @@ async function ensureProfileSource(
 async function ensureProfileScaffoldFiles(
   repoPath: string,
   profileSourcePath: string,
-  profile: string
+  profile: string,
+  options: { includeDefaultAgent?: boolean } = {},
 ): Promise<void> {
   await mkdir(path.join(repoPath, "profiles"), { recursive: true });
   for (const dir of [
@@ -684,15 +943,20 @@ async function ensureProfileScaffoldFiles(
   }
   const profileManifestPath = path.join(profileSourcePath, PROFILE_MANIFEST);
   if (!existsSync(profileManifestPath)) {
+    const agentLines = options.includeDefaultAgent === false
+      ? ["agents: []"]
+      : [
+          "agents:",
+          `  - id: ${DEFAULT_PROFILE_AGENT}`,
+          "    path: agent/agent.ts",
+          "    enabled: true",
+        ];
     await writeFile(
       profileManifestPath,
       [
         "schema: openpond.profile.v1",
         `profile: ${profile}`,
-        "agents:",
-        `  - id: ${DEFAULT_PROFILE_AGENT}`,
-        "    path: agent/agent.ts",
-        "    enabled: true",
+        ...agentLines,
         "",
       ].join("\n"),
       "utf8"

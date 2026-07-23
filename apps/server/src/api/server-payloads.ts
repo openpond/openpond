@@ -62,16 +62,12 @@ import {
   updateOpenPondAccountConfig,
 } from "@openpond/runtime";
 import {
-  createGithubExtensionManager,
-  emptyProfileState,
-  initLocalProfileRepo,
-  loadOpenPondProfileState,
+  createGithubExtensionManager, emptyProfileState, initLocalProfileRepo,
+  loadOpenPondProfileLibrary, loadOpenPondProfileState,
 } from "@openpond/cloud";
 import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
-import {
-  assertCreateImproveRunLinked,
-} from "../create-pipeline-guards.js";
+import { assertCreateImproveRunLinked } from "../create-pipeline-guards.js";
 import { normalizeAppPreferences } from "../preferences.js";
 import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
 import {
@@ -796,6 +792,7 @@ export function createServerPayloads(deps: {
       personalization,
       localProjects,
       profile,
+      profileLibrary,
       codexPersonalSkills,
       extensionCatalog,
     ] = await Promise.all([
@@ -808,6 +805,7 @@ export function createServerPayloads(deps: {
       loadPersonalizationSettings(store, storeDir),
       listLocalProjects(store),
       loadBootstrapProfile(Boolean(bootstrapOptions.ensureProfile)),
+      loadOpenPondProfileLibrary(),
       loadCodexPersonalSkills(),
       extensionManager.list(),
     ]);
@@ -857,6 +855,7 @@ export function createServerPayloads(deps: {
       localProjects: linkedLocalProjects,
       cloudProjects,
       profile,
+      profileLibrary,
       codexPersonalSkills,
       extensionCatalog,
       codexHistorySessions: validBootstrapSessions(

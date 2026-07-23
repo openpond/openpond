@@ -264,6 +264,7 @@ export function createSubagentToolRuntime(deps: {
       localProjectId: childSessionWorkspace.localProjectId ?? context.session.localProjectId,
       cloudProjectId: childSessionWorkspace.cloudProjectId ?? context.session.cloudProjectId,
       cloudTeamId: childSessionWorkspace.cloudTeamId ?? context.session.cloudTeamId,
+      currentProfile: context.session.currentProfile ?? null,
       cwd: isolation.cwd ?? context.session.cwd,
       title: `${subagentRoleLabel(role)}: ${input.objective.slice(0, 72)}`,
       metadata: childSessionMetadata,

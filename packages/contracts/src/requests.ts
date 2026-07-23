@@ -35,6 +35,8 @@ import {
 } from "./providers.js";
 import { SidebarAppPreferenceSchema } from "./workspaces.js";
 import { UsageRequestAttributionSchema } from "./usage.js";
+import { OpenPondProfileRefSchema } from "./profile-ref.js";
+import { OpenPondActionCatalogEntrySchema } from "./action-catalog.js";
 
 const ConnectedAppProviderFamilyIdSchema = z.enum([
   "slack",
@@ -131,6 +133,7 @@ export const CreateSessionRequestSchema = z.object({
   localProjectId: z.string().nullable().optional(),
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
+  currentProfile: OpenPondProfileRefSchema.nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
   title: z.string().optional(),
@@ -251,31 +254,6 @@ export type CloudWorkItemBackgroundRequest = z.infer<
   typeof CloudWorkItemBackgroundRequestSchema
 >;
 
-export const OpenPondActionCatalogEntrySchema = z.object({
-  id: z.string().trim().min(1).max(191),
-  agentId: z.string().trim().min(1).max(191).optional().nullable(),
-  sourcePath: z.string().trim().min(1).max(2000).optional().nullable(),
-  sourceActionId: z.string().trim().min(1).max(191).optional().nullable(),
-  name: z.string().trim().min(1).max(191).optional().nullable(),
-  label: z.string().trim().min(1).max(160).optional().nullable(),
-  description: z.string().trim().max(1000).optional().nullable(),
-  visibility: z.string().trim().max(80).optional().nullable(),
-  inputSchema: z.union([z.string().trim().max(191), z.record(z.string(), z.unknown())]).optional().nullable(),
-  outputSchema: z.union([z.string().trim().max(191), z.record(z.string(), z.unknown())]).optional().nullable(),
-  approvalPolicy: z.record(z.string(), z.unknown()).optional().nullable(),
-  artifactPolicy: z.record(z.string(), z.unknown()).optional().nullable(),
-  setupRequirements: z.array(z.record(z.string(), z.unknown())).optional(),
-  mcp: z.record(z.string(), z.unknown()).optional().nullable(),
-  schedulePolicy: z.record(z.string(), z.unknown()).optional().nullable(),
-  trace: z.record(z.string(), z.unknown()).optional().nullable(),
-  implementation: z.record(z.string(), z.unknown()).optional().nullable(),
-  invokesModel: z.boolean().optional(),
-});
-
-export type OpenPondActionCatalogEntry = z.infer<
-  typeof OpenPondActionCatalogEntrySchema
->;
-
 export const OpenCloudWorkItemRequestSchema = z.object({
   teamId: z.string().trim().min(1),
   runtimeId: z.string().trim().min(1).max(191).optional().nullable(),
@@ -365,6 +343,7 @@ export const PatchSessionRequestSchema = z.object({
   localProjectId: z.string().nullable().optional(),
   cloudProjectId: z.string().nullable().optional(),
   cloudTeamId: z.string().nullable().optional(),
+  currentProfile: OpenPondProfileRefSchema.nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
 });

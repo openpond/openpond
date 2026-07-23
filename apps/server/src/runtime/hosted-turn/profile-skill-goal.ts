@@ -34,11 +34,14 @@ export function createProfileSkillGoalRuntime(deps: {
     const objective = input.objective.trim();
     if (!objective) throw new Error("objective is required");
     const command = await deps.executeProfileSkillGoal({
-      operation: input.operation,
-      objective,
-      skillName: input.skillName ?? null,
-      changeRequest: input.changeRequest ?? null,
-      source: input.source ?? "model_tool",
+      profileRef: context.session.currentProfile ?? null,
+      request: {
+        operation: input.operation,
+        objective,
+        skillName: input.skillName ?? null,
+        changeRequest: input.changeRequest ?? null,
+        source: input.source ?? "model_tool",
+      },
     });
     if (command.handled || command.action !== "goal") {
       throw new Error("Profile skill goal execution did not produce a goal request.");

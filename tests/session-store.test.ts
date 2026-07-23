@@ -8,6 +8,38 @@ import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 describe("session store patches", () => {
+  test("defaults new chats to the last-used Profile and allows chat-local switching", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-profile-"));
+    const store = new SqliteStore(storeDir);
+    const defaultProfile = {
+      source: "local" as const,
+      repositoryId: "/profiles/default",
+      profileId: "default",
+    };
+    const reviewProfile = {
+      source: "local" as const,
+      repositoryId: "/profiles/review",
+      profileId: "review",
+    };
+    try {
+      const { createSession, patchSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        loadLastUsedProfile: async () => defaultProfile,
+        appendRuntimeEvent: async () => undefined,
+      });
+      const inherited = await createSession({ provider: "openpond" });
+      const explicit = await createSession({ provider: "openpond", currentProfile: reviewProfile });
+      expect(inherited.currentProfile).toEqual(defaultProfile);
+      expect(explicit.currentProfile).toEqual(reviewProfile);
+      expect((await patchSession(inherited.id, { currentProfile: reviewProfile })).currentProfile).toEqual(reviewProfile);
+      expect(explicit.currentProfile).toEqual(reviewProfile);
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("creates normal local chat sessions visible in the default sidebar", async () => {
     const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
     const store = new SqliteStore(storeDir);

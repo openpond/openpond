@@ -28,6 +28,7 @@ import {
   type ComposerProjectTargetState,
   type ComposerSubmitOptions,
 } from "../chat/Composer";
+import type { ComposerProfileTargetState } from "../chat/ComposerControls";
 import type { ComposerCreateImproveActions } from "../chat/ComposerCreateImproveStrip";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 import type { RightChatPanelView, RightChatScrollState } from "./right-chat-panel-types";
@@ -44,6 +45,7 @@ export function RightChatPane({
   mentionApps,
   codexPersonalSkills,
   profileSkills,
+  profileTarget,
   projectTarget,
   providerSettings,
   accountBaseUrl,
@@ -61,6 +63,7 @@ export function RightChatPane({
   onProviderChange,
   onProviderSetupOpen,
   onPromptChange,
+  onProfileTargetChange,
   onScrollStateChange,
   onProjectTargetChange,
   onResolveApproval,
@@ -81,6 +84,7 @@ export function RightChatPane({
   mentionApps: OpenPondApp[];
   codexPersonalSkills: CodexPersonalSkill[];
   profileSkills: OpenPondProfileSkill[];
+  profileTarget: ComposerProfileTargetState | null;
   projectTarget: ComposerProjectTargetState;
   providerSettings?: BootstrapPayload["providers"] | null;
   accountBaseUrl?: string | null;
@@ -98,6 +102,7 @@ export function RightChatPane({
   onProviderChange: (provider: ChatProvider) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (prompt: string) => void;
+  onProfileTargetChange: (value: string) => void;
   onScrollStateChange: (state: RightChatScrollState) => void;
   onProjectTargetChange: (value: string) => void;
   onResolveApproval: (
@@ -217,6 +222,7 @@ export function RightChatPane({
           mentionApps={mentionApps}
           connectedAppMentions={connectedAppMentions}
           profileSkills={panel.provider === "codex" ? codexPersonalSkills : profileSkills}
+          profileTarget={panel.provider === "codex" ? null : profileTarget}
           selectedMentionAppId={null}
           contextWindowStatus={panel.contextWindowStatus}
           goalRuntime={panel.goalRuntime}
@@ -250,6 +256,7 @@ export function RightChatPane({
           onCodexReasoningEffortChange={onCodexReasoningEffortChange}
           onOpenPondCommandAccessModeChange={onOpenPondCommandAccessModeChange}
           onPromptChange={onPromptChange}
+          onProfileTargetChange={onProfileTargetChange}
           onMentionAppSelect={undefined}
           showToast={showToast}
           onSubmit={onSubmit}

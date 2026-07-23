@@ -46,7 +46,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     label: "Harness",
     items: [
-      { section: "profile", label: "My Profile", Icon: Bot },
+      { section: "profile", label: "Profiles", Icon: Bot },
       { section: "skills", label: "Skills", Icon: FileText },
       { section: "goals", label: "Goals", Icon: ScrollText },
       { section: "context", label: "Context", Icon: BookOpenText },
