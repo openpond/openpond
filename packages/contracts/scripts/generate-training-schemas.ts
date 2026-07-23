@@ -2,6 +2,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
+  DpoRecipeSchema,
+  DpoTrainingRecordSchema,
+  PolicyTrainingRecordSchema,
+  PpoRecipeSchema,
   SftRecipeSchema,
   SftTrainingRecordSchema,
   TasksetSchema,
@@ -16,6 +20,10 @@ const outputDirectory = path.resolve(
 );
 
 const schemas = {
+  "dpo-recipe.schema.json": DpoRecipeSchema,
+  "dpo-training-record.schema.json": DpoTrainingRecordSchema,
+  "policy-training-record.schema.json": PolicyTrainingRecordSchema,
+  "ppo-recipe.schema.json": PpoRecipeSchema,
   "sft-recipe.schema.json": SftRecipeSchema,
   "sft-training-record.schema.json": SftTrainingRecordSchema,
   "taskset.schema.json": TasksetSchema,

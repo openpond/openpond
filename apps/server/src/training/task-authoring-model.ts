@@ -3,6 +3,8 @@ import {
   TaskDesignProposalSchema,
   type ChatModelRef,
   type CodexReasoningEffort,
+  type DatasetBuildIntent,
+  type DatasetBuildSpecification,
   type AuthoringRepair,
   type TaskCreationRequest,
   type TaskDesignProposal,
@@ -33,6 +35,8 @@ export async function authorTaskDesignWithModel(input: {
   model: ChatModelRef;
   reasoningEffort: CodexReasoningEffort | null;
   evidence: TaskAuthoringEvidence[];
+  buildIntent: DatasetBuildIntent;
+  buildSpecification: DatasetBuildSpecification | null;
   skillText: string;
   methodHint?: TaskCreationRequest["methodHint"];
   instruction?: string | null;
@@ -74,7 +78,7 @@ export async function authorTaskDesignWithModel(input: {
   }
 }
 
-function taskAuthoringMessages(input: { id: string; evidence: TaskAuthoringEvidence[]; skillText: string; methodHint?: TaskCreationRequest["methodHint"]; instruction?: string | null; currentProposal?: TaskDesignProposal | null }): Array<{ role: "system" | "user"; content: string }> {
+function taskAuthoringMessages(input: { id: string; evidence: TaskAuthoringEvidence[]; skillText: string; buildIntent: DatasetBuildIntent; buildSpecification: DatasetBuildSpecification | null; methodHint?: TaskCreationRequest["methodHint"]; instruction?: string | null; currentProposal?: TaskDesignProposal | null }): Array<{ role: "system" | "user"; content: string }> {
   return [
     {
       role: "system",
@@ -88,6 +92,7 @@ function taskAuthoringMessages(input: { id: string; evidence: TaskAuthoringEvide
         "Prefer deterministic graders. Model judges must be calibrated and cannot silently become reward.",
         "Do not fabricate expert approval, preferences, corrections, or rewards.",
         "A methodHint is a user preference, not permission to misclassify the evidence. Explain a different recommendation when the hint is unsuitable.",
+        "A buildIntent is the learning signal the user wants to construct, not permission to invent unsupported demonstrations, preferences, rewards, or labels.",
         "Historical assistant messages are candidate outcomes, not automatically approved truth. Exclude stale, contradictory, speculative, context-incomplete, or unsuccessful answers.",
         "Explicitly selected local chats may supply extracted candidate examples when the assistant output is complete, internally consistent, and supports the stated objective. Do not require a separate historical expert-approval field; final approval occurs when the user creates the Taskset.",
         "For each usable example, populate proposedExamples with its exact input and expected output, source and turn provenance, split, origin, and rationale.",
@@ -105,7 +110,7 @@ function taskAuthoringMessages(input: { id: string; evidence: TaskAuthoringEvide
     },
     {
       role: "user",
-      content: JSON.stringify({ proposalId: input.id, methodHint: input.methodHint ?? null, instruction: input.instruction ?? null, currentProposal: input.currentProposal ?? null, evidence: input.evidence }, null, 2),
+      content: JSON.stringify({ proposalId: input.id, buildIntent: input.buildIntent, buildSpecification: input.buildSpecification, methodHint: input.methodHint ?? null, instruction: input.instruction ?? null, currentProposal: input.currentProposal ?? null, evidence: input.evidence }, null, 2),
     },
   ];
 }

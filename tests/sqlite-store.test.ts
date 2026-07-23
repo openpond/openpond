@@ -73,6 +73,36 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("creates model build drafts when upgrading a version 28 store", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const store = new SqliteStore(storeDir);
+      await store.snapshot();
+      await store.close();
+
+      const db = openTestDatabase(storePath);
+      await run(db, "DROP TABLE model_build_drafts");
+      await run(db, "PRAGMA user_version = 28");
+      await close(db);
+
+      const migrated = new SqliteStore(storeDir);
+      await migrated.snapshot();
+      await migrated.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const table = await get<{ name: string }>(
+          migratedDb,
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_build_drafts'",
+        );
+        expect(table.name).toBe("model_build_drafts");
+        expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      } finally {
+        await close(migratedDb);
+      }
+    });
+  });
+
   test("clears replaced subagent transport rows and events during migration", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");

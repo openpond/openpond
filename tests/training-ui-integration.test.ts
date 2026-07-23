@@ -132,6 +132,21 @@ describe("Training UI", () => {
     expect(view).not.toContain('onTasksetCreated={() => finishRunSetup("tasksets")}');
   });
 
+  test("opens Model Builder from a Dataset with its immutable revision selected", async () => {
+    const [datasets, route, builder, pane] = await Promise.all([
+      readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/ModelBuildPage.tsx", "utf8"),
+      readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
+    ]);
+    expect(datasets).toContain("Train Model");
+    expect(datasets).toContain("onTrainModel(selected.id)");
+    expect(route).toContain("initialTasksetId={training.launchRequest.initialTasksetId}");
+    expect(pane).toContain("initialTasksetId,");
+    expect(builder).toContain("revision: taskset.revision");
+    expect(builder).toContain("contentHash: taskset.contentHash");
+  });
+
   test("keeps supervised and reinforcement setup separate without relabeling RFT as local SFT", () => {
     const base = tasksetFixture({ ready: true });
     const taskset = TasksetSchema.parse({

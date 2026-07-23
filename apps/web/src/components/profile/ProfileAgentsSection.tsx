@@ -32,8 +32,8 @@ export function ProfileAgentsSection({
         </div>
       </div>
       {profile.agents.length || schedules.schedules.length ? (
-        <div className="profile-agent-table-frame">
-          <table className="profile-agent-table" aria-label="Profile agents table">
+        <div className="profile-table-frame">
+          <table className="profile-data-table profile-agent-table" aria-label="Profile agents table">
             <colgroup>
               <col className="profile-agent-column" />
               <col className="profile-action-column" />

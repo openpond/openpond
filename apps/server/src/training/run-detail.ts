@@ -1,9 +1,11 @@
 import {
   SftStepMetricSchema,
+  PolicyOptimizationMetricSchema,
   TrainingEvaluationSummarySchema,
   TrainingRunDetailSchema,
   type GradeResult,
   type SftStepMetric,
+  type PolicyOptimizationMetric,
   type TaskAttemptResult,
   type TrainingEvaluationAggregate,
   type TrainingEvaluationGrade,
@@ -56,9 +58,28 @@ export async function trainingRunDetail(store: SqliteStore, jobId: string): Prom
     job,
     events,
     stepMetrics: deduplicateStepMetrics(events.flatMap(stepMetricFromEvent)),
+    policyMetrics: deduplicatePolicyMetrics(events.flatMap(policyMetricFromEvent)),
     evaluation,
     generatedAt: new Date().toISOString(),
   });
+}
+
+function policyMetricFromEvent(event: TrainingJobEvent): PolicyOptimizationMetric[] {
+  if (
+    event.type !== "metric"
+    || event.payload.metricKind !== "policy_optimization"
+  ) return [];
+  const parsed = PolicyOptimizationMetricSchema.safeParse(event.payload);
+  return parsed.success ? [parsed.data] : [];
+}
+
+function deduplicatePolicyMetrics(
+  metrics: PolicyOptimizationMetric[],
+): PolicyOptimizationMetric[] {
+  const latest = new Map<number, PolicyOptimizationMetric>();
+  for (const metric of metrics) latest.set(metric.step, metric);
+  return [...latest.values()].sort((left, right) =>
+    left.step - right.step || left.timestamp.localeCompare(right.timestamp));
 }
 
 function deduplicateStepMetrics(

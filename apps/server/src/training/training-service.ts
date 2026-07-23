@@ -8,7 +8,6 @@ import {
   TrainingApprovalSchema,
   TrainingPreparedStartSchema,
   TrainingPlanSchema,
-  nextCreateImproveRunRevision,
   type TrainingDestinationId,
   type ComputeInventory,
   type GradeResult,
@@ -54,6 +53,7 @@ import {
   assertArtifactIntegrity, isInside, matchingRftSignalGate,
   requireFireworksApprovalActor, withAuthoritativeRecipeHashes,
 } from "./training-service-helpers.js";
+import { updateModelCreateImproveRelease as reconcileModelRelease } from "./model-release-reconciliation.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
@@ -137,6 +137,9 @@ export function createTrainingService(deps: {
     reactivateManagedBinding: deps.reactivateManagedBinding,
     activateManagedBinding: deps.activateManagedBinding,
   });
+  const updateModelCreateImproveRelease = (
+    input: Omit<Parameters<typeof reconcileModelRelease>[0], "store">,
+  ) => reconcileModelRelease({ store: deps.store, ...input });
   registry.register(fireworks);
   registry.register(new HardwareGatedTrainingDestination("local_cuda", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
   registry.register(new HardwareGatedTrainingDestination("local_mlx", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
@@ -148,7 +151,7 @@ export function createTrainingService(deps: {
 
   async function destinations() { return Promise.all(registry.list().map((destination) => destination.capabilities())); }
 
-  async function createPlan(input: { modelId?: string | null; tasksetId: string; destinationId: TrainingDestinationId; recipe: unknown; exportApproved?: boolean; retentionDays?: number | null; region?: string | null }) {
+  async function createPlan(input: { modelId: string; tasksetId: string; destinationId: TrainingDestinationId; recipe: unknown; exportApproved?: boolean; retentionDays?: number | null; region?: string | null }) {
     const taskset = await deps.store.getTaskset(input.tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
     if (!taskset.readiness?.ready) throw new Error("Taskset is not ready for training. Resolve readiness blockers first.");
@@ -161,11 +164,13 @@ export function createTrainingService(deps: {
       : null;
     const destination = registry.get(input.destinationId);
     const capabilities = await destination.capabilities();
-    const initial = createTrainingPlan({ taskset, destinationId: input.destinationId, recipe, exportApproved: input.exportApproved, retentionDays: input.retentionDays, region: input.region });
+    const initial = createTrainingPlan({ modelId: input.modelId, taskset, destinationId: input.destinationId, recipe, exportApproved: input.exportApproved, retentionDays: input.retentionDays, region: input.region });
     const draft = TrainingPlanSchema.parse({
       ...initial,
-      modelId: input.modelId ?? null,
-      environmentPlacement: capabilities.environmentPlacements[0] ?? "none",
+      environmentPlacement: recipe.method === "ppo"
+        && capabilities.environmentPlacements.includes("local")
+        ? "local"
+        : capabilities.environmentPlacements[0] ?? "none",
       rftSignalGate,
     });
     const compatibility = await destination.validate(draft);
@@ -242,18 +247,23 @@ export function createTrainingService(deps: {
     if (!plan || !bundle || bundle.planId !== plan.id) throw new Error("Training Plan and Bundle do not match.");
     if (!plan.compatibility.compatible) throw new Error("Incompatible Training Plans cannot be approved.");
     const recipe = TrainingRecipeSchema.parse(plan.recipe);
-    if (recipe.method !== "sft" && recipe.method !== "grpo") {
+    if (recipe.method !== "sft" && recipe.method !== "dpo" && recipe.method !== "grpo" && recipe.method !== "ppo") {
       throw new Error(`Training method ${recipe.method} has no executable approval contract.`);
     }
     const approvedBy = plan.destinationId === "fireworks"
       ? await requireFireworksApprovalActor(deps.resolveApprovalActor)
       : input.approvedBy ?? "local_user";
     const maximumCostUsd = input.maximumCostUsd ?? plan.estimatedCostUsd;
+    const approvalModel = recipe.method === "dpo"
+      ? recipe.policyModel
+      : recipe.method === "ppo"
+        ? recipe.policyOptimization.policyModel
+      : recipe.baseModel;
     const approvalId = `training_approval_${contentHash([
       plan.id,
       bundle.contentHash,
       plan.destinationId,
-      recipe.baseModel.id,
+      approvalModel.id,
       recipe.method,
       recipe.parameterization,
       maximumCostUsd,
@@ -267,7 +277,7 @@ export function createTrainingService(deps: {
       planId: plan.id,
       bundleHash: bundle.contentHash,
       destinationId: plan.destinationId,
-      modelId: recipe.baseModel.id,
+      modelId: approvalModel.id,
       method: recipe.method,
       parameterization: recipe.parameterization,
       maximumCostUsd,
@@ -314,10 +324,10 @@ export function createTrainingService(deps: {
     return job;
   }
 
-  async function start(input: { modelId?: string | null; tasksetId: string; destinationId: TrainingDestinationId; recipe: unknown; exportApproved?: boolean; maximumCostUsd?: number | null; retentionDays?: number | null; region?: string | null }) {
+  async function start(input: { modelId: string; tasksetId: string; destinationId: TrainingDestinationId; recipe: unknown; exportApproved?: boolean; maximumCostUsd?: number | null; retentionDays?: number | null; region?: string | null }) {
     await deps.revalidateCompute?.();
     const plan = await createPlan({
-      modelId: input.modelId ?? null,
+      modelId: input.modelId,
       tasksetId: input.tasksetId,
       destinationId: input.destinationId,
       recipe: input.recipe,
@@ -333,7 +343,7 @@ export function createTrainingService(deps: {
   }
 
   async function prepareStart(input: {
-    modelId?: string | null;
+    modelId: string;
     tasksetId: string;
     destinationId: TrainingDestinationId;
     recipe: unknown;
@@ -884,115 +894,4 @@ export function createTrainingService(deps: {
     close,
   };
 
-  async function updateModelCreateImproveRelease(input: {
-    modelId: string;
-    jobId: string;
-    artifactId: string;
-    status: "released" | "rejected" | "rolled_back";
-    receiptId: string;
-    timestamp: string;
-    reason: string | null;
-  }): Promise<void> {
-    const runs = await deps.store.listCreateImproveRuns({
-      targetKind: "model",
-      limit: 500,
-    });
-    for (const run of runs) {
-      if (
-        run.target.kind !== "model" ||
-        (
-          run.target.trainingJobId !== input.jobId &&
-          run.target.artifactId !== input.artifactId
-        )
-      ) {
-        continue;
-      }
-      const candidate = run.candidates.find((item) =>
-        item.target.kind === "model" &&
-        (
-          item.target.trainingJobId === input.jobId ||
-          item.artifactRefs.includes(input.artifactId)
-        ));
-      const candidates = candidate
-        ? run.candidates.map((item) =>
-            item.id === candidate.id
-              ? {
-                  ...item,
-                  status: input.status === "released"
-                    ? "accepted" as const
-                    : input.status === "rejected"
-                      ? "rejected" as const
-                      : item.status,
-                  updatedAt: input.timestamp,
-                }
-              : item)
-        : run.candidates;
-      let staged = run;
-      if (input.status === "released" && staged.state !== "released") {
-        if (staged.state === "ready") {
-          staged = nextCreateImproveRunRevision(staged, {
-            state: "awaiting_promotion",
-            updatedAt: input.timestamp,
-          });
-        }
-        if (staged.state === "awaiting_promotion") {
-          staged = nextCreateImproveRunRevision(staged, {
-            state: "reconciling_release",
-            updatedAt: input.timestamp,
-          });
-        }
-        if (staged.state !== "reconciling_release") {
-          throw new Error(`Model promotion cannot release a run from ${staged.state}.`);
-        }
-        staged = nextCreateImproveRunRevision(staged, {
-          state: "released",
-          updatedAt: input.timestamp,
-        });
-      } else if (input.status === "rejected" && staged.state !== "rejected") {
-        if (staged.state === "ready") {
-          staged = nextCreateImproveRunRevision(staged, {
-            state: "awaiting_promotion",
-            updatedAt: input.timestamp,
-          });
-        }
-        if (staged.state !== "awaiting_promotion") {
-          throw new Error(`Model rejection cannot complete a run from ${staged.state}.`);
-        }
-        staged = nextCreateImproveRunRevision(staged, {
-          state: "rejected",
-          updatedAt: input.timestamp,
-        });
-      } else if (input.status === "rolled_back" && staged.state === "released") {
-        staged = nextCreateImproveRunRevision(staged, {
-          state: "ready",
-          updatedAt: input.timestamp,
-        });
-      }
-      await deps.store.upsertCreateImproveRun(nextCreateImproveRunRevision(staged, {
-        state: staged.state,
-        candidates,
-        releaseOutcome: {
-          ...run.releaseOutcome,
-          status: input.status,
-          releaseReceiptRef: input.receiptId,
-          updatedAt: input.timestamp,
-        },
-        externalExecutionRefs: [
-          ...run.externalExecutionRefs.filter((ref) =>
-            !(ref.kind === "release" && ref.id === input.receiptId)),
-          {
-            kind: "release",
-            id: input.receiptId,
-            status: input.status,
-            metadata: {
-              modelId: input.modelId,
-              artifactId: input.artifactId,
-            },
-          },
-        ],
-        blockedReason: input.status === "rejected" ? input.reason : null,
-        updatedAt: input.timestamp,
-      }));
-    }
-  }
 }

@@ -3,6 +3,8 @@ import {
   TASK_AUTHORING_MAX_DISCLOSED_EVIDENCE_TOKENS,
   type ChatProvider,
   type CodexReasoningEffort,
+  type DatasetBuildIntent,
+  type DatasetBuildSpecification,
   type ProviderSettings,
   type TrainingChatSearchEntry,
 } from "@openpond/contracts";
@@ -20,6 +22,10 @@ import {
   type TrainingSourceEstimate,
 } from "./TrainingChatPicker";
 import type { AgentSourceMode, NewModelMode } from "./TrainingStartModeStep";
+import {
+  buildSpecificationReady,
+  TrainingEvidenceEditor,
+} from "./TrainingEvidenceEditor";
 
 type AuthoringSourceMode = NewModelMode | AgentSourceMode;
 
@@ -29,11 +35,14 @@ export function TrainingSourceStep({
   authoringReasoningEffort,
   busy,
   disclosurePending,
+  buildIntent,
+  buildSpecification,
   estimatesBySessionId,
   matchingSessionCount,
   mode,
   objective,
   onObjectiveChange,
+  onBuildSpecificationChange,
   onAnalyze,
   onApproveDisclosure,
   onAuthoringModelChange,
@@ -67,11 +76,14 @@ export function TrainingSourceStep({
   authoringReasoningEffort: CodexReasoningEffort;
   busy: boolean;
   disclosurePending: boolean;
+  buildIntent: DatasetBuildIntent | null;
+  buildSpecification: DatasetBuildSpecification | null;
   estimatesBySessionId: Record<string, TrainingSourceEstimate>;
   matchingSessionCount: number;
   mode: AuthoringSourceMode;
   objective: string;
   onObjectiveChange: (value: string) => void;
+  onBuildSpecificationChange: (value: DatasetBuildSpecification) => void;
   onAnalyze: () => void;
   onApproveDisclosure: () => void;
   onAuthoringModelChange: (value: string) => void;
@@ -108,7 +120,7 @@ export function TrainingSourceStep({
   const fromChats = mode === "from_chats";
   const showsObjective = mode === "manual" || fromPrompt || fromChats;
   const showsChats = !fromPrompt;
-  const canAnalyze = fromChats
+  const sourceReady = fromChats
     ? Boolean(objective.trim()) && selectedCount > 0
     : mode === "manual" || fromPrompt
       ? Boolean(objective.trim())
@@ -128,6 +140,22 @@ export function TrainingSourceStep({
   const authoringModelLabel = displayedModelOptions.find((option) => option.value === authoringModel)?.label ?? authoringModel;
   const authoringProviderLabel = providerOptions.find((option) => option.value === authoringProvider)?.label ?? authoringProvider;
   const authorsDataset = isModel || isDataset;
+  const structuredEvidenceReady = !authorsDataset
+    || buildIntent === "discovery"
+    || (
+      buildSpecificationReady(buildSpecification)
+      && (
+        buildSpecification?.kind !== "demonstrations"
+        || buildSpecification.examples.length > 0
+        || selectedCount > 0
+      )
+      && (
+        buildSpecification?.kind !== "preferences"
+        || buildSpecification.pairs.length > 0
+        || selectedCount > 0
+      )
+    );
+  const canAnalyze = sourceReady && structuredEvidenceReady;
   const sourceHeading = disclosurePending && isAgent
     ? "Review chats for the Agent plan"
     : isDataset
@@ -183,6 +211,14 @@ export function TrainingSourceStep({
           </label>
         ) : objective ? (
           <div className="training-evidence-objective"><span>{objectiveLabel}</span><strong>{objective}</strong></div>
+        ) : null}
+
+        {authorsDataset && buildSpecification ? (
+          <TrainingEvidenceEditor
+            disabled={busy || disclosurePending}
+            specification={buildSpecification}
+            onChange={onBuildSpecificationChange}
+          />
         ) : null}
 
         <fieldset className="training-evidence-fields" disabled={busy || disclosurePending}>

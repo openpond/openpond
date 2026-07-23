@@ -24,9 +24,16 @@ export function validateTrainingCompatibility(input: {
     path: "taskset.capabilities.compatibleMethods",
     message: `Taskset does not declare ${input.plan.recipe.method} compatibility or a staged ${input.plan.recipe.method} bootstrap.`,
   });
-  const executableRecipe = input.plan.recipe.method === "sft" || input.plan.recipe.method === "grpo";
+  const executableRecipe = input.plan.recipe.method === "sft"
+    || input.plan.recipe.method === "dpo"
+    || input.plan.recipe.method === "grpo"
+    || input.plan.recipe.method === "ppo";
   const baseModelId = input.plan.recipe.method === "sft"
     ? input.plan.recipe.baseModel.id
+    : input.plan.recipe.method === "dpo"
+      ? input.plan.recipe.policyModel.id
+    : input.plan.recipe.method === "ppo"
+      ? input.plan.recipe.policyOptimization.policyModel.id
     : input.plan.recipe.method === "grpo"
       ? input.plan.recipe.baseModel.id
       : "";
@@ -55,6 +62,113 @@ export function validateTrainingCompatibility(input: {
       recipe.dataset.trainSplit
     ] ?? trainTasks.length;
     if (trainCount < 8) issues.push({ code: "training_dataset_small", severity: "warning", path: "taskset.tasks", message: `${trainCount} training example${trainCount === 1 ? " is" : "s are"} sufficient for a pipeline test, not evidence of useful model quality.` });
+  }
+  if (recipe.method === "dpo") {
+    const pairs = input.taskset.learningSignals.preferences.filter((signal) =>
+      signal.approved);
+    if (!pairs.length) {
+      issues.push({
+        code: "dpo_preferences_missing",
+        severity: "error",
+        path: "taskset.learningSignals.preferences",
+        message: "DPO requires at least one approved chosen/rejected pair.",
+      });
+    }
+    if (pairs.some((pair) => pair.chosen.trim() === pair.rejected.trim())) {
+      issues.push({
+        code: "dpo_preferences_invalid",
+        severity: "error",
+        path: "taskset.learningSignals.preferences",
+        message: "DPO chosen and rejected responses must differ.",
+      });
+    }
+    if (recipe.policyModel.tokenizerRevision !== recipe.referenceModel.tokenizerRevision
+      || recipe.policyModel.chatTemplateHash !== recipe.referenceModel.chatTemplateHash) {
+      issues.push({
+        code: "dpo_reference_template_mismatch",
+        severity: "error",
+        path: "recipe.referenceModel",
+        message: "DPO policy and reference models must use the same tokenizer revision and chat template.",
+      });
+    }
+    if (!input.taskset.tasks.some((task) => task.split === recipe.dataset.validationSplit)) {
+      issues.push({
+        code: "dpo_frozen_eval_missing",
+        severity: "error",
+        path: "taskset.tasks",
+        message: "DPO requires an independent frozen evaluation split.",
+      });
+    }
+    if (input.plan.destinationId !== "local_cpu_fixture") {
+      issues.push({
+        code: "dpo_destination_unproven",
+        severity: "error",
+        path: "destinationId",
+        message: "The executable DPO contract is currently proven only on the local CPU correctness destination.",
+      });
+    }
+  }
+  if (recipe.method === "ppo") {
+    const rewardReady = input.taskset.learningSignals.rewards.some((signal) =>
+      signal.approved && signal.executable);
+    if (!rewardReady) {
+      issues.push({
+        code: "ppo_executable_reward_missing",
+        severity: "error",
+        path: "taskset.learningSignals.rewards",
+        message: "PPO requires an approved executable verifier reward.",
+      });
+    }
+    if (!input.taskset.capabilities.rewardKinds.some((kind) =>
+      kind === "exact" || kind === "deterministic")) {
+      issues.push({
+        code: "ppo_reward_kind_unsupported",
+        severity: "error",
+        path: "taskset.capabilities.rewardKinds",
+        message: "The controlled PPO executor accepts only exact or deterministic verifier rewards.",
+      });
+    }
+    if (!input.taskset.tasks.some((task) => task.split === "frozen_eval")) {
+      issues.push({
+        code: "ppo_frozen_eval_missing",
+        severity: "error",
+        path: "taskset.tasks",
+        message: "PPO requires an independent frozen evaluation split.",
+      });
+    }
+    if (recipe.policyOptimization.optimizer.valueModel.id.trim() === "") {
+      issues.push({
+        code: "ppo_value_model_missing",
+        severity: "error",
+        path: "recipe.policyOptimization.optimizer.valueModel",
+        message: "PPO requires a pinned value-model identity.",
+      });
+    }
+    if (recipe.policyOptimization.optimizer.minibatchSize
+      > recipe.policyOptimization.budgets.maxRollouts) {
+      issues.push({
+        code: "ppo_minibatch_exceeds_rollouts",
+        severity: "error",
+        path: "recipe.policyOptimization.optimizer.minibatchSize",
+        message: "PPO minibatch size cannot exceed the bounded rollout count.",
+      });
+    }
+    if (input.plan.destinationId !== "local_cpu_fixture") {
+      issues.push({
+        code: "ppo_destination_unproven",
+        severity: "error",
+        path: "destinationId",
+        message: "The verifier-backed PPO correctness executor is currently proven only on the local CPU destination.",
+      });
+    }
+    if (input.plan.environmentPlacement !== "local") {
+      issues.push({
+        code: "ppo_environment_placement",
+        severity: "error",
+        path: "environmentPlacement",
+        message: "The controlled PPO executor requires a local verifier environment.",
+      });
+    }
   }
   if (recipe.method === "grpo") {
     const trainTasks = input.taskset.tasks.filter((task) => task.split === recipe.dataset.trainSplit);

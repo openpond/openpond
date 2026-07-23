@@ -287,6 +287,20 @@ export function createFireworksRftEnvironment(input: {
         correlationId: `fireworks:${init.metadata.experiment_id}:${init.metadata.rollout_id}`,
         provider: "fireworks",
         providerTrace: providerTrace(init),
+        optimizerMethod: "grpo",
+        evidenceLevels: {
+          requested: "trajectory",
+          observed: "trajectory",
+          providerReported: "provider_reported",
+        },
+        budgetUsage: {
+          rollouts: 0,
+          environmentExecutions: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          optimizerSteps: 0,
+          costUsd: 0,
+        },
         environment: {
           id: recipe.reward.environmentId,
           version: recipe.reward.environmentVersion,
@@ -420,6 +434,11 @@ export function createFireworksRftEnvironment(input: {
         reward: outcome.reward,
         trajectory: outcome.trajectory,
         verifier: outcome.verifier,
+        budgetUsage: {
+          ...receipt.budgetUsage,
+          rollouts: 1,
+          environmentExecutions: 1,
+        },
         providerStatus: { code: Status.rolloutFinished().code },
         completedAt: completed,
         updatedAt: completed,

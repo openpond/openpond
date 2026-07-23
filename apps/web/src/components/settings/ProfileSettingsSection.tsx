@@ -163,7 +163,7 @@ export function ProfileSettingsSection({
   }
 
   return (
-    <section className="account-settings">
+    <section className="account-settings profile-settings">
       {profile?.mode === "local" ? (
         <>
           {showControls ? (
@@ -871,23 +871,36 @@ function ProfileSkillsSection({
         </div>
       </div>
       {skills.length ? (
-        <>
-          <div className="profile-skill-table-head" aria-hidden="true">
-            <span>Skill</span>
-            <span>Trigger</span>
-            <span>Status</span>
-            <span>Source</span>
-            <span>Actions</span>
-          </div>
-          {skills.map((skill) => (
-            <ProfileSkillRow
-              commandDisabled={commandDisabled}
-              key={skill.name}
-              onSkillCommand={runCommand}
-              skill={skill}
-            />
-          ))}
-        </>
+        <div className="profile-table-frame">
+          <table className="profile-data-table profile-skill-table" aria-label="Profile skills table">
+            <colgroup>
+              <col className="profile-skill-name-column" />
+              <col className="profile-skill-trigger-column" />
+              <col className="profile-skill-status-column" />
+              <col className="profile-skill-source-column" />
+              <col className="profile-skill-actions-column" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">Skill</th>
+                <th scope="col">Trigger</th>
+                <th scope="col">Status</th>
+                <th scope="col">Source</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {skills.map((skill) => (
+                <ProfileSkillRow
+                  commandDisabled={commandDisabled}
+                  key={skill.name}
+                  onSkillCommand={runCommand}
+                  skill={skill}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <div className="empty-account-list">
           <strong>No profile skills found</strong>
@@ -912,42 +925,48 @@ function ProfileSkillRow({
       ? { state: "ready", label: "valid" }
       : { state: "warning", label: skill.validationStatus };
   return (
-    <div className="product-row profile-skill-row">
-      <div className="profile-agent-identity">
-        <FileText size={18} />
-        <div>
-          <strong>{skill.name}</strong>
-          <span title={skill.path}>{skill.path}</span>
+    <tr className="profile-skill-row">
+      <td>
+        <div className="profile-agent-identity">
+          <FileText size={18} />
+          <div>
+            <strong>{skill.name}</strong>
+            <span title={skill.path}>{skill.path}</span>
+          </div>
         </div>
-      </div>
-      <div className="profile-skill-description" title={skill.description}>
+      </td>
+      <td className="profile-skill-description" title={skill.description}>
         {skill.description || "No description"}
-      </div>
-      <ProfileStatusText status={status} />
-      <div className="profile-agent-action">
-        <span title={skill.sourcePath}>{skill.sourcePath}</span>
-      </div>
-      <div className="profile-skill-actions">
-        <button
-          className="settings-secondary compact"
-          disabled={commandDisabled || !skill.enabled}
-          type="button"
-          title={`Use ${skill.name}`}
-          onClick={() => onSkillCommand(`$${skill.name} `)}
-        >
-          <span>Use</span>
-        </button>
-        <button
-          className="settings-secondary compact"
-          disabled={commandDisabled}
-          type="button"
-          title={`Edit ${skill.name}`}
-          onClick={() => onSkillCommand(`/skill edit ${skill.name} `)}
-        >
-          <span>Edit</span>
-        </button>
-      </div>
-    </div>
+      </td>
+      <td><ProfileStatusText status={status} /></td>
+      <td>
+        <div className="profile-agent-action">
+          <span title={skill.sourcePath}>{skill.sourcePath}</span>
+        </div>
+      </td>
+      <td>
+        <div className="profile-skill-actions">
+          <button
+            className="settings-secondary compact"
+            disabled={commandDisabled || !skill.enabled}
+            type="button"
+            title={`Use ${skill.name}`}
+            onClick={() => onSkillCommand(`$${skill.name} `)}
+          >
+            <span>Use</span>
+          </button>
+          <button
+            className="settings-secondary compact"
+            disabled={commandDisabled}
+            type="button"
+            title={`Edit ${skill.name}`}
+            onClick={() => onSkillCommand(`/skill edit ${skill.name} `)}
+          >
+            <span>Edit</span>
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 

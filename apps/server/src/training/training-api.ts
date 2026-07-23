@@ -5,9 +5,11 @@ import {
   ApproveDatasetImportMappingRequestSchema,
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
+  ModelBuildDraftSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
+  TaskCreationRequestSchema,
   TaskMinerConfigSchema,
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
@@ -83,6 +85,29 @@ export function createTrainingApi(deps: {
           ?? requestUrl?.searchParams.get("profileId")
           ?? "default",
       );
+    }
+    if (action === "save_model_build_draft") {
+      const draft = ModelBuildDraftSchema.parse(input);
+      const existing = await deps.store.getModelBuildDraft(draft.id);
+      if (existing && existing.profileId !== draft.profileId) {
+        throw new Error("Model build draft profile does not match the active Profile.");
+      }
+      if (existing && existing.modelId !== draft.modelId) {
+        throw new Error("A saved Model build draft cannot change Model identity.");
+      }
+      return deps.store.saveModelBuildDraft({
+        ...draft,
+        createdAt: existing?.createdAt ?? draft.createdAt,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    if (action === "delete_model_build_draft") {
+      const draft = await deps.store.getModelBuildDraft(
+        requiredString(input.draftId, "draftId"),
+      );
+      if (!draft) return { deleted: false };
+      await deps.store.deleteModelBuildDraft(draft.id);
+      return { deleted: true, draftId: draft.id };
     }
     if (action === "add_source") return deps.taskCreator.addSessionSource({ profileId: requiredString(input.profileId, "profileId"), sessionId: requiredString(input.sessionId, "sessionId"), turnIds: stringArray(input.turnIds), consentScope: input.consentScope === "selected_turns" ? "selected_turns" : "full_session" });
     if (action === "add_sources") {
@@ -170,6 +195,10 @@ export function createTrainingApi(deps: {
         mode: input.mode === "customize" ? "customize" : "defaults",
         entryMode: input.entryMode === "automated" ? "automated" : "manual",
         resourceIntent: input.resourceIntent === "dataset" ? "dataset" : "workproduct",
+        buildIntent: datasetBuildIntent(input.buildIntent),
+        buildSpecification: input.buildSpecification
+          ? TaskCreationRequestSchema.shape.buildSpecification.parse(input.buildSpecification)
+          : null,
         objective: string(input.objective),
         methodHint: trainingMethodHint(input.methodHint),
         preferredBaseModelId: preferredBaseModel?.modelId ?? null,
@@ -230,12 +259,12 @@ export function createTrainingApi(deps: {
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
-    if (action === "create_plan") return deps.training.createPlan({ modelId: string(input.modelId), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
     if (action === "build_bundle") return deps.training.buildBundle(requiredString(input.planId, "planId"));
     if (action === "approve_training") return deps.training.approve({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), approvedBy: string(input.approvedBy) ?? undefined, maximumCostUsd: nullableNumber(input.maximumCostUsd) });
     if (action === "launch") return deps.training.launch({ planId: requiredString(input.planId, "planId"), approvalId: requiredString(input.approvalId, "approvalId") });
     if (action === "prepare_start") return deps.training.prepareStart({
-      modelId: string(input.modelId),
+      modelId: requiredString(input.modelId, "modelId"),
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
       destinationId: TrainingDestinationIdSchema.parse(input.destinationId),
       recipe: input.recipe,
@@ -252,7 +281,7 @@ export function createTrainingApi(deps: {
       return linkStartedTraining(result);
     }
     if (action === "start") {
-      const result = await deps.training.start({ modelId: string(input.modelId), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+      const result = await deps.training.start({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
       return linkStartedTraining(result);
     }
     if (action === "import_artifact") return deps.training.importExternal({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), artifactDirectory: requiredString(input.artifactDirectory, "artifactDirectory") });
@@ -302,7 +331,7 @@ export function createTrainingApi(deps: {
     });
     const stableModelId = result.plan.modelId;
     const exactRun = linkedRuns.find((candidate) =>
-      (!stableModelId || candidate.target.id === stableModelId)
+      candidate.target.id === stableModelId
       &&
       candidate.tasksetRef?.id === taskset.id
       && candidate.tasksetRef.revision === taskset.revision
@@ -314,7 +343,7 @@ export function createTrainingApi(deps: {
       && candidate.externalExecutionRefs.length === 0
       && candidate.evaluationReceipts.length === 0) ?? null;
     const unexecutedPriorRun = linkedRuns.find((candidate) =>
-      (!stableModelId || candidate.target.id === stableModelId)
+      candidate.target.id === stableModelId
       &&
       candidate.tasksetRef?.id === taskset.id
       && candidate.target.kind === "model"
@@ -367,7 +396,7 @@ export function createTrainingApi(deps: {
   }
 
   async function state(profileId: string) {
-    const [sources, creations, tasksets, datasetImports, datasetArtifacts, candidates, minerConfig, minerRuns, frontierBaselineRuns, baselineRuns, execution] = await Promise.all([
+    const [sources, creations, tasksets, datasetImports, datasetArtifacts, candidates, minerConfig, minerRuns, frontierBaselineRuns, baselineRuns, modelBuildDrafts, execution] = await Promise.all([
       deps.store.listTrainingSources(profileId),
       deps.store.listTaskCreationSnapshots(profileId),
       deps.store.listTasksets(profileId),
@@ -378,12 +407,13 @@ export function createTrainingApi(deps: {
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listCrossSystemFrontierBaselineRuns(profileId),
       deps.store.listTasksetBaselineRuns({ profileId }),
+      deps.store.listModelBuildDrafts(profileId),
       deps.training.state(profileId),
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const baselineReports = (await Promise.all(tasksets.map((taskset) => deps.store.listBaselineReports(taskset.id)))).flat();
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
-    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, datasetImports, datasetArtifacts, baselineReports, baselineRuns, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, ...execution, generatedAt: new Date().toISOString() };
+    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, datasetImports, datasetArtifacts, baselineReports, baselineRuns, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, modelBuildDrafts, ...execution, generatedAt: new Date().toISOString() };
   }
 
   async function datasetCatalog(profileId: string) {
@@ -638,7 +668,17 @@ function baselineSampling(value: unknown): { maxOutputTokens?: number; temperatu
     ? sampling
     : undefined;
 }
-function trainingMethodHint(value: unknown): TaskCreationRequest["methodHint"] { return value === "sft" || value === "dpo" || value === "grpo" ? value : null; }
+function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
+  return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"
+    ? value
+    : "demonstrations";
+}
+
+function trainingMethodHint(value: unknown): TaskCreationRequest["methodHint"] {
+  return value === "sft" || value === "dpo" || value === "grpo" || value === "ppo"
+    ? value
+    : null;
+}
 function tasksetTargetIntent(value: unknown): TaskCreationRequest["targetIntent"] {
   const candidate = record(value);
   const kind = candidate.kind;

@@ -54,6 +54,7 @@ export function TrainingModelDetail({
   const modelLineage = state?.models
     .filter((model) => model.tasksetId === taskset.id && model.status === "imported")
     .sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0] ?? null;
+  const modelId = plan?.modelId ?? modelLineage?.modelId ?? null;
   const adapter = lineage ? state?.artifacts.find((artifact) => artifact.id === lineage.artifactId) ?? null : null;
   const detail = useTrainingRunDetail(connection, selectedJob?.id ?? null, selectedJob?.status ?? null);
   const method = tasksetMethod(taskset);
@@ -103,7 +104,7 @@ export function TrainingModelDetail({
             <TrainingModelComparisons taskset={taskset} state={state} />
           </DetailSection>
 
-          <DetailSection title="Training runs" actions={canStart ? <button className="training-button" type="button" disabled={!taskset.readiness?.ready || Boolean(training.busyAction)} onClick={() => setStartOpen(true)}>Start training</button> : null}>
+          <DetailSection title="Training runs" actions={canStart ? <button className="training-button" type="button" title={modelId ? undefined : "Create a Model from this Dataset before starting training."} disabled={!modelId || !taskset.readiness?.ready || Boolean(training.busyAction)} onClick={() => setStartOpen(true)}>Start training</button> : null}>
             {jobs.length ? <div className="training-table-wrap"><table className="training-data-table training-runs-table"><thead><tr><th>Run</th><th>Method</th><th>Compute</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody>{jobs.map((job) => {
               const jobPlan = planForJob(state, job);
               return <tr key={job.id} className={job.id === selectedJob?.id ? "selected" : ""} onClick={() => setSelectedJobId(job.id)}><td><button type="button" onClick={() => setSelectedJobId(job.id)}>{shortId(job.id)}</button></td><td>{trainingRunMethodLabel(taskset, jobPlan)}</td><td>{jobPlan ? destinationLabel(jobPlan.destinationId) : job.destinationId}</td><td>{formatDateTime(job.startedAt ?? job.createdAt)}</td><td>{formatDuration(job.startedAt, job.completedAt)}</td><td><span className={`training-run-status ${job.status}`}>{statusLabel(job.status)}</span></td></tr>;
@@ -159,7 +160,7 @@ export function TrainingModelDetail({
         </div>
       )}
 
-      {startOpen ? <TrainingStartDialog
+      {startOpen && modelId ? <TrainingStartDialog
         baseModelCandidates={state?.baseModelCandidates ?? []}
         connection={connection}
         taskset={currentTaskset}
@@ -177,6 +178,7 @@ export function TrainingModelDetail({
           await training.actions.baseline(currentTaskset.id, model, options),
         )}
         onPrepare={(destinationId, recipe, approval) => training.actions.prepareTraining({
+          modelId,
           tasksetId: taskset.id,
           destinationId,
           recipe,
@@ -191,7 +193,7 @@ export function TrainingModelDetail({
             maximumCostUsd,
           }),
         )}
-        onStart={async (destinationId: TrainingDestinationId, recipe, approval) => Boolean(await training.actions.startTraining({ tasksetId: taskset.id, destinationId, recipe, ...approval }))}
+        onStart={async (destinationId: TrainingDestinationId, recipe, approval) => Boolean(await training.actions.startTraining({ modelId, tasksetId: taskset.id, destinationId, recipe, ...approval }))}
       /> : null}
     </div>
   );

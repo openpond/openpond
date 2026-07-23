@@ -11,6 +11,7 @@ import type {
   ChatProvider,
   CodexReasoningEffort,
   CreateImproveRun,
+  DatasetBuildSpecification,
   LocalProject,
   ProviderSettings,
   Session,
@@ -31,11 +32,13 @@ import { TrainingAutomaticCandidatesStep } from "../training/TrainingAutomaticCa
 import { TrainingAutomaticScopeStep } from "../training/TrainingAutomaticScopeStep";
 import { TrainingBaseModelStep } from "../training/TrainingBaseModelStep";
 import { TrainingDatasetStep } from "../training/TrainingDatasetStep";
+import { emptyBuildSpecification } from "../training/TrainingEvidenceEditor";
 import { TrainingRunReviewStep } from "../training/TrainingRunReviewStep";
 import { TrainingSourceStep } from "../training/TrainingSourceStep";
 import {
   TrainingStartModeStep,
   type AgentSourceMode,
+  type DatasetEvidenceIntent,
   type NewModelMode,
   type NewModelSetup,
 } from "../training/TrainingStartModeStep";
@@ -128,7 +131,7 @@ export function CreateImproveAuthoringDialog({
     initialCreation
       ? initialCreationStep(initialCreation)
       : datasetBuildMode
-        ? "evidence"
+        ? "start"
         : usesBaseModelStep
           ? "existing_dataset"
           : "start",
@@ -139,14 +142,35 @@ export function CreateImproveAuthoringDialog({
         ? "from_chats"
         : "from_prompt";
     }
-    return initialCreation?.request.entryMode
-      ?? (datasetBuildMode ? "manual" : usesBaseModelStep ? "existing_dataset" : null);
+    return initialCreation
+      ? resourceIntent === "dataset" || targetIntent.kind === "model"
+        ? initialCreation.request.buildIntent
+        : initialCreation.request.entryMode
+      : usesBaseModelStep ? "existing_dataset" : null;
   });
+  const buildIntent: DatasetEvidenceIntent | null =
+    setup === "demonstrations"
+    || setup === "preferences"
+    || setup === "verifiable_reward"
+    || setup === "rubric"
+    || setup === "discovery"
+      ? setup
+      : null;
   const mode: NewModelMode | null =
-    setup === "automated" || setup === "manual" ? setup : null;
+    buildIntent === "discovery"
+      ? "automated"
+      : buildIntent
+        ? "manual"
+        : null;
   const agentSourceMode: AgentSourceMode | null =
     setup === "from_prompt" || setup === "from_chats" ? setup : null;
   const [objective, setObjective] = useState(initialCreation?.request.objective ?? initialObjective ?? "");
+  const [buildSpecification, setBuildSpecification] = useState<DatasetBuildSpecification | null>(
+    () => initialCreation?.request.buildSpecification
+      ?? (initialCreation?.request.buildIntent && initialCreation.request.buildIntent !== "discovery"
+        ? emptyBuildSpecification(initialCreation.request.buildIntent)
+        : null),
+  );
   const [preferredBaseModelKey, setPreferredBaseModelKey] = useState<string | null>(
     () => candidateForPreference(
       baseModelCandidates,
@@ -387,9 +411,28 @@ export function CreateImproveAuthoringDialog({
   function selectMode(nextMode: NewModelSetup) {
     if (nextMode !== setup && setup !== null) setEvidenceChanged(true);
     setSetup(nextMode);
+    if (
+      nextMode === "demonstrations"
+      || nextMode === "preferences"
+      || nextMode === "verifiable_reward"
+      || nextMode === "rubric"
+    ) {
+      setBuildSpecification((current) =>
+        current?.kind === nextMode ? current : emptyBuildSpecification(nextMode));
+    } else if (nextMode === "discovery") {
+      setBuildSpecification(null);
+    }
   }
 
   function continueFromStart() {
+    if (setup === "existing_dataset") {
+      setStep("existing_dataset");
+      return;
+    }
+    if (buildIntent === "discovery") {
+      setStep("automatic_scope");
+      return;
+    }
     if (usesBaseModelStep) {
       setStep("base_model");
       return;
@@ -525,6 +568,24 @@ export function CreateImproveAuthoringDialog({
     setSelectedSessionIds(new Set(sessionIds));
     setSelectedCandidateId(candidate.id);
     setObjective(candidate.title);
+    setSetup(candidate.recommendation.tactic === "grpo_rft"
+      || candidate.recommendation.tactic === "agentic_rl"
+      ? "verifiable_reward"
+      : candidate.recommendation.tactic === "preference"
+        ? "preferences"
+        : "demonstrations");
+    const resolvedIntent = candidate.recommendation.tactic === "grpo_rft"
+      || candidate.recommendation.tactic === "agentic_rl"
+      ? "verifiable_reward"
+      : candidate.recommendation.tactic === "preference"
+        ? "preferences"
+        : "demonstrations";
+    const candidateSpecification = emptyBuildSpecification(resolvedIntent);
+    setBuildSpecification(candidateSpecification.kind === "demonstrations"
+      ? { ...candidateSpecification, behavior: candidate.summary }
+      : candidateSpecification.kind === "preferences"
+        ? { ...candidateSpecification, preference: candidate.summary }
+        : { ...candidateSpecification, task: candidate.summary });
     setEvidenceChanged(true);
     setStep("evidence");
   }
@@ -561,6 +622,8 @@ export function CreateImproveAuthoringDialog({
         mode: "defaults",
         entryMode: mode ?? "manual",
         resourceIntent,
+        buildIntent: buildIntent ?? "demonstrations",
+        buildSpecification,
         objective: objective.trim() || undefined,
         methodHint: null,
         preferredBaseModel: usesBaseModelStep ? preferredBaseModel : null,
@@ -631,6 +694,7 @@ export function CreateImproveAuthoringDialog({
   }
 
   async function returnToDatasetSources() {
+    if (!confirmDiscardEvidence()) return;
     const activeCreation = creation;
     try {
       if (shouldCancelCreationOnDialogDismiss(activeCreation)) {
@@ -666,6 +730,7 @@ export function CreateImproveAuthoringDialog({
 
   async function closeDialog() {
     if (dialogDismissedRef.current) return;
+    if (!confirmDiscardEvidence()) return;
     dialogDismissedRef.current = true;
     searchRequestRef.current += 1;
     const activeCreation = creation;
@@ -676,6 +741,12 @@ export function CreateImproveAuthoringDialog({
     } finally {
       onClose();
     }
+  }
+
+  function confirmDiscardEvidence(): boolean {
+    if (!evidenceChanged || creation?.state === "ready") return true;
+    if (typeof window === "undefined") return true;
+    return window.confirm("Discard the unsaved Dataset evidence in this builder?");
   }
 
   async function openComputeSettings() {
@@ -783,11 +854,17 @@ export function CreateImproveAuthoringDialog({
             authoringReasoningEffort={authoringReasoningEffort}
             busy={busy}
             disclosurePending={creation?.state === "awaiting_disclosure_approval"}
+            buildIntent={buildIntent}
+            buildSpecification={buildSpecification}
             estimatesBySessionId={estimatesBySessionId}
             matchingSessionCount={searchTotal}
             mode={agentSourceMode ?? mode!}
             objective={objective}
             onObjectiveChange={changeObjective}
+            onBuildSpecificationChange={(next) => {
+              setBuildSpecification(next);
+              setEvidenceChanged(true);
+            }}
             onAnalyze={() => void analyze()}
             onApproveDisclosure={() => void approveDisclosure()}
             onAuthoringModelChange={changeAuthoringModel}

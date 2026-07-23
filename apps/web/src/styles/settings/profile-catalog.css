@@ -176,7 +176,7 @@
   font-size: 11px;
 }
 
-@container profile-view (max-width: 620px) {
+@container profile-view (max-width: 840px) {
   .profile-catalog-row {
     grid-template-columns: 1fr auto;
   }
@@ -184,5 +184,10 @@
   .profile-catalog-source,
   .profile-catalog-summary {
     display: none;
+  }
+
+  .profile-catalog-actions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
   }
 }

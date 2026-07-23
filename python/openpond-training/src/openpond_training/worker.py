@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from datasets import Dataset
 from transformers import TrainerCallback
-from trl import SFTConfig, SFTTrainer
+from trl import DPOConfig, DPOTrainer, SFTConfig, SFTTrainer
 
 from .artifacts import build_artifact_manifest, validate_artifact_manifest
 from .contracts import ContractError, load_bundle
@@ -27,8 +27,14 @@ from .events import EventWriter
 from .fixture_model import (
     lora_config,
 )
-from .model_runtime import load_base_model, reload_adapter, render_evaluation_prompt
+from .model_runtime import (
+    load_base_model,
+    recipe_base_model,
+    reload_adapter,
+    render_evaluation_prompt,
+)
 from .training_projection import build_training_projection
+from .ppo_worker import run_ppo_training
 
 
 class Cancelled(RuntimeError):
@@ -65,7 +71,19 @@ class TrainingTelemetryCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):  # type: ignore[no-untyped-def]
         values = logs or {}
-        if not any(key in values for key in ("loss", "grad_norm", "learning_rate", "entropy", "mean_token_accuracy")):
+        if not any(key in values for key in (
+            "loss",
+            "grad_norm",
+            "learning_rate",
+            "entropy",
+            "mean_token_accuracy",
+            "rewards/accuracies",
+            "rewards/margins",
+            "rewards/chosen",
+            "rewards/rejected",
+            "logps/chosen",
+            "logps/rejected",
+        )):
             return control
         payload = compact_numbers({
             "metricKind": "sft_step",
@@ -77,6 +95,12 @@ class TrainingTelemetryCallback(TrainerCallback):
             "gradientNorm": values.get("grad_norm"),
             "entropy": values.get("entropy"),
             "meanTokenAccuracy": values.get("mean_token_accuracy"),
+            "preferenceAccuracy": values.get("rewards/accuracies"),
+            "preferenceMargin": values.get("rewards/margins"),
+            "chosenReward": values.get("rewards/chosen"),
+            "rejectedReward": values.get("rewards/rejected"),
+            "chosenLogProbability": values.get("logps/chosen"),
+            "rejectedLogProbability": values.get("logps/rejected"),
             "inputTokensSeen": values.get("num_tokens", values.get("num_input_tokens_seen")),
             "memoryBytes": current_max_rss_bytes(),
             "elapsedSeconds": time.monotonic() - self.started_at,
@@ -94,8 +118,11 @@ def run(args: argparse.Namespace) -> int:
     output_directory.mkdir(parents=True, exist_ok=True)
     writer = EventWriter(args.job_id, sys.stdout, output_directory / "events.jsonl")
     cancellation: CancellationCallback | None = None
+    ppo_cancelled = False
 
     def request_cancel(_signum: int, _frame: Any) -> None:
+        nonlocal ppo_cancelled
+        ppo_cancelled = True
         if cancellation is not None:
             cancellation.cancelled = True
 
@@ -107,6 +134,18 @@ def run(args: argparse.Namespace) -> int:
         manifest, recipe, records = load_bundle(bundle_directory)
         if os.environ.get("OPENPOND_TRAINING_INJECT_FAILURE") == "1":
             raise RuntimeError("Injected worker failure.")
+        if recipe["method"] == "ppo":
+            return run_ppo_training(
+                args=args,
+                manifest=manifest,
+                recipe=recipe,
+                records=records,
+                writer=writer,
+                temporary_directory=temporary_directory,
+                cancelled=lambda: ppo_cancelled
+                    or bool(args.cancel_file and Path(args.cancel_file).exists()),
+                run_frozen_evaluation=run_frozen_evaluation,
+            )
         optimizer = recipe["optimizer"]
         limits = recipe["resourceLimits"]
         cancellation = CancellationCallback(Path(args.cancel_file).resolve() if args.cancel_file else None, writer, int(limits["wallTimeMs"]), int(limits["memoryBytes"]))
@@ -117,56 +156,101 @@ def run(args: argparse.Namespace) -> int:
         torch.set_num_threads(max(1, min(int(limits["cpuThreads"]), os.cpu_count() or 1)))
         model_path = getattr(args, "model_path", None)
         model, tokenizer, template_hash = load_base_model(recipe, records, seed, model_path)
-        expected_hash = recipe["baseModel"]["chatTemplateHash"]
+        base_model = recipe_base_model(recipe)
+        expected_hash = base_model["chatTemplateHash"]
         if expected_hash not in {template_hash, "fixture00000000"}:
             raise ContractError(f"Chat template hash mismatch: expected {expected_hash}, constructed {template_hash}.")
-        max_sequence_length = int(recipe["dataset"]["maxSequenceLength"])
-        completion_only = bool(recipe["dataset"]["completionOnly"])
-        projection = build_training_projection(
-            records,
-            tokenizer,
-            completion_only=completion_only,
-            max_length=max_sequence_length,
-        )
-        dataset = Dataset.from_list(projection.rows)
-        if projection.sample_input_ids is not None:
-            sample_input_ids = torch.tensor([projection.sample_input_ids], dtype=torch.long)
-            sample = {"input_ids": sample_input_ids, "attention_mask": torch.ones_like(sample_input_ids)}
+        is_dpo = recipe["method"] == "dpo"
+        projection = None
+        if is_dpo:
+            max_sequence_length = int(recipe["dataset"]["maxPromptTokens"]) + int(
+                recipe["dataset"]["maxCompletionTokens"]
+            )
+            dataset = Dataset.from_list(records)
+            sample_text = f"{records[0]['prompt']}{records[0]['chosen']}"
+            sample = tokenizer(
+                sample_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_sequence_length,
+            )
         else:
-            sample = tokenizer(projection.rows[0]["text"], return_tensors="pt", truncation=True, max_length=max_sequence_length)
+            max_sequence_length = int(recipe["dataset"]["maxSequenceLength"])
+            completion_only = bool(recipe["dataset"]["completionOnly"])
+            projection = build_training_projection(
+                records,
+                tokenizer,
+                completion_only=completion_only,
+                max_length=max_sequence_length,
+            )
+            dataset = Dataset.from_list(projection.rows)
+            if projection.sample_input_ids is not None:
+                sample_input_ids = torch.tensor([projection.sample_input_ids], dtype=torch.long)
+                sample = {"input_ids": sample_input_ids, "attention_mask": torch.ones_like(sample_input_ids)}
+            else:
+                sample = tokenizer(projection.rows[0]["text"], return_tensors="pt", truncation=True, max_length=max_sequence_length)
         with torch.no_grad():
             before_logits = model(**sample).logits.detach().clone()
         if args.taskset:
             run_frozen_evaluation(taskset_path=Path(args.taskset).resolve(), model=model, tokenizer=tokenizer, output_path=output_directory / "base-frozen-eval-predictions.jsonl", seed=seed)
-        config = SFTConfig(
-            output_dir=str(temporary_directory / "trainer"),
-            max_steps=int(optimizer["maxSteps"]),
-            num_train_epochs=float(optimizer["epochs"]),
-            per_device_train_batch_size=int(optimizer["batchSize"]),
-            gradient_accumulation_steps=int(optimizer["gradientAccumulationSteps"]),
-            learning_rate=float(optimizer["learningRate"]),
-            logging_strategy="steps",
-            logging_steps=1,
-            logging_first_step=True,
-            save_strategy="no",
-            report_to="none",
-            disable_tqdm=True,
-            include_num_input_tokens_seen=True,
-            include_tokens_per_second=True,
-            use_cpu=True,
-            seed=seed,
-            dataset_text_field="text",
-            max_length=max_sequence_length,
-            completion_only_loss=completion_only,
-        )
-        trainer = SFTTrainer(
-            model=model,
-            args=config,
-            train_dataset=dataset,
-            processing_class=tokenizer,
-            peft_config=lora_config(recipe),
-            callbacks=[cancellation, TrainingTelemetryCallback(writer, output_directory / "step-metrics.jsonl")],
-        )
+        common_config = {
+            "output_dir": str(temporary_directory / "trainer"),
+            "max_steps": int(optimizer["maxSteps"]),
+            "num_train_epochs": float(optimizer["epochs"]),
+            "per_device_train_batch_size": int(optimizer["batchSize"]),
+            "gradient_accumulation_steps": int(optimizer["gradientAccumulationSteps"]),
+            "learning_rate": float(optimizer["learningRate"]),
+            "logging_strategy": "steps",
+            "logging_steps": 1,
+            "logging_first_step": True,
+            "save_strategy": "no",
+            "report_to": "none",
+            "disable_tqdm": True,
+            "include_num_input_tokens_seen": True,
+            "include_tokens_per_second": True,
+            "use_cpu": True,
+            "seed": seed,
+        }
+        callbacks = [
+            cancellation,
+            TrainingTelemetryCallback(writer, output_directory / "step-metrics.jsonl"),
+        ]
+        if is_dpo:
+            config = DPOConfig(
+                **common_config,
+                max_prompt_length=int(recipe["dataset"]["maxPromptTokens"]),
+                max_completion_length=int(recipe["dataset"]["maxCompletionTokens"]),
+                max_length=max_sequence_length,
+                beta=float(recipe["loss"]["beta"]),
+                loss_type=[str(recipe["loss"]["variant"])],
+                label_smoothing=float(recipe["loss"]["labelSmoothing"]),
+                precompute_ref_log_probs=True,
+                gradient_checkpointing=False,
+            )
+            trainer = DPOTrainer(
+                model=model,
+                ref_model=None,
+                args=config,
+                train_dataset=dataset,
+                processing_class=tokenizer,
+                peft_config=lora_config(recipe),
+                callbacks=callbacks,
+            )
+        else:
+            config = SFTConfig(
+                **common_config,
+                dataset_text_field="text",
+                max_length=max_sequence_length,
+                completion_only_loss=completion_only,
+            )
+            trainer = SFTTrainer(
+                model=model,
+                args=config,
+                train_dataset=dataset,
+                processing_class=tokenizer,
+                peft_config=lora_config(recipe),
+                callbacks=callbacks,
+            )
         with redirect_stdout(sys.stderr):
             result = trainer.train()
         if cancellation.resource_error:
@@ -177,10 +261,18 @@ def run(args: argparse.Namespace) -> int:
         trainer.model.save_pretrained(adapter_directory, safe_serialization=True)
         tokenizer.save_pretrained(output_directory / "tokenizer")
         reloaded, reloaded_tokenizer, reloaded_template_hash = reload_adapter(adapter_directory, recipe, records, seed, model_path)
-        if projection.sample_input_ids is not None:
+        if projection is not None and projection.sample_input_ids is not None:
             reload_input_ids = torch.tensor([projection.sample_input_ids], dtype=torch.long)
             reload_sample = {"input_ids": reload_input_ids, "attention_mask": torch.ones_like(reload_input_ids)}
+        elif is_dpo:
+            reload_sample = reloaded_tokenizer(
+                sample_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_sequence_length,
+            )
         else:
+            assert projection is not None
             reload_sample = reloaded_tokenizer(projection.rows[0]["text"], return_tensors="pt", truncation=True, max_length=max_sequence_length)
         with torch.no_grad():
             after_logits = reloaded(**reload_sample).logits.detach()
@@ -190,16 +282,31 @@ def run(args: argparse.Namespace) -> int:
         if not adapter_parameters or not adapter_nonzero or logit_delta <= 0:
             raise RuntimeError("LoRA smoke failed: adapter parameters or logits did not change.")
         metrics = {
+            "method": recipe["method"],
             "trainLoss": float(result.training_loss),
             "steps": int(result.global_step),
             "logitDelta": logit_delta,
             "adapterParameterCount": sum(parameter.numel() for parameter in adapter_parameters),
-            "trainingExampleCount": len(projection.rows),
-            "completionOnly": projection.completion_only,
-            "assistantTargetCount": projection.assistant_target_count,
-            "contextTruncatedExampleCount": projection.context_truncated_example_count,
-            "contextTokensDropped": projection.context_tokens_dropped,
+            "trainingExampleCount": len(dataset),
+            "completionOnly": projection.completion_only if projection else False,
+            "assistantTargetCount": projection.assistant_target_count if projection else 0,
+            "contextTruncatedExampleCount": projection.context_truncated_example_count if projection else 0,
+            "contextTokensDropped": projection.context_tokens_dropped if projection else 0,
         }
+        if is_dpo:
+            cache_rows = []
+            for row in trainer.train_dataset:
+                cache_rows.append({
+                    "id": row.get("id"),
+                    "referenceChosenLogProbability": row.get("ref_chosen_logps"),
+                    "referenceRejectedLogProbability": row.get("ref_rejected_logps"),
+                    "cacheKey": recipe["referenceLogprobs"]["cacheKey"],
+                    "invalidationHash": recipe["referenceLogprobs"]["invalidationHash"],
+                })
+            (output_directory / "reference-logprobs.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in cache_rows),
+                encoding="utf-8",
+            )
         (output_directory / "metrics.json").write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         writer.emit("metric", {"metricKind": "run_summary", **metrics})
         if args.taskset:
@@ -211,7 +318,7 @@ def run(args: argparse.Namespace) -> int:
                 seed=seed,
             )
         tokenizer_hash = hashlib.sha256(reloaded_tokenizer.backend_tokenizer.to_str().encode("utf-8")).hexdigest()
-        artifact_manifest = build_artifact_manifest(job_id=args.job_id, output_directory=output_directory, base_model_id=recipe["baseModel"]["id"], base_revision=recipe["baseModel"]["revision"], tokenizer_revision=recipe["baseModel"]["tokenizerRevision"], tokenizer_hash=tokenizer_hash, chat_template_hash=reloaded_template_hash, metadata={"bundleHash": manifest["contentHash"], "recipeHash": manifest["recipeHash"], "seed": seed, "reloadVerified": True, "baseAndAdapterEvaluation": bool(args.taskset), **metrics})
+        artifact_manifest = build_artifact_manifest(job_id=args.job_id, output_directory=output_directory, base_model_id=base_model["id"], base_revision=base_model["revision"], tokenizer_revision=base_model["tokenizerRevision"], tokenizer_hash=tokenizer_hash, chat_template_hash=reloaded_template_hash, metadata={"bundleHash": manifest["contentHash"], "recipeHash": manifest["recipeHash"], "seed": seed, "reloadVerified": True, "baseAndAdapterEvaluation": bool(args.taskset), "referenceLogprobCacheKey": recipe.get("referenceLogprobs", {}).get("cacheKey"), **metrics})
         writer.emit("complete", {"artifactManifest": str(output_directory / "artifact-manifest.json"), "artifactCount": len(artifact_manifest["artifacts"]), "nonProduction": True})
         return 0
     except Cancelled as error:
@@ -253,6 +360,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--cancel-file")
     result.add_argument("--taskset")
     result.add_argument("--model-path")
+    result.add_argument("--checkpoint-path")
     return result
 
 
@@ -265,7 +373,7 @@ def evaluate(args: argparse.Namespace) -> int:
     try:
         bundle_manifest, recipe, records = load_bundle(bundle_directory)
         artifact_manifest = validate_artifact_manifest(output_directory)
-        expected = recipe["baseModel"]
+        expected = recipe_base_model(recipe)
         actual = artifact_manifest.get("baseModel", {})
         if actual.get("id") != expected["id"] or actual.get("revision") != expected["revision"]:
             raise ContractError("Imported adapter base model does not match the Training Plan.")
@@ -282,7 +390,7 @@ def evaluate(args: argparse.Namespace) -> int:
         run_frozen_evaluation(taskset_path=Path(args.taskset).resolve(), model=model, tokenizer=tokenizer, output_path=output_directory / "frozen-eval-predictions.jsonl", seed=seed)
         writer.emit("metric", {"reloadVerified": True, "frozenEvaluationExecuted": True})
         tokenizer_hash = hashlib.sha256(tokenizer.backend_tokenizer.to_str().encode("utf-8")).hexdigest()
-        rebuilt = build_artifact_manifest(job_id=args.job_id, output_directory=output_directory, base_model_id=recipe["baseModel"]["id"], base_revision=recipe["baseModel"]["revision"], tokenizer_revision=recipe["baseModel"]["tokenizerRevision"], tokenizer_hash=tokenizer_hash, chat_template_hash=template_hash, metadata={"bundleHash": bundle_manifest["contentHash"], "recipeHash": bundle_manifest["recipeHash"], "seed": seed, "reloadVerified": True, "manualImport": True})
+        rebuilt = build_artifact_manifest(job_id=args.job_id, output_directory=output_directory, base_model_id=expected["id"], base_revision=expected["revision"], tokenizer_revision=expected["tokenizerRevision"], tokenizer_hash=tokenizer_hash, chat_template_hash=template_hash, metadata={"bundleHash": bundle_manifest["contentHash"], "recipeHash": bundle_manifest["recipeHash"], "seed": seed, "reloadVerified": True, "manualImport": True})
         writer.emit("complete", {"artifactManifest": str(output_directory / "artifact-manifest.json"), "artifactCount": len(rebuilt["artifacts"]), "nonProduction": True, "manualImport": True})
         return 0
     except Exception as error:

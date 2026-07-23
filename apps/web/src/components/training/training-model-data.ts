@@ -80,12 +80,16 @@ export function trainingRunMethodLabel(taskset: Taskset, plan: TrainingPlan | nu
 
 export function trainingMethodLabel(method: string | null | undefined): string {
   if (method === "grpo") return "RFT";
+  if (method === "dpo") return "DPO";
+  if (method === "ppo") return "PPO";
   if (method === "sft") return "SFT";
   return method?.toUpperCase() ?? "Review";
 }
 
 export function trainingMethodName(method: string | null | undefined): string {
   if (method === "grpo") return "Reinforcement";
+  if (method === "ppo") return "Reinforcement";
+  if (method === "dpo") return "Preference";
   if (method === "sft") return "Supervised";
   return "Training";
 }

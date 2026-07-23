@@ -5,3 +5,4 @@ export * from "./custom-adapter.js";
 export * from "./managed-client.js";
 export * from "./destination.js";
 export * from "./plan.js";
+export * from "./policy-comparison.js";

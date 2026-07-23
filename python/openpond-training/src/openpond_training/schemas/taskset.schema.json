@@ -11,10 +11,29 @@
       "minLength": 1,
       "maxLength": 240
     },
+    "revision": {
+      "default": 1,
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
     "profileId": {
       "type": "string",
       "minLength": 1,
       "maxLength": 240
+    },
+    "createImproveRunId": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "name": {
       "type": "string",
@@ -47,89 +66,40 @@
       "maxItems": 100000,
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "schemaVersion": {
-            "type": "string",
-            "const": "openpond.trainingSource.v1"
-          },
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 240
-          },
-          "profileId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 240
-          },
-          "sessionId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 240
-          },
-          "turnIds": {
-            "default": [],
-            "maxItems": 1000,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 240
-            }
-          },
-          "workspaceId": {
-            "anyOf": [
-              {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "string",
+                "const": "openpond.trainingSource.v1"
+              },
+              "id": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 240
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "sourceHash": {
-            "type": "string",
-            "minLength": 8,
-            "maxLength": 256
-          },
-          "clusterKey": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 240
-          },
-          "title": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 500
-          },
-          "occurredAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "consent": {
-            "type": "object",
-            "properties": {
-              "status": {
+              "profileId": {
                 "type": "string",
-                "enum": [
-                  "pending",
-                  "granted",
-                  "denied",
-                  "revoked"
-                ]
+                "minLength": 1,
+                "maxLength": 240
               },
-              "scope": {
+              "sessionId": {
                 "type": "string",
-                "enum": [
-                  "metadata_only",
-                  "selected_turns",
-                  "full_session"
-                ]
+                "minLength": 1,
+                "maxLength": 240
               },
-              "grantedBy": {
+              "turnIds": {
+                "default": [],
+                "maxItems": 1000,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240
+                }
+              },
+              "workspaceId": {
                 "anyOf": [
                   {
                     "type": "string",
@@ -141,96 +111,801 @@
                   }
                 ]
               },
-              "grantedAt": {
-                "anyOf": [
-                  {
+              "sourceHash": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 256
+              },
+              "clusterKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "occurredAt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "consent": {
+                "type": "object",
+                "properties": {
+                  "status": {
                     "type": "string",
-                    "minLength": 1
+                    "enum": [
+                      "pending",
+                      "granted",
+                      "denied",
+                      "revoked"
+                    ]
                   },
-                  {
-                    "type": "null"
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "metadata_only",
+                      "selected_turns",
+                      "full_session"
+                    ]
+                  },
+                  "grantedBy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "grantedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "const": "task_authoring_and_evaluation"
                   }
+                },
+                "required": [
+                  "status",
+                  "scope",
+                  "grantedBy",
+                  "grantedAt",
+                  "purpose"
+                ],
+                "additionalProperties": false
+              },
+              "connectedAppIds": {
+                "default": [],
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240
+                }
+              },
+              "secretScanStatus": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "passed",
+                  "blocked"
                 ]
               },
-              "purpose": {
+              "piiScanStatus": {
                 "type": "string",
-                "const": "task_authoring_and_evaluation"
+                "enum": [
+                  "pending",
+                  "passed",
+                  "review",
+                  "blocked"
+                ]
+              },
+              "licensingStatus": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "approved",
+                  "review",
+                  "blocked"
+                ]
+              },
+              "metadata": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
               }
             },
             "required": [
-              "status",
-              "scope",
-              "grantedBy",
-              "grantedAt",
-              "purpose"
+              "schemaVersion",
+              "id",
+              "profileId",
+              "sessionId",
+              "turnIds",
+              "workspaceId",
+              "sourceHash",
+              "clusterKey",
+              "title",
+              "occurredAt",
+              "consent",
+              "connectedAppIds",
+              "secretScanStatus",
+              "piiScanStatus",
+              "licensingStatus",
+              "metadata"
             ],
             "additionalProperties": false
           },
-          "connectedAppIds": {
-            "default": [],
-            "maxItems": 100,
-            "type": "array",
-            "items": {
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "profileId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "sourceHash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 256
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "licensingStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "approved",
+                      "review",
+                      "blocked"
+                    ]
+                  },
+                  "secretScanStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "blocked"
+                    ]
+                  },
+                  "piiScanStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "review",
+                      "blocked"
+                    ]
+                  },
+                  "metadata": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "schemaVersion": {
+                    "type": "string",
+                    "const": "openpond.huggingFaceDatasetSource.v1"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "huggingface"
+                  },
+                  "repositoryId": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "pattern": "^[^/\\s]+\\/[^/\\s]+$"
+                  },
+                  "repositoryUrl": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "format": "uri"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 7,
+                    "maxLength": 256
+                  },
+                  "configuration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "upstreamSplits": {
+                    "minItems": 1,
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "gated": {
+                    "type": "boolean"
+                  },
+                  "private": {
+                    "type": "boolean"
+                  },
+                  "declaredLicense": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceFileHashes": {
+                    "minItems": 1,
+                    "maxItems": 100000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 8,
+                      "maxLength": 256
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "profileId",
+                  "title",
+                  "sourceHash",
+                  "occurredAt",
+                  "licensingStatus",
+                  "secretScanStatus",
+                  "piiScanStatus",
+                  "metadata",
+                  "schemaVersion",
+                  "kind",
+                  "repositoryId",
+                  "repositoryUrl",
+                  "revision",
+                  "configuration",
+                  "upstreamSplits",
+                  "gated",
+                  "private",
+                  "declaredLicense",
+                  "sourceFileHashes"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "profileId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "sourceHash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 256
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "licensingStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "approved",
+                      "review",
+                      "blocked"
+                    ]
+                  },
+                  "secretScanStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "blocked"
+                    ]
+                  },
+                  "piiScanStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "review",
+                      "blocked"
+                    ]
+                  },
+                  "metadata": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "schemaVersion": {
+                    "type": "string",
+                    "const": "openpond.uploadedFileDatasetSource.v1"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "uploaded_file"
+                  },
+                  "originalFileNames": {
+                    "minItems": 1,
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "mediaTypes": {
+                    "minItems": 1,
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "sourceFileHashes": {
+                    "minItems": 1,
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 8,
+                      "maxLength": 256
+                    }
+                  },
+                  "totalBytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "parserVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "id",
+                  "profileId",
+                  "title",
+                  "sourceHash",
+                  "occurredAt",
+                  "licensingStatus",
+                  "secretScanStatus",
+                  "piiScanStatus",
+                  "metadata",
+                  "schemaVersion",
+                  "kind",
+                  "originalFileNames",
+                  "mediaTypes",
+                  "sourceFileHashes",
+                  "totalBytes",
+                  "parserVersion"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "profileId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "sourceHash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 256
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "licensingStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "approved",
+                      "review",
+                      "blocked"
+                    ]
+                  },
+                  "secretScanStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "blocked"
+                    ]
+                  },
+                  "piiScanStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "review",
+                      "blocked"
+                    ]
+                  },
+                  "metadata": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "schemaVersion": {
+                    "type": "string",
+                    "const": "openpond.generatedDatasetSource.v1"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "generated"
+                  },
+                  "generatorId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "generatorVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "generatorHash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "id",
+                  "profileId",
+                  "title",
+                  "sourceHash",
+                  "occurredAt",
+                  "licensingStatus",
+                  "secretScanStatus",
+                  "piiScanStatus",
+                  "metadata",
+                  "schemaVersion",
+                  "kind",
+                  "generatorId",
+                  "generatorVersion",
+                  "seed",
+                  "generatorHash"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "datasetArtifact": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "string",
+              "const": "openpond.datasetArtifact.v1"
+            },
+            "id": {
               "type": "string",
               "minLength": 1,
               "maxLength": 240
+            },
+            "tasksetId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
+            "tasksetRevision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "contentHash": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 256
+            },
+            "format": {
+              "type": "string",
+              "const": "parquet"
+            },
+            "schema": {
+              "type": "object",
+              "properties": {
+                "schemaVersion": {
+                  "type": "string",
+                  "const": "openpond.datasetSemanticSchema.v1"
+                },
+                "fields": {
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "semanticRole": {
+                        "type": "string",
+                        "enum": [
+                          "row_id",
+                          "cluster_id",
+                          "prompt",
+                          "messages",
+                          "demonstration",
+                          "chosen",
+                          "rejected",
+                          "expected_output",
+                          "privileged_context",
+                          "reward",
+                          "feedback",
+                          "tag",
+                          "metadata"
+                        ]
+                      },
+                      "logicalType": {
+                        "type": "string",
+                        "enum": [
+                          "string",
+                          "integer",
+                          "float",
+                          "boolean",
+                          "json",
+                          "messages"
+                        ]
+                      },
+                      "nullable": {
+                        "type": "boolean"
+                      },
+                      "policy": {
+                        "type": "string",
+                        "enum": [
+                          "visible",
+                          "privileged",
+                          "metadata"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "semanticRole",
+                      "logicalType",
+                      "nullable",
+                      "policy"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "schemaHash": {
+                  "type": "string",
+                  "minLength": 8,
+                  "maxLength": 256
+                }
+              },
+              "required": [
+                "schemaVersion",
+                "fields",
+                "schemaHash"
+              ],
+              "additionalProperties": false
+            },
+            "shards": {
+              "minItems": 1,
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "split": {
+                    "type": "string",
+                    "enum": [
+                      "train",
+                      "validation",
+                      "test",
+                      "frozen_eval"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "contentHash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 256
+                  },
+                  "schemaHash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 256
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "rowCount": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "rowGroupCount": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "split",
+                  "path",
+                  "contentHash",
+                  "schemaHash",
+                  "sizeBytes",
+                  "rowCount",
+                  "rowGroupCount"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "rowCount": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "splitCounts": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "enum": [
+                  "train",
+                  "validation",
+                  "test",
+                  "frozen_eval"
+                ]
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "required": [
+                "train",
+                "validation",
+                "test",
+                "frozen_eval"
+              ]
+            },
+            "sourceReceiptRefs": {
+              "minItems": 1,
+              "maxItems": 100000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              }
+            },
+            "mappingHash": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 256
+            },
+            "qualityReportHash": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 256
+            },
+            "createdAt": {
+              "type": "string",
+              "minLength": 1
             }
           },
-          "secretScanStatus": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "passed",
-              "blocked"
-            ]
-          },
-          "piiScanStatus": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "passed",
-              "review",
-              "blocked"
-            ]
-          },
-          "licensingStatus": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "approved",
-              "review",
-              "blocked"
-            ]
-          },
-          "metadata": {
-            "default": {},
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          }
+          "required": [
+            "schemaVersion",
+            "id",
+            "tasksetId",
+            "tasksetRevision",
+            "contentHash",
+            "format",
+            "schema",
+            "shards",
+            "rowCount",
+            "splitCounts",
+            "sourceReceiptRefs",
+            "mappingHash",
+            "qualityReportHash",
+            "createdAt"
+          ],
+          "additionalProperties": false
         },
-        "required": [
-          "schemaVersion",
-          "id",
-          "profileId",
-          "sessionId",
-          "turnIds",
-          "workspaceId",
-          "sourceHash",
-          "clusterKey",
-          "title",
-          "occurredAt",
-          "consent",
-          "connectedAppIds",
-          "secretScanStatus",
-          "piiScanStatus",
-          "licensingStatus",
-          "metadata"
-        ],
-        "additionalProperties": false
-      }
+        {
+          "type": "null"
+        }
+      ]
     },
     "policy": {
       "type": "object",
@@ -411,6 +1086,7 @@
               "sft",
               "dpo",
               "grpo",
+              "ppo",
               "sdft",
               "opd",
               "opsd",
@@ -481,7 +1157,6 @@
       "additionalProperties": false
     },
     "tasks": {
-      "minItems": 1,
       "maxItems": 1000000,
       "type": "array",
       "items": {
@@ -741,6 +1416,7 @@
                     "enum": [
                       "openpond",
                       "codex",
+                      "local-adapter",
                       "anthropic",
                       "openai",
                       "xai",
@@ -1062,17 +1738,6 @@
                 "minLength": 1,
                 "maxLength": 240
               },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "demonstration",
-                  "preference",
-                  "correction",
-                  "feedback",
-                  "reward",
-                  "label"
-                ]
-              },
               "taskId": {
                 "anyOf": [
                   {
@@ -1115,17 +1780,47 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "kind": {
+                "type": "string",
+                "const": "demonstration"
+              },
+              "prompt": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "response": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 200000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "id",
-              "kind",
               "taskId",
               "sourceRefs",
               "artifactRef",
               "approved",
               "confidence",
-              "metadata"
+              "metadata",
+              "kind",
+              "prompt",
+              "response"
             ],
             "additionalProperties": false
           }
@@ -1142,17 +1837,6 @@
                 "minLength": 1,
                 "maxLength": 240
               },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "demonstration",
-                  "preference",
-                  "correction",
-                  "feedback",
-                  "reward",
-                  "label"
-                ]
-              },
               "taskId": {
                 "anyOf": [
                   {
@@ -1195,17 +1879,49 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "kind": {
+                "type": "string",
+                "const": "preference"
+              },
+              "prompt": {
+                "type": "string",
+                "maxLength": 100000
+              },
+              "chosen": {
+                "type": "string",
+                "maxLength": 200000
+              },
+              "rejected": {
+                "type": "string",
+                "maxLength": 200000
+              },
+              "rationale": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "id",
-              "kind",
               "taskId",
               "sourceRefs",
               "artifactRef",
               "approved",
               "confidence",
-              "metadata"
+              "metadata",
+              "kind",
+              "prompt",
+              "chosen",
+              "rejected",
+              "rationale"
             ],
             "additionalProperties": false
           }
@@ -1222,17 +1938,6 @@
                 "minLength": 1,
                 "maxLength": 240
               },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "demonstration",
-                  "preference",
-                  "correction",
-                  "feedback",
-                  "reward",
-                  "label"
-                ]
-              },
               "taskId": {
                 "anyOf": [
                   {
@@ -1275,17 +1980,44 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "kind": {
+                "type": "string",
+                "const": "correction"
+              },
+              "original": {
+                "type": "string",
+                "maxLength": 200000
+              },
+              "corrected": {
+                "type": "string",
+                "maxLength": 200000
+              },
+              "rationale": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "id",
-              "kind",
               "taskId",
               "sourceRefs",
               "artifactRef",
               "approved",
               "confidence",
-              "metadata"
+              "metadata",
+              "kind",
+              "original",
+              "corrected",
+              "rationale"
             ],
             "additionalProperties": false
           }
@@ -1302,17 +2034,6 @@
                 "minLength": 1,
                 "maxLength": 240
               },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "demonstration",
-                  "preference",
-                  "correction",
-                  "feedback",
-                  "reward",
-                  "label"
-                ]
-              },
               "taskId": {
                 "anyOf": [
                   {
@@ -1355,17 +2076,36 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "kind": {
+                "type": "string",
+                "const": "feedback"
+              },
+              "feedback": {
+                "type": "string",
+                "maxLength": 100000
+              },
+              "polarity": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ]
               }
             },
             "required": [
               "id",
-              "kind",
               "taskId",
               "sourceRefs",
               "artifactRef",
               "approved",
               "confidence",
-              "metadata"
+              "metadata",
+              "kind",
+              "feedback",
+              "polarity"
             ],
             "additionalProperties": false
           }
@@ -1382,17 +2122,6 @@
                 "minLength": 1,
                 "maxLength": 240
               },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "demonstration",
-                  "preference",
-                  "correction",
-                  "feedback",
-                  "reward",
-                  "label"
-                ]
-              },
               "taskId": {
                 "anyOf": [
                   {
@@ -1435,17 +2164,64 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "kind": {
+                "type": "string",
+                "const": "reward"
+              },
+              "task": {
+                "type": "string",
+                "maxLength": 100000
+              },
+              "rules": {
+                "minItems": 1,
+                "maxItems": 1000,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "points": {
+                      "type": "number"
+                    },
+                    "condition": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "points",
+                    "condition"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "otherwisePoints": {
+                "type": "number"
+              },
+              "executable": {
+                "type": "boolean"
               }
             },
             "required": [
               "id",
-              "kind",
               "taskId",
               "sourceRefs",
               "artifactRef",
               "approved",
               "confidence",
-              "metadata"
+              "metadata",
+              "kind",
+              "task",
+              "rules",
+              "otherwisePoints",
+              "executable"
             ],
             "additionalProperties": false
           }
@@ -1462,17 +2238,6 @@
                 "minLength": 1,
                 "maxLength": 240
               },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "demonstration",
-                  "preference",
-                  "correction",
-                  "feedback",
-                  "reward",
-                  "label"
-                ]
-              },
               "taskId": {
                 "anyOf": [
                   {
@@ -1515,17 +2280,90 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "kind": {
+                "type": "string",
+                "const": "label"
+              },
+              "labelKind": {
+                "type": "string",
+                "const": "rubric"
+              },
+              "task": {
+                "type": "string",
+                "maxLength": 100000
+              },
+              "criteria": {
+                "minItems": 1,
+                "maxItems": 1000,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "calibrationExamples": {
+                "type": "object",
+                "properties": {
+                  "positive": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000
+                  },
+                  "negative": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000
+                  },
+                  "boundary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000
+                  }
+                },
+                "required": [
+                  "positive",
+                  "negative",
+                  "boundary"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
               "id",
-              "kind",
               "taskId",
               "sourceRefs",
               "artifactRef",
               "approved",
               "confidence",
-              "metadata"
+              "metadata",
+              "kind",
+              "labelKind",
+              "task",
+              "criteria",
+              "calibrationExamples"
             ],
             "additionalProperties": false
           }
@@ -1558,6 +2396,7 @@
                   "enum": [
                     "openpond",
                     "codex",
+                    "local-adapter",
                     "anthropic",
                     "openai",
                     "xai",
@@ -1606,6 +2445,250 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200
+        },
+        "buildIntent": {
+          "default": "demonstrations",
+          "type": "string",
+          "enum": [
+            "demonstrations",
+            "preferences",
+            "verifiable_reward",
+            "rubric",
+            "discovery"
+          ]
+        },
+        "buildSpecification": {
+          "default": null,
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "demonstrations"
+                    },
+                    "behavior": {
+                      "type": "string",
+                      "maxLength": 100000
+                    },
+                    "examples": {
+                      "default": [],
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "maxLength": 100000
+                          },
+                          "response": {
+                            "type": "string",
+                            "maxLength": 100000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "prompt",
+                          "response"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "behavior",
+                    "examples"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "preferences"
+                    },
+                    "preference": {
+                      "type": "string",
+                      "maxLength": 100000
+                    },
+                    "pairs": {
+                      "default": [],
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "maxLength": 100000
+                          },
+                          "chosen": {
+                            "type": "string",
+                            "maxLength": 100000
+                          },
+                          "rejected": {
+                            "type": "string",
+                            "maxLength": 100000
+                          },
+                          "rationale": {
+                            "type": "string",
+                            "maxLength": 100000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "prompt",
+                          "chosen",
+                          "rejected",
+                          "rationale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "preference",
+                    "pairs"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "verifiable_reward"
+                    },
+                    "task": {
+                      "type": "string",
+                      "maxLength": 100000
+                    },
+                    "rules": {
+                      "default": [],
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "points": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "maxLength": 100000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "points",
+                          "condition"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "otherwisePoints": {
+                      "default": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "task",
+                    "rules",
+                    "otherwisePoints"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "rubric"
+                    },
+                    "task": {
+                      "type": "string",
+                      "maxLength": 100000
+                    },
+                    "criteria": {
+                      "default": [],
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "label": {
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "description": {
+                            "type": "string",
+                            "maxLength": 100000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "positiveExample": {
+                      "type": "string",
+                      "maxLength": 100000
+                    },
+                    "negativeExample": {
+                      "type": "string",
+                      "maxLength": 100000
+                    },
+                    "boundaryExample": {
+                      "type": "string",
+                      "maxLength": 100000
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "task",
+                    "criteria",
+                    "positiveExample",
+                    "negativeExample",
+                    "boundaryExample"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "evidenceHashes": {
           "maxItems": 100000,
@@ -1673,6 +2756,8 @@
         "modelConfig",
         "skillHash",
         "promptTemplateVersion",
+        "buildIntent",
+        "buildSpecification",
         "evidenceHashes",
         "tasksetSdkVersion",
         "sourceCommit",
@@ -1711,11 +2796,149 @@
                 "sft",
                 "dpo",
                 "grpo",
+                "ppo",
                 "sdft",
                 "opd",
                 "opsd",
                 "sdpo"
               ]
+            },
+            "trainingPath": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "primaryMethod": {
+                      "type": "string",
+                      "enum": [
+                        "sft",
+                        "dpo",
+                        "grpo",
+                        "ppo",
+                        "sdft",
+                        "opsd",
+                        "sdpo"
+                      ]
+                    },
+                    "bootstrap": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "method": {
+                              "type": "string",
+                              "const": "sft"
+                            },
+                            "purpose": {
+                              "type": "string",
+                              "const": "trajectory_bootstrap"
+                            },
+                            "demonstrationRefs": {
+                              "minItems": 1,
+                              "maxItems": 100000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              }
+                            },
+                            "limitations": {
+                              "minItems": 1,
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 5000
+                              }
+                            }
+                          },
+                          "required": [
+                            "method",
+                            "purpose",
+                            "demonstrationRefs",
+                            "limitations"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "primaryMethod",
+                    "bootstrap"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "methodReadiness": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "sft",
+                      "dpo",
+                      "grpo",
+                      "ppo"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "recommended",
+                      "compatible",
+                      "needs_dataset_work"
+                    ]
+                  },
+                  "reasonCodes": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "taskset_not_ready",
+                        "demonstrations_missing",
+                        "preference_pairs_missing",
+                        "preference_pairs_invalid",
+                        "executable_reward_missing",
+                        "reward_not_calibrated",
+                        "reward_model_missing",
+                        "value_model_required",
+                        "frozen_eval_missing"
+                      ]
+                    }
+                  },
+                  "reasons": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 5000
+                    }
+                  }
+                },
+                "required": [
+                  "method",
+                  "status",
+                  "reasonCodes",
+                  "reasons"
+                ],
+                "additionalProperties": false
+              }
             },
             "compatibleDestinationClasses": {
               "type": "array",
@@ -1787,6 +3010,79 @@
                 }
               ]
             },
+            "baselineReward": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "mean": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "min": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "max": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "variance": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "mean",
+                    "min",
+                    "max",
+                    "variance"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "generatedAt": {
               "type": "string",
               "minLength": 1
@@ -1798,10 +3094,13 @@
             "tasksetHash",
             "ready",
             "recommendedMethod",
+            "trainingPath",
+            "methodReadiness",
             "compatibleDestinationClasses",
             "blockers",
             "warnings",
             "baselineReportId",
+            "baselineReward",
             "generatedAt"
           ],
           "additionalProperties": false
@@ -1836,7 +3135,9 @@
   "required": [
     "schemaVersion",
     "id",
+    "revision",
     "profileId",
+    "createImproveRunId",
     "name",
     "objective",
     "status",

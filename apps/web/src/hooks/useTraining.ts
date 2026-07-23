@@ -17,6 +17,7 @@ import type {
   TrainingChatSearchResult,
   TrainingStateResponse,
   LocalModelChatConfiguration,
+  ModelBuildDraft,
   FireworksModelServingSession,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
@@ -105,6 +106,20 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   }, [connection, hasActiveBaselineRun, hasActiveDatasetImport, hasActiveFrontierBaselineRun, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
 
   const actions = useMemo(() => ({
+    saveModelBuildDraft: (draft: ModelBuildDraft) =>
+      mutate<ModelBuildDraft>(
+        "save-model-build-draft",
+        "/model-build-drafts",
+        draft,
+        "PUT",
+      ),
+    deleteModelBuildDraft: (draftId: string) =>
+      mutate<{ deleted: boolean; draftId?: string }>(
+        "delete-model-build-draft",
+        `/model-build-drafts/${encodeURIComponent(draftId)}`,
+        {},
+        "DELETE",
+      ),
     inspectHuggingFaceDataset: (url: string) =>
       mutate<DatasetImportJob>(
         "inspect-huggingface-dataset",
@@ -173,7 +188,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     cancelCrossSystemFrontierBaseline: (runId: string) => mutate<CrossSystemFrontierBaselineRun>("cancel-cross-system-frontier-baseline", `/cross-system-operations/frontier-baseline/runs/${encodeURIComponent(runId)}/cancel`, {}),
     removeSource: (sourceId: string) => mutate("remove-source", `/sources/${encodeURIComponent(sourceId)}`, {}, "DELETE"),
     deleteTaskset: (tasksetId: string) => mutate<{ deleted: boolean; tasksetId: string }>("delete-model", `/tasksets/${encodeURIComponent(tasksetId)}`, {}, "DELETE"),
-    startCreation: (sourceIds: string[], options: { objective?: string; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModel?: BaseModelPreference | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModel?.modelId ?? null, preferredBaseModel: options.preferredBaseModel ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
+    startCreation: (sourceIds: string[], options: { objective?: string; buildIntent?: TaskCreationRequest["buildIntent"]; buildSpecification?: TaskCreationRequest["buildSpecification"]; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModel?: BaseModelPreference | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", buildIntent: options.buildIntent ?? "demonstrations", buildSpecification: options.buildSpecification ?? null, objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModel?.modelId ?? null, preferredBaseModel: options.preferredBaseModel ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
     createModelFromTaskset: (tasksetId: string, preferredBaseModel: BaseModelPreference) =>
       mutate<CreateImproveRun>("create-model", "/models/from-taskset", {
         profileId,
@@ -262,7 +277,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     approveTraining: (planId: string, bundleId: string) => mutate<{ id: string }>("approve-training", "/approvals", { planId, bundleId }),
     launch: (planId: string, approvalId: string) => mutate("launch", "/launch", { planId, approvalId }),
     prepareTraining: (body: {
-      modelId?: string | null;
+      modelId: string;
       tasksetId: string;
       destinationId: string;
       recipe: unknown;
@@ -281,7 +296,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       job: { id: string };
       createImproveRunId: string;
     }>("start-prepared-training", "/start/prepared", body),
-    startTraining: (body: { modelId?: string | null; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
+    startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     evaluateJob: (jobId: string) => mutate(
       "evaluate-job",

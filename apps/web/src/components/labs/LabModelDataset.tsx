@@ -107,6 +107,15 @@ export function LabModelDataset({
   const approvedDemonstrations = taskset.learningSignals.demonstrations.filter(
     (signal) => signal.approved,
   ).length;
+  const approvedPreferences = taskset.learningSignals.preferences.filter(
+    (signal) => signal.approved,
+  ).length;
+  const approvedRewards = taskset.learningSignals.rewards.filter(
+    (signal) => signal.approved,
+  ).length;
+  const rubricLabels = taskset.learningSignals.labels.filter(
+    (signal) => signal.approved && signal.labelKind === "rubric",
+  ).length;
   const baselineRuns = training.payload?.baselineRuns.filter((run) =>
     run.tasksetId === taskset.id) ?? [];
 
@@ -127,8 +136,33 @@ export function LabModelDataset({
           <Fact label="Training" value={String(counts.get("train") ?? 0)} />
           <Fact label="Validation" value={String(counts.get("validation") ?? 0)} />
           <Fact label="Frozen Eval" value={String(counts.get("frozen_eval") ?? 0)} />
-          <Fact label="Approved demonstrations" value={String(approvedDemonstrations)} />
+          <Fact label="Demonstrations" value={String(approvedDemonstrations)} />
+          <Fact label="Preference pairs" value={String(approvedPreferences)} />
+          <Fact label="Reward specs" value={String(approvedRewards)} />
+          <Fact label="Rubrics" value={String(rubricLabels)} />
         </dl>
+        <div className="labs-dataset-method-readiness">
+          <strong>Training compatibility</strong>
+          <div className="training-pills">
+            {taskset.readiness?.methodReadiness.length
+              ? taskset.readiness.methodReadiness.map((entry) => (
+                  <span key={entry.method} title={entry.reasons.join(" ")}>
+                    {entry.method.toUpperCase()} · {titleCase(entry.status)}
+                  </span>
+                ))
+              : taskset.capabilities.compatibleMethods
+                  .filter((method) => !["none", "retrieval"].includes(method))
+                  .map((method) => <span key={method}>{method.toUpperCase()}</span>)}
+          </div>
+          {taskset.readiness?.methodReadiness.some((entry) => entry.reasons.length) ? (
+            <ul>
+              {taskset.readiness.methodReadiness.flatMap((entry) =>
+                entry.reasons.map((reason) => (
+                  <li key={`${entry.method}:${reason}`}><strong>{entry.method.toUpperCase()}:</strong> {reason}</li>
+                )))}
+            </ul>
+          ) : null}
+        </div>
       </DetailSection>
     );
   }

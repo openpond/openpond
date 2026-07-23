@@ -116,7 +116,12 @@ function inlineTrainingData(
   plan: TrainingPlan,
   approvedSources: Set<string>,
 ): ResolvedTrainingData {
-  if (plan.recipe.method !== "sft" && plan.recipe.method !== "grpo") {
+  if (
+    plan.recipe.method !== "sft"
+    && plan.recipe.method !== "dpo"
+    && plan.recipe.method !== "grpo"
+    && plan.recipe.method !== "ppo"
+  ) {
     throw new Error(`Training method ${plan.recipe.method} cannot produce task data.`);
   }
   const approvedDemonstrations = new Set(
@@ -125,14 +130,58 @@ function inlineTrainingData(
   );
   const seed = plan.recipe.method === "grpo"
     ? plan.recipe.rollout.seed
+    : plan.recipe.method === "ppo"
+      ? plan.recipe.policyOptimization.seed
     : plan.recipe.optimizer.seed;
-  const limit = plan.recipe.dataset.maxExamples;
+  if (plan.recipe.method === "dpo") {
+    const selected = taskset.learningSignals.preferences
+      .filter((signal) =>
+        signal.approved
+        && signal.sourceRefs.every((source) => approvedSources.has(source)))
+      .map((signal) => ({
+        priority: contentHash([
+          taskset.contentHash,
+          seed,
+          "preference",
+          signal.id,
+        ]),
+        record: {
+          id: signal.id,
+          prompt: signal.prompt,
+          chosen: signal.chosen,
+          rejected: signal.rejected,
+          sourceRefs: signal.sourceRefs,
+        },
+      }))
+      .sort((left, right) =>
+        left.priority.localeCompare(right.priority)
+        || left.record.id.localeCompare(right.record.id))
+      .slice(0, plan.recipe.dataset.maxPairs);
+    const content = selected.length
+      ? `${selected.map((item) => JSON.stringify(item.record)).join("\n")}\n`
+      : "";
+    const bytes = Buffer.from(content, "utf8");
+    return {
+      content,
+      contentHash: sha256(bytes),
+      sizeBytes: bytes.byteLength,
+      exampleCount: selected.length,
+      eligibleRows: selected.length,
+      selectionSeed: seed,
+      selectionStrategy: plan.recipe.dataset.selectionStrategy,
+      taskIdsHash: contentHash(selected.map((item) => item.record.id)),
+    };
+  }
+  const limit = plan.recipe.method === "ppo"
+    ? plan.recipe.policyOptimization.dataset.maxExamples
+    : plan.recipe.dataset.maxExamples;
   const selected = taskset.tasks
     .filter((task) =>
       task.split === "train"
       && task.sourceRefs.every((source) => approvedSources.has(source))
       && (
         plan.recipe.method === "grpo"
+        || plan.recipe.method === "ppo"
         || (
           task.expectedOutput !== null
           && approvedDemonstrations.has(task.id)
@@ -140,7 +189,7 @@ function inlineTrainingData(
       ))
     .map((task) => ({
       priority: contentHash([taskset.contentHash, seed, "train", task.id]),
-      record: plan.recipe.method === "grpo"
+      record: plan.recipe.method === "grpo" || plan.recipe.method === "ppo"
         ? { id: task.id, input: task.input, tags: task.tags }
         : {
             id: task.id,
@@ -164,7 +213,9 @@ function inlineTrainingData(
     exampleCount: selected.length,
     eligibleRows: selected.length,
     selectionSeed: seed,
-    selectionStrategy: "stable_hash_top_n",
+    selectionStrategy: plan.recipe.method === "ppo"
+      ? plan.recipe.policyOptimization.dataset.selectionStrategy
+      : "stable_hash_top_n",
     taskIdsHash: contentHash(selected.map((item) => item.record.id)),
   };
 }

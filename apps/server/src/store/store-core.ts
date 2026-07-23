@@ -592,6 +592,9 @@ export class SqliteStoreCore {
       CREATE TABLE IF NOT EXISTS task_miner_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS task_miner_runs_profile_updated_idx ON task_miner_runs(profile_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS model_build_drafts (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, model_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS model_build_drafts_profile_updated_idx ON model_build_drafts(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS model_build_drafts_model_idx ON model_build_drafts(model_id, updated_at DESC);
       CREATE TABLE IF NOT EXISTS training_plans (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, destination_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS training_plans_taskset_idx ON training_plans(taskset_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS training_bundles (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, content_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -608,6 +611,24 @@ export class SqliteStoreCore {
       CREATE TABLE IF NOT EXISTS model_artifact_lineage (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE UNIQUE INDEX IF NOT EXISTS model_lineage_artifact_idx ON model_artifact_lineage(artifact_id);
       CREATE INDEX IF NOT EXISTS model_lineage_taskset_idx ON model_artifact_lineage(taskset_id, created_at DESC);
+    `);
+  }
+
+  async createModelBuildDraftTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS model_build_drafts (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS model_build_drafts_profile_updated_idx
+        ON model_build_drafts(profile_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS model_build_drafts_model_idx
+        ON model_build_drafts(model_id, updated_at DESC);
     `);
   }
 

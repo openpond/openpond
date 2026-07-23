@@ -175,7 +175,7 @@ describe("Lab Model workspace projection", () => {
     );
   });
 
-  test("coalesces executed pre-identity runs without merging new reusable-Dataset drafts", () => {
+  test("keeps executed Model identities separate from each other and reusable-Dataset drafts", () => {
     const taskset = tasksetFixture({ ready: true });
     const firstPlan = {
       ...planFixture(taskset),
@@ -256,9 +256,11 @@ describe("Lab Model workspace projection", () => {
       runs: [...executed, draft],
     }).filter((workproduct) => workproduct.kind === "model");
 
-    expect(models).toHaveLength(2);
+    expect(models).toHaveLength(3);
+    expect(models.find((model) => model.id === "model_legacy_first")?.runIds)
+      .toEqual([first.id]);
     expect(models.find((model) => model.id === "model_legacy_second")?.runIds)
-      .toEqual(expect.arrayContaining([first.id, second.id]));
+      .toEqual([second.id]);
     expect(models.some((model) => model.id === "model_intentional_new")).toBe(
       true,
     );

@@ -55,8 +55,14 @@ describe("New model flow", () => {
     );
     expect(html).toContain("labs-dataset-build-editor");
     expect(html).toContain('aria-label="New Dataset"');
-    expect(html).toContain("Back to Dataset sources");
-    expect(html).toContain("Build the Dataset");
+    expect(html).toContain("What do you want to build?");
+    expect(html).toContain("Teach with examples");
+    expect(html).toContain("Compare responses");
+    expect(html).toContain("Reward correct outcomes");
+    expect(html).toContain("Score with a rubric");
+    expect(html).toContain("Find opportunities");
+    expect(html).not.toContain(">Automatic<");
+    expect(html).not.toContain(">Manual<");
     expect(html).not.toContain("training-dialog-backdrop");
     expect(html).not.toContain("labs-dataset-builder-page");
   });
@@ -558,6 +564,12 @@ function manualSourceProps(): ComponentProps<typeof TrainingSourceStep> {
     authoringProvider: "custom-openai-compatible",
     authoringReasoningEffort: "high",
     busy: false,
+    buildIntent: "demonstrations",
+    buildSpecification: {
+      kind: "demonstrations",
+      behavior: "",
+      examples: [],
+    },
     disclosurePending: false,
     estimatesBySessionId: {},
     matchingSessionCount: 2,
@@ -570,6 +582,7 @@ function manualSourceProps(): ComponentProps<typeof TrainingSourceStep> {
     onAuthoringReasoningEffortChange: () => undefined,
     onDeclineDisclosure: () => undefined,
     onLoadMore: () => undefined,
+    onBuildSpecificationChange: () => undefined,
     onObjectiveChange: () => undefined,
     onReturnToRecommendation: () => undefined,
     onSearchChange: () => undefined,

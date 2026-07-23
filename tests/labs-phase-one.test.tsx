@@ -56,6 +56,7 @@ describe("Lab Phase 1", () => {
         onToast: noop,
         onSelectedIdChange: noop,
         onBuild: noop,
+        onTrainModel: noop,
         onOpenFiles: noop,
       }),
     );
@@ -77,6 +78,7 @@ describe("Lab Phase 1", () => {
         onToast: noop,
         onSelectedIdChange: noop,
         onBuild: noop,
+        onTrainModel: noop,
         onOpenFiles: noop,
       }),
     );
@@ -181,7 +183,7 @@ describe("Lab Phase 1", () => {
     expect(markup).not.toContain(">Agents</button>");
   });
 
-  test("routes Agent create, Agent improve, Model, and Dataset through one authoring shell", async () => {
+  test("routes Agent and Dataset authoring through the shared shell and Model creation through Model Builder", async () => {
     const [route, dialog, datasetsPage] = await Promise.all([
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
       readFile(
@@ -190,7 +192,8 @@ describe("Lab Phase 1", () => {
       ),
       readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
     ]);
-    expect(route.match(/<CreateImproveAuthoringDialog/g)).toHaveLength(5);
+    expect(route.match(/<CreateImproveAuthoringDialog/g)).toHaveLength(4);
+    expect(route).toContain("<ModelBuildPage");
     expect(route).toContain("initialCreation={resumedModelCreation}");
     expect(route).toContain(
       'targetIntent={{ kind: "agent", id: null, displayName: null, operation: "create" }}'
@@ -204,7 +207,7 @@ describe("Lab Phase 1", () => {
     expect(route).not.toContain("LabAgentImproveDialog");
     expect(route).not.toContain("genericCreateOpen");
     expect(route).not.toContain("onCreateGeneric");
-    expect(dialog).not.toContain("window.confirm");
+    expect(dialog).toContain("Discard the unsaved Dataset evidence in this builder?");
     expect(dialog).not.toContain("current selections will be discarded");
     expect(datasetsPage.indexOf('{ id: "build", label: "Build" }')).toBeLessThan(
       datasetsPage.indexOf('{ id: "overview", label: "Overview" }'),
@@ -1328,7 +1331,7 @@ describe("Lab Phase 1", () => {
     expect(route).toContain("onUseSkill");
     expect(route).not.toContain('"Search profile"');
     expect(route).not.toContain('"Filter workproduct type"');
-    expect(route).toContain('showHeader={!selected && !selectedDatasetId && datasetCreateRoute !== "build"}');
+    expect(route).toContain('showHeader={!training.launchRequest && !selected && !selectedDatasetId && datasetCreateRoute !== "build"}');
     expect(route).toContain('className="labs-home-models"');
     expect(route).not.toContain("homeModels.length ?");
     expect(detail).toContain("labWorkproductProgression");

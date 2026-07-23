@@ -1646,8 +1646,13 @@ export function MainPane({
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
                 openSuggestionsRequestId={labSuggestionsRequestId}
-                onNewModel={() => {
-                  setTrainingLaunchRequest({ id: Date.now(), objective: null, initialSessionIds: [] });
+                onNewModel={(initialTasksetId) => {
+                  setTrainingLaunchRequest({
+                    id: Date.now(),
+                    objective: null,
+                    initialSessionIds: [],
+                    initialTasksetId,
+                  });
                 }}
                 onUseAgent={handleUseAgent}
                 onCreateAgent={createAgentFromLab}

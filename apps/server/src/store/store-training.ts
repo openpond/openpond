@@ -4,6 +4,7 @@ import type {
   GradeResult,
   GraderAuditReport,
   ModelArtifactLineage,
+  ModelBuildDraft,
   RuntimeEvent,
   Session,
   TaskAttemptArtifact,
@@ -32,6 +33,7 @@ import {
   GradeResultSchema,
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
+  ModelBuildDraftSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TaskCandidateSchema,
@@ -677,6 +679,40 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
       profileId ? [profileId] : [],
       CrossSystemFrontierBaselineRunSchema.parse,
     );
+  }
+
+  async saveModelBuildDraft(draftInput: ModelBuildDraft): Promise<ModelBuildDraft> {
+    const draft = ModelBuildDraftSchema.parse(draftInput);
+    await this.upsertPayload(
+      `INSERT INTO model_build_drafts (id, profile_id, model_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, model_id = excluded.model_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [draft.id, draft.profileId, draft.modelId, draft.status, JSON.stringify(draft), draft.createdAt, draft.updatedAt],
+    );
+    return draft;
+  }
+
+  async getModelBuildDraft(id: string): Promise<ModelBuildDraft | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_build_drafts WHERE id = ?",
+      [id],
+      ModelBuildDraftSchema.parse,
+    );
+  }
+
+  async listModelBuildDrafts(profileId: string): Promise<ModelBuildDraft[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM model_build_drafts WHERE profile_id = ? ORDER BY updated_at DESC",
+      [profileId],
+      ModelBuildDraftSchema.parse,
+    );
+  }
+
+  async deleteModelBuildDraft(id: string): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(() =>
+      this.run("DELETE FROM model_build_drafts WHERE id = ?", [id]));
+    this.writeQueue = write.catch(() => undefined);
+    await write;
   }
 
   async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {

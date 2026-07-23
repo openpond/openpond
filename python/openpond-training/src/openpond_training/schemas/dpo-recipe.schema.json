@@ -1,0 +1,303 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.dpoRecipe.v1"
+    },
+    "method": {
+      "type": "string",
+      "const": "dpo"
+    },
+    "parameterization": {
+      "type": "string",
+      "const": "lora"
+    },
+    "policyModel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "tokenizerRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "chatTemplateHash": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "tokenizerRevision",
+        "chatTemplateHash"
+      ],
+      "additionalProperties": false
+    },
+    "referenceModel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "tokenizerRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "chatTemplateHash": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "tokenizerRevision",
+        "chatTemplateHash"
+      ],
+      "additionalProperties": false
+    },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "trainSplit": {
+          "type": "string",
+          "const": "train"
+        },
+        "validationSplit": {
+          "type": "string",
+          "enum": [
+            "validation",
+            "frozen_eval"
+          ]
+        },
+        "maxPairs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "maxPromptTokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 32768
+        },
+        "maxCompletionTokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 32768
+        },
+        "selectionStrategy": {
+          "type": "string",
+          "const": "stable_hash_top_n"
+        },
+        "selectionSeed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "trainSplit",
+        "validationSplit",
+        "maxPairs",
+        "maxPromptTokens",
+        "maxCompletionTokens",
+        "selectionStrategy",
+        "selectionSeed"
+      ],
+      "additionalProperties": false
+    },
+    "lora": {
+      "type": "object",
+      "properties": {
+        "rank": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 256
+        },
+        "alpha": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1024
+        },
+        "dropout": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "targetModules": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        }
+      },
+      "required": [
+        "rank",
+        "alpha",
+        "dropout",
+        "targetModules"
+      ],
+      "additionalProperties": false
+    },
+    "loss": {
+      "type": "object",
+      "properties": {
+        "variant": {
+          "type": "string",
+          "const": "sigmoid"
+        },
+        "beta": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10
+        },
+        "labelSmoothing": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        }
+      },
+      "required": [
+        "variant",
+        "beta",
+        "labelSmoothing"
+      ],
+      "additionalProperties": false
+    },
+    "optimizer": {
+      "type": "object",
+      "properties": {
+        "learningRate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "epochs": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "maxSteps": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
+        },
+        "batchSize": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000
+        },
+        "gradientAccumulationSteps": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "learningRate",
+        "epochs",
+        "maxSteps",
+        "batchSize",
+        "gradientAccumulationSteps",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
+    "referenceLogprobs": {
+      "type": "object",
+      "properties": {
+        "cacheSchemaVersion": {
+          "type": "string",
+          "const": "openpond.dpoReferenceLogprobs.v1"
+        },
+        "cacheKey": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        },
+        "invalidationHash": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "cacheSchemaVersion",
+        "cacheKey",
+        "invalidationHash"
+      ],
+      "additionalProperties": false
+    },
+    "resourceLimits": {
+      "type": "object",
+      "properties": {
+        "cpuThreads": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 256
+        },
+        "memoryBytes": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "wallTimeMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "cpuThreads",
+        "memoryBytes",
+        "wallTimeMs"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "method",
+    "parameterization",
+    "policyModel",
+    "referenceModel",
+    "dataset",
+    "lora",
+    "loss",
+    "optimizer",
+    "referenceLogprobs",
+    "resourceLimits"
+  ],
+  "additionalProperties": false
+}

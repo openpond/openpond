@@ -12,6 +12,7 @@ import {
   type ChatModelRef,
   type ComputeStateResponse,
   type ModelAsset,
+  type ModelBuildRunPreset,
   type Taskset,
   type TasksetBaselineRun,
   type TrainingDestinationCapabilities,
@@ -58,13 +59,19 @@ export function TrainingStartDialog({
   onRunBaseline,
   baselineReports = [],
   baselineRuns = [],
+  presentation = "dialog",
+  runControlId,
+  hideActions = false,
+  onReadinessChange,
+  onConfigurationChange,
+  runPreset = "custom",
 }: {
   baseModelCandidates: BaseModelCandidate[];
   connection: ClientConnection | null;
   taskset: Taskset;
   modelId?: string | null;
   destinations: TrainingDestinationCapabilities[];
-  initialMethod?: "sft" | "grpo";
+  initialMethod?: "sft" | "dpo" | "grpo" | "ppo";
   preferredBaseModel?: BaseModelPreference | null;
   busy: boolean;
   busyAction?: string | null;
@@ -99,6 +106,21 @@ export function TrainingStartDialog({
   }) => Promise<boolean>;
   baselineReports?: BaselineReport[];
   baselineRuns?: TasksetBaselineRun[];
+  presentation?: "dialog" | "embedded";
+  runControlId?: string;
+  hideActions?: boolean;
+  onReadinessChange?: (state: {
+    ready: boolean;
+    reason: string | null;
+    actionLabel: string;
+  }) => void;
+  onConfigurationChange?: (configuration: {
+    baseModel: BaseModelPreference | null;
+    method: "sft" | "dpo" | "grpo" | "ppo";
+    destinationId: TrainingDestinationId;
+    recipe: TrainingRecipe;
+  }) => void;
+  runPreset?: ModelBuildRunPreset;
 }) {
   const trainingPath = taskset.readiness?.trainingPath ?? null;
   const primaryMethod = trainingPath?.primaryMethod ?? tasksetMethod(taskset);
@@ -106,7 +128,10 @@ export function TrainingStartDialog({
   const methodOptions = selectableMethods(taskset);
   const requestedInitialMethod = initialMethod && methodOptions.includes(initialMethod)
     ? initialMethod
-    : primaryMethod === "grpo" ? "grpo" : "sft";
+    : primaryMethod === "grpo" ? "grpo"
+      : primaryMethod === "dpo" ? "dpo"
+        : primaryMethod === "ppo" ? "ppo"
+        : "sft";
   const preferredCandidate = candidateForPreference(
     baseModelCandidates,
     preferredBaseModel,
@@ -137,17 +162,25 @@ export function TrainingStartDialog({
   const [deviceId, setDeviceId] = useState("automatic");
   const [maxSteps, setMaxSteps] = useState(() =>
     requestedInitialMethod === "grpo"
-      ? 8
-      : 2);
+      ? runPreset === "standard" ? 50 : 8
+      : requestedInitialMethod === "dpo"
+        ? runPreset === "standard" ? 100 : 4
+        : requestedInitialMethod === "ppo"
+          ? runPreset === "standard" ? 20 : 2
+        : runPreset === "standard" ? 100 : 2);
   const availableTrainExamples = trainingSplitCount(taskset, "train");
   const [trainingExamples, setTrainingExamples] = useState(() =>
     Math.max(
       1,
       Math.min(
         availableTrainExamples,
-        requestedInitialMethod === "grpo" && taskset.datasetArtifact
-          ? 16
-          : 1_000,
+        requestedInitialMethod === "dpo"
+          ? taskset.learningSignals.preferences.filter((pair) => pair.approved).length
+          : requestedInitialMethod === "ppo"
+            ? runPreset === "standard" ? 16 : 4
+          : requestedInitialMethod === "grpo" && taskset.datasetArtifact
+          ? runPreset === "standard" ? 32 : 16
+          : runPreset === "small" ? 32 : 1_000,
       ),
     ));
   const [sequenceLength, setSequenceLength] = useState(() => {
@@ -176,14 +209,16 @@ export function TrainingStartDialog({
   );
   const [rftLossMethod, setRftLossMethod] = useState<RftLossMethod>(() =>
     defaultRftLossMethod(taskset));
-  const [method, setMethod] = useState<"sft" | "grpo">(requestedInitialMethod);
+  const [method, setMethod] = useState<"sft" | "dpo" | "grpo" | "ppo">(requestedInitialMethod);
   const [prepared, setPrepared] = useState<{
     configurationKey: string;
     value: TrainingPreparedStart;
   } | null>(null);
   const destination = destinations.find((item) => item.destinationId === destinationId) ?? null;
   const isBootstrap = method === "sft" && primaryMethod !== "sft" && bootstrap?.method === "sft";
-  const approvedExamples = taskset.learningSignals.demonstrations.filter((example) => example.approved).length;
+  const approvedExamples = method === "dpo"
+    ? taskset.learningSignals.preferences.filter((pair) => pair.approved).length
+    : taskset.learningSignals.demonstrations.filter((example) => example.approved).length;
   const evaluationExamples = trainingSplitCount(taskset, "frozen_eval");
   const selectableDevices = useMemo(() => compute?.inventory?.devices.filter((device) => device.available) ?? [], [compute?.inventory?.devices]);
   const trainableModels = useMemo(() => compute?.inventory?.models.filter((model) => model.trainingCompatible && model.modelId && model.revision && model.tokenizerRevision && model.chatTemplateHash) ?? [], [compute?.inventory?.models]);
@@ -274,7 +309,11 @@ export function TrainingStartDialog({
     && !baselineReport.rftSignal.passed
     && !baselineFailed
   );
-  const maximumTrainingExamples = method === "grpo"
+  const maximumTrainingExamples = method === "dpo"
+    ? Math.max(1, taskset.learningSignals.preferences.filter((pair) => pair.approved).length)
+    : method === "ppo"
+      ? Math.max(1, Math.min(1_000, availableTrainExamples))
+    : method === "grpo"
     && isFireworks
     && taskset.datasetArtifact
     ? Math.max(1, Math.min(32, availableTrainExamples))
@@ -287,7 +326,10 @@ export function TrainingStartDialog({
     retentionDays >= 1 &&
     retentionDays <= 30
   );
-  const executableMethod = method === "sft" || (method === "grpo" && isFireworks);
+  const executableMethod = method === "sft"
+    || (method === "dpo" && destinationId === "local_cpu_fixture")
+    || (method === "ppo" && destinationId === "local_cpu_fixture")
+    || (method === "grpo" && isFireworks);
   const tasksetMethodCompatible = taskset.capabilities.compatibleMethods.includes(method as never)
     || bootstrap?.method === method;
   const compatible = Boolean(
@@ -405,7 +447,7 @@ export function TrainingStartDialog({
     setSequenceLength(recommendedSequenceLength(taskset));
   }
 
-  function selectMethod(next: "sft" | "grpo") {
+  function selectMethod(next: "sft" | "dpo" | "grpo" | "ppo") {
     setMethod(next);
     setPrepared(null);
     setBaseModelKey((current) => preserveBaseModelSelection(
@@ -428,7 +470,19 @@ export function TrainingStartDialog({
       ));
       return;
     }
-    setMaxSteps(2);
+    setMaxSteps(next === "dpo" ? 4 : next === "ppo" ? 2 : 2);
+    if (next === "dpo") {
+      setTrainingExamples(Math.max(
+        1,
+        Math.min(
+          taskset.learningSignals.preferences.filter((pair) => pair.approved).length,
+          64,
+        ),
+      ));
+    }
+    if (next === "ppo") {
+      setTrainingExamples(Math.max(1, Math.min(availableTrainExamples, 4)));
+    }
   }
   const preparedQuote = currentPrepared?.plan.estimatedCostUsd ?? null;
   const actionLabel = busy
@@ -441,9 +495,28 @@ export function TrainingStartDialog({
         ? "Prepare exact quote"
         : "Start training";
 
-  return <div className="training-dialog-backdrop" role="presentation" onMouseDown={busy ? undefined : onClose}>
-    <section className="training-dialog training-start-dialog" role="dialog" aria-modal="true" aria-label="Start training" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="training-dialog-header"><div><h2>Start training</h2><p>{taskset.name}</p></div><button type="button" aria-label="Close start training" disabled={busy} onClick={onClose}><X size={16}/></button></div>
+  useEffect(() => {
+    onReadinessChange?.({
+      ready: compatible,
+      reason: compatible ? null : incompatibility ?? "This setup is unavailable.",
+      actionLabel,
+    });
+  }, [actionLabel, compatible, incompatibility, onReadinessChange]);
+
+  useEffect(() => {
+    onConfigurationChange?.({
+      baseModel: selectedBaseModel?.preference ?? null,
+      method,
+      destinationId,
+      recipe,
+    });
+  }, [
+    configurationKey,
+    onConfigurationChange,
+  ]);
+
+  const content = <section className={`training-dialog training-start-dialog${presentation === "embedded" ? " embedded" : ""}`} role={presentation === "dialog" ? "dialog" : "region"} aria-modal={presentation === "dialog" ? "true" : undefined} aria-label="Start training" onMouseDown={(event) => event.stopPropagation()}>
+      {presentation === "dialog" ? <div className="training-dialog-header"><div><h2>Start training</h2><p>{taskset.name}</p></div><button type="button" aria-label="Close start training" disabled={busy} onClick={onClose}><X size={16}/></button></div> : null}
       <div className="training-method-tabs" role="tablist" aria-label="Training method">
         {methodOptions.map((candidate) => (
           <button
@@ -489,7 +562,7 @@ export function TrainingStartDialog({
         {method === "grpo" ? <p className="training-start-note">RFT requires a public HTTPS callback ending in <code>/v1/training/fireworks/rft</code>. Launch fails closed before provider upload when it is missing or invalid.</p> : null}
       </fieldset> : null}
       <dl className="training-start-summary">
-        <div><dt>Training data</dt><dd>{method === "grpo" ? `${Math.min(trainingExamples, availableTrainExamples)} of ${availableTrainExamples} approved train prompts` : `${Math.min(trainingExamples, approvedExamples || availableTrainExamples)} approved example${trainingExamples === 1 ? "" : "s"}`}</dd></div>
+        <div><dt>Training data</dt><dd>{method === "grpo" || method === "ppo" ? `${Math.min(trainingExamples, availableTrainExamples)} of ${availableTrainExamples} approved train prompts` : method === "dpo" ? `${Math.min(trainingExamples, approvedExamples)} of ${approvedExamples} approved preference pairs` : `${Math.min(trainingExamples, approvedExamples || availableTrainExamples)} approved example${trainingExamples === 1 ? "" : "s"}`}</dd></div>
         <div><dt>Evaluation</dt><dd>{evaluationExamples} test example{evaluationExamples === 1 ? "" : "s"}</dd></div>
         <div><dt>{preparedQuote == null ? "Estimate" : "Exact quote"}</dt><dd>{destinationId === "local_cpu_fixture" ? selectedModel ? `$0 · ${maxSteps} steps × ${sequenceLength} tokens · 15-minute hard stop` : "$0 · 2-minute hard stop" : isFireworks ? preparedQuote == null ? `Prepare a provider-validated quote · hard cap $${Number.isFinite(maximumCostUsd) ? maximumCostUsd.toFixed(2) : "—"}` : `$${preparedQuote.toFixed(2)} · hard cap $${maximumCostUsd.toFixed(2)}` : "Provided before approval"}</dd></div>
         <div><dt>Storage</dt><dd>{isFireworks ? "Portable output imported into app-managed storage" : compute?.settings.modelStorePath ?? "App-managed local storage"}</dd></div>
@@ -503,7 +576,7 @@ export function TrainingStartDialog({
           <dl className="training-start-summary">
             <div><dt>Account</dt><dd>{currentPrepared.approvalActor ?? "Local user"}</dd></div>
             <div><dt>Provider</dt><dd>{destinationLabel(currentPrepared.plan.destinationId)}</dd></div>
-            <div><dt>Model</dt><dd>{modelLabel(currentPrepared.plan.recipe.method === "sft" || currentPrepared.plan.recipe.method === "grpo" ? currentPrepared.plan.recipe.baseModel.id : "")}</dd></div>
+            <div><dt>Model</dt><dd>{modelLabel(currentPrepared.plan.recipe.method === "dpo" ? currentPrepared.plan.recipe.policyModel.id : currentPrepared.plan.recipe.method === "ppo" ? currentPrepared.plan.recipe.policyOptimization.policyModel.id : currentPrepared.plan.recipe.method === "sft" || currentPrepared.plan.recipe.method === "grpo" ? currentPrepared.plan.recipe.baseModel.id : "")}</dd></div>
             <div><dt>Method</dt><dd>{currentPrepared.plan.recipe.method === "grpo" ? `RFT · ${rftLossLabel(currentPrepared.plan.recipe.loss.method)}` : `${trainingMethodLabel(currentPrepared.plan.recipe.method)} · ${currentPrepared.plan.recipe.parameterization.toUpperCase()}`}</dd></div>
             <div><dt>Quote</dt><dd>{preparedQuote == null ? "Unavailable" : `$${preparedQuote.toFixed(2)}`}</dd></div>
             <div><dt>Maximum</dt><dd>${maximumCostUsd.toFixed(2)}</dd></div>
@@ -580,9 +653,11 @@ export function TrainingStartDialog({
       {isBootstrap && bootstrap ? <div className="training-bootstrap-limitations"><strong>Supervised precursor</strong><p>This SFT run teaches the approved tool trajectories. It does not replace reinforcement training.</p><ul>{bootstrap.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul></div> : null}
       <details className="training-start-advanced"><summary>Advanced settings</summary><div className="training-start-fields"><label><span>Training examples</span><input type="number" min={1} max={maximumTrainingExamples} value={trainingExamples} onChange={(event) => setTrainingExamples(Math.max(1, Math.min(maximumTrainingExamples, event.target.valueAsNumber || 1)))}/></label><label><span>Optimizer steps</span><input type="number" min={1} max={1000} value={maxSteps} onChange={(event) => setMaxSteps(event.target.valueAsNumber || 1)}/></label><label><span>{method === "grpo" ? "Prompt length" : "Sequence length"}</span><input type="number" min={16} max={isFireworks ? FIREWORKS_MAXIMUM_SEQUENCE_LENGTH : 4_096} value={sequenceLength} onChange={(event) => setSequenceLength(event.target.valueAsNumber || 64)}/></label>{method === "grpo" ? <label><span>Maximum output</span><input type="number" min={16} max={FIREWORKS_MAXIMUM_RFT_OUTPUT_TOKENS} value={rolloutMaxOutputTokens} onChange={(event) => setRolloutMaxOutputTokens(Math.max(16, Math.min(FIREWORKS_MAXIMUM_RFT_OUTPUT_TOKENS, event.target.valueAsNumber || FIREWORKS_DEFAULT_RFT_MAX_OUTPUT_TOKENS)))}/></label> : null}<label><span>LoRA rank</span><input type="number" min={1} max={256} value={rank} onChange={(event) => setRank(event.target.valueAsNumber || 2)}/></label><label><span>Learning rate</span><input type="number" min={0.000001} max={0.1} step={0.0001} value={learningRate} onChange={(event) => { const value = event.target.valueAsNumber; if (Number.isFinite(value)) setLearningRate(value); }}/></label>{method === "grpo" ? <><label><span>RL loss</span><select aria-label="RL loss" value={rftLossMethod} onChange={(event) => setRftLossMethod(event.target.value as RftLossMethod)}><option value="dapo">DAPO</option><option value="grpo">GRPO</option><option value="gspo-token">GSPO-token</option></select></label><label><span>Rollouts per prompt</span><input type="number" min={2} max={16} value={rolloutGroupSize} onChange={(event) => setRolloutGroupSize(event.target.valueAsNumber || 8)}/></label><label><span>Concurrent rollouts</span><input type="number" min={1} max={16} value={rolloutConcurrency} onChange={(event) => setRolloutConcurrency(event.target.valueAsNumber || 4)}/></label></> : null}</div></details>
       {!compatible && (rftBaselineReady || method !== "grpo" || !isFireworks) ? <div className="training-banner error training-dialog-error">{incompatibility ?? "This setup is unavailable."}</div> : destination?.nonProduction ? <p className="training-start-note">This local worker is an experimental correctness run. It does not claim useful model quality.</p> : null}
-      <div className="training-dialog-actions"><button className="training-button secondary" type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="training-button" type="button" disabled={busy || !compatible} onClick={() => void start()}>{actionLabel}</button></div>
-    </section>
-  </div>;
+      {hideActions ? <button id={runControlId} hidden type="button" disabled={busy || !compatible} onClick={() => void start()}>{actionLabel}</button> : <div className="training-dialog-actions"><button className="training-button secondary" type="button" disabled={busy} onClick={onClose}>Cancel</button><button id={runControlId} className="training-button" type="button" disabled={busy || !compatible} onClick={() => void start()}>{actionLabel}</button></div>}
+    </section>;
+  return presentation === "embedded"
+    ? content
+    : <div className="training-dialog-backdrop" role="presentation" onMouseDown={busy ? undefined : onClose}>{content}</div>;
 }
 
 function baselineRunLabel(run: TasksetBaselineRun | null): string {
@@ -633,11 +708,188 @@ export function trainingRecipe(input: { method: string; taskset: Taskset; destin
         ),
         maxPayloadBytes: 1_000_000,
       },
+      policyOptimization: null,
     };
   }
-  if (input.destinationId === "fireworks") return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: input.baseModelId, revision: "fireworks-managed-model-resource-v1", tokenizerRevision: "fireworks-provider-managed", chatTemplateHash: "fireworks-qwen3-chat-v1" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength, maxExamples: input.trainingExamples }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0.05, targetModules: SMOLLM2_LORA_TARGET_MODULES }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 1, memoryBytes: 1_000_000_000, wallTimeMs: 3_600_000 } };
-  if (!input.model?.modelId || !input.model.revision || !input.model.tokenizerRevision || !input.model.chatTemplateHash) return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: "openpond/tiny-cpu-gpt2-fixture", revision: "architecture-v2-seed-17-context-512", tokenizerRevision: "wordlevel-v1", chatTemplateHash: "fixture00000000" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength, maxExamples: input.trainingExamples }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0, targetModules: ["c_attn"] }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 } };
-  return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: input.model.modelId, revision: input.model.revision, tokenizerRevision: input.model.tokenizerRevision, chatTemplateHash: input.model.chatTemplateHash }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength, maxExamples: input.trainingExamples }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0.05, targetModules: SMOLLM2_LORA_TARGET_MODULES }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 8_000_000_000, wallTimeMs: 900_000 } };
+  if (input.method === "ppo" && input.destinationId === "local_cpu_fixture") {
+    const policyModel = input.model?.modelId
+      && input.model.revision
+      && input.model.tokenizerRevision
+      && input.model.chatTemplateHash
+      ? {
+          id: input.model.modelId,
+          revision: input.model.revision,
+          tokenizerRevision: input.model.tokenizerRevision,
+          chatTemplateHash: input.model.chatTemplateHash,
+        }
+      : {
+          id: "openpond/tiny-cpu-gpt2-fixture",
+          revision: "architecture-v2-seed-17-context-512",
+          tokenizerRevision: "wordlevel-v1",
+          chatTemplateHash: "fixture00000000",
+        };
+    const valueModel = { ...policyModel, id: `${policyModel.id}:value-head-v1` };
+    const maxRollouts = Math.max(input.maxSteps, input.trainingExamples);
+    const maximumOutputPerRollout = Math.max(
+      1,
+      Math.min(64, input.rolloutMaxOutputTokens),
+    );
+    const metadataToolContractHash = input.taskset.environment.metadata.toolContractHash;
+    const toolContractHash = typeof metadataToolContractHash === "string"
+      ? metadataToolContractHash
+      : DATASET_NO_TOOLS_CONTRACT_HASH;
+    return {
+      schemaVersion: "openpond.ppoRecipe.v1",
+      method: "ppo",
+      parameterization: "lora",
+      policyOptimization: {
+        schemaVersion: "openpond.policyOptimization.v1",
+        policyModel,
+        referenceModel: { ...policyModel },
+        dataset: {
+          tasksetId: input.taskset.id,
+          tasksetHash: input.taskset.contentHash,
+          split: "train",
+          selectionStrategy: "stable_hash_top_n",
+          selectionSeed: 17,
+          maxExamples: input.trainingExamples,
+        },
+        sampler: {
+          temperature: 0.8,
+          topP: 0.95,
+          maxOutputTokens: maximumOutputPerRollout,
+          maxTurns: 1,
+          concurrency: 1,
+        },
+        environment: {
+          id: input.taskset.environment.entrypoint.slice(0, 240),
+          version: input.taskset.environment.protocolVersion,
+          toolContractHash,
+        },
+        reward: {
+          graderId: "openpond.deterministic_token_match.v1",
+          graderHash: "server-authoritative-grader-hash",
+        },
+        kl: {
+          coefficient: 0.05,
+          referenceConstraint: "fixed_reference",
+        },
+        budgets: {
+          maxRollouts,
+          maxEnvironmentExecutions: maxRollouts,
+          maxInputTokens: maxRollouts * Math.max(16, input.sequenceLength),
+          maxOutputTokens: maxRollouts * maximumOutputPerRollout,
+          maxOptimizerSteps: input.maxSteps,
+          wallTimeMs: input.model ? 900_000 : 120_000,
+          maximumCostUsd: 0,
+        },
+        checkpointEverySteps: 1,
+        seed: 17,
+        evaluationSplit: "frozen_eval",
+        optimizer: {
+          method: "ppo",
+          valueModel,
+          gamma: 1,
+          gaeLambda: 0.95,
+          policyClip: 0.2,
+          valueClip: 0.2,
+          valueLossCoefficient: 0.5,
+          ppoEpochs: 2,
+          minibatchSize: 1,
+        },
+      },
+      lora: {
+        rank: input.rank,
+        alpha: input.rank * 2,
+        dropout: input.model ? 0.05 : 0,
+        targetModules: input.model ? SMOLLM2_LORA_TARGET_MODULES : ["c_attn"],
+      },
+      valueHead: {
+        initialization: "policy_hidden_state_linear",
+        optimizerLearningRate: input.learningRate,
+        artifactName: "value_head.safetensors",
+      },
+      policyLearningRate: input.learningRate,
+      resume: {
+        checkpointId: null,
+        policyHash: "server-authoritative-policy-hash",
+        referenceHash: "server-authoritative-reference-hash",
+        valueModelHash: "server-authoritative-value-hash",
+        optimizerStateHash: null,
+      },
+      resourceLimits: {
+        cpuThreads: 4,
+        memoryBytes: input.model ? 8_000_000_000 : 2_000_000_000,
+        wallTimeMs: input.model ? 900_000 : 120_000,
+      },
+    };
+  }
+  if (input.method === "dpo" && input.destinationId === "local_cpu_fixture") {
+    const policyModel = input.model?.modelId
+      && input.model.revision
+      && input.model.tokenizerRevision
+      && input.model.chatTemplateHash
+      ? {
+          id: input.model.modelId,
+          revision: input.model.revision,
+          tokenizerRevision: input.model.tokenizerRevision,
+          chatTemplateHash: input.model.chatTemplateHash,
+        }
+      : {
+          id: "openpond/tiny-cpu-gpt2-fixture",
+          revision: "architecture-v2-seed-17-context-512",
+          tokenizerRevision: "wordlevel-v1",
+          chatTemplateHash: "fixture00000000",
+        };
+    return {
+      schemaVersion: "openpond.dpoRecipe.v1",
+      method: "dpo",
+      parameterization: "lora",
+      policyModel,
+      referenceModel: { ...policyModel },
+      dataset: {
+        trainSplit: "train",
+        validationSplit: "frozen_eval",
+        maxPairs: input.trainingExamples,
+        maxPromptTokens: Math.max(16, Math.floor(input.sequenceLength / 2)),
+        maxCompletionTokens: Math.max(16, Math.ceil(input.sequenceLength / 2)),
+        selectionStrategy: "stable_hash_top_n",
+        selectionSeed: 17,
+      },
+      lora: {
+        rank: input.rank,
+        alpha: input.rank * 2,
+        dropout: input.model ? 0.05 : 0,
+        targetModules: input.model ? SMOLLM2_LORA_TARGET_MODULES : ["c_attn"],
+      },
+      loss: {
+        variant: "sigmoid",
+        beta: 0.1,
+        labelSmoothing: 0,
+      },
+      optimizer: {
+        learningRate: input.learningRate,
+        epochs: 1,
+        maxSteps: input.maxSteps,
+        batchSize: 1,
+        gradientAccumulationSteps: 1,
+        seed: 17,
+      },
+      referenceLogprobs: {
+        cacheSchemaVersion: "openpond.dpoReferenceLogprobs.v1",
+        cacheKey: "server-authoritative-cache-key",
+        invalidationHash: "server-authoritative-invalidation-hash",
+      },
+      resourceLimits: {
+        cpuThreads: 4,
+        memoryBytes: input.model ? 8_000_000_000 : 2_000_000_000,
+        wallTimeMs: input.model ? 900_000 : 120_000,
+      },
+    };
+  }
+  if (input.destinationId === "fireworks") return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: input.baseModelId, revision: "fireworks-managed-model-resource-v1", tokenizerRevision: "fireworks-provider-managed", chatTemplateHash: "fireworks-qwen3-chat-v1" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength, maxExamples: input.trainingExamples, selectionStrategy: "stable_hash_top_n", selectionSeed: 17 }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0.05, targetModules: SMOLLM2_LORA_TARGET_MODULES }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 1, memoryBytes: 1_000_000_000, wallTimeMs: 3_600_000 } };
+  if (!input.model?.modelId || !input.model.revision || !input.model.tokenizerRevision || !input.model.chatTemplateHash) return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: "openpond/tiny-cpu-gpt2-fixture", revision: "architecture-v2-seed-17-context-512", tokenizerRevision: "wordlevel-v1", chatTemplateHash: "fixture00000000" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength, maxExamples: input.trainingExamples, selectionStrategy: "stable_hash_top_n", selectionSeed: 17 }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0, targetModules: ["c_attn"] }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 } };
+  return { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: input.model.modelId, revision: input.model.revision, tokenizerRevision: input.model.tokenizerRevision, chatTemplateHash: input.model.chatTemplateHash }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: input.sequenceLength, maxExamples: input.trainingExamples, selectionStrategy: "stable_hash_top_n", selectionSeed: 17 }, lora: { rank: input.rank, alpha: input.rank * 2, dropout: 0.05, targetModules: SMOLLM2_LORA_TARGET_MODULES }, optimizer: { learningRate: input.learningRate, epochs: 1, maxSteps: input.maxSteps, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 4, memoryBytes: 8_000_000_000, wallTimeMs: 900_000 } };
 }
 
 export function defaultRftLossMethod(taskset: Taskset): RftLossMethod {
@@ -662,7 +914,7 @@ export function preserveBaseModelSelection(
   candidates: BaseModelCandidate[],
   currentSelectionKey: string,
   destinationId: TrainingDestinationId,
-  method: "sft" | "grpo",
+  method: "sft" | "dpo" | "grpo" | "ppo",
 ): string {
   const current = candidates.find((candidate) =>
     candidate.selectionKey === currentSelectionKey);
@@ -674,16 +926,19 @@ export function preserveBaseModelSelection(
 
 function defaultLearningRate(modelId: string): number { return modelId === "openpond/tiny-cpu-gpt2-fixture" ? 0.01 : 0.0002; }
 function tasksetMethod(taskset: Taskset) { const authored = taskset.metadata.trainingMethod; if (typeof authored === "string" && authored !== "none") return authored; return taskset.readiness?.recommendedMethod && taskset.readiness.recommendedMethod !== "none" ? taskset.readiness.recommendedMethod : "sft"; }
-function selectableMethods(taskset: Taskset): Array<"sft" | "grpo"> {
-  const methods = new Set<"sft" | "grpo">();
+function selectableMethods(taskset: Taskset): Array<"sft" | "dpo" | "grpo" | "ppo"> {
+  const methods = new Set<"sft" | "dpo" | "grpo" | "ppo">();
   for (const method of taskset.capabilities.compatibleMethods) {
-    if (method === "sft" || method === "grpo") methods.add(method);
+    if (method === "sft" || method === "dpo" || method === "grpo" || method === "ppo") methods.add(method);
   }
   if (taskset.readiness?.trainingPath?.bootstrap?.method === "sft") methods.add("sft");
   if (taskset.readiness?.trainingPath?.primaryMethod === "grpo") methods.add("grpo");
-  const ordered: Array<"sft" | "grpo"> = [];
+  if (taskset.readiness?.trainingPath?.primaryMethod === "ppo") methods.add("ppo");
+  const ordered: Array<"sft" | "dpo" | "grpo" | "ppo"> = [];
   if (methods.has("sft")) ordered.push("sft");
+  if (methods.has("dpo")) ordered.push("dpo");
   if (methods.has("grpo")) ordered.push("grpo");
+  if (methods.has("ppo")) ordered.push("ppo");
   return ordered.length ? ordered : ["sft"];
 }
 function trainingSplitCount(taskset: Taskset, split: "train" | "frozen_eval"): number {
@@ -709,7 +964,7 @@ function candidateForPreference(
 function defaultCandidateForDestination(
   candidates: BaseModelCandidate[],
   destinationId: TrainingDestinationId,
-  method: "sft" | "grpo",
+  method: "sft" | "dpo" | "grpo" | "ppo",
 ): BaseModelCandidate | null {
   const compatible = candidates.filter((candidate) =>
     candidate.executionOptions.some((option) =>
