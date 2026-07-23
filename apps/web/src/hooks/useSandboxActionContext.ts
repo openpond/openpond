@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CloudProject, LocalProject, OpenPondActionCatalogEntry } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { actionCatalogForProject } from "../lib/sandbox-action-catalog";
-import { actionCatalogForLocalAgentSdkProject } from "../lib/local-agent-sdk-action-catalog";
+import { actionCatalogForLocalCrossSystemFixture } from "../lib/local-cross-system-action-catalog";
 import { openPondActionProjectTarget } from "../lib/openpond-action-project";
 import {
   buildOpenPondAgentSlashCommand,
@@ -142,7 +142,7 @@ export function useSandboxActionContext({
   }, [accountScopeKey, connection, selectedActionProjectTarget?.id, selectedActionProjectTarget?.teamId]);
 
   const selectedLocalProjectActionCatalog = useMemo(
-    () => actionCatalogForLocalAgentSdkProject(selectedProject),
+    () => actionCatalogForLocalCrossSystemFixture(selectedProject),
     [selectedProject],
   );
   const selectedProjectActionCatalog = useMemo(() => {

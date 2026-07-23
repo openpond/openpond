@@ -724,38 +724,6 @@ describe("Cloud native UI", () => {
     expect(previousSidebarChatVisibleCount(40, 24)).toBe(15);
   });
 
-  test("marks agent SDK projects with composite sidebar icons", () => {
-    const agentSdk = {
-      detected: true,
-      packageName: "openpond-agent-sdk",
-      rootPath: null,
-      manifestPath: "package.json",
-      version: "^1.0.0",
-      dependencyType: "dependencies" as const,
-    };
-    const localProjectRows = localProjectSidebarRows([
-      localProject({ agentSdk }),
-    ]);
-    const cloudProjectRows = cloudProjectSidebarRows([
-      cloudProject({ agentSdk }),
-    ]);
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSectionList, sidebarProps({
-        selectedProjectId: null,
-        selectedCloudWorkItemId: null,
-        localProjectRows,
-        visibleProjectRows: [...localProjectRows, ...cloudProjectRows],
-        cloudProjectRows,
-        cloudWorkItemsByProjectId: {},
-        expandedProjectIds: new Set([localProjectRows[0]!.id]),
-      })),
-    );
-
-    expect(markup.match(/project-kind-icon-agent/g)?.length).toBe(2);
-    expect(markup).toContain("lucide-folder-open");
-    expect(markup).toContain("lucide-cloud");
-  });
-
   test("selects sidebar projects only from a draft chat", () => {
     expect(sidebarProjectClickAction({ view: "chat", selectedSessionId: null })).toBe("select_draft_project");
     expect(sidebarProjectClickAction({ view: "chat", selectedSessionId: "session_1" })).toBe("toggle_project");

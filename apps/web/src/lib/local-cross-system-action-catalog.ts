@@ -4,10 +4,10 @@ import {
   type OpenPondActionCatalogEntry,
 } from "@openpond/contracts";
 
-export function actionCatalogForLocalAgentSdkProject(
+export function actionCatalogForLocalCrossSystemFixture(
   project: LocalProject | null | undefined,
 ): OpenPondActionCatalogEntry[] {
-  if (!project?.agentSdk?.detected || !isCrossSystemOperationsProject(project)) return [];
+  if (!project || !isCrossSystemOperationsFixture(project)) return [];
   return CROSS_SYSTEM_TOOL_DEFINITIONS.map((definition) => ({
     id: definition.name,
     sourcePath: project.path,
@@ -22,7 +22,7 @@ export function actionCatalogForLocalAgentSdkProject(
   }));
 }
 
-function isCrossSystemOperationsProject(
+function isCrossSystemOperationsFixture(
   project: Pick<LocalProject, "name" | "workspacePath">,
 ): boolean {
   return [project.name, project.workspacePath.split(/[\\/]/).at(-1) ?? ""]

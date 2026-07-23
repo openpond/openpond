@@ -12,8 +12,6 @@ import {
   type CloudWorkItemRuntimeSession,
   type CreateImproveRun,
   type LocalProject,
-  type ProjectAgentSdk,
-  type ProjectAgentSdkDependencyType,
   type RuntimeEvent,
   type Session,
   type UsageRequestAttribution,
@@ -41,20 +39,6 @@ const CLOUD_PROJECT_SOURCE_TYPES: ReadonlySet<CloudProjectSourceType> = new Set(
   "template",
   "manual",
 ]);
-const OPENPOND_AGENT_SDK_PACKAGE_NAME = "openpond-agent-sdk";
-const AGENT_SDK_DEPENDENCY_TYPES: ReadonlySet<ProjectAgentSdkDependencyType> = new Set([
-  "dependencies",
-  "devDependencies",
-  "peerDependencies",
-  "optionalDependencies",
-]);
-const AGENT_SDK_DEPENDENCY_FIELDS: ProjectAgentSdkDependencyType[] = [
-  "dependencies",
-  "devDependencies",
-  "peerDependencies",
-  "optionalDependencies",
-];
-
 export type ActiveCodexHistoryTurn = {
   client: CodexAppServerClient;
   completion: Promise<unknown> | null;
@@ -190,7 +174,6 @@ export function normalizeCloudProject(
     manifestPath: stringValue(value.sandboxManifestPath),
     manifestHash: stringValue(value.sandboxManifestHash),
     syncedAt: stringValue(value.sandboxManifestSyncedAt),
-    agentSdk: cloudProjectAgentSdk(value),
     organizationName: organization.displayName,
     organizationSlug: organization.slug,
     createdAt: stringValue(value.createdAt),
@@ -220,123 +203,6 @@ export function cloudProjectSourceLabel(
     return stringValue(value.templateRepoUrl) ?? stringValue(value.templateSourceProjectId) ?? "Template";
   }
   return stringValue(value.normalizedSourceIdentity);
-}
-
-export function cloudProjectAgentSdk(value: Record<string, unknown>): ProjectAgentSdk | null {
-  const metadata = asRecord(value.metadata);
-  const sourceConfig = asRecord(value.sourceConfig);
-  return (
-    normalizeProjectAgentSdk(value.agentSdk) ??
-    normalizeProjectAgentSdk(value.openpondAgentSdk) ??
-    normalizeProjectAgentSdk(metadata.agentSdk) ??
-    normalizeProjectAgentSdk(metadata.openpondAgentSdk) ??
-    normalizeProjectAgentSdk(sourceConfig.agentSdk) ??
-    normalizeProjectAgentSdk(sourceConfig.openpondAgentSdk) ??
-    projectAgentSdkFromBooleanFlags(value, metadata, sourceConfig) ??
-    projectAgentSdkFromPackageManifest(value.packageJson) ??
-    projectAgentSdkFromPackageManifest(metadata.packageJson) ??
-    projectAgentSdkFromPackageManifest(sourceConfig.packageJson)
-  );
-}
-
-export function normalizeProjectAgentSdk(value: unknown): ProjectAgentSdk | null {
-  if (value === true) return detectedProjectAgentSdk({});
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const manifestDetection = projectAgentSdkFromPackageManifest(record.packageJson);
-  if (manifestDetection) return manifestDetection;
-  const detected =
-    booleanValue(record.detected) ??
-    booleanValue(record.usesOpenPondAgentSdk) ??
-    booleanValue(record.openpondAgentSdkDetected);
-  if (detected === false) {
-    return {
-      detected: false,
-      packageName: OPENPOND_AGENT_SDK_PACKAGE_NAME,
-      rootPath: null,
-      manifestPath: stringValue(record.manifestPath) ?? stringValue(record.packageJsonPath),
-      version: null,
-      dependencyType: null,
-    };
-  }
-  const packageName =
-    stringValue(record.packageName) ??
-    stringValue(record.name) ??
-    OPENPOND_AGENT_SDK_PACKAGE_NAME;
-  const version =
-    stringValue(record.version) ??
-    stringValue(record.versionRange) ??
-    stringValue(record.packageVersion);
-  if (detected !== true && packageName !== OPENPOND_AGENT_SDK_PACKAGE_NAME && !version) return null;
-  return detectedProjectAgentSdk({
-    packageName,
-    rootPath: stringValue(record.rootPath),
-    manifestPath:
-      stringValue(record.manifestPath) ??
-      stringValue(record.packageJsonPath) ??
-      stringValue(record.path),
-    version,
-    dependencyType:
-      dependencyTypeValue(record.dependencyType) ??
-      dependencyTypeValue(record.dependencyField),
-  });
-}
-
-export function projectAgentSdkFromBooleanFlags(
-  value: Record<string, unknown>,
-  metadata: Record<string, unknown>,
-  sourceConfig: Record<string, unknown>,
-): ProjectAgentSdk | null {
-  if (
-    booleanValue(value.usesOpenPondAgentSdk) ||
-    booleanValue(value.openpondAgentSdkDetected) ||
-    booleanValue(metadata.usesOpenPondAgentSdk) ||
-    booleanValue(metadata.openpondAgentSdkDetected) ||
-    booleanValue(sourceConfig.usesOpenPondAgentSdk) ||
-    booleanValue(sourceConfig.openpondAgentSdkDetected)
-  ) {
-    return detectedProjectAgentSdk({});
-  }
-  return null;
-}
-
-export function projectAgentSdkFromPackageManifest(value: unknown): ProjectAgentSdk | null {
-  const manifest = asRecord(value);
-  if (Object.keys(manifest).length === 0) return null;
-  for (const dependencyType of AGENT_SDK_DEPENDENCY_FIELDS) {
-    const dependencies = asRecord(manifest[dependencyType]);
-    const version = stringValue(dependencies[OPENPOND_AGENT_SDK_PACKAGE_NAME]);
-    if (!version) continue;
-    return detectedProjectAgentSdk({
-      manifestPath: stringValue(manifest.path) ?? stringValue(manifest.manifestPath),
-      version,
-      dependencyType,
-    });
-  }
-  return null;
-}
-
-export function detectedProjectAgentSdk(input: {
-  packageName?: string | null;
-  rootPath?: string | null;
-  manifestPath?: string | null;
-  version?: string | null;
-  dependencyType?: ProjectAgentSdkDependencyType | null;
-}): ProjectAgentSdk {
-  return {
-    detected: true,
-    packageName: input.packageName ?? OPENPOND_AGENT_SDK_PACKAGE_NAME,
-    rootPath: input.rootPath ?? null,
-    manifestPath: input.manifestPath ?? null,
-    version: input.version ?? null,
-    dependencyType: input.dependencyType ?? null,
-  };
-}
-
-export function dependencyTypeValue(value: unknown): ProjectAgentSdkDependencyType | null {
-  return typeof value === "string" && AGENT_SDK_DEPENDENCY_TYPES.has(value as ProjectAgentSdkDependencyType)
-    ? (value as ProjectAgentSdkDependencyType)
-    : null;
 }
 
 export function booleanValue(value: unknown): boolean | null {
@@ -606,7 +472,6 @@ export function cloudProjectFromSandboxRecord(
     manifestPath: stringValue(value.sandboxManifestPath),
     manifestHash: stringValue(value.sandboxManifestHash),
     syncedAt: stringValue(value.sandboxManifestSyncedAt),
-    agentSdk: cloudProjectAgentSdk(value),
     organizationName: null,
     organizationSlug: null,
     createdAt: stringValue(value.createdAt),

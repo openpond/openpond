@@ -136,7 +136,6 @@ function cloudProject(input: Partial<CloudProject> = {}): CloudProject {
     manifestPath: null,
     manifestHash: null,
     syncedAt: timestamp,
-    agentSdk: null,
     organizationName: "OpenPond",
     organizationSlug: "openpond",
     createdAt: timestamp,
