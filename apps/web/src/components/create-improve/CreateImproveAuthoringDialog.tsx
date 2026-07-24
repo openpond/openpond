@@ -67,6 +67,7 @@ export function CreateImproveAuthoringDialog({
   defaultModel,
   datasetBuildBackLabel = "Back to Dataset sources",
   initialCreation = null,
+  initialBuildIntent = null,
   initialExistingTasksetId = null,
   initialObjective,
   initialSessionIds = [],
@@ -75,6 +76,7 @@ export function CreateImproveAuthoringDialog({
   onBackToDatasetSources,
   onOpenComputeSettings,
   onCreateDataset,
+  onUseExistingDataset,
   onModelCreatedFromTaskset,
   onTasksetCreated,
   preferences,
@@ -91,6 +93,7 @@ export function CreateImproveAuthoringDialog({
   datasetBuildBackLabel?: string;
   defaultModel: ChatModelRef;
   initialCreation?: TaskCreationSnapshot | null;
+  initialBuildIntent?: DatasetEvidenceIntent | null;
   initialExistingTasksetId?: string | null;
   initialObjective: string | null;
   initialSessionIds?: string[];
@@ -102,6 +105,7 @@ export function CreateImproveAuthoringDialog({
   onBackToDatasetSources?: () => void;
   onOpenComputeSettings: () => void;
   onCreateDataset?: () => void;
+  onUseExistingDataset?: () => void;
   onModelCreatedFromTaskset?: (
     taskset: Taskset,
     run: CreateImproveRun,
@@ -131,7 +135,11 @@ export function CreateImproveAuthoringDialog({
     initialCreation
       ? initialCreationStep(initialCreation)
       : datasetBuildMode
-        ? "start"
+        ? initialBuildIntent === "discovery"
+          ? "automatic_scope"
+          : initialBuildIntent
+            ? "evidence"
+            : "start"
         : usesBaseModelStep
           ? "existing_dataset"
           : "start",
@@ -146,7 +154,7 @@ export function CreateImproveAuthoringDialog({
       ? resourceIntent === "dataset" || targetIntent.kind === "model"
         ? initialCreation.request.buildIntent
         : initialCreation.request.entryMode
-      : usesBaseModelStep ? "existing_dataset" : null;
+      : initialBuildIntent ?? (usesBaseModelStep ? "existing_dataset" : null);
   });
   const buildIntent: DatasetEvidenceIntent | null =
     setup === "demonstrations"
@@ -169,7 +177,9 @@ export function CreateImproveAuthoringDialog({
     () => initialCreation?.request.buildSpecification
       ?? (initialCreation?.request.buildIntent && initialCreation.request.buildIntent !== "discovery"
         ? emptyBuildSpecification(initialCreation.request.buildIntent)
-        : null),
+        : initialBuildIntent && initialBuildIntent !== "discovery"
+          ? emptyBuildSpecification(initialBuildIntent)
+          : null),
   );
   const [preferredBaseModelKey, setPreferredBaseModelKey] = useState<string | null>(
     () => candidateForPreference(
@@ -605,6 +615,9 @@ export function CreateImproveAuthoringDialog({
         return;
       }
       const selectedSources = await ensureSelectedSources();
+      const usesDeterministicManualBuild = selectedSources.length === 0
+        && buildIntent !== "discovery"
+        && buildSpecification !== null;
       const reusableDraftRunId = creation?.request.sourceIds.length === 0
         ? creation.request.createImproveRunId
         : null;
@@ -628,8 +641,12 @@ export function CreateImproveAuthoringDialog({
         methodHint: null,
         preferredBaseModel: usesBaseModelStep ? preferredBaseModel : null,
         candidateId: selectedCandidateId,
-        analysisModel: { providerId: authoringProvider, modelId: authoringModel },
-        analysisReasoningEffort: authoringReasoningEffort,
+        analysisModel: usesDeterministicManualBuild
+          ? null
+          : { providerId: authoringProvider, modelId: authoringModel },
+        analysisReasoningEffort: usesDeterministicManualBuild
+          ? null
+          : authoringReasoningEffort,
         createImproveRunId: reusableDraftRunId,
         targetIntent,
       });
@@ -791,12 +808,17 @@ export function CreateImproveAuthoringDialog({
     >
         {step === "start" ? (
           <TrainingStartModeStep
-            allowExistingDataset={usesBaseModelStep && Boolean(onModelCreatedFromTaskset)}
+            allowExistingDataset={Boolean(onUseExistingDataset)
+              || (usesBaseModelStep && Boolean(onModelCreatedFromTaskset))}
             mode={setup}
             operation={targetIntent.operation}
             targetLabel={targetLabel(targetIntent, resourceIntent)}
             onChange={selectMode}
             onContinue={continueFromStart}
+            onUseExistingDataset={onUseExistingDataset ?? (() => {
+              setSetup("existing_dataset");
+              setStep("existing_dataset");
+            })}
           />
         ) : step === "base_model" ? (
           <TrainingBaseModelStep

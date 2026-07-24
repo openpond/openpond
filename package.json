@@ -55,6 +55,7 @@
     "benchmark:turn-runtime": "tsx scripts/benchmark-turn-runtime-queries.ts",
     "baseline:optimization": "tsx scripts/capture-optimization-baseline.ts",
     "training:export-internal-grpo-qa": "tsx scripts/export-internal-grpo-qa-import.ts",
+    "training:seed-local-ppo-smoke": "tsx scripts/materialize-local-ppo-smoke-dataset.ts",
     "media:prepare": "node scripts/tutorials/prepare-public-videos.mjs",
     "media:pull": "node scripts/tutorials/pull-public-videos.mjs",
     "media:verify": "node scripts/tutorials/verify-public-media.mjs",

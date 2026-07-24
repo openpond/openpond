@@ -168,6 +168,24 @@ export function WorkproductConfiguration({
       </DetailSection>
     );
   }
+  if (workproduct.kind === "model") {
+    return (
+      <DetailSection title="Model">
+        <dl className="training-configuration-list">
+          <Config label="Stable Model ID" value={workproduct.id} />
+          <Config
+            label="Dataset"
+            value={workproduct.tasksetId ?? "Select one in Build"}
+          />
+          <Config
+            label="Training runs"
+            value={String(workproduct.trainingRunCount)}
+          />
+          <Config label="Status" value={workproduct.status} />
+        </dl>
+      </DetailSection>
+    );
+  }
   return null;
 }
 

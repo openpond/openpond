@@ -33,6 +33,10 @@ import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { FolderOpen, MessageSquare, Plus, X } from "../icons";
 import { mostRecentlyActivatedRightChatPanel } from "../../lib/right-chat-panels";
 import {
+  buildOpenPondProfileActionCatalog,
+  isOpenPondProfileAction,
+} from "../../lib/openpond-action-run";
+import {
   composerProfileTargetForLibrary,
   composerSkillsForProfile,
   profileStateForRef,
@@ -44,6 +48,7 @@ export type { RightChatPanelView } from "./right-chat-panel-types";
 
 export function RightChatPanelStack({
   panels,
+  actionCatalog = [],
   createImproveActions,
   busy,
   codexPermissionMode,
@@ -53,8 +58,8 @@ export function RightChatPanelStack({
   connectedAppMentions,
   mentionApps,
   codexPersonalSkills,
-  profileSkills,
-  profileLibrary,
+  profileSkills = [],
+  profileLibrary = { lastUsed: null, profiles: [] },
   extensionCatalog,
   projectTarget,
   providerSettings,
@@ -88,6 +93,7 @@ export function RightChatPanelStack({
   onWorkspaceTargetChange,
 }: {
   panels: RightChatPanelView[];
+  actionCatalog?: SandboxActionCatalogEntry[];
   createImproveActions: ComposerCreateImproveActions;
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
@@ -159,6 +165,12 @@ export function RightChatPanelStack({
   const activeProfileSkills = activeProfileState
     ? composerSkillsForProfile(activeProfileState, extensionCatalog)
     : profileSkills;
+  const activeActionCatalog = activeProfileState
+    ? [
+        ...actionCatalog.filter((action) => !isOpenPondProfileAction(action)),
+        ...buildOpenPondProfileActionCatalog(activeProfileState),
+      ]
+    : actionCatalog;
   const profileTarget: ComposerProfileTargetState | null =
     composerProfileTargetForLibrary(profileLibrary, activeProfileRef);
 
@@ -361,6 +373,7 @@ export function RightChatPanelStack({
             openPondCommandAccessMode={openPondCommandAccessMode}
             connection={connection}
             connectedAppMentions={connectedAppMentions}
+            actionCatalog={activeActionCatalog}
             key={activePanel.id}
             mentionApps={mentionApps}
             codexPersonalSkills={codexPersonalSkills}

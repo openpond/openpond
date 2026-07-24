@@ -125,7 +125,7 @@ export function LabsView({
                       }}
                     >
                       <ChartColumnStacked size={13} />
-                      <span><strong>Model</strong><small>Build the data and Evals, then choose training.</small></span>
+                      <span><strong>Model</strong><small>Create a Model and set up its first training run.</small></span>
                     </button>
                   </>
                 ) : null}

@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 29;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 30;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -536,7 +536,15 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_profile_updated_idx ON cross_system_frontier_baseline_runs(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_status_updated_idx ON cross_system_frontier_baseline_runs(status, updated_at DESC);
 
-  CREATE TABLE IF NOT EXISTS model_build_drafts (
+  CREATE TABLE IF NOT EXISTS model_projects (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS model_projects_profile_updated_idx ON model_projects(profile_id, updated_at DESC);
+  CREATE TABLE IF NOT EXISTS model_run_drafts (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
     model_id TEXT NOT NULL,
@@ -545,8 +553,8 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
-  CREATE INDEX IF NOT EXISTS model_build_drafts_profile_updated_idx ON model_build_drafts(profile_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS model_build_drafts_model_idx ON model_build_drafts(model_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS model_run_drafts_profile_updated_idx ON model_run_drafts(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS model_run_drafts_model_idx ON model_run_drafts(model_id, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS training_plans (
     id TEXT PRIMARY KEY,

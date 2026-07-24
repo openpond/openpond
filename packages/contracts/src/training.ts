@@ -355,21 +355,32 @@ export const TrainingMethodAvailabilitySchema = z.object({
   destinationId: TrainingDestinationIdSchema.nullable().default(null),
 });
 
-export const ModelBuildRunPresetSchema = z.enum([
+export const ModelRunPresetSchema = z.enum([
   "small",
   "standard",
   "custom",
   "small_experiment",
 ]);
 
-export const ModelBuildDraftSchema = z.object({
-  schemaVersion: z.literal("openpond.modelBuildDraft.v1"),
+export const ModelProjectSchema = z.object({
+  schemaVersion: z.literal("openpond.modelProject.v1"),
+  id: IdSchema,
+  profileId: IdSchema,
+  name: z.string().trim().min(1).max(200),
+  objective: z.string().trim().max(5_000).nullable(),
+  defaultBaseModel: BaseModelPreferenceSchema.nullable(),
+  defaultDestinationId: TrainingDestinationIdSchema.nullable(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+});
+
+export const ModelRunDraftSchema = z.object({
+  schemaVersion: z.literal("openpond.modelRunDraft.v1"),
   id: IdSchema,
   profileId: IdSchema,
   modelId: IdSchema,
-  name: z.string().trim().min(1).max(200),
-  objective: z.string().trim().max(5_000).nullable(),
   status: z.enum(["draft", "ready_to_run", "launched", "cancelled"]),
+  title: z.string().trim().min(1).max(200),
   datasetMode: z.enum(["existing", "build"]).nullable(),
   tasksetRef: z.object({
     id: IdSchema,
@@ -382,7 +393,7 @@ export const ModelBuildDraftSchema = z.object({
   baseModel: BaseModelPreferenceSchema.nullable(),
   method: TrainingMethodSchema.nullable(),
   destinationId: TrainingDestinationIdSchema.nullable(),
-  runPreset: ModelBuildRunPresetSchema.nullable(),
+  runPreset: ModelRunPresetSchema.nullable(),
   recipe: TrainingRecipeSchema.nullable(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
@@ -503,6 +514,12 @@ export const SftStepMetricSchema = z.object({
   gradientNorm: z.number().nonnegative().nullable(),
   entropy: z.number().nonnegative().nullable(),
   meanTokenAccuracy: z.number().min(0).max(1).nullable(),
+  preferenceAccuracy: z.number().min(0).max(1).nullable().default(null),
+  preferenceMargin: z.number().nullable().default(null),
+  chosenReward: z.number().nullable().default(null),
+  rejectedReward: z.number().nullable().default(null),
+  chosenLogProbability: z.number().nullable().default(null),
+  rejectedLogProbability: z.number().nullable().default(null),
   reward: z.number().nullable().default(null),
   policyLoss: z.number().nullable().default(null),
   advantageLoss: z.number().nullable().default(null),
@@ -913,7 +930,8 @@ export const TrainingStateResponseSchema = z.object({
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),
   frontierBaselineRuns: z.array(CrossSystemFrontierBaselineRunSchema).default([]),
-  modelBuildDrafts: z.array(ModelBuildDraftSchema).default([]),
+  modelProjects: z.array(ModelProjectSchema).default([]),
+  modelRunDrafts: z.array(ModelRunDraftSchema).default([]),
   plans: z.array(TrainingPlanSchema),
   bundles: z.array(TrainingBundleManifestSchema),
   jobs: z.array(TrainingJobSchema),
@@ -949,8 +967,9 @@ export type TrainingCompatibilityReport = z.infer<typeof TrainingCompatibilityRe
 export type PolicyOptimizationComparison = z.infer<typeof PolicyOptimizationComparisonSchema>;
 export type TrainingMethodAvailabilityReasonCode = z.infer<typeof TrainingMethodAvailabilityReasonCodeSchema>;
 export type TrainingMethodAvailability = z.infer<typeof TrainingMethodAvailabilitySchema>;
-export type ModelBuildRunPreset = z.infer<typeof ModelBuildRunPresetSchema>;
-export type ModelBuildDraft = z.infer<typeof ModelBuildDraftSchema>;
+export type ModelRunPreset = z.infer<typeof ModelRunPresetSchema>;
+export type ModelProject = z.infer<typeof ModelProjectSchema>;
+export type ModelRunDraft = z.infer<typeof ModelRunDraftSchema>;
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 export type TrainingBundleManifest = z.infer<typeof TrainingBundleManifestSchema>;
 export type TrainingBundleExport = z.infer<typeof TrainingBundleExportSchema>;

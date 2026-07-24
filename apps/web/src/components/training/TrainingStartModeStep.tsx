@@ -1,12 +1,12 @@
-import { Boxes, CheckCircle2, MessageSquare, Search, SquarePen } from "../icons";
+import { MessageSquare, SquarePen } from "../icons";
+import {
+  TrainingGoalCards,
+  type DatasetEvidenceIntent,
+} from "./TrainingGoalCards";
+
+export type { DatasetEvidenceIntent } from "./TrainingGoalCards";
 
 export type NewModelMode = "automated" | "manual";
-export type DatasetEvidenceIntent =
-  | "demonstrations"
-  | "preferences"
-  | "verifiable_reward"
-  | "rubric"
-  | "discovery";
 export type AgentSourceMode = "from_prompt" | "from_chats";
 export type NewModelSetup =
   | DatasetEvidenceIntent
@@ -21,6 +21,7 @@ export function TrainingStartModeStep({
   targetLabel = "model",
   onChange,
   onContinue,
+  onUseExistingDataset,
 }: {
   mode: NewModelSetup | null;
   allowExistingDataset?: boolean;
@@ -28,47 +29,11 @@ export function TrainingStartModeStep({
   targetLabel?: string;
   onChange: (mode: NewModelSetup) => void;
   onContinue: () => void;
+  onUseExistingDataset?: () => void;
 }) {
   const isAgent = targetLabel === "agent";
   const isDatasetOrModel = targetLabel === "dataset" || targetLabel === "model";
   const copy = startModeCopy(targetLabel);
-  const evidenceModes = [
-    {
-      id: "demonstrations" as const,
-      title: "Teach with examples",
-      description: "Provide prompts and approved responses that show the behavior you want.",
-      example: "Example: “Answer in our support style.”",
-      icon: MessageSquare,
-    },
-    {
-      id: "preferences" as const,
-      title: "Compare responses",
-      description: "Choose which response is better for the same prompt, and why.",
-      example: "Example: “Make this response more likely than that one.”",
-      icon: SquarePen,
-    },
-    {
-      id: "verifiable_reward" as const,
-      title: "Reward correct outcomes",
-      description: "Define an executable check that scores sampled responses.",
-      example: "Example: +1 query executes; +1 returns expected rows; 0 otherwise.",
-      icon: CheckCircle2,
-    },
-    {
-      id: "rubric" as const,
-      title: "Score with a rubric",
-      description: "Define review criteria with positive, negative, and boundary examples.",
-      example: "Example: accurate, complete, grounded, and concise.",
-      icon: Boxes,
-    },
-  ];
-  const existingDatasetMode = {
-    id: "existing_dataset" as const,
-    title: "Use existing Dataset",
-    description: "Create the Model from a reviewed Dataset without changing its tasks, graders, or held-out Evals.",
-    example: "Reuse one Dataset across multiple Models and training attempts.",
-    icon: Boxes,
-  };
   const legacyModes = [
     {
       id: "automated" as const,
@@ -83,13 +48,6 @@ export function TrainingStartModeStep({
       icon: SquarePen,
     },
   ];
-  const discoveryMode = {
-    id: "discovery" as const,
-    title: "Find opportunities",
-    description: "Search an explicitly reviewed local chat scope for recurring work, then choose the evidence to build.",
-    example: "OpenPond shows the eligible scope before any scan starts.",
-    icon: Search,
-  };
   const agentModes = [
     {
       id: "from_prompt" as const,
@@ -108,27 +66,27 @@ export function TrainingStartModeStep({
       icon: MessageSquare,
     },
   ];
-  const options = isAgent
-    ? agentModes
-    : isDatasetOrModel
-      ? allowExistingDataset
-        ? [existingDatasetMode, ...evidenceModes, discoveryMode]
-        : [...evidenceModes, discoveryMode]
-      : legacyModes;
+  const options = isAgent ? agentModes : legacyModes;
   return (
     <>
       <div className="training-run-step-heading">
         <h3>{isAgent ? "Choose a setup" : "What do you want to build?"}</h3>
         <p>{copy.introduction}</p>
       </div>
-      <div
-        aria-label={isAgent
-          ? `How to ${operation} an agent`
-          : `How to start a new ${targetLabel}`}
-        className={`training-method-options training-start-mode-options${isDatasetOrModel ? " training-evidence-intent-options" : ""}`}
-        role="radiogroup"
-      >
-        {options.map((option) => {
+      {isDatasetOrModel ? (
+        <TrainingGoalCards
+          ariaLabel={`How to start a new ${targetLabel}`}
+          value={isDatasetEvidenceIntent(mode) ? mode : null}
+          onActivate={onContinue}
+          onChange={onChange}
+        />
+      ) : (
+        <div
+          aria-label={isAgent ? `How to ${operation} an agent` : `How to start a new ${targetLabel}`}
+          className="training-method-options training-start-mode-options"
+          role="radiogroup"
+        >
+          {options.map((option) => {
           const Icon = option.icon;
           const selected = option.id === mode;
           return (
@@ -158,17 +116,36 @@ export function TrainingStartModeStep({
               <span className="training-start-mode-copy">
                 <strong>{option.title}</strong>
                 <small>{option.description}</small>
-                {"example" in option ? <small className="training-evidence-intent-example">{option.example}</small> : null}
               </span>
               <span className="training-choice-indicator" aria-hidden="true" />
             </button>
           );
-        })}
-      </div>
+          })}
+        </div>
+      )}
       <div className="training-dialog-actions">
+        {allowExistingDataset && onUseExistingDataset ? (
+          <button
+            className="training-button secondary"
+            type="button"
+            onClick={onUseExistingDataset}
+          >
+            Use existing Dataset
+          </button>
+        ) : null}
         <button className="training-button" type="button" disabled={!mode} onClick={onContinue}>Continue</button>
       </div>
     </>
+  );
+}
+
+function isDatasetEvidenceIntent(value: NewModelSetup | null): value is DatasetEvidenceIntent {
+  return (
+    value === "demonstrations" ||
+    value === "preferences" ||
+    value === "verifiable_reward" ||
+    value === "rubric" ||
+    value === "discovery"
   );
 }
 

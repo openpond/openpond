@@ -16,6 +16,7 @@ import {
   completeActivityGroup,
   isCodexGoalContextEvent,
   isCompactionEvent,
+  settleLatestActivityGroup,
 } from "./chat-activities";
 import { classifyChatError } from "./chat-errors";
 import { attachTurnDeliverables } from "./chat-deliverables";
@@ -106,6 +107,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     if (item.name === "assistant.delta") {
       const content = item.output ?? "";
       if (!content) continue;
+      settleLatestActivityGroup(messages, item);
       const previous = messages[messages.length - 1];
       if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createImproveRun) {
         previous.content = `${previous.content ?? ""}${content}`;

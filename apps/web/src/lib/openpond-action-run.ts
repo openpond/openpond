@@ -1,4 +1,7 @@
-import type { ChatAttachment } from "@openpond/contracts";
+import type {
+  ChatAttachment,
+  OpenPondProfileState,
+} from "@openpond/contracts";
 import type {
   SandboxActionCatalogEntry,
   SandboxAgent,
@@ -129,16 +132,43 @@ export function openPondAgentSlashCommandInfo(
 
 export function buildOpenPondProfileActionCommand(
   action: SandboxActionCatalogEntry,
+  options: { agentName?: string | null } = {},
 ): SandboxActionCatalogEntry {
+  const agentName = options.agentName?.trim() || null;
   return {
     ...action,
     implementation: {
       ...(asRecord(action.implementation) ?? {}),
       type: OPENPOND_PROFILE_ACTION_TYPE,
       actionId: action.id,
+      ...(agentName ? { agentName } : {}),
     },
     invokesModel: action.invokesModel ?? true,
   };
+}
+
+export function buildOpenPondProfileActionCatalog(
+  profile: Pick<OpenPondProfileState, "actionCatalog" | "agents"> | null | undefined,
+): SandboxActionCatalogEntry[] {
+  if (!profile) return [];
+  const agentNames = new Map(
+    profile.agents
+      .filter((agent) => agent.enabled)
+      .map((agent) => [agent.id, agent.name] as const),
+  );
+  return profile.actionCatalog
+    .filter((action) => !action.agentId || agentNames.has(action.agentId))
+    .map((action) =>
+      buildOpenPondProfileActionCommand(action, {
+        agentName: action.agentId ? agentNames.get(action.agentId) : null,
+      }),
+    );
+}
+
+export function isOpenPondProfileAction(
+  action: SandboxActionCatalogEntry | null | undefined,
+): boolean {
+  return Boolean(action && openPondProfileActionInfo(action));
 }
 
 export function shouldRetainOpenPondProfileActionAfterSubmit(

@@ -1,31 +1,30 @@
-import type { ActivityItem, ChatMessage } from "./app-models";
-
-export const LIVE_WORK_TRACE_STEP_LIMIT = 5;
+import type { ActivityItem } from "./app-models";
 
 export type WorkTracePresentation = {
-  expanded: boolean;
-  hiddenCount: number;
+  toolCount: number;
+  toolsExpanded: boolean;
   visibleActivities: ActivityItem[];
 };
 
 export function workTracePresentation(
   activities: ActivityItem[],
-  traceState: ChatMessage["traceState"],
-  manualExpanded: boolean | null,
+  toolsExpanded: boolean,
 ): WorkTracePresentation {
-  const running = traceState === "running";
-  const expanded = manualExpanded ?? (running && activities.length <= LIVE_WORK_TRACE_STEP_LIMIT);
-  if (expanded) {
-    return { expanded, hiddenCount: 0, visibleActivities: activities };
-  }
-  if (running && activities.length > LIVE_WORK_TRACE_STEP_LIMIT) {
-    return {
-      expanded,
-      hiddenCount: Math.max(0, activities.length - 1),
-      visibleActivities: activities.slice(-1),
-    };
-  }
-  return { expanded, hiddenCount: activities.length, visibleActivities: [] };
+  const toolCount = activities.reduce(
+    (count, activity) => count + (isInlineWorkTraceActivity(activity) ? 0 : 1),
+    0,
+  );
+  return {
+    toolCount,
+    toolsExpanded,
+    visibleActivities: toolsExpanded
+      ? activities
+      : activities.filter(isInlineWorkTraceActivity),
+  };
+}
+
+export function isInlineWorkTraceActivity(activity: ActivityItem): boolean {
+  return activity.kind === "reasoning";
 }
 
 export function formatWorkTraceDuration(startedAt?: string, completedAt?: string): string | null {

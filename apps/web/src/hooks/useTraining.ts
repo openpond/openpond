@@ -17,7 +17,8 @@ import type {
   TrainingChatSearchResult,
   TrainingStateResponse,
   LocalModelChatConfiguration,
-  ModelBuildDraft,
+  ModelProject,
+  ModelRunDraft,
   FireworksModelServingSession,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
@@ -106,17 +107,24 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   }, [connection, hasActiveBaselineRun, hasActiveDatasetImport, hasActiveFrontierBaselineRun, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
 
   const actions = useMemo(() => ({
-    saveModelBuildDraft: (draft: ModelBuildDraft) =>
-      mutate<ModelBuildDraft>(
-        "save-model-build-draft",
-        "/model-build-drafts",
+    saveModelProject: (project: ModelProject) =>
+      mutate<ModelProject>(
+        "save-model-project",
+        "/models",
+        project,
+        "PUT",
+      ),
+    saveModelRunDraft: (draft: ModelRunDraft) =>
+      mutate<ModelRunDraft>(
+        "save-model-run-draft",
+        "/model-run-drafts",
         draft,
         "PUT",
       ),
-    deleteModelBuildDraft: (draftId: string) =>
+    deleteModelRunDraft: (draftId: string) =>
       mutate<{ deleted: boolean; draftId?: string }>(
-        "delete-model-build-draft",
-        `/model-build-drafts/${encodeURIComponent(draftId)}`,
+        "delete-model-run-draft",
+        `/model-run-drafts/${encodeURIComponent(draftId)}`,
         {},
         "DELETE",
       ),

@@ -135,7 +135,6 @@ export function LabDatasetsPage({
             <button
               aria-selected={detailTab === tab.id}
               className={detailTab === tab.id ? "active" : undefined}
-              disabled={creating && tab.id !== "build"}
               key={tab.id}
               role="tab"
               type="button"
@@ -163,6 +162,13 @@ export function LabDatasetsPage({
             onOpenFiles={() => onOpenFiles(selected.id)}
             training={training}
           />
+        ) : null}
+        {creating && detailTab !== "build" ? (
+          <div className="training-run-placeholder">
+            {detailTab === "overview"
+              ? "Dataset summary will appear here as you save the first revision."
+              : `${DATASET_DETAIL_TABS.find((tab) => tab.id === detailTab)?.label ?? "This section"} will be available after the first Dataset revision is saved.`}
+          </div>
         ) : null}
         {selected && detailTab === "evals" && selected.metadata.flagship === "cross-system-operations" ? (
           <LabExpertBootstrap

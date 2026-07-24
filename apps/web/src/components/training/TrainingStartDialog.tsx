@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
@@ -12,7 +12,7 @@ import {
   type ChatModelRef,
   type ComputeStateResponse,
   type ModelAsset,
-  type ModelBuildRunPreset,
+  type ModelRunPreset,
   type Taskset,
   type TasksetBaselineRun,
   type TrainingDestinationCapabilities,
@@ -65,6 +65,9 @@ export function TrainingStartDialog({
   onReadinessChange,
   onConfigurationChange,
   runPreset = "custom",
+  hideMethodTabs = false,
+  approvalPresentation = "inline",
+  configurationContent,
 }: {
   baseModelCandidates: BaseModelCandidate[];
   connection: ClientConnection | null;
@@ -120,7 +123,10 @@ export function TrainingStartDialog({
     destinationId: TrainingDestinationId;
     recipe: TrainingRecipe;
   }) => void;
-  runPreset?: ModelBuildRunPreset;
+  runPreset?: ModelRunPreset;
+  hideMethodTabs?: boolean;
+  approvalPresentation?: "inline" | "dialog";
+  configurationContent?: ReactNode;
 }) {
   const trainingPath = taskset.readiness?.trainingPath ?? null;
   const primaryMethod = trainingPath?.primaryMethod ?? tasksetMethod(taskset);
@@ -132,6 +138,8 @@ export function TrainingStartDialog({
       : primaryMethod === "dpo" ? "dpo"
         : primaryMethod === "ppo" ? "ppo"
         : "sft";
+  const quickTest =
+    runPreset === "small" || runPreset === "small_experiment";
   const preferredCandidate = candidateForPreference(
     baseModelCandidates,
     preferredBaseModel,
@@ -161,7 +169,9 @@ export function TrainingStartDialog({
   );
   const [deviceId, setDeviceId] = useState("automatic");
   const [maxSteps, setMaxSteps] = useState(() =>
-    requestedInitialMethod === "grpo"
+    quickTest && requestedInitialMethod !== "grpo"
+      ? 1
+      : requestedInitialMethod === "grpo"
       ? runPreset === "standard" ? 50 : 8
       : requestedInitialMethod === "dpo"
         ? runPreset === "standard" ? 100 : 4
@@ -175,12 +185,14 @@ export function TrainingStartDialog({
       Math.min(
         availableTrainExamples,
         requestedInitialMethod === "dpo"
-          ? taskset.learningSignals.preferences.filter((pair) => pair.approved).length
+          ? quickTest
+            ? 2
+            : taskset.learningSignals.preferences.filter((pair) => pair.approved).length
           : requestedInitialMethod === "ppo"
-            ? runPreset === "standard" ? 16 : 4
+            ? quickTest ? 2 : runPreset === "standard" ? 16 : 4
           : requestedInitialMethod === "grpo" && taskset.datasetArtifact
           ? runPreset === "standard" ? 32 : 16
-          : runPreset === "small" ? 32 : 1_000,
+          : quickTest ? 4 : 1_000,
       ),
     ));
   const [sequenceLength, setSequenceLength] = useState(() => {
@@ -214,6 +226,7 @@ export function TrainingStartDialog({
     configurationKey: string;
     value: TrainingPreparedStart;
   } | null>(null);
+  const [providerApprovalOpen, setProviderApprovalOpen] = useState(false);
   const destination = destinations.find((item) => item.destinationId === destinationId) ?? null;
   const isBootstrap = method === "sft" && primaryMethod !== "sft" && bootstrap?.method === "sft";
   const approvedExamples = method === "dpo"
@@ -332,21 +345,18 @@ export function TrainingStartDialog({
     || (method === "grpo" && isFireworks);
   const tasksetMethodCompatible = taskset.capabilities.compatibleMethods.includes(method as never)
     || bootstrap?.method === method;
-  const compatible = Boolean(
+  const configurationCompatible = Boolean(
     taskset.readiness?.ready &&
-    rftBaselineReady &&
     executableMethod &&
     destination?.available &&
     destination.methods.includes(method as never) &&
     tasksetMethodCompatible &&
     selectedExecutionOption?.available &&
-    (selectedBaseModel?.preference.source !== "local" || Boolean(selectedModel)) &&
-    approvalReady,
+    (selectedBaseModel?.preference.source !== "local" || Boolean(selectedModel)),
   );
-  const incompatibility = !taskset.readiness?.ready
+  const compatible = configurationCompatible && rftBaselineReady && approvalReady;
+  const configurationIncompatibility = !taskset.readiness?.ready
     ? "The Taskset must pass environment, grader, and data readiness before training."
-    : !rftBaselineReady
-      ? "Verify mixed rewards on the selected train prompts before preparing a paid training quote."
     : !executableMethod
       ? `${method.toUpperCase()} is the primary recommendation but no compatible execution backend is available here.${bootstrap ? " Choose the optional SFT trajectory bootstrap to run the local precursor." : ""}`
       : !selectedBaseModel
@@ -357,14 +367,17 @@ export function TrainingStartDialog({
             ? "The selected local model is no longer present in the verified compute inventory. Scan Compute and select it again."
       : !destination?.methods.includes(method as never)
         ? `${destinationLabel(destinationId)} does not execute ${method.toUpperCase()}.`
-      : destination?.unavailableReason
-        ?? (isFireworks && !exportApproved
-          ? "Approve the bounded train-split export before launching Fireworks."
-          : isFireworks && (maximumCostUsd < FIREWORKS_CONSERVATIVE_ESTIMATE_USD || maximumCostUsd > FIREWORKS_MAXIMUM_CAP_USD)
-            ? `Set a Fireworks cap from $${FIREWORKS_CONSERVATIVE_ESTIMATE_USD.toFixed(2)} through $${FIREWORKS_MAXIMUM_CAP_USD.toFixed(2)}.`
-            : isFireworks && (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 30)
-              ? "Choose a provider retention record from 1 through 30 days."
-              : null);
+      : destination?.unavailableReason ?? null;
+  const launchIncompatibility = configurationIncompatibility
+    ?? (!rftBaselineReady
+      ? "Verify mixed rewards on the selected train prompts before preparing a paid training quote."
+      : isFireworks && !exportApproved
+        ? "Approve the bounded train-split export before launching Fireworks."
+        : isFireworks && (maximumCostUsd < FIREWORKS_CONSERVATIVE_ESTIMATE_USD || maximumCostUsd > FIREWORKS_MAXIMUM_CAP_USD)
+          ? `Set a Fireworks cap from $${FIREWORKS_CONSERVATIVE_ESTIMATE_USD.toFixed(2)} through $${FIREWORKS_MAXIMUM_CAP_USD.toFixed(2)}.`
+          : isFireworks && (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 30)
+            ? "Choose a provider retention record from 1 through 30 days."
+            : null);
   const recipe = trainingRecipe({
     method,
     taskset,
@@ -408,7 +421,7 @@ export function TrainingStartDialog({
     return () => { active = false; };
   }, [connection]);
 
-  async function start() {
+  async function performStart() {
     if (!compatible) return;
     if (isFireworks && !currentPrepared) {
       const next = await onPrepare(destinationId, recipe, approval);
@@ -418,7 +431,19 @@ export function TrainingStartDialog({
     const completed = isFireworks && currentPrepared
       ? await onConfirmPrepared(currentPrepared, maximumCostUsd)
       : await onStart(destinationId, recipe, approval);
-    if (completed) onClose();
+    if (completed) {
+      setProviderApprovalOpen(false);
+      onClose();
+    }
+  }
+
+  async function start() {
+    if (!configurationCompatible) return;
+    if (isFireworks && approvalPresentation === "dialog") {
+      setProviderApprovalOpen(true);
+      return;
+    }
+    await performStart();
   }
 
   function selectDestination(next: TrainingDestinationId) {
@@ -470,19 +495,28 @@ export function TrainingStartDialog({
       ));
       return;
     }
-    setMaxSteps(next === "dpo" ? 4 : next === "ppo" ? 2 : 2);
+    setMaxSteps(
+      quickTest ? 1 : next === "dpo" ? 4 : next === "ppo" ? 2 : 2,
+    );
     if (next === "dpo") {
       setTrainingExamples(Math.max(
         1,
         Math.min(
           taskset.learningSignals.preferences.filter((pair) => pair.approved).length,
-          64,
+          quickTest ? 2 : 64,
         ),
       ));
+      return;
     }
     if (next === "ppo") {
-      setTrainingExamples(Math.max(1, Math.min(availableTrainExamples, 4)));
+      setTrainingExamples(
+        Math.max(1, Math.min(availableTrainExamples, quickTest ? 2 : 4)),
+      );
+      return;
     }
+    setTrainingExamples(
+      Math.max(1, Math.min(availableTrainExamples, quickTest ? 4 : 32)),
+    );
   }
   const preparedQuote = currentPrepared?.plan.estimatedCostUsd ?? null;
   const actionLabel = busy
@@ -494,14 +528,32 @@ export function TrainingStartDialog({
       : isFireworks
         ? "Prepare exact quote"
         : "Start training";
+  const readinessCompatible =
+    approvalPresentation === "dialog" && isFireworks
+      ? configurationCompatible
+      : compatible;
+  const readinessActionLabel =
+    approvalPresentation === "dialog" && isFireworks ? "Run" : actionLabel;
 
   useEffect(() => {
     onReadinessChange?.({
-      ready: compatible,
-      reason: compatible ? null : incompatibility ?? "This setup is unavailable.",
-      actionLabel,
+      ready: readinessCompatible,
+      reason: readinessCompatible
+        ? null
+        : approvalPresentation === "dialog" && isFireworks
+          ? configurationIncompatibility ?? "This setup is unavailable."
+          : launchIncompatibility ?? "This setup is unavailable.",
+      actionLabel: readinessActionLabel,
     });
-  }, [actionLabel, compatible, incompatibility, onReadinessChange]);
+  }, [
+    approvalPresentation,
+    configurationIncompatibility,
+    isFireworks,
+    launchIncompatibility,
+    onReadinessChange,
+    readinessActionLabel,
+    readinessCompatible,
+  ]);
 
   useEffect(() => {
     onConfigurationChange?.({
@@ -515,9 +567,83 @@ export function TrainingStartDialog({
     onConfigurationChange,
   ]);
 
-  const content = <section className={`training-dialog training-start-dialog${presentation === "embedded" ? " embedded" : ""}`} role={presentation === "dialog" ? "dialog" : "region"} aria-modal={presentation === "dialog" ? "true" : undefined} aria-label="Start training" onMouseDown={(event) => event.stopPropagation()}>
+  const providerApprovalFields = isFireworks ? (
+    <fieldset className="training-provider-approval">
+      <legend>Provider approval</legend>
+      {onOpenProviderSettings ? (
+        <button
+          className="training-text-button"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            if (approvalPresentation === "dialog") {
+              setProviderApprovalOpen(false);
+            } else {
+              onClose();
+            }
+            onOpenProviderSettings();
+          }}
+        >
+          Manage Fireworks provider
+        </button>
+      ) : null}
+      <label className="training-provider-consent">
+        <input
+          type="checkbox"
+          checked={exportApproved}
+          disabled={busy}
+          onChange={(event) => setExportApproved(event.target.checked)}
+        />
+        <span>
+          Export only the approved train split to Fireworks. Frozen Eval cases
+          and grader secrets stay in OpenPond.
+        </span>
+      </label>
+      <div className="training-start-fields">
+        <label>
+          <span>Maximum provider spend (USD)</span>
+          <input
+            aria-label="Maximum provider spend (USD)"
+            type="number"
+            min={FIREWORKS_CONSERVATIVE_ESTIMATE_USD}
+            max={FIREWORKS_MAXIMUM_CAP_USD}
+            step={0.01}
+            value={maximumCostUsd}
+            disabled={busy}
+            onChange={(event) => setMaximumCostUsd(event.target.valueAsNumber)}
+          />
+        </label>
+        <label>
+          <span>Retention record (days)</span>
+          <input
+            aria-label="Retention record (days)"
+            type="number"
+            min={1}
+            max={30}
+            step={1}
+            value={retentionDays}
+            disabled={busy}
+            onChange={(event) => setRetentionDays(event.target.valueAsNumber)}
+          />
+        </label>
+      </div>
+      <p className="training-start-note">
+        Approval is bound server-side to the signed-in OpenPond account at
+        launch.
+      </p>
+      {method === "grpo" ? (
+        <p className="training-start-note">
+          RFT requires a public HTTPS callback ending in{" "}
+          <code>/v1/training/fireworks/rft</code>. Launch fails closed before
+          provider upload when it is missing or invalid.
+        </p>
+      ) : null}
+    </fieldset>
+  ) : null;
+
+  const content = <section className={`training-dialog training-start-dialog${presentation === "embedded" ? " embedded" : ""}${hideMethodTabs ? " hide-method-tabs" : ""}`} role={presentation === "dialog" ? "dialog" : "region"} aria-modal={presentation === "dialog" ? "true" : undefined} aria-label="Start training" onMouseDown={(event) => event.stopPropagation()}>
       {presentation === "dialog" ? <div className="training-dialog-header"><div><h2>Start training</h2><p>{taskset.name}</p></div><button type="button" aria-label="Close start training" disabled={busy} onClick={onClose}><X size={16}/></button></div> : null}
-      <div className="training-method-tabs" role="tablist" aria-label="Training method">
+      {!hideMethodTabs ? <div className="training-method-tabs" role="tablist" aria-label="Training method">
         {methodOptions.map((candidate) => (
           <button
             aria-selected={candidate === method}
@@ -532,42 +658,21 @@ export function TrainingStartDialog({
             <strong>{trainingMethodLabel(candidate)}</strong>
           </button>
         ))}
-      </div>
+      </div> : null}
       <div className="training-start-fields">
-        <label><span>Base model</span><select value={baseModelKey} disabled={busy} onChange={(event) => { const key = event.target.value; const candidate = baseModelCandidates.find((item) => item.selectionKey === key); setBaseModelKey(key); setLearningRate(defaultLearningRate(candidate?.preference.modelId ?? "")); }}><option value="" disabled>Choose compatible starting weights</option>{compatibleBaseModels.map((candidate) => { const option = candidate.executionOptions.find((item) => item.destinationId === destinationId && item.methods.includes(method)); return <option key={candidate.selectionKey} value={candidate.selectionKey} disabled={!option?.available}>{candidate.label} · {candidate.sourceLabel}{option?.available ? "" : ` — ${option?.unavailableReason ?? "Unavailable"}`}</option>; })}</select></label>
         <label><span>Compute</span><select value={destinationId} disabled={busy} onChange={(event) => selectDestination(event.target.value as TrainingDestinationId)}>{destinations.filter((item) => !["custom", "runpod_byoc", "export"].includes(item.destinationId)).map((item) => <option value={item.destinationId} key={item.destinationId} disabled={!item.available}>{destinationLabel(item.destinationId)}{item.available ? "" : ` — ${item.unavailableReason ?? "Unavailable"}`}</option>)}</select></label>
+        <label><span>Base model</span><select value={baseModelKey} disabled={busy} onChange={(event) => { const key = event.target.value; const candidate = baseModelCandidates.find((item) => item.selectionKey === key); setBaseModelKey(key); setLearningRate(defaultLearningRate(candidate?.preference.modelId ?? "")); }}><option value="" disabled>Choose compatible starting weights</option>{compatibleBaseModels.map((candidate) => { const option = candidate.executionOptions.find((item) => item.destinationId === destinationId && item.methods.includes(method)); return <option key={candidate.selectionKey} value={candidate.selectionKey} disabled={!option?.available}>{candidate.label} · {candidate.sourceLabel}{option?.available ? "" : ` — ${option?.unavailableReason ?? "Unavailable"}`}</option>; })}</select></label>
         <label><span>Device</span><select value={deviceId} disabled={busy || destinationId !== "local_cpu_fixture"} onChange={(event) => setDeviceId(event.target.value)}><option value="automatic">Automatic</option>{selectableDevices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}</select></label>
       </div>
-      {isFireworks ? <fieldset className="training-provider-approval">
-        <legend>Provider approval</legend>
-        {onOpenProviderSettings ? (
-          <button
-            className="training-text-button"
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              onClose();
-              onOpenProviderSettings();
-            }}
-          >
-            Manage Fireworks provider
-          </button>
-        ) : null}
-        <label className="training-provider-consent"><input type="checkbox" checked={exportApproved} disabled={busy} onChange={(event) => setExportApproved(event.target.checked)}/><span>Export only the approved train split to Fireworks. Frozen Eval cases and grader secrets stay in OpenPond.</span></label>
-        <div className="training-start-fields">
-          <label><span>Maximum provider spend (USD)</span><input aria-label="Maximum provider spend (USD)" type="number" min={FIREWORKS_CONSERVATIVE_ESTIMATE_USD} max={FIREWORKS_MAXIMUM_CAP_USD} step={0.01} value={maximumCostUsd} disabled={busy} onChange={(event) => setMaximumCostUsd(event.target.valueAsNumber)}/></label>
-          <label><span>Retention record (days)</span><input aria-label="Retention record (days)" type="number" min={1} max={30} step={1} value={retentionDays} disabled={busy} onChange={(event) => setRetentionDays(event.target.valueAsNumber)}/></label>
-        </div>
-        <p className="training-start-note">Approval is bound server-side to the signed-in OpenPond account at launch.</p>
-        {method === "grpo" ? <p className="training-start-note">RFT requires a public HTTPS callback ending in <code>/v1/training/fireworks/rft</code>. Launch fails closed before provider upload when it is missing or invalid.</p> : null}
-      </fieldset> : null}
+      {configurationContent}
+      {approvalPresentation === "inline" ? providerApprovalFields : null}
       <dl className="training-start-summary">
         <div><dt>Training data</dt><dd>{method === "grpo" || method === "ppo" ? `${Math.min(trainingExamples, availableTrainExamples)} of ${availableTrainExamples} approved train prompts` : method === "dpo" ? `${Math.min(trainingExamples, approvedExamples)} of ${approvedExamples} approved preference pairs` : `${Math.min(trainingExamples, approvedExamples || availableTrainExamples)} approved example${trainingExamples === 1 ? "" : "s"}`}</dd></div>
         <div><dt>Evaluation</dt><dd>{evaluationExamples} test example{evaluationExamples === 1 ? "" : "s"}</dd></div>
-        <div><dt>{preparedQuote == null ? "Estimate" : "Exact quote"}</dt><dd>{destinationId === "local_cpu_fixture" ? selectedModel ? `$0 · ${maxSteps} steps × ${sequenceLength} tokens · 15-minute hard stop` : "$0 · 2-minute hard stop" : isFireworks ? preparedQuote == null ? `Prepare a provider-validated quote · hard cap $${Number.isFinite(maximumCostUsd) ? maximumCostUsd.toFixed(2) : "—"}` : `$${preparedQuote.toFixed(2)} · hard cap $${maximumCostUsd.toFixed(2)}` : "Provided before approval"}</dd></div>
+        <div><dt>{preparedQuote == null ? "Estimate" : "Exact quote"}</dt><dd>{destinationId === "local_cpu_fixture" ? selectedModel ? `$0 · ${maxSteps} steps × ${sequenceLength} tokens · 15-minute hard stop` : "$0 · 2-minute hard stop" : isFireworks ? approvalPresentation === "dialog" ? "Reviewed when you Run" : preparedQuote == null ? `Prepare a provider-validated quote · hard cap $${Number.isFinite(maximumCostUsd) ? maximumCostUsd.toFixed(2) : "—"}` : `$${preparedQuote.toFixed(2)} · hard cap $${maximumCostUsd.toFixed(2)}` : "Provided before approval"}</dd></div>
         <div><dt>Storage</dt><dd>{isFireworks ? "Portable output imported into app-managed storage" : compute?.settings.modelStorePath ?? "App-managed local storage"}</dd></div>
       </dl>
-      {currentPrepared ? (
+      {approvalPresentation === "inline" && currentPrepared ? (
         <section className="training-prepared-confirmation" aria-label="Confirm paid training launch">
           <div>
             <strong>Ready to launch</strong>
@@ -587,7 +692,7 @@ export function TrainingStartDialog({
           <p>No Fireworks dataset or job exists until you launch.</p>
         </section>
       ) : null}
-      {method === "grpo" && isFireworks ? (
+      {approvalPresentation === "inline" && method === "grpo" && isFireworks ? (
         <section className="training-prepared-confirmation" aria-label={taskset.datasetArtifact ? "Train-signal check" : "Base-model test"}>
           <div>
             <strong>{taskset.datasetArtifact
@@ -652,12 +757,143 @@ export function TrainingStartDialog({
       ) : null}
       {isBootstrap && bootstrap ? <div className="training-bootstrap-limitations"><strong>Supervised precursor</strong><p>This SFT run teaches the approved tool trajectories. It does not replace reinforcement training.</p><ul>{bootstrap.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul></div> : null}
       <details className="training-start-advanced"><summary>Advanced settings</summary><div className="training-start-fields"><label><span>Training examples</span><input type="number" min={1} max={maximumTrainingExamples} value={trainingExamples} onChange={(event) => setTrainingExamples(Math.max(1, Math.min(maximumTrainingExamples, event.target.valueAsNumber || 1)))}/></label><label><span>Optimizer steps</span><input type="number" min={1} max={1000} value={maxSteps} onChange={(event) => setMaxSteps(event.target.valueAsNumber || 1)}/></label><label><span>{method === "grpo" ? "Prompt length" : "Sequence length"}</span><input type="number" min={16} max={isFireworks ? FIREWORKS_MAXIMUM_SEQUENCE_LENGTH : 4_096} value={sequenceLength} onChange={(event) => setSequenceLength(event.target.valueAsNumber || 64)}/></label>{method === "grpo" ? <label><span>Maximum output</span><input type="number" min={16} max={FIREWORKS_MAXIMUM_RFT_OUTPUT_TOKENS} value={rolloutMaxOutputTokens} onChange={(event) => setRolloutMaxOutputTokens(Math.max(16, Math.min(FIREWORKS_MAXIMUM_RFT_OUTPUT_TOKENS, event.target.valueAsNumber || FIREWORKS_DEFAULT_RFT_MAX_OUTPUT_TOKENS)))}/></label> : null}<label><span>LoRA rank</span><input type="number" min={1} max={256} value={rank} onChange={(event) => setRank(event.target.valueAsNumber || 2)}/></label><label><span>Learning rate</span><input type="number" min={0.000001} max={0.1} step={0.0001} value={learningRate} onChange={(event) => { const value = event.target.valueAsNumber; if (Number.isFinite(value)) setLearningRate(value); }}/></label>{method === "grpo" ? <><label><span>RL loss</span><select aria-label="RL loss" value={rftLossMethod} onChange={(event) => setRftLossMethod(event.target.value as RftLossMethod)}><option value="dapo">DAPO</option><option value="grpo">GRPO</option><option value="gspo-token">GSPO-token</option></select></label><label><span>Rollouts per prompt</span><input type="number" min={2} max={16} value={rolloutGroupSize} onChange={(event) => setRolloutGroupSize(event.target.valueAsNumber || 8)}/></label><label><span>Concurrent rollouts</span><input type="number" min={1} max={16} value={rolloutConcurrency} onChange={(event) => setRolloutConcurrency(event.target.valueAsNumber || 4)}/></label></> : null}</div></details>
-      {!compatible && (rftBaselineReady || method !== "grpo" || !isFireworks) ? <div className="training-banner error training-dialog-error">{incompatibility ?? "This setup is unavailable."}</div> : destination?.nonProduction ? <p className="training-start-note">This local worker is an experimental correctness run. It does not claim useful model quality.</p> : null}
-      {hideActions ? <button id={runControlId} hidden type="button" disabled={busy || !compatible} onClick={() => void start()}>{actionLabel}</button> : <div className="training-dialog-actions"><button className="training-button secondary" type="button" disabled={busy} onClick={onClose}>Cancel</button><button id={runControlId} className="training-button" type="button" disabled={busy || !compatible} onClick={() => void start()}>{actionLabel}</button></div>}
+      {!readinessCompatible ? <div className="training-banner error training-dialog-error">{approvalPresentation === "dialog" && isFireworks ? configurationIncompatibility ?? "This setup is unavailable." : launchIncompatibility ?? "This setup is unavailable."}</div> : destination?.nonProduction ? <p className="training-start-note">This local worker is an experimental correctness run. It does not claim useful model quality.</p> : null}
+      {hideActions ? <button id={runControlId} hidden type="button" disabled={busy || !readinessCompatible} onClick={() => void start()}>{readinessActionLabel}</button> : <div className="training-dialog-actions"><button className="training-button secondary" type="button" disabled={busy} onClick={onClose}>Cancel</button><button id={runControlId} className="training-button" type="button" disabled={busy || !compatible} onClick={() => void start()}>{actionLabel}</button></div>}
     </section>;
-  return presentation === "embedded"
-    ? content
-    : <div className="training-dialog-backdrop" role="presentation" onMouseDown={busy ? undefined : onClose}>{content}</div>;
+  const providerApprovalDialog =
+    approvalPresentation === "dialog" && isFireworks && providerApprovalOpen ? (
+      <div
+        className="training-dialog-backdrop"
+        role="presentation"
+        onMouseDown={busy ? undefined : () => setProviderApprovalOpen(false)}
+      >
+        <section
+          aria-label="Review provider approval"
+          aria-modal="true"
+          className="training-dialog training-provider-approval-dialog"
+          role="dialog"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="training-dialog-header">
+            <div>
+              <h2>Review and run</h2>
+              <p>
+                {destinationLabel(destinationId)} · {modelLabel(baseModelId)}
+              </p>
+            </div>
+            <button
+              aria-label="Close provider approval"
+              disabled={busy}
+              type="button"
+              onClick={() => setProviderApprovalOpen(false)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {method === "grpo" ? (
+            <section className="training-launch-check">
+              <div>
+                <strong>
+                  {rftBaselineReady
+                    ? "Train signal verified"
+                    : "Train-signal check required"}
+                </strong>
+                <span>
+                  {rftBaselineReady
+                    ? "The selected prompts produced the mixed rewards required for GRPO."
+                    : "Run the selected train prompts before any provider upload or paid training job can start."}
+                </span>
+              </div>
+              {!rftBaselineReady ? (
+                <button
+                  className="training-button secondary"
+                  type="button"
+                  disabled={baselineBusy || !baseModelId || !onRunBaseline}
+                  onClick={() => {
+                    if (!onRunBaseline || !baseModelId) return;
+                    void onRunBaseline(
+                      { providerId: "fireworks", modelId: baseModelId },
+                      {
+                        targetModelId: modelId,
+                        taskLimit: taskset.datasetArtifact
+                          ? trainingExamples
+                          : 8,
+                        attemptsPerTask: taskset.datasetArtifact
+                          ? rolloutGroupSize
+                          : 4,
+                        selectionSeed: 17,
+                        split: taskset.datasetArtifact
+                          ? "train"
+                          : "frozen_eval",
+                        selectionStrategy: rftSelectionStrategy,
+                        sampling: rftSampling,
+                      }
+                    );
+                  }}
+                >
+                  {baselineBusy
+                    ? baselineRunLabel(alignedBaselineRun)
+                    : baselineRunFailed || baselineFailed
+                      ? "Retry train-signal check"
+                      : "Run train-signal check"}
+                </button>
+              ) : null}
+            </section>
+          ) : null}
+          {providerApprovalFields}
+          {currentPrepared ? (
+            <dl className="training-start-summary">
+              <div>
+                <dt>Exact quote</dt>
+                <dd>
+                  {preparedQuote == null
+                    ? "Unavailable"
+                    : `$${preparedQuote.toFixed(2)}`}
+                </dd>
+              </div>
+              <div>
+                <dt>Prepared data</dt>
+                <dd>
+                  {formatBytes(currentPrepared.bundle.totalSizeBytes)} · verified
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+          <div className="training-dialog-actions">
+            <button
+              className="training-button secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => setProviderApprovalOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              className="training-button"
+              type="button"
+              disabled={busy || !compatible}
+              onClick={() => void performStart()}
+            >
+              {actionLabel}
+            </button>
+          </div>
+        </section>
+      </div>
+    ) : null;
+  return presentation === "embedded" ? (
+    <>
+      {content}
+      {providerApprovalDialog}
+    </>
+  ) : (
+    <div
+      className="training-dialog-backdrop"
+      role="presentation"
+      onMouseDown={busy ? undefined : onClose}
+    >
+      {content}
+    </div>
+  );
 }
 
 function baselineRunLabel(run: TasksetBaselineRun | null): string {

@@ -101,7 +101,7 @@ function deduplicateStepMetrics(
 function stepMetricFromEvent(event: TrainingJobEvent): SftStepMetric[] {
   if (
     event.type !== "metric"
-    || !["sft_step", "training_step"].includes(String(event.payload.metricKind))
+    || !["sft_step", "dpo_step", "training_step"].includes(String(event.payload.metricKind))
   ) return [];
   const number = (key: string) => typeof event.payload[key] === "number" && Number.isFinite(event.payload[key]) ? event.payload[key] as number : null;
   const step = number("step");
@@ -118,6 +118,12 @@ function stepMetricFromEvent(event: TrainingJobEvent): SftStepMetric[] {
     gradientNorm: number("gradientNorm"),
     entropy: number("entropy"),
     meanTokenAccuracy: number("meanTokenAccuracy"),
+    preferenceAccuracy: number("preferenceAccuracy"),
+    preferenceMargin: number("preferenceMargin"),
+    chosenReward: number("chosenReward"),
+    rejectedReward: number("rejectedReward"),
+    chosenLogProbability: number("chosenLogProbability"),
+    rejectedLogProbability: number("rejectedLogProbability"),
     reward: number("reward"),
     policyLoss: number("policyLoss"),
     advantageLoss: number("advantageLoss"),

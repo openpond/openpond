@@ -736,7 +736,21 @@ function heuristicProposal(id: string, snapshot: TaskCreationSnapshot, sources: 
         : snapshot.request.buildIntent === "rubric"
           ? "none"
           : "sft");
-  const proposedExamples = sources.flatMap((source, sourceIndex) => pairEvidence(evidence[sourceIndex]?.excerpts ?? []).flatMap((pair, pairIndex) => pair.assistant ? [{ id: `example_${contentHash([source.id, pair.user.turnId, pairIndex]).slice(0, 20)}`, sourceId: source.id, sourceTurnId: pair.user.turnId, split: splitForSource(sourceIndex, sources.length), origin: "extracted" as const, inputPrompt: pair.user.text, expectedOutputText: pair.assistant.text, rationale: "Selected as a candidate example from the explicitly chosen conversation." }] : []));
+  const proposedExamples = sources.flatMap((source, sourceIndex) => {
+    const pairs = pairEvidence(evidence[sourceIndex]?.excerpts ?? []);
+    return pairs.flatMap((pair, pairIndex) => pair.assistant ? [{
+      id: `example_${contentHash([source.id, pair.user.turnId, pairIndex]).slice(0, 20)}`,
+      sourceId: source.id,
+      sourceTurnId: pair.user.turnId,
+      split: source.metadata.manualBuildSpecification === true
+        ? splitForSource(pairIndex, pairs.length)
+        : splitForSource(sourceIndex, sources.length),
+      origin: "extracted" as const,
+      inputPrompt: pair.user.text,
+      expectedOutputText: pair.assistant.text,
+      rationale: "Selected as a candidate example from the explicitly chosen conversation.",
+    }] : []);
+  });
   return TaskDesignProposalSchema.parse({
     schemaVersion: "openpond.taskDesignProposal.v1",
     id,
@@ -824,11 +838,12 @@ function taskRecords(
     id: string,
     input: Record<string, unknown>,
     expectedOutput: Record<string, unknown> | null,
+    split: TaskDataRecord["split"] = "train",
   ): TaskDataRecord => ({
     schemaVersion: "openpond.taskData.v1",
     id: `task_${contentHash([source.id, id]).slice(0, 20)}`,
     clusterKey: `${source.clusterKey}_${id}`,
-    split: "train",
+    split,
     input,
     expectedOutput,
     policyVisibleContext: {},
@@ -841,12 +856,22 @@ function taskRecords(
     },
   });
   if (specification.kind === "demonstrations") {
-    return [...proposalTasks, ...specification.examples.map((example) =>
-      task(example.id, { prompt: example.prompt }, { text: example.response }))];
+    return [...proposalTasks, ...specification.examples.map((example, index) =>
+      task(
+        example.id,
+        { prompt: example.prompt },
+        { text: example.response },
+        splitForSource(index, specification.examples.length),
+      ))];
   }
   if (specification.kind === "preferences") {
-    return [...proposalTasks, ...specification.pairs.map((pair) =>
-      task(pair.id, { prompt: pair.prompt }, { text: pair.chosen }))];
+    return [...proposalTasks, ...specification.pairs.map((pair, index) =>
+      task(
+        pair.id,
+        { prompt: pair.prompt },
+        { text: pair.chosen },
+        splitForSource(index, specification.pairs.length),
+      ))];
   }
   return [...proposalTasks, task(
     specification.kind,

@@ -6,6 +6,7 @@ import {
   BookOpenText,
   Bot,
   Check,
+  FileText,
   Paperclip,
   Plus,
   Workflow,
@@ -22,6 +23,10 @@ import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions
 import { connectedAppIconUrl } from "../../lib/public-assets";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import {
+  profileSkillInvocationText,
+  type ComposerInvocableSkill,
+} from "../../lib/profile-skill-invocations";
+import {
   composerSlashCommandDetail,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
@@ -29,12 +34,14 @@ import {
 export type SlashMenuItem =
   | { kind: "command"; command: ComposerSlashCommand }
   | { kind: "app-context"; app: OpenPondApp }
+  | { kind: "skill"; skill: ComposerInvocableSkill }
   | { kind: "action"; action: SandboxActionCatalogEntry };
 
 export type ComposerMentionMenuItem =
   | { kind: "app"; app: OpenPondApp }
   | { kind: "connected-app"; app: ConnectedAppMentionOption }
   | { kind: "team-member"; member: TeamChatMember }
+  | { kind: "skill"; skill: ComposerInvocableSkill }
   | { kind: "action"; action: SandboxActionCatalogEntry };
 
 export type ComposerCommandMenuItem =
@@ -49,21 +56,30 @@ export type ComposerCommandMenuSection = {
   label: string;
   grid?: boolean;
   queryScope?: "mentions" | "slash";
+  queryScopes?: Array<"mentions" | "slash">;
 };
 
 function isAgentAction(action: SandboxActionCatalogEntry): boolean {
-  return action.implementation?.type === "openpond-agent";
+  const implementationType = action.implementation?.type;
+  return implementationType === "openpond-agent"
+    || implementationType === "local-profile-agent"
+    || (
+      implementationType === "openpond-profile-action"
+      && (action.sourceActionId === "chat" || action.id === "chat" || action.id.endsWith(".chat"))
+    );
 }
 
 function slashMenuItemKey(item: SlashMenuItem): string {
   if (item.kind === "command") return `command:${item.command.id}`;
   if (item.kind === "app-context") return `app-context:${item.app.id}`;
+  if (item.kind === "skill") return `skill:${item.skill.name}`;
   return `action:${item.action.id}`;
 }
 
 function slashMenuItemLabel(item: SlashMenuItem): string {
   if (item.kind === "command") return `${item.command.command} ${item.command.label}`;
   if (item.kind === "app-context") return item.app.name;
+  if (item.kind === "skill") return profileSkillInvocationText(item.skill);
   return composerActionCatalogLabel(item.action);
 }
 
@@ -72,6 +88,7 @@ function slashMenuItemDetail(item: SlashMenuItem): string {
   if (item.kind === "app-context") {
     return `Planning context${item.app.description ? `: ${item.app.description}` : item.app.gitRepo ? `: ${item.app.gitRepo}` : ""}`;
   }
+  if (item.kind === "skill") return item.skill.description || item.skill.path;
   return item.action.description || composerActionCatalogHint(item.action);
 }
 
@@ -79,6 +96,7 @@ function mentionMenuItemKey(item: ComposerMentionMenuItem): string {
   if (item.kind === "app") return `app:${item.app.id}`;
   if (item.kind === "connected-app") return `connected-app:${item.app.provider}`;
   if (item.kind === "team-member") return `team-member:${item.member.userId}`;
+  if (item.kind === "skill") return `skill:${item.skill.name}`;
   return `action:${item.action.id}`;
 }
 
@@ -86,6 +104,7 @@ function mentionMenuItemLabel(item: ComposerMentionMenuItem): string {
   if (item.kind === "app") return item.app.name;
   if (item.kind === "connected-app") return item.app.label;
   if (item.kind === "team-member") return item.member.name;
+  if (item.kind === "skill") return profileSkillInvocationText(item.skill);
   return actionMentionLabel(item.action);
 }
 
@@ -95,6 +114,7 @@ function mentionMenuItemDetail(item: ComposerMentionMenuItem): string {
   if (item.kind === "team-member") {
     return item.member.handle ? `@${item.member.handle}` : "Team member";
   }
+  if (item.kind === "skill") return item.skill.description || item.skill.path;
   const actionNames = item.app.sandboxActionRegistry?.actions.map((action) => action.name) ?? [];
   return actionNames.length > 0
     ? `Actions: ${actionNames.slice(0, 4).join(", ")}${actionNames.length > 4 ? ` +${actionNames.length - 4}` : ""}`
@@ -136,7 +156,11 @@ export function filterComposerCommandMenuSections(
   const scope = query.startsWith("/") ? "slash" : query.startsWith("@") ? "mentions" : null;
   const searchQuery = scope ? query.slice(1).trimStart() : query;
   const scopedSections = scope
-    ? sections.filter((section) => section.id === scope || section.queryScope === scope)
+    ? sections.filter((section) =>
+        section.id === scope
+        || section.queryScope === scope
+        || section.queryScopes?.includes(scope)
+      )
     : sections;
   if (!searchQuery) return scopedSections;
 
@@ -170,6 +194,7 @@ function menuItemIcon(item: ComposerCommandMenuItem) {
       return <Workflow size={14} />;
     }
     if (slashItem.kind === "app-context") return <AtSign size={14} />;
+    if (slashItem.kind === "skill") return <FileText size={14} />;
     return isAgentAction(slashItem.action) ? <Bot size={14} /> : <Workflow size={14} />;
   }
   const mentionItem = item.item;
@@ -186,6 +211,7 @@ function menuItemIcon(item: ComposerCommandMenuItem) {
   if (mentionItem.kind === "action") {
     return isAgentAction(mentionItem.action) ? <Bot size={14} /> : <Workflow size={14} />;
   }
+  if (mentionItem.kind === "skill") return <FileText size={14} />;
   return <AtSign size={14} />;
 }
 

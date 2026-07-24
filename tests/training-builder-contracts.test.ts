@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   TaskCreationRequestSchema,
   TasksetReadinessReportSchema,
-  ModelBuildDraftSchema,
+  ModelRunDraftSchema,
   TrainingMethodAvailabilitySchema,
   TrainingMethodSchema,
   TrainingRecipeSchema,
@@ -68,15 +68,14 @@ test("PPO is first-class and cannot fall back to an unsupported placeholder reci
   }).success, false);
 });
 
-test("Model build drafts keep Model and immutable Dataset identity separate", () => {
-  const draft = ModelBuildDraftSchema.parse({
-    schemaVersion: "openpond.modelBuildDraft.v1",
-    id: "model_build_fixture",
+test("Model run drafts keep Model and immutable Dataset identity separate", () => {
+  const draft = ModelRunDraftSchema.parse({
+    schemaVersion: "openpond.modelRunDraft.v1",
+    id: "run_draft_fixture",
     profileId: "default",
     modelId: "model_independent_fixture",
-    name: "Greeting model",
-    objective: "Improve approved greetings.",
     status: "draft",
+    title: "Run draft",
     datasetMode: "existing",
     tasksetRef: {
       id: "dataset_fixture",

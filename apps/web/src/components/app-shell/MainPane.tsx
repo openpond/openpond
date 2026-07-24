@@ -37,7 +37,11 @@ import {
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
-import { buildOpenPondProfileActionCommand } from "../../lib/openpond-action-run";
+import {
+  buildOpenPondProfileActionCatalog,
+  buildOpenPondProfileActionCommand,
+  isOpenPondProfileAction,
+} from "../../lib/openpond-action-run";
 import {
   resolveRightSidebarFileSource,
   type RightSidebarFileSource,
@@ -348,6 +352,10 @@ export function MainPane({
     () => composerSkillsForProfile(selectedProfileState, bootstrap?.extensionCatalog),
     [bootstrap?.extensionCatalog, selectedProfileState],
   );
+  const selectedProfileActionCatalog = useMemo(
+    () => buildOpenPondProfileActionCatalog(selectedProfileState),
+    [selectedProfileState],
+  );
   const composerProfileTarget = useMemo(() => {
     return composerProfileTargetForLibrary(bootstrap?.profileLibrary, selectedProfileRef);
   }, [bootstrap?.profileLibrary, selectedProfileRef]);
@@ -420,10 +428,15 @@ export function MainPane({
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
-    const byId = new Map(actionCatalog.map((action) => [action.id, action]));
+    const byId = new Map(
+      actionCatalog
+        .filter((action) => !isOpenPondProfileAction(action))
+        .map((action) => [action.id, action]),
+    );
+    for (const action of selectedProfileActionCatalog) byId.set(action.id, action);
     for (const action of profileActionCatalogOverride) byId.set(action.id, action);
     return [...byId.values()];
-  }, [actionCatalog, profileActionCatalogOverride]);
+  }, [actionCatalog, profileActionCatalogOverride, selectedProfileActionCatalog]);
   const labCandidateReview = useLabCandidateReview(connection);
   const handleLabCandidateReviewChange = useCallback((input: {
     run: CreateImproveReviewActionInput["run"];
@@ -494,7 +507,9 @@ export function MainPane({
 
     void api.profileCurrent(connection)
       .then((profile) => {
-        const freshActions = profile.actionCatalog.map(buildOpenPondProfileActionCommand);
+        const freshActions = profile.actionCatalog.map((action) =>
+          buildOpenPondProfileActionCommand(action)
+        );
         if (!selectActionAfterCatalogCommit(freshActions) && existingAction) {
           selectActionAfterCatalogCommit([existingAction]);
         } else if (!freshActions.some((action) => action.id === actionId)) {
@@ -1406,6 +1421,7 @@ export function MainPane({
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
+      actionCatalog={composerActionCatalog}
       createImproveActions={createImproveActions}
       busy={busy}
       codexPermissionMode={codexPermissionMode}

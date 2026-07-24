@@ -6,7 +6,11 @@ import type {
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
-import { TasksetBaselineRunSchema } from "@openpond/contracts";
+import {
+  ModelProjectSchema,
+  ModelRunDraftSchema,
+  TasksetBaselineRunSchema,
+} from "@openpond/contracts";
 
 import {
   currentModelBinding,
@@ -259,11 +263,154 @@ describe("Lab Model workspace projection", () => {
     expect(models).toHaveLength(3);
     expect(models.find((model) => model.id === "model_legacy_first")?.runIds)
       .toEqual([first.id]);
+    expect(
+      models.find((model) => model.id === "model_legacy_first")
+        ?.trainingRunCount,
+    ).toBe(1);
     expect(models.find((model) => model.id === "model_legacy_second")?.runIds)
       .toEqual([second.id]);
+    expect(
+      models.find((model) => model.id === "model_legacy_second")
+        ?.trainingRunCount,
+    ).toBe(1);
     expect(models.some((model) => model.id === "model_intentional_new")).toBe(
       true,
     );
+  });
+
+  test("projects stable Models and saved run drafts into the Model workspace", () => {
+    const timestamp = "2026-07-23T12:00:00.000Z";
+    const project = ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v1",
+      id: "model_fixture_draft",
+      profileId: "default",
+      name: "Renewal Risk Model",
+      objective: "Classify renewal risk.",
+      defaultBaseModel: null,
+      defaultDestinationId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const draft = ModelRunDraftSchema.parse({
+      schemaVersion: "openpond.modelRunDraft.v1",
+      id: "run_draft_fixture",
+      profileId: "default",
+      modelId: "model_fixture_draft",
+      status: "draft",
+      title: "Run draft",
+      datasetMode: null,
+      tasksetRef: null,
+      datasetCreationId: null,
+      buildIntent: null,
+      buildSpecification: null,
+      baseModel: null,
+      method: null,
+      destinationId: null,
+      runPreset: null,
+      recipe: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const readyDraft = ModelRunDraftSchema.parse({
+      ...draft,
+      id: "run_draft_ready_fixture",
+      status: "ready_to_run",
+      title: "Second run draft",
+      updatedAt: "2026-07-23T12:05:00.000Z",
+    });
+
+    const [projected] = labWorkproductProjection({
+      profile: null,
+      training: {
+        modelProjects: [project],
+        modelRunDrafts: [readyDraft, draft],
+        tasksets: [],
+        plans: [],
+        jobs: [],
+        models: [],
+      } as TrainingStateResponse,
+      runs: [],
+    });
+
+    expect(projected).toMatchObject({
+      kind: "model",
+      id: draft.modelId,
+      name: project.name,
+      status: "Ready to run",
+      trainingRunCount: 2,
+    });
+  });
+
+  test("preserves a stable Model name and counts only its own launched runs", () => {
+    const timestamp = "2026-07-23T12:00:00.000Z";
+    const taskset = tasksetFixture({ ready: true });
+    const project = ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v1",
+      id: "model_local_sft_smoke",
+      profileId: "default",
+      name: "Local SFT Smoke",
+      objective: "Verify local SFT training.",
+      defaultBaseModel: null,
+      defaultDestinationId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const olderPlan = {
+      ...planFixture(taskset),
+      id: "training_plan_other_model",
+      modelId: "model_other",
+      createdAt: "2026-07-23T12:01:00.000Z",
+    };
+    const projectPlan = {
+      ...planFixture(taskset),
+      id: "training_plan_local_sft_smoke",
+      modelId: project.id,
+      createdAt: "2026-07-23T12:03:00.000Z",
+    };
+    const state = {
+      modelProjects: [project],
+      modelRunDrafts: [],
+      tasksets: [taskset],
+      plans: [olderPlan, projectPlan],
+      jobs: [
+        job(
+          "training_job_other_model",
+          olderPlan.id,
+          "2026-07-23T12:02:00.000Z",
+        ),
+        job(
+          "training_job_local_sft_smoke",
+          projectPlan.id,
+          "2026-07-23T12:04:00.000Z",
+        ),
+      ],
+      models: [],
+      modelBindings: [],
+      frontierBaselineRuns: [],
+    } as unknown as TrainingStateResponse;
+    const staleRun = createImproveRunFixture({
+      id: "create_improve_local_sft_smoke",
+      target: {
+        kind: "model",
+        id: project.id,
+        displayName: taskset.name,
+        trainingPlanId: projectPlan.id,
+        trainingJobId: "training_job_local_sft_smoke",
+        artifactId: null,
+      },
+    });
+
+    const projected = labWorkproductProjection({
+      profile: null,
+      training: state,
+      runs: [staleRun],
+    }).find((workproduct) => workproduct.id === project.id);
+
+    expect(projected).toMatchObject({
+      name: project.name,
+      description: project.objective,
+      trainingRunCount: 1,
+    });
   });
 });
 

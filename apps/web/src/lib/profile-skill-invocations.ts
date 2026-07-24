@@ -34,7 +34,7 @@ export function profileSkillInvocationText(skill: Pick<ComposerInvocableSkill, "
 
 export function replaceActiveProfileSkillInvocation(
   input: string,
-  context: ActiveProfileSkillInvocationContext,
+  context: Pick<ActiveProfileSkillInvocationContext, "end" | "start">,
   skill: Pick<ComposerInvocableSkill, "name">,
 ): { cursor: number; value: string } {
   const start = Math.max(0, Math.min(context.start, input.length));

@@ -5,7 +5,8 @@ import {
   ApproveDatasetImportMappingRequestSchema,
   CreateHuggingFaceDatasetImportRequestSchema,
   DatasetCatalogResponseSchema,
-  ModelBuildDraftSchema,
+  ModelProjectSchema,
+  ModelRunDraftSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
@@ -86,27 +87,52 @@ export function createTrainingApi(deps: {
           ?? "default",
       );
     }
-    if (action === "save_model_build_draft") {
-      const draft = ModelBuildDraftSchema.parse(input);
-      const existing = await deps.store.getModelBuildDraft(draft.id);
+    if (action === "save_model_project") {
+      const project = ModelProjectSchema.parse(input);
+      const existing = await deps.store.getModelProject(project.id);
+      if (existing && existing.profileId !== project.profileId) {
+        throw new Error("Model profile does not match the active Profile.");
+      }
+      return deps.store.saveModelProject({
+        ...project,
+        createdAt: existing?.createdAt ?? project.createdAt,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    if (action === "save_model_run_draft") {
+      const draft = ModelRunDraftSchema.parse(input);
+      const existing = await deps.store.getModelRunDraft(draft.id);
       if (existing && existing.profileId !== draft.profileId) {
-        throw new Error("Model build draft profile does not match the active Profile.");
+        throw new Error("Model run draft profile does not match the active Profile.");
       }
       if (existing && existing.modelId !== draft.modelId) {
-        throw new Error("A saved Model build draft cannot change Model identity.");
+        throw new Error("A saved Model run draft cannot change Model identity.");
       }
-      return deps.store.saveModelBuildDraft({
+      if (existing && (existing.status === "launched" || existing.status === "cancelled")) {
+        if (JSON.stringify(existing) !== JSON.stringify(draft)) {
+          throw new Error("Launched and cancelled Model runs are immutable.");
+        }
+        return existing;
+      }
+      const project = await deps.store.getModelProject(draft.modelId);
+      if (!project || project.profileId !== draft.profileId) {
+        throw new Error("Save the Model before saving its run draft.");
+      }
+      return deps.store.saveModelRunDraft({
         ...draft,
         createdAt: existing?.createdAt ?? draft.createdAt,
         updatedAt: new Date().toISOString(),
       });
     }
-    if (action === "delete_model_build_draft") {
-      const draft = await deps.store.getModelBuildDraft(
+    if (action === "delete_model_run_draft") {
+      const draft = await deps.store.getModelRunDraft(
         requiredString(input.draftId, "draftId"),
       );
       if (!draft) return { deleted: false };
-      await deps.store.deleteModelBuildDraft(draft.id);
+      if (draft.status === "launched") {
+        throw new Error("A launched Model run cannot be deleted.");
+      }
+      await deps.store.deleteModelRunDraft(draft.id);
       return { deleted: true, draftId: draft.id };
     }
     if (action === "add_source") return deps.taskCreator.addSessionSource({ profileId: requiredString(input.profileId, "profileId"), sessionId: requiredString(input.sessionId, "sessionId"), turnIds: stringArray(input.turnIds), consentScope: input.consentScope === "selected_turns" ? "selected_turns" : "full_session" });
@@ -396,7 +422,7 @@ export function createTrainingApi(deps: {
   }
 
   async function state(profileId: string) {
-    const [sources, creations, tasksets, datasetImports, datasetArtifacts, candidates, minerConfig, minerRuns, frontierBaselineRuns, baselineRuns, modelBuildDrafts, execution] = await Promise.all([
+    const [sources, creations, tasksets, datasetImports, datasetArtifacts, candidates, minerConfig, minerRuns, frontierBaselineRuns, baselineRuns, modelProjects, modelRunDrafts, execution] = await Promise.all([
       deps.store.listTrainingSources(profileId),
       deps.store.listTaskCreationSnapshots(profileId),
       deps.store.listTasksets(profileId),
@@ -407,13 +433,14 @@ export function createTrainingApi(deps: {
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listCrossSystemFrontierBaselineRuns(profileId),
       deps.store.listTasksetBaselineRuns({ profileId }),
-      deps.store.listModelBuildDrafts(profileId),
+      deps.store.listModelProjects(profileId),
+      deps.store.listModelRunDrafts(profileId),
       deps.training.state(profileId),
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const baselineReports = (await Promise.all(tasksets.map((taskset) => deps.store.listBaselineReports(taskset.id)))).flat();
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
-    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, datasetImports, datasetArtifacts, baselineReports, baselineRuns, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, modelBuildDrafts, ...execution, generatedAt: new Date().toISOString() };
+    return { schemaVersion: "openpond.trainingState.v1", profileId, sources, creations, tasksets, datasetImports, datasetArtifacts, baselineReports, baselineRuns, graderAuditReports, candidates, minerConfig, minerRuns, frontierBaselineRuns, modelProjects, modelRunDrafts, ...execution, generatedAt: new Date().toISOString() };
   }
 
   async function datasetCatalog(profileId: string) {

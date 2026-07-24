@@ -16,38 +16,142 @@ import {
   TrainingRolloutReceipts,
 } from "../apps/web/src/components/training/TrainingModelEvidence";
 import { TrainingModelPromotion } from "../apps/web/src/components/training/TrainingModelPromotion";
-import { trainingModelRows, trainingRunMethodLabel } from "../apps/web/src/components/training/training-model-data";
+import {
+  trainingModelRows,
+  trainingRunMethodLabel,
+} from "../apps/web/src/components/training/training-model-data";
 import { recommendedSequenceLength } from "../apps/web/src/components/training/training-start-defaults";
 import { TasksetSchema } from "../packages/contracts/src";
-import { planFixture, sourceFixture, tasksetFixture } from "./helpers/training-fixtures";
+import {
+  planFixture,
+  sourceFixture,
+  tasksetFixture,
+} from "./helpers/training-fixtures";
 
 describe("Training UI", () => {
   test("renders the Models workspace without duplicating Lab navigation", () => {
     const taskset = tasksetFixture();
-    const controller = { payload: { schemaVersion: "openpond.trainingState.v1", profileId: "default", sources: [sourceFixture()], creations: [], tasksets: [taskset], baselineReports: [], candidates: [], minerConfig: { schemaVersion: "openpond.taskMinerConfig.v1", enabled: false, localOnly: true, observationWindowDays: 30, minimumRecurrence: 3, clustering: "hybrid_deterministic_first", consentRequired: true }, plans: [], bundles: [], jobs: [], artifacts: [], models: [{ id: "lineage_fixture", tasksetId: taskset.id, status: "imported", importedAt: "2026-07-12T01:00:00Z" }], destinations: [], credentialRefs: [], generatedAt: "2026-07-12T00:00:00Z" }, loading: false, busyAction: null, error: null, refresh: async () => null, actions: actionStubs() } as any;
-    const html = renderToStaticMarkup(createElement(TrainingView, { training: controller, sessions: [], connection: null, defaultModel: { providerId: "custom-openai-compatible", modelId: "fixture" }, onError: () => undefined, onToast: () => 1, onSettingsPreferences: () => undefined, onOpenChat: () => undefined, onChatWithModel: () => undefined, onOpenTasksetFiles: () => undefined, selectedTasksetId: null, onSelectedTasksetIdChange: () => undefined, onSelectedTrainingJobIdChange: () => undefined, detailTasksetId: null, onDetailTasksetIdChange: () => undefined, launchRequest: null, onLaunchHandled: () => undefined, preferences: { defaultModelRef: null, creationMode: "customize", autoApproveEvidence: false }, settingsPreferences: {} as any, providerSettings: null, reasoningEffort: "high" }));
+    const controller = {
+      payload: {
+        schemaVersion: "openpond.trainingState.v1",
+        profileId: "default",
+        sources: [sourceFixture()],
+        creations: [],
+        tasksets: [taskset],
+        baselineReports: [],
+        candidates: [],
+        minerConfig: {
+          schemaVersion: "openpond.taskMinerConfig.v1",
+          enabled: false,
+          localOnly: true,
+          observationWindowDays: 30,
+          minimumRecurrence: 3,
+          clustering: "hybrid_deterministic_first",
+          consentRequired: true,
+        },
+        plans: [],
+        bundles: [],
+        jobs: [],
+        artifacts: [],
+        models: [
+          {
+            id: "lineage_fixture",
+            tasksetId: taskset.id,
+            status: "imported",
+            importedAt: "2026-07-12T01:00:00Z",
+          },
+        ],
+        destinations: [],
+        credentialRefs: [],
+        generatedAt: "2026-07-12T00:00:00Z",
+      },
+      loading: false,
+      busyAction: null,
+      error: null,
+      refresh: async () => null,
+      actions: actionStubs(),
+    } as any;
+    const html = renderToStaticMarkup(
+      createElement(TrainingView, {
+        training: controller,
+        sessions: [],
+        connection: null,
+        defaultModel: {
+          providerId: "custom-openai-compatible",
+          modelId: "fixture",
+        },
+        onError: () => undefined,
+        onToast: () => 1,
+        onSettingsPreferences: () => undefined,
+        onOpenChat: () => undefined,
+        onChatWithModel: () => undefined,
+        onOpenTasksetFiles: () => undefined,
+        selectedTasksetId: null,
+        onSelectedTasksetIdChange: () => undefined,
+        onSelectedTrainingJobIdChange: () => undefined,
+        detailTasksetId: null,
+        onDetailTasksetIdChange: () => undefined,
+        launchRequest: null,
+        onLaunchHandled: () => undefined,
+        preferences: {
+          defaultModelRef: null,
+          creationMode: "customize",
+          autoApproveEvidence: false,
+        },
+        settingsPreferences: {} as any,
+        providerSettings: null,
+        reasoningEffort: "high",
+      })
+    );
     for (const label of ["Models", "Settings"]) expect(html).toContain(label);
     expect(html).not.toContain("New model");
     expect(html).not.toContain("<h1>Training</h1>");
-    expect(html).not.toContain('>Experiments<');
-    expect(html).not.toContain('>Suggestions');
+    expect(html).not.toContain(">Experiments<");
+    expect(html).not.toContain(">Suggestions");
     expect(html).not.toContain("AI suggestions");
-    expect(html).toContain('<th>Runs</th>');
+    expect(html).toContain("<th>Runs</th>");
     expect(html).not.toContain('aria-label="Training sections"');
     expect(html).not.toContain("Tasksets &amp; runs");
-    for (const removed of ["Task Creator", "Create with defaults", "Customize", "Add chats"]) expect(html).not.toContain(removed);
+    for (const removed of [
+      "Task Creator",
+      "Create with defaults",
+      "Customize",
+      "Add chats",
+    ])
+      expect(html).not.toContain(removed);
     expect(html).toContain("training-models-table");
     expect(html).not.toContain("training-header-tabs");
     expect(html).not.toContain("training-section-context");
-    expect(html).not.toContain("Training plans, runs, artifacts, and model handoff.");
+    expect(html).not.toContain(
+      "Training plans, runs, artifacts, and model handoff."
+    );
     expect(html).toContain("> Chat</button>");
     expect(html).toContain("Fixture Taskset model");
-    for (const label of ["Model", "Primary", "Latest run", "Base model", "Runs", "Updated", "Status"]) expect(html).toContain(`<th>${label}</th>`);
-    expect(html).not.toContain("Materialized tasks, graders, baselines, and readiness.");
+    for (const label of [
+      "Model",
+      "Primary",
+      "Latest run",
+      "Base model",
+      "Runs",
+      "Updated",
+      "Status",
+    ])
+      expect(html).toContain(`<th>${label}</th>`);
+    expect(html).not.toContain(
+      "Materialized tasks, graders, baselines, and readiness."
+    );
     expect(html).not.toContain('aria-label="Tasksets"');
     expect(html).not.toContain("gradient");
     expect(html).toContain("Settings");
-    for (const removed of ["Check grader", "Run checks", "Baseline model", "Run baseline", ">Readiness<", ">Check<"]) expect(html).not.toContain(removed);
+    for (const removed of [
+      "Check grader",
+      "Run checks",
+      "Baseline model",
+      "Run baseline",
+      ">Readiness<",
+      ">Check<",
+    ])
+      expect(html).not.toContain(removed);
     expect(html).not.toContain("View code");
     expect(html).not.toContain("training-taskset-detail-shell");
     expect(html).not.toContain("training-eyebrow");
@@ -56,14 +160,23 @@ describe("Training UI", () => {
   });
 
   test("renders suggested experiments only on the dedicated Suggestions surface", () => {
-    const controller = { payload: { candidates: [] }, busyAction: null, actions: actionStubs() } as any;
-    const html = renderToStaticMarkup(createElement(TrainingSuggestions, {
-      training: controller,
-      defaultModel: { providerId: "custom-openai-compatible", modelId: "fixture" },
-      preferences: { creationMode: "customize", autoApproveEvidence: false },
-      reasoningEffort: "high",
-      onPlanStarted: () => undefined,
-    }));
+    const controller = {
+      payload: { candidates: [] },
+      busyAction: null,
+      actions: actionStubs(),
+    } as any;
+    const html = renderToStaticMarkup(
+      createElement(TrainingSuggestions, {
+        training: controller,
+        defaultModel: {
+          providerId: "custom-openai-compatible",
+          modelId: "fixture",
+        },
+        preferences: { creationMode: "customize", autoApproveEvidence: false },
+        reasoningEffort: "high",
+        onPlanStarted: () => undefined,
+      })
+    );
     expect(html).toContain("AI suggestions");
     expect(html).toContain("No AI suggestions yet");
     expect(html).toContain("Automatic");
@@ -71,9 +184,28 @@ describe("Training UI", () => {
 
   test("shows the method and a plain evaluation preview without canned blocker copy", () => {
     const taskset = tasksetFixture();
-    const controller = { payload: { tasksets: [taskset] }, busyAction: null, actions: actionStubs() } as any;
-    const html = renderToStaticMarkup(createElement(TrainingTasksetDetail, { taskset, training: controller, onOpenChat: () => undefined }));
-    for (const label of ["Method", "SFT", "Training examples", "Test examples", "Evaluation", "Expected output match", "2 sources"]) expect(html).toContain(label);
+    const controller = {
+      payload: { tasksets: [taskset] },
+      busyAction: null,
+      actions: actionStubs(),
+    } as any;
+    const html = renderToStaticMarkup(
+      createElement(TrainingTasksetDetail, {
+        taskset,
+        training: controller,
+        onOpenChat: () => undefined,
+      })
+    );
+    for (const label of [
+      "Method",
+      "SFT",
+      "Training examples",
+      "Test examples",
+      "Evaluation",
+      "Expected output match",
+      "2 sources",
+    ])
+      expect(html).toContain(label);
     expect(html).not.toContain("<h2>Fixture Taskset</h2>");
     expect(html).toContain("training-chat-link");
     expect(html).not.toContain("At least one approved training demonstration");
@@ -90,15 +222,22 @@ describe("Training UI", () => {
       ]),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
       readFile("apps/web/src/hooks/useWorkspaceController.ts", "utf8"),
-      readFile("apps/web/src/components/workspace-diff/WorkspaceDiffPanel.tsx", "utf8"),
+      readFile(
+        "apps/web/src/components/workspace-diff/WorkspaceDiffPanel.tsx",
+        "utf8"
+      ),
     ]);
     const app = appModules.join("\n");
     expect(app).toContain('view === "labs"');
     expect(app).toContain('if (view === "labs")');
     expect(app).toContain('tab: "summary"');
-    expect(app).toContain('showDiffControls: view === "chat" || view === "cloud"');
+    expect(app).toContain(
+      'showDiffControls: view === "chat" || view === "cloud"'
+    );
     expect(pane).toContain("trainingTasksetRootPath");
-    expect(pane).toContain("profiles/${bootstrap?.profile.activeProfile ?? \"default\"}/tasksets/${activeTrainingTasksetId}");
+    expect(pane).toContain(
+      'profiles/${bootstrap?.profile.activeProfile ?? "default"}/tasksets/${activeTrainingTasksetId}'
+    );
     expect(pane).toContain("fileRootPath={showLabCandidateDiffPanel");
     expect(pane).toContain(": rightSidebarUsesSandbox");
     expect(pane).toContain(": trainingTasksetRootPath}");
@@ -111,10 +250,14 @@ describe("Training UI", () => {
 
   test("keeps model navigation and destructive controls in the intended surfaces", async () => {
     const [detail, topBar] = await Promise.all([
-      readFile("apps/web/src/components/training/TrainingModelDetail.tsx", "utf8"),
+      readFile(
+        "apps/web/src/components/training/TrainingModelDetail.tsx",
+        "utf8"
+      ),
       readFile("apps/web/src/components/app-shell/AppTopBar.tsx", "utf8"),
     ]);
-    for (const tab of ["Summary", "Details", "Configuration", "Settings"]) expect(detail).toContain(`>${tab}</button>`);
+    for (const tab of ["Summary", "Details", "Configuration", "Settings"])
+      expect(detail).toContain(`>${tab}</button>`);
     expect(detail).toContain("<TrainingModelConfiguration");
     expect(detail).toContain(">Delete model</button>");
     expect(detail).not.toContain("training-back-button");
@@ -124,42 +267,170 @@ describe("Training UI", () => {
   });
 
   test("hands a newly materialized Taskset to its model Summary", async () => {
-    const view = await readFile("apps/web/src/components/training/TrainingView.tsx", "utf8");
-    expect(view).toContain("onSelectedTasksetIdChange(creation.materializedTasksetId)");
-    expect(view).toContain("onDetailTasksetIdChange(creation.materializedTasksetId)");
+    const view = await readFile(
+      "apps/web/src/components/training/TrainingView.tsx",
+      "utf8"
+    );
+    expect(view).toContain(
+      "onSelectedTasksetIdChange(creation.materializedTasksetId)"
+    );
+    expect(view).toContain(
+      "onDetailTasksetIdChange(creation.materializedTasksetId)"
+    );
     expect(view).toContain('onSectionChange?.("models")');
     expect(view).toContain("onTasksetCreated={finishTasksetCreation}");
-    expect(view).not.toContain('onTasksetCreated={() => finishRunSetup("tasksets")}');
+    expect(view).not.toContain(
+      'onTasksetCreated={() => finishRunSetup("tasksets")}'
+    );
   });
 
-  test("opens Model Builder from a Dataset with its immutable revision selected", async () => {
-    const [datasets, route, builder, pane] = await Promise.all([
+  test("opens the Model run editor from a Dataset with its immutable revision selected", async () => {
+    const [datasets, route, builder, previews, pane, css] = await Promise.all([
       readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
-      readFile("apps/web/src/components/labs/ModelBuildPage.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/ModelRunEditorPage.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/ModelRunSetupPreviews.tsx", "utf8"),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
+      readFile("apps/web/src/styles/training/training.css", "utf8"),
     ]);
     expect(datasets).toContain("Train Model");
     expect(datasets).toContain("onTrainModel(selected.id)");
-    expect(route).toContain("initialTasksetId={training.launchRequest.initialTasksetId}");
+    expect(route).toContain(
+      "initialTasksetId={training.launchRequest.initialTasksetId}"
+    );
     expect(pane).toContain("initialTasksetId,");
     expect(builder).toContain("revision: taskset.revision");
     expect(builder).toContain("contentHash: taskset.contentHash");
+    expect(builder).not.toContain(">Model Builder<");
+    expect(builder).toContain('aria-label="Run setup"');
+    expect(builder).toContain("What do you want to build?");
+    expect(builder).toContain('aria-label="Model creation"');
+    expect(builder).toContain('["setup", "Setup"]');
+    expect(builder).toContain('["overview", "Overview"]');
+    expect(builder).toContain('["runs", "Runs"]');
+    expect(builder).toContain('["configuration", "Configuration"]');
+    expect(builder).not.toContain("selectedContent={datasetGoalContent}");
+    expect(builder).toContain("<ModelSetupSteps");
+    expect(builder).toContain('activeSetupStep === "dataset"');
+    expect(builder).toContain('activeSetupStep === "method"');
+    expect(builder).toContain("datasetStepContent");
+    expect(builder).toContain('aria-label="Dataset revision"');
+    expect(builder).toContain("Build a Dataset");
+    expect(builder).not.toContain("Choose existing Dataset");
+    expect(builder).toContain('setActiveSetupStep("dataset")');
+    expect(builder).toContain('setActiveSetupStep("method")');
+    expect(builder).toContain('setActiveSetupStep("configuration")');
+    expect(builder).toContain('approvalPresentation="dialog"');
+    expect(builder).toContain("hideMethodTabs");
+    expect(builder).toContain("configurationContent={");
+    expect(builder).toContain('aria-label="Training budget"');
+    expect(builder).toContain('runPreset: "standard"');
+    expect(builder).toContain("<h2>Choose a model</h2>");
+    expect(builder).toContain("method: current.method ?? configuration.method");
+    expect(builder).not.toContain("Training target · LLM weights");
+    expect(builder).not.toContain("RLHF and RLVR are guidance labels");
+    expect(builder).not.toContain('"Unsaved"');
+    expect(builder).toMatch(/>\s*Save\s*</);
+    expect(builder).not.toContain("Save draft");
+    expect(builder).toContain("onNameChange?.(project.name)");
+    expect(builder).toContain("nextModelName(state?.modelProjects ?? [])");
+    expect(builder).toContain("model-build-name-button");
+    expect(builder).toContain("setEditingName(true)");
+    expect(builder).not.toContain("window.confirm");
+    expect(builder).toContain("<ConfirmDialog");
+    expect(builder).not.toContain("model-build-readiness");
+    expect(builder).toContain("disabled={!candidate.available}");
+    expect(builder).toContain("Incompatible Dataset");
+    expect(builder).toContain(
+      "taskset.capabilities.compatibleMethods.includes(method)"
+    );
+    expect(builder).toContain("methodExecutionTargets(method, destinations)");
+    expect(builder).toContain('"Local CPU · Experimental"');
+    expect(builder).toContain(
+      'method === "grpo" ? "Fireworks RFT" : "Fireworks"'
+    );
+    expect(builder).toContain("model-build-target-pill unavailable");
+    expect(builder).toContain(
+      "does not execute ${method.toUpperCase()}."
+    );
+    expect(builder).toContain('datasetMode: "build"');
+    expect(builder).toContain("renderDatasetBuilder(");
+    expect(builder).toContain("(tasksetId) => {");
+    expect(route).toContain("onUseExistingDataset={onUseExistingDataset}");
+    expect(css).toContain(
+      ".model-build-choice.selected,.model-build-method.selected{border-color:var(--border);box-shadow:none;background:transparent}"
+    );
+    expect(css).toContain(
+      ".model-build-section{display:flex;flex-direction:column;gap:14px;padding:12px 0 20px;background:transparent}"
+    );
+    expect(css).toContain(
+      ".model-setup-step-list{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr))"
+    );
+    expect(css).toContain(
+      ".model-setup-step-segment{display:block;width:100%;height:7px;border:0"
+    );
+    expect(builder).toContain("<ModelSetupRunsPreview");
+    expect(previews).toContain('aria-label="Preview run"');
+    expect(previews).toContain("{draft.title} · Pending");
+    expect(previews).toContain('aria-label="Run detail preview"');
+    expect(previews).toContain("<EmptyMetricChart");
+    expect(previews).toContain("Metrics will appear after the run starts");
+    expect(previews).toContain("model-setup-configuration-fields");
+    expect(previews).not.toContain("Every launch will appear here");
+    expect(css).toContain(".model-setup-empty-chart");
   });
 
   test("keeps supervised and reinforcement setup separate without relabeling RFT as local SFT", () => {
     const base = tasksetFixture({ ready: true });
     const taskset = TasksetSchema.parse({
       ...base,
-      capabilities: { ...base.capabilities, compatibleMethods: ["grpo", "sft"] },
+      capabilities: {
+        ...base.capabilities,
+        compatibleMethods: ["grpo", "sft"],
+      },
       metadata: { ...base.metadata, trainingMethod: "grpo" },
       readiness: {
         ...base.readiness!,
         recommendedMethod: "grpo",
-        trainingPath: { primaryMethod: "grpo", bootstrap: { method: "sft", purpose: "trajectory_bootstrap", demonstrationRefs: ["demo_train"], limitations: ["Bootstrap does not satisfy GRPO."] } },
+        trainingPath: {
+          primaryMethod: "grpo",
+          bootstrap: {
+            method: "sft",
+            purpose: "trajectory_bootstrap",
+            demonstrationRefs: ["demo_train"],
+            limitations: ["Bootstrap does not satisfy GRPO."],
+          },
+        },
       },
     });
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, { baseModelCandidates: [localFixtureCandidate()], connection: null, taskset, destinations: [{ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "local_cpu_fixture", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [], maxDatasetBytes: null, environmentPlacements: ["local"], nonProduction: true, unavailableReason: null, checkedAt: "2026-07-13T00:00:00.000Z" }], initialMethod: "sft", busy: false, onClose: () => undefined, onPrepare: async () => null, onConfirmPrepared: async () => false, onStart: async () => true }));
+    const html = renderToStaticMarkup(
+      createElement(TrainingStartDialog, {
+        baseModelCandidates: [localFixtureCandidate()],
+        connection: null,
+        taskset,
+        destinations: [
+          {
+            schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+            destinationId: "local_cpu_fixture",
+            available: true,
+            methods: ["sft"],
+            parameterizations: ["lora"],
+            modelAllowlist: [],
+            maxDatasetBytes: null,
+            environmentPlacements: ["local"],
+            nonProduction: true,
+            unavailableReason: null,
+            checkedAt: "2026-07-13T00:00:00.000Z",
+          },
+        ],
+        initialMethod: "sft",
+        busy: false,
+        onClose: () => undefined,
+        onPrepare: async () => null,
+        onConfirmPrepared: async () => false,
+        onStart: async () => true,
+      })
+    );
     expect(html).toContain('aria-label="Training method"');
     expect(html).toContain(">Supervised<");
     expect(html).toContain(">Reinforcement<");
@@ -176,7 +447,10 @@ describe("Training UI", () => {
     const base = tasksetFixture({ ready: true });
     const taskset = TasksetSchema.parse({
       ...base,
-      capabilities: { ...base.capabilities, compatibleMethods: ["grpo", "sft"] },
+      capabilities: {
+        ...base.capabilities,
+        compatibleMethods: ["grpo", "sft"],
+      },
       metadata: { ...base.metadata, trainingMethod: "grpo" },
       readiness: {
         ...base.readiness!,
@@ -197,11 +471,21 @@ describe("Training UI", () => {
       tasksets: [taskset],
       plans: [plan],
       jobs: [],
-      models: [{ id: "lineage_bootstrap", tasksetId: taskset.id, status: "imported", importedAt: "2026-07-13T00:00:00.000Z" }],
+      models: [
+        {
+          id: "lineage_bootstrap",
+          tasksetId: taskset.id,
+          status: "imported",
+          importedAt: "2026-07-13T00:00:00.000Z",
+        },
+      ],
     } as any);
 
     expect(trainingRunMethodLabel(taskset, plan)).toBe("SFT bootstrap");
-    expect(rows[0]).toMatchObject({ primaryMethod: "grpo", latestRunLabel: "SFT bootstrap" });
+    expect(rows[0]).toMatchObject({
+      primaryMethod: "grpo",
+      latestRunLabel: "SFT bootstrap",
+    });
     expect(rows[0]?.latestRunLabel).not.toContain("GRPO");
   });
 
@@ -209,13 +493,45 @@ describe("Training UI", () => {
     const base = tasksetFixture({ ready: true });
     const longTaskset = TasksetSchema.parse({
       ...base,
-      tasks: base.tasks.map((task) => task.split === "train"
-        ? { ...task, input: { prompt: "p".repeat(235) }, expectedOutput: { text: "e".repeat(123) } }
-        : task),
+      tasks: base.tasks.map((task) =>
+        task.split === "train"
+          ? {
+              ...task,
+              input: { prompt: "p".repeat(235) },
+              expectedOutput: { text: "e".repeat(123) },
+            }
+          : task
+      ),
     });
 
     expect(recommendedSequenceLength(longTaskset)).toBe(256);
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, { baseModelCandidates: [localFixtureCandidate()], connection: null, taskset: longTaskset, destinations: [{ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: "local_cpu_fixture", available: true, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: [], maxDatasetBytes: null, environmentPlacements: ["local"], nonProduction: true, unavailableReason: null, checkedAt: "2026-07-13T00:00:00.000Z" }], busy: false, onClose: () => undefined, onPrepare: async () => null, onConfirmPrepared: async () => false, onStart: async () => true }));
+    const html = renderToStaticMarkup(
+      createElement(TrainingStartDialog, {
+        baseModelCandidates: [localFixtureCandidate()],
+        connection: null,
+        taskset: longTaskset,
+        destinations: [
+          {
+            schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+            destinationId: "local_cpu_fixture",
+            available: true,
+            methods: ["sft"],
+            parameterizations: ["lora"],
+            modelAllowlist: [],
+            maxDatasetBytes: null,
+            environmentPlacements: ["local"],
+            nonProduction: true,
+            unavailableReason: null,
+            checkedAt: "2026-07-13T00:00:00.000Z",
+          },
+        ],
+        busy: false,
+        onClose: () => undefined,
+        onPrepare: async () => null,
+        onConfirmPrepared: async () => false,
+        onStart: async () => true,
+      })
+    );
     expect(html).toContain("Sequence length");
     expect(html).toContain("Learning rate");
     expect(html).toContain('value="256"');
@@ -223,39 +539,51 @@ describe("Training UI", () => {
 
   test("shows an explicit bounded Fireworks export and spend approval", () => {
     const taskset = tasksetFixture({ ready: true });
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
-      baseModelCandidates: [managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft"])],
-      connection: null,
-      taskset,
-      destinations: [{
-        schemaVersion: "openpond.trainingDestinationCapabilities.v1",
-        destinationId: "fireworks",
-        available: true,
-        methods: ["sft"],
-        parameterizations: ["lora"],
-        modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
-        maxDatasetBytes: 1_000_000,
-        environmentPlacements: ["provider_native"],
-        nonProduction: false,
-        unavailableReason: null,
-        checkedAt: "2026-07-17T00:00:00.000Z",
-      }],
-      busy: false,
-      onClose: () => undefined,
-      onOpenProviderSettings: () => undefined,
-      onPrepare: async () => null,
-      onConfirmPrepared: async () => false,
-      onStart: async () => true,
-    }));
+    const html = renderToStaticMarkup(
+      createElement(TrainingStartDialog, {
+        baseModelCandidates: [
+          managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft"]),
+        ],
+        connection: null,
+        taskset,
+        destinations: [
+          {
+            schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+            destinationId: "fireworks",
+            available: true,
+            methods: ["sft"],
+            parameterizations: ["lora"],
+            modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
+            maxDatasetBytes: 1_000_000,
+            environmentPlacements: ["provider_native"],
+            nonProduction: false,
+            unavailableReason: null,
+            checkedAt: "2026-07-17T00:00:00.000Z",
+          },
+        ],
+        busy: false,
+        onClose: () => undefined,
+        onOpenProviderSettings: () => undefined,
+        onPrepare: async () => null,
+        onConfirmPrepared: async () => false,
+        onStart: async () => true,
+      })
+    );
 
     expect(html).toContain("Qwen3 0.6B");
     expect(html).toContain("Provider approval");
     expect(html).toContain("Maximum provider spend (USD)");
     expect(html).toContain('value="3"');
-    expect(html).toContain("Prepare a provider-validated quote · hard cap $3.00");
+    expect(html).toContain(
+      "Prepare a provider-validated quote · hard cap $3.00"
+    );
     expect(html).toContain("Prepare exact quote");
-    expect(html).toContain("Frozen Eval cases and grader secrets stay in OpenPond");
-    expect(html).toContain("Approval is bound server-side to the signed-in OpenPond account");
+    expect(html).toContain(
+      "Frozen Eval cases and grader secrets stay in OpenPond"
+    );
+    expect(html).toContain(
+      "Approval is bound server-side to the signed-in OpenPond account"
+    );
     expect(html).toContain("Portable output imported into app-managed storage");
     expect(html).toContain("Approve the bounded train-split export");
     expect(html).toContain('disabled=""');
@@ -273,31 +601,40 @@ describe("Training UI", () => {
         trainingPath: { primaryMethod: "grpo", bootstrap: null },
       },
     });
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
-      baseModelCandidates: [managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft", "grpo"])],
-      connection: null,
-      taskset,
-      destinations: [{
-        schemaVersion: "openpond.trainingDestinationCapabilities.v1",
-        destinationId: "fireworks",
-        available: true,
-        methods: ["sft", "grpo"],
-        parameterizations: ["lora"],
-        modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
-        maxDatasetBytes: 1_000_000,
-        environmentPlacements: ["provider_native"],
-        nonProduction: false,
-        unavailableReason: null,
-        checkedAt: "2026-07-17T00:00:00.000Z",
-      }],
-      busy: false,
-      onClose: () => undefined,
-      onPrepare: async () => null,
-      onConfirmPrepared: async () => false,
-      onStart: async () => true,
-      onOpenProviderSettings: () => undefined,
-      onRunBaseline: async () => true,
-    }));
+    const html = renderToStaticMarkup(
+      createElement(TrainingStartDialog, {
+        baseModelCandidates: [
+          managedCandidate("accounts/fireworks/models/qwen3-0p6b", [
+            "sft",
+            "grpo",
+          ]),
+        ],
+        connection: null,
+        taskset,
+        destinations: [
+          {
+            schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+            destinationId: "fireworks",
+            available: true,
+            methods: ["sft", "grpo"],
+            parameterizations: ["lora"],
+            modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
+            maxDatasetBytes: 1_000_000,
+            environmentPlacements: ["provider_native"],
+            nonProduction: false,
+            unavailableReason: null,
+            checkedAt: "2026-07-17T00:00:00.000Z",
+          },
+        ],
+        busy: false,
+        onClose: () => undefined,
+        onPrepare: async () => null,
+        onConfirmPrepared: async () => false,
+        onStart: async () => true,
+        onOpenProviderSettings: () => undefined,
+        onRunBaseline: async () => true,
+      })
+    );
 
     expect(html).toContain("RFT requires a public HTTPS callback");
     expect(html).toContain("/v1/training/fireworks/rft");
@@ -328,25 +665,29 @@ describe("Training UI", () => {
         format: "parquet",
         schema: {
           schemaVersion: "openpond.datasetSemanticSchema.v1",
-          fields: [{
-            name: "expected_output",
-            semanticRole: "expected_output",
-            logicalType: "string",
-            nullable: false,
-            policy: "privileged",
-          }],
+          fields: [
+            {
+              name: "expected_output",
+              semanticRole: "expected_output",
+              logicalType: "string",
+              nullable: false,
+              policy: "privileged",
+            },
+          ],
           schemaHash: "schemahash-ui-rft",
         },
-        shards: [{
-          id: "dataset_shard_ui_rft",
-          split: "train",
-          path: "data/train.parquet",
-          contentHash: "shardhash-ui-rft",
-          schemaHash: "schemahash-ui-rft",
-          sizeBytes: 1_000,
-          rowCount: 100,
-          rowGroupCount: 1,
-        }],
+        shards: [
+          {
+            id: "dataset_shard_ui_rft",
+            split: "train",
+            path: "data/train.parquet",
+            contentHash: "shardhash-ui-rft",
+            schemaHash: "schemahash-ui-rft",
+            sizeBytes: 1_000,
+            rowCount: 100,
+            rowGroupCount: 1,
+          },
+        ],
         rowCount: 120,
         splitCounts: { train: 100, validation: 10, test: 0, frozen_eval: 10 },
         sourceReceiptRefs: ["receipt_ui_rft"],
@@ -362,34 +703,44 @@ describe("Training UI", () => {
         trainingPath: { primaryMethod: "grpo", bootstrap: null },
       },
     });
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
-      baseModelCandidates: [managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["grpo"])],
-      connection: null,
-      taskset,
-      destinations: [{
-        schemaVersion: "openpond.trainingDestinationCapabilities.v1",
-        destinationId: "fireworks",
-        available: true,
-        methods: ["grpo"],
-        parameterizations: ["lora"],
-        modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
-        maxDatasetBytes: 1_000_000,
-        environmentPlacements: ["provider_native"],
-        nonProduction: false,
-        unavailableReason: null,
-        checkedAt: "2026-07-20T00:00:00.000Z",
-      }],
-      busy: false,
-      onClose: () => undefined,
-      onPrepare: async () => null,
-      onConfirmPrepared: async () => false,
-      onStart: async () => true,
-      onRunBaseline: async () => true,
-    }));
+    const html = renderToStaticMarkup(
+      createElement(TrainingStartDialog, {
+        baseModelCandidates: [
+          managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["grpo"]),
+        ],
+        connection: null,
+        taskset,
+        destinations: [
+          {
+            schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+            destinationId: "fireworks",
+            available: true,
+            methods: ["grpo"],
+            parameterizations: ["lora"],
+            modelAllowlist: ["accounts/fireworks/models/qwen3-0p6b"],
+            maxDatasetBytes: 1_000_000,
+            environmentPlacements: ["provider_native"],
+            nonProduction: false,
+            unavailableReason: null,
+            checkedAt: "2026-07-20T00:00:00.000Z",
+          },
+        ],
+        busy: false,
+        onClose: () => undefined,
+        onPrepare: async () => null,
+        onConfirmPrepared: async () => false,
+        onStart: async () => true,
+        onRunBaseline: async () => true,
+      })
+    );
 
     expect(html).toContain("Check train signal");
-    expect(html).toContain("Run 16 selected train prompts with 8 candidates each");
-    expect(html).toContain("At least 4 prompts must produce both correct and incorrect rewards");
+    expect(html).toContain(
+      "Run 16 selected train prompts with 8 candidates each"
+    );
+    expect(html).toContain(
+      "At least 4 prompts must produce both correct and incorrect rewards"
+    );
     expect(html).toContain("Run train-signal check");
     expect(html).toContain('value="16"');
     expect(html).toContain('value="512"');
@@ -412,12 +763,15 @@ describe("Training UI", () => {
       rolloutMaxOutputTokens: 2_048,
       trainingExamples: 16,
     });
-    expect(recipe.method === "grpo" && recipe.dataset.selectionStrategy)
-      .toBe("rft_easy_curriculum_v1");
-    expect(recipe.method === "grpo" && recipe.resourceLimits.maxRollouts)
-      .toBe(128);
-    expect(recipe.method === "grpo" && recipe.rollout.maxOutputTokens)
-      .toBe(2_048);
+    expect(recipe.method === "grpo" && recipe.dataset.selectionStrategy).toBe(
+      "rft_easy_curriculum_v1"
+    );
+    expect(recipe.method === "grpo" && recipe.resourceLimits.maxRollouts).toBe(
+      128
+    );
+    expect(recipe.method === "grpo" && recipe.rollout.maxOutputTokens).toBe(
+      2_048
+    );
   });
 
   test("budgets every grouped RFT rollout and defaults to the supported 8B model", () => {
@@ -451,36 +805,48 @@ describe("Training UI", () => {
     expect(recipe.dataset.maxExamples).toBe(2);
     expect(recipe.loss.method).toBe("grpo");
 
-    const html = renderToStaticMarkup(createElement(TrainingStartDialog, {
-      baseModelCandidates: [
-        managedCandidate("accounts/fireworks/models/qwen3-0p6b", ["sft", "grpo"]),
-        managedCandidate("accounts/fireworks/models/qwen3-8b", ["sft", "grpo"]),
-      ],
-      connection: null,
-      taskset,
-      destinations: [{
-        schemaVersion: "openpond.trainingDestinationCapabilities.v1",
-        destinationId: "fireworks",
-        available: true,
-        methods: ["sft", "grpo"],
-        parameterizations: ["lora"],
-        modelAllowlist: [
-          "accounts/fireworks/models/qwen3-0p6b",
-          "accounts/fireworks/models/qwen3-8b",
+    const html = renderToStaticMarkup(
+      createElement(TrainingStartDialog, {
+        baseModelCandidates: [
+          managedCandidate("accounts/fireworks/models/qwen3-0p6b", [
+            "sft",
+            "grpo",
+          ]),
+          managedCandidate("accounts/fireworks/models/qwen3-8b", [
+            "sft",
+            "grpo",
+          ]),
         ],
-        maxDatasetBytes: 1_000_000,
-        environmentPlacements: ["provider_native"],
-        nonProduction: false,
-        unavailableReason: null,
-        checkedAt: "2026-07-18T00:00:00.000Z",
-      }],
-      busy: false,
-      onClose: () => undefined,
-      onPrepare: async () => null,
-      onConfirmPrepared: async () => false,
-      onStart: async () => true,
-    }));
-    expect(html).toContain('value="managed_accounts/fireworks/models/qwen3-8b" selected="">Qwen3 8B · Fireworks');
+        connection: null,
+        taskset,
+        destinations: [
+          {
+            schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+            destinationId: "fireworks",
+            available: true,
+            methods: ["sft", "grpo"],
+            parameterizations: ["lora"],
+            modelAllowlist: [
+              "accounts/fireworks/models/qwen3-0p6b",
+              "accounts/fireworks/models/qwen3-8b",
+            ],
+            maxDatasetBytes: 1_000_000,
+            environmentPlacements: ["provider_native"],
+            nonProduction: false,
+            unavailableReason: null,
+            checkedAt: "2026-07-18T00:00:00.000Z",
+          },
+        ],
+        busy: false,
+        onClose: () => undefined,
+        onPrepare: async () => null,
+        onConfirmPrepared: async () => false,
+        onStart: async () => true,
+      })
+    );
+    expect(html).toContain(
+      'value="managed_accounts/fireworks/models/qwen3-8b" selected="">Qwen3 8B · Fireworks'
+    );
   });
 
   test("defaults DAPO-Math artifacts to the DAPO provider loss", () => {
@@ -488,7 +854,8 @@ describe("Training UI", () => {
     const taskset = TasksetSchema.parse({
       ...base,
       sourceRefs: base.sourceRefs.map((source, index) =>
-        index === 0 ? { ...source, title: "DAPO-Math-17k" } : source),
+        index === 0 ? { ...source, title: "DAPO-Math-17k" } : source
+      ),
       contentHash: "taskset-ui-dapo-loss-v1",
     });
     expect(defaultRftLossMethod(taskset)).toBe("dapo");
@@ -512,47 +879,98 @@ describe("Training UI", () => {
   });
 
   test("preserves a compatible base model and clears an incompatible destination change", () => {
-    const candidate = managedCandidate(
-      "accounts/fireworks/models/qwen3-8b",
-      ["sft", "grpo"],
-    );
-    expect(preserveBaseModelSelection(
-      [candidate],
-      candidate.selectionKey,
-      "fireworks",
-      "grpo",
-    )).toBe(candidate.selectionKey);
-    expect(preserveBaseModelSelection(
-      [candidate],
-      candidate.selectionKey,
-      "local_cpu_fixture",
+    const candidate = managedCandidate("accounts/fireworks/models/qwen3-8b", [
       "sft",
-    )).toBe("");
+      "grpo",
+    ]);
+    expect(
+      preserveBaseModelSelection(
+        [candidate],
+        candidate.selectionKey,
+        "fireworks",
+        "grpo"
+      )
+    ).toBe(candidate.selectionKey);
+    expect(
+      preserveBaseModelSelection(
+        [candidate],
+        candidate.selectionKey,
+        "local_cpu_fixture",
+        "sft"
+      )
+    ).toBe("");
   });
 
   test("uses a full transformer LoRA target set for real SmolLM adapters", async () => {
-    const dialog = await readFile("apps/web/src/components/training/TrainingStartDialog.tsx", "utf8");
-    for (const module of ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]) expect(dialog).toContain(`"${module}"`);
+    const dialog = await readFile(
+      "apps/web/src/components/training/TrainingStartDialog.tsx",
+      "utf8"
+    );
+    for (const module of [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj",
+    ])
+      expect(dialog).toContain(`"${module}"`);
     expect(dialog).toContain("targetModules: SMOLLM2_LORA_TARGET_MODULES");
   });
 
+  test("chooses compute before narrowing the base model and device", async () => {
+    const dialog = await readFile(
+      "apps/web/src/components/training/TrainingStartDialog.tsx",
+      "utf8"
+    );
+    const fields = dialog.slice(dialog.indexOf('<div className="training-start-fields">'));
+    expect(fields.indexOf("<span>Compute</span>")).toBeLessThan(
+      fields.indexOf("<span>Base model</span>")
+    );
+    expect(fields.indexOf("<span>Base model</span>")).toBeLessThan(
+      fields.indexOf("<span>Device</span>")
+    );
+  });
+
   test("keeps long New model recommendations scrollable", async () => {
-    const css = await readFile("apps/web/src/styles/training/training.css", "utf8");
-    expect(css).toContain(".training-run-workflow-step{height:min(680px,calc(100vh - 40px));overflow:hidden}");
-    expect(css).toContain(".training-dialog-scroll-body{min-height:0;overflow:auto");
+    const css = await readFile(
+      "apps/web/src/styles/training/training.css",
+      "utf8"
+    );
+    expect(css).toContain(
+      ".training-run-workflow-step{height:min(680px,calc(100vh - 40px));overflow:hidden}"
+    );
+    expect(css).toContain(
+      ".training-dialog-scroll-body{min-height:0;overflow:auto"
+    );
   });
 
   test("replaces Chromium's amber objective-field ring with the app focus color", async () => {
-    const css = await readFile("apps/web/src/styles/training/training.css", "utf8");
-    expect(css).toContain(".training-objective-field textarea:focus-visible{border-color:color-mix(in srgb,var(--cyan) 70%,var(--border))}");
-    expect(css).toContain("border-radius:6px;outline:0;background:var(--panel)");
+    const css = await readFile(
+      "apps/web/src/styles/training/training.css",
+      "utf8"
+    );
+    expect(css).toContain(
+      ".training-objective-field textarea:focus-visible{border-color:color-mix(in srgb,var(--cyan) 70%,var(--border))}"
+    );
+    expect(css).toContain(
+      "border-radius:6px;outline:0;background:var(--panel)"
+    );
   });
 
   test("does not discard an unsaved model configuration when Training polling returns equivalent data", async () => {
-    const configuration = await readFile("apps/web/src/components/training/TrainingModelConfiguration.tsx", "utf8");
-    expect(configuration).toContain('`${lineage.id}:${lineage.chatConfiguration.updatedAt ?? "initial"}`');
+    const configuration = await readFile(
+      "apps/web/src/components/training/TrainingModelConfiguration.tsx",
+      "utf8"
+    );
+    expect(configuration).toContain(
+      '`${lineage.id}:${lineage.chatConfiguration.updatedAt ?? "initial"}`'
+    );
     expect(configuration).toContain("}, [savedConfigurationVersion]);");
-    expect(configuration).not.toContain("}, [lineage?.chatConfiguration, lineage?.id]);");
+    expect(configuration).not.toContain(
+      "}, [lineage?.chatConfiguration, lineage?.id]);"
+    );
   });
 
   test("shows explicit promotion, method-separated comparison, rollback, and correlated rollout evidence", () => {
@@ -571,48 +989,58 @@ describe("Training UI", () => {
     const state = {
       models: [lineage],
       plans: [plan],
-      jobs: [{
-        id: lineage.jobId,
-        planId: plan.id,
-        destinationId: "fireworks",
-      }],
-      artifacts: [{
-        id: lineage.frozenEvaluationArtifactId,
-        metadata: {
-          basePassRate: 0.25,
-          trainedPassRate: 1,
+      jobs: [
+        {
+          id: lineage.jobId,
+          planId: plan.id,
+          destinationId: "fireworks",
         },
-      }],
-      modelBindings: [{
-        id: "model_binding_active",
-        status: "active",
-        role: "chat_manual",
-        roleTargetId: "default",
-        modelArtifactLineageId: lineage.id,
-        rollbackTargetBindingId: "model_binding_prior",
-      }],
+      ],
+      artifacts: [
+        {
+          id: lineage.frozenEvaluationArtifactId,
+          metadata: {
+            basePassRate: 0.25,
+            trainedPassRate: 1,
+          },
+        },
+      ],
+      modelBindings: [
+        {
+          id: "model_binding_active",
+          status: "active",
+          role: "chat_manual",
+          roleTargetId: "default",
+          modelArtifactLineageId: lineage.id,
+          rollbackTargetBindingId: "model_binding_prior",
+        },
+      ],
     } as any;
     const controller = {
       payload: state,
       busyAction: null,
       actions: actionStubs(),
     } as any;
-    const promotion = renderToStaticMarkup(createElement(TrainingModelPromotion, {
-      lineage: lineage as any,
-      state,
-      training: controller,
-      onToast: () => 1,
-    }));
+    const promotion = renderToStaticMarkup(
+      createElement(TrainingModelPromotion, {
+        lineage: lineage as any,
+        state,
+        training: controller,
+        onToast: () => 1,
+      })
+    );
     expect(promotion).toContain("Promotion gate");
     expect(promotion).toContain("Passed");
     expect(promotion).toContain("Default chat model");
     expect(promotion).toContain(">Roll back</button>");
     expect(promotion).toContain("<strong>prior</strong>");
 
-    const comparison = renderToStaticMarkup(createElement(TrainingModelComparisons, {
-      taskset,
-      state,
-    }));
+    const comparison = renderToStaticMarkup(
+      createElement(TrainingModelComparisons, {
+        taskset,
+        state,
+      })
+    );
     expect(comparison).toContain("Base model");
     expect(comparison).toContain("Latest candidate");
     expect(comparison).toContain("SFT");
@@ -631,9 +1059,8 @@ describe("Training UI", () => {
         },
       },
     };
-    const currentComparison = renderToStaticMarkup(createElement(
-      TrainingModelComparisons,
-      {
+    const currentComparison = renderToStaticMarkup(
+      createElement(TrainingModelComparisons, {
         taskset,
         state: {
           ...state,
@@ -654,87 +1081,91 @@ describe("Training UI", () => {
             },
           ],
         } as any,
-      },
-    ));
+      })
+    );
     expect(currentComparison).toContain("accounts/fireworks/models/qwen3-8b");
     expect(currentComparison).toContain("Pending for active run");
 
-    const infrastructureBlocked = renderToStaticMarkup(createElement(
-      TrainingModelComparisons,
-      {
+    const infrastructureBlocked = renderToStaticMarkup(
+      createElement(TrainingModelComparisons, {
         taskset,
         state: {
           ...state,
-          artifacts: [{
-            id: lineage.frozenEvaluationArtifactId,
-            metadata: {
-              evaluationComplete: false,
-              infrastructureFailureCount: 2,
-              basePassRate: 0,
-              trainedPassRate: 0,
+          artifacts: [
+            {
+              id: lineage.frozenEvaluationArtifactId,
+              metadata: {
+                evaluationComplete: false,
+                infrastructureFailureCount: 2,
+                basePassRate: 0,
+                trainedPassRate: 0,
+              },
             },
-          }],
+          ],
         } as any,
-      },
-    ));
+      })
+    );
     expect(infrastructureBlocked).toContain("Infrastructure blocked");
     expect(infrastructureBlocked).not.toContain("0% (+0 pts)");
-    const blockedPromotion = renderToStaticMarkup(createElement(
-      TrainingModelPromotion,
-      {
+    const blockedPromotion = renderToStaticMarkup(
+      createElement(TrainingModelPromotion, {
         lineage: { ...lineage, promotable: false } as any,
         state: {
           ...state,
           models: [{ ...lineage, promotable: false }],
-          artifacts: [{
-            id: lineage.frozenEvaluationArtifactId,
-            metadata: {
-              evaluationComplete: false,
-              infrastructureFailureCount: 2,
+          artifacts: [
+            {
+              id: lineage.frozenEvaluationArtifactId,
+              metadata: {
+                evaluationComplete: false,
+                infrastructureFailureCount: 2,
+              },
             },
-          }],
+          ],
         } as any,
         training: controller,
         onToast: () => 1,
-      },
-    ));
-    expect(blockedPromotion).toContain("Run evaluation");
-    expect(blockedPromotion).toContain(
-      "recorded no quality result",
+      })
     );
+    expect(blockedPromotion).toContain("Run evaluation");
+    expect(blockedPromotion).toContain("recorded no quality result");
 
-    const receipts = renderToStaticMarkup(createElement(TrainingRolloutReceipts, {
-      receipts: [{
-        id: "receipt_1",
-        status: "succeeded",
-        taskId: "task_train",
-        correlationId: "fireworks:experiment:rollout",
-        providerTrace: {
-          invocationId: "invocation_1",
-          experimentId: "experiment_1",
-          rolloutId: "rollout_1",
-          runId: "run_1",
-          rowId: "task_train",
-        },
-        policy: {
-          modelId: "accounts/fireworks/models/qwen3-0p6b",
-          checkpointId: "checkpoint_1",
-        },
-        environment: {
-          id: "cross-system-operations",
-          version: "cross-system-operations.v1",
-          worldId: "world_1",
-          worldHash: "worldhash00000000",
-        },
-        reward: {
-          eligible: true,
-          raw: 1.1,
-          components: { exactAnswer: 1 },
-        },
-        verifier: { outcome: "correct" },
-        failureClass: null,
-      }] as any,
-    }));
+    const receipts = renderToStaticMarkup(
+      createElement(TrainingRolloutReceipts, {
+        receipts: [
+          {
+            id: "receipt_1",
+            status: "succeeded",
+            taskId: "task_train",
+            correlationId: "fireworks:experiment:rollout",
+            providerTrace: {
+              invocationId: "invocation_1",
+              experimentId: "experiment_1",
+              rolloutId: "rollout_1",
+              runId: "run_1",
+              rowId: "task_train",
+            },
+            policy: {
+              modelId: "accounts/fireworks/models/qwen3-0p6b",
+              checkpointId: "checkpoint_1",
+            },
+            environment: {
+              id: "cross-system-operations",
+              version: "cross-system-operations.v1",
+              worldId: "world_1",
+              worldHash: "worldhash00000000",
+            },
+            reward: {
+              eligible: true,
+              raw: 1.1,
+              components: { exactAnswer: 1 },
+            },
+            verifier: { outcome: "correct" },
+            failureClass: null,
+          },
+        ] as any,
+      })
+    );
     expect(receipts).toContain("1.100");
     expect(receipts).toContain("fireworks:experiment:rollout");
     expect(receipts).toContain("checkpoint_1");
@@ -770,9 +1201,8 @@ describe("Training UI", () => {
       verifier: { outcome: "incorrect" },
       failureClass: null,
     };
-    const boundedReceipts = renderToStaticMarkup(createElement(
-      TrainingRolloutReceipts,
-      {
+    const boundedReceipts = renderToStaticMarkup(
+      createElement(TrainingRolloutReceipts, {
         receipts: Array.from({ length: 25 }, (_, index) => ({
           ...receiptSeed,
           id: `receipt_${index}`,
@@ -782,8 +1212,8 @@ describe("Training UI", () => {
             rolloutId: `rollout_${String(index).padStart(2, "0")}`,
           },
         })) as any,
-      },
-    ));
+      })
+    );
     expect(boundedReceipts).toContain("Showing latest 24 of 25 receipts");
     expect(boundedReceipts).toContain("Show all 25");
     expect(boundedReceipts).toContain("rollout_24");
@@ -810,14 +1240,16 @@ function localFixtureCandidate() {
     nonProduction: true,
     unavailableReason: null,
     methods: ["sft" as const],
-    executionOptions: [{
-      destinationId: "local_cpu_fixture" as const,
-      available: true,
-      methods: ["sft" as const],
-      parameterizations: ["lora" as const],
-      nonProduction: true,
-      unavailableReason: null,
-    }],
+    executionOptions: [
+      {
+        destinationId: "local_cpu_fixture" as const,
+        available: true,
+        methods: ["sft" as const],
+        parameterizations: ["lora" as const],
+        nonProduction: true,
+        unavailableReason: null,
+      },
+    ],
   };
 }
 
@@ -840,15 +1272,19 @@ function managedCandidate(modelId: string, methods: Array<"sft" | "grpo">) {
     nonProduction: false,
     unavailableReason: null,
     methods,
-    executionOptions: [{
-      destinationId: "fireworks" as const,
-      available: true,
-      methods,
-      parameterizations: ["lora" as const],
-      nonProduction: false,
-      unavailableReason: null,
-    }],
+    executionOptions: [
+      {
+        destinationId: "fireworks" as const,
+        available: true,
+        methods,
+        parameterizations: ["lora" as const],
+        nonProduction: false,
+        unavailableReason: null,
+      },
+    ],
   };
 }
 
-function actionStubs() { return new Proxy({}, { get: () => async () => null }); }
+function actionStubs() {
+  return new Proxy({}, { get: () => async () => null });
+}

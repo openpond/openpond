@@ -22,6 +22,7 @@ import {
 } from "../apps/web/src/components/app-shell/main-pane-helpers";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import {
+  composerActionCatalogLabel,
   composerActionCatalogMatches,
   composerActionSlashQuery,
 } from "../apps/web/src/lib/composer-action-catalog";
@@ -43,6 +44,7 @@ import {
 import {
   buildOpenPondAppActionRunInput,
   buildOpenPondAgentRunInput,
+  buildOpenPondProfileActionCatalog,
   buildOpenPondProfileActionCommand,
   buildOpenPondProfileActionRunInput,
   shouldRetainOpenPondProfileActionAfterSubmit,
@@ -152,6 +154,31 @@ function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
 }
 
 describe("OpenPond App action channel", () => {
+  test("labels a profile's default chat action with its configured agent name", () => {
+    const [profileAction] = buildOpenPondProfileActionCatalog({
+      agents: [{
+        id: "release-reviewer",
+        name: "Release Reviewer",
+        path: "agents/release-reviewer",
+        enabled: true,
+      }],
+      actionCatalog: [{
+        id: "chat",
+        agentId: "release-reviewer",
+        sourceActionId: "chat",
+        label: "Chat",
+        description: "Reviews releases before they ship.",
+      }],
+    });
+
+    expect(profileAction?.implementation).toMatchObject({
+      type: "openpond-profile-action",
+      actionId: "chat",
+      agentName: "Release Reviewer",
+    });
+    expect(composerActionCatalogLabel(profileAction!)).toBe("Release Reviewer");
+  });
+
   test("retains profile chat actions for conversational follow-ups only", () => {
     const chat = buildOpenPondProfileActionCommand({
       id: "account-health-agent.chat",

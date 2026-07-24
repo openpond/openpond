@@ -69,7 +69,8 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/cross-system-operations/fixture-baseline", action: "record_cross_system_fixture_baseline", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
-    { method: "PUT", path: "/v1/training/model-build-drafts", action: "save_model_build_draft" },
+    { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
+    { method: "PUT", path: "/v1/training/model-run-drafts", action: "save_model_run_draft" },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
     { method: "POST", path: "/v1/training/grade", action: "grade" },
@@ -95,7 +96,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
   }
   const dynamic = [
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/model-build-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_build_draft", key: "draftId" },
+    { pattern: /^\/v1\/training\/model-run-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_run_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },

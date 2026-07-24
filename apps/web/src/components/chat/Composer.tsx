@@ -252,8 +252,7 @@ function slashActionMatchesForQuery(actions: SandboxActionCatalogEntry[], query:
         .join(" ")
         .toLowerCase()
         .includes(query);
-    })
-    .slice(0, 8);
+    });
 }
 
 function slashAppContextMatchesForQuery(apps: OpenPondApp[], query: string): OpenPondApp[] {
@@ -279,6 +278,7 @@ function mentionMenuMatchesForQuery({
   actionCatalog,
   connectedAppMentions,
   mentionApps,
+  profileSkills,
   query,
   surface,
   teamMentionMembers,
@@ -286,6 +286,7 @@ function mentionMenuMatchesForQuery({
   actionCatalog: SandboxActionCatalogEntry[];
   connectedAppMentions: ConnectedAppMentionOption[];
   mentionApps: OpenPondApp[];
+  profileSkills: ComposerSkillMenuItem[];
   query: string;
   surface: "chat" | "team";
   teamMentionMembers: TeamChatMember[];
@@ -300,9 +301,9 @@ function mentionMenuMatchesForQuery({
           .some((token) => token.includes(needle));
       })
       .map((member) => ({ kind: "team-member" as const, member }));
-    const teamActionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
+    const teamActionMatches = actionMentionMatchesForQuery(actionCatalog, needle, actionCatalog.length)
       .map((action) => ({ kind: "action" as const, action }));
-    return [...memberMatches, ...teamActionMatches].slice(0, 8);
+    return [...teamActionMatches, ...memberMatches];
   }
   const appMatches = mentionApps
     .filter((app) => {
@@ -316,11 +317,13 @@ function mentionMenuMatchesForQuery({
       return tokens.some((token) => token.includes(needle));
     })
     .map((app) => ({ kind: "app" as const, app }));
-  const actionMatches = actionMentionMatchesForQuery(actionCatalog, needle)
+  const actionMatches = actionMentionMatchesForQuery(actionCatalog, needle, actionCatalog.length)
     .map((action) => ({ kind: "action" as const, action }));
+  const skillMatches = profileSkillInvocationMatchesForQuery(profileSkills, needle)
+    .map((skill) => ({ kind: "skill" as const, skill }));
   const connectedAppMatches = connectedAppMentionMatchesForQuery(connectedAppMentions, needle)
     .map((app) => ({ kind: "connected-app" as const, app }));
-  return [...appMatches, ...connectedAppMatches, ...actionMatches].slice(0, 8);
+  return [...actionMatches, ...skillMatches, ...appMatches, ...connectedAppMatches];
 }
 
 export function promptWithSelectedInvocationText(
@@ -698,11 +701,20 @@ export function Composer({
       actionCatalog,
       connectedAppMentions,
       mentionApps,
+      profileSkills,
       query: mentionContext.query,
       surface,
       teamMentionMembers,
     });
-  }, [actionCatalog, connectedAppMentions, mentionApps, mentionContext, surface, teamMentionMembers]);
+  }, [
+    actionCatalog,
+    connectedAppMentions,
+    mentionApps,
+    mentionContext,
+    profileSkills,
+    surface,
+    teamMentionMembers,
+  ]);
   const addMenuMentionItems = useMemo<ComposerMentionMenuItem[]>(() => {
     return surface === "team"
       ? []
@@ -710,11 +722,19 @@ export function Composer({
           actionCatalog,
           connectedAppMentions,
           mentionApps,
+          profileSkills,
           query: "",
           surface,
           teamMentionMembers,
-        });
-  }, [actionCatalog, connectedAppMentions, mentionApps, surface, teamMentionMembers]);
+        }).filter((item) => item.kind !== "skill");
+  }, [
+    actionCatalog,
+    connectedAppMentions,
+    mentionApps,
+    profileSkills,
+    surface,
+    teamMentionMembers,
+  ]);
   const showMentionMenu = Boolean(
     !addMenuOpen &&
     !inputDisabled &&
@@ -762,13 +782,19 @@ export function Composer({
       ? slashCommandMatchesForQuery(activeSlashContext.query)
       : [];
   }, [activeSlashContext, surface]);
+  const slashSkillMatches = useMemo(() => {
+    return activeSlashContext && surface !== "team"
+      ? profileSkillInvocationMatchesForQuery(profileSkills, activeSlashContext.query)
+      : [];
+  }, [activeSlashContext, profileSkills, surface]);
   const slashMatches = useMemo<SlashMenuItem[]>(
     () => [
+      ...actionMatches.map((action) => ({ kind: "action" as const, action })),
+      ...slashSkillMatches.map((skill) => ({ kind: "skill" as const, skill })),
       ...commandMatches.map((command) => ({ kind: "command" as const, command })),
       ...appContextMatches.map((app) => ({ kind: "app-context" as const, app })),
-      ...actionMatches.map((action) => ({ kind: "action" as const, action })),
-    ].slice(0, 10),
-    [actionMatches, appContextMatches, commandMatches],
+    ],
+    [actionMatches, appContextMatches, commandMatches, slashSkillMatches],
   );
   const showActionMenu = Boolean(
     !addMenuOpen &&
@@ -781,24 +807,22 @@ export function Composer({
     COMPOSER_SLASH_COMMANDS.map((command) => ({ kind: "command" as const, command })),
   []);
   const addMenuSlashItems = useMemo<SlashMenuItem[]>(() => [
-    ...slashAppContextMatchesForQuery(mentionApps, "")
-      .map((app) => ({ kind: "app-context" as const, app })),
     ...slashActionMatchesForQuery(actionCatalog, "")
       .map((action) => ({ kind: "action" as const, action })),
+    ...slashAppContextMatchesForQuery(mentionApps, "")
+      .map((app) => ({ kind: "app-context" as const, app })),
   ], [actionCatalog, mentionApps]);
+  const addMenuSkillItems = useMemo<SlashMenuItem[]>(
+    () => profileSkillInvocationMatchesForQuery(profileSkills, "")
+      .map((skill) => ({ kind: "skill" as const, skill })),
+    [profileSkills],
+  );
   const addMenuSections = useMemo<ComposerCommandMenuSection[]>(() => {
     const sections: ComposerCommandMenuSection[] = [
       {
         id: "add",
         items: [{ kind: "files" }],
         label: "Add",
-      },
-      {
-        id: "openpond",
-        items: addMenuOpenPondItems.map((item) => ({ kind: "slash", item })),
-        label: "OpenPond",
-        grid: true,
-        queryScope: "slash",
       },
     ];
     if (addMenuSlashItems.length > 0) {
@@ -809,6 +833,21 @@ export function Composer({
         queryScope: "slash",
       });
     }
+    if (addMenuSkillItems.length > 0) {
+      sections.push({
+        id: "skills",
+        items: addMenuSkillItems.map((item) => ({ kind: "slash", item })),
+        label: "Skills",
+        queryScopes: ["slash", "mentions"],
+      });
+    }
+    sections.push({
+      id: "openpond",
+      items: addMenuOpenPondItems.map((item) => ({ kind: "slash", item })),
+      label: "OpenPond",
+      grid: true,
+      queryScope: "slash",
+    });
     sections.push({
       emptyLabel: "No mentions available",
       id: "mentions",
@@ -816,7 +855,7 @@ export function Composer({
       label: "@",
     });
     return sections;
-  }, [addMenuMentionItems, addMenuOpenPondItems, addMenuSlashItems]);
+  }, [addMenuMentionItems, addMenuOpenPondItems, addMenuSkillItems, addMenuSlashItems]);
   const filteredAddMenuSections = useMemo(
     () => filterComposerCommandMenuSections(addMenuSections, addMenuQuery),
     [addMenuQuery, addMenuSections],
@@ -1262,6 +1301,12 @@ export function Composer({
       selectConnectedAppMention(item.app);
       return;
     }
+    if (item.kind === "skill") {
+      if (!mentionContext) return;
+      const cursor = Math.max(0, Math.min(cursorIndex, prompt.length));
+      insertProfileSkill(item.skill, { start: mentionContext.start, end: cursor });
+      return;
+    }
     selectMentionAction(item.action);
   }
 
@@ -1317,18 +1362,33 @@ export function Composer({
       selectSlashPlanningApp(item.app);
       return;
     }
+    if (item.kind === "skill") {
+      if (!activeSlashContext) return;
+      insertProfileSkill(item.skill, activeSlashContext);
+      return;
+    }
     selectSlashAction(item.action);
   }
 
-  function selectProfileSkill(item: ComposerSkillMenuItem) {
-    if (!activeSkillContext) return;
-    const replacement = replaceActiveProfileSkillInvocation(prompt, activeSkillContext, item);
+  function insertProfileSkill(
+    item: ComposerSkillMenuItem,
+    range: { end: number; start: number },
+  ) {
+    const replacement = replaceActiveProfileSkillInvocation(prompt, range, item);
     setSkillMenuDismissedPrompt(null);
+    setMentionMenuDismissedPrompt(null);
+    setActionMenuDismissedPrompt(null);
     onPromptChange(replacement.value);
     setCursorIndex(replacement.cursor);
     window.requestAnimationFrame(() => {
       inputRef.current?.focusAtPromptIndex(replacement.cursor);
     });
+    return replacement.cursor;
+  }
+
+  function selectProfileSkill(item: ComposerSkillMenuItem) {
+    if (!activeSkillContext) return;
+    insertProfileSkill(item, activeSkillContext);
   }
 
   function openFilePicker() {
@@ -1372,6 +1432,10 @@ export function Composer({
         resetAddMenuQuery(insertPlanningAppMention(item.item.app, range));
         return;
       }
+      if (item.item.kind === "skill") {
+        resetAddMenuQuery(insertProfileSkill(item.item.skill, range));
+        return;
+      }
       resetAddMenuQuery(insertSelectedAction(item.item.action, range));
       return;
     }
@@ -1385,6 +1449,10 @@ export function Composer({
     }
     if (item.item.kind === "connected-app") {
       resetAddMenuQuery(insertConnectedAppMention(item.item.app, range));
+      return;
+    }
+    if (item.item.kind === "skill") {
+      resetAddMenuQuery(insertProfileSkill(item.item.skill, range));
       return;
     }
     resetAddMenuQuery(insertSelectedAction(item.item.action, range));

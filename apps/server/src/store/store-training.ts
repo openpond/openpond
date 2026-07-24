@@ -4,7 +4,8 @@ import type {
   GradeResult,
   GraderAuditReport,
   ModelArtifactLineage,
-  ModelBuildDraft,
+  ModelProject,
+  ModelRunDraft,
   RuntimeEvent,
   Session,
   TaskAttemptArtifact,
@@ -33,7 +34,8 @@ import {
   GradeResultSchema,
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
-  ModelBuildDraftSchema,
+  ModelProjectSchema,
+  ModelRunDraftSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TaskCandidateSchema,
@@ -681,36 +683,62 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     );
   }
 
-  async saveModelBuildDraft(draftInput: ModelBuildDraft): Promise<ModelBuildDraft> {
-    const draft = ModelBuildDraftSchema.parse(draftInput);
+  async saveModelProject(projectInput: ModelProject): Promise<ModelProject> {
+    const project = ModelProjectSchema.parse(projectInput);
     await this.upsertPayload(
-      `INSERT INTO model_build_drafts (id, profile_id, model_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [project.id, project.profileId, JSON.stringify(project), project.createdAt, project.updatedAt],
+    );
+    return project;
+  }
+
+  async getModelProject(id: string): Promise<ModelProject | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_projects WHERE id = ?",
+      [id],
+      ModelProjectSchema.parse,
+    );
+  }
+
+  async listModelProjects(profileId: string): Promise<ModelProject[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM model_projects WHERE profile_id = ? ORDER BY updated_at DESC",
+      [profileId],
+      ModelProjectSchema.parse,
+    );
+  }
+
+  async saveModelRunDraft(draftInput: ModelRunDraft): Promise<ModelRunDraft> {
+    const draft = ModelRunDraftSchema.parse(draftInput);
+    await this.upsertPayload(
+      `INSERT INTO model_run_drafts (id, profile_id, model_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, model_id = excluded.model_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
       [draft.id, draft.profileId, draft.modelId, draft.status, JSON.stringify(draft), draft.createdAt, draft.updatedAt],
     );
     return draft;
   }
 
-  async getModelBuildDraft(id: string): Promise<ModelBuildDraft | null> {
+  async getModelRunDraft(id: string): Promise<ModelRunDraft | null> {
     return this.getParsedPayload(
-      "SELECT payload FROM model_build_drafts WHERE id = ?",
+      "SELECT payload FROM model_run_drafts WHERE id = ?",
       [id],
-      ModelBuildDraftSchema.parse,
+      ModelRunDraftSchema.parse,
     );
   }
 
-  async listModelBuildDrafts(profileId: string): Promise<ModelBuildDraft[]> {
+  async listModelRunDrafts(profileId: string): Promise<ModelRunDraft[]> {
     return this.listParsedPayloads(
-      "SELECT payload FROM model_build_drafts WHERE profile_id = ? ORDER BY updated_at DESC",
+      "SELECT payload FROM model_run_drafts WHERE profile_id = ? ORDER BY updated_at DESC",
       [profileId],
-      ModelBuildDraftSchema.parse,
+      ModelRunDraftSchema.parse,
     );
   }
 
-  async deleteModelBuildDraft(id: string): Promise<void> {
+  async deleteModelRunDraft(id: string): Promise<void> {
     await this.ready;
     const write = this.writeQueue.then(() =>
-      this.run("DELETE FROM model_build_drafts WHERE id = ?", [id]));
+      this.run("DELETE FROM model_run_drafts WHERE id = ?", [id]));
     this.writeQueue = write.catch(() => undefined);
     await write;
   }

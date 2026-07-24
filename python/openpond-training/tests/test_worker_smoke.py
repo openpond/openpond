@@ -189,6 +189,7 @@ def test_cpu_dpo_worker_records_preference_metrics_and_reference_cache(tmp_path:
     dpo_metrics = [
         event["payload"] for event in events
         if event["type"] == "metric"
+        and event["payload"].get("metricKind") == "dpo_step"
         and event["payload"].get("preferenceAccuracy") is not None
     ]
     assert dpo_metrics

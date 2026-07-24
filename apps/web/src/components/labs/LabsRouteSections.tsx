@@ -283,7 +283,7 @@ export function ModelsTable({
             <th>Model</th>
             <th>Active</th>
             <th>Eval</th>
-            <th>Versions</th>
+            <th>Runs</th>
             <th>Updated</th>
             <th><span className="sr-only">Actions</span></th>
           </tr>
@@ -333,7 +333,7 @@ export function ModelsTable({
                     }
                   />
                 </td>
-                <td>{versions.length}</td>
+                <td>{item.trainingRunCount}</td>
                 <td>{compactUpdatedAt(item.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">

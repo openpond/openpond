@@ -296,7 +296,8 @@ describe("chat message projection", () => {
         onOpenSession: () => undefined,
       }),
     );
-    expect(html).toContain("Subagent completed, read a file, and searched code");
+    expect(html).toContain("Working…");
+    expect(html).not.toContain("Subagent completed, read a file, and searched code");
     expect(html).toContain("activity-subagent-avatar-group");
     expect(html).toContain("Open Research subagent (completed) conversation");
   });
@@ -375,7 +376,7 @@ describe("chat message projection", () => {
     expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
     expect(messages[1]).toMatchObject({
       role: "activity_group",
-      traceState: "running",
+      traceState: "settled",
     });
     expect(messages[1]?.activities).toMatchObject([
       {
@@ -389,9 +390,10 @@ describe("chat message projection", () => {
     });
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    expect(html).toContain("Working…");
+    expect(html).toContain("Thought through the request");
+    expect(html).not.toContain("Working…");
     expect(html).toContain("The user is greeting Z.ai.");
-    expect(html).toContain("Reasoning");
+    expect(html).not.toContain(">Reasoning<");
     expect(html).not.toContain("Hello z.ai");
 
     const assistantHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[2]! }));
@@ -474,9 +476,101 @@ describe("chat message projection", () => {
     ]);
     expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe("Searched code");
     expect(messages[2]?.content).toBe("I found the chat files.");
+
+    const html = renderToStaticMarkup(createElement(MessageRow, {
+      message: {
+        ...messages[1]!,
+        traceStartedAt: "2026-07-22T15:00:00.000Z",
+        traceCompletedAt: "2026-07-22T15:01:24.000Z",
+      },
+    }));
+    expect(html).toContain("Worked for 1m 24s · Searched code");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("I need to find the relevant files.");
+    expect(html).toContain("Now I can inspect the candidate.");
+    expect(html).not.toContain("Found 2 resources.");
+    expect(html).not.toContain("Searched resources");
   });
 
-  test("collapses completed reasoning into a deterministic work summary", () => {
+  test("keeps legacy Codex commentary and later tool activity in transcript order", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "inspect the renderer" },
+      }),
+      commandStarted("search_1", "turn_1", "rg workTracePresentation apps/web"),
+      runtimeEvent({
+        id: "commentary_1",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "I found the live trace threshold.",
+      }),
+      commandStarted("read_1", "turn_1", "sed -n '1,120p' apps/web/src/lib/chat-work-trace.ts"),
+      runtimeEvent({
+        id: "turn_completed",
+        name: "turn.completed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        status: "completed",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+      "assistant",
+      "activity_group",
+    ]);
+    expect(messages[1]?.activities?.map((activity) => activity.id)).toEqual(["search_1"]);
+    expect(messages[2]?.content).toBe("I found the live trace threshold.");
+    expect(messages[3]?.activities?.map((activity) => activity.id)).toEqual(["read_1"]);
+    expect(messages[1]?.traceState).toBe("settled");
+    expect(messages[3]?.traceState).toBe("completed");
+  });
+
+  test("settles earlier work summaries while only the active tail keeps working", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "inspect the renderer" },
+      }),
+      commandStarted("search_1", "turn_1", "rg activity-summary apps/web/src"),
+      runtimeEvent({
+        id: "commentary_1",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "I found the summary renderer.",
+      }),
+      commandStarted("list_1", "turn_1", "ls apps/web/src/components/chat"),
+    ]);
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+      "assistant",
+      "activity_group",
+    ]);
+    expect(messages[1]?.traceState).toBe("settled");
+    expect(messages[3]?.traceState).toBe("running");
+
+    const settledHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    const runningHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[3]! }));
+    expect(settledHtml).toContain('Searched for &quot;activity-summary&quot; in apps/web/src');
+    expect(settledHtml).not.toContain("Working…");
+    expect(settledHtml).not.toContain(" working");
+    expect(runningHtml).toContain("Working…");
+    expect(runningHtml).toContain(" working");
+  });
+
+  test("keeps completed reasoning inline beneath a factual work summary", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -504,12 +598,12 @@ describe("chat message projection", () => {
     ]);
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    expect(html).toContain("Thought through the request");
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("I found the branch");
-    expect(html).not.toContain("app-state.ts");
-    expect(html).not.toContain("const prompt");
-    expect(html).not.toContain("setPrompt");
+    expect(html).toContain("Worked · Thought through the request");
+    expect(html).not.toContain("aria-expanded");
+    expect(html).toContain("I found the branch");
+    expect(html).toContain("app-state.ts");
+    expect(html).toContain("const prompt");
+    expect(html).toContain("setPrompt");
     expect(messages[1]?.activities?.[0]?.content).toContain("const prompt");
     expect(messages[1]?.activities?.[0]?.content).toContain("setPrompt");
   });
@@ -1467,7 +1561,8 @@ describe("chat message projection", () => {
     expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual(["search / 1 capability"]);
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    expect(html).toContain("X search");
+    expect(html).toContain("Working…");
+    expect(html).not.toContain("X search");
     expect(html).not.toContain("conn_should_not_render");
     expect(html).not.toContain("token_should_not_render");
 
@@ -1578,7 +1673,7 @@ describe("chat message projection", () => {
     expect(activities[0]?.detail).toBe(
       "To github.com:openpond/sandbox.git\n   0b0d5ad..38dc899  develop -> develop",
     );
-    expect(activityGroupSummary(activities)).toBe("Ran a command");
+    expect(activityGroupSummary(activities)).toBe("Pushed changes");
   });
 
   test("summarizes one command by activity instead of raw command text", () => {
@@ -1593,15 +1688,18 @@ describe("chat message projection", () => {
     ]);
 
     const activities = messages[1]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe("Searched code");
+    expect(activityGroupSummary(activities)).toBe(
+      'Searched for "activityGroupSummary" in apps/web/src',
+    );
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
       }),
     );
-    expect(html).toContain("Searched code");
-    expect(html).toContain("activityGroupSummary");
+    expect(html).toContain("Working…");
+    expect(html).not.toContain("Searched code");
+    expect(html).not.toContain("activityGroupSummary");
   });
 
   test("merges workspace action results into the started activity row", () => {
@@ -1630,7 +1728,8 @@ describe("chat message projection", () => {
     expect(activities[0]?.state).toBe("completed");
 
     const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[0]! }));
-    expect(html).toContain("Started sandbox");
+    expect(html).toContain("Working…");
+    expect(html).not.toContain("Started sandbox");
     expect(html).not.toContain("Starting sandbox");
   });
 

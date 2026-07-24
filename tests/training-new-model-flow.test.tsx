@@ -10,9 +10,48 @@ import { TrainingDatasetStep } from "../apps/web/src/components/training/Trainin
 import { TrainingSourceStep } from "../apps/web/src/components/training/TrainingSourceStep";
 import { TrainingStartModeStep } from "../apps/web/src/components/training/TrainingStartModeStep";
 import { TrainingRunReviewStep } from "../apps/web/src/components/training/TrainingRunReviewStep";
+import { nextModelName } from "../apps/web/src/components/labs/ModelRunEditorPage";
 import { proposalFixture, sourceFixture, tasksetFixture } from "./helpers/training-fixtures";
 
 describe("New model flow", () => {
+  test("assigns the next sequential default Model title even when earlier Models were renamed", () => {
+    expect(nextModelName([])).toBe("Model #1");
+    expect(nextModelName([{ name: "Model #3" }, { name: "Support specialist" }])).toBe(
+      "Model #4",
+    );
+  });
+
+  test("starts combined Model and Dataset creation from evidence intent cards", () => {
+    const html = renderToStaticMarkup(
+      <TrainingStartModeStep
+        allowExistingDataset
+        mode="preferences"
+        targetLabel="dataset"
+        onChange={() => undefined}
+        onContinue={() => undefined}
+        onUseExistingDataset={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("What do you want to build?");
+    expect(html).toContain("Teach with examples");
+    expect(html).toContain("Compare responses");
+    expect(html).toContain("Reward correct outcomes");
+    expect(html).toContain("Score with a rubric");
+    expect(html).toContain("Find opportunities");
+    expect(html).toContain("SFT recommended");
+    expect(html).toContain("DPO recommended");
+    expect(html).toContain("RLVR · verifiable rewards");
+    expect(html).toContain("GRPO recommended");
+    expect(html).toContain("PPO compatible");
+    expect(html).toContain('class="training-choice-indicator"');
+    expect(html).toContain(">Use existing Dataset</button>");
+    expect(html.indexOf("Use existing Dataset")).toBeLessThan(
+      html.indexOf(">Continue</button>"),
+    );
+    expect(html).not.toContain("Reuse one Dataset across multiple Models");
+  });
+
   test("starts from reusable Datasets rather than Dataset-authoring modes", () => {
     const html = renderToStaticMarkup(<CreateImproveAuthoringDialog {...dialogProps()} initialObjective={null} />);
     expect(html).toContain("Choose a Dataset");
@@ -61,6 +100,8 @@ describe("New model flow", () => {
     expect(html).toContain("Reward correct outcomes");
     expect(html).toContain("Score with a rubric");
     expect(html).toContain("Find opportunities");
+    expect(html).toContain("SFT recommended");
+    expect(html).toContain("DPO recommended");
     expect(html).not.toContain(">Automatic<");
     expect(html).not.toContain(">Manual<");
     expect(html).not.toContain("training-dialog-backdrop");

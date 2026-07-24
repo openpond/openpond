@@ -64,9 +64,10 @@ class CancellationCallback(TrainerCallback):
 
 
 class TrainingTelemetryCallback(TrainerCallback):
-    def __init__(self, writer: EventWriter, metrics_path: Path) -> None:
+    def __init__(self, writer: EventWriter, metrics_path: Path, method: str) -> None:
         self.writer = writer
         self.metrics_path = metrics_path
+        self.metric_kind = "dpo_step" if method == "dpo" else "sft_step"
         self.started_at = time.monotonic()
 
     def on_log(self, args, state, control, logs=None, **kwargs):  # type: ignore[no-untyped-def]
@@ -86,7 +87,7 @@ class TrainingTelemetryCallback(TrainerCallback):
         )):
             return control
         payload = compact_numbers({
-            "metricKind": "sft_step",
+            "metricKind": self.metric_kind,
             "step": int(state.global_step),
             "maxSteps": int(state.max_steps),
             "epoch": values.get("epoch", state.epoch),
@@ -213,7 +214,11 @@ def run(args: argparse.Namespace) -> int:
         }
         callbacks = [
             cancellation,
-            TrainingTelemetryCallback(writer, output_directory / "step-metrics.jsonl"),
+            TrainingTelemetryCallback(
+                writer,
+                output_directory / "step-metrics.jsonl",
+                recipe["method"],
+            ),
         ]
         if is_dpo:
             config = DPOConfig(

@@ -35,6 +35,7 @@ import type { RightChatPanelView, RightChatScrollState } from "./right-chat-pane
 
 export function RightChatPane({
   panel,
+  actionCatalog,
   createImproveActions,
   initialScrollState,
   codexPermissionMode,
@@ -73,6 +74,7 @@ export function RightChatPane({
   onWorkspaceTargetChange,
 }: {
   panel: RightChatPanelView;
+  actionCatalog: SandboxActionCatalogEntry[];
   createImproveActions: ComposerCreateImproveActions;
   initialScrollState: RightChatScrollState | null;
   busy: boolean;
@@ -238,7 +240,7 @@ export function RightChatPane({
           provider={panel.provider}
           model={panel.model}
           projectTarget={projectTarget}
-          actionCatalog={[]}
+          actionCatalog={actionCatalog}
           workspaceTarget={workspaceTarget}
           codexPermissionMode={codexPermissionMode}
           codexReasoningEffort={codexReasoningEffort}

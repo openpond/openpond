@@ -451,7 +451,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     defaultTeamId: appDefaults.defaultTeamId,
     accountScopeKey,
     localProjects: bootstrap?.localProjects ?? [],
-    profileActionCatalogEntries: bootstrap?.profile.actionCatalog ?? [],
+    profile: bootstrap?.profile,
     selectedCloudProject,
     selectedProject,
   });

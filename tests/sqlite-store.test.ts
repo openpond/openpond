@@ -73,7 +73,7 @@ describe("SqliteStore hardening", () => {
     });
   });
 
-  test("creates model build drafts when upgrading a version 28 store", async () => {
+  test("splits legacy Model build drafts into stable Models and run drafts", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");
       const store = new SqliteStore(storeDir);
@@ -81,8 +81,57 @@ describe("SqliteStore hardening", () => {
       await store.close();
 
       const db = openTestDatabase(storePath);
-      await run(db, "DROP TABLE model_build_drafts");
-      await run(db, "PRAGMA user_version = 28");
+      await run(db, "DROP TABLE model_projects");
+      await run(db, "DROP TABLE model_run_drafts");
+      await run(
+        db,
+        `CREATE TABLE model_build_drafts (
+          id TEXT PRIMARY KEY,
+          profile_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )`,
+      );
+      const timestamp = "2026-07-23T12:00:00.000Z";
+      await run(
+        db,
+        `INSERT INTO model_build_drafts
+          (id, profile_id, model_id, status, payload, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "legacy_draft",
+          "default",
+          "legacy_model",
+          "draft",
+          JSON.stringify({
+            schemaVersion: "openpond.modelBuildDraft.v1",
+            id: "legacy_draft",
+            profileId: "default",
+            modelId: "legacy_model",
+            status: "draft",
+            name: "Legacy Model",
+            objective: "Keep this setup",
+            datasetMode: null,
+            tasksetRef: null,
+            datasetCreationId: null,
+            buildIntent: "demonstration",
+            buildSpecification: null,
+            baseModel: null,
+            method: "sft",
+            destinationId: null,
+            runPreset: "small",
+            recipe: null,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }),
+          timestamp,
+          timestamp,
+        ],
+      );
+      await run(db, "PRAGMA user_version = 29");
       await close(db);
 
       const migrated = new SqliteStore(storeDir);
@@ -91,11 +140,35 @@ describe("SqliteStore hardening", () => {
 
       const migratedDb = openTestDatabase(storePath);
       try {
-        const table = await get<{ name: string }>(
+        const projectTable = await get<{ name: string }>(
           migratedDb,
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_build_drafts'",
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_projects'",
         );
-        expect(table.name).toBe("model_build_drafts");
+        const draftTable = await get<{ name: string }>(
+          migratedDb,
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_run_drafts'",
+        );
+        expect(projectTable.name).toBe("model_projects");
+        expect(draftTable.name).toBe("model_run_drafts");
+        const project = await get<{ payload: string }>(
+          migratedDb,
+          "SELECT payload FROM model_projects WHERE id = 'legacy_model'",
+        );
+        const draft = await get<{ payload: string }>(
+          migratedDb,
+          "SELECT payload FROM model_run_drafts WHERE id = 'legacy_draft'",
+        );
+        expect(JSON.parse(project.payload)).toMatchObject({
+          schemaVersion: "openpond.modelProject.v1",
+          id: "legacy_model",
+          name: "Legacy Model",
+        });
+        expect(JSON.parse(draft.payload)).toMatchObject({
+          schemaVersion: "openpond.modelRunDraft.v1",
+          id: "legacy_draft",
+          modelId: "legacy_model",
+          method: "sft",
+        });
         expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
       } finally {
         await close(migratedDb);
