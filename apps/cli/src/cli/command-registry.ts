@@ -339,6 +339,30 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options, rest }) => (await import("./sandbox-command")).runSandboxCommand(options, rest),
   },
   {
+    name: "training",
+    usage: "openpond training <start|status|watch|logs|cancel|artifacts> <model-run-id|run-id>",
+    usages: [
+      "openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
+      "openpond training status <run-id> [--json]",
+      "openpond training watch <run-id> [--interval-ms <ms>] [--json]",
+      "openpond training logs <run-id> [--json]",
+      "openpond training cancel <run-id> [--json]",
+      "openpond training artifacts <run-id> [--json]",
+    ],
+    optionSchema: {
+      apiBaseUrl: "string",
+      detach: "boolean",
+      intervalMs: "integer",
+      json: "boolean",
+      manifest: "string",
+      maxSpend: "number",
+      retentionDays: "integer",
+      yes: "boolean",
+    },
+    handler: async ({ options, rest }) =>
+      (await import("./training")).runTrainingCommand(options, rest),
+  },
+  {
     name: "opchat",
     usage: "openpond opchat <command> [args]",
     optionSchema: {

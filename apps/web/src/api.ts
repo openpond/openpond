@@ -19,6 +19,7 @@ import type {
   InsightsAskRequest,
   InsightsAskResponse,
   TrainingStateResponse,
+  TrainingCatalog,
   TrainingRunDetail,
   DatasetCatalogResponse,
   ComputeStateResponse,
@@ -635,6 +636,14 @@ export const api = {
       connection,
       `/v1/training?profileId=${encodeURIComponent(profileId)}`
     ),
+  portableTrainingCatalog: (connection: ClientConnection, query = "") => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    return apiFetch<TrainingCatalog>(
+      connection,
+      `/v1/training/catalog${params.size ? `?${params.toString()}` : ""}`,
+    );
+  },
   datasetCatalog: (connection: ClientConnection, profileId: string) =>
     apiFetch<DatasetCatalogResponse>(
       connection,

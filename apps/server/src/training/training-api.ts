@@ -80,6 +80,11 @@ export function createTrainingApi(deps: {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    if (action === "portable_catalog") {
+      return deps.training.portableCatalog(
+        requestUrl?.searchParams.get("query") ?? "",
+      );
+    }
     if (action === "dataset_catalog") {
       return datasetCatalog(
         string(input.profileId)
@@ -286,6 +291,22 @@ export function createTrainingApi(deps: {
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
     if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "prepare_model_run") return deps.training.prepareModelRun({
+      modelRunId: requiredString(input.modelRunId, "modelRunId"),
+      maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
+      retentionDays: nullableNumber(input.retentionDays),
+    });
+    if (action === "start_model_run") return deps.training.startModelRun({
+      modelRunId: requiredString(input.modelRunId, "modelRunId"),
+      maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
+      retentionDays: nullableNumber(input.retentionDays),
+      manifest: input.manifest,
+    });
+    if (action === "model_run_status") return deps.training.modelRunStatus(requiredString(input.modelRunId, "modelRunId"));
+    if (action === "model_run_events") return deps.training.modelRunEvents(requiredString(input.modelRunId, "modelRunId"));
+    if (action === "model_run_logs") return deps.training.modelRunLogs(requiredString(input.modelRunId, "modelRunId"));
+    if (action === "model_run_artifacts") return deps.training.modelRunArtifacts(requiredString(input.modelRunId, "modelRunId"));
+    if (action === "cancel_model_run") return deps.training.cancelModelRun(requiredString(input.modelRunId, "modelRunId"));
     if (action === "build_bundle") return deps.training.buildBundle(requiredString(input.planId, "planId"));
     if (action === "approve_training") return deps.training.approve({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), approvedBy: string(input.approvedBy) ?? undefined, maximumCostUsd: nullableNumber(input.maximumCostUsd) });
     if (action === "launch") return deps.training.launch({ planId: requiredString(input.planId, "planId"), approvalId: requiredString(input.approvalId, "approvalId") });

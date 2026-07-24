@@ -17,6 +17,17 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
   }
   if (
     request.method === "GET"
+    && requestUrl.pathname === "/v1/training/catalog"
+  ) {
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload("portable_catalog", {}, requestUrl),
+    );
+    return true;
+  }
+  if (
+    request.method === "GET"
     && requestUrl.pathname === "/v1/training/datasets"
   ) {
     sendJson(
@@ -95,6 +106,13 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/prepare$/, method: "POST", action: "prepare_model_run", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/start$/, method: "POST", action: "start_model_run", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/status$/, method: "GET", action: "model_run_status", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/events$/, method: "GET", action: "model_run_events", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/logs$/, method: "GET", action: "model_run_logs", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/artifacts$/, method: "GET", action: "model_run_artifacts", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_model_run", key: "modelRunId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
     { pattern: /^\/v1\/training\/model-run-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_run_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },

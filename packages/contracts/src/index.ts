@@ -42,3 +42,8 @@ export * from "./training-sizing.js";
 export * from "./compute.js";
 export * from "./cross-system-operations.js";
 export * from "./cross-system-frontier-baseline.js";
+export * from "./release-core.js";
+export * from "./learning-signals.js";
+export * from "./harness-releases.js";
+export * from "./training-platform.js";
+export * from "./connected-worker.js";

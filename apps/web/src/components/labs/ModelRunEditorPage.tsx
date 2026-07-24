@@ -12,7 +12,6 @@ import type {
   ModelRunPreset,
   Taskset,
   TrainingDestinationId,
-  TrainingMethod,
   TrainingRecipe,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
@@ -36,9 +35,26 @@ import {
   ModelSetupSteps,
   type ModelSetupStepId,
 } from "./ModelSetupSteps";
+import {
+  bindTaskset,
+  buildPageReason,
+  cloneRunDraft,
+  comparableEditor,
+  datasetGuidance,
+  firstIncompleteSetupStep,
+  methodAvailability,
+  newDraft,
+  nextModelName,
+  newProject,
+  preparationReview,
+  presetFor,
+  presetsFor,
+  setupStepComplete,
+} from "./model-run-editor-helpers";
+
+export { nextModelName } from "./model-run-editor-helpers";
 
 const RUN_CONTROL_ID = "model-build-run-control";
-const METHODS = ["sft", "dpo", "grpo", "ppo"] as const;
 const SETUP_TABS = [
   ["setup", "Setup"],
   ["overview", "Overview"],
@@ -166,6 +182,12 @@ export function ModelRunEditorPage({
     reason: "Select a Dataset.",
     actionLabel: "Run",
   });
+  const [runApproval, setRunApproval] = useState<TrainingStartApproval>({
+    exportApproved: true,
+    maximumCostUsd: 0,
+    retentionDays: null,
+    region: null,
+  });
   const selectedTaskset =
     state?.tasksets.find(
       (taskset) =>
@@ -237,7 +259,9 @@ export function ModelRunEditorPage({
       method: "sft" | "dpo" | "grpo" | "ppo";
       destinationId: TrainingDestinationId;
       recipe: TrainingRecipe;
+      approval: TrainingStartApproval;
     }) => {
+      setRunApproval(configuration.approval);
       setDraft((current) => ({
         ...current,
         baseModel: configuration.baseModel,
@@ -296,8 +320,30 @@ export function ModelRunEditorPage({
 
   async function launch() {
     if (!canRun || !selectedTaskset) return;
-    await save(false);
-    document.getElementById(RUN_CONTROL_ID)?.click();
+    const saved = await save(false);
+    if (!saved) return;
+    const preparation = await training.actions.prepareModelRun(saved.id, {
+      maximumSpendUsd: runApproval.maximumCostUsd,
+      retentionDays: runApproval.retentionDays,
+    });
+    if (!preparation) return;
+    const confirmed = await confirmAction({
+      title: "Review and start training",
+      body: preparationReview(preparation),
+      confirmLabel: preparation.quoteUsd
+        ? `Approve up to $${(
+            preparation.maximumSpendUsd ?? preparation.quoteUsd
+          ).toFixed(2)} and run`
+        : "Start exact run",
+      cancelLabel: "Back",
+    });
+    if (!confirmed) return;
+    const started = await training.actions.startModelRun(saved.id, {
+      maximumSpendUsd: runApproval.maximumCostUsd,
+      retentionDays: runApproval.retentionDays,
+    });
+    if (!started) return;
+    await onFinished(saved.modelId, selectedTaskset.id);
   }
 
   function selectTaskset(taskset: Taskset) {
@@ -677,8 +723,10 @@ export function ModelRunEditorPage({
                     busy={[
                       "baseline",
                       "prepare-training",
+                      "prepare-model-run",
                       "start-prepared-training",
                       "start-training",
+                      "start-model-run",
                     ].includes(training.busyAction ?? "")}
                     busyAction={training.busyAction}
                     baselineReports={
@@ -829,343 +877,5 @@ export function ModelRunEditorPage({
       </main>
       <ConfirmDialog state={confirmDialog} onResolve={resolveConfirmDialog} />
     </>
-  );
-}
-
-function newProject(
-  profileId: string,
-  objective: string | null,
-  modelId?: string,
-  name?: string
-): ModelProject {
-  const timestamp = new Date().toISOString();
-  const suffix = crypto.randomUUID();
-  return {
-    schemaVersion: "openpond.modelProject.v1",
-    id: modelId ?? `model_${suffix}`,
-    profileId,
-    name: name?.trim() || "Model #1",
-    objective,
-    defaultBaseModel: null,
-    defaultDestinationId: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-function firstIncompleteSetupStep(draft: ModelRunDraft): ModelSetupStepId {
-  if (!draft.buildIntent) return "goal";
-  if (!draft.tasksetRef) return "dataset";
-  if (!draft.method) return "method";
-  return "configuration";
-}
-
-function setupStepComplete(
-  step: ModelSetupStepId,
-  draft: ModelRunDraft,
-  taskset: Taskset | null,
-  canRun: boolean
-): boolean {
-  if (step === "goal") return Boolean(draft.buildIntent);
-  if (step === "dataset") return Boolean(taskset);
-  if (step === "method") return Boolean(draft.method);
-  return canRun;
-}
-
-export function nextModelName(
-  projects: Array<Pick<ModelProject, "name">>
-): string {
-  let highestNumber = projects.length;
-  for (const project of projects) {
-    const match = /^Model #(\d+)$/.exec(project.name.trim());
-    if (match) highestNumber = Math.max(highestNumber, Number(match[1]));
-  }
-  return `Model #${highestNumber + 1}`;
-}
-
-function newDraft(profileId: string, modelId: string): ModelRunDraft {
-  const timestamp = new Date().toISOString();
-  const suffix = crypto.randomUUID();
-  return {
-    schemaVersion: "openpond.modelRunDraft.v1",
-    id: `run_draft_${suffix}`,
-    profileId,
-    modelId,
-    status: "draft",
-    title: "Run draft",
-    datasetMode: null,
-    tasksetRef: null,
-    datasetCreationId: null,
-    buildIntent: null,
-    buildSpecification: null,
-    baseModel: null,
-    method: null,
-    destinationId: null,
-    runPreset: null,
-    recipe: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-function bindTaskset(draft: ModelRunDraft, taskset: Taskset): ModelRunDraft {
-  return {
-    ...draft,
-    datasetMode: "existing",
-    tasksetRef: {
-      id: taskset.id,
-      revision: taskset.revision,
-      contentHash: taskset.contentHash,
-    },
-    buildIntent: draft.buildIntent ?? buildIntentForTaskset(taskset),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function cloneRunDraft(template: ModelRunDraft): ModelRunDraft {
-  const timestamp = new Date().toISOString();
-  return {
-    ...template,
-    id: `run_draft_${crypto.randomUUID()}`,
-    status: "draft",
-    title: "Run draft",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-function buildIntentForTaskset(taskset: Taskset): DatasetEvidenceIntent {
-  if (
-    taskset.capabilities.supportedSignals.includes("preference") ||
-    taskset.capabilities.compatibleMethods.includes("dpo")
-  ) {
-    return "preferences";
-  }
-  if (
-    taskset.capabilities.supportedSignals.includes("reward") ||
-    taskset.capabilities.compatibleMethods.includes("grpo") ||
-    taskset.capabilities.compatibleMethods.includes("ppo")
-  ) {
-    return "verifiable_reward";
-  }
-  if (taskset.capabilities.supportedSignals.includes("label")) return "rubric";
-  return "demonstrations";
-}
-
-function comparableEditor(project: ModelProject, draft: ModelRunDraft): string {
-  const { updatedAt: _projectUpdatedAt, ...projectValue } = project;
-  const { updatedAt: _draftUpdatedAt, status: _status, ...draftValue } = draft;
-  return JSON.stringify({ project: projectValue, draft: draftValue });
-}
-
-function buildPageReason(
-  project: ModelProject,
-  draft: ModelRunDraft,
-  taskset: Taskset | null,
-  launchState: { ready: boolean; reason: string | null }
-): string | null {
-  if (!project.name.trim()) return "Name this Model.";
-  if (!draft.buildIntent) return "Choose what you want to build.";
-  if (!draft.datasetMode)
-    return "Choose an existing Dataset or build a new one.";
-  if (!taskset) return "Choose or build a Dataset to enable Run.";
-  if (!draft.method) return "Choose a training method.";
-  const readiness = taskset.readiness?.methodReadiness.find(
-    (item) => item.method === draft.method
-  );
-  if (readiness?.status === "needs_dataset_work") {
-    return readiness.reasons[0] ?? "Resolve Dataset readiness for this method.";
-  }
-  if (!draft.runPreset)
-    return draft.method === "grpo" || draft.method === "ppo"
-      ? "Choose an experiment size."
-      : "Choose a run size.";
-  if (!draft.baseModel) return "Choose a base model.";
-  if (!draft.destinationId) return "Choose a compatible destination.";
-  return launchState.ready
-    ? null
-    : launchState.reason ?? "Complete the launch checks.";
-}
-
-function methodAvailability(
-  taskset: Taskset | null,
-  destinations: NonNullable<
-    TrainingViewProps["training"]["payload"]
-  >["destinations"]
-) {
-  return METHODS.map((method) => {
-    const readiness = taskset?.readiness?.methodReadiness.find(
-      (item) => item.method === method
-    );
-    const datasetCompatible = Boolean(
-      taskset &&
-        (taskset.capabilities.compatibleMethods.includes(method) ||
-          taskset.readiness?.trainingPath?.bootstrap?.method === method)
-    );
-    const executable = destinations.some(
-      (destination) =>
-        destination.available && destination.methods.includes(method)
-    );
-    const state =
-      readiness?.status === "needs_dataset_work"
-        ? "Needs Dataset work"
-        : !datasetCompatible
-        ? "Incompatible Dataset"
-        : !executable
-        ? "Destination unavailable"
-        : readiness?.status === "recommended"
-        ? "Recommended"
-        : "Compatible";
-    const reason =
-      readiness?.reasons[0] ??
-      (!datasetCompatible
-        ? `This Dataset revision does not contain the evidence required for ${method.toUpperCase()}.`
-        : !executable
-        ? `No configured destination currently executes ${method.toUpperCase()}.`
-        : methodTradeoff(method));
-    const executionTargets = methodExecutionTargets(method, destinations);
-    return {
-      method,
-      state,
-      reason,
-      executionTargets,
-      available: datasetCompatible &&
-        readiness?.status !== "needs_dataset_work" &&
-        executable,
-    };
-  });
-}
-
-function methodExecutionTargets(
-  method: TrainingMethod,
-  destinations: NonNullable<
-    TrainingViewProps["training"]["payload"]
-  >["destinations"]
-) {
-  return [
-    executionTarget(
-      method,
-      "local_cpu_fixture",
-      "Local CPU · Experimental",
-      destinations
-    ),
-    executionTarget(
-      method,
-      "fireworks",
-      method === "grpo" ? "Fireworks RFT" : "Fireworks",
-      destinations
-    ),
-  ];
-}
-
-function executionTarget(
-  method: TrainingMethod,
-  destinationId: "local_cpu_fixture" | "fireworks",
-  label: string,
-  destinations: NonNullable<
-    TrainingViewProps["training"]["payload"]
-  >["destinations"]
-) {
-  const destination = destinations.find(
-    (candidate) => candidate.destinationId === destinationId
-  );
-  const destinationName =
-    destinationId === "local_cpu_fixture" ? "Local CPU" : "Fireworks";
-  const supportsMethod = Boolean(destination?.methods.includes(method));
-  return {
-    id: destinationId,
-    label,
-    available: Boolean(destination?.available && supportsMethod),
-    reason: !destination
-      ? `${destinationName} capabilities have not loaded.`
-      : !supportsMethod
-      ? `${destinationName} does not execute ${method.toUpperCase()}.`
-      : destination.unavailableReason ??
-        `${destinationName} is not available in this environment.`,
-  };
-}
-
-function methodTradeoff(method: TrainingMethod): string {
-  if (method === "sft")
-    return "Imitate approved responses with assistant-only loss.";
-  if (method === "dpo")
-    return "Increase the margin between chosen and rejected responses.";
-  if (method === "grpo")
-    return "Sample grouped responses and optimize executable rewards.";
-  return "Optimize a policy with a separately tracked value model.";
-}
-
-function datasetGuidance(intent: DatasetEvidenceIntent | null): string {
-  if (!intent) {
-    return "Choose an existing Dataset, or select a goal before building a new one.";
-  }
-  if (intent === "demonstrations") {
-    return "Build or choose prompts paired with approved responses. OpenPond will recommend SFT.";
-  }
-  if (intent === "preferences") {
-    return "Build or choose prompts with chosen and rejected responses for DPO.";
-  }
-  if (intent === "verifiable_reward") {
-    return "Build or choose prompts with an executable reward and environment for GRPO or PPO.";
-  }
-  if (intent === "rubric") {
-    return "Build or choose rubric examples and calibrate evaluation before selecting optimization.";
-  }
-  return "Discover evidence first; OpenPond will recommend a concrete Dataset shape and method.";
-}
-
-function presetsFor(method: TrainingMethod | null): Array<{
-  id: ModelRunPreset;
-  label: string;
-  description: string;
-}> {
-  if (method === "grpo" || method === "ppo") {
-    return [
-      {
-        id: "small_experiment",
-        label: "Quick test",
-        description:
-          "Bound prompts, rollouts, output tokens, steps, time, and spend.",
-      },
-      {
-        id: "standard",
-        label: "Recommended",
-        description: "Use the Dataset-aware recommended online budgets.",
-      },
-      {
-        id: "custom",
-        label: "Custom",
-        description: "Set each rollout and optimizer limit explicitly.",
-      },
-    ];
-  }
-  return [
-    {
-      id: "small",
-      label: "Quick test",
-      description:
-        "A bounded LoRA experiment with independent frozen evaluation.",
-    },
-    {
-      id: "standard",
-      label: "Recommended",
-      description:
-        "Use Dataset-aware recommended examples and optimizer limits.",
-    },
-    {
-      id: "custom",
-      label: "Custom",
-      description:
-        "Set examples, steps, sequence length, rank, time, and spend.",
-    },
-  ];
-}
-
-function presetFor(
-  method: TrainingMethod | null,
-  presetId: ModelRunPreset | null
-) {
-  return presetsFor(method).find(
-    (preset) => preset.id === (presetId ?? "standard")
   );
 }

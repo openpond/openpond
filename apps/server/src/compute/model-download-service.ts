@@ -55,6 +55,48 @@ export function createModelDownloadService(deps: { storeDir: string; projectDir:
     return updated;
   }
 
+  async function ensure(input: {
+    modelId: string;
+    revision: string | null;
+  }): Promise<ModelDownloadJob> {
+    if (
+      input.modelId !== SMOLLM2_MODEL.id ||
+      input.revision !== SMOLLM2_MODEL.revision
+    ) {
+      throw new Error(
+        "No verified downloader is registered for this exact Model revision.",
+      );
+    }
+    const started = await start();
+    if (started.status === "succeeded") return started;
+    return new Promise<ModelDownloadJob>((resolve, reject) => {
+      const poll = async () => {
+        const current = (await list()).find((item) => item.id === started.id);
+        if (!current) {
+          reject(new Error("Model download state was lost."));
+          return;
+        }
+        if (current.status === "succeeded") {
+          resolve(current);
+          return;
+        }
+        if (current.status === "failed" || current.status === "cancelled") {
+          reject(
+            new Error(
+              current.error ??
+                (current.status === "cancelled"
+                  ? "Model download was cancelled."
+                  : "Model download failed."),
+            ),
+          );
+          return;
+        }
+        setTimeout(() => void poll(), 250).unref?.();
+      };
+      void poll();
+    });
+  }
+
   async function consume(initial: ModelDownloadJob, child: ChildProcessWithoutNullStreams): Promise<void> {
     let stdout = "";
     let stderr = "";
@@ -119,5 +161,5 @@ export function createModelDownloadService(deps: { storeDir: string; projectDir:
     }
   }
 
-  return { list, start, cancel, close };
+  return { list, start, ensure, cancel, close };
 }

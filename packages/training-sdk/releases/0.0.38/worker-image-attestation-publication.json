@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "openpond.workerImageAttestationPublication.v1",
+  "subject": "us-east4-docker.pkg.dev/openpond/openpond-staging/openpond-worker-prime-rl@sha256:4d0594fe2dfb2cb2f6b2bcbfbda1161ea17cf06692b8023ec5463f2aaee6e94c",
+  "tag": "us-east4-docker.pkg.dev/openpond/openpond-staging/openpond-worker-prime-rl:attestation-v0.0.38-8e056a9b754c",
+  "artifactRef": "oci://us-east4-docker.pkg.dev/openpond/openpond-staging/openpond-worker-prime-rl@sha256:3e8814777e213fce1031767c43e375b3d24f04e2667ab1c3e82c0c65a559c0b3",
+  "artifactType": "application/vnd.openpond.worker-image-attestation.v1+json",
+  "manifestSizeBytes": 727,
+  "attestationSha256": "5bce8423ae1f83766bfd6e412b261f5a9f477f75fc7a92537eb1a7d4b01f1eeb",
+  "contentHash": "f1f906e41425fea9de30d2443894367548c46bf727972535168b284030e8540a",
+  "publishedAt": "2026-07-24T16:11:00.000Z"
+}

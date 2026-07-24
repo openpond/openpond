@@ -23,6 +23,7 @@ export type Command =
   | "apps"
   | "repo"
   | "sandbox"
+  | "training"
   | "goal"
   | "harness"
   | "project"

@@ -320,7 +320,7 @@ export function createComputeService(deps: ComputeServiceDeps) {
     return current.models.find((model) => model.modelId === modelId && model.revision === revision && model.trainingCompatible)?.path ?? null;
   }
 
-  return { state, settings, inventory, updateSettings, scan, modelPath, startModelDownload: modelDownloads.start, cancelModelDownload: modelDownloads.cancel, close: modelDownloads.close };
+  return { state, settings, inventory, updateSettings, scan, modelPath, ensureModel: modelDownloads.ensure, startModelDownload: modelDownloads.start, cancelModelDownload: modelDownloads.cancel, close: modelDownloads.close };
 }
 
 async function pythonRuntimeProbe(probe: CommandProbe, projectDir: string): Promise<ComputeRuntime[]> {

@@ -7,12 +7,17 @@
   },
   "references": [
     { "path": "../../packages/cloud" },
+    { "path": "../../packages/compute-provider-prime" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/codex-provider" },
     { "path": "../../packages/logging" },
     { "path": "../../packages/runtime" }
     ,{ "path": "../../packages/taskset-sdk" }
     ,{ "path": "../../packages/training-sdk" }
+    ,{ "path": "../../packages/trainer-connected" }
+    ,{ "path": "../../packages/trainer-fireworks" }
+    ,{ "path": "../../packages/trainer-local" }
+    ,{ "path": "../../packages/trainer-sandbox" }
   ],
   "include": ["src/**/*.ts"]
 }

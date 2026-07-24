@@ -3,5 +3,6 @@ export * from "./canonical-json.js";
 export * from "./graders.js";
 export * from "./hashing.js";
 export * from "./local-run.js";
+export * from "./portable-local-runtime.js";
 export * from "./materialize.js";
 export * from "./validation.js";

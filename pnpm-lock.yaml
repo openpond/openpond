@@ -32,6 +32,9 @@ importers:
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:packages/taskset-sdk
+      '@openpond/training-sdk':
+        specifier: workspace:*
+        version: link:packages/training-sdk
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -135,6 +138,9 @@ importers:
       '@openpond/codex-provider':
         specifier: workspace:*
         version: link:../../packages/codex-provider
+      '@openpond/compute-provider-prime':
+        specifier: workspace:*
+        version: link:../../packages/compute-provider-prime
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -147,6 +153,18 @@ importers:
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:../../packages/taskset-sdk
+      '@openpond/trainer-connected':
+        specifier: workspace:*
+        version: link:../../packages/trainer-connected
+      '@openpond/trainer-fireworks':
+        specifier: workspace:*
+        version: link:../../packages/trainer-fireworks
+      '@openpond/trainer-local':
+        specifier: workspace:*
+        version: link:../../packages/trainer-local
+      '@openpond/trainer-sandbox':
+        specifier: workspace:*
+        version: link:../../packages/trainer-sandbox
       '@openpond/training-sdk':
         specifier: workspace:*
         version: link:../../packages/training-sdk
@@ -271,6 +289,25 @@ importers:
 
   packages/codex-provider: {}
 
+  packages/compute-provider-prime:
+    dependencies:
+      '@openpond/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@openpond/taskset-sdk':
+        specifier: workspace:*
+        version: link:../taskset-sdk
+      '@openpond/training-sdk':
+        specifier: workspace:*
+        version: link:../training-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/connected-apps: {}
 
   packages/contracts:
@@ -308,6 +345,82 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/trainer-connected:
+    dependencies:
+      '@openpond/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@openpond/taskset-sdk':
+        specifier: workspace:*
+        version: link:../taskset-sdk
+      '@openpond/training-sdk':
+        specifier: workspace:*
+        version: link:../training-sdk
+      undici:
+        specifier: ^7.28.0
+        version: 7.28.0
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/trainer-fireworks:
+    dependencies:
+      '@openpond/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@openpond/training-sdk':
+        specifier: workspace:*
+        version: link:../training-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/trainer-local:
+    dependencies:
+      '@openpond/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@openpond/taskset-sdk':
+        specifier: workspace:*
+        version: link:../taskset-sdk
+      '@openpond/training-sdk':
+        specifier: workspace:*
+        version: link:../training-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/trainer-sandbox:
+    dependencies:
+      '@openpond/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@openpond/taskset-sdk':
+        specifier: workspace:*
+        version: link:../taskset-sdk
+      '@openpond/training-sdk':
+        specifier: workspace:*
+        version: link:../training-sdk
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -5528,8 +5641,7 @@ snapshots:
 
   undici@6.27.0: {}
 
-  undici@7.28.0:
-    optional: true
+  undici@7.28.0: {}
 
   universalify@0.1.2: {}
 

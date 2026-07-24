@@ -135,6 +135,7 @@ import { createDatasetImportService } from "./training/dataset-imports/import-se
 import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
 import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
+import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { normalizeAppPreferences } from "./preferences.js";
@@ -641,13 +642,16 @@ export async function createOpenPondServer(
       "python",
       "openpond-training"
     ),
-    revalidateCompute: async () => {
-      await computeService.scan();
-    },
+    revalidateCompute: async () => void (await computeService.scan()),
     resolveModelPath: computeService.modelPath,
-    modelArtifactStore: async () =>
-      (await computeService.settings()).modelStorePath,
+    prepareModel: (model) => computeService.ensureModel(model),
+    modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
+    ...createPortableTrainingServerDependencies({
+      storeDir,
+      environment: process.env,
+      computeInventory: computeService.inventory,
+    }),
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;

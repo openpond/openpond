@@ -12,6 +12,9 @@ import {
 
 const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture", "local_cuda", "local_mlx"]);
 const TINY_CPU_MODEL = "openpond/tiny-cpu-gpt2-fixture";
+const TINY_CPU_CHAT_TEMPLATE_HASH = createHash("sha256")
+  .update("openpond-tiny-cpu-chat-template-v1")
+  .digest("hex");
 
 export function projectBaseModelCandidates(input: {
   destinations: TrainingDestinationCapabilities[];
@@ -52,7 +55,7 @@ export function projectBaseModelCandidates(input: {
         modelId: TINY_CPU_MODEL,
         revision: "architecture-v2-seed-17-context-512",
         tokenizerRevision: "wordlevel-v1",
-        chatTemplateHash: "fixture00000000",
+        chatTemplateHash: TINY_CPU_CHAT_TEMPLATE_HASH,
         modelAssetId: null,
         source: "builtin",
       },

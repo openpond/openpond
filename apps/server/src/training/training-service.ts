@@ -8,6 +8,8 @@ import {
   TrainingApprovalSchema,
   TrainingPreparedStartSchema,
   TrainingPlanSchema,
+  type SignedWorkerCatalog,
+  type WorkerCatalogEntry,
   type TrainingDestinationId,
   type ComputeInventory,
   type GradeResult,
@@ -16,6 +18,7 @@ import {
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import {
+  TrainingAdapterRegistry,
   TrainingDestinationRegistry,
   buildTrainingBundle,
   createTrainingBundleExport,
@@ -23,18 +26,16 @@ import {
   validateTrainingBundle,
 } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
-import { ExportTrainingDestination, UnavailableTrainingDestination } from "./destinations.js";
+import {
+  ExportTrainingDestination,
+  PortablePreparationTrainingDestination,
+  UnavailableTrainingDestination,
+} from "./destinations.js";
 import { listTrainingDestinationSecretRefs, writeTrainingDestinationSecret } from "./destination-secrets.js";
 import { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
 import { HardwareGatedTrainingDestination } from "./hardware-gated-destination.js";
-import {
-  FireworksTrainingDestination,
-  type FireworksProviderCredential,
-} from "./fireworks-destination.js";
-import {
-  createFireworksRftEnvironment,
-  validateFireworksRftCallbackCredential,
-} from "./fireworks-rft-environment.js";
+import { FireworksTrainingDestination, type FireworksProviderCredential } from "./fireworks-destination.js";
+import { createFireworksRftEnvironment, validateFireworksRftCallbackCredential } from "./fireworks-rft-environment.js";
 import type { FireworksRftEvaluatorProvisioner } from "./fireworks-rft-evaluator.js";
 import { createCrossSystemExpertBootstrapService } from "./cross-system-operations/expert-bootstrap-service.js";
 import { createFireworksServingService } from "./fireworks-serving-service.js";
@@ -54,6 +55,10 @@ import {
   requireFireworksApprovalActor, withAuthoritativeRecipeHashes,
 } from "./training-service-helpers.js";
 import { updateModelCreateImproveRelease as reconcileModelRelease } from "./model-release-reconciliation.js";
+import { createPortableDestinationAdapterRegistry } from "./portable-destination-engine.js";
+import type { RegistryModelSearchResult } from "./model-registry-search.js";
+import { createPortableModelRunService } from "./portable-model-run-service.js";
+import { createPortableTrainingServiceSupport } from "./portable-training-service-support.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
@@ -81,6 +86,27 @@ export function createTrainingService(deps: {
   fireworksRequest?: typeof fetch;
   provisionFireworksRftEvaluator?: FireworksRftEvaluatorProvisioner;
   fireworksRftPublicBaseUrl?: () => string | null;
+  workerCatalog?: () => Promise<SignedWorkerCatalog | null>;
+  workerImages?: {
+    inspect(entry: WorkerCatalogEntry): Promise<{ cached: boolean }>;
+    prepare(entry: WorkerCatalogEntry): Promise<{ state: string; cached: boolean }>;
+  };
+  prepareModel?: (input: {
+    modelId: string;
+    revision: string | null;
+  }) => Promise<unknown>;
+  registerPortableAdapters?: (registry: TrainingAdapterRegistry) => void;
+  connectedWorkerConfigured?: boolean;
+  connectedEngineConfigured?: boolean;
+  primeRawConfigured?: boolean;
+  sandboxManagedConfigured?: boolean;
+  connectedWorkerImageDigest?: string | null;
+  sandboxBinding?: {
+    runtime: import("@openpond/contracts").HarnessRuntimeTargetBinding;
+    compute: import("@openpond/contracts").ComputeTargetBinding;
+    resolvedBundleHash: string;
+  } | null;
+  searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
   const resolveTaskset = (id: string) => deps.store.getTaskset(id);
@@ -94,9 +120,43 @@ export function createTrainingService(deps: {
   registry.register(new ExportTrainingDestination(resolveTaskset));
   const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir, resolveModelPath: deps.resolveModelPath, modelArtifactStore: deps.modelArtifactStore });
   registry.register(localCpu);
-  registry.register(new UnavailableTrainingDestination("openpond_managed", "OpenPond Managed is a client stub; the managed service is not implemented in this repository.", resolveTaskset));
+  registry.register(
+    deps.sandboxManagedConfigured
+      ? new PortablePreparationTrainingDestination("openpond_managed", {
+          resolveTaskset,
+          estimatedCostUsd: null,
+          methods: ["grpo"],
+          environmentPlacements: ["remote"],
+          assumptions: [
+            "Sandbox materializes the exact environment projection on Latitude.",
+            "GPU provisioning requires a fresh quote and explicit maximum spend.",
+          ],
+        })
+      : new UnavailableTrainingDestination(
+          "openpond_managed",
+          "OpenPond Managed requires a configured Sandbox M8 endpoint.",
+          resolveTaskset,
+        ),
+  );
   registry.register(new UnavailableTrainingDestination("custom", "Register a custom TrainingDestination implementation before launch.", resolveTaskset));
-  registry.register(new UnavailableTrainingDestination("prime_hosted", "Prime hosted training is not connected in this open-source build.", resolveTaskset));
+  registry.register(
+    deps.primeRawConfigured
+      ? new PortablePreparationTrainingDestination("prime_hosted", {
+          resolveTaskset,
+          estimatedCostUsd: null,
+          methods: ["grpo"],
+          environmentPlacements: ["local"],
+          assumptions: [
+            "Prime provisions raw compute before the generic connected-worker bootstrap.",
+            "A fresh provider quote and explicit maximum spend are required.",
+          ],
+        })
+      : new UnavailableTrainingDestination(
+          "prime_hosted",
+          "Prime raw compute requires a configured provider adapter and connected-worker bootstrap.",
+          resolveTaskset,
+        ),
+  );
   const fireworks = new FireworksTrainingDestination({
     store: deps.store,
     storeDir: deps.storeDir,
@@ -143,13 +203,58 @@ export function createTrainingService(deps: {
   registry.register(fireworks);
   registry.register(new HardwareGatedTrainingDestination("local_cuda", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
   registry.register(new HardwareGatedTrainingDestination("local_mlx", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
-  registry.register(new UnavailableTrainingDestination("ssh_gpu", "User-owned SSH GPU execution is deferred until its worker conformance suite is complete.", resolveTaskset));
+  registry.register(
+    deps.connectedWorkerConfigured
+      ? new PortablePreparationTrainingDestination("ssh_gpu", {
+          resolveTaskset,
+          estimatedCostUsd: 0,
+          methods: ["grpo"],
+          environmentPlacements: ["local"],
+          assumptions: [
+            "The user owns the connected GPU; OpenPond adds no provider charge.",
+            "The exact signed worker image is already running at the configured endpoint.",
+          ],
+        })
+      : new UnavailableTrainingDestination(
+          "ssh_gpu",
+          "Configure an authenticated connected worker endpoint.",
+          resolveTaskset,
+        ),
+  );
   deps.registerDestinations?.(registry);
+  const {
+    adapters: portableAdapters,
+    bridges: portableDestinationBridges,
+  } = createPortableDestinationAdapterRegistry({
+    destinations: registry,
+    store: deps.store,
+    catalog: () => portableCatalog(),
+  });
+  deps.registerPortableAdapters?.(portableAdapters);
   void localCpu.reconcile();
   void fireworks.reconcile();
   void fireworksServing.reconcile();
 
   async function destinations() { return Promise.all(registry.list().map((destination) => destination.capabilities())); }
+
+  const portableSupport = createPortableTrainingServiceSupport({
+    store: deps.store,
+    destinations,
+    adapters: portableAdapters,
+    computeInventory: deps.computeInventory,
+    revalidateCompute: deps.revalidateCompute,
+    workerCatalog: deps.workerCatalog,
+    workerImages: deps.workerImages,
+    connectedWorkerConfigured: deps.connectedWorkerConfigured,
+    connectedEngineConfigured: deps.connectedEngineConfigured,
+    primeRawConfigured: deps.primeRawConfigured,
+    sandboxManagedConfigured: deps.sandboxManagedConfigured,
+    connectedWorkerImageDigest: deps.connectedWorkerImageDigest,
+    searchTrainingModels: deps.searchTrainingModels,
+    sandboxBinding: deps.sandboxBinding,
+  });
+  const portableCatalog = portableSupport.catalog;
+  const prepareModelRun = portableSupport.prepare;
 
   async function createPlan(input: { modelId: string; tasksetId: string; destinationId: TrainingDestinationId; recipe: unknown; exportApproved?: boolean; retentionDays?: number | null; region?: string | null }) {
     const taskset = await deps.store.getTaskset(input.tasksetId);
@@ -353,8 +458,10 @@ export function createTrainingService(deps: {
   }) {
     await deps.revalidateCompute?.();
     const plan = await createPlan(input);
-    if (!plan.compatibility.compatible || plan.estimatedCostUsd == null) {
-      throw new Error("Training preparation did not produce a compatible exact quote.");
+    if (!plan.compatibility.compatible) {
+      throw new Error(
+        "Training preparation did not produce a compatible plan.",
+      );
     }
     const bundle = await buildBundle(plan.id);
     const approvalActor = plan.destinationId === "fireworks"
@@ -393,6 +500,21 @@ export function createTrainingService(deps: {
     const job = await launch({ planId: plan.id, approvalId: approval.id });
     return { plan, bundle, approval, job };
   }
+
+  const portableModelRuns = createPortableModelRunService({
+    store: deps.store,
+    storeDir: deps.storeDir,
+    adapters: portableAdapters,
+    bridges: portableDestinationBridges,
+    destinations: registry,
+    catalog: portableCatalog,
+    prepare: prepareModelRun,
+    prepareStart,
+    approve,
+    prepareModel: deps.prepareModel,
+    workerImages: deps.workerImages,
+    sandboxBinding: deps.sandboxBinding,
+  });
 
   async function state(profileId?: string) {
     await Promise.all([fireworks.reconcile(), fireworksServing.reconcile()]);
@@ -862,7 +984,16 @@ export function createTrainingService(deps: {
 
   return {
     registry,
+    portableAdapters,
     destinations,
+    portableCatalog,
+    prepareModelRun,
+    startModelRun: portableModelRuns.start,
+    modelRunStatus: portableModelRuns.status,
+    modelRunEvents: portableModelRuns.events,
+    modelRunLogs: portableModelRuns.logs,
+    modelRunArtifacts: portableModelRuns.artifacts,
+    cancelModelRun: portableModelRuns.cancel,
     createPlan,
     buildBundle,
     deleteTaskset,

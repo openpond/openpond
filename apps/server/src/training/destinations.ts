@@ -38,6 +38,76 @@ export class UnavailableTrainingDestination implements TrainingDestination {
   async collect(): Promise<TrainingArtifact[]> { throw new Error(this.reason); }
 }
 
+export class PortablePreparationTrainingDestination
+  implements TrainingDestination
+{
+  constructor(
+    readonly id: Extract<
+      TrainingDestinationId,
+      "ssh_gpu" | "prime_hosted" | "openpond_managed"
+    >,
+    private readonly options: {
+      resolveTaskset: TasksetResolver;
+      estimatedCostUsd: number | null;
+      methods: TrainingDestinationCapabilities["methods"];
+      environmentPlacements: TrainingDestinationCapabilities["environmentPlacements"];
+      assumptions: string[];
+    },
+  ) {}
+
+  async capabilities(): Promise<TrainingDestinationCapabilities> {
+    return TrainingDestinationCapabilitiesSchema.parse({
+      schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+      destinationId: this.id,
+      available: true,
+      methods: this.options.methods,
+      parameterizations: ["lora"],
+      modelAllowlist: [],
+      maxDatasetBytes: null,
+      environmentPlacements: this.options.environmentPlacements,
+      nonProduction: true,
+      unavailableReason: null,
+      checkedAt: new Date().toISOString(),
+    });
+  }
+
+  async validate(
+    plan: TrainingPlan,
+  ): Promise<TrainingCompatibilityReport> {
+    const taskset = await this.options.resolveTaskset(plan.tasksetId);
+    if (!taskset) throw new Error("Taskset not found.");
+    return validateAgainst(taskset, plan, await this.capabilities());
+  }
+
+  async quote(): Promise<{
+    estimatedCostUsd: number | null;
+    assumptions: string[];
+  }> {
+    return {
+      estimatedCostUsd: this.options.estimatedCostUsd,
+      assumptions: this.options.assumptions,
+    };
+  }
+
+  async launch(): Promise<TrainingJob> {
+    throw new Error(
+      `${this.id} launches only through the resolved portable adapter graph.`,
+    );
+  }
+
+  async status(): Promise<TrainingJob> {
+    throw new Error(`${this.id} has no legacy destination job.`);
+  }
+
+  async cancel(): Promise<TrainingJob> {
+    throw new Error(`${this.id} has no legacy destination job.`);
+  }
+
+  async collect(): Promise<TrainingArtifact[]> {
+    return [];
+  }
+}
+
 export function createImmediateCustomExample(input: { resolveTaskset: TasksetResolver }): TrainingDestination {
   const jobs = new Map<string, TrainingJob>();
   return {

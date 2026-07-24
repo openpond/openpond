@@ -11,6 +11,7 @@ import type {
   TaskMinerConfig,
   TrainingBundleManifest,
   TrainingPreparedStart,
+  TrainingPreparationPlan,
   TrainingPlan,
   TrainingSourceRef,
   TrainingSourceEstimate,
@@ -293,6 +294,32 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       retentionDays: number | null;
       region: string | null;
     }) => mutate<TrainingPreparedStart>("prepare-training", "/prepare", body),
+    prepareModelRun: (
+      modelRunId: string,
+      input: {
+        maximumSpendUsd: number | null;
+        retentionDays: number | null;
+      },
+    ) => mutate<TrainingPreparationPlan>(
+      "prepare-model-run",
+      `/model-runs/${encodeURIComponent(modelRunId)}/prepare`,
+      input,
+    ),
+    startModelRun: (
+      modelRunId: string,
+      input: {
+        maximumSpendUsd: number | null;
+        retentionDays: number | null;
+        manifest?: unknown;
+      },
+    ) => mutate<{
+      manifest: { id: string; contentHash: string };
+      job: { id: string };
+    }>(
+      "start-model-run",
+      `/model-runs/${encodeURIComponent(modelRunId)}/start`,
+      input,
+    ),
     startPreparedTraining: (body: {
       planId: string;
       bundleId: string;

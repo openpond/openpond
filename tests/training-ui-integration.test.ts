@@ -285,14 +285,19 @@ describe("Training UI", () => {
   });
 
   test("opens the Model run editor from a Dataset with its immutable revision selected", async () => {
-    const [datasets, route, builder, previews, pane, css] = await Promise.all([
+    const [datasets, route, builder, builderHelpers, previews, pane, css] =
+      await Promise.all([
       readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
       readFile("apps/web/src/components/labs/ModelRunEditorPage.tsx", "utf8"),
+      readFile(
+        "apps/web/src/components/labs/model-run-editor-helpers.ts",
+        "utf8"
+      ),
       readFile("apps/web/src/components/labs/ModelRunSetupPreviews.tsx", "utf8"),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
       readFile("apps/web/src/styles/training/training.css", "utf8"),
-    ]);
+      ]);
     expect(datasets).toContain("Train Model");
     expect(datasets).toContain("onTrainModel(selected.id)");
     expect(route).toContain(
@@ -340,17 +345,19 @@ describe("Training UI", () => {
     expect(builder).toContain("<ConfirmDialog");
     expect(builder).not.toContain("model-build-readiness");
     expect(builder).toContain("disabled={!candidate.available}");
-    expect(builder).toContain("Incompatible Dataset");
-    expect(builder).toContain(
+    expect(builderHelpers).toContain("Incompatible Dataset");
+    expect(builderHelpers).toContain(
       "taskset.capabilities.compatibleMethods.includes(method)"
     );
-    expect(builder).toContain("methodExecutionTargets(method, destinations)");
-    expect(builder).toContain('"Local CPU · Experimental"');
-    expect(builder).toContain(
+    expect(builderHelpers).toContain(
+      "methodExecutionTargets(method, destinations)"
+    );
+    expect(builderHelpers).toContain('"Local CPU · Experimental"');
+    expect(builderHelpers).toContain(
       'method === "grpo" ? "Fireworks RFT" : "Fireworks"'
     );
     expect(builder).toContain("model-build-target-pill unavailable");
-    expect(builder).toContain(
+    expect(builderHelpers).toContain(
       "does not execute ${method.toUpperCase()}."
     );
     expect(builder).toContain('datasetMode: "build"');
@@ -537,7 +544,7 @@ describe("Training UI", () => {
     expect(html).toContain('value="256"');
   });
 
-  test("shows an explicit bounded Fireworks export and spend approval", () => {
+  test("does not invent provider approval policy while the server catalog loads", () => {
     const taskset = tasksetFixture({ ready: true });
     const html = renderToStaticMarkup(
       createElement(TrainingStartDialog, {
@@ -571,25 +578,12 @@ describe("Training UI", () => {
     );
 
     expect(html).toContain("Qwen3 0.6B");
-    expect(html).toContain("Provider approval");
-    expect(html).toContain("Maximum provider spend (USD)");
-    expect(html).toContain('value="3"');
-    expect(html).toContain(
-      "Prepare a provider-validated quote · hard cap $3.00"
-    );
-    expect(html).toContain("Prepare exact quote");
-    expect(html).toContain(
-      "Frozen Eval cases and grader secrets stay in OpenPond"
-    );
-    expect(html).toContain(
-      "Approval is bound server-side to the signed-in OpenPond account"
-    );
-    expect(html).toContain("Portable output imported into app-managed storage");
-    expect(html).toContain("Approve the bounded train-split export");
-    expect(html).toContain('disabled=""');
+    expect(html).toContain("Loading compute catalog");
+    expect(html).not.toContain("Maximum provider spend (USD)");
+    expect(html).not.toContain("Prepare exact quote");
   });
 
-  test("discloses the public callback gate for Fireworks RFT", () => {
+  test("does not embed provider callback policy in the loading-state UI", () => {
     const base = tasksetFixture({ ready: true });
     const taskset = TasksetSchema.parse({
       ...base,
@@ -636,19 +630,13 @@ describe("Training UI", () => {
       })
     );
 
-    expect(html).toContain("RFT requires a public HTTPS callback");
-    expect(html).toContain("/v1/training/fireworks/rft");
-    expect(html).toContain("Launch fails closed before provider upload");
-    expect(html).toContain("Manage Fireworks provider");
+    expect(html).toContain("Loading compute catalog");
+    expect(html).not.toContain("/v1/training/fireworks/rft");
     expect(html).toContain("Optimizer steps");
     expect(html).toContain("Training examples");
     expect(html).toContain('value="8"');
     expect(html).toContain('aria-label="RL loss"');
-    expect(html).toContain("Test the base model");
-    expect(html).toContain("Test base model");
-    expect(html).toContain("up to $1.17");
     expect(html).not.toContain("grouped loss");
-    expect(html).toContain("Answers and grading stay inside OpenPond");
   });
 
   test("defaults artifact-backed RFT to the bounded train-signal canary", () => {
@@ -734,18 +722,9 @@ describe("Training UI", () => {
       })
     );
 
-    expect(html).toContain("Check train signal");
-    expect(html).toContain(
-      "Run 16 selected train prompts with 8 candidates each"
-    );
-    expect(html).toContain(
-      "At least 4 prompts must produce both correct and incorrect rewards"
-    );
-    expect(html).toContain("Run train-signal check");
+    expect(html).toContain("Loading compute catalog");
     expect(html).toContain('value="16"');
-    expect(html).toContain('value="512"');
     expect(html).toContain("Maximum output");
-    expect(html).toContain('value="2048"');
     expect(html).not.toContain("grouped loss");
 
     const recipe = trainingRecipe({
@@ -762,6 +741,7 @@ describe("Training UI", () => {
       rolloutConcurrency: 4,
       rolloutMaxOutputTokens: 2_048,
       trainingExamples: 16,
+      executionMode: "provider_native",
     });
     expect(recipe.method === "grpo" && recipe.dataset.selectionStrategy).toBe(
       "rft_easy_curriculum_v1"
@@ -774,7 +754,7 @@ describe("Training UI", () => {
     );
   });
 
-  test("budgets every grouped RFT rollout and defaults to the supported 8B model", () => {
+  test("budgets every grouped provider-native RFT rollout without a client model default", () => {
     const base = tasksetFixture({ ready: true });
     const taskset = TasksetSchema.parse({
       ...base,
@@ -798,6 +778,7 @@ describe("Training UI", () => {
       rolloutConcurrency: 4,
       rolloutMaxOutputTokens: 2_048,
       trainingExamples: 2,
+      executionMode: "provider_native",
     });
     expect(recipe.method).toBe("grpo");
     if (recipe.method !== "grpo") return;
@@ -844,9 +825,8 @@ describe("Training UI", () => {
         onStart: async () => true,
       })
     );
-    expect(html).toContain(
-      'value="managed_accounts/fireworks/models/qwen3-8b" selected="">Qwen3 8B · Fireworks'
-    );
+    expect(html).toContain("Qwen3 0.6B");
+    expect(html).toContain("Qwen3 8B");
   });
 
   test("defaults DAPO-Math artifacts to the DAPO provider loss", () => {
@@ -873,6 +853,7 @@ describe("Training UI", () => {
       rolloutConcurrency: 4,
       rolloutMaxOutputTokens: 4_096,
       trainingExamples: 256,
+      executionMode: "provider_native",
     });
     expect(recipe.method).toBe("grpo");
     if (recipe.method === "grpo") expect(recipe.loss.method).toBe("dapo");
@@ -902,8 +883,8 @@ describe("Training UI", () => {
   });
 
   test("uses a full transformer LoRA target set for real SmolLM adapters", async () => {
-    const dialog = await readFile(
-      "apps/web/src/components/training/TrainingStartDialog.tsx",
+    const recipeBuilder = await readFile(
+      "apps/web/src/components/training/training-start-recipe.ts",
       "utf8"
     );
     for (const module of [
@@ -915,13 +896,15 @@ describe("Training UI", () => {
       "up_proj",
       "down_proj",
     ])
-      expect(dialog).toContain(`"${module}"`);
-    expect(dialog).toContain("targetModules: SMOLLM2_LORA_TARGET_MODULES");
+      expect(recipeBuilder).toContain(`"${module}"`);
+    expect(recipeBuilder).toContain(
+      "targetModules: SMOLLM2_LORA_TARGET_MODULES"
+    );
   });
 
   test("chooses compute before narrowing the base model and device", async () => {
     const dialog = await readFile(
-      "apps/web/src/components/training/TrainingStartDialog.tsx",
+      "apps/web/src/components/training/TrainingCatalogSetup.tsx",
       "utf8"
     );
     const fields = dialog.slice(dialog.indexOf('<div className="training-start-fields">'));

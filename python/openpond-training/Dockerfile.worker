@@ -1,0 +1,28 @@
+FROM primeintellect/prime-rl@sha256:eae2df21d34ddfdc0065390b4f3261ff691ea4ebd281630f64aacc60855c0c37
+
+ARG OPENPOND_RELEASE=0.0.38
+
+LABEL org.opencontainers.image.title="OpenPond connected prime-rl worker" \
+      org.opencontainers.image.version="${OPENPOND_RELEASE}" \
+      org.opencontainers.image.revision="e0d60e4d85ea636873acb2e7083e794740d20226" \
+      ai.openpond.worker.protocol="openpond.connectedWorker.v1" \
+      ai.openpond.worker.engine="connected-prime-rl" \
+      ai.openpond.worker.upstream-image.digest="sha256:eae2df21d34ddfdc0065390b4f3261ff691ea4ebd281630f64aacc60855c0c37"
+
+WORKDIR /app
+COPY --chown=appuser:appuser pyproject.toml LICENSE worker-sbom.cdx.json /opt/openpond-training/
+COPY --chown=appuser:appuser src /opt/openpond-training/src
+COPY --chown=appuser:appuser worker-directory.keep /var/lib/openpond-worker/state/.keep
+COPY --chown=appuser:appuser worker-directory.keep /var/lib/openpond-worker/model-cache/.keep
+COPY --chown=appuser:appuser worker-directory.keep /var/lib/openpond-worker/huggingface/.keep
+COPY --chown=appuser:appuser worker-directory.keep /var/lib/openpond-worker/uv-cache/.keep
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/openpond-training/src \
+    OPENPOND_CONNECTED_WORKER_STATE_DIR=/var/lib/openpond-worker/state \
+    OPENPOND_PRIME_RL_MODEL_CACHE=/var/lib/openpond-worker/model-cache \
+    UV_CACHE_DIR=/var/lib/openpond-worker/uv-cache \
+    HF_HOME=/var/lib/openpond-worker/huggingface
+
+USER appuser
+ENTRYPOINT ["python", "-m", "openpond_training.connected_worker"]
