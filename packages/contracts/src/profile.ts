@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { OpenPondActionCatalogEntrySchema } from "./requests.js";
+import { OpenPondActionCatalogEntrySchema } from "./action-catalog.js";
+import { OpenPondProfileRefSchema } from "./profile-ref.js";
 
 export const LocalOpenPondProfileCheckStatusSchema = z.object({
   command: z.enum(["inspect", "build", "validate", "eval", "run"]),
@@ -250,6 +251,19 @@ export const OpenPondProfileStateSchema = z.object({
   error: z.string().nullable(),
 });
 
+export const OpenPondProfileCatalogEntrySchema = z.object({
+  ref: OpenPondProfileRefSchema,
+  name: z.string(),
+  repoPath: z.string(),
+  sourcePath: z.string().nullable(),
+  state: OpenPondProfileStateSchema,
+});
+
+export const OpenPondProfileLibrarySchema = z.object({
+  lastUsed: OpenPondProfileRefSchema.nullable(),
+  profiles: z.array(OpenPondProfileCatalogEntrySchema),
+});
+
 export type LocalOpenPondProfileCheckStatus = z.infer<typeof LocalOpenPondProfileCheckStatusSchema>;
 export type OpenPondProfileAgent = z.infer<typeof OpenPondProfileAgentSchema>;
 export type OpenPondProfileSkill = z.infer<typeof OpenPondProfileSkillSchema>;
@@ -264,6 +278,12 @@ export type OpenPondProfileDiffSummary = z.infer<typeof OpenPondProfileDiffSumma
 export type OpenPondProfileHostedBinding = z.infer<typeof OpenPondProfileHostedBindingSchema>;
 export type OpenPondProfileSummary = z.infer<typeof OpenPondProfileSummarySchema>;
 export type OpenPondProfileState = z.infer<typeof OpenPondProfileStateSchema>;
+export type OpenPondProfileCatalogEntry = z.infer<typeof OpenPondProfileCatalogEntrySchema>;
+export type OpenPondProfileLibrary = z.infer<typeof OpenPondProfileLibrarySchema>;
+
+export function emptyOpenPondProfileLibrary(): OpenPondProfileLibrary {
+  return { lastUsed: null, profiles: [] };
+}
 
 export function emptyOpenPondProfileState(): OpenPondProfileState {
   return {

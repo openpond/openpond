@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type {
-  BootstrapPayload,
   OpenPondExtension,
-  OpenPondProfileSkill,
   SidebarFileBookmark,
   TerminalScope,
 } from "@openpond/contracts";
@@ -20,6 +18,7 @@ import type { SkillSourceDocument } from "../components/app-shell/skill-source-d
 import type { SkillPackageSourceSelection } from "../components/app-shell/skill-package-source";
 import { extensionSourceSelection } from "../components/settings/extension-source-selection";
 import { AppToastProvider } from "./AppToastContext";
+import { composerSkillsForProfile } from "../lib/profile-selection";
 import {
   POST_TRAINING_LESSONS,
   type PostTrainingCourseState,
@@ -36,32 +35,6 @@ import type {
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
   secondary: AppSecondaryRuntime;
-}
-
-function harnessSkillsForComposer(bootstrap: BootstrapPayload | null): OpenPondProfileSkill[] {
-  const skills = new Map(
-    (bootstrap?.profile?.skills ?? []).map((skill) => [skill.name, skill]),
-  );
-  for (const extension of bootstrap?.extensionCatalog.extensions ?? []) {
-    if (extension.validationStatus !== "valid") continue;
-    for (const skill of extension.skills) {
-      if (skill.validationStatus !== "valid" || skills.has(skill.name)) continue;
-      skills.set(skill.name, {
-        name: skill.name,
-        description: skill.description,
-        path: skill.relativePath,
-        scope: "profile",
-        enabled: true,
-        sourcePath: extension.sourcePath,
-        charCount: skill.charCount,
-        sourceHash: skill.sourceHash,
-        validationStatus: "valid",
-        validationMessages: [],
-        resourceFiles: skill.resourceFiles,
-      });
-    }
-  }
-  return [...skills.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
@@ -124,7 +97,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   } = secondary;
   const [nativeSkillSidebar, setNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
   const [extensionSkillSidebar, setExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
-  const harnessSkills = harnessSkillsForComposer(bootstrap);
+  const harnessSkills = composerSkillsForProfile(bootstrap?.profile, bootstrap?.extensionCatalog);
   const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
   const [pendingExtensionSkillSidebar, setPendingExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
   const [postTrainingCourse, setPostTrainingCourse] = useState<PostTrainingCourseState | null>(null);

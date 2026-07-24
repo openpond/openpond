@@ -221,9 +221,11 @@ function progressionForModel(input: {
 
   const jobs = jobsForTaskset(input.training, input.taskset.id);
   const latestJob = jobs[0] ?? null;
-  const importedModel = input.training?.models.find(
-    (model) => model.tasksetId === input.taskset!.id && model.status === "imported",
-  ) ?? null;
+  const importedModel = latestJob
+    ? input.training?.models.find(
+        (model) => model.jobId === latestJob.id && model.status === "imported",
+      ) ?? null
+    : null;
 
   if (latestJob && ACTIVE_TRAINING_STATES.has(latestJob.status)) {
     return {
@@ -244,10 +246,14 @@ function progressionForModel(input: {
     };
   }
   if (latestJob?.status === "succeeded") {
-    if (
-      latestJob.metadata.frozenEvaluationComplete === true &&
-      latestJob.metadata.frozenEvaluationThresholdPassed !== true
-    ) {
+    const evaluationComplete =
+      latestJob.metadata.frozenEvaluationComplete === true
+      || Boolean(importedModel?.frozenEvaluationArtifactId);
+    const evaluationPassed =
+      typeof latestJob.metadata.frozenEvaluationThresholdPassed === "boolean"
+        ? latestJob.metadata.frozenEvaluationThresholdPassed
+        : importedModel?.promotable === true;
+    if (evaluationComplete && !evaluationPassed) {
       return {
         statusLabel: "Evaluation failed",
         statusValue: "failed",
@@ -256,17 +262,18 @@ function progressionForModel(input: {
         conversationId,
       };
     }
+    if (evaluationComplete && evaluationPassed) {
+      return {
+        statusLabel: importedModel?.promotable ? "Model ready" : "Evaluation passed",
+        statusValue: importedModel?.promotable ? "ready" : "passed",
+        action: { kind: "open_training", label: "Review results" },
+        runId: input.latestRun?.id ?? null,
+        conversationId,
+      };
+    }
     return {
-      statusLabel: importedModel
-        ? latestJob.metadata.frozenEvaluationThresholdPassed === true
-          ? "Model ready"
-          : "Evaluation pending"
-        : "Collecting model",
-      statusValue:
-        importedModel &&
-        latestJob.metadata.frozenEvaluationThresholdPassed === true
-          ? "ready"
-          : "running",
+      statusLabel: importedModel ? "Evaluation pending" : "Collecting model",
+      statusValue: "running",
       action: { kind: "open_training", label: "Review results" },
       runId: input.latestRun?.id ?? null,
       conversationId,

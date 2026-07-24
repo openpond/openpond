@@ -203,6 +203,12 @@
   padding: 12px 0 6px;
 }
 
+.labs-dataset-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .labs-datasets-page > .training-detail-tabs {
   padding: 0;
 }

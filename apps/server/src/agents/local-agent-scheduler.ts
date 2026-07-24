@@ -8,6 +8,7 @@ import type {
   LocalAgentSchedule,
   LocalAgentScheduleRun,
   LocalAgentSchedulesResponse,
+  OpenPondProfileLibrary,
   OpenPondProfileState,
   PatchLocalAgentScheduleRequest,
   RuntimeEvent,
@@ -69,11 +70,17 @@ type AgentScheduleSource = {
   agentRootPath: string;
 };
 
+type AgentScheduleSourceCatalog = {
+  sourcesToInspect: AgentScheduleSource[];
+  installedSourceIds: Set<string>;
+};
+
 export function createLocalAgentScheduleLoop(options: {
   store: SqliteStore;
   queue: BackgroundWorkerQueue;
   isClosing: () => boolean;
   loadProfileState?: () => Promise<OpenPondProfileState>;
+  loadProfileLibrary?: () => Promise<OpenPondProfileLibrary>;
   appendRuntimeEvent?: (runtimeEvent: RuntimeEvent) => Promise<void>;
   logger?: LocalAgentSchedulerLogger;
   tickMs?: number;
@@ -107,11 +114,13 @@ export function createLocalAgentScheduleLoop(options: {
   }
 
   async function reconcile(): Promise<void> {
-    const sources = await listProfileScheduleSources(options.loadProfileState, options.logger);
-    if (!sources) return;
-    const activeSourceIds = new Set<string>();
-    for (const source of sources) {
-      activeSourceIds.add(source.id);
+    const sourceCatalog = await listProfileScheduleSources(
+      options.loadProfileState,
+      options.loadProfileLibrary,
+      options.logger,
+    );
+    if (!sourceCatalog) return;
+    for (const source of sourceCatalog.sourcesToInspect) {
       try {
         const manifest = await inspectAgentProject(source.agentRootPath);
         const existingSchedules = await options.store.listLocalAgentSchedules({
@@ -124,7 +133,7 @@ export function createLocalAgentScheduleLoop(options: {
           seenIds.push(id);
           const existing = existingById.get(id) ?? null;
           const timestamp = now();
-          const enabled = existing?.enabled ?? definition.enabledByDefault;
+          const enabled = existing?.enabled ?? false;
           const previousSourceHash = existing?.sourceHash ?? null;
           const hasSourceChanged = previousSourceHash !== definition.sourceHash;
           const nextRunAt = nextRunForReconciledSchedule({
@@ -169,7 +178,7 @@ export function createLocalAgentScheduleLoop(options: {
         });
       }
     }
-    await deleteSchedulesForInactiveSources(options.store, activeSourceIds);
+    await pauseSchedulesForMissingSources(options.store, sourceCatalog.installedSourceIds);
     lastSyncAt = now();
     lastReconcileAtMs = Date.now();
   }
@@ -402,28 +411,70 @@ export function createLocalAgentScheduleLoop(options: {
 
 async function listProfileScheduleSources(
   loadProfileState: (() => Promise<OpenPondProfileState>) | undefined,
+  loadProfileLibrary: (() => Promise<OpenPondProfileLibrary>) | undefined,
   logger: LocalAgentSchedulerLogger | undefined,
-): Promise<AgentScheduleSource[] | null> {
-  if (!loadProfileState) return [];
+): Promise<AgentScheduleSourceCatalog | null> {
+  if (!loadProfileState && !loadProfileLibrary) {
+    return { sourcesToInspect: [], installedSourceIds: new Set() };
+  }
   try {
-    const profile = await loadProfileState();
-    if (profile.mode !== "local") return [];
+    const library = loadProfileLibrary ? await loadProfileLibrary() : null;
+    if (library) return profileScheduleSourceCatalogForLibrary(library, logger);
+    const profiles = loadProfileState ? [await loadProfileState()] : [];
+    return profileScheduleSourceCatalogForStates(profiles, profiles, logger);
+  } catch (error) {
+    logger?.warn("local agent schedule profile source scan failed", { error: errorText(error) });
+    return null;
+  }
+}
+
+export function profileScheduleSourceCatalogForLibrary(
+  library: OpenPondProfileLibrary,
+  logger?: LocalAgentSchedulerLogger,
+): AgentScheduleSourceCatalog {
+  const profiles = library.profiles.map((entry) => entry.state);
+  const selectedRef = library.lastUsed;
+  const selectedProfiles = selectedRef
+    ? library.profiles
+        .filter((entry) =>
+          entry.ref.source === selectedRef.source
+          && entry.ref.repositoryId === selectedRef.repositoryId
+          && entry.ref.profileId === selectedRef.profileId,
+        )
+        .map((entry) => entry.state)
+    : [];
+  return profileScheduleSourceCatalogForStates(profiles, selectedProfiles, logger);
+}
+
+function profileScheduleSourceCatalogForStates(
+  installedProfiles: OpenPondProfileState[],
+  profilesToInspect: OpenPondProfileState[],
+  logger?: LocalAgentSchedulerLogger,
+): AgentScheduleSourceCatalog {
+  const installedSourceIds = new Set<string>();
+  for (const profile of installedProfiles) {
+    if (profile.mode !== "local" || !profile.repoPath || !profile.sourcePath) continue;
+    for (const agent of profile.agents.filter((candidate) => candidate.enabled)) {
+      installedSourceIds.add(profileScheduleSourceId(profile, agent.id));
+    }
+  }
+  const sourcesToInspect: AgentScheduleSource[] = [];
+  for (const profile of profilesToInspect) {
+    if (profile.mode !== "local") continue;
     if (profile.error) {
       logger?.warn("local agent schedule profile source scan skipped", { error: profile.error });
-      return null;
+      continue;
     }
-    if (!profile.repoPath || !profile.sourcePath) return [];
-    return profile.agents
+    if (!profile.repoPath || !profile.sourcePath) continue;
+    sourcesToInspect.push(...profile.agents
       .filter((agent) => agent.enabled)
       .map((agent) => ({
         id: profileScheduleSourceId(profile, agent.id),
         name: agent.id,
         agentRootPath: profileAgentRootPath(profile.sourcePath!, agent),
-      }));
-  } catch (error) {
-    logger?.warn("local agent schedule profile source scan failed", { error: errorText(error) });
-    return null;
+      })));
   }
+  return { sourcesToInspect, installedSourceIds };
 }
 
 function profileScheduleSourceId(profile: OpenPondProfileState, agentId: string): string {
@@ -443,18 +494,20 @@ function profileAgentRootPath(
     : path.resolve(profileSourcePath, agent.path);
 }
 
-async function deleteSchedulesForInactiveSources(
+async function pauseSchedulesForMissingSources(
   store: SqliteStore,
-  activeSourceIds: Set<string>,
+  installedSourceIds: Set<string>,
 ): Promise<void> {
   const schedules = await store.listLocalAgentSchedules();
-  const inactiveSourceIds = new Set(
-    schedules
-      .map((schedule) => schedule.localProjectId)
-      .filter((localProjectId) => !activeSourceIds.has(localProjectId)),
-  );
-  for (const localProjectId of inactiveSourceIds) {
-    await store.deleteLocalAgentSchedulesNotIn(localProjectId, []);
+  for (const schedule of schedules) {
+    if (installedSourceIds.has(schedule.localProjectId) || !schedule.enabled) continue;
+    await store.patchLocalAgentSchedule(schedule.id, (current) => ({
+      ...current,
+      enabled: false,
+      nextRunAt: null,
+      lastError: "Profile source is no longer installed; enable again after restoring it.",
+      updatedAt: now(),
+    }));
   }
 }
 

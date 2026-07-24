@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { LocalProject } from "@openpond/contracts";
 
-import { actionCatalogForLocalAgentSdkProject } from "../apps/web/src/lib/local-agent-sdk-action-catalog";
+import { actionCatalogForLocalCrossSystemFixture } from "../apps/web/src/lib/local-cross-system-action-catalog";
 import { actionCatalogForProject } from "../apps/web/src/lib/sandbox-action-catalog";
 import type { SandboxProject } from "../apps/web/src/lib/sandbox-types";
 
@@ -58,21 +58,13 @@ describe("sandbox action catalog", () => {
     ]);
   });
 
-  test("adds the versioned synthetic tools for a selected local Cross-System Agent SDK project", () => {
+  test("adds synthetic tools for the selected local Cross-System fixture", () => {
     const project = localProject({
       name: "cross-system-operations",
       workspacePath: "/work/cross-system-operations",
-      agentSdk: {
-        detected: true,
-        packageName: "openpond-agent-sdk",
-        rootPath: "/work/cross-system-operations",
-        manifestPath: "/work/cross-system-operations/package.json",
-        version: "workspace",
-        dependencyType: "dependencies",
-      },
     });
 
-    const catalog = actionCatalogForLocalAgentSdkProject(project);
+    const catalog = actionCatalogForLocalCrossSystemFixture(project);
     expect(catalog.map((action) => action.id)).toEqual([
       "search_crm",
       "query_billing",
@@ -88,12 +80,8 @@ describe("sandbox action catalog", () => {
     expect(catalog[0]?.inputSchema).toEqual(expect.objectContaining({ type: "object" }));
   });
 
-  test("does not invent local tools for unrelated or non-Agent-SDK projects", () => {
-    expect(actionCatalogForLocalAgentSdkProject(localProject({ name: "other" }))).toEqual([]);
-    expect(actionCatalogForLocalAgentSdkProject(localProject({
-      name: "cross-system-operations",
-      workspacePath: "/work/cross-system-operations",
-    }))).toEqual([]);
+  test("does not invent local tools for unrelated projects", () => {
+    expect(actionCatalogForLocalCrossSystemFixture(localProject({ name: "other" }))).toEqual([]);
   });
 });
 
@@ -106,7 +94,6 @@ function localProject(overrides: Partial<LocalProject> = {}): LocalProject {
     repoPath: "/work/project",
     source: "folder",
     sandboxTemplate: null,
-    agentSdk: null,
     linkedOpenPondApp: null,
     linkedSandboxProject: null,
     preferredSandboxAgentId: null,

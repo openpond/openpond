@@ -17,7 +17,9 @@ function profileChatActionAgentLabel(action: SandboxActionCatalogEntry): string 
   const implementation = asRecord(action.implementation);
   if (implementation?.type !== PROFILE_ACTION_TYPE) return null;
   const actionId = text(implementation.actionId) ?? action.id;
-  if (!actionId.endsWith(".chat")) return null;
+  if (action.sourceActionId !== "chat" && actionId !== "chat" && !actionId.endsWith(".chat")) {
+    return null;
+  }
   const label = text(action.label);
   if (label && !isGenericChatLabel(label)) return shortProfileAgentLabel({ label, description: action.description });
   const agentName = text(implementation.agentName) ?? text(action.name);
@@ -49,6 +51,12 @@ export function composerActionCatalogHint(
       ? action.implementation.type
       : null;
   if (implementationType === "openpond-agent") return "OpenPond Agent";
+  if (
+    implementationType === "openpond-profile-action" &&
+    (action.sourceActionId === "chat" || action.id === "chat" || action.id.endsWith(".chat"))
+  ) {
+    return "Profile agent";
+  }
   if (implementationType === "workflow") return "Workflow-backed action";
   if (implementationType === "agent") return "Agent-backed action";
   if (implementationType === "remote-agent") return "Remote-agent action";

@@ -184,26 +184,6 @@ export const LocalProjectSandboxProjectLinkSchema = z.object({
 
 export type LocalProjectSandboxProjectLink = z.infer<typeof LocalProjectSandboxProjectLinkSchema>;
 
-export const ProjectAgentSdkDependencyTypeSchema = z.enum([
-  "dependencies",
-  "devDependencies",
-  "peerDependencies",
-  "optionalDependencies",
-]);
-
-export type ProjectAgentSdkDependencyType = z.infer<typeof ProjectAgentSdkDependencyTypeSchema>;
-
-export const ProjectAgentSdkSchema = z.object({
-  detected: z.boolean(),
-  packageName: z.string().optional().default("openpond-agent-sdk"),
-  rootPath: z.string().nullable().optional().default(null),
-  manifestPath: z.string().nullable().optional().default(null),
-  version: z.string().nullable().optional().default(null),
-  dependencyType: ProjectAgentSdkDependencyTypeSchema.nullable().optional().default(null),
-});
-
-export type ProjectAgentSdk = z.infer<typeof ProjectAgentSdkSchema>;
-
 export const CloudProjectSourceTypeSchema = z.enum(["github_repo", "internal_repo", "template", "manual"]);
 
 export type CloudProjectSourceType = z.infer<typeof CloudProjectSourceTypeSchema>;
@@ -220,7 +200,6 @@ export const CloudProjectSchema = z.object({
   manifestPath: z.string().nullable().optional().default(null),
   manifestHash: z.string().nullable().optional().default(null),
   syncedAt: z.string().nullable().optional().default(null),
-  agentSdk: ProjectAgentSdkSchema.nullable().optional(),
   organizationName: z.string().nullable().optional().default(null),
   organizationSlug: z.string().nullable().optional().default(null),
   createdAt: z.string().nullable().optional().default(null),
@@ -329,7 +308,6 @@ export const LocalProjectSchema = z.object({
   systemKind: z.enum(["openpond.insights"]).nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   sandboxTemplate: LocalProjectSandboxTemplateSchema.nullable().optional().default(null),
-  agentSdk: ProjectAgentSdkSchema.nullable().optional(),
   linkedOpenPondApp: LocalProjectOpenPondLinkSchema.nullable().optional().default(null),
   linkedSandboxProject: LocalProjectSandboxProjectLinkSchema.nullable().optional().default(null),
   preferredSandboxAgentId: z.string().nullable().optional().default(null),

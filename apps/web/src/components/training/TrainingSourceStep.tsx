@@ -3,6 +3,8 @@ import {
   TASK_AUTHORING_MAX_DISCLOSED_EVIDENCE_TOKENS,
   type ChatProvider,
   type CodexReasoningEffort,
+  type DatasetBuildIntent,
+  type DatasetBuildSpecification,
   type ProviderSettings,
   type TrainingChatSearchEntry,
 } from "@openpond/contracts";
@@ -20,6 +22,10 @@ import {
   type TrainingSourceEstimate,
 } from "./TrainingChatPicker";
 import type { AgentSourceMode, NewModelMode } from "./TrainingStartModeStep";
+import {
+  buildSpecificationReady,
+  TrainingEvidenceEditor,
+} from "./TrainingEvidenceEditor";
 
 type AuthoringSourceMode = NewModelMode | AgentSourceMode;
 
@@ -29,11 +35,14 @@ export function TrainingSourceStep({
   authoringReasoningEffort,
   busy,
   disclosurePending,
+  buildIntent,
+  buildSpecification,
   estimatesBySessionId,
   matchingSessionCount,
   mode,
   objective,
   onObjectiveChange,
+  onBuildSpecificationChange,
   onAnalyze,
   onApproveDisclosure,
   onAuthoringModelChange,
@@ -67,11 +76,14 @@ export function TrainingSourceStep({
   authoringReasoningEffort: CodexReasoningEffort;
   busy: boolean;
   disclosurePending: boolean;
+  buildIntent: DatasetBuildIntent | null;
+  buildSpecification: DatasetBuildSpecification | null;
   estimatesBySessionId: Record<string, TrainingSourceEstimate>;
   matchingSessionCount: number;
   mode: AuthoringSourceMode;
   objective: string;
   onObjectiveChange: (value: string) => void;
+  onBuildSpecificationChange: (value: DatasetBuildSpecification) => void;
   onAnalyze: () => void;
   onApproveDisclosure: () => void;
   onAuthoringModelChange: (value: string) => void;
@@ -108,7 +120,7 @@ export function TrainingSourceStep({
   const fromChats = mode === "from_chats";
   const showsObjective = mode === "manual" || fromPrompt || fromChats;
   const showsChats = !fromPrompt;
-  const canAnalyze = fromChats
+  const sourceReady = fromChats
     ? Boolean(objective.trim()) && selectedCount > 0
     : mode === "manual" || fromPrompt
       ? Boolean(objective.trim())
@@ -128,6 +140,27 @@ export function TrainingSourceStep({
   const authoringModelLabel = displayedModelOptions.find((option) => option.value === authoringModel)?.label ?? authoringModel;
   const authoringProviderLabel = providerOptions.find((option) => option.value === authoringProvider)?.label ?? authoringProvider;
   const authorsDataset = isModel || isDataset;
+  const usesDeterministicManualBuild = authorsDataset
+    && mode === "manual"
+    && selectedCount === 0
+    && buildIntent !== "discovery"
+    && buildSpecificationReady(buildSpecification);
+  const structuredEvidenceReady = !authorsDataset
+    || buildIntent === "discovery"
+    || (
+      buildSpecificationReady(buildSpecification)
+      && (
+        buildSpecification?.kind !== "demonstrations"
+        || buildSpecification.examples.length > 0
+        || selectedCount > 0
+      )
+      && (
+        buildSpecification?.kind !== "preferences"
+        || buildSpecification.pairs.length > 0
+        || selectedCount > 0
+      )
+    );
+  const canAnalyze = sourceReady && structuredEvidenceReady;
   const sourceHeading = disclosurePending && isAgent
     ? "Review chats for the Agent plan"
     : isDataset
@@ -183,6 +216,14 @@ export function TrainingSourceStep({
           </label>
         ) : objective ? (
           <div className="training-evidence-objective"><span>{objectiveLabel}</span><strong>{objective}</strong></div>
+        ) : null}
+
+        {authorsDataset && buildSpecification ? (
+          <TrainingEvidenceEditor
+            disabled={busy || disclosurePending}
+            specification={buildSpecification}
+            onChange={onBuildSpecificationChange}
+          />
         ) : null}
 
         <fieldset className="training-evidence-fields" disabled={busy || disclosurePending}>
@@ -242,17 +283,19 @@ export function TrainingSourceStep({
             </>
           )}
 
-          <div className="training-authoring-row">
-            <span>{isAgent ? "Build with" : "Analyzed with"}</span>
-            <div className="training-authoring-controls" aria-label="Analysis model">
-              <DropdownSelect compact placement="bottom" label="Provider" value={authoringProvider} options={providerOptions} disabled={busy} onChange={(value) => onAuthoringProviderChange(value as ChatProvider)} />
-              {showReasoning ? (
-                <CodexModelReasoningMenu disabled={busy} model={authoringModel} modelOptions={displayedModelOptions} placement="bottom" reasoningEffort={authoringReasoningEffort} onModelChange={onAuthoringModelChange} onReasoningEffortChange={onAuthoringReasoningEffortChange} />
-              ) : (
-                <DropdownSelect compact placement="bottom" label="Model" value={authoringModel} options={displayedModelOptions} disabled={busy} onChange={onAuthoringModelChange} />
-              )}
+          {usesDeterministicManualBuild ? null : (
+            <div className="training-authoring-row">
+              <span>{isAgent ? "Build with" : "Analyzed with"}</span>
+              <div className="training-authoring-controls" aria-label="Analysis model">
+                <DropdownSelect compact placement="bottom" label="Provider" value={authoringProvider} options={providerOptions} disabled={busy} onChange={(value) => onAuthoringProviderChange(value as ChatProvider)} />
+                {showReasoning ? (
+                  <CodexModelReasoningMenu disabled={busy} model={authoringModel} modelOptions={displayedModelOptions} placement="bottom" reasoningEffort={authoringReasoningEffort} onModelChange={onAuthoringModelChange} onReasoningEffortChange={onAuthoringReasoningEffortChange} />
+                ) : (
+                  <DropdownSelect compact placement="bottom" label="Model" value={authoringModel} options={displayedModelOptions} disabled={busy} onChange={onAuthoringModelChange} />
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </fieldset>
 
         {disclosurePending ? (
@@ -273,7 +316,9 @@ export function TrainingSourceStep({
           {fromPrompt
             ? "No chats will be attached"
             : selectedCount === 0
-              ? mode === "manual" ? "Supporting chats are optional" : "Select at least one supporting chat"
+              ? usesDeterministicManualBuild
+                ? "Manual evidence builds locally"
+                : mode === "manual" ? "Supporting chats are optional" : "Select at least one supporting chat"
               : selectedEstimate.measuredChats === selectedCount ? <><span>{selectedCount} chat{selectedCount === 1 ? "" : "s"}</span><span>{selectedEstimate.messageCount} messages</span><span>About {formatTrainingTokens(selectedEstimate.estimatedTokens)} tokens</span></> : <><span>{selectedCount} chat{selectedCount === 1 ? "" : "s"}</span><span>Estimating…</span></>}
         </span>
         {disclosurePending ? <>

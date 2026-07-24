@@ -51,7 +51,6 @@ describe("cloud session readiness copy", () => {
           manifestPath: null,
           manifestHash: null,
           syncedAt: "2026-07-04T00:00:00.000Z",
-          agentSdk: null,
           organizationName: "OpenPond",
           organizationSlug: "openpond",
           createdAt: "2026-07-04T00:00:00.000Z",

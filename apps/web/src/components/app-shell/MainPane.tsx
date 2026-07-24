@@ -37,7 +37,11 @@ import {
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
-import { buildOpenPondProfileActionCommand } from "../../lib/openpond-action-run";
+import {
+  buildOpenPondProfileActionCatalog,
+  buildOpenPondProfileActionCommand,
+  isOpenPondProfileAction,
+} from "../../lib/openpond-action-run";
 import {
   resolveRightSidebarFileSource,
   type RightSidebarFileSource,
@@ -50,6 +54,13 @@ import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import {
   skillPromptForComposer,
 } from "../../lib/profile-skill-composer";
+import {
+  composerProfileTargetForLibrary,
+  composerSkillsForProfile,
+  openPondProfileRefFromKey,
+  profileStateForRef,
+} from "../../lib/profile-selection";
+import { selectComposerProfileTransaction } from "../../lib/profile-selection-transaction";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { trainingCreationForSession } from "../training/training-flow";
@@ -328,6 +339,65 @@ export function MainPane({
   const [profileActionCatalogOverride, setProfileActionCatalogOverride] = useState<
     SandboxActionCatalogEntry[]
   >([]);
+  const selectedProfileSession = useMemo(
+    () => bootstrap?.sessions.find((session) => session.id === selectedSessionId) ?? null,
+    [bootstrap?.sessions, selectedSessionId],
+  );
+  const selectedProfileRef = selectedProfileSession?.currentProfile ?? bootstrap?.profileLibrary?.lastUsed ?? null;
+  const selectedProfileState = profileStateForRef(
+    bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
+    selectedProfileRef,
+  ) ?? bootstrap?.profile ?? null;
+  const selectedProfileSkills = useMemo(
+    () => composerSkillsForProfile(selectedProfileState, bootstrap?.extensionCatalog),
+    [bootstrap?.extensionCatalog, selectedProfileState],
+  );
+  const selectedProfileActionCatalog = useMemo(
+    () => buildOpenPondProfileActionCatalog(selectedProfileState),
+    [selectedProfileState],
+  );
+  const composerProfileTarget = useMemo(() => {
+    return composerProfileTargetForLibrary(bootstrap?.profileLibrary, selectedProfileRef);
+  }, [bootstrap?.profileLibrary, selectedProfileRef]);
+  const changeComposerProfile = useCallback(async (
+    value: string,
+    targetSessionId: string | null = selectedSessionId,
+  ) => {
+    if (!connection || !bootstrap) return;
+    const ref = openPondProfileRefFromKey(
+      bootstrap.profileLibrary ?? { lastUsed: null, profiles: [] },
+      value,
+    );
+    if (!ref) return;
+    try {
+      const targetSession = targetSessionId && !isCodexHistorySessionId(targetSessionId)
+        ? bootstrap.sessions.find((session) => session.id === targetSessionId) ?? null
+        : null;
+      const result = await selectComposerProfileTransaction({
+        ref,
+        session: targetSession,
+        selectProfile: (nextRef) => api.profileSelect(connection, nextRef),
+        patchSession: (sessionId, currentProfile) =>
+          api.patchSession(connection, sessionId, { currentProfile }),
+      });
+      let sessions = bootstrap.sessions;
+      if (result.session) {
+        sessions = sessions.map((session) =>
+          session.id === result.session!.id ? result.session! : session,
+        );
+      }
+      onPayload({
+        ...bootstrap,
+        profile: result.selected.profile,
+        profileLibrary: result.selected.library,
+        sessions,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      onError(message);
+      showToast(message, "error");
+    }
+  }, [bootstrap, connection, onError, onPayload, selectedSessionId, showToast]);
   const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
   useEffect(() => {
     if (!sidebarFileOpenRequest) return;
@@ -358,10 +428,15 @@ export function MainPane({
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
-    const byId = new Map(actionCatalog.map((action) => [action.id, action]));
+    const byId = new Map(
+      actionCatalog
+        .filter((action) => !isOpenPondProfileAction(action))
+        .map((action) => [action.id, action]),
+    );
+    for (const action of selectedProfileActionCatalog) byId.set(action.id, action);
     for (const action of profileActionCatalogOverride) byId.set(action.id, action);
     return [...byId.values()];
-  }, [actionCatalog, profileActionCatalogOverride]);
+  }, [actionCatalog, profileActionCatalogOverride, selectedProfileActionCatalog]);
   const labCandidateReview = useLabCandidateReview(connection);
   const handleLabCandidateReviewChange = useCallback((input: {
     run: CreateImproveReviewActionInput["run"];
@@ -432,7 +507,9 @@ export function MainPane({
 
     void api.profileCurrent(connection)
       .then((profile) => {
-        const freshActions = profile.actionCatalog.map(buildOpenPondProfileActionCommand);
+        const freshActions = profile.actionCatalog.map((action) =>
+          buildOpenPondProfileActionCommand(action)
+        );
         if (!selectActionAfterCatalogCommit(freshActions) && existingAction) {
           selectActionAfterCatalogCommit([existingAction]);
         } else if (!freshActions.some((action) => action.id === actionId)) {
@@ -1344,6 +1421,7 @@ export function MainPane({
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
+      actionCatalog={composerActionCatalog}
       createImproveActions={createImproveActions}
       busy={busy}
       codexPermissionMode={codexPermissionMode}
@@ -1354,6 +1432,8 @@ export function MainPane({
       mentionApps={mentionApps}
       codexPersonalSkills={bootstrap?.codexPersonalSkills ?? []}
       profileSkills={profileSkills}
+      profileLibrary={bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] }}
+      extensionCatalog={bootstrap?.extensionCatalog ?? null}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
       accountBaseUrl={accountBaseUrl}
@@ -1374,6 +1454,7 @@ export function MainPane({
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
+      onProfileTargetChange={(sessionId, value) => void changeComposerProfile(value, sessionId)}
       onScrollStateChange={onRightChatScrollStateChange}
       onProjectTargetChange={changeProjectTarget}
       onResolveApproval={resolveApproval}
@@ -1581,8 +1662,13 @@ export function MainPane({
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
                 openSuggestionsRequestId={labSuggestionsRequestId}
-                onNewModel={() => {
-                  setTrainingLaunchRequest({ id: Date.now(), objective: null, initialSessionIds: [] });
+                onNewModel={(initialTasksetId) => {
+                  setTrainingLaunchRequest({
+                    id: Date.now(),
+                    objective: null,
+                    initialSessionIds: [],
+                    initialTasksetId,
+                  });
                 }}
                 onUseAgent={handleUseAgent}
                 onCreateAgent={createAgentFromLab}
@@ -1739,7 +1825,7 @@ export function MainPane({
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
-                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : profileSkills}
+                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : selectedProfileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1756,6 +1842,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
+                profileTarget={activeProvider === "codex" ? null : composerProfileTarget}
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1765,6 +1852,7 @@ export function MainPane({
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
+                onProfileTargetChange={(value) => void changeComposerProfile(value)}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
@@ -1804,7 +1892,7 @@ export function MainPane({
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
-                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : profileSkills}
+                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : selectedProfileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1820,6 +1908,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
+                profileTarget={activeProvider === "codex" ? null : composerProfileTarget}
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1829,6 +1918,7 @@ export function MainPane({
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
+                onProfileTargetChange={(value) => void changeComposerProfile(value)}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}

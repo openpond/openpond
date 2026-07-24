@@ -154,7 +154,7 @@ function modelLineage(): ModelArtifactLineage {
   return {
     schemaVersion: "openpond.modelArtifactLineage.v1",
     id: "lineage-1",
-    modelId: null,
+    modelId: "model-1",
     artifactId: "source-artifact-1",
     jobId: "job-1",
     tasksetId: "taskset-1",

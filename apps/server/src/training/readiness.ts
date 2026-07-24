@@ -19,7 +19,9 @@ export function buildTasksetReadiness(input: {
     ? input.taskset.metadata.trainingMethod
     : null;
   const authoredTrainingMethod = trainingPathMethod(authoredMethod);
-  const requiresApprovedDemonstrations = authoredTrainingMethod !== "grpo";
+  const requiresApprovedDemonstrations = authoredTrainingMethod === "sft";
+  const requiresPreferencePairs = authoredTrainingMethod === "dpo";
+  const requiresOnlineReward = authoredTrainingMethod === "grpo" || authoredTrainingMethod === "ppo";
   const approvedDemonstrationTaskIds = new Set(input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved && signal.taskId).map((signal) => signal.taskId!));
   const artifact = input.taskset.datasetArtifact;
   const approvedArtifactSignals = new Set(
@@ -31,7 +33,7 @@ export function buildTasksetReadiness(input: {
       || field.semanticRole === "expected_output"
       || field.semanticRole === "chosen"),
   );
-  const allTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput);
+  const allTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && (task.expectedOutput || requiresOnlineReward));
   const trainTasks = requiresApprovedDemonstrations
     ? allTrainTasks.filter((task) => approvedDemonstrationTaskIds.has(task.id))
     : allTrainTasks;
@@ -46,15 +48,24 @@ export function buildTasksetReadiness(input: {
   const artifactSignalApproved = artifact
     ? approvedArtifactSignals.has(authoredTrainingMethod ?? "")
     : false;
-  const trainTaskCount = artifact
+  const baseTrainTaskCount = artifact
     ? artifactSignalApproved ? artifactTrainCount : 0
     : trainTasks.length;
+  const approvedPreferenceCount = input.taskset.learningSignals.preferences.filter((signal) => signal.approved).length;
+  const executableRewardCount = input.taskset.learningSignals.rewards.filter((signal) => signal.approved && signal.executable).length;
+  const trainTaskCount = requiresPreferencePairs
+    ? approvedPreferenceCount
+    : requiresOnlineReward
+      ? executableRewardCount ? baseTrainTaskCount : 0
+      : baseTrainTaskCount;
   const frozenTaskCount = artifact ? artifactFrozenCount : frozenTasks.length;
   if (trainTaskCount === 0) {
     blockers.push(
       requiresApprovedDemonstrations
         ? { code: "sft_demonstrations_missing", message: "At least one explicitly approved training demonstration is required.", path: "learningSignals.demonstrations" }
-        : { code: "grpo_training_tasks_missing", message: "At least one reward-bearing training task is required for GRPO.", path: "tasks" },
+        : requiresPreferencePairs
+          ? { code: "dpo_preferences_missing", message: "At least one approved chosen/rejected response pair is required for DPO.", path: "learningSignals.preferences" }
+          : { code: "online_reward_missing", message: `${authoredTrainingMethod?.toUpperCase() ?? "Online training"} requires an executable reward-bearing task.`, path: "learningSignals.rewards" },
     );
   }
   const unapprovedTrainCount = artifact
@@ -88,7 +99,7 @@ export function buildTasksetReadiness(input: {
   if (input.graderAudit && !input.graderAudit.leakageChecksPassed) blockers.push({ code: "environment_leakage", message: "Environment or privileged-state leakage checks failed.", path: "environment" });
   if (input.graderAudit && !input.graderAudit.infrastructureSafetyPassed) blockers.push({ code: "infrastructure_reward", message: "An infrastructure failure produced a score or eligible reward.", path: "graderFixtures" });
   const hasRewardEligibleGrader = input.taskset.graders.some((grader) => grader.rewardEligible && (grader.kind !== "model_judge" || grader.calibrationStatus === "passed"));
-  if (authoredTrainingMethod === "grpo" && !hasRewardEligibleGrader) blockers.push({ code: "grpo_reward_missing", message: "GRPO requires a calibrated reward-eligible grader.", path: "graders" });
+  if (requiresOnlineReward && !hasRewardEligibleGrader) blockers.push({ code: "online_reward_grader_missing", message: `${authoredTrainingMethod?.toUpperCase()} requires a calibrated reward-eligible grader.`, path: "graders" });
   const currentBaseline = input.baseline?.tasksetHash === input.taskset.contentHash ? input.baseline : null;
   const baselineReward = currentBaseline?.reward;
   const hasRewardVariance = Boolean(baselineReward && (baselineReward.variance ?? 0) > 0 && (baselineReward.mean ?? 0) > 0.05 && (baselineReward.mean ?? 0) < 0.95);
@@ -108,6 +119,54 @@ export function buildTasksetReadiness(input: {
     } : null,
   };
   const ready = blockers.length === 0;
+  const globalMethodReason = blockers.length > 0;
+  const methodReadiness = (["sft", "dpo", "grpo", "ppo"] as const).map((method) => {
+    const reasonCodes: Array<
+      "taskset_not_ready"
+      | "demonstrations_missing"
+      | "preference_pairs_missing"
+      | "executable_reward_missing"
+      | "value_model_required"
+      | "frozen_eval_missing"
+    > = [];
+    const reasons: string[] = [];
+    if (method === "sft" && demonstrationRefs.length === 0) {
+      reasonCodes.push("demonstrations_missing");
+      reasons.push("Add at least one approved prompt/response demonstration.");
+    }
+    if (method === "dpo" && approvedPreferenceCount === 0) {
+      reasonCodes.push("preference_pairs_missing");
+      reasons.push("Add at least one approved chosen/rejected response pair.");
+    }
+    if ((method === "grpo" || method === "ppo") && executableRewardCount === 0) {
+      reasonCodes.push("executable_reward_missing");
+      reasons.push("Implement and validate an executable scalar reward.");
+    }
+    if (method === "ppo") {
+      reasonCodes.push("value_model_required");
+      reasons.push("Choose and bind a value/critic model before PPO can execute.");
+    }
+    if (frozenTaskCount === 0) {
+      reasonCodes.push("frozen_eval_missing");
+      reasons.push("Add an independent frozen-evaluation split.");
+    }
+    if (globalMethodReason && reasonCodes.length === 0) {
+      reasonCodes.push("taskset_not_ready");
+      reasons.push("Resolve the Dataset validation, grader-audit, and baseline blockers.");
+    }
+    const datasetBlockingReasons = reasonCodes.filter((code) =>
+      code !== "value_model_required");
+    return {
+      method,
+      status: datasetBlockingReasons.length
+        ? "needs_dataset_work" as const
+        : method === recommendedMethod
+          ? "recommended" as const
+          : "compatible" as const,
+      reasonCodes,
+      reasons,
+    };
+  });
   return TasksetReadinessReportSchema.parse({
     schemaVersion: "openpond.tasksetReadiness.v1",
     tasksetId: input.taskset.id,
@@ -115,6 +174,7 @@ export function buildTasksetReadiness(input: {
     ready,
     recommendedMethod,
     trainingPath,
+    methodReadiness,
     compatibleDestinationClasses: ready ? recommendedMethod === "grpo" ? ["export", "custom", "openpond_managed", "hosted_byok"] : ["export", "local_cpu_fixture", "custom", "openpond_managed"] : ["export"],
     blockers,
     warnings: [
@@ -132,8 +192,8 @@ export function buildTasksetReadiness(input: {
   });
 }
 
-function trainingPathMethod(value: string | null): "sft" | "dpo" | "grpo" | "sdft" | "opsd" | "sdpo" | null {
-  return value === "sft" || value === "dpo" || value === "grpo" || value === "sdft" || value === "opsd" || value === "sdpo" ? value : null;
+function trainingPathMethod(value: string | null): "sft" | "dpo" | "grpo" | "ppo" | "sdft" | "opsd" | "sdpo" | null {
+  return value === "sft" || value === "dpo" || value === "grpo" || value === "ppo" || value === "sdft" || value === "opsd" || value === "sdpo" ? value : null;
 }
 
 function metadataRecord(value: unknown): Record<string, unknown> | null {

@@ -167,7 +167,7 @@
   display: grid;
   align-content: start;
   gap: 22px;
-  width: min(760px, calc(100% - 72px));
+  width: min(1120px, calc(100% - 72px));
   min-width: 0;
   justify-self: center;
   padding: 42px 0 64px;

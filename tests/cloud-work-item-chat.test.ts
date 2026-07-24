@@ -752,7 +752,6 @@ function localProject(repoPath: string, head: string): LocalProject {
     systemKind: null,
     hiddenFromDefaultSidebar: false,
     sandboxTemplate: null,
-    agentSdk: null,
     linkedOpenPondApp: null,
     linkedSandboxProject: {
       teamId: "team_1",

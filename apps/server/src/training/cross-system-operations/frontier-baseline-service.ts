@@ -17,7 +17,7 @@ import type { CrossSystemTask } from "./types.js";
 import { recordFrontierBaselineSources } from "./frontier-baseline-sources.js";
 import type { CrossSystemFrontierModelStream } from "./frontier-baseline.js";
 
-type ProjectIdentity = Pick<LocalProject, "id" | "name" | "workspacePath" | "agentSdk">;
+type ProjectIdentity = Pick<LocalProject, "id" | "name" | "workspacePath">;
 
 export function createCrossSystemFrontierBaselineService(deps: {
   store: SqliteStore;
@@ -254,8 +254,8 @@ export function createCrossSystemFrontierBaselineService(deps: {
   async function requiredCrossSystemProject(projectId: string): Promise<ProjectIdentity> {
     const project = await deps.findLocalProject(projectId);
     if (!project) throw new Error("The selected local project no longer exists.");
-    if (!isCrossSystemProject(project) || !project.agentSdk?.detected) {
-      throw new Error("Select the imported Cross-System Operations Agent SDK project before running the frontier baseline.");
+    if (!isCrossSystemProject(project)) {
+      throw new Error("Select the Cross-System Operations fixture project before running the frontier baseline.");
     }
     return project;
   }

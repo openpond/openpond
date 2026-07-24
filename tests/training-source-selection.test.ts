@@ -21,8 +21,11 @@ describe("Training source selection UI", () => {
     expect(pane).toContain("setTrainingLaunchRequest");
     expect(pane).toContain("onNewModel");
     expect(startStep).toContain('type NewModelMode = "automated" | "manual"');
+    expect(startStep).toContain("type DatasetEvidenceIntent");
     expect(startStep).toContain('type AgentSourceMode = "from_prompt" | "from_chats"');
-    expect(startStep).toContain('NewModelMode | AgentSourceMode | "existing_dataset"');
+    for (const intent of ["demonstrations", "preferences", "verifiable_reward", "rubric", "discovery"]) {
+      expect(startStep).toContain(`"${intent}"`);
+    }
     expect(flow).toContain('type NewModelStep =');
     for (const step of ["start", "base_model", "existing_dataset", "automatic_scope", "automatic_candidates", "evidence", "recommendation"]) expect(flow).toContain(`| "${step}"`);
     expect(flow).not.toContain("manual_goal");
@@ -31,9 +34,13 @@ describe("Training source selection UI", () => {
     expect(dialog).toContain("const sessionIds = [...selectedSessionIds]");
     expect(dialog).toContain("runMiner(");
     expect(dialog).not.toContain("eligibleSessions.map((session) => session.id),");
-    expect(startStep).toContain("Choose a setup");
-    expect(startStep).toContain("Automatic");
-    expect(startStep).toContain("Manual");
+    expect(startStep).toContain("What do you want to build?");
+    expect(startStep).toContain("Teach with examples");
+    expect(startStep).toContain("Compare responses");
+    expect(startStep).toContain("Reward correct outcomes");
+    expect(startStep).toContain("Score with a rubric");
+    expect(startStep).toContain("Find opportunities");
+    expect(startStep).toContain("training-evidence-intent-example");
     expect(dialog).toContain('? "existing_dataset"');
     expect(dialog).toContain("onCreateDataset");
     expect(sourceStep).toContain("Build the Dataset");
@@ -43,6 +50,7 @@ describe("Training source selection UI", () => {
     expect(sourceStep).toContain("Add supporting chats");
     expect(sourceStep).toContain("Optional");
     expect(dialog).not.toContain("methodHintForApproach");
+    expect(dialog).toContain("buildIntent:");
     expect(sourceStep).toContain("CodexModelReasoningMenu");
     expect(chatPicker).toContain('placeholder="Search chats"');
     expect(dialog).toContain("CHAT_SEARCH_PAGE_SIZE = 20");
@@ -63,5 +71,6 @@ describe("Training source selection UI", () => {
     expect(hook).toContain('"/sources/search"');
     expect(hook).toContain('"/models/from-taskset"');
     expect(hook).toContain('TaskCreationRequest["methodHint"]');
+    expect(hook).toContain('TaskCreationRequest["buildIntent"]');
   });
 });

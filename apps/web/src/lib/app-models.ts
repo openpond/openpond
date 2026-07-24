@@ -206,7 +206,7 @@ export type ChatMessage = {
   turnId?: string;
   activities?: ActivityItem[];
   deliverables?: NonNullable<ActivityItem["artifacts"]>;
-  traceState?: "running" | "completed" | "failed" | "interrupted";
+  traceState?: "running" | "settled" | "completed" | "failed" | "interrupted";
   traceStartedAt?: string;
   traceCompletedAt?: string;
   sources?: ChatSource[];

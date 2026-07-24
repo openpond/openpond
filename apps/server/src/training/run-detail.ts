@@ -1,9 +1,11 @@
 import {
   SftStepMetricSchema,
+  PolicyOptimizationMetricSchema,
   TrainingEvaluationSummarySchema,
   TrainingRunDetailSchema,
   type GradeResult,
   type SftStepMetric,
+  type PolicyOptimizationMetric,
   type TaskAttemptResult,
   type TrainingEvaluationAggregate,
   type TrainingEvaluationGrade,
@@ -56,9 +58,28 @@ export async function trainingRunDetail(store: SqliteStore, jobId: string): Prom
     job,
     events,
     stepMetrics: deduplicateStepMetrics(events.flatMap(stepMetricFromEvent)),
+    policyMetrics: deduplicatePolicyMetrics(events.flatMap(policyMetricFromEvent)),
     evaluation,
     generatedAt: new Date().toISOString(),
   });
+}
+
+function policyMetricFromEvent(event: TrainingJobEvent): PolicyOptimizationMetric[] {
+  if (
+    event.type !== "metric"
+    || event.payload.metricKind !== "policy_optimization"
+  ) return [];
+  const parsed = PolicyOptimizationMetricSchema.safeParse(event.payload);
+  return parsed.success ? [parsed.data] : [];
+}
+
+function deduplicatePolicyMetrics(
+  metrics: PolicyOptimizationMetric[],
+): PolicyOptimizationMetric[] {
+  const latest = new Map<number, PolicyOptimizationMetric>();
+  for (const metric of metrics) latest.set(metric.step, metric);
+  return [...latest.values()].sort((left, right) =>
+    left.step - right.step || left.timestamp.localeCompare(right.timestamp));
 }
 
 function deduplicateStepMetrics(
@@ -80,7 +101,7 @@ function deduplicateStepMetrics(
 function stepMetricFromEvent(event: TrainingJobEvent): SftStepMetric[] {
   if (
     event.type !== "metric"
-    || !["sft_step", "training_step"].includes(String(event.payload.metricKind))
+    || !["sft_step", "dpo_step", "training_step"].includes(String(event.payload.metricKind))
   ) return [];
   const number = (key: string) => typeof event.payload[key] === "number" && Number.isFinite(event.payload[key]) ? event.payload[key] as number : null;
   const step = number("step");
@@ -97,6 +118,12 @@ function stepMetricFromEvent(event: TrainingJobEvent): SftStepMetric[] {
     gradientNorm: number("gradientNorm"),
     entropy: number("entropy"),
     meanTokenAccuracy: number("meanTokenAccuracy"),
+    preferenceAccuracy: number("preferenceAccuracy"),
+    preferenceMargin: number("preferenceMargin"),
+    chosenReward: number("chosenReward"),
+    rejectedReward: number("rejectedReward"),
+    chosenLogProbability: number("chosenLogProbability"),
+    rejectedLogProbability: number("rejectedLogProbability"),
     reward: number("reward"),
     policyLoss: number("policyLoss"),
     advantageLoss: number("advantageLoss"),

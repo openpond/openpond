@@ -1,8 +1,27 @@
 import { useMemo, useState } from "react";
-import type { SftStepMetric, TrainingRunDetail } from "@openpond/contracts";
+import type {
+  PolicyOptimizationMetric,
+  SftStepMetric,
+  TrainingRunDetail,
+} from "@openpond/contracts";
 import { useErrorToast } from "../../app/AppToastContext";
 
-type MetricKey = "loss" | "reward" | "policyLoss" | "advantageLoss" | "learningRate" | "gradientNorm" | "meanTokenAccuracy" | "entropy" | "memoryBytes";
+type MetricKey =
+  | "loss"
+  | "reward"
+  | "policyLoss"
+  | "advantageLoss"
+  | "learningRate"
+  | "gradientNorm"
+  | "meanTokenAccuracy"
+  | "preferenceAccuracy"
+  | "preferenceMargin"
+  | "chosenReward"
+  | "rejectedReward"
+  | "chosenLogProbability"
+  | "rejectedLogProbability"
+  | "entropy"
+  | "memoryBytes";
 const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) => string }> = [
   { key: "loss", label: "Loss", format: compactNumber },
   { key: "reward", label: "Reward", format: compactNumber },
@@ -11,8 +30,41 @@ const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) =>
   { key: "learningRate", label: "Learning rate", format: scientificNumber },
   { key: "gradientNorm", label: "Gradient norm", format: compactNumber },
   { key: "meanTokenAccuracy", label: "Token accuracy", format: percent },
+  { key: "preferenceAccuracy", label: "Preference accuracy", format: percent },
+  { key: "preferenceMargin", label: "Preference margin", format: compactNumber },
+  { key: "chosenReward", label: "Chosen reward", format: compactNumber },
+  { key: "rejectedReward", label: "Rejected reward", format: compactNumber },
+  { key: "chosenLogProbability", label: "Chosen log probability", format: compactNumber },
+  { key: "rejectedLogProbability", label: "Rejected log probability", format: compactNumber },
   { key: "entropy", label: "Entropy", format: compactNumber },
   { key: "memoryBytes", label: "Memory", format: bytes },
+];
+
+type PolicyMetricKey =
+  | "meanReward"
+  | "meanReturn"
+  | "policyLoss"
+  | "valueLoss"
+  | "kl"
+  | "entropy"
+  | "policyClipFraction"
+  | "valueClipFraction"
+  | "explainedVariance";
+
+const POLICY_METRICS: Array<{
+  key: PolicyMetricKey;
+  label: string;
+  format: (value: number) => string;
+}> = [
+  { key: "meanReward", label: "Reward", format: compactNumber },
+  { key: "meanReturn", label: "Return", format: compactNumber },
+  { key: "policyLoss", label: "Policy loss", format: compactNumber },
+  { key: "valueLoss", label: "Value loss", format: compactNumber },
+  { key: "kl", label: "KL", format: compactNumber },
+  { key: "entropy", label: "Entropy", format: compactNumber },
+  { key: "policyClipFraction", label: "Policy clip fraction", format: percent },
+  { key: "valueClipFraction", label: "Value clip fraction", format: percent },
+  { key: "explainedVariance", label: "Explained variance", format: compactNumber },
 ];
 
 export function TrainingRunMetrics({ detail, loading, error }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null }) {
@@ -28,11 +80,80 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
   const [requestedMetric, setRequestedMetric] = useState<MetricKey>("loss");
   const active = available.find((metric) => metric.key === requestedMetric) ?? available[0] ?? METRICS[0]!;
   const points = stepMetrics.flatMap((point) => point[active.key] == null ? [] : [{ step: point.step, value: point[active.key] as number }]);
+  const policyMetrics = useMemo(
+    () => uniquePolicyMetrics(detail?.policyMetrics ?? []),
+    [detail?.policyMetrics],
+  );
+  const policyAvailable = useMemo(
+    () =>
+      POLICY_METRICS.filter((metric) =>
+        policyMetrics.some((point) => point[metric.key] != null)),
+    [policyMetrics],
+  );
+  const [requestedPolicyMetric, setRequestedPolicyMetric] =
+    useState<PolicyMetricKey>("meanReward");
+  const activePolicy =
+    policyAvailable.find((metric) => metric.key === requestedPolicyMetric)
+    ?? policyAvailable[0]
+    ?? POLICY_METRICS[0]!;
+  const policyPoints = policyMetrics.flatMap((point) =>
+    point[activePolicy.key] == null
+      ? []
+      : [{ step: point.step, value: point[activePolicy.key] as number }]);
   const summary = detail ? finalSummary(detail) : {};
 
   if (loading && !detail) return <div className="training-run-placeholder">Loading training metrics…</div>;
   if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
   if (!detail) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
+  if (policyMetrics.length) {
+    const latest = policyMetrics.at(-1)!;
+    return (
+      <div className="training-run-metrics">
+        <div className="training-metric-summary">
+          <MetricFact label="Optimizer steps" value={latest.step} />
+          <MetricFact
+            label="Latest reward"
+            value={latest.meanReward == null ? null : compactNumber(latest.meanReward)}
+          />
+          <MetricFact
+            label="Policy loss"
+            value={latest.policyLoss == null ? null : compactNumber(latest.policyLoss)}
+          />
+          <MetricFact
+            label="Value loss"
+            value={latest.valueLoss == null ? null : compactNumber(latest.valueLoss)}
+          />
+          <MetricFact
+            label="Environment executions"
+            value={latest.environmentExecutions}
+          />
+        </div>
+        {policyAvailable.length ? (
+          <>
+            <div className="training-metric-tabs" role="tablist" aria-label="Policy metrics">
+              {policyAvailable.map((metric) => (
+                <button
+                  className={metric.key === activePolicy.key ? "active" : ""}
+                  key={metric.key}
+                  role="tab"
+                  type="button"
+                  aria-selected={metric.key === activePolicy.key}
+                  onClick={() => setRequestedPolicyMetric(metric.key)}
+                >
+                  {metric.label}
+                </button>
+              ))}
+            </div>
+            <MetricLineChart
+              label={activePolicy.label}
+              points={policyPoints}
+              format={activePolicy.format}
+            />
+          </>
+        ) : null}
+      </div>
+    );
+  }
   const rft = detail.job.metadata.trainingMethod === "grpo";
   const rewardValues = stepMetrics.flatMap((metric) => metric.reward == null ? [] : [metric.reward]);
   const lossValues = stepMetrics.flatMap((metric) => metric.loss == null ? [] : [metric.loss]);
@@ -136,6 +257,14 @@ function optimizerUpdates(
 
 function uniqueStepMetrics(metrics: SftStepMetric[]): SftStepMetric[] {
   const latestByStep = new Map<number, SftStepMetric>();
+  for (const metric of metrics) latestByStep.set(metric.step, metric);
+  return [...latestByStep.values()].sort((left, right) => left.step - right.step);
+}
+
+function uniquePolicyMetrics(
+  metrics: PolicyOptimizationMetric[],
+): PolicyOptimizationMetric[] {
+  const latestByStep = new Map<number, PolicyOptimizationMetric>();
   for (const metric of metrics) latestByStep.set(metric.step, metric);
   return [...latestByStep.values()].sort((left, right) => left.step - right.step);
 }

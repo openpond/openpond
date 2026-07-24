@@ -55,7 +55,6 @@ export default desktopScenario({
       body: { path: path.join(harness.repoRoot, "packages", "agent-sdk", "examples", "cross-system-operations") },
     });
     const project = projectImport.project;
-    assert(project.agentSdk?.detected === true, "Cross-System Operations did not import as a normal Agent SDK project.");
 
     const worlds = WORLD_SPECS.map(generateCrossSystemWorld);
     const baselineTasks = worlds.flatMap(generateCrossSystemTasks).filter((task) => task.phrasingVariant === 0);
@@ -121,7 +120,7 @@ export default desktopScenario({
     const taskset = TasksetSchema.parse(JSON.parse(await readFile(tasksetPath, "utf8")));
     const inspection = await inspectTaskset(tasksetPath);
     assert(inspection.report.valid, `Generated Taskset is invalid: ${inspection.report.issues.map((issue) => issue.message).join("; ")}`);
-    assert(taskset.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH && taskset.environment.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH, "Taskset environment contract drifted from the Agent SDK project.");
+    assert(taskset.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH && taskset.environment.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH, "Taskset environment contract drifted from the Cross-System fixture.");
     assert(taskset.tasks.every((task) => task.tags.includes("structured-tool-trajectory") && Array.isArray(task.input.messages) && Array.isArray(task.expectedOutput?.messages)), "Taskset flattened structured bootstrap messages.");
     assert(new Set(taskset.tasks.filter((task) => task.split === "train").map((task) => task.clusterKey)).intersection(new Set(taskset.tasks.filter((task) => task.split === "frozen_eval").map((task) => task.clusterKey))).size === 0, "Train and frozen-evaluation world clusters overlap.");
 
@@ -196,7 +195,7 @@ export default desktopScenario({
     const reloadedModel = state.models.find((item) => item.id === model.id);
     const bootstrap = await harness.api.bootstrap<{ localProjects?: LocalProject[] }>();
     assert(reloadedModel?.jobId === launched.id, "Registered model did not reconcile after restart.");
-    assert(bootstrap.localProjects?.some((item) => item.id === project.id && item.agentSdk?.detected), "Synthetic Agent SDK project did not reconcile after restart.");
+    assert(bootstrap.localProjects?.some((item) => item.id === project.id), "Cross-System fixture project did not reconcile after restart.");
     const secondChat = await runConstrainedModelChatThroughUi(harness, {
       project,
       modelId: model.id,

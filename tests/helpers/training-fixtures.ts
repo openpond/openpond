@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   SftRecipeSchema,
+  DpoRecipeSchema,
+  PpoRecipeSchema,
   TaskAttemptResultSchema,
   TasksetSchema,
   TaskDesignProposalSchema,
@@ -55,9 +57,214 @@ export function sftRecipeFixture() {
 }
 
 export function planFixture(taskset = tasksetFixture({ ready: true }), destinationId: TrainingDestinationId = "local_cpu_fixture"): TrainingPlan {
-  const draft = createTrainingPlan({ taskset, destinationId, recipe: sftRecipeFixture(), exportApproved: true });
+  const draft = createTrainingPlan({ modelId: "model_fixture", taskset, destinationId, recipe: sftRecipeFixture(), exportApproved: true });
   const compatibility = { schemaVersion: "openpond.trainingCompatibility.v1" as const, compatible: true, destinationId, tasksetId: taskset.id, recipeMethod: "sft" as const, issues: [], checkedAt: FIXED_TIME };
   return TrainingPlanSchema.parse({ ...draft, compatibility, contentHash: contentHash({ ...draft, compatibility, contentHash: "" }) });
+}
+
+export function preferenceTasksetFixture(): Taskset {
+  const base = tasksetFixture();
+  const draft = TasksetSchema.parse({
+    ...base,
+    status: "needs_review",
+    capabilities: {
+      ...base.capabilities,
+      supportedSignals: ["preference"],
+      compatibleMethods: ["dpo"],
+      rewardKinds: ["none"],
+    },
+    learningSignals: {
+      demonstrations: [],
+      preferences: [{
+        id: "preference_fixture",
+        kind: "preference",
+        taskId: "task_train",
+        sourceRefs: ["source_train"],
+        artifactRef: "preference_fixture_artifact",
+        approved: true,
+        confidence: 1,
+        prompt: "Say hello",
+        chosen: "Hello friend",
+        rejected: "Go away",
+        rationale: "The chosen response follows the approved style.",
+        metadata: {},
+      }],
+      corrections: [],
+      feedback: [],
+      rewards: [],
+      labels: [],
+    },
+    readiness: null,
+    contentHash: "00000000",
+    metadata: { ...base.metadata, trainingMethod: "dpo" },
+  });
+  const tasksetHash = computeTasksetHash(draft);
+  return TasksetSchema.parse({
+    ...draft,
+    status: "ready",
+    contentHash: tasksetHash,
+    readiness: {
+      schemaVersion: "openpond.tasksetReadiness.v1",
+      tasksetId: draft.id,
+      tasksetHash,
+      ready: true,
+      recommendedMethod: "dpo",
+      trainingPath: { primaryMethod: "dpo", bootstrap: null },
+      methodReadiness: [{ method: "dpo", status: "recommended", reasonCodes: [], reasons: [] }],
+      compatibleDestinationClasses: ["local_cpu_fixture"],
+      blockers: [],
+      warnings: [],
+      baselineReportId: null,
+      baselineReward: null,
+      generatedAt: FIXED_TIME,
+    },
+  });
+}
+
+export function rewardTasksetFixture(): Taskset {
+  const base = tasksetFixture();
+  const draft = TasksetSchema.parse({
+    ...base,
+    status: "needs_review",
+    capabilities: {
+      ...base.capabilities,
+      supportedSignals: ["reward"],
+      compatibleMethods: ["grpo", "ppo"],
+      rewardKinds: ["deterministic"],
+    },
+    learningSignals: {
+      demonstrations: [],
+      preferences: [],
+      corrections: [],
+      feedback: [],
+      rewards: [{
+        id: "reward_fixture",
+        kind: "reward",
+        taskId: "task_train",
+        sourceRefs: ["source_train"],
+        artifactRef: "reward_fixture_artifact",
+        approved: true,
+        confidence: 1,
+        task: "Produce the expected greeting.",
+        rules: [{ id: "exact", points: 1, condition: "Output matches the expected text." }],
+        otherwisePoints: 0,
+        executable: true,
+        metadata: {},
+      }],
+      labels: [],
+    },
+    readiness: null,
+    contentHash: "00000000",
+    metadata: { ...base.metadata, trainingMethod: "ppo" },
+  });
+  const tasksetHash = computeTasksetHash(draft);
+  return TasksetSchema.parse({
+    ...draft,
+    status: "ready",
+    contentHash: tasksetHash,
+    readiness: {
+      schemaVersion: "openpond.tasksetReadiness.v1",
+      tasksetId: draft.id,
+      tasksetHash,
+      ready: true,
+      recommendedMethod: "ppo",
+      trainingPath: { primaryMethod: "ppo", bootstrap: null },
+      methodReadiness: [
+        { method: "grpo", status: "compatible", reasonCodes: [], reasons: [] },
+        { method: "ppo", status: "recommended", reasonCodes: ["value_model_required"], reasons: ["Bind the recipe value model."] },
+      ],
+      compatibleDestinationClasses: ["local_cpu_fixture"],
+      blockers: [],
+      warnings: [],
+      baselineReportId: null,
+      baselineReward: null,
+      generatedAt: FIXED_TIME,
+    },
+  });
+}
+
+export function dpoRecipeFixture() {
+  const model = fixtureModelRef();
+  return DpoRecipeSchema.parse({
+    schemaVersion: "openpond.dpoRecipe.v1",
+    method: "dpo",
+    parameterization: "lora",
+    policyModel: model,
+    referenceModel: model,
+    dataset: { trainSplit: "train", validationSplit: "frozen_eval", maxPairs: 8, maxPromptTokens: 64, maxCompletionTokens: 64, selectionStrategy: "stable_hash_top_n", selectionSeed: 17 },
+    lora: { rank: 2, alpha: 4, dropout: 0, targetModules: ["c_attn"] },
+    loss: { variant: "sigmoid", beta: 0.1, labelSmoothing: 0 },
+    optimizer: { learningRate: 0.01, epochs: 1, maxSteps: 2, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 },
+    referenceLogprobs: { cacheSchemaVersion: "openpond.dpoReferenceLogprobs.v1", cacheKey: "cachehash", invalidationHash: "invalidatehash" },
+    resourceLimits: { cpuThreads: 2, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 },
+  });
+}
+
+export function ppoRecipeFixture(taskset = rewardTasksetFixture()) {
+  const model = fixtureModelRef();
+  const valueModel = { ...model, id: `${model.id}:value-head-v1` };
+  return PpoRecipeSchema.parse({
+    schemaVersion: "openpond.ppoRecipe.v1",
+    method: "ppo",
+    parameterization: "lora",
+    policyOptimization: {
+      schemaVersion: "openpond.policyOptimization.v1",
+      policyModel: model,
+      referenceModel: model,
+      dataset: { tasksetId: taskset.id, tasksetHash: taskset.contentHash, split: "train", selectionStrategy: "stable_hash_top_n", selectionSeed: 17, maxExamples: 1 },
+      sampler: { temperature: 0.8, topP: 0.95, maxOutputTokens: 4, maxTurns: 1, concurrency: 1 },
+      environment: { id: taskset.environment.entrypoint, version: taskset.environment.protocolVersion, toolContractHash: "no-tools-v1" },
+      reward: { graderId: "openpond.deterministic_token_match.v1", graderHash: contentHash(taskset.graders) },
+      kl: { coefficient: 0.05, referenceConstraint: "fixed_reference" },
+      budgets: { maxRollouts: 2, maxEnvironmentExecutions: 2, maxInputTokens: 256, maxOutputTokens: 8, maxOptimizerSteps: 2, wallTimeMs: 120_000, maximumCostUsd: 0 },
+      checkpointEverySteps: 1,
+      seed: 17,
+      evaluationSplit: "frozen_eval",
+      optimizer: { method: "ppo", valueModel, gamma: 1, gaeLambda: 0.95, policyClip: 0.2, valueClip: 0.2, valueLossCoefficient: 0.5, ppoEpochs: 2, minibatchSize: 1 },
+    },
+    lora: { rank: 2, alpha: 4, dropout: 0, targetModules: ["c_attn"] },
+    valueHead: { initialization: "policy_hidden_state_linear", optimizerLearningRate: 0.01, artifactName: "value_head.safetensors" },
+    policyLearningRate: 0.01,
+    resume: { checkpointId: null, policyHash: contentHash(model), referenceHash: contentHash(model), valueModelHash: contentHash(valueModel), optimizerStateHash: null },
+    resourceLimits: { cpuThreads: 2, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 },
+  });
+}
+
+export function executablePlanFixture(
+  taskset: Taskset,
+  recipe: ReturnType<typeof dpoRecipeFixture> | ReturnType<typeof ppoRecipeFixture>,
+): TrainingPlan {
+  const draft = createTrainingPlan({
+    modelId: `model_${recipe.method}_fixture`,
+    taskset,
+    destinationId: "local_cpu_fixture",
+    recipe,
+    exportApproved: true,
+  });
+  const compatibility = {
+    schemaVersion: "openpond.trainingCompatibility.v1" as const,
+    compatible: true,
+    destinationId: "local_cpu_fixture" as const,
+    tasksetId: taskset.id,
+    recipeMethod: recipe.method,
+    issues: [],
+    checkedAt: FIXED_TIME,
+  };
+  return TrainingPlanSchema.parse({
+    ...draft,
+    environmentPlacement: recipe.method === "ppo" ? "local" : "none",
+    compatibility,
+    contentHash: contentHash({ ...draft, compatibility, contentHash: "" }),
+  });
+}
+
+function fixtureModelRef() {
+  return {
+    id: "openpond/tiny-cpu-gpt2-fixture",
+    revision: "architecture-v2-seed-17-context-512",
+    tokenizerRevision: "wordlevel-v1",
+    chatTemplateHash: "fixture00000000",
+  };
 }
 
 export function attemptFixture(input: Partial<TaskAttemptResult> = {}): TaskAttemptResult {

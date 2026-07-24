@@ -68,6 +68,12 @@ def lora_config(recipe: dict[str, Any]) -> LoraConfig:
 
 
 def render_record(record: dict[str, Any]) -> str:
+    if all(isinstance(record.get(key), str) for key in ("prompt", "chosen", "rejected")):
+        return (
+            f"<user> {record['prompt']} <eos> "
+            f"<assistant> {record['chosen']} <eos> "
+            f"<assistant> {record['rejected']} <eos>"
+        )
     input_value = record.get("input")
     expected_value = record.get("expectedOutput")
     messages: list[Any] = []
@@ -78,6 +84,9 @@ def render_record(record: dict[str, Any]) -> str:
     if messages:
         from .inference import normalized_messages
         return "".join(f"<{message['role']}> {message['content']} <eos>" for message in normalized_messages(messages))
+    if "expectedOutput" not in record:
+        prompt = str(record.get("input", {}).get("prompt", json.dumps(record.get("input", {}), sort_keys=True)))
+        return f"<user> {prompt} <eos> <assistant>"
     prompt = str(record["input"].get("prompt", json.dumps(record["input"], sort_keys=True)))
     expected = str(record["expectedOutput"].get("text", json.dumps(record["expectedOutput"], sort_keys=True)))
     return f"<user> {prompt} <eos> <assistant> {expected} <eos>"

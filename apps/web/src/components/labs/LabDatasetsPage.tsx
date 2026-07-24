@@ -32,6 +32,7 @@ export function LabDatasetsPage({
   building = false,
   buildContent = null,
   onBuild,
+  onTrainModel,
   onOpenFiles,
   training,
   onToast,
@@ -43,6 +44,7 @@ export function LabDatasetsPage({
   building?: boolean;
   buildContent?: ReactNode;
   onBuild: (tasksetId: string) => void;
+  onTrainModel: (tasksetId: string) => void;
   onOpenFiles: (tasksetId: string) => void;
   training: ReturnType<typeof useTraining>;
   onToast: ShowAppToast;
@@ -108,10 +110,21 @@ export function LabDatasetsPage({
             <h1>{selected?.name ?? "New Dataset"}</h1>
             <p>{selected?.objective ?? "Define the Dataset, review its tasks and Evals, then save an immutable first version."}</p>
           </div>
-          <LabStatusBadge
-            label={selected ? datasetStatus(selected) : "Draft"}
-            value={selected?.status ?? "planning"}
-          />
+          <div className="labs-dataset-detail-actions">
+            {selected ? (
+              <button
+                className="training-button"
+                type="button"
+                onClick={() => onTrainModel(selected.id)}
+              >
+                Train Model
+              </button>
+            ) : null}
+            <LabStatusBadge
+              label={selected ? datasetStatus(selected) : "Draft"}
+              value={selected?.status ?? "planning"}
+            />
+          </div>
         </div>
         <div
           className="training-detail-tabs"
@@ -122,7 +135,6 @@ export function LabDatasetsPage({
             <button
               aria-selected={detailTab === tab.id}
               className={detailTab === tab.id ? "active" : undefined}
-              disabled={creating && tab.id !== "build"}
               key={tab.id}
               role="tab"
               type="button"
@@ -150,6 +162,13 @@ export function LabDatasetsPage({
             onOpenFiles={() => onOpenFiles(selected.id)}
             training={training}
           />
+        ) : null}
+        {creating && detailTab !== "build" ? (
+          <div className="training-run-placeholder">
+            {detailTab === "overview"
+              ? "Dataset summary will appear here as you save the first revision."
+              : `${DATASET_DETAIL_TABS.find((tab) => tab.id === detailTab)?.label ?? "This section"} will be available after the first Dataset revision is saved.`}
+          </div>
         ) : null}
         {selected && detailTab === "evals" && selected.metadata.flagship === "cross-system-operations" ? (
           <LabExpertBootstrap

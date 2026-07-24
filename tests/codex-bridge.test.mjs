@@ -146,6 +146,103 @@ describe("codex bridge", () => {
     assert.equal(goalClearedEvent.data.threadId, "thread_1");
   });
 
+  test("maps Codex commentary and readable reasoning summaries into work-trace events", async () => {
+    const events = [];
+    const turn = { id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" };
+    const store = {
+      async turnByProviderTurnId(providerTurnId) {
+        return providerTurnId === turn.providerTurnId ? turn : null;
+      },
+      async latestTurnForSession() { return turn; },
+      async getSession() { return { id: "session_1", appId: "app_1" }; },
+      async runtimeEventsForSession() { return events; },
+      async runtimeEventContext() {
+        return { turnId: "turn_local", appId: "app_1" };
+      },
+    };
+    const bridge = createCodexBridge({
+      store,
+      upsertApproval: async () => {},
+      appendRuntimeEvent: async (event) => {
+        events.push(event);
+      },
+      providerRuntimeIngestionQueue: immediateQueue(),
+    });
+
+    await bridge.mapCodexNotification("session_1", {
+      method: "item/started",
+      params: {
+        turnId: "turn_provider",
+        item: { type: "agentMessage", id: "commentary_1", text: "", phase: "commentary" },
+      },
+    });
+    await bridge.mapCodexNotification("session_1", {
+      method: "item/agentMessage/delta",
+      params: {
+        turnId: "turn_provider",
+        itemId: "commentary_1",
+        delta: "I’m checking the current renderer.",
+      },
+    });
+    await bridge.mapCodexNotification("session_1", {
+      method: "item/reasoning/summaryTextDelta",
+      params: {
+        turnId: "turn_provider",
+        itemId: "reasoning_1",
+        delta: "Comparing the two event streams",
+        summaryIndex: 0,
+      },
+    });
+    await bridge.mapCodexNotification("session_1", {
+      method: "item/started",
+      params: {
+        turnId: "turn_provider",
+        item: { type: "agentMessage", id: "final_1", text: "", phase: "final_answer" },
+      },
+    });
+    await bridge.mapCodexNotification("session_1", {
+      method: "item/agentMessage/delta",
+      params: {
+        turnId: "turn_provider",
+        itemId: "final_1",
+        delta: "The renderer is fixed.",
+      },
+    });
+
+    assert.deepEqual(
+      events.map((event) => [event.name, event.action ?? null, event.output]),
+      [
+        ["assistant.reasoning.delta", "codex_commentary", "I’m checking the current renderer."],
+        ["assistant.reasoning.delta", "codex_reasoning_summary", "Comparing the two event streams"],
+        ["assistant.delta", null, "The renderer is fixed."],
+      ],
+    );
+    assert.deepEqual(
+      events.map((event) => event.data),
+      [
+        {
+          provider: "codex",
+          kind: "commentary",
+          phase: "commentary",
+          itemId: "commentary_1",
+        },
+        {
+          provider: "codex",
+          kind: "reasoning_summary",
+          itemId: "reasoning_1",
+          callId: "reasoning_1:0",
+          summaryIndex: 0,
+        },
+        {
+          provider: "codex",
+          kind: "agent_message",
+          phase: "final_answer",
+          itemId: "final_1",
+        },
+      ],
+    );
+  });
+
   test("clears stale active Codex goals when a live turn completes", async () => {
     const events = [];
     const turn = { id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" };

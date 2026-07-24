@@ -1,10 +1,12 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, copyFile, cp, lstat, mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { access, cp, lstat, mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   GradeResultSchema,
   ModelArtifactLineageSchema,
+  PpoTrajectorySchema,
+  RolloutTrajectoryReceiptSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TrainingArtifactSchema,
@@ -17,14 +19,22 @@ import {
   type TrainingDestinationCapabilities,
   type TrainingJob,
   type TrainingPlan,
+  type Taskset,
 } from "@openpond/contracts";
 import { contentHash, gradeAttempt, sha256 } from "@openpond/taskset-sdk";
 import { validateTrainingCompatibility, type TrainingDestination } from "@openpond/training-sdk";
 import { loadOpenPondProfileState } from "@openpond/cloud";
 import type { SqliteStore } from "../store/store.js";
+import { copyTreePortable } from "./portable-file-copy.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 
-type ActiveWorker = { child: ChildProcessWithoutNullStreams; cancelFile: string; timeout: ReturnType<typeof setTimeout> };
+type ActiveWorker = {
+  child: ChildProcessWithoutNullStreams;
+  cancelFile: string;
+  timeout: ReturnType<typeof setTimeout>;
+  timedOut: boolean;
+  wallTimeMs: number;
+};
 
 export class LocalCpuTrainingDestination implements TrainingDestination {
   readonly id = "local_cpu_fixture" as const;
@@ -37,7 +47,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     let available = true;
     let unavailableReason: string | null = null;
     try { await access(path.join(this.deps.projectDir, "pyproject.toml")); } catch { available = false; unavailableReason = "The optional python/openpond-training worker is not installed with this source checkout."; }
-    return TrainingDestinationCapabilitiesSchema.parse({ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: this.id, available, methods: ["sft"], parameterizations: ["lora"], modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture", "HuggingFaceTB/SmolLM2-135M-Instruct"], maxDatasetBytes: 10_000_000, environmentPlacements: ["none"], nonProduction: true, unavailableReason, checkedAt: new Date().toISOString() });
+    return TrainingDestinationCapabilitiesSchema.parse({ schemaVersion: "openpond.trainingDestinationCapabilities.v1", destinationId: this.id, available, methods: ["sft", "dpo", "ppo"], parameterizations: ["lora"], modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture", "HuggingFaceTB/SmolLM2-135M-Instruct"], maxDatasetBytes: 10_000_000, environmentPlacements: ["none", "local"], nonProduction: true, unavailableReason, checkedAt: new Date().toISOString() });
   }
 
   async validate(plan: TrainingPlan): Promise<TrainingCompatibilityReport> {
@@ -68,17 +78,31 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const modelPath = await this.resolveModelPath(plan);
     const workerArgs = ["run", "--project", this.deps.projectDir, "openpond-training", "run", "--bundle", bundleDirectory, "--output", outputDirectory, "--job-id", jobId, "--cancel-file", cancelFile, "--taskset", tasksetPath];
     if (modelPath) workerArgs.push("--model-path", modelPath);
+    const checkpointPath = await this.resolvePpoCheckpointPath(plan);
+    if (checkpointPath) workerArgs.push("--checkpoint-path", checkpointPath);
     const child = spawn("uv", workerArgs, {
       cwd: this.deps.projectDir,
+      detached: process.platform !== "win32",
       env: { ...process.env, PYTHONUNBUFFERED: "1", TOKENIZERS_PARALLELISM: "false" },
       stdio: ["pipe", "pipe", "pipe"],
     });
     child.stdin.end();
-    let job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: jobId, planId: plan.id, bundleHash: bundle.contentHash, approvalId: approval.id, destinationId: this.id, status: "starting", nonProduction: true, workerPid: child.pid ?? null, startedAt: timestamp, completedAt: null, error: null, createdAt: timestamp, updatedAt: timestamp, metadata: { outputDirectory, workerProject: this.deps.projectDir, untested: ["CUDA", "SSH", "RunPod", "GRPO", "useful model quality", "production performance"] } });
+    let job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: jobId, planId: plan.id, bundleHash: bundle.contentHash, approvalId: approval.id, destinationId: this.id, status: "starting", nonProduction: true, workerPid: child.pid ?? null, startedAt: timestamp, completedAt: null, error: null, createdAt: timestamp, updatedAt: timestamp, metadata: { outputDirectory, workerProject: this.deps.projectDir, untested: ["CUDA", "SSH", "RunPod", "GRPO", "PPO", "useful model quality", "production performance"] } });
     await this.deps.store.saveTrainingJob(job);
-    const timeout = setTimeout(() => child.kill("SIGKILL"), plan.recipe.method === "sft" ? plan.recipe.resourceLimits.wallTimeMs + 5_000 : 125_000);
+    const wallTimeMs = executableWallTime(plan);
+    const timeout = setTimeout(() => {
+      const worker = this.active.get(jobId);
+      if (worker) worker.timedOut = true;
+      signalChildTree(child, "SIGKILL");
+    }, wallTimeMs + 5_000);
     timeout.unref?.();
-    this.active.set(jobId, { child, cancelFile, timeout });
+    this.active.set(jobId, {
+      child,
+      cancelFile,
+      timeout,
+      timedOut: false,
+      wallTimeMs,
+    });
     this.trackConsumer(job, child, outputDirectory);
     return job;
   }
@@ -91,7 +115,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const worker = this.active.get(jobId);
     const timestamp = new Date().toISOString();
     await writeFile(worker?.cancelFile ?? path.join(this.deps.storeDir, "training", "jobs", jobId, "cancel.requested"), timestamp + "\n", "utf8");
-    worker?.child.kill("SIGTERM");
+    if (worker) signalChildTree(worker.child, "SIGTERM");
     const updated = TrainingJobSchema.parse({ ...job, status: "cancelling", updatedAt: timestamp });
     await this.deps.store.saveTrainingJob(updated);
     return updated;
@@ -104,7 +128,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const plan = await this.deps.store.getTrainingPlan(input.planId);
     const bundle = await this.deps.store.getTrainingBundle(input.bundleId);
     if (!plan || !bundle || bundle.planId !== plan.id) throw new Error("Training Plan and Bundle do not match this import.");
-    if (plan.recipe.schemaVersion !== "openpond.sftRecipe.v1") throw new Error("Only a LoRA SFT adapter can be imported by the local fixture.");
+    if (plan.recipe.method !== "sft" && plan.recipe.method !== "dpo" && plan.recipe.method !== "ppo") throw new Error("Only a LoRA SFT, DPO, or PPO adapter can be imported by the local fixture.");
     const sourceDirectory = path.resolve(input.artifactDirectory);
     await assertPortableArtifactTree(sourceDirectory);
     const sourceManifest = JSON.parse(await readFile(path.join(sourceDirectory, "artifact-manifest.json"), "utf8")) as { schemaVersion?: string };
@@ -123,13 +147,29 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const modelPath = await this.resolveModelPath(plan);
     const workerArgs = ["run", "--project", this.deps.projectDir, "openpond-training", "evaluate", "--bundle", bundleDirectory, "--output", outputDirectory, "--job-id", jobId, "--cancel-file", cancelFile, "--taskset", tasksetPath];
     if (modelPath) workerArgs.push("--model-path", modelPath);
-    const child = spawn("uv", workerArgs, { cwd: this.deps.projectDir, env: { ...process.env, PYTHONUNBUFFERED: "1", TOKENIZERS_PARALLELISM: "false" }, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn("uv", workerArgs, {
+      cwd: this.deps.projectDir,
+      detached: process.platform !== "win32",
+      env: { ...process.env, PYTHONUNBUFFERED: "1", TOKENIZERS_PARALLELISM: "false" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     child.stdin.end();
     const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: jobId, planId: plan.id, bundleHash: bundle.contentHash, approvalId: "manual_import_approval", destinationId: this.id, status: "starting", nonProduction: true, workerPid: child.pid ?? null, startedAt: timestamp, completedAt: null, error: null, createdAt: timestamp, updatedAt: timestamp, metadata: { outputDirectory, workerProject: this.deps.projectDir, manualImport: true, originalPlanDestinationId: plan.destinationId, sourceDirectory, untested: ["provider integration", "CUDA", "SSH", "RunPod", "GRPO", "useful model quality", "production performance"] } });
     await this.deps.store.saveTrainingJob(job);
-    const timeout = setTimeout(() => child.kill("SIGKILL"), plan.recipe.method === "sft" ? plan.recipe.resourceLimits.wallTimeMs + 5_000 : 125_000);
+    const wallTimeMs = executableWallTime(plan);
+    const timeout = setTimeout(() => {
+      const worker = this.active.get(job.id);
+      if (worker) worker.timedOut = true;
+      signalChildTree(child, "SIGKILL");
+    }, wallTimeMs + 5_000);
     timeout.unref?.();
-    this.active.set(job.id, { child, cancelFile, timeout });
+    this.active.set(job.id, {
+      child,
+      cancelFile,
+      timeout,
+      timedOut: false,
+      wallTimeMs,
+    });
     this.trackConsumer(job, child, outputDirectory);
     return job;
   }
@@ -139,7 +179,10 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     await Promise.all([...this.active.values()].map(({ child, timeout }) => new Promise<void>((resolve) => {
       clearTimeout(timeout);
       if (child.exitCode !== null || child.signalCode !== null) return resolve();
-      const hardKillTimeout = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 5_000);
+      const hardKillTimeout = setTimeout(() => {
+        signalChildTree(child, "SIGKILL");
+        resolve();
+      }, 5_000);
       child.once("exit", () => { clearTimeout(hardKillTimeout); resolve(); });
     })));
     await Promise.allSettled([...this.consumers.values()]);
@@ -148,7 +191,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
   async reconcile(): Promise<void> {
     for (const job of await this.deps.store.listTrainingJobs()) {
       if (job.destinationId !== this.id || !["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) continue;
-      if (job.workerPid && processIsAlive(job.workerPid)) { try { process.kill(job.workerPid, "SIGTERM"); } catch { /* already gone */ } }
+      if (job.workerPid) signalWorkerPid(job.workerPid, "SIGTERM");
       const timestamp = new Date().toISOString();
       await this.deps.store.saveTrainingJob({ ...job, status: job.status === "cancelling" ? "cancelled" : "failed", completedAt: timestamp, updatedAt: timestamp, error: job.status === "cancelling" ? null : "OpenPond restarted during the local CPU fixture; the orphan-safe reconciler terminated the old worker. Relaunch the approved plan." });
     }
@@ -186,13 +229,25 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     if (buffer.trim()) eventWrites = eventWrites.then(() => this.persistWorkerEvent(buffer));
     await eventWrites;
     const active = this.active.get(initialJob.id);
+    const timedOut = active?.timedOut ?? false;
+    const wallTimeMs = active?.wallTimeMs ?? null;
     if (active) clearTimeout(active.timeout);
     this.active.delete(initialJob.id);
     const timestamp = new Date().toISOString();
     const latest = await this.deps.store.getTrainingJob(initialJob.id) ?? initialJob;
     if (exit.code !== 0) {
       const cancelled = latest.status === "cancelling" || exit.code === 130 || exit.signal === "SIGTERM";
-      await this.deps.store.saveTrainingJob({ ...latest, status: cancelled ? "cancelled" : "failed", completedAt: timestamp, updatedAt: timestamp, error: cancelled ? null : stderr || `Worker exited with ${exit.code ?? exit.signal}.` });
+      await this.deps.store.saveTrainingJob({
+        ...latest,
+        status: cancelled ? "cancelled" : "failed",
+        completedAt: timestamp,
+        updatedAt: timestamp,
+        error: cancelled
+          ? null
+          : timedOut && wallTimeMs
+            ? `Local CPU training exceeded its ${Math.round(wallTimeMs / 60_000)}-minute hard stop. Choose Quick test or reduce the examples, sequence length, or optimizer steps.`
+            : stderr || `Worker exited with ${exit.code ?? exit.signal}.`,
+      });
       return;
     }
     const artifacts = await this.importArtifacts(initialJob, outputDirectory);
@@ -202,9 +257,16 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     const taskset = await this.deps.store.getTaskset((await this.deps.store.getTrainingPlan(initialJob.planId))?.tasksetId ?? "");
     const plan = await this.deps.store.getTrainingPlan(initialJob.planId);
     if (!taskset || !plan) throw new Error("Training lineage source was not found.");
+    if (plan.recipe.method === "ppo") {
+      await this.importPpoTrajectories(initialJob, plan, taskset, outputDirectory);
+    }
+    const frozenEvaluation = await this.frozenEvaluationStatus(
+      initialJob,
+      taskset,
+    );
     const mirroredArtifactDirectory = await this.mirrorPortableArtifact(taskset.id, initialJob.id, outputDirectory);
-    await this.deps.store.saveModelArtifactLineage(ModelArtifactLineageSchema.parse({ schemaVersion: "openpond.modelArtifactLineage.v1", id: `lineage_${adapter.id}`, modelId: plan.modelId, artifactId: adapter.id, jobId: initialJob.id, tasksetId: taskset.id, tasksetHash: taskset.contentHash, graderHash: contentHash(taskset.graders), planHash: plan.contentHash, bundleHash: initialJob.bundleHash, recipeHash: contentHash(plan.recipe), workerVersion: "0.0.1", trainerVersion: "trl-0.26.2", importedAt: timestamp, frozenEvaluationArtifactId: evaluation?.id ?? null, promotable: false }));
-    await this.deps.store.saveTrainingJob({ ...latest, status: "succeeded", completedAt: timestamp, updatedAt: timestamp, error: null, metadata: { ...latest.metadata, artifactCount: artifacts.length, reloadVerified: true, frozenEvaluationExecuted: Boolean(evaluation), mirroredArtifactDirectory } });
+    await this.deps.store.saveModelArtifactLineage(ModelArtifactLineageSchema.parse({ schemaVersion: "openpond.modelArtifactLineage.v1", id: `lineage_${adapter.id}`, modelId: plan.modelId, artifactId: adapter.id, jobId: initialJob.id, tasksetId: taskset.id, tasksetHash: taskset.contentHash, graderHash: contentHash(taskset.graders), planHash: plan.contentHash, bundleHash: initialJob.bundleHash, recipeHash: contentHash(plan.recipe), workerVersion: "0.0.1", trainerVersion: plan.recipe.method === "ppo" ? "openpond-ppo-reference-v1" : "trl-0.26.2", importedAt: timestamp, frozenEvaluationArtifactId: evaluation?.id ?? null, promotable: false }));
+    await this.deps.store.saveTrainingJob({ ...latest, status: "succeeded", completedAt: timestamp, updatedAt: timestamp, error: null, metadata: { ...latest.metadata, artifactCount: artifacts.length, reloadVerified: true, frozenEvaluationExecuted: Boolean(evaluation), frozenEvaluationComplete: frozenEvaluation.complete, frozenEvaluationThresholdPassed: frozenEvaluation.thresholdPassed, mirroredArtifactDirectory } });
   }
 
   private async persistWorkerEvent(line: string): Promise<void> {
@@ -228,7 +290,15 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
       if (!target.startsWith(`${path.resolve(outputDirectory)}${path.sep}`)) throw new Error("Artifact path escaped the job directory.");
       const bytes = await readFile(target);
       if (sha256(bytes) !== item.sha256 || bytes.byteLength !== item.sizeBytes) throw new Error(`Artifact verification failed for ${item.path}.`);
-      const kind = item.path.endsWith("adapter_model.safetensors") ? "adapter" : item.path === "metrics.json" || item.path === "step-metrics.jsonl" ? "metrics" : item.path === "frozen-eval-predictions.jsonl" ? "evaluation" : item.path === "events.jsonl" ? "log" : "checkpoint";
+      const kind = item.path.endsWith("adapter_model.safetensors")
+        ? "adapter"
+        : item.path === "metrics.json" || item.path.endsWith("metrics.jsonl")
+          ? "metrics"
+          : item.path === "frozen-eval-predictions.jsonl"
+            ? "evaluation"
+            : item.path === "events.jsonl" || item.path.endsWith("trajectories.jsonl")
+              ? "log"
+              : "checkpoint";
       const artifact = TrainingArtifactSchema.parse({ schemaVersion: "openpond.trainingArtifact.v1", id: `artifact_${contentHash([job.id, item.path, item.sha256]).slice(0, 24)}`, jobId: job.id, kind, path: target, sha256: item.sha256, sizeBytes: item.sizeBytes, baseModelId: manifest.baseModel.id, baseModelRevision: manifest.baseModel.revision, tokenizerRevision: manifest.tokenizerRevision, chatTemplateHash: manifest.chatTemplateHash, nonProduction: true, createdAt: new Date().toISOString(), metadata: { relativePath: item.path, verified: true, tokenizerHash: manifest.tokenizerHash } });
       await this.deps.store.saveTrainingArtifact(artifact);
       imported.push(artifact);
@@ -268,7 +338,7 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
       await writeFile(rawPath, rawBytes, { mode: 0o600 });
       const rawArtifact = TaskAttemptArtifactSchema.parse({ schemaVersion: "openpond.taskAttemptArtifact.v1", id: `attempt_artifact_${contentHash([attemptId, sha256(rawBytes)]).slice(0, 24)}`, tasksetId: taskset.id, taskId: task.id, attemptId, kind: "raw_model_response", path: rawPath, sha256: sha256(rawBytes), sizeBytes: rawBytes.byteLength, createdAt: timestamp, metadata: { jobId: job.id, frozen: true, localOnly: true, evaluationStage } });
       await this.deps.store.saveTaskAttemptArtifact(rawArtifact);
-      const baseModelId = plan.recipe.method === "sft" ? plan.recipe.baseModel.id : "local-model";
+      const baseModelId = localRecipeBaseModel(plan).id;
       const modelId = evaluationStage === "trained" ? `${baseModelId}+lora` : baseModelId;
       const attempt = TaskAttemptResultSchema.parse({ schemaVersion: "openpond.taskAttempt.v1", id: attemptId, tasksetId: taskset.id, taskId: task.id, split: "frozen_eval", attempt: 0, seed: prediction.seed, modelRef: { providerId: "custom-openai-compatible", modelId }, startedAt: timestamp, completedAt: timestamp, output: prediction.output, runtimeEventRefs: [], artifactRefs: [rawArtifact.id], privilegedOutcomeRef: task.privilegedContextRef, infrastructureError: null, costUsd: 0, latencyMs: 0, userInterventions: 0, metadata: { jobId: job.id, frozen: true, localArtifact: true, evaluationStage } });
       const grade = GradeResultSchema.parse(await gradeAttempt({
@@ -287,6 +357,124 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
     }
   }
 
+  private async frozenEvaluationStatus(
+    job: TrainingJob,
+    taskset: Taskset,
+  ): Promise<{ complete: boolean; thresholdPassed: boolean }> {
+    const taskIds = new Set(
+      taskset.tasks
+        .filter((task) => task.split === "frozen_eval")
+        .map((task) => task.id),
+    );
+    if (!taskIds.size) return { complete: false, thresholdPassed: false };
+    const [attempts, grades] = await Promise.all([
+      this.deps.store.listTaskAttempts(taskset.id),
+      this.deps.store.listGradeResultsForTaskset(taskset.id),
+    ]);
+    const gradeByAttempt = new Map(
+      grades.map((grade) => [grade.attemptId, grade] as const),
+    );
+    const trainedGrades = attempts
+      .filter((attempt) =>
+        attempt.metadata.jobId === job.id
+        && attempt.metadata.evaluationStage === "trained"
+        && taskIds.has(attempt.taskId))
+      .flatMap((attempt) => {
+        const grade = gradeByAttempt.get(attempt.id);
+        return grade ? [[attempt.taskId, grade] as const] : [];
+      });
+    const gradeByTask = new Map(trainedGrades);
+    const complete = [...taskIds].every((taskId) => gradeByTask.has(taskId));
+    return {
+      complete,
+      thresholdPassed:
+        complete && [...gradeByTask.values()].every((grade) => grade.passed),
+    };
+  }
+
+  private async importPpoTrajectories(
+    job: TrainingJob,
+    plan: TrainingPlan,
+    taskset: Taskset,
+    outputDirectory: string,
+  ): Promise<void> {
+    if (plan.recipe.method !== "ppo") return;
+    const content = await readFile(
+      path.join(outputDirectory, "ppo-trajectories.jsonl"),
+      "utf8",
+    );
+    for (const [index, line] of content.split("\n").filter(Boolean).entries()) {
+      const trajectory = PpoTrajectorySchema.parse(JSON.parse(line));
+      const reward = trajectory.steps.reduce((sum, step) => sum + step.reward, 0);
+      const timestamp = trajectory.createdAt;
+      const receipt = RolloutTrajectoryReceiptSchema.parse({
+        schemaVersion: "openpond.rolloutTrajectoryReceipt.v1",
+        id: `rollout_receipt_${contentHash([job.id, trajectory.id]).slice(0, 24)}`,
+        jobId: job.id,
+        planId: plan.id,
+        tasksetId: taskset.id,
+        tasksetHash: taskset.contentHash,
+        taskId: trajectory.taskId,
+        split: "train",
+        correlationId: `local-ppo:${job.id}:${index}`,
+        provider: "local_cpu_fixture",
+        providerTrace: {
+          invocationId: job.id,
+          experimentId: plan.id,
+          rolloutId: trajectory.id,
+          runId: job.id,
+          rowId: trajectory.taskId,
+        },
+        optimizerMethod: "ppo",
+        evidenceLevels: {
+          requested: "trajectory",
+          observed: "trajectory",
+          providerReported: "trajectory",
+        },
+        budgetUsage: {
+          rollouts: 1,
+          environmentExecutions: 1,
+          inputTokens: 0,
+          outputTokens: trajectory.steps.length,
+          optimizerSteps: 1,
+          costUsd: 0,
+        },
+        environment: {
+          id: plan.recipe.policyOptimization.environment.id,
+          version: plan.recipe.policyOptimization.environment.version,
+          worldId: `local_ppo_${trajectory.taskId}`,
+          worldHash: contentHash([
+            taskset.contentHash,
+            trajectory.taskId,
+            plan.recipe.policyOptimization.environment,
+          ]),
+          toolContractHash: plan.recipe.policyOptimization.environment.toolContractHash,
+        },
+        policy: {
+          modelId: trajectory.policyModelId,
+          checkpointId: plan.recipe.resume.checkpointId,
+          completionParametersHash: contentHash(plan.recipe.policyOptimization.sampler),
+        },
+        status: "succeeded",
+        failureClass: null,
+        reward: {
+          eligible: true,
+          raw: Math.max(0, Math.min(1, reward)),
+          normalized: Math.max(0, Math.min(1, reward)),
+          components: { deterministic_token_match: reward },
+        },
+        trajectory,
+        verifier: null,
+        providerStatus: { executor: "openpond-ppo-reference-v1" },
+        receivedAt: timestamp,
+        startedAt: timestamp,
+        completedAt: timestamp,
+        updatedAt: timestamp,
+      });
+      await this.deps.store.saveRolloutTrajectoryReceipt(receipt);
+    }
+  }
+
   private async tasksetPath(tasksetId: string): Promise<string> {
     const taskset = await this.deps.store.getTaskset(tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
@@ -299,10 +487,27 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
   }
 
   private async resolveModelPath(plan: TrainingPlan): Promise<string | null> {
-    if (plan.recipe.method !== "sft" || plan.recipe.baseModel.id === "openpond/tiny-cpu-gpt2-fixture") return null;
-    const resolved = await this.deps.resolveModelPath?.(plan.recipe.baseModel.id, plan.recipe.baseModel.revision);
-    if (!resolved) throw new Error(`Verified local model ${plan.recipe.baseModel.id}@${plan.recipe.baseModel.revision} was not found. Download it in Settings > Compute.`);
+    if (plan.recipe.method !== "sft" && plan.recipe.method !== "dpo" && plan.recipe.method !== "ppo") return null;
+    const model = localRecipeBaseModel(plan);
+    if (model.id === "openpond/tiny-cpu-gpt2-fixture") return null;
+    const resolved = await this.deps.resolveModelPath?.(model.id, model.revision);
+    if (!resolved) throw new Error(`Verified local model ${model.id}@${model.revision} was not found. Download it in Settings > Compute.`);
     return resolved;
+  }
+
+  private async resolvePpoCheckpointPath(plan: TrainingPlan): Promise<string | null> {
+    if (plan.recipe.method !== "ppo") return null;
+    const checkpointId = plan.recipe.resume.checkpointId;
+    if (!checkpointId) return null;
+    const artifact = await this.deps.store.getTrainingArtifact(checkpointId);
+    if (!artifact || artifact.kind !== "checkpoint") {
+      throw new Error("The pinned PPO resume checkpoint was not found.");
+    }
+    const bytes = await readFile(artifact.path);
+    if (sha256(bytes) !== artifact.sha256 || bytes.byteLength !== artifact.sizeBytes) {
+      throw new Error("The pinned PPO resume checkpoint failed integrity verification.");
+    }
+    return artifact.path;
   }
 
   private async mirrorPortableArtifact(tasksetId: string, jobId: string, outputDirectory: string): Promise<string | null> {
@@ -318,7 +523,50 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
   }
 }
 
-function processIsAlive(pid: number): boolean { try { process.kill(pid, 0); return true; } catch { return false; } }
+function localRecipeBaseModel(plan: TrainingPlan) {
+  if (plan.recipe.method === "sft") return plan.recipe.baseModel;
+  if (plan.recipe.method === "dpo") return plan.recipe.policyModel;
+  if (plan.recipe.method === "ppo") return plan.recipe.policyOptimization.policyModel;
+  throw new Error(`Local CPU cannot resolve a base model for ${plan.recipe.method}.`);
+}
+
+function executableWallTime(plan: TrainingPlan): number {
+  if (plan.recipe.method === "sft" || plan.recipe.method === "dpo" || plan.recipe.method === "ppo") {
+    return plan.recipe.resourceLimits.wallTimeMs;
+  }
+  return 120_000;
+}
+
+function signalChildTree(
+  child: ChildProcessWithoutNullStreams,
+  signal: NodeJS.Signals,
+): boolean {
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return true;
+    } catch {
+      // Fall through when the process group has already exited.
+    }
+  }
+  return child.kill(signal);
+}
+
+function signalWorkerPid(pid: number, signal: NodeJS.Signals): void {
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-pid, signal);
+      return;
+    } catch {
+      // Fall through for legacy workers that were not process-group leaders.
+    }
+  }
+  try {
+    process.kill(pid, signal);
+  } catch {
+    // The worker has already exited.
+  }
+}
 
 async function assertPortableArtifactTree(root: string): Promise<void> {
   const rootStat = await lstat(root);
@@ -330,16 +578,4 @@ async function assertPortableArtifactTree(root: string): Promise<void> {
     if (stat.isSymbolicLink()) throw new Error(`Artifact import rejects symbolic links: ${entry.name}.`);
     if (stat.isDirectory()) await assertPortableArtifactTree(target);
   }
-}
-
-async function copyTreePortable(source: string, destination: string): Promise<void> {
-  const sourceStat = await lstat(source);
-  if (sourceStat.isSymbolicLink()) throw new Error(`Portable artifact mirror rejects symbolic links: ${source}.`);
-  if (sourceStat.isDirectory()) {
-    await mkdir(destination, { recursive: true });
-    for (const entry of await readdir(source)) await copyTreePortable(path.join(source, entry), path.join(destination, entry));
-    return;
-  }
-  if (!sourceStat.isFile()) throw new Error(`Portable artifact mirror rejects unsupported filesystem entries: ${source}.`);
-  await copyFile(source, destination);
 }

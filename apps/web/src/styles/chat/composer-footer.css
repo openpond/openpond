@@ -143,6 +143,7 @@
 }
 
 .composer-project-target,
+.composer-profile-target,
 .workspace-action-control {
   position: relative;
   min-width: 0;
@@ -156,6 +157,7 @@
 }
 
 .composer-project-trigger,
+.composer-profile-trigger,
 .workspace-action-trigger {
   position: relative;
   display: inline-flex;
@@ -207,6 +209,13 @@
   white-space: nowrap;
 }
 
+.composer-profile-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-action-trigger .workspace-target-trigger-label {
   min-width: 0;
   overflow: hidden;
@@ -219,6 +228,7 @@
 }
 
 .composer-project-trigger svg,
+.composer-profile-trigger svg,
 .workspace-action-trigger svg,
 .workspace-upload-trigger svg {
   flex: 0 0 auto;
@@ -266,6 +276,8 @@
 
 .composer-project-trigger:hover:not(:disabled),
 .composer-project-trigger.active,
+.composer-profile-trigger:hover:not(:disabled),
+.composer-profile-trigger.active,
 .workspace-action-trigger:hover:not(:disabled),
 .workspace-action-trigger.active,
 .workspace-action-trigger:focus-visible,
@@ -277,6 +289,7 @@
 }
 
 .composer-project-trigger:disabled,
+.composer-profile-trigger:disabled,
 .workspace-action-trigger:disabled,
 .workspace-upload-trigger:disabled {
   opacity: 0.55;
@@ -302,6 +315,11 @@
 }
 
 .composer-project-target.open-up .composer-project-menu {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+.composer-profile-target.open-up .composer-project-menu {
   top: auto;
   bottom: calc(100% + 5px);
 }

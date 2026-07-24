@@ -611,7 +611,6 @@ export function SidebarProjectRow({
       >
         <ProjectKindIcon
           kind={kind}
-          agentSdk={Boolean(project.agentSdk?.detected)}
           linkedCloud={linkedCloud}
           open={kind === "local" && expanded}
           className="sidebar-row-icon"

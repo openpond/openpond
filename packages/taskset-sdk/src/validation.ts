@@ -44,7 +44,8 @@ export function validateTaskset(input: unknown): TasksetValidationReport {
   validatePolicyBoundary(taskset, issues);
   validateGraders(taskset, issues);
   validateGraderFixtures(taskset, issues);
-  validateCapabilities(taskset.capabilities, issues);
+  validateLearningSignals(taskset, issues);
+  validateCapabilities(taskset.capabilities, issues, taskset);
 
   const computedHash = tasksetContentHash(taskset);
   if (taskset.contentHash !== computedHash) {
@@ -143,7 +144,7 @@ function tasksetContentHash(taskset: Omit<Taskset, "contentHash"> | Taskset): st
 
 export function validatePortability(capabilities: TasksetCapabilityManifest): TasksetValidationIssue[] {
   const issues: TasksetValidationIssue[] = [];
-  validateCapabilities(capabilities, issues);
+  validateCapabilities(capabilities, issues, null);
   return issues;
 }
 
@@ -211,11 +212,58 @@ function validateGraders(taskset: Taskset, issues: TasksetValidationIssue[]): vo
   }
 }
 
-function validateCapabilities(capabilities: TasksetCapabilityManifest, issues: TasksetValidationIssue[]): void {
+function validateLearningSignals(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  const taskIds = new Set(taskset.tasks.map((task) => task.id));
+  const sourceIds = new Set(taskset.sourceRefs.map((source) => source.id));
+  for (const signal of [
+    ...taskset.learningSignals.demonstrations,
+    ...taskset.learningSignals.preferences,
+    ...taskset.learningSignals.corrections,
+    ...taskset.learningSignals.feedback,
+    ...taskset.learningSignals.rewards,
+    ...taskset.learningSignals.labels,
+  ]) {
+    if (signal.taskId && !taskset.datasetArtifact && !taskIds.has(signal.taskId)) {
+      issues.push({ code: "learning_signal_task_missing", severity: "error", message: `Signal ${signal.id} references missing task ${signal.taskId}.`, path: `learningSignals.${signal.kind}.${signal.id}.taskId` });
+    }
+    if (signal.sourceRefs.some((sourceId) => !sourceIds.has(sourceId))) {
+      issues.push({ code: "learning_signal_source_missing", severity: "error", message: `Signal ${signal.id} references a source outside the Dataset.`, path: `learningSignals.${signal.kind}.${signal.id}.sourceRefs` });
+    }
+  }
+  for (const preference of taskset.learningSignals.preferences) {
+    if (preference.chosen.trim() === preference.rejected.trim()) {
+      issues.push({ code: "preference_pair_identical", severity: "error", message: `Preference ${preference.id} has identical chosen and rejected responses.`, path: `learningSignals.preferences.${preference.id}` });
+    }
+  }
+  for (const reward of taskset.learningSignals.rewards) {
+    if (!reward.executable) {
+      issues.push({ code: "reward_not_executable", severity: "warning", message: `Reward ${reward.id} is a reviewed specification but has no executable verifier yet.`, path: `learningSignals.rewards.${reward.id}.executable` });
+    }
+  }
+}
+
+function validateCapabilities(
+  capabilities: TasksetCapabilityManifest,
+  issues: TasksetValidationIssue[],
+  taskset: Taskset | null,
+): void {
   if (!capabilities.exportable && capabilities.portabilityBlockers.length === 0) {
     issues.push({ code: "portability_reason_missing", severity: "error", message: "Non-exportable Tasksets must declare a portability blocker.", path: "capabilities.portabilityBlockers" });
   }
   if (capabilities.compatibleMethods.includes("grpo") && !capabilities.rewardKinds.some((kind) => kind === "exact" || kind === "deterministic" || kind === "model_judge")) {
     issues.push({ code: "grpo_reward_missing", severity: "error", message: "GRPO compatibility requires a scalar reward kind.", path: "capabilities.rewardKinds" });
+  }
+  if (taskset?.capabilities.compatibleMethods.includes("sft") && taskset.learningSignals.demonstrations.length === 0) {
+    issues.push({ code: "sft_demonstrations_missing", severity: "error", message: "SFT compatibility requires approved demonstrations.", path: "learningSignals.demonstrations" });
+  }
+  if (taskset?.capabilities.compatibleMethods.includes("dpo") && taskset.learningSignals.preferences.length === 0) {
+    issues.push({ code: "dpo_preferences_missing", severity: "error", message: "DPO compatibility requires chosen and rejected response pairs.", path: "learningSignals.preferences" });
+  }
+  if (
+    taskset
+    && (taskset.capabilities.compatibleMethods.includes("grpo") || taskset.capabilities.compatibleMethods.includes("ppo"))
+    && !taskset.learningSignals.rewards.some((reward) => reward.executable)
+  ) {
+    issues.push({ code: "online_reward_not_executable", severity: "error", message: "GRPO/PPO compatibility requires an executable scalar reward.", path: "learningSignals.rewards" });
   }
 }

@@ -349,6 +349,13 @@ describe("composer slash behavior", () => {
   test("plus menu combines add, slash, and mention rows", () => {
     const createCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create")!;
     const skillCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "skill")!;
+    const profileSkill = {
+      name: "release-notes",
+      description: "Draft release notes from the current changes.",
+      path: "skills/release-notes/SKILL.md",
+      enabled: true,
+      validationStatus: "valid" as const,
+    };
     const app = planningApp();
     const markup = renderToStaticMarkup(
       createElement(ComposerCommandMenu, {
@@ -366,6 +373,15 @@ describe("composer slash behavior", () => {
             label: "OpenPond",
             grid: true,
             queryScope: "slash",
+          },
+          {
+            id: "skills",
+            items: [{
+              kind: "slash",
+              item: { kind: "skill", skill: profileSkill },
+            }],
+            label: "Skills",
+            queryScopes: ["slash", "mentions"],
           },
           {
             id: "mention",
@@ -388,6 +404,9 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("/create Make Agent");
     expect(markup).toContain("/skill Manage skills");
     expect(markup).toContain("lucide-book-open-text");
+    expect(markup).toContain('aria-label="Skills"');
+    expect(markup).toContain("$release-notes");
+    expect(markup).toContain("Draft release notes from the current changes.");
     expect(markup).toContain('data-app-context-id="app_alpha"');
     expect(markup).toContain("Alpha Bot");
     expect(markup).toContain("Summarizes release activity.");
@@ -820,6 +839,67 @@ describe("composer slash behavior", () => {
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
     expect(markup).toContain("Review Bot");
     expect(markup).toContain("Reviews project changes.");
+  });
+
+  test("profile agents and skills stay visible in the unfiltered slash and mention menus", () => {
+    const profileSkills = [{
+      name: "release-notes",
+      description: "Draft release notes from the current changes.",
+      path: "skills/release-notes/SKILL.md",
+      enabled: true,
+      validationStatus: "valid" as const,
+    }];
+    const actionCatalog = [{
+      id: "chat",
+      sourceActionId: "chat",
+      label: "Chat",
+      description: "Reviews releases before they ship.",
+      implementation: {
+        type: "openpond-profile-action",
+        actionId: "chat",
+        agentName: "Release Reviewer",
+      },
+    }];
+    const renderComposer = (prompt: string) => renderToStaticMarkup(
+      createElement(Composer, {
+        mode: "start",
+        prompt,
+        mentionApps: [],
+        profileSkills,
+        selectedMentionAppId: null,
+        contextWindowStatus,
+        goalRuntime: null,
+        busy: false,
+        running: false,
+        connection: null,
+        provider: "openpond",
+        model: "openpond-chat",
+        projectTarget,
+        actionCatalog,
+        workspaceTarget,
+        codexPermissionMode: "default",
+        codexReasoningEffort: "medium",
+        onProviderChange: noop,
+        onProjectTargetChange: noop,
+        onWorkspaceTargetChange: noop,
+        onModelChange: noop,
+        onCodexPermissionModeChange: noop,
+        onCodexReasoningEffortChange: noop,
+        onPromptChange: noop,
+        onMentionAppSelect: noop,
+        showToast: noop,
+        onSubmit: async () => true,
+        onStop: noop,
+      }),
+    );
+
+    const slashMarkup = renderComposer("/");
+    expect(slashMarkup).toContain("Release Reviewer");
+    expect(slashMarkup).toContain("$release-notes");
+
+    const mentionMarkup = renderComposer("@");
+    expect(mentionMarkup).toContain("Release Reviewer");
+    expect(mentionMarkup).toContain("$release-notes");
   });
 
   test("regular chat composer shows generated profile chat actions by metadata agent name in the slash menu", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   isTrainingSourceRef,
   type ChatModelRef,
@@ -40,6 +40,7 @@ import type {
 import { LabsView, type LabPrimaryTab } from "./LabsView";
 import { LabAgentRenameDialog } from "./LabAgentRenameDialog";
 import { LabDatasetsPage } from "./LabDatasetsPage";
+import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { labModelVersions } from "./lab-models";
 import { buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { useErrorToast } from "../../app/AppToastContext";
@@ -63,7 +64,7 @@ export type LabsRouteProps = {
   closeDetailKind: LabDetailKind | null;
   closeDetailRequestId: number;
   openSuggestionsRequestId: number;
-  onNewModel: () => void;
+  onNewModel: (initialTasksetId?: string) => void;
   onUseAgent: (actionId: string, agentName: string) => void;
   onCreateAgent: (
     objective: string,
@@ -191,17 +192,15 @@ export function LabsRoute({
   const [datasetCreateRoute, setDatasetCreateRoute] = useState<
     "source" | DatasetCreateSource | null
   >(null);
-  const [datasetCreateOrigin, setDatasetCreateOrigin] = useState<
-    "datasets" | "model"
-  >("datasets");
   const [datasetBuildTargetId, setDatasetBuildTargetId] = useState<string | null>(null);
-  const [initialModelDatasetId, setInitialModelDatasetId] = useState<string | null>(null);
   const [agentRename, setAgentRename] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const [resumedModelCreation, setResumedModelCreation] =
     useState<TaskCreationSnapshot | null>(null);
+  const [modelEditorSection, setModelEditorSection] = useState<"run" | "dataset">("run");
+  const [modelEditorName, setModelEditorName] = useState<string | null>(null);
   const [modelUseVersionId, setModelUseVersionId] = useState<string | null>(
     null
   );
@@ -324,6 +323,22 @@ export function LabsRoute({
     setActiveTab("workproducts");
   }, [closeDetailKind, closeDetailRequestId]);
   useEffect(() => {
+    setModelEditorName(null);
+  }, [training.launchRequest?.id]);
+  useEffect(() => {
+    if (training.launchRequest) {
+      onDetailOpenChange({
+         kind: "model",
+         kindLabel: "Models",
+         kindOnSelect: () => document.getElementById("model-run-editor-cancel")?.click(),
+         workproductLabel: null,
+         segments: [
+           { label: modelEditorName ?? "Model" },
+           ...(modelEditorSection === "dataset" ? [{ label: "New Dataset" }] : []),
+         ],
+      });
+      return;
+    }
     if (activeTab === "datasets") {
       onDetailOpenChange(
         selectedDatasetId
@@ -334,7 +349,7 @@ export function LabsRoute({
                 training.training.payload?.tasksets.find(
                   (taskset) => taskset.id === selectedDatasetId,
                 )?.name ?? "Dataset",
-              sectionLabels: [],
+              segments: [],
             }
           : null,
       );
@@ -350,6 +365,9 @@ export function LabsRoute({
     onDetailOpenChange,
     selected,
     selectedDatasetId,
+    modelEditorSection,
+    modelEditorName,
+    training.launchRequest,
     training.training.payload?.tasksets,
   ]);
   useEffect(() => () => onDetailOpenChange(null), [onDetailOpenChange]);
@@ -403,8 +421,7 @@ export function LabsRoute({
     );
   }
 
-  function openDatasetCreation(origin: "datasets" | "model") {
-    setDatasetCreateOrigin(origin);
+  function openDatasetCreation() {
     setDatasetBuildTargetId(null);
     setDatasetCreateRoute("source");
     setSelectedDatasetId(null);
@@ -414,11 +431,9 @@ export function LabsRoute({
   function closeDatasetCreation() {
     setDatasetCreateRoute(null);
     setDatasetBuildTargetId(null);
-    if (datasetCreateOrigin === "model") setActiveTab("workproducts");
   }
 
   function openDatasetBuild(tasksetId: string) {
-    setDatasetCreateOrigin("datasets");
     setDatasetBuildTargetId(tasksetId);
     setDatasetCreateRoute("build");
     setSelectedDatasetId(tasksetId);
@@ -429,27 +444,28 @@ export function LabsRoute({
     setDatasetCreateRoute(null);
     setDatasetBuildTargetId(null);
     setSelectedKey(null);
-    if (datasetCreateOrigin === "model") {
-      setInitialModelDatasetId(tasksetId);
-      setActiveTab("workproducts");
-      return;
-    }
     setActiveTab("datasets");
     setSelectedDatasetId(tasksetId);
   }
 
+  function openModelRunEditor(initialTasksetId?: string) {
+    setModelEditorSection("run");
+    setSelectedKey(null);
+    setSelectedDatasetId(null);
+    setActiveTab("workproducts");
+    onNewModel(initialTasksetId);
+  }
+  const closeSelectedWorkproduct = useCallback(() => setSelectedKey(null), []);
+
   return (
     <LabsView
       activeTab={activeTab}
-      showHeader={!selected && !selectedDatasetId && datasetCreateRoute !== "build"}
+      showHeader={!training.launchRequest && !selected && !selectedDatasetId && datasetCreateRoute !== "build"}
       suggestionCount={suggestionCount}
       onTabChange={changePrimaryTab}
       onCreateAgent={() => setAgentCreateOpen(true)}
-      onCreateDataset={() => openDatasetCreation("datasets")}
-      onCreateModel={() => {
-        setInitialModelDatasetId(null);
-        onNewModel();
-      }}
+      onCreateDataset={openDatasetCreation}
+      onCreateModel={() => openModelRunEditor()}
     >
       {activeTab === "suggestions" ? (
         <SuggestionsTab
@@ -498,10 +514,60 @@ export function LabsRoute({
           }
           onSelectedIdChange={setSelectedDatasetId}
           onBuild={openDatasetBuild}
+          onTrainModel={openModelRunEditor}
           onOpenFiles={(tasksetId) => {
             training.onSelectedTasksetIdChange(tasksetId);
             training.onOpenTasksetFiles();
           }}
+        />
+      ) : training.launchRequest && training.training.payload ? (
+        <ModelRunEditorPage
+          connection={profileView.connection}
+          initialObjective={training.launchRequest.objective}
+          initialTasksetId={training.launchRequest.initialTasksetId}
+          profileId={profileId}
+          training={training.training}
+          onCancel={() => {
+            training.onLaunchHandled(training.launchRequest!.id);
+          }}
+          onFinished={async (modelId, tasksetId) => {
+            training.onSelectedTasksetIdChange(tasksetId);
+            training.onDetailTasksetIdChange(tasksetId);
+            training.onLaunchHandled(training.launchRequest!.id);
+            setSelectedKey(workproductKey("model", modelId));
+            setActiveTab("workproducts");
+            await createImprove.refresh();
+          }}
+          onNameChange={setModelEditorName}
+          onSectionChange={setModelEditorSection}
+          onSaved={async (modelId) => {
+            training.onLaunchHandled(training.launchRequest!.id);
+            setSelectedKey(workproductKey("model", modelId));
+            setActiveTab("workproducts");
+          }}
+          onOpenProviderSettings={training.onOpenProviderSettings}
+          renderDatasetBuilder={(onCreated, onUseExistingDataset, buildIntent) => (
+            <DatasetBuildEditor
+              initialBuildIntent={buildIntent}
+              taskset={null}
+              createImproveRefresh={createImprove.refresh}
+              defaultModel={training.defaultModel}
+              localProjects={training.localProjects ?? []}
+              onBack={() => undefined}
+              onClose={() => undefined}
+              onCreated={(tasksetId) => {
+                if (tasksetId) onCreated(tasksetId);
+              }}
+              onOpenComputeSettings={training.onOpenComputeSettings}
+              onUseExistingDataset={onUseExistingDataset}
+              preferences={training.preferences}
+              providerSettings={training.providerSettings}
+              reasoningEffort={training.reasoningEffort}
+              sessions={training.sessions}
+              sources={training.training.payload?.sources ?? []}
+              training={training.training}
+            />
+          )}
         />
       ) : selected ? (
         <LabWorkproductDetail
@@ -520,6 +586,7 @@ export function LabsRoute({
           onOpenPullRequest={onOpenPullRequest}
           onOpenCandidateFiles={onOpenCandidateFiles}
           onOpenConversation={onOpenRunConversation}
+          onClose={closeSelectedWorkproduct}
           onLocationChange={onDetailOpenChange}
           onRenameAgent={() =>
             setAgentRename({ id: selected.id, name: selected.name })
@@ -529,12 +596,60 @@ export function LabsRoute({
             setSelectedDatasetId(tasksetId);
             setActiveTab("datasets");
           }}
-          onOpenProviderSettings={training.onOpenProviderSettings}
           onPause={onPause}
           onReconcilePullRequest={onReconcilePullRequest}
           onRejectCandidate={onRejectCandidate}
           onResume={onResume}
           onRevise={onRevise}
+          renderModelRunEditor={({
+            initialTasksetId,
+            draftId,
+            modelId,
+            modelName,
+            onCancel: cancelBuild,
+            onFinished: finishBuild,
+            onSectionChange,
+          }) => (
+            <ModelRunEditorPage
+              connection={profileView.connection}
+              initialModelId={modelId}
+              initialName={modelName}
+              initialDraftId={draftId ?? undefined}
+              initialObjective={selected.description}
+              initialTasksetId={initialTasksetId ?? undefined}
+              profileId={profileId}
+              training={training.training}
+              onCancel={cancelBuild}
+              onFinished={async () => {
+                await createImprove.refresh();
+                await finishBuild();
+              }}
+              onSectionChange={onSectionChange}
+              onOpenProviderSettings={training.onOpenProviderSettings}
+              renderDatasetBuilder={(onCreated, onUseExistingDataset, buildIntent) => (
+                <DatasetBuildEditor
+                  initialBuildIntent={buildIntent}
+                  taskset={null}
+                  createImproveRefresh={createImprove.refresh}
+                  defaultModel={training.defaultModel}
+                  localProjects={training.localProjects ?? []}
+                  onBack={() => undefined}
+                  onClose={() => undefined}
+                  onCreated={(tasksetId) => {
+                    if (tasksetId) onCreated(tasksetId);
+                  }}
+                  onOpenComputeSettings={training.onOpenComputeSettings}
+                  onUseExistingDataset={onUseExistingDataset}
+                  preferences={training.preferences}
+                  providerSettings={training.providerSettings}
+                  reasoningEffort={training.reasoningEffort}
+                  sessions={training.sessions}
+                  sources={training.training.payload?.sources ?? []}
+                  training={training.training}
+                />
+              )}
+            />
+          )}
           onStartAgentChange={(agentId, prompt) =>
             openAgentChange(agentId, prompt ?? "")
           }
@@ -591,46 +706,6 @@ export function LabsRoute({
         </div>
       )}
 
-      {training.launchRequest
-      && training.training.payload
-      && !(datasetCreateOrigin === "model" && datasetCreateRoute !== null) ? (
-        <CreateImproveAuthoringDialog
-          defaultModel={training.defaultModel}
-          initialExistingTasksetId={initialModelDatasetId}
-          initialObjective={training.launchRequest.objective}
-          initialSessionIds={training.launchRequest.initialSessionIds ?? []}
-          localProjects={training.localProjects ?? []}
-          onClose={() => training.onLaunchHandled(training.launchRequest!.id)}
-          onCreateDataset={() => openDatasetCreation("model")}
-          onOpenComputeSettings={training.onOpenComputeSettings}
-          onModelCreatedFromTaskset={async (taskset, run) => {
-            setInitialModelDatasetId(null);
-            training.onLaunchHandled(training.launchRequest!.id);
-            training.onSelectedTasksetIdChange(taskset.id);
-            training.onDetailTasksetIdChange(taskset.id);
-            setSelectedKey(
-              workproductKey("model", run.target.id ?? run.id),
-            );
-            setActiveTab("workproducts");
-            await createImprove.refresh();
-          }}
-          onTasksetCreated={async (creation) => {
-            await finishModelCreation(
-              creation,
-              training,
-              createImprove.refresh,
-              setSelectedKey,
-            );
-            setActiveTab("workproducts");
-          }}
-          preferences={training.preferences}
-          providerSettings={training.providerSettings}
-          reasoningEffort={training.reasoningEffort}
-          sessions={training.sessions}
-          sources={training.training.payload.sources}
-          training={training.training}
-        />
-      ) : null}
       {agentCreateOpen ? (
         <CreateImproveAuthoringDialog
           defaultModel={training.defaultModel}
@@ -813,6 +888,7 @@ export function LabsRoute({
 }
 
 function DatasetBuildEditor({
+  initialBuildIntent = null,
   taskset,
   createImproveRefresh,
   defaultModel,
@@ -821,6 +897,7 @@ function DatasetBuildEditor({
   onClose,
   onCreated,
   onOpenComputeSettings,
+  onUseExistingDataset,
   preferences,
   providerSettings,
   reasoningEffort,
@@ -829,6 +906,7 @@ function DatasetBuildEditor({
   training,
 }: {
   taskset: Taskset | null;
+  initialBuildIntent?: import("../training/TrainingGoalCards").DatasetEvidenceIntent | null;
   createImproveRefresh: () => Promise<unknown>;
   defaultModel: ChatModelRef;
   localProjects: NonNullable<TrainingViewProps["localProjects"]>;
@@ -836,6 +914,7 @@ function DatasetBuildEditor({
   onClose: () => void;
   onCreated: (tasksetId: string | null) => void;
   onOpenComputeSettings: TrainingViewProps["onOpenComputeSettings"];
+  onUseExistingDataset?: () => void;
   preferences: TrainingViewProps["preferences"];
   providerSettings: TrainingViewProps["providerSettings"];
   reasoningEffort: TrainingViewProps["reasoningEffort"];
@@ -855,11 +934,13 @@ function DatasetBuildEditor({
       datasetBuildMode
       defaultModel={defaultModel}
       initialObjective={taskset?.objective ?? null}
+      initialBuildIntent={initialBuildIntent}
       initialSessionIds={initialSessionIds}
       localProjects={localProjects}
       onBackToDatasetSources={onBack}
       onClose={onClose}
       onOpenComputeSettings={onOpenComputeSettings}
+      onUseExistingDataset={onUseExistingDataset}
       onTasksetCreated={async (creation) => {
         await Promise.all([training.refresh(), createImproveRefresh()]);
         onCreated(creation.materializedTasksetId);

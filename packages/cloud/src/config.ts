@@ -142,6 +142,16 @@ export type LocalOpenPondProfileConfig = {
   mode: "local";
   lastCheck?: LocalOpenPondProfileCheckStatus;
   lastPush?: LocalOpenPondProfilePushStatus;
+  profiles?: LocalOpenPondProfileCatalogEntry[];
+};
+
+export type LocalOpenPondProfileCatalogEntry = {
+  source: "local" | "github" | "openpond_git";
+  repositoryId: string;
+  repoPath: string;
+  profile: string;
+  lastCheck?: LocalOpenPondProfileCheckStatus;
+  lastPush?: LocalOpenPondProfilePushStatus;
 };
 
 export type LocalGoalStorageLocation = "global" | "workspace";
@@ -435,6 +445,30 @@ function sanitizeLocalOpenPondProfile(
           : {}),
       };
     }
+  }
+  if (Array.isArray(input.profiles)) {
+    const profiles = input.profiles.flatMap((value) => {
+      const entry = sanitizeLocalOpenPondProfile(value);
+      if (!entry) return [];
+      const rawEntry = value as Record<string, unknown>;
+      const source =
+        rawEntry.source === "github" || rawEntry.source === "openpond_git"
+          ? rawEntry.source
+          : "local";
+      const repositoryId =
+        typeof rawEntry.repositoryId === "string" && rawEntry.repositoryId.trim()
+          ? rawEntry.repositoryId.trim()
+          : path.resolve(entry.repoPath);
+      return [{
+        source,
+        repositoryId,
+        repoPath: entry.repoPath,
+        profile: entry.profile,
+        ...(entry.lastCheck ? { lastCheck: entry.lastCheck } : {}),
+        ...(entry.lastPush ? { lastPush: entry.lastPush } : {}),
+      } satisfies LocalOpenPondProfileCatalogEntry];
+    });
+    if (profiles.length > 0) out.profiles = profiles;
   }
   return out;
 }

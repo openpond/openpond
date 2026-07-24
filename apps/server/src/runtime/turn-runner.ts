@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
@@ -111,6 +111,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeCrossSystemTool,
     finalizeCrossSystemTurn,
     loadOpenPondProfileState,
+    loadOpenPondProfileStateForRef,
+    loadOpenPondProfileLibrary,
     readOpenPondProfileSkill,
     loadOpenPondExtensionCatalog,
     readOpenPondExtensionSkill,
@@ -316,7 +318,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     preloadExplicitProfileSkills,
     profileSkillInstructionModeForProvider,
   } = createProfileSkillCatalogRuntime({
-    loadProfileState: loadOpenPondProfileState,
+    loadProfileState: loadOpenPondProfileStateForRef
+      ? (session) => loadOpenPondProfileStateForRef(session.currentProfile)
+      : loadOpenPondProfileState
+        ? () => loadOpenPondProfileState()
+        : undefined,
     readProfileSkill: readOpenPondProfileSkill,
     loadExtensionCatalog: loadOpenPondExtensionCatalog,
     readExtensionSkill: readOpenPondExtensionSkill,
@@ -634,6 +640,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const selectedProfileRef = session.currentProfile ??
+      (loadOpenPondProfileLibrary ? (await loadOpenPondProfileLibrary()).lastUsed : null);
+    if (!session.currentProfile && selectedProfileRef) {
+      session = await updateSession(sessionId, { currentProfile: selectedProfileRef });
+    }
+    const selectedProfile = loadOpenPondProfileStateForRef
+      ? await loadOpenPondProfileStateForRef(selectedProfileRef)
+      : loadOpenPondProfileState
+        ? await loadOpenPondProfileState()
+        : null;
     let subagentContinuation = await prepareSubagentContinuationTurn({
       session,
       request: input,
@@ -650,7 +666,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ? { providerId: activeProvider, modelId: activeModelId }
       : input.modelRef ?? session.modelRef ?? null;
     const profileSkillCommand = executeProfileSkillCommand
-      ? await executeProfileSkillCommand({ prompt: input.prompt })
+      ? await executeProfileSkillCommand({
+          prompt: input.prompt,
+          profileRef: selectedProfileRef,
+        })
       : null;
     const priorEvents = await store.runtimeEventsForSession(sessionId);
 
@@ -674,6 +693,22 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       error: null,
       metadata: createImproveMetadata,
       createImproveRun: input.createImproveRun ?? null,
+      profileSnapshot:
+        selectedProfileRef && selectedProfile && selectedProfile.mode !== "none" && !selectedProfile.error
+          ? {
+              ref: selectedProfileRef,
+              revision: selectedProfile.git?.head ?? null,
+              sourceHash: createHash("sha256")
+                .update(JSON.stringify({
+                  profile: selectedProfile.activeProfile,
+                  revision: selectedProfile.git?.head ?? null,
+                  agents: selectedProfile.agents,
+                  skills: selectedProfile.skills.map((skill) => [skill.name, skill.sourceHash]),
+                  actions: selectedProfile.actionCatalog.map((action) => action.id),
+                }))
+                .digest("hex"),
+            }
+          : null,
     };
     await insertStoredTurn(turn);
     const initialCwd =
@@ -826,7 +861,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const shouldLoadProfileSkills =
         session.provider === "openpond" || isOpenAiCompatibleProviderId(session.provider);
       const profileSkillRuntime: ProfileSkillRuntime = shouldLoadProfileSkills
-        ? await loadProfileSkillRuntime({ session, turnId: turn.id })
+        ? await loadProfileSkillRuntime({ session, turnId: turn.id, profile: selectedProfile })
         : { profileSourcePath: null, skills: [], readSkill: null };
       const loadedProfileSkills = shouldLoadProfileSkills
         ? await preloadExplicitProfileSkills({

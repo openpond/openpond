@@ -120,6 +120,7 @@ describe.sequential("Fireworks RFT destination", () => {
 
       try {
         const started = await service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe,
@@ -191,6 +192,7 @@ describe.sequential("Fireworks RFT destination", () => {
         const providerPostsBeforeConcurrentAttempt = provider.calls.filter((call) =>
           call.startsWith("POST ")).length;
         await expect(service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe,
@@ -296,6 +298,7 @@ describe.sequential("Fireworks RFT destination", () => {
       });
       try {
         const plan = await service.createPlan({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),
@@ -362,6 +365,7 @@ describe.sequential("Fireworks RFT destination", () => {
       });
       try {
         await expect(service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRftRecipe(),
@@ -409,6 +413,7 @@ describe.sequential("Fireworks RFT destination", () => {
       const recipe = fireworksRftRecipe();
       try {
         await expect(service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: {
@@ -474,6 +479,7 @@ describe.sequential("Fireworks RFT destination", () => {
       });
       try {
         await expect(service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRftRecipe(),
@@ -517,6 +523,7 @@ describe.sequential("Fireworks RFT destination", () => {
       });
       try {
         await expect(service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRftRecipe(),
@@ -562,6 +569,7 @@ describe.sequential("Fireworks RFT destination", () => {
       });
       try {
         const started = await service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRftRecipe(),
@@ -647,6 +655,7 @@ describe.sequential("Fireworks RFT destination", () => {
 
       try {
         const started = await service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),

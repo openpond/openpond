@@ -11,6 +11,8 @@ import type {
   OpenPondExtensionCatalog,
   OpenPondProfileSkill,
   OpenPondProfileState,
+  OpenPondProfileLibrary,
+  OpenPondProfileRef,
   ProviderSettings,
   RuntimeEvent,
   SendTurnRequest,
@@ -302,11 +304,19 @@ export type TurnRunnerDependencies = {
     } | null;
   }) => Promise<{ attemptId: string; gradeId: string; generatedTaskId: string } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
+  loadOpenPondProfileStateForRef?: (ref: OpenPondProfileRef | null | undefined) => Promise<OpenPondProfileState>;
+  loadOpenPondProfileLibrary?: () => Promise<OpenPondProfileLibrary>;
   readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (name: string) => Promise<ProfileSkillReadResult>;
-  executeProfileSkillCommand?: (input: { prompt: string }) => Promise<ProfileSkillCommandResult | null>;
-  executeProfileSkillGoal?: (input: ProfileSkillGoalCommandInput) => Promise<ProfileSkillCommandResult>;
+  executeProfileSkillCommand?: (input: {
+    prompt: string;
+    profileRef: OpenPondProfileRef | null;
+  }) => Promise<ProfileSkillCommandResult | null>;
+  executeProfileSkillGoal?: (input: {
+    request: ProfileSkillGoalCommandInput;
+    profileRef: OpenPondProfileRef | null;
+  }) => Promise<ProfileSkillCommandResult>;
   executeWebSearch?: WebSearchExecutor;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;

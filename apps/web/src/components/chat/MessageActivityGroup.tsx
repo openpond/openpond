@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ChevronDown,
   CircleAlert,
@@ -26,13 +26,16 @@ import {
   summarizeShellCommand,
   type ActivityGroupSummaryKind,
 } from "../../lib/chat-activity-summary";
-import { formatWorkTraceDuration, workTracePresentation } from "../../lib/chat-work-trace";
+import {
+  formatWorkTraceDuration,
+  isInlineWorkTraceActivity,
+  workTracePresentation,
+} from "../../lib/chat-work-trace";
 import { workspaceFileName } from "../../lib/workspace-images";
 import { revealLocalFile } from "../../lib/desktop-files";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { MarkdownText } from "./MarkdownText";
 
-const COMMAND_OUTPUT_VISIBLE_LINES = 5;
 const MAX_SUMMARY_SUBAGENT_AVATARS = 4;
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
 const SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS = 280;
@@ -56,13 +59,14 @@ export function ActivityGroup({
   onOpenSession?: (sessionId: string) => void;
   workspaceRootPath?: string | null;
 }) {
-  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
   const [openImage, setOpenImage] = useState<ActivityItem["imagePreview"] | null>(null);
+  const toolListId = useId();
   const activities = message.activities ?? [];
   const summary = useMemo(() => summarizeActivityGroup(activities), [activities]);
   const presentation = useMemo(
-    () => workTracePresentation(activities, message.traceState, manualExpanded),
-    [activities, manualExpanded, message.traceState],
+    () => workTracePresentation(activities, toolsExpanded),
+    [activities, toolsExpanded],
   );
   const summaryImage = activities.find((activity) => activity.imagePreview)?.imagePreview ?? null;
   const artifacts = message.deliverables ?? [];
@@ -70,7 +74,7 @@ export function ActivityGroup({
   const running = message.traceState === "running";
   const danger = message.traceState === "failed" || message.traceState === "interrupted";
   const duration = formatWorkTraceDuration(message.traceStartedAt, message.traceCompletedAt);
-  const summaryText = workTraceSummaryText(summary.text, message.traceState);
+  const summaryText = workTraceSummaryText(summary.text, message.traceState, duration);
   const summaryOpenSessions = subagentOpenSessions(activities);
   const childMessageSummary = activities.length > 0 && activities.every((activity) => activity.subagentMessage);
 
@@ -85,24 +89,36 @@ export function ActivityGroup({
   return (
     <article className={`activity-group work-trace ${running ? "running" : "settled"}`}>
       <div className="activity-summary-row">
-        <button
-          type="button"
-          aria-expanded={presentation.expanded}
-          className={`activity-summary ${danger ? "danger" : ""} ${running ? "working" : ""}`}
-          onClick={() => setManualExpanded(!presentation.expanded)}
-        >
-          {summaryImage ? (
-            <ActivitySummaryImage activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} image={summaryImage} />
-          ) : (
-            <ActivitySummaryIcon kind={summary.kind} />
-          )}
-          <ActivitySummaryText duration={duration} summary={summaryText} />
-          <ChevronDown className={`activity-summary-toggle ${presentation.expanded ? "expanded" : ""}`} size={14} />
-        </button>
+        {presentation.toolCount > 0 ? (
+          <button
+            type="button"
+            aria-controls={toolListId}
+            aria-expanded={presentation.toolsExpanded}
+            className={`activity-summary ${danger ? "danger" : ""} ${running ? "working" : ""}`}
+            onClick={() => setToolsExpanded((current) => !current)}
+          >
+            {summaryImage ? (
+              <ActivitySummaryImage activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} image={summaryImage} />
+            ) : (
+              <ActivitySummaryIcon kind={summary.kind} />
+            )}
+            <ActivitySummaryText summary={summaryText} />
+            <ChevronDown className={`activity-summary-toggle ${presentation.toolsExpanded ? "expanded" : ""}`} size={14} />
+          </button>
+        ) : (
+          <div className={`activity-summary static ${danger ? "danger" : ""} ${running ? "working" : ""}`}>
+            {summaryImage ? (
+              <ActivitySummaryImage activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} image={summaryImage} />
+            ) : (
+              <ActivitySummaryIcon kind={summary.kind} />
+            )}
+            <ActivitySummaryText summary={summaryText} />
+          </div>
+        )}
         {summaryOpenSessions.length > 0 && onOpenSession ? (
           <SubagentAvatarGroup
             onOpenSession={onOpenSession}
-            onShowAll={() => setManualExpanded(true)}
+            onShowAll={() => setToolsExpanded(true)}
             sessions={summaryOpenSessions}
           />
         ) : null}
@@ -114,29 +130,29 @@ export function ActivityGroup({
           onOpenFileInSidebar={onOpenFileInSidebar}
         />
       ) : null}
-      {running && presentation.hiddenCount > 0 ? (
-        <button
-          type="button"
-          className="work-trace-earlier-toggle"
-          onClick={() => setManualExpanded(true)}
-        >
-          Show earlier work ({presentation.hiddenCount})
-        </button>
-      ) : null}
       {presentation.visibleActivities.length > 0 ? (
-        <div className="activity-details">
+        <div className="work-trace-flow" id={toolListId}>
           {presentation.visibleActivities.map((activity) => (
-            <ActivityDetailRow
-              activeWorkspaceAppId={activeWorkspaceAppId}
-              activity={activity}
-              connection={connection}
-              key={activity.id}
-              onOpenBrowserLink={onOpenBrowserLink}
-              onOpenFileInSidebar={onOpenFileInSidebar}
-              onOpenImage={setOpenImage}
-              onOpenSession={onOpenSession}
-              workspaceRootPath={workspaceRootPath}
-            />
+            isInlineWorkTraceActivity(activity) ? (
+              <InlineReasoningActivity
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                activity={activity}
+                connection={connection}
+                key={activity.id}
+                onOpenBrowserLink={onOpenBrowserLink}
+                onOpenFileInSidebar={onOpenFileInSidebar}
+                workspaceRootPath={workspaceRootPath}
+              />
+            ) : (
+              <ActivityToolRow
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                activity={activity}
+                connection={connection}
+                key={activity.id}
+                onOpenImage={setOpenImage}
+                onOpenSession={onOpenSession}
+              />
+            )
           ))}
         </div>
       ) : null}
@@ -150,14 +166,12 @@ export function ActivityGroup({
   );
 }
 
-function ActivityDetailRow({
+function InlineReasoningActivity({
   activeWorkspaceAppId,
   activity,
   connection,
   onOpenBrowserLink,
   onOpenFileInSidebar,
-  onOpenImage,
-  onOpenSession,
   workspaceRootPath,
 }: {
   activeWorkspaceAppId: string | null;
@@ -165,72 +179,93 @@ function ActivityDetailRow({
   connection: ClientConnection | null;
   onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
   onOpenFileInSidebar?: (path: string) => void;
-  onOpenImage: (image: ActivityItem["imagePreview"] | null) => void;
-  onOpenSession?: (sessionId: string) => void;
   workspaceRootPath?: string | null;
 }) {
+  if (!activity.content) return null;
+  return (
+    <div className="work-trace-inline-reasoning">
+      <MarkdownText
+        activeWorkspaceAppId={activeWorkspaceAppId}
+        connection={connection}
+        content={activity.content}
+        onOpenBrowserLink={onOpenBrowserLink}
+        onOpenFileInSidebar={onOpenFileInSidebar}
+        workspaceRootPath={workspaceRootPath}
+      />
+    </div>
+  );
+}
+
+function ActivityToolRow({
+  activeWorkspaceAppId,
+  activity,
+  connection,
+  onOpenImage,
+  onOpenSession,
+}: {
+  activeWorkspaceAppId: string | null;
+  activity: ActivityItem;
+  connection: ClientConnection | null;
+  onOpenImage: (image: ActivityItem["imagePreview"] | null) => void;
+  onOpenSession?: (sessionId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
   const imageSrc = useActivityImageUrl(activity.imagePreview ?? null, connection, activeWorkspaceAppId);
   if (activity.subagentMessage) {
-    return (
-      <SubagentMessageDetailRow
-        activity={activity}
-      />
-    );
+    return <SubagentMessageDetailRow activity={activity} />;
   }
   return (
-    <div
-      className={`activity-detail-row ${activity.controlKind === "turn_aborted" ? "danger" : ""}`}
-      key={activity.id}
-    >
-      <span>{activity.label}</span>
-      <div className="activity-detail-main">
-        {activity.content && (
-          activity.kind === "command" ? (
-            <ShellCommandCode className="activity-detail-command" command={activity.content} />
-          ) : activity.kind === "reasoning" ? (
-            <div className="work-trace-reasoning">
-              <MarkdownText
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                connection={connection}
-                content={activity.content}
-                onOpenBrowserLink={onOpenBrowserLink}
-                onOpenFileInSidebar={onOpenFileInSidebar}
-                workspaceRootPath={workspaceRootPath}
+    <div className={`activity-tool-row ${activity.controlKind === "turn_aborted" ? "danger" : ""}`}>
+      <button
+        type="button"
+        aria-controls={detailsId}
+        aria-expanded={expanded}
+        className="activity-tool-summary"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <ChevronDown className={`activity-tool-toggle ${expanded ? "expanded" : ""}`} size={13} />
+        <span>{activityToolRowLabel(activity)}</span>
+      </button>
+      {expanded ? (
+        <div className="activity-tool-details" id={detailsId}>
+          {activity.content ? (
+            activity.kind === "command" ? (
+              <ShellCommandBlock command={activity.content} />
+            ) : isMultilineActivity(activity.content) ? (
+              <pre className="activity-detail-output">{activity.content}</pre>
+            ) : (
+              <code className="activity-tool-content">{activity.content}</code>
+            )
+          ) : null}
+          {activity.detail ? (
+            <pre className="activity-detail-output">{activity.detail.replace(/\r\n/g, "\n").trimEnd()}</pre>
+          ) : null}
+          {activity.meta ? <small className="activity-detail-meta">{activity.meta}</small> : null}
+          {activity.imagePreview && imageSrc ? (
+            <button
+              type="button"
+              className="activity-image-preview"
+              title={`Open ${activity.imagePreview.path}`}
+              onClick={() => onOpenImage(activity.imagePreview ?? null)}
+            >
+              <img
+                alt={workspaceFileName(activity.imagePreview.path)}
+                decoding="async"
+                loading="lazy"
+                src={imageSrc}
               />
-            </div>
-          ) : isMultilineActivity(activity.content) ? (
-            <pre className="activity-detail-output">{activity.content}</pre>
-          ) : (
-            <code>{activity.content}</code>
-          )
-        )}
-        {activity.detail && (
-          <pre className="activity-detail-output">{compactActivityOutput(activity.detail)}</pre>
-        )}
-        {activity.meta && <small className="activity-detail-meta">{activity.meta}</small>}
-        {activity.imagePreview && imageSrc && (
-          <button
-            type="button"
-            className="activity-image-preview"
-            title={`Open ${activity.imagePreview.path}`}
-            onClick={() => onOpenImage(activity.imagePreview ?? null)}
-          >
-            <img
-              alt={workspaceFileName(activity.imagePreview.path)}
-              decoding="async"
-              loading="lazy"
-              src={imageSrc}
+            </button>
+          ) : null}
+          {activity.openSession && onOpenSession ? (
+            <SubagentAvatarButton
+              className="activity-subagent-detail-avatar"
+              openSession={activity.openSession}
+              onOpenSession={onOpenSession}
             />
-          </button>
-        )}
-        {activity.openSession && onOpenSession ? (
-          <SubagentAvatarButton
-            className="activity-subagent-detail-avatar"
-            openSession={activity.openSession}
-            onOpenSession={onOpenSession}
-          />
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -478,30 +513,44 @@ export function subagentMessageNeedsCollapse(body: string): boolean {
   return body.length > SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS || body.split(/\r?\n/).length > SUBAGENT_MESSAGE_VISIBLE_LINES;
 }
 
-function ActivitySummaryText({ duration, summary }: { duration: string | null; summary: string }) {
+function ActivitySummaryText({ summary }: { summary: string }) {
   return (
     <span className="activity-summary-text">
       <span>{summary}</span>
-      {duration ? <small>{duration}</small> : null}
     </span>
   );
 }
 
-function workTraceSummaryText(summary: string, traceState: ChatMessage["traceState"]): string {
-  if (traceState === "running") {
-    return summary === "Thought through the request" ? "Working…" : `Working… · ${summary}`;
+function workTraceSummaryText(
+  summary: string,
+  traceState: ChatMessage["traceState"],
+  duration: string | null,
+): string {
+  if (traceState === "running") return "Working…";
+  if (traceState === "failed") {
+    return `${duration ? `Failed after ${duration}` : "Failed"}${summary ? ` · ${summary}` : ""}`;
   }
-  if (traceState === "failed") return `Failed · ${summary}`;
-  if (traceState === "interrupted") return `Interrupted · ${summary}`;
+  if (traceState === "interrupted") {
+    return `${duration ? `Interrupted after ${duration}` : "Interrupted"}${summary ? ` · ${summary}` : ""}`;
+  }
+  if (traceState === "completed") {
+    return `${duration ? `Worked for ${duration}` : "Worked"}${summary ? ` · ${summary}` : ""}`;
+  }
   return summary;
 }
 
-function ShellCommandCode({ className, command }: { className: string; command: string }) {
-  const display = summarizeShellCommand(command) ?? command;
+function activityToolRowLabel(activity: ActivityItem): string {
+  if (activity.kind !== "command") return activity.label;
+  if (activity.state === "failed") return "Command failed";
+  return summarizeShellCommand(activity.content, activity.state)
+    ?? (activity.state === "running" ? "Running command" : "Ran command");
+}
+
+function ShellCommandBlock({ command }: { command: string }) {
   return (
-    <code className={`${className} shell-command-code`} title={command}>
-      {display === command ? highlightShellCommand(command) : display}
-    </code>
+    <pre className="activity-detail-output activity-tool-command">
+      <code className="shell-command-code">{highlightShellCommand(command)}</code>
+    </pre>
   );
 }
 
@@ -511,14 +560,6 @@ function highlightShellCommand(command: string) {
       {token.text}
     </span>
   ));
-}
-
-function compactActivityOutput(value: string): string {
-  const normalized = value.replace(/\r\n/g, "\n").trimEnd();
-  const lines = normalized.split("\n");
-  if (lines.length <= COMMAND_OUTPUT_VISIBLE_LINES) return normalized;
-  const omitted = lines.length - COMMAND_OUTPUT_VISIBLE_LINES;
-  return `${lines.slice(0, COMMAND_OUTPUT_VISIBLE_LINES).join("\n")}\n... ${omitted} ${omitted === 1 ? "line" : "lines"} omitted`;
 }
 
 type ShellToken = {

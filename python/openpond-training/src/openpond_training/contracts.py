@@ -60,15 +60,35 @@ def load_bundle(directory: Path) -> tuple[dict[str, Any], dict[str, Any], list[d
         if target.stat().st_size != item.get("sizeBytes"):
             raise ContractError(f"Bundle file size mismatch: {relative}.")
     recipe = json.loads((directory / "recipe.json").read_text(encoding="utf-8"))
-    validate_contract("sft-recipe", recipe)
-    if recipe.get("schemaVersion") != "openpond.sftRecipe.v1" or recipe.get("method") != "sft" or recipe.get("parameterization") != "lora":
-        raise ContractError("Only openpond.sftRecipe.v1 LoRA SFT is executable.")
+    method = recipe.get("method")
+    if method == "sft":
+        validate_contract("sft-recipe", recipe)
+        if recipe.get("schemaVersion") != "openpond.sftRecipe.v1":
+            raise ContractError("Unsupported SFT recipe schemaVersion.")
+        record_contract = "sft-training-record"
+    elif method == "dpo":
+        validate_contract("dpo-recipe", recipe)
+        if recipe.get("schemaVersion") != "openpond.dpoRecipe.v1":
+            raise ContractError("Unsupported DPO recipe schemaVersion.")
+        record_contract = "dpo-training-record"
+    elif method == "ppo":
+        validate_contract("ppo-recipe", recipe)
+        if recipe.get("schemaVersion") != "openpond.ppoRecipe.v1":
+            raise ContractError("Unsupported PPO recipe schemaVersion.")
+        record_contract = "policy-training-record"
+    else:
+        raise ContractError("The local worker executes only SFT, DPO, and PPO recipes.")
+    if recipe.get("parameterization") != "lora":
+        raise ContractError("The local worker requires LoRA parameterization.")
     records: list[dict[str, Any]] = []
     for line in (directory / "data" / "train.jsonl").read_text(encoding="utf-8").splitlines():
         if line.strip():
             record = json.loads(line)
-            validate_contract("sft-training-record", record)
-            if not isinstance(record.get("input"), dict) or not isinstance(record.get("expectedOutput"), dict):
+            validate_contract(record_contract, record)
+            if method == "sft" and (
+                not isinstance(record.get("input"), dict)
+                or not isinstance(record.get("expectedOutput"), dict)
+            ):
                 raise ContractError("Every SFT record requires input and expectedOutput objects.")
             records.append(record)
     if not records:

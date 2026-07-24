@@ -27,6 +27,12 @@ import type {
   OpenPondExtension,
   OpenPondExtensionCatalog,
   OpenPondExtensionPreview,
+  OpenPondProfileLibrary,
+  OpenPondProfileRef,
+  OpenPondProfilePublicationPreview,
+  OpenPondProfilePublicationPreviewRequest,
+  OpenPondProfilePublicationPublishRequest,
+  OpenPondProfilePublicationResult,
   LocalAgentSchedulesResponse,
   LocalAgentScheduleRunsResponse,
   LocalAgentScheduleRunResponse,
@@ -923,6 +929,50 @@ export const api = {
     ),
   profileCurrent: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile"),
+  profileCatalog: (connection: ClientConnection) =>
+    apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/catalog"),
+  profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
+    apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(
+      connection,
+      "/v1/profile/select",
+      { method: "POST", body: JSON.stringify({ ref }) },
+    ),
+  profileRemove: (connection: ClientConnection, ref: OpenPondProfileRef) =>
+    apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/remove", {
+      method: "POST",
+      body: JSON.stringify({ ref }),
+    }),
+  profilePublicationPreview: (
+    connection: ClientConnection,
+    input: OpenPondProfilePublicationPreviewRequest,
+  ) => apiFetch<OpenPondProfilePublicationPreview>(connection, "/v1/profile/publication/preview", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  profilePublicationPublish: (
+    connection: ClientConnection,
+    input: OpenPondProfilePublicationPublishRequest,
+  ) => apiFetch<OpenPondProfilePublicationResult>(connection, "/v1/profile/publication/publish", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  profileInstall: (
+    connection: ClientConnection,
+    input: {
+      source: "github" | "openpond_git";
+      repositoryId: string;
+      url?: string | null;
+      profile?: string | null;
+    },
+  ) => apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(connection, "/v1/profile/install", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  profileUpdate: (connection: ClientConnection, ref: OpenPondProfileRef) =>
+    apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(connection, "/v1/profile/update", {
+      method: "POST",
+      body: JSON.stringify({ ref }),
+    }),
   profileInit: (
     connection: ClientConnection,
     input: {

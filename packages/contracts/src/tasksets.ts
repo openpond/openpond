@@ -34,6 +34,60 @@ export const TaskCreationSurfaceSchema = z.enum([
 ]);
 export const TaskCreationModeSchema = z.enum(["defaults", "customize"]);
 export const NewModelModeSchema = z.enum(["automated", "manual"]);
+export const DatasetBuildIntentSchema = z.enum([
+  "demonstrations",
+  "preferences",
+  "verifiable_reward",
+  "rubric",
+  "discovery",
+]);
+
+const DatasetEvidenceTextSchema = z.string().trim().max(100_000);
+
+export const DatasetBuildSpecificationSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("demonstrations"),
+    behavior: DatasetEvidenceTextSchema,
+    examples: z.array(z.object({
+      id: IdSchema,
+      prompt: DatasetEvidenceTextSchema,
+      response: DatasetEvidenceTextSchema,
+    })).max(1_000).default([]),
+  }),
+  z.object({
+    kind: z.literal("preferences"),
+    preference: DatasetEvidenceTextSchema,
+    pairs: z.array(z.object({
+      id: IdSchema,
+      prompt: DatasetEvidenceTextSchema,
+      chosen: DatasetEvidenceTextSchema,
+      rejected: DatasetEvidenceTextSchema,
+      rationale: DatasetEvidenceTextSchema,
+    })).max(1_000).default([]),
+  }),
+  z.object({
+    kind: z.literal("verifiable_reward"),
+    task: DatasetEvidenceTextSchema,
+    rules: z.array(z.object({
+      id: IdSchema,
+      points: z.number().finite(),
+      condition: DatasetEvidenceTextSchema,
+    })).max(1_000).default([]),
+    otherwisePoints: z.number().finite().default(0),
+  }),
+  z.object({
+    kind: z.literal("rubric"),
+    task: DatasetEvidenceTextSchema,
+    criteria: z.array(z.object({
+      id: IdSchema,
+      label: z.string().trim().max(500),
+      description: DatasetEvidenceTextSchema,
+    })).max(1_000).default([]),
+    positiveExample: DatasetEvidenceTextSchema,
+    negativeExample: DatasetEvidenceTextSchema,
+    boundaryExample: DatasetEvidenceTextSchema,
+  }),
+]);
 
 export const TrainingSourceConsentSchema = z.object({
   status: z.enum(["pending", "granted", "denied", "revoked"]),
@@ -127,9 +181,8 @@ export const TaskDataRecordSchema = z.object({
   metadata: MetadataSchema,
 });
 
-export const LearningSignalRefSchema = z.object({
+const LearningSignalBaseSchema = z.object({
   id: IdSchema,
-  kind: z.enum(["demonstration", "preference", "correction", "feedback", "reward", "label"]),
   taskId: NullableIdSchema,
   sourceRefs: z.array(IdSchema).min(1).max(100),
   artifactRef: IdSchema,
@@ -138,13 +191,71 @@ export const LearningSignalRefSchema = z.object({
   metadata: MetadataSchema,
 });
 
+export const DemonstrationSignalSchema = LearningSignalBaseSchema.extend({
+  kind: z.literal("demonstration"),
+  prompt: z.string().max(100_000).nullable().default(null),
+  response: z.string().max(200_000).nullable().default(null),
+});
+export const PreferenceSignalSchema = LearningSignalBaseSchema.extend({
+  kind: z.literal("preference"),
+  prompt: z.string().max(100_000),
+  chosen: z.string().max(200_000),
+  rejected: z.string().max(200_000),
+  rationale: z.string().max(100_000).nullable().default(null),
+});
+export const CorrectionSignalSchema = LearningSignalBaseSchema.extend({
+  kind: z.literal("correction"),
+  original: z.string().max(200_000),
+  corrected: z.string().max(200_000),
+  rationale: z.string().max(100_000).nullable().default(null),
+});
+export const FeedbackSignalSchema = LearningSignalBaseSchema.extend({
+  kind: z.literal("feedback"),
+  feedback: z.string().max(100_000),
+  polarity: z.enum(["positive", "negative", "mixed", "neutral"]),
+});
+export const RewardSignalSchema = LearningSignalBaseSchema.extend({
+  kind: z.literal("reward"),
+  task: z.string().max(100_000),
+  rules: z.array(z.object({
+    id: IdSchema,
+    points: z.number().finite(),
+    condition: z.string().trim().min(1).max(100_000),
+  })).min(1).max(1_000),
+  otherwisePoints: z.number().finite(),
+  executable: z.boolean(),
+});
+export const LabelSignalSchema = LearningSignalBaseSchema.extend({
+  kind: z.literal("label"),
+  labelKind: z.literal("rubric"),
+  task: z.string().max(100_000),
+  criteria: z.array(z.object({
+    id: IdSchema,
+    label: z.string().trim().min(1).max(500),
+    description: z.string().trim().min(1).max(100_000),
+  })).min(1).max(1_000),
+  calibrationExamples: z.object({
+    positive: z.string().trim().min(1).max(200_000),
+    negative: z.string().trim().min(1).max(200_000),
+    boundary: z.string().trim().min(1).max(200_000),
+  }),
+});
+export const LearningSignalRefSchema = z.discriminatedUnion("kind", [
+  DemonstrationSignalSchema,
+  PreferenceSignalSchema,
+  CorrectionSignalSchema,
+  FeedbackSignalSchema,
+  RewardSignalSchema,
+  LabelSignalSchema,
+]);
+
 export const LearningSignalInventorySchema = z.object({
-  demonstrations: z.array(LearningSignalRefSchema).max(100_000).default([]),
-  preferences: z.array(LearningSignalRefSchema).max(100_000).default([]),
-  corrections: z.array(LearningSignalRefSchema).max(100_000).default([]),
-  feedback: z.array(LearningSignalRefSchema).max(100_000).default([]),
-  rewards: z.array(LearningSignalRefSchema).max(100_000).default([]),
-  labels: z.array(LearningSignalRefSchema).max(100_000).default([]),
+  demonstrations: z.array(DemonstrationSignalSchema).max(100_000).default([]),
+  preferences: z.array(PreferenceSignalSchema).max(100_000).default([]),
+  corrections: z.array(CorrectionSignalSchema).max(100_000).default([]),
+  feedback: z.array(FeedbackSignalSchema).max(100_000).default([]),
+  rewards: z.array(RewardSignalSchema).max(100_000).default([]),
+  labels: z.array(LabelSignalSchema).max(100_000).default([]),
 });
 
 export const TasksetEnvironmentContractSchema = z.object({
@@ -164,7 +275,7 @@ export const TasksetCapabilityManifestSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetCapabilities.v1"),
   taskKind: z.enum(["chat", "single_agent", "multi_agent", "custom_program"]),
   supportedSignals: z.array(z.enum(["demonstration", "preference", "correction", "feedback", "reward", "label"])),
-  compatibleMethods: z.array(z.enum(["none", "retrieval", "sft", "dpo", "grpo", "sdft", "opd", "opsd", "sdpo"])),
+  compatibleMethods: z.array(z.enum(["none", "retrieval", "sft", "dpo", "grpo", "ppo", "sdft", "opd", "opsd", "sdpo"])),
   rewardKinds: z.array(z.enum(["none", "exact", "deterministic", "model_judge", "human"])),
   requiresTools: z.boolean(),
   requiresState: z.boolean(),
@@ -479,7 +590,7 @@ export const GraderAuditReportSchema = z.object({
 });
 
 export const TrainingPathRecommendationSchema = z.object({
-  primaryMethod: z.enum(["sft", "dpo", "grpo", "sdft", "opsd", "sdpo"]),
+  primaryMethod: z.enum(["sft", "dpo", "grpo", "ppo", "sdft", "opsd", "sdpo"]),
   bootstrap: z.object({
     method: z.literal("sft"),
     purpose: z.literal("trajectory_bootstrap"),
@@ -488,13 +599,33 @@ export const TrainingPathRecommendationSchema = z.object({
   }).nullable(),
 });
 
+export const TrainingMethodReadinessReasonCodeSchema = z.enum([
+  "taskset_not_ready",
+  "demonstrations_missing",
+  "preference_pairs_missing",
+  "preference_pairs_invalid",
+  "executable_reward_missing",
+  "reward_not_calibrated",
+  "reward_model_missing",
+  "value_model_required",
+  "frozen_eval_missing",
+]);
+
+export const TrainingMethodReadinessSchema = z.object({
+  method: z.enum(["sft", "dpo", "grpo", "ppo"]),
+  status: z.enum(["recommended", "compatible", "needs_dataset_work"]),
+  reasonCodes: z.array(TrainingMethodReadinessReasonCodeSchema).default([]),
+  reasons: z.array(z.string().trim().min(1).max(5_000)).default([]),
+});
+
 export const TasksetReadinessReportSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetReadiness.v1"),
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
   ready: z.boolean(),
-  recommendedMethod: z.enum(["none", "retrieval", "sft", "dpo", "grpo", "sdft", "opd", "opsd", "sdpo"]),
+  recommendedMethod: z.enum(["none", "retrieval", "sft", "dpo", "grpo", "ppo", "sdft", "opd", "opsd", "sdpo"]),
   trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
+  methodReadiness: z.array(TrainingMethodReadinessSchema).default([]),
   compatibleDestinationClasses: z.array(z.enum(["export", "local_cpu_fixture", "custom", "openpond_managed", "hosted_byok"])),
   blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
@@ -534,6 +665,8 @@ export const AuthoringProvenanceSchema = z.object({
   modelConfig: MetadataSchema,
   skillHash: HashSchema,
   promptTemplateVersion: z.string().trim().min(1).max(200),
+  buildIntent: DatasetBuildIntentSchema.default("demonstrations"),
+  buildSpecification: DatasetBuildSpecificationSchema.nullable().default(null),
   evidenceHashes: z.array(HashSchema).max(100_000),
   tasksetSdkVersion: z.string().trim().min(1).max(100),
   sourceCommit: z.string().trim().min(1).max(256).nullable(),
@@ -651,8 +784,10 @@ export const TaskCreationRequestSchema = z.object({
   mode: TaskCreationModeSchema,
   entryMode: NewModelModeSchema.default("manual"),
   resourceIntent: z.enum(["workproduct", "dataset"]).default("workproduct"),
+  buildIntent: DatasetBuildIntentSchema.default("demonstrations"),
+  buildSpecification: DatasetBuildSpecificationSchema.nullable().default(null),
   objective: z.string().trim().min(1).max(20_000).nullable(),
-  methodHint: z.enum(["sft", "dpo", "grpo"]).nullable().default(null),
+  methodHint: z.enum(["sft", "dpo", "grpo", "ppo"]).nullable().default(null),
   preferredBaseModelId: IdSchema.nullable().default(null),
   preferredBaseModel: BaseModelPreferenceSchema.nullable().default(null),
   sourceIds: z.array(IdSchema).max(100_000),
@@ -711,7 +846,15 @@ export type TrainingChatSearchResult = z.infer<typeof TrainingChatSearchResultSc
 export type TaskCreationSurface = z.infer<typeof TaskCreationSurfaceSchema>;
 export type TaskCreationMode = z.infer<typeof TaskCreationModeSchema>;
 export type NewModelMode = z.infer<typeof NewModelModeSchema>;
+export type DatasetBuildIntent = z.infer<typeof DatasetBuildIntentSchema>;
+export type DatasetBuildSpecification = z.infer<typeof DatasetBuildSpecificationSchema>;
 export type TaskDataRecord = z.infer<typeof TaskDataRecordSchema>;
+export type DemonstrationSignal = z.infer<typeof DemonstrationSignalSchema>;
+export type PreferenceSignal = z.infer<typeof PreferenceSignalSchema>;
+export type CorrectionSignal = z.infer<typeof CorrectionSignalSchema>;
+export type FeedbackSignal = z.infer<typeof FeedbackSignalSchema>;
+export type RewardSignal = z.infer<typeof RewardSignalSchema>;
+export type LabelSignal = z.infer<typeof LabelSignalSchema>;
 export type LearningSignalInventory = z.infer<typeof LearningSignalInventorySchema>;
 export type TasksetEnvironmentContract = z.infer<typeof TasksetEnvironmentContractSchema>;
 export type TasksetCapabilityManifest = z.infer<typeof TasksetCapabilityManifestSchema>;
@@ -728,6 +871,8 @@ export type BaselineReport = z.infer<typeof BaselineReportSchema>;
 export type TasksetBaselineRun = z.infer<typeof TasksetBaselineRunSchema>;
 export type GraderAuditReport = z.infer<typeof GraderAuditReportSchema>;
 export type TrainingPathRecommendation = z.infer<typeof TrainingPathRecommendationSchema>;
+export type TrainingMethodReadinessReasonCode = z.infer<typeof TrainingMethodReadinessReasonCodeSchema>;
+export type TrainingMethodReadiness = z.infer<typeof TrainingMethodReadinessSchema>;
 export type TasksetReadinessReport = z.infer<typeof TasksetReadinessReportSchema>;
 export type CapabilityDiagnosis = z.infer<typeof CapabilityDiagnosisSchema>;
 export type TaskExampleProposal = z.infer<typeof TaskExampleProposalSchema>;

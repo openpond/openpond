@@ -314,6 +314,24 @@
   margin-bottom: 16px;
 }
 
+.labs-dataset-method-readiness {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.labs-dataset-method-readiness ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .labs-dataset-tabs {
   display: flex;
   width: fit-content;

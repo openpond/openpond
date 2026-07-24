@@ -16,7 +16,12 @@ import { useErrorToast } from "../../app/AppToastContext";
 
 type TrainingController = ReturnType<typeof useTraining>;
 export type TrainingSection = "models" | "evals" | "suggestions";
-export type TrainingLaunchRequest = { id: number; objective: string | null; initialSessionIds?: string[] };
+export type TrainingLaunchRequest = {
+  id: number;
+  objective: string | null;
+  initialSessionIds?: string[];
+  initialTasksetId?: string;
+};
 
 export type TrainingViewProps = {
   section?: TrainingSection;

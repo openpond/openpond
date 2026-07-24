@@ -4,10 +4,13 @@ import {
   BaselineRftSignalSchema,
   BaselineReportSchema,
   BaselineScopeSchema,
+  DatasetBuildIntentSchema,
+  DatasetBuildSpecificationSchema,
   GraderAuditReportSchema,
   TasksetBaselineRunSchema,
   TaskCreationSnapshotSchema,
   TasksetSchema,
+  TrainingMethodReadinessReasonCodeSchema,
   TrainingSourceRefSchema,
 } from "./tasksets.js";
 import { TaskCandidateSchema, TaskMinerConfigSchema, TaskMinerRunSchema } from "./task-mining.js";
@@ -18,6 +21,23 @@ import {
 } from "./cross-system-operations.js";
 import { DatasetArtifactSummarySchema } from "./dataset-artifacts.js";
 import { DatasetImportJobSchema } from "./dataset-imports.js";
+import {
+  PolicyOptimizationBudgetSchema,
+  PolicyOptimizationContractSchema,
+  PolicyOptimizerSchema,
+  PpoOptimizerSchema,
+  RftLossMethodSchema,
+  TrainingModelRefSchema,
+} from "./training-policy-optimization.js";
+export {
+  GrpoOptimizerSchema,
+  PolicyOptimizationBudgetSchema,
+  PolicyOptimizationContractSchema,
+  PolicyOptimizerSchema,
+  PpoOptimizerSchema,
+  RftLossMethodSchema,
+  TrainingModelRefSchema,
+} from "./training-policy-optimization.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -29,9 +49,7 @@ export const DATASET_EXACT_ANSWER_ENVIRONMENT_ID =
 export const DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION =
   "dataset-exact-answer-v1" as const;
 export const DATASET_NO_TOOLS_CONTRACT_HASH = "no-tools-v1" as const;
-export const RftLossMethodSchema = z.enum(["grpo", "dapo", "gspo-token"]);
-
-export const TrainingMethodSchema = z.enum(["sft", "dpo", "grpo", "sdft", "opd", "opsd", "sdpo"]);
+export const TrainingMethodSchema = z.enum(["sft", "dpo", "grpo", "ppo", "sdft", "opd", "opsd", "sdpo"]);
 export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
 export const TrainingDestinationIdSchema = z.enum([
   "export",
@@ -57,6 +75,8 @@ export const SftRecipeSchema = z.object({
     completionOnly: z.boolean(),
     maxSequenceLength: z.number().int().positive().max(32_768),
     maxExamples: z.number().int().positive().max(100_000).default(1_000),
+    selectionStrategy: z.literal("stable_hash_top_n").default("stable_hash_top_n"),
+    selectionSeed: z.number().int().default(17),
   }),
   lora: z.object({ rank: z.number().int().positive().max(256), alpha: z.number().positive().max(1_024), dropout: z.number().min(0).max(1), targetModules: z.array(IdSchema).min(1).max(100) }),
   optimizer: z.object({ learningRate: z.number().positive(), epochs: z.number().positive().max(100), maxSteps: z.number().int().positive().max(1_000_000), batchSize: z.number().int().positive().max(10_000), gradientAccumulationSteps: z.number().int().positive().max(10_000), seed: z.number().int() }),
@@ -67,6 +87,20 @@ export const SftTrainingRecordSchema = z.object({
   id: IdSchema,
   input: z.record(z.string(), z.unknown()),
   expectedOutput: z.record(z.string(), z.unknown()),
+  tags: z.array(IdSchema).max(100).default([]),
+});
+
+export const DpoTrainingRecordSchema = z.object({
+  id: IdSchema,
+  prompt: z.string().min(1).max(500_000),
+  chosen: z.string().min(1).max(500_000),
+  rejected: z.string().min(1).max(500_000),
+  sourceRefs: z.array(IdSchema).min(1).max(10_000),
+});
+
+export const PolicyTrainingRecordSchema = z.object({
+  id: IdSchema,
+  input: z.record(z.string(), z.unknown()),
   tags: z.array(IdSchema).max(100).default([]),
 });
 
@@ -122,17 +156,99 @@ export const RftRecipeSchema = z.object({
     maxRollouts: z.number().int().positive().max(100_000),
     maxPayloadBytes: z.number().int().positive().max(10 * 1024 * 1024),
   }),
+  policyOptimization: PolicyOptimizationContractSchema.nullable().default(null),
+});
+
+export const DpoRecipeSchema = z.object({
+  schemaVersion: z.literal("openpond.dpoRecipe.v1"),
+  method: z.literal("dpo"),
+  parameterization: z.literal("lora"),
+  policyModel: TrainingModelRefSchema,
+  referenceModel: TrainingModelRefSchema,
+  dataset: z.object({
+    trainSplit: z.literal("train"),
+    validationSplit: z.enum(["validation", "frozen_eval"]),
+    maxPairs: z.number().int().positive().max(100_000),
+    maxPromptTokens: z.number().int().positive().max(32_768),
+    maxCompletionTokens: z.number().int().positive().max(32_768),
+    selectionStrategy: z.literal("stable_hash_top_n"),
+    selectionSeed: z.number().int(),
+  }),
+  lora: z.object({
+    rank: z.number().int().positive().max(256),
+    alpha: z.number().positive().max(1_024),
+    dropout: z.number().min(0).max(1),
+    targetModules: z.array(IdSchema).min(1).max(100),
+  }),
+  loss: z.object({
+    variant: z.literal("sigmoid"),
+    beta: z.number().positive().max(10),
+    labelSmoothing: z.number().min(0).max(0.5).default(0),
+  }),
+  optimizer: z.object({
+    learningRate: z.number().positive(),
+    epochs: z.number().positive().max(100),
+    maxSteps: z.number().int().positive().max(1_000_000),
+    batchSize: z.number().int().positive().max(10_000),
+    gradientAccumulationSteps: z.number().int().positive().max(10_000),
+    seed: z.number().int(),
+  }),
+  referenceLogprobs: z.object({
+    cacheSchemaVersion: z.literal("openpond.dpoReferenceLogprobs.v1"),
+    cacheKey: HashSchema,
+    invalidationHash: HashSchema,
+  }),
+  resourceLimits: z.object({
+    cpuThreads: z.number().int().positive().max(256),
+    memoryBytes: z.number().int().positive(),
+    wallTimeMs: z.number().int().positive(),
+  }),
+});
+
+export const PpoRecipeSchema = z.object({
+  schemaVersion: z.literal("openpond.ppoRecipe.v1"),
+  method: z.literal("ppo"),
+  parameterization: z.literal("lora"),
+  policyOptimization: PolicyOptimizationContractSchema.extend({
+    optimizer: PpoOptimizerSchema,
+  }),
+  lora: z.object({
+    rank: z.number().int().positive().max(256),
+    alpha: z.number().positive().max(1_024),
+    dropout: z.number().min(0).max(1),
+    targetModules: z.array(IdSchema).min(1).max(100),
+  }),
+  valueHead: z.object({
+    initialization: z.literal("policy_hidden_state_linear"),
+    optimizerLearningRate: z.number().positive(),
+    artifactName: z.literal("value_head.safetensors"),
+  }),
+  policyLearningRate: z.number().positive(),
+  resume: z.object({
+    checkpointId: IdSchema.nullable(),
+    policyHash: HashSchema,
+    referenceHash: HashSchema,
+    valueModelHash: HashSchema,
+    optimizerStateHash: HashSchema.nullable(),
+  }),
+  resourceLimits: z.object({
+    cpuThreads: z.number().int().positive().max(256),
+    memoryBytes: z.number().int().positive(),
+    wallTimeMs: z.number().int().positive(),
+  }),
 });
 
 export const UnsupportedTrainingRecipeSchema = z.object({
   schemaVersion: z.literal("openpond.unsupportedRecipe.v1"),
-  method: TrainingMethodSchema.exclude(["sft", "grpo"]),
+  method: TrainingMethodSchema.exclude(["sft", "dpo", "grpo", "ppo"]),
   parameterization: TrainingParameterizationSchema,
   unsupportedReason: z.string().trim().min(1).max(5_000),
 });
 export const TrainingRecipeSchema = z.union([
   SftRecipeSchema,
+  DpoRecipeSchema,
   RftRecipeSchema,
+  PpoRecipeSchema,
   UnsupportedTrainingRecipeSchema,
 ]);
 
@@ -188,10 +304,105 @@ export const TrainingCompatibilityReportSchema = z.object({
   checkedAt: TimestampSchema,
 });
 
+export const PolicyOptimizationComparisonSchema = z.object({
+  schemaVersion: z.literal("openpond.policyOptimizationComparison.v1"),
+  grpoPlanId: IdSchema,
+  ppoPlanId: IdSchema,
+  comparable: z.boolean(),
+  shared: z.object({
+    tasksetId: IdSchema,
+    tasksetHash: HashSchema,
+    policyModelHash: HashSchema,
+    referenceModelHash: HashSchema,
+    environmentHash: HashSchema,
+    rewardHash: HashSchema,
+    rolloutBudgetHash: HashSchema,
+    evaluationSplit: z.literal("frozen_eval"),
+  }).nullable(),
+  mismatches: z.array(z.enum([
+    "dataset",
+    "policy_model",
+    "reference_model",
+    "environment",
+    "reward",
+    "rollout_budget",
+    "evaluation",
+  ])),
+});
+
+export const TrainingMethodAvailabilityReasonCodeSchema = z.union([
+  TrainingMethodReadinessReasonCodeSchema,
+  z.enum([
+    "destination_unavailable",
+    "destination_method_unsupported",
+    "destination_model_unsupported",
+    "destination_parameterization_unsupported",
+    "experimental_destination",
+  ]),
+]);
+
+export const TrainingMethodAvailabilitySchema = z.object({
+  method: TrainingMethodSchema,
+  state: z.enum([
+    "recommended",
+    "compatible",
+    "needs_dataset_work",
+    "destination_unavailable",
+    "experimental_destination",
+  ]),
+  reasonCodes: z.array(TrainingMethodAvailabilityReasonCodeSchema).default([]),
+  reasons: z.array(z.string().trim().min(1).max(5_000)).default([]),
+  destinationId: TrainingDestinationIdSchema.nullable().default(null),
+});
+
+export const ModelRunPresetSchema = z.enum([
+  "small",
+  "standard",
+  "custom",
+  "small_experiment",
+]);
+
+export const ModelProjectSchema = z.object({
+  schemaVersion: z.literal("openpond.modelProject.v1"),
+  id: IdSchema,
+  profileId: IdSchema,
+  name: z.string().trim().min(1).max(200),
+  objective: z.string().trim().max(5_000).nullable(),
+  defaultBaseModel: BaseModelPreferenceSchema.nullable(),
+  defaultDestinationId: TrainingDestinationIdSchema.nullable(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+});
+
+export const ModelRunDraftSchema = z.object({
+  schemaVersion: z.literal("openpond.modelRunDraft.v1"),
+  id: IdSchema,
+  profileId: IdSchema,
+  modelId: IdSchema,
+  status: z.enum(["draft", "ready_to_run", "launched", "cancelled"]),
+  title: z.string().trim().min(1).max(200),
+  datasetMode: z.enum(["existing", "build"]).nullable(),
+  tasksetRef: z.object({
+    id: IdSchema,
+    revision: z.number().int().positive(),
+    contentHash: HashSchema,
+  }).nullable(),
+  datasetCreationId: IdSchema.nullable(),
+  buildIntent: DatasetBuildIntentSchema.nullable(),
+  buildSpecification: DatasetBuildSpecificationSchema.nullable(),
+  baseModel: BaseModelPreferenceSchema.nullable(),
+  method: TrainingMethodSchema.nullable(),
+  destinationId: TrainingDestinationIdSchema.nullable(),
+  runPreset: ModelRunPresetSchema.nullable(),
+  recipe: TrainingRecipeSchema.nullable(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+});
+
 export const TrainingPlanSchema = z.object({
   schemaVersion: z.literal("openpond.trainingPlan.v1"),
   id: IdSchema,
-  modelId: IdSchema.nullable().default(null),
+  modelId: IdSchema,
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
   destinationId: TrainingDestinationIdSchema,
@@ -303,12 +514,39 @@ export const SftStepMetricSchema = z.object({
   gradientNorm: z.number().nonnegative().nullable(),
   entropy: z.number().nonnegative().nullable(),
   meanTokenAccuracy: z.number().min(0).max(1).nullable(),
+  preferenceAccuracy: z.number().min(0).max(1).nullable().default(null),
+  preferenceMargin: z.number().nullable().default(null),
+  chosenReward: z.number().nullable().default(null),
+  rejectedReward: z.number().nullable().default(null),
+  chosenLogProbability: z.number().nullable().default(null),
+  rejectedLogProbability: z.number().nullable().default(null),
   reward: z.number().nullable().default(null),
   policyLoss: z.number().nullable().default(null),
   advantageLoss: z.number().nullable().default(null),
   inputTokensSeen: z.number().int().nonnegative().nullable(),
   memoryBytes: z.number().int().nonnegative().nullable(),
   elapsedSeconds: z.number().nonnegative().nullable(),
+});
+
+export const PolicyOptimizationMetricSchema = z.object({
+  schemaVersion: z.literal("openpond.policyOptimizationMetric.v1"),
+  method: z.enum(["grpo", "ppo"]),
+  step: z.number().int().nonnegative(),
+  timestamp: TimestampSchema,
+  policyLoss: z.number().nullable(),
+  valueLoss: z.number().nullable(),
+  meanReward: z.number().nullable(),
+  meanReturn: z.number().nullable(),
+  kl: z.number().nullable(),
+  entropy: z.number().nullable(),
+  policyClipFraction: z.number().min(0).max(1).nullable(),
+  valueClipFraction: z.number().min(0).max(1).nullable(),
+  explainedVariance: z.number().nullable(),
+  rolloutLearnerLag: z.number().int().nonnegative().nullable(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  environmentExecutions: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative(),
 });
 
 export const TrainingEvaluationAggregateSchema = z.object({
@@ -358,6 +596,7 @@ export const TrainingRunDetailSchema = z.object({
   job: TrainingJobSchema,
   events: z.array(TrainingJobEventSchema),
   stepMetrics: z.array(SftStepMetricSchema),
+  policyMetrics: z.array(PolicyOptimizationMetricSchema).default([]),
   evaluation: TrainingEvaluationSummarySchema.nullable(),
   generatedAt: TimestampSchema,
 });
@@ -428,7 +667,7 @@ export const ManagedAdapterServingProjectionSchema = z.object({
 export const ModelArtifactLineageSchema = z.object({
   schemaVersion: z.literal("openpond.modelArtifactLineage.v1"),
   id: IdSchema,
-  modelId: IdSchema.nullable().default(null),
+  modelId: IdSchema,
   artifactId: IdSchema,
   jobId: IdSchema,
   tasksetId: IdSchema,
@@ -463,6 +702,30 @@ export const SingleTurnPolicyTrajectorySchema = z.object({
   metadata: MetadataSchema,
 });
 
+export const PpoTrajectorySchema = z.object({
+  schemaVersion: z.literal("openpond.ppoTrajectory.v1"),
+  id: IdSchema,
+  taskId: IdSchema,
+  policyModelId: IdSchema,
+  referenceModelId: IdSchema,
+  valueModelId: IdSchema,
+  steps: z.array(z.object({
+    index: z.number().int().nonnegative(),
+    observationHash: HashSchema,
+    actionTokenIds: z.array(z.number().int().nonnegative()).min(1),
+    terminated: z.boolean(),
+    truncated: z.boolean(),
+    reward: z.number(),
+    policyLogProbability: z.number(),
+    referenceLogProbability: z.number(),
+    valuePrediction: z.number(),
+    return: z.number(),
+    advantage: z.number(),
+    mask: z.number().min(0).max(1),
+  })).min(1).max(100_000),
+  createdAt: TimestampSchema,
+});
+
 export const ExactAnswerVerifierResultSchema = z.object({
   schemaVersion: z.literal("openpond.exactAnswerVerifierResult.v1"),
   outcome: z.enum([
@@ -490,13 +753,38 @@ export const RolloutTrajectoryReceiptSchema = z.object({
   taskId: IdSchema,
   split: z.literal("train"),
   correlationId: IdSchema,
-  provider: z.literal("fireworks"),
+  provider: IdSchema,
   providerTrace: z.object({
     invocationId: IdSchema,
     experimentId: IdSchema,
     rolloutId: IdSchema,
     runId: IdSchema,
     rowId: IdSchema,
+  }),
+  optimizerMethod: z.enum(["grpo", "ppo"]).default("grpo"),
+  evidenceLevels: z.object({
+    requested: z.enum(["trajectory", "aggregate", "provider_reported"]),
+    observed: z.enum(["trajectory", "aggregate", "provider_reported"]),
+    providerReported: z.enum(["trajectory", "aggregate", "provider_reported"]),
+  }).default({
+    requested: "trajectory",
+    observed: "trajectory",
+    providerReported: "provider_reported",
+  }),
+  budgetUsage: z.object({
+    rollouts: z.number().int().nonnegative(),
+    environmentExecutions: z.number().int().nonnegative(),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    optimizerSteps: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative(),
+  }).default({
+    rollouts: 0,
+    environmentExecutions: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    optimizerSteps: 0,
+    costUsd: 0,
   }),
   environment: z.object({
     id: IdSchema,
@@ -529,6 +817,7 @@ export const RolloutTrajectoryReceiptSchema = z.object({
   trajectory: z.union([
     CrossSystemTrajectorySchema,
     SingleTurnPolicyTrajectorySchema,
+    PpoTrajectorySchema,
   ]).nullable(),
   verifier: z.union([
     CrossSystemVerifierResultSchema,
@@ -641,6 +930,8 @@ export const TrainingStateResponseSchema = z.object({
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),
   frontierBaselineRuns: z.array(CrossSystemFrontierBaselineRunSchema).default([]),
+  modelProjects: z.array(ModelProjectSchema).default([]),
+  modelRunDrafts: z.array(ModelRunDraftSchema).default([]),
   plans: z.array(TrainingPlanSchema),
   bundles: z.array(TrainingBundleManifestSchema),
   jobs: z.array(TrainingJobSchema),
@@ -658,14 +949,27 @@ export const TrainingStateResponseSchema = z.object({
 export type TrainingMethod = z.infer<typeof TrainingMethodSchema>;
 export type TrainingDestinationId = z.infer<typeof TrainingDestinationIdSchema>;
 export type RftLossMethod = z.infer<typeof RftLossMethodSchema>;
+export type PolicyOptimizationBudget = z.infer<typeof PolicyOptimizationBudgetSchema>;
+export type PolicyOptimizer = z.infer<typeof PolicyOptimizerSchema>;
+export type PolicyOptimizationContract = z.infer<typeof PolicyOptimizationContractSchema>;
 export type SftRecipe = z.infer<typeof SftRecipeSchema>;
+export type DpoRecipe = z.infer<typeof DpoRecipeSchema>;
+export type PpoRecipe = z.infer<typeof PpoRecipeSchema>;
 export type RftRecipe = z.infer<typeof RftRecipeSchema>;
 export type SftTrainingRecord = z.infer<typeof SftTrainingRecordSchema>;
+export type DpoTrainingRecord = z.infer<typeof DpoTrainingRecordSchema>;
+export type PolicyTrainingRecord = z.infer<typeof PolicyTrainingRecordSchema>;
 export type TrainingRecipe = z.infer<typeof TrainingRecipeSchema>;
 export type TrainingDestinationCapabilities = z.infer<typeof TrainingDestinationCapabilitiesSchema>;
 export type BaseModelExecutionOption = z.infer<typeof BaseModelExecutionOptionSchema>;
 export type BaseModelCandidate = z.infer<typeof BaseModelCandidateSchema>;
 export type TrainingCompatibilityReport = z.infer<typeof TrainingCompatibilityReportSchema>;
+export type PolicyOptimizationComparison = z.infer<typeof PolicyOptimizationComparisonSchema>;
+export type TrainingMethodAvailabilityReasonCode = z.infer<typeof TrainingMethodAvailabilityReasonCodeSchema>;
+export type TrainingMethodAvailability = z.infer<typeof TrainingMethodAvailabilitySchema>;
+export type ModelRunPreset = z.infer<typeof ModelRunPresetSchema>;
+export type ModelProject = z.infer<typeof ModelProjectSchema>;
+export type ModelRunDraft = z.infer<typeof ModelRunDraftSchema>;
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 export type TrainingBundleManifest = z.infer<typeof TrainingBundleManifestSchema>;
 export type TrainingBundleExport = z.infer<typeof TrainingBundleExportSchema>;
@@ -674,6 +978,7 @@ export type TrainingApproval = z.infer<typeof TrainingApprovalSchema>;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;
 export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
 export type SftStepMetric = z.infer<typeof SftStepMetricSchema>;
+export type PolicyOptimizationMetric = z.infer<typeof PolicyOptimizationMetricSchema>;
 export type TrainingEvaluationAggregate = z.infer<typeof TrainingEvaluationAggregateSchema>;
 export type TrainingEvaluationGrade = z.infer<typeof TrainingEvaluationGradeSchema>;
 export type TrainingEvaluationExample = z.infer<typeof TrainingEvaluationExampleSchema>;
@@ -686,6 +991,7 @@ export type ManagedAdapterServingProjection = z.infer<
   typeof ManagedAdapterServingProjectionSchema
 >;
 export type RolloutTrajectoryReceipt = z.infer<typeof RolloutTrajectoryReceiptSchema>;
+export type PpoTrajectory = z.infer<typeof PpoTrajectorySchema>;
 export type ModelBindingRole = z.infer<typeof ModelBindingRoleSchema>;
 export type ModelBinding = z.infer<typeof ModelBindingSchema>;
 export type FireworksModelServingSession = z.infer<

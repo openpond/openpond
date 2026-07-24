@@ -427,7 +427,6 @@ function crossSystemProject() {
     id: "local_cross_system",
     name: "cross-system-operations",
     workspacePath: "/tmp/cross-system-operations",
-    agentSdk: { detected: true, packageName: "openpond-agent-sdk", rootPath: "/tmp/cross-system-operations", manifestPath: "/tmp/cross-system-operations/package.json", version: "workspace", dependencyType: "dependencies" as const },
   };
 }
 

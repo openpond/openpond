@@ -14,15 +14,6 @@
   color: inherit;
 }
 
-.project-kind-icon-agent {
-  color: inherit;
-  stroke-width: 1.75;
-}
-
-.project-kind-icon-agent rect {
-  fill: #181818;
-}
-
 .project-kind-icon.linked-cloud {
   color: #b6c7d7;
 }

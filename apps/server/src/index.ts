@@ -20,10 +20,9 @@ import {
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import {
+  loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
   readProfileSkill,
-  runProfileSkillCommandFromPrompt,
-  runProfileSkillGoalCommand,
 } from "@openpond/cloud";
 import {
   getBundledRuntimeVersion,
@@ -137,6 +136,7 @@ import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-at
 import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
+import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { normalizeAppPreferences } from "./preferences.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
@@ -307,6 +307,8 @@ export async function createOpenPondServer(
     updateOpenPondAccountConfigPayload,
     profileCurrentPayload,
     profileCatalogPayload,
+    profileSelectPayload, profileRemovePayload, profilePublicationPreviewPayload,
+    profilePublicationPublishPayload, profileInstallPayload, profileUpdatePayload,
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
@@ -354,6 +356,7 @@ export async function createOpenPondServer(
     defaultSessionCwd,
     loadAppPreferences,
     appendRuntimeEvent,
+    loadLastUsedProfile: async () => (await loadOpenPondProfileLibrary()).lastUsed,
   });
 
   const {
@@ -868,12 +871,11 @@ export async function createOpenPondServer(
     executeCrossSystemTool: crossSystemChatToolRuntime.execute,
     finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
+    ...createProfileTurnDependencies(),
+    loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
-    executeProfileSkillCommand: ({ prompt }) =>
-      runProfileSkillCommandFromPrompt(prompt),
-    executeProfileSkillGoal: (input) => runProfileSkillGoalCommand(input),
     executeWebSearch: executeWebSearch ?? undefined,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
@@ -1025,6 +1027,7 @@ export async function createOpenPondServer(
     queue: workQueues.localAgentSchedule,
     isClosing: () => closing,
     loadProfileState: loadOpenPondProfileState,
+    loadProfileLibrary: loadOpenPondProfileLibrary,
     appendRuntimeEvent,
     logger,
   });
@@ -1666,6 +1669,8 @@ export async function createOpenPondServer(
       updateOpenPondAccountConfigPayload,
       profileCurrentPayload,
       profileCatalogPayload,
+      profileSelectPayload, profileRemovePayload, profilePublicationPreviewPayload,
+      profilePublicationPublishPayload, profileInstallPayload, profileUpdatePayload,
       profileInitPayload,
       profileLoadPayload,
       profileCheckPayload,

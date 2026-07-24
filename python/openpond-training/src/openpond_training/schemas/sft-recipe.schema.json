@@ -69,9 +69,21 @@
           "maximum": 32768
         },
         "maxExamples": {
+          "default": 1000,
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 100000
+        },
+        "selectionStrategy": {
+          "default": "stable_hash_top_n",
+          "type": "string",
+          "const": "stable_hash_top_n"
+        },
+        "selectionSeed": {
+          "default": 17,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -79,7 +91,9 @@
         "validationSplit",
         "completionOnly",
         "maxSequenceLength",
-        "maxExamples"
+        "maxExamples",
+        "selectionStrategy",
+        "selectionSeed"
       ],
       "additionalProperties": false
     },

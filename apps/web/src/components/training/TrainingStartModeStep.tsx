@@ -1,8 +1,18 @@
-import { Boxes, MessageSquare, SquarePen } from "../icons";
+import { MessageSquare, SquarePen } from "../icons";
+import {
+  TrainingGoalCards,
+  type DatasetEvidenceIntent,
+} from "./TrainingGoalCards";
+
+export type { DatasetEvidenceIntent } from "./TrainingGoalCards";
 
 export type NewModelMode = "automated" | "manual";
 export type AgentSourceMode = "from_prompt" | "from_chats";
-export type NewModelSetup = NewModelMode | AgentSourceMode | "existing_dataset";
+export type NewModelSetup =
+  | DatasetEvidenceIntent
+  | NewModelMode
+  | AgentSourceMode
+  | "existing_dataset";
 
 export function TrainingStartModeStep({
   mode,
@@ -11,6 +21,7 @@ export function TrainingStartModeStep({
   targetLabel = "model",
   onChange,
   onContinue,
+  onUseExistingDataset,
 }: {
   mode: NewModelSetup | null;
   allowExistingDataset?: boolean;
@@ -18,10 +29,12 @@ export function TrainingStartModeStep({
   targetLabel?: string;
   onChange: (mode: NewModelSetup) => void;
   onContinue: () => void;
+  onUseExistingDataset?: () => void;
 }) {
   const isAgent = targetLabel === "agent";
+  const isDatasetOrModel = targetLabel === "dataset" || targetLabel === "model";
   const copy = startModeCopy(targetLabel);
-  const modelModes = [
+  const legacyModes = [
     {
       id: "automated" as const,
       title: "Automatic",
@@ -33,12 +46,6 @@ export function TrainingStartModeStep({
       title: "Manual",
       description: copy.manualDescription,
       icon: SquarePen,
-    },
-    {
-      id: "existing_dataset" as const,
-      title: "Existing Dataset",
-      description: "Create the Model from a reviewed Dataset without changing its tasks, graders, or held-out Evals.",
-      icon: Boxes,
     },
   ];
   const agentModes = [
@@ -59,25 +66,27 @@ export function TrainingStartModeStep({
       icon: MessageSquare,
     },
   ];
-  const options = isAgent
-    ? agentModes
-    : allowExistingDataset
-      ? modelModes
-      : modelModes.filter((option) => option.id !== "existing_dataset");
+  const options = isAgent ? agentModes : legacyModes;
   return (
     <>
       <div className="training-run-step-heading">
-        <h3>Choose a setup</h3>
+        <h3>{isAgent ? "Choose a setup" : "What do you want to build?"}</h3>
         <p>{copy.introduction}</p>
       </div>
-      <div
-        aria-label={isAgent
-          ? `How to ${operation} an agent`
-          : `How to start a new ${targetLabel}`}
-        className="training-method-options training-start-mode-options"
-        role="radiogroup"
-      >
-        {options.map((option) => {
+      {isDatasetOrModel ? (
+        <TrainingGoalCards
+          ariaLabel={`How to start a new ${targetLabel}`}
+          value={isDatasetEvidenceIntent(mode) ? mode : null}
+          onActivate={onContinue}
+          onChange={onChange}
+        />
+      ) : (
+        <div
+          aria-label={isAgent ? `How to ${operation} an agent` : `How to start a new ${targetLabel}`}
+          className="training-method-options training-start-mode-options"
+          role="radiogroup"
+        >
+          {options.map((option) => {
           const Icon = option.icon;
           const selected = option.id === mode;
           return (
@@ -89,6 +98,17 @@ export function TrainingStartModeStep({
               className={selected ? "selected" : ""}
               onClick={() => onChange(option.id)}
               onDoubleClick={onContinue}
+              onKeyDown={(event) => {
+                if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
+                event.preventDefault();
+                const direction = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+                const currentIndex = options.findIndex((candidate) => candidate.id === option.id);
+                const nextIndex = (currentIndex + direction + options.length) % options.length;
+                const next = options[nextIndex]!;
+                onChange(next.id);
+                const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+                buttons?.[nextIndex]?.focus();
+              }}
             >
               <span className="training-start-mode-icon" aria-hidden="true">
                 <Icon size={18} />
@@ -100,12 +120,32 @@ export function TrainingStartModeStep({
               <span className="training-choice-indicator" aria-hidden="true" />
             </button>
           );
-        })}
-      </div>
+          })}
+        </div>
+      )}
       <div className="training-dialog-actions">
+        {allowExistingDataset && onUseExistingDataset ? (
+          <button
+            className="training-button secondary"
+            type="button"
+            onClick={onUseExistingDataset}
+          >
+            Use existing Dataset
+          </button>
+        ) : null}
         <button className="training-button" type="button" disabled={!mode} onClick={onContinue}>Continue</button>
       </div>
     </>
+  );
+}
+
+function isDatasetEvidenceIntent(value: NewModelSetup | null): value is DatasetEvidenceIntent {
+  return (
+    value === "demonstrations" ||
+    value === "preferences" ||
+    value === "verifiable_reward" ||
+    value === "rubric" ||
+    value === "discovery"
   );
 }
 
@@ -123,16 +163,16 @@ function startModeCopy(targetLabel: string): {
   }
   if (targetLabel === "dataset") {
     return {
-      automaticDescription: "Choose chats to inspect for repeated work worth capturing in a Dataset.",
-      introduction: "Let OpenPond find a Dataset opportunity in selected chats, or define the Dataset you already need.",
-      manualDescription: "Define the Dataset's purpose yourself, with optional supporting chats.",
+      automaticDescription: "",
+      introduction: "Start with the strongest evidence you can provide. OpenPond will recommend compatible training methods after the Dataset is built.",
+      manualDescription: "",
     };
   }
   if (targetLabel === "model") {
     return {
-      automaticDescription: "Choose chats to inspect for repeated work that may be worth training into a Model.",
-      introduction: "Let OpenPond find a training opportunity in selected chats, define the capability yourself, or start from an existing Dataset.",
-      manualDescription: "Define the capability the Model should learn, with optional supporting chats.",
+      automaticDescription: "",
+      introduction: "Use a reviewed Dataset or build the evidence first. Training method and destination come after Dataset readiness.",
+      manualDescription: "",
     };
   }
   return {

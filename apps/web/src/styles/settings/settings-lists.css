@@ -438,7 +438,7 @@
   padding: 0 0 10px;
 }
 
-.profile-agent-table-frame {
+.profile-table-frame {
   width: 100%;
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -446,12 +446,15 @@
   background: var(--panel);
 }
 
-.profile-agent-table {
+.profile-data-table {
   width: 100%;
-  min-width: 600px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+}
+
+.profile-agent-table {
+  min-width: 600px;
 }
 
 .profile-agent-column {
@@ -470,8 +473,8 @@
   width: 28%;
 }
 
-.profile-agent-table th,
-.profile-agent-table td {
+.profile-data-table th,
+.profile-data-table td {
   min-width: 0;
   border-right: 1px solid rgba(255, 255, 255, 0.07);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
@@ -480,16 +483,16 @@
   vertical-align: middle;
 }
 
-.profile-agent-table th:last-child,
-.profile-agent-table td:last-child {
+.profile-data-table th:last-child,
+.profile-data-table td:last-child {
   border-right: 0;
 }
 
-.profile-agent-table tbody tr:last-child td {
+.profile-data-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.profile-agent-table th {
+.profile-data-table th {
   padding-block: 10px;
   background: var(--panel-soft);
   color: #858585;
@@ -497,15 +500,15 @@
   font-weight: 560;
 }
 
-.profile-agent-table strong,
-.profile-agent-table span {
+.profile-data-table strong,
+.profile-data-table span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.profile-agent-table strong {
+.profile-data-table strong {
   color: #f6f6f6;
   font-size: 13px;
   font-weight: 550;
@@ -523,34 +526,36 @@
   gap: 10px;
 }
 
-.profile-skill-table-head,
-.profile-skill-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.3fr) minmax(78px, 0.38fr) minmax(140px, 0.8fr) minmax(120px, 0.54fr);
-  align-items: center;
-  justify-content: stretch;
+.profile-skill-table {
+  min-width: 820px;
 }
 
-.profile-skill-table-head {
-  min-height: 34px;
-  padding: 0 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
-  color: #858585;
-  font-size: 11px;
-  font-weight: 560;
+.profile-skill-name-column {
+  width: 23%;
 }
 
-.profile-skill-table-head span,
+.profile-skill-trigger-column {
+  width: 29%;
+}
+
+.profile-skill-status-column {
+  width: 10%;
+}
+
+.profile-skill-source-column {
+  width: 22%;
+}
+
+.profile-skill-actions-column {
+  width: 16%;
+}
+
 .profile-skill-description {
-  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-skill-description {
   color: #a9a9a9;
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-skill-actions {
@@ -660,7 +665,7 @@
   color: #858585;
 }
 
-@container profile-view (max-width: 620px) {
+@container profile-view (max-width: 840px) {
   .profile-control-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -669,19 +674,6 @@
   .profile-local-status {
     max-width: 100%;
     text-align: left;
-  }
-
-  .profile-skill-table-head {
-    display: none;
-  }
-
-  .profile-skill-row {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  .profile-skill-actions {
-    justify-content: flex-start;
   }
 
 }
