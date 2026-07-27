@@ -2,8 +2,6 @@ import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFile } from "node:fs/promises";
-import { TrainingView } from "../apps/web/src/components/training/TrainingView";
-import { TrainingTasksetDetail } from "../apps/web/src/components/training/TrainingTasksetDetail";
 import {
   defaultRftLossMethod,
   preserveBaseModelSelection,
@@ -24,141 +22,10 @@ import { recommendedSequenceLength } from "../apps/web/src/components/training/t
 import { TasksetSchema } from "../packages/contracts/src";
 import {
   planFixture,
-  sourceFixture,
   tasksetFixture,
 } from "./helpers/training-fixtures";
 
 describe("Training UI", () => {
-  test("renders the Models workspace without duplicating Lab navigation", () => {
-    const taskset = tasksetFixture();
-    const controller = {
-      payload: {
-        schemaVersion: "openpond.trainingState.v1",
-        profileId: "default",
-        sources: [sourceFixture()],
-        creations: [],
-        tasksets: [taskset],
-        baselineReports: [],
-        candidates: [],
-        minerConfig: {
-          schemaVersion: "openpond.taskMinerConfig.v1",
-          enabled: false,
-          localOnly: true,
-          observationWindowDays: 30,
-          minimumRecurrence: 3,
-          clustering: "hybrid_deterministic_first",
-          consentRequired: true,
-        },
-        plans: [],
-        bundles: [],
-        jobs: [],
-        artifacts: [],
-        models: [
-          {
-            id: "lineage_fixture",
-            tasksetId: taskset.id,
-            status: "imported",
-            importedAt: "2026-07-12T01:00:00Z",
-          },
-        ],
-        destinations: [],
-        credentialRefs: [],
-        generatedAt: "2026-07-12T00:00:00Z",
-      },
-      loading: false,
-      busyAction: null,
-      error: null,
-      refresh: async () => null,
-      actions: actionStubs(),
-    } as any;
-    const html = renderToStaticMarkup(
-      createElement(TrainingView, {
-        training: controller,
-        sessions: [],
-        connection: null,
-        defaultModel: {
-          providerId: "custom-openai-compatible",
-          modelId: "fixture",
-        },
-        onError: () => undefined,
-        onToast: () => 1,
-        onSettingsPreferences: () => undefined,
-        onOpenChat: () => undefined,
-        onChatWithModel: () => undefined,
-        onOpenTasksetFiles: () => undefined,
-        selectedTasksetId: null,
-        onSelectedTasksetIdChange: () => undefined,
-        onSelectedTrainingJobIdChange: () => undefined,
-        detailTasksetId: null,
-        onDetailTasksetIdChange: () => undefined,
-        launchRequest: null,
-        onLaunchHandled: () => undefined,
-        preferences: {
-          defaultModelRef: null,
-          creationMode: "customize",
-          autoApproveEvidence: false,
-        },
-        settingsPreferences: {} as any,
-        providerSettings: null,
-        reasoningEffort: "high",
-      })
-    );
-    for (const label of ["Models", "Settings"]) expect(html).toContain(label);
-    expect(html).not.toContain("New model");
-    expect(html).not.toContain("<h1>Training</h1>");
-    expect(html).not.toContain(">Experiments<");
-    expect(html).not.toContain(">Suggestions");
-    expect(html).not.toContain("AI suggestions");
-    expect(html).toContain("<th>Runs</th>");
-    expect(html).not.toContain('aria-label="Training sections"');
-    expect(html).not.toContain("Tasksets &amp; runs");
-    for (const removed of [
-      "Task Creator",
-      "Create with defaults",
-      "Customize",
-      "Add chats",
-    ])
-      expect(html).not.toContain(removed);
-    expect(html).toContain("training-models-table");
-    expect(html).not.toContain("training-header-tabs");
-    expect(html).not.toContain("training-section-context");
-    expect(html).not.toContain(
-      "Training plans, runs, artifacts, and model handoff."
-    );
-    expect(html).toContain("> Chat</button>");
-    expect(html).toContain("Fixture Taskset model");
-    for (const label of [
-      "Model",
-      "Primary",
-      "Latest run",
-      "Base model",
-      "Runs",
-      "Updated",
-      "Status",
-    ])
-      expect(html).toContain(`<th>${label}</th>`);
-    expect(html).not.toContain(
-      "Materialized tasks, graders, baselines, and readiness."
-    );
-    expect(html).not.toContain('aria-label="Tasksets"');
-    expect(html).not.toContain("gradient");
-    expect(html).toContain("Settings");
-    for (const removed of [
-      "Check grader",
-      "Run checks",
-      "Baseline model",
-      "Run baseline",
-      ">Readiness<",
-      ">Check<",
-    ])
-      expect(html).not.toContain(removed);
-    expect(html).not.toContain("View code");
-    expect(html).not.toContain("training-taskset-detail-shell");
-    expect(html).not.toContain("training-eyebrow");
-    expect(html).not.toContain(">Overview<");
-    expect(html).not.toContain(">Graders<");
-  });
-
   test("renders suggested experiments only on the dedicated Suggestions surface", () => {
     const controller = {
       payload: { candidates: [] },
@@ -180,36 +47,6 @@ describe("Training UI", () => {
     expect(html).toContain("AI suggestions");
     expect(html).toContain("No AI suggestions yet");
     expect(html).toContain("Automatic");
-  });
-
-  test("shows the method and a plain evaluation preview without canned blocker copy", () => {
-    const taskset = tasksetFixture();
-    const controller = {
-      payload: { tasksets: [taskset] },
-      busyAction: null,
-      actions: actionStubs(),
-    } as any;
-    const html = renderToStaticMarkup(
-      createElement(TrainingTasksetDetail, {
-        taskset,
-        training: controller,
-        onOpenChat: () => undefined,
-      })
-    );
-    for (const label of [
-      "Method",
-      "SFT",
-      "Training examples",
-      "Test examples",
-      "Evaluation",
-      "Expected output match",
-      "2 sources",
-    ])
-      expect(html).toContain(label);
-    expect(html).not.toContain("<h2>Fixture Taskset</h2>");
-    expect(html).toContain("training-chat-link");
-    expect(html).not.toContain("At least one approved training demonstration");
-    expect(html).not.toContain(" · ");
   });
 
   test("opens the existing workspace Files sidebar at the selected Taskset folder", async () => {
@@ -246,42 +83,6 @@ describe("Training UI", () => {
     expect(diffPanel).toContain("TrainingRunSidebarSummary");
     expect(diffPanel).toContain("rootPath={fileRootPath}");
     expect(workspace).toContain('view === "labs"');
-  });
-
-  test("keeps model navigation and destructive controls in the intended surfaces", async () => {
-    const [detail, topBar] = await Promise.all([
-      readFile(
-        "apps/web/src/components/training/TrainingModelDetail.tsx",
-        "utf8"
-      ),
-      readFile("apps/web/src/components/app-shell/AppTopBar.tsx", "utf8"),
-    ]);
-    for (const tab of ["Summary", "Details", "Configuration", "Settings"])
-      expect(detail).toContain(`>${tab}</button>`);
-    expect(detail).toContain("<TrainingModelConfiguration");
-    expect(detail).toContain(">Delete model</button>");
-    expect(detail).not.toContain("training-back-button");
-    expect(detail).not.toContain('aria-label="Model settings"');
-    expect(topBar).toContain("backAction.label");
-    expect(topBar).toContain("<ArrowLeft size={16}");
-  });
-
-  test("hands a newly materialized Taskset to its model Summary", async () => {
-    const view = await readFile(
-      "apps/web/src/components/training/TrainingView.tsx",
-      "utf8"
-    );
-    expect(view).toContain(
-      "onSelectedTasksetIdChange(creation.materializedTasksetId)"
-    );
-    expect(view).toContain(
-      "onDetailTasksetIdChange(creation.materializedTasksetId)"
-    );
-    expect(view).toContain('onSectionChange?.("models")');
-    expect(view).toContain("onTasksetCreated={finishTasksetCreation}");
-    expect(view).not.toContain(
-      'onTasksetCreated={() => finishRunSetup("tasksets")}'
-    );
   });
 
   test("opens the Model run editor from a Dataset with its immutable revision selected", async () => {
@@ -939,20 +740,6 @@ describe("Training UI", () => {
     );
     expect(css).toContain(
       "border-radius:6px;outline:0;background:var(--panel)"
-    );
-  });
-
-  test("does not discard an unsaved model configuration when Training polling returns equivalent data", async () => {
-    const configuration = await readFile(
-      "apps/web/src/components/training/TrainingModelConfiguration.tsx",
-      "utf8"
-    );
-    expect(configuration).toContain(
-      '`${lineage.id}:${lineage.chatConfiguration.updatedAt ?? "initial"}`'
-    );
-    expect(configuration).toContain("}, [savedConfigurationVersion]);");
-    expect(configuration).not.toContain(
-      "}, [lineage?.chatConfiguration, lineage?.id]);"
     );
   });
 

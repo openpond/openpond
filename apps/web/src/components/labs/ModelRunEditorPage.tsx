@@ -20,7 +20,7 @@ import {
   TrainingGoalCards,
   type DatasetEvidenceIntent,
 } from "../training/TrainingGoalCards";
-import type { TrainingViewProps } from "../training/TrainingView";
+import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import {
   TrainingStartDialog,
   type TrainingStartApproval,
@@ -87,7 +87,7 @@ export function ModelRunEditorPage({
   initialDraftId?: string;
   initialTasksetId?: string;
   profileId: string;
-  training: TrainingViewProps["training"];
+  training: TrainingWorkspaceProps["training"];
   onCancel: () => void;
   onFinished: (modelId: string, tasksetId: string) => Promise<void>;
   onNameChange?: (name: string) => void;

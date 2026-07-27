@@ -7,14 +7,19 @@ import json
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .grouped_grpo_coordinator import content_hash, utc_timestamp
+from .canonical_json import content_hash
 
 
 class VllmPolicyManagerError(RuntimeError):
     pass
+
+
+def utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 RequestJson = Callable[

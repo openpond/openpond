@@ -8,7 +8,7 @@ import type {
 } from "@openpond/contracts";
 
 import type { DatasetEvidenceIntent } from "../training/TrainingGoalCards";
-import type { TrainingViewProps } from "../training/TrainingView";
+import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import type { ModelSetupStepId } from "./ModelSetupSteps";
 
 const METHODS = ["sft", "dpo", "grpo", "ppo"] as const;
@@ -228,7 +228,7 @@ export function preparationReview(
 export function methodAvailability(
   taskset: Taskset | null,
   destinations: NonNullable<
-    TrainingViewProps["training"]["payload"]
+    TrainingWorkspaceProps["training"]["payload"]
   >["destinations"],
 ) {
   return METHODS.map((method) => {
@@ -277,7 +277,7 @@ export function methodAvailability(
 function methodExecutionTargets(
   method: TrainingMethod,
   destinations: NonNullable<
-    TrainingViewProps["training"]["payload"]
+    TrainingWorkspaceProps["training"]["payload"]
   >["destinations"],
 ) {
   return [
@@ -301,7 +301,7 @@ function executionTarget(
   destinationId: "local_cpu_fixture" | "fireworks",
   label: string,
   destinations: NonNullable<
-    TrainingViewProps["training"]["payload"]
+    TrainingWorkspaceProps["training"]["payload"]
   >["destinations"],
 ) {
   const destination = destinations.find(

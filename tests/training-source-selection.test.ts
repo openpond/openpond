@@ -3,9 +3,8 @@ import { readFile } from "node:fs/promises";
 
 describe("Training source selection UI", () => {
   test("supports intent-first flow followed by compact shared evidence selection", async () => {
-    const [rows, view, labs, pane, dialog, flow, startStep, goalCards, sourceStep, chatPicker, hook] = await Promise.all([
+    const [rows, labs, pane, dialog, flow, startStep, goalCards, sourceStep, chatPicker, hook] = await Promise.all([
       readFile("apps/web/src/components/sidebar/SidebarRows.tsx", "utf8"),
-      readFile("apps/web/src/components/training/TrainingView.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsView.tsx", "utf8"),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
       readFile("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx", "utf8"),
@@ -17,7 +16,6 @@ describe("Training source selection UI", () => {
       readFile("apps/web/src/hooks/useTraining.ts", "utf8"),
     ]);
     expect(rows).not.toContain('label="Add to training"');
-    expect(view).not.toContain("New model");
     expect(labs).toContain("onCreateModel");
     expect(pane).toContain("setTrainingLaunchRequest");
     expect(pane).toContain("onNewModel");

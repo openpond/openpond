@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import time
 from pathlib import Path
 from typing import Any
 
-from .prime_grpo_runner import (
-    claim_runner,
-    release_runner,
-)
 from .vllm_runtime import (
     start_vllm,
     terminate_process,
@@ -112,6 +109,52 @@ def utc_timestamp() -> str:
         time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
         + f".{int(time.time_ns() / 1_000_000) % 1_000:03d}Z"
     )
+
+
+def claim_runner(run_dir: Path) -> Path:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    pid_path = run_dir / "openpond-runner.pid"
+    for _attempt in range(2):
+        try:
+            descriptor = os.open(
+                pid_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+            )
+        except FileExistsError:
+            try:
+                existing = int(pid_path.read_text(encoding="utf-8").strip())
+            except (OSError, ValueError):
+                existing = -1
+            if existing > 0 and process_exists(existing):
+                raise RuntimeError("vllm_evaluation_runner_already_active")
+            pid_path.unlink(missing_ok=True)
+            continue
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(f"{os.getpid()}\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        return pid_path
+    raise RuntimeError("vllm_evaluation_runner_lock_failed")
+
+
+def release_runner(pid_path: Path) -> None:
+    try:
+        owner = int(pid_path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return
+    if owner == os.getpid():
+        pid_path.unlink(missing_ok=True)
+
+
+def process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def verify_adapter_alias(

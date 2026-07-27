@@ -11,7 +11,7 @@ import {
 
 import type { InsightsViewProps } from "../insights/InsightsView";
 import { InsightsView } from "../insights/InsightsView";
-import type { TrainingViewProps } from "../training/TrainingView";
+import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
 import {
   ChartColumnStacked,
@@ -528,7 +528,7 @@ function titleCase(value: string): string {
 }
 
 export function trainingModelRunSyncKey(
-  training: TrainingViewProps["training"]["payload"]
+  training: TrainingWorkspaceProps["training"]["payload"]
 ): string {
   if (!training) return "";
   return [

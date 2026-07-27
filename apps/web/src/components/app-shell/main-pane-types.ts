@@ -57,7 +57,7 @@ import type { PostTrainingCourseState } from "../get-started/post-training-lesso
 import type { LabDetailLocation } from "../labs/lab-detail-navigation";
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
-import type { TrainingLaunchRequest } from "../training/TrainingView";
+import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type {
   WorkspaceDiffPanelViewState,
   WorkspaceDiffTabRequest,

@@ -21,7 +21,7 @@ import { useSidebarMutations } from "../hooks/useSidebarMutations";
 import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
 import { teamChatThreadTitle } from "../lib/team-chat-thread";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
-import type { TrainingLaunchRequest } from "../components/training/TrainingView";
+import type { TrainingLaunchRequest } from "../components/training/training-workspace-types";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 

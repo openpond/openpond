@@ -64,7 +64,7 @@ import { selectComposerProfileTransaction } from "../../lib/profile-selection-tr
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { trainingCreationForSession } from "../training/training-flow";
-import type { TrainingLaunchRequest } from "../training/TrainingView";
+import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
 import type {
   WorkspaceFileSourceSwitcher,

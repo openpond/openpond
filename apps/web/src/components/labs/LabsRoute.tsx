@@ -10,7 +10,7 @@ import {
 import type { InsightsViewProps } from "../insights/InsightsView";
 import type { ProfileViewProps } from "../profile/ProfileView";
 import { ProfileView } from "../profile/ProfileView";
-import type { TrainingViewProps } from "../training/TrainingView";
+import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { CreateImproveAuthoringDialog } from "../create-improve/CreateImproveAuthoringDialog";
 import {
   DatasetSourcePickerDialog,
@@ -80,7 +80,7 @@ export type LabsRouteProps = {
   onSkillSelectionChange: (selection: LabSkillSourceSelection | null) => void;
   profileView: ProfileViewProps;
   insights: InsightsViewProps;
-  training: Omit<TrainingViewProps, "section" | "onSectionChange">;
+  training: TrainingWorkspaceProps;
   onAnswerQuestion: (
     input: { run: CreateImproveRun },
     questionId: string,
