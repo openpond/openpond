@@ -4,8 +4,6 @@ import type {
   ChatAttachment,
   ChatProvider,
   CloudProject,
-  CloudWorkItem,
-  CloudWorkItemDetail,
   CodexPermissionMode,
   CodexReasoningEffort,
   InsightItem,
@@ -151,13 +149,6 @@ export type MainPaneProps = {
   onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
   onOpenInsightsSession: (sessionId: string) => void;
   cloudProjects: CloudProject[];
-  cloudWorkItems: CloudWorkItem[];
-  selectedCloudWorkItem: CloudWorkItem | null;
-  cloudWorkItemDetail: CloudWorkItemDetail | null;
-  cloudWorkItemLocalProjectName: string | null;
-  cloudLoading: boolean;
-  cloudBusy: boolean;
-  cloudError: string | null;
   chatHistoryHasMore?: boolean;
   chatHistoryLoading?: boolean;
   onDiffPanelResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -260,14 +251,5 @@ export type MainPaneProps = {
   ) => Promise<boolean>;
   onStopRightChat: (sessionId: string | null) => Promise<boolean>;
   onCloseTerminal: () => void;
-  onOpenCloudHome: () => void;
-  onSetupCloudProject: (projectId: string) => void;
-  onCreateCloudWork: (input: { projectId: string; prompt: string; select?: boolean }) => Promise<boolean>;
-  onSelectCloudWorkItem: (workItem: CloudWorkItem) => void;
-  onSendCloudWorkItemMessage: (message: string) => Promise<void>;
-  onHandleCloudWorkItemBackground: (message: string | null) => Promise<void>;
-  onCancelCloudWorkItemCreatePipeline: () => Promise<void>;
-  onCancelCloudWorkItemTask: () => Promise<void>;
-  onApplyCloudWorkItemPatchLocally: () => Promise<void>;
   onLoadMoreChatHistory?: () => Promise<boolean>;
 };

@@ -50,13 +50,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     appDefaults, startMessage, teamChatOrganization,
     teamChatTeamId, teamChat, publishTeamProfileAgent, communitySidebar, communityView, teamAiThreadId,
     toggleTeamAiSidebar, activeOpenPondCommandAccessMode, profileWorkspaceId, viewWorkspaceAppId, viewWorkspaceId, viewWorkspaceKind,
-    viewWorkspaceName, selectedActionCatalog, expandedProjectIds, expandProject, toggleProjectExpanded, cloudBusy,
-    cloudError, cloudLoading, cloudWorkItemDetail, cloudWorkItems, selectedCloudWorkItem, selectedCloudWorkItemId,
-    selectedCloudWorkItemLocalProject, applyCloudWorkItemPatchLocally, cancelCloudWorkItemCreatePipeline, cancelCloudWorkItemTask, createCloudWork, handleCloudWorkItemBackground,
-    openCloudHome, selectCloudWorkItem, sendCloudWorkItemMessage, changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode,
+    viewWorkspaceName, selectedActionCatalog, expandedProjectIds, expandProject, toggleProjectExpanded,
+    changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode,
     resolveApproval, beginNewChat, beginNewChatWithTrainingModel, dismissTrainingChatHandoff, trainingChatHandoff, selectTrainingChatTaskForComposer,
     chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
-    localProjectRows, visibleProjectRows, cloudProjectRows, cloudWorkItemsByProjectId, projectSessionRowsByProjectId, childSessionRowsByParentId,
+    localProjectRows, visibleProjectRows, cloudProjectRows, projectSessionRowsByProjectId, childSessionRowsByParentId,
     sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, goalRuntime,
     subagentRuntime, visibleChatMessages, activeTerminalScope, terminalSummaries, runningSessionIds, selectedSessionRunning,
     selectedSteerAutoDispatchBlocked, selectedSteerAutoDispatchReady, sidebarGoalRuntimeBySessionId, sidebarSubagentRuntimeBySessionId, dragItem, startPinnedDrag,
@@ -76,7 +74,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
     toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
-    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
+    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab,
     openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
     closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
     showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
@@ -241,7 +239,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   } as CSSProperties;
   const rightSidebarAvailableForView =
     view === "chat" ||
-    view === "cloud" ||
     view === "labs" ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
@@ -285,7 +282,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         selectedAppId,
         selectedProjectId,
         selectedSessionId,
-        selectedCloudWorkItemId,
         selectedTeamThreadId: teamChat.selectedThreadId,
         teamChatEnabled: teamChatTeamId !== null,
         teamChatOrganization,
@@ -316,7 +312,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         insightsSystemProjectHidden,
         cloudProjectRows,
         workspaceStates,
-        cloudWorkItemsByProjectId,
         projectSessionRowsByProjectId,
         childSessionRowsByParentId,
         sidebarProjectIdBySessionId,
@@ -350,9 +345,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         setChatRowsVisibleCount,
         beginNewChat,
         dockSessionRight: openRightChatPanel,
-        openCloudHome,
         createCloudEnvironment: createCloudEnvironmentFromSidebar,
-        selectCloudWorkItem,
         selectTeamThread: (threadId) => {
           setView("team");
           void teamChat.selectThread(threadId);
@@ -408,7 +401,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         managedWorkspace,
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat" || view === "cloud",
+        showDiffControls: view === "chat",
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
@@ -585,13 +578,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onPatchInsightStatus: insights.patchStatus,
         onOpenInsightsSession: openSessionInChat,
         cloudProjects: bootstrap?.cloudProjects ?? [],
-        cloudWorkItems,
-        selectedCloudWorkItem,
-        cloudWorkItemDetail,
-        cloudWorkItemLocalProjectName: selectedCloudWorkItemLocalProject?.name ?? null,
-        cloudLoading,
-        cloudBusy,
-        cloudError,
         chatHistoryHasMore: selectedChatHistoryHasMore,
         chatHistoryLoading: selectedChatHistoryLoading,
         onDiffPanelResizeStart: startDiffPanelResize,
@@ -625,15 +611,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onSubmitRightChat: submitRightChatPrompt,
         onStopRightChat: (sessionId) => stopTurn(sessionId),
         onCloseTerminal: () => setTerminalOpen(false),
-        onOpenCloudHome: openCloudHome,
-        onSetupCloudProject: setupCloudProjectFromCloudView,
-        onCreateCloudWork: createCloudWork,
-        onSelectCloudWorkItem: selectCloudWorkItem,
-        onSendCloudWorkItemMessage: sendCloudWorkItemMessage,
-        onHandleCloudWorkItemBackground: handleCloudWorkItemBackground,
-        onCancelCloudWorkItemCreatePipeline: cancelCloudWorkItemCreatePipeline,
-        onCancelCloudWorkItemTask: cancelCloudWorkItemTask,
-        onApplyCloudWorkItemPatchLocally: applyCloudWorkItemPatchLocally,
         onLoadMoreChatHistory: loadMoreSelectedChatHistory,
         canSyncWorkspace: canSyncActiveWorkspace,
         startMessage,

@@ -1,7 +1,5 @@
 import type {
   CloudProject,
-  CloudWorkItem,
-  CloudWorkItemDetail,
   UsageRequestAttribution,
 } from "@openpond/contracts";
 import type { ChatMessage } from "../../lib/app-models";
@@ -44,22 +42,16 @@ function userMessageRows(element: HTMLElement): HTMLElement[] {
 export function billingTargetForContext({
   activeWorkspaceId,
   cloudProjects,
-  selectedCloudWorkItem,
 }: {
   activeWorkspaceId: string | null;
   cloudProjects: CloudProject[];
-  selectedCloudWorkItem: CloudWorkItem | null;
 }): { organizationSlug: string | null; teamId: string | null } {
-  const selectedProject = cloudProjects.find((project) =>
-    project.id === activeWorkspaceId ||
-    project.id === selectedCloudWorkItem?.projectId ||
-    project.teamId === selectedCloudWorkItem?.teamId
-  );
+  const selectedProject = cloudProjects.find((project) => project.id === activeWorkspaceId);
   const fallbackProject = cloudProjects.find((project) => project.organizationSlug || project.teamId);
   const project = selectedProject ?? fallbackProject ?? null;
   return {
     organizationSlug: project?.organizationSlug ?? null,
-    teamId: project?.teamId ?? selectedCloudWorkItem?.teamId ?? null,
+    teamId: project?.teamId ?? null,
   };
 }
 
@@ -132,10 +124,6 @@ export function latestCreatePipelineRuntime(
   return run && run.target.kind !== "agent" ? { run } : null;
 }
 
-export function cloudProjectIdFromComposerTarget(value: string): string | null {
-  return value.startsWith("cloud:") ? value.slice("cloud:".length) || null : null;
-}
-
 export function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
   if (command.command === "agent") return command.args ? `/agent ${command.args}` : "/agent";
   if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
@@ -162,23 +150,6 @@ export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSl
     command.command === "agent" ||
     command.command === "skill" ||
     command.command === "sync-cloud"
-  );
-}
-
-export function cloudWorkItemSandboxId(
-  workItem: CloudWorkItem | null,
-  detail: CloudWorkItemDetail | null,
-): string | null {
-  if (!workItem) return null;
-  const detailApplies = detail?.workItem.id === workItem.id;
-  return (
-    (detailApplies ? detail.workItem.latestSandboxId : null) ??
-    workItem.latestSandboxId ??
-    (detailApplies
-      ? detail.runtimeSessions.find((session) => session.sandboxId && !session.endedAt)?.sandboxId ??
-        detail.runtimeSessions.find((session) => session.sandboxId)?.sandboxId ??
-        null
-      : null)
   );
 }
 

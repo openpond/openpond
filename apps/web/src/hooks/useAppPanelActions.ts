@@ -118,6 +118,5 @@ export function useAppPanelActions({
     showChangesPanel,
     showGoalSidebarTab,
     toggleChangesPanel,
-    setupCloudProjectFromCloudView,
   };
 }

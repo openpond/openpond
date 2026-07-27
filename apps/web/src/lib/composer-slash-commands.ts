@@ -3,7 +3,6 @@ export type ComposerSlashCommandId =
   | "skill"
   | "goal"
   | "goal-local"
-  | "goal-remote"
   | "insights"
   | "train"
   | "submit-issue"
@@ -58,12 +57,6 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/submit-issue",
     label: "Submit issue",
     description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
-  },
-  {
-    id: "goal-remote",
-    command: "/goal-remote",
-    label: "Run a cloud goal",
-    description: "Open a Cloud work item and track the hosted goal loop.",
   },
   {
     id: "goal-local",

@@ -76,8 +76,6 @@ import {
   CHAT_USER_MESSAGE_SCROLL_OFFSET_PX,
   EMPTY_USER_MESSAGE_NAVIGATION,
   billingTargetForContext,
-  cloudProjectIdFromComposerTarget,
-  cloudWorkItemSandboxId,
   easeInOutCubic,
   easedChatScrollDuration,
   insightsSystemSessionId,
@@ -106,7 +104,6 @@ import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import {
   AppsView,
   BrowserSidebar,
-  CloudWorkView,
   GetStartedView,
   LabsRoute,
   LabSkillSidebar,
@@ -212,13 +209,6 @@ export function MainPane({
   onPatchInsightStatus,
   onOpenInsightsSession,
   cloudProjects,
-  cloudWorkItems,
-  selectedCloudWorkItem,
-  cloudWorkItemDetail,
-  cloudWorkItemLocalProjectName,
-  cloudLoading,
-  cloudBusy,
-  cloudError,
   chatHistoryHasMore = false,
   chatHistoryLoading = false,
   onDiffPanelResizeStart,
@@ -279,15 +269,6 @@ export function MainPane({
   onSubmitRightChat,
   onStopRightChat,
   onCloseTerminal,
-  onOpenCloudHome,
-  onSetupCloudProject,
-  onCreateCloudWork,
-  onSelectCloudWorkItem,
-  onSendCloudWorkItemMessage,
-  onHandleCloudWorkItemBackground,
-  onCancelCloudWorkItemCreatePipeline,
-  onCancelCloudWorkItemTask,
-  onApplyCloudWorkItemPatchLocally,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
   const [composerAttachmentRequest, setComposerAttachmentRequest] = useState<ComposerAttachmentRequest | null>(null);
@@ -559,10 +540,6 @@ export function MainPane({
     () => trainingCreationForSession(training.payload, selectedSessionId),
     [selectedSessionId, training.payload],
   );
-  const selectedCloudSandboxId = useMemo(
-    () => cloudWorkItemSandboxId(selectedCloudWorkItem, cloudWorkItemDetail),
-    [cloudWorkItemDetail, selectedCloudWorkItem],
-  );
   const latestCreateRuntime = useMemo(() => latestCreatePipelineRuntime(chatMessages), [chatMessages]);
   const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime) || Boolean(subagentRuntime);
   const showLabCandidateDiffPanel = view === "labs" && Boolean(labCandidateReview.selection);
@@ -571,11 +548,6 @@ export function MainPane({
     && diffPanelOpen
     && rightPanelMode === "changes"
     && Boolean(labSkillSource);
-  const showCloudDiffPanel =
-    view === "cloud" &&
-    diffPanelOpen &&
-    (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails)) &&
-    Boolean(selectedCloudWorkItem);
   const showLocalDiffPanel = (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId);
   const showEmptyRightChatFallbackPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
@@ -583,17 +555,16 @@ export function MainPane({
     ? activeWorkspaceId ?? sandboxIdFromWorkspaceName(workspaceName)
     : null;
   const showChatSandboxDiffPanel = view === "chat" && Boolean(chatSandboxId);
-  const rightSidebarSandboxId = showCloudDiffPanel ? selectedCloudSandboxId : chatSandboxId;
+  const rightSidebarSandboxId = chatSandboxId;
   const rightSidebarSandboxSourceAvailable =
     Boolean(rightSidebarSandboxId) ||
-    showCloudDiffPanel ||
     workspaceTarget.value === "cloud" ||
     workspaceTarget.value === "hybrid";
   const rightSidebarSourceState = useMemo(
     () =>
       resolveRightSidebarFileSource({
-        workspaceTarget: showCloudDiffPanel ? "cloud" : workspaceTarget.value,
-        localWorkspaceId: showCloudDiffPanel ? null : activeWorkspaceAppId,
+        workspaceTarget: workspaceTarget.value,
+        localWorkspaceId: activeWorkspaceAppId,
         sandboxSourceAvailable: rightSidebarSandboxSourceAvailable,
         sandboxWorkspaceId: rightSidebarSandboxId,
         override: rightSidebarSourceOverride,
@@ -603,7 +574,6 @@ export function MainPane({
       rightSidebarSandboxSourceAvailable,
       rightSidebarSandboxId,
       rightSidebarSourceOverride,
-      showCloudDiffPanel,
       workspaceTarget.value,
     ],
   );
@@ -622,13 +592,13 @@ export function MainPane({
   );
   useEffect(() => {
     setRightSidebarSourceOverride(null);
-  }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, showCloudDiffPanel, workspaceTarget.value]);
+  }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, workspaceTarget.value]);
   const showDiffPanel =
     !showLabSkillPanel &&
-    (showLabCandidateDiffPanel || showLocalDiffPanel || showCloudDiffPanel || showChatSandboxDiffPanel) &&
+    (showLabCandidateDiffPanel || showLocalDiffPanel || showChatSandboxDiffPanel) &&
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
-  const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
+  const showBrowserPanel = view === "chat" && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
     (view === "chat" || view === "labs") &&
     diffPanelOpen &&
@@ -645,7 +615,7 @@ export function MainPane({
     rightPanelMode === "chat" &&
     Boolean(teamChat.agentConversation);
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
-    supportedView: view === "chat" || view === "cloud" || view === "labs",
+    supportedView: view === "chat" || view === "labs",
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
@@ -674,7 +644,6 @@ export function MainPane({
   const billingTarget = billingTargetForContext({
     activeWorkspaceId,
     cloudProjects,
-    selectedCloudWorkItem,
   });
   const showThinkingIndicator =
     view === "chat" && turnRunning && !pendingApproval && shouldShowThinkingIndicator(chatMessages);
@@ -726,10 +695,6 @@ export function MainPane({
       : null;
   }, [createImproveActions, latestCreateRuntime]);
   const viewClass = mainPaneViewClass(view, showChatThread);
-  const slashCommandCloudProjectId =
-    selectedCloudWorkItem?.projectId ??
-    cloudProjectIdFromComposerTarget(projectTarget.value) ??
-    (cloudProjects.length === 1 ? cloudProjects[0]?.id ?? null : null);
   const submitComposerPrompt = useCallback(
     async (
       attachments: ChatAttachment[] = [],
@@ -827,18 +792,13 @@ export function MainPane({
               ),
             });
           }
-          if (!slashCommandCloudProjectId) {
-            showToast(`Select a Cloud Project before using /${command.command}.`, "error");
-            return false;
-          }
-          const created = await onCreateCloudWork({
-            projectId: slashCommandCloudProjectId,
-            prompt: promptForAppSlashCommand(command),
+          return sendPrompt([], null, promptForAppSlashCommand(command), {
+            clearPrompt: options.preservePrompt ? () => undefined : undefined,
+            usageAttribution: usageAttributionForComposerSlashCommand(
+              command,
+              selectedCommand ? "composer_selection" : "prompt_parse",
+            ),
           });
-          if (created) {
-            clearMainPrompt();
-          }
-          return created;
         }
       }
       return sendPrompt(attachments, action, options.promptOverride, {
@@ -856,7 +816,6 @@ export function MainPane({
       onAskInsightsQuestion,
       onOpenLabSuggestions,
       onOpenInsightsSession,
-      onCreateCloudWork,
       onRunInsightsScan,
       composerDraftStore,
       sendPrompt,
@@ -864,7 +823,6 @@ export function MainPane({
       setMentionedAppId,
       setView,
       showToast,
-      slashCommandCloudProjectId,
       training,
       view,
     ],
@@ -1321,7 +1279,7 @@ export function MainPane({
           : trainingTasksetRootPath}
       filesWithPreview={showLabCandidateDiffPanel}
       editorPreferences={bootstrap?.preferences.editor ?? null}
-      loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
+      loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? workspaceBusy : diffBusy || workspaceStatusLoading}
       openFileRequest={showLabCandidateDiffPanel ? labCandidateReview.openFileRequest : openDiffFileRequest}
       sidebarFileBookmarks={sidebarFileBookmarks}
       sidebarFileSourceSessionId={selectedSessionId}
@@ -1331,7 +1289,7 @@ export function MainPane({
       sourceSwitcher={showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher}
       tabRequest={rightPanelTabRequest}
       viewState={workspaceDiffPanelViewState}
-      workspaceName={showLabCandidateDiffPanel ? labCandidateReview.selection?.title ?? "Change" : rightSidebarUsesSandbox ? selectedCloudWorkItem?.title ?? "Sandbox" : workspaceName}
+      workspaceName={showLabCandidateDiffPanel ? labCandidateReview.selection?.title ?? "Change" : rightSidebarUsesSandbox ? workspaceName ?? "Sandbox" : workspaceName}
       workspaceInitialized={showLabCandidateDiffPanel ? true : rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
       workspaceError={showLabCandidateDiffPanel ? labCandidateReview.error : rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
       expanded={diffPanelExpanded}
@@ -1515,32 +1473,6 @@ export function MainPane({
       onClose={onCloseTerminal}
     />
   );
-  const cloudView = (
-    <CloudWorkView
-      projects={cloudProjects}
-      workItems={cloudWorkItems}
-      selectedWorkItem={selectedCloudWorkItem}
-      detail={cloudWorkItemDetail}
-      loading={cloudLoading}
-      actionBusy={cloudBusy}
-      error={cloudError}
-      model={activeModel}
-      onBack={onOpenCloudHome}
-      connection={connection}
-      showToast={showToast}
-      onModelChange={changeMainComposerModel}
-      onSetupCloudProject={onSetupCloudProject}
-      onCreateWork={onCreateCloudWork}
-      onSelectWorkItem={onSelectCloudWorkItem}
-      onSendMessage={onSendCloudWorkItemMessage}
-      onHandleBackground={onHandleCloudWorkItemBackground}
-      onCancelCreatePlan={onCancelCloudWorkItemCreatePipeline}
-      onCancelTask={onCancelCloudWorkItemTask}
-      localProjectName={cloudWorkItemLocalProjectName}
-      onApplyLocalPatch={onApplyCloudWorkItemPatchLocally}
-      onShowFiles={selectedCloudSandboxId ? onShowFilesPanel : undefined}
-    />
-  );
   return (
     <main
       className={`main-pane ${viewClass} ${terminalOpen ? "terminal-open" : ""} ${showRightPanel ? "diff-open" : ""} ${
@@ -1680,12 +1612,6 @@ export function MainPane({
             {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
           </>
         )
-      ) : view === "cloud" ? (
-        <>
-          <Suspense fallback={null}>{cloudView}</Suspense>
-          {terminalPanel}
-          {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
-        </>
       ) : rightPanelExpanded ? (
         <Suspense fallback={null}>{rightPanel}</Suspense>
       ) : showChatThread ? (

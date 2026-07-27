@@ -24,9 +24,6 @@ export const RightChatPanelStack = lazy(() =>
 export const NativeSkillSidebar = lazy(() =>
   import("./NativeSkillSidebar").then((module) => ({ default: module.NativeSkillSidebar })),
 );
-export const CloudWorkView = lazy(() =>
-  import("../cloud/CloudWorkView").then((module) => ({ default: module.CloudWorkView })),
-);
 export const TeamChatView = lazy(() =>
   import("../team-chat/TeamChatView").then((module) => ({ default: module.TeamChatView })),
 );

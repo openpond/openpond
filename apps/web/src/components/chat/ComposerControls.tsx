@@ -278,7 +278,7 @@ export function WorkspaceActionControl({
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedIconKind =
-    state.value === "cloud" || state.value === "queue_cloud"
+    state.value === "cloud"
       ? "cloud"
       : state.value === "hybrid"
         ? "hybrid"
@@ -396,7 +396,7 @@ function WorkspaceTargetIcon({
   value: WorkspaceTargetValue;
   size: number;
 }) {
-  if (value === "cloud" || value === "queue_cloud") return <Cloud size={size} />;
+  if (value === "cloud") return <Cloud size={size} />;
   if (value === "hybrid") {
     return (
       <span className="workspace-target-hybrid-icon" aria-hidden="true">

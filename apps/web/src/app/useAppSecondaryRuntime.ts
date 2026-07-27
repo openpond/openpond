@@ -574,7 +574,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     showBrowserPanel,
     showChangesPanel,
     showGoalSidebarTab,
-    setupCloudProjectFromCloudView,
   } = useAppPanelActions({
     account,
     browserConversationId,
@@ -698,7 +697,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     sendPrompt, pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
     toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
-    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
+    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab,
     openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
     closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
     showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
