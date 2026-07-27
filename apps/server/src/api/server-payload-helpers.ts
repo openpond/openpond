@@ -1,31 +1,17 @@
 import {
-  CloudWorkItemActivitySchema,
-  CloudWorkItemMessageSchema,
-  CloudWorkItemRuntimeSessionSchema,
-  CloudWorkItemSchema,
-  CreateImproveRunSchema,
   type CloudProject,
   type CloudProjectSourceType,
-  type CloudWorkItem,
-  type CloudWorkItemActivity,
-  type CloudWorkItemMessage,
-  type CloudWorkItemRuntimeSession,
-  type CreateImproveRun,
   type LocalProject,
   type RuntimeEvent,
   type Session,
-  type UsageRequestAttribution,
-  type WorkspaceState,
 } from "@openpond/contracts";
 import type { CodexAppServerClient } from "@openpond/codex-provider";
-import { assertCreateImproveMutationApproved } from "../create-pipeline-guards.js";
 import { organizationRequestPayload } from "../openpond/organizations.js";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
 import {
   collectLocalProjectSourceUploadBundle,
   pushLocalProjectSourceToGit,
 } from "../workspace/local-project-source-upload.js";
-import { runWorkspaceCommand } from "../workspace/workspaces.js";
 
 type OpenPondOrganizationSummary = {
   teamId: string;
@@ -60,46 +46,6 @@ export type CodexHistoryTurnInterruptResponse =
 
 export function hasObjectKey(value: unknown, key: string): boolean {
   return Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key));
-}
-
-export function latestRuntimeSessionSandboxId(detail: { runtimeSessions: CloudWorkItemRuntimeSession[] }): string | null {
-  return detail.runtimeSessions.find((session) => session.sandboxId)?.sandboxId ?? null;
-}
-
-export async function assertApplyableLocalWorkspace(workspaceState: WorkspaceState): Promise<void> {
-  if (!workspaceState.initialized) {
-    throw new Error(workspaceState.error || "Local checkout is not initialized.");
-  }
-  const repoCheck = await runWorkspaceCommand(
-    "git",
-    ["rev-parse", "--is-inside-work-tree"],
-    workspaceState.repoPath,
-  );
-  if (repoCheck.code !== 0 || repoCheck.stdout.trim() !== "true") {
-    throw new Error("Local checkout must be a Git repository before applying a Cloud patch.");
-  }
-  if (workspaceState.dirty) {
-    throw new Error("Commit or discard local changes before applying a Cloud patch.");
-  }
-}
-
-export function countPatchFiles(patchText: string): number {
-  const paths = new Set<string>();
-  for (const line of patchText.split("\n")) {
-    const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line.trim());
-    if (match?.[2]) paths.add(match[2]);
-  }
-  return paths.size;
-}
-
-export function assertCreateImproveBackgroundApproved(input: {
-  run?: CreateImproveRun | null;
-}): void {
-  if (!input.run) return;
-  assertCreateImproveMutationApproved({
-    actionLabel: "Create/Improve background work",
-    run: input.run,
-  });
 }
 
 export async function fetchCloudProjects(): Promise<CloudProject[]> {
@@ -477,182 +423,6 @@ export function cloudProjectFromSandboxRecord(
     createdAt: stringValue(value.createdAt),
     updatedAt: stringValue(value.updatedAt),
   };
-}
-
-export function cloudWorkItemTeamInput(payload: unknown): { teamId: string } {
-  const teamId = stringValue(asRecord(payload).teamId);
-  if (!teamId) throw new Error("OpenPond team id is required.");
-  return { teamId };
-}
-
-export function parseCreateImproveRun(value: unknown): CreateImproveRun | null {
-  const parsed = CreateImproveRunSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
-
-export function createImproveMetadata(
-  run: CreateImproveRun | null | undefined,
-): Record<string, unknown> {
-  return run ? { createImproveRun: run } : {};
-}
-
-export function usageAttributionMetadata(
-  usageAttribution: UsageRequestAttribution | null,
-): Record<string, unknown> {
-  return usageAttribution ? { usageAttribution } : {};
-}
-
-export function linkCreateImproveRunToWorkItem(input: {
-  workItem: CloudWorkItem;
-  run: CreateImproveRun | null;
-}): CreateImproveRun | null {
-  return input.run
-    ? CreateImproveRunSchema.parse({
-        ...input.run,
-        adapter:
-          input.run.adapter.kind === "hosted"
-            ? {
-                ...input.run.adapter,
-                projectId: input.workItem.projectId,
-                workItemId: input.workItem.id,
-              }
-            : input.run.adapter,
-        scope: {
-          ...input.run.scope,
-          conversationId: input.workItem.conversationId ?? input.run.scope.conversationId,
-          workItemId: input.workItem.id,
-          projectId: input.workItem.projectId,
-        },
-        plan: input.run.plan
-          ? {
-              ...input.run.plan,
-              metadata: {
-                ...input.run.plan.metadata,
-                workItemId: input.workItem.id,
-                conversationId: input.workItem.conversationId,
-                projectId: input.workItem.projectId,
-              },
-            }
-          : null,
-        workflowCapture: input.run.workflowCapture
-          ? {
-              ...input.run.workflowCapture,
-              metadata: {
-                ...input.run.workflowCapture.metadata,
-                workItemId: input.workItem.id,
-                conversationId: input.workItem.conversationId,
-                projectId: input.workItem.projectId,
-              },
-            }
-          : null,
-        metadata: {
-          ...input.run.metadata,
-          workItemId: input.workItem.id,
-          conversationId: input.workItem.conversationId,
-          projectId: input.workItem.projectId,
-        },
-      })
-    : null;
-}
-
-export function extractCreateImproveRun(record: Record<string, unknown>): CreateImproveRun | null {
-  const metadata = asRecord(record.metadata);
-  const payload = asRecord(record.payload);
-  return (
-    parseCreateImproveRun(record.createImproveRun) ??
-    parseCreateImproveRun(metadata.createImproveRun) ??
-    parseCreateImproveRun(payload.createImproveRun)
-  );
-}
-
-export function attachCreateImproveRunToWorkItem(
-  workItem: CloudWorkItem,
-  run: CreateImproveRun | null,
-): CloudWorkItem {
-  return {
-    ...workItem,
-    createImproveRun: run ?? workItem.createImproveRun ?? null,
-  };
-}
-
-export function latestCreateImproveRunFromTimeline(
-  workItem: CloudWorkItem,
-  messages: CloudWorkItemMessage[],
-  activity: CloudWorkItemActivity[],
-): CreateImproveRun | null {
-  let latest = workItem.createImproveRun ?? null;
-  for (const item of [...messages, ...activity]) {
-    const run = parseCreateImproveRun(asRecord(item.metadata).createImproveRun);
-    if (run) latest = run;
-  }
-  return latest;
-}
-
-export function normalizeCloudWorkItem(value: unknown): CloudWorkItem | null {
-  const record = asRecord(value);
-  if (!stringValue(record.id)) return null;
-  const createImproveRun = extractCreateImproveRun(record);
-  const parsed = CloudWorkItemSchema.safeParse({
-    ...record,
-    conversationId: stringValue(record.conversationId),
-    sourceRef: stringValue(record.sourceRef),
-    baseSha: stringValue(record.baseSha),
-    latestRuntimeId: stringValue(record.latestRuntimeId),
-    latestSandboxId: stringValue(record.latestSandboxId),
-    latestTaskRunId: stringValue(record.latestTaskRunId),
-    assignedAgentId: stringValue(record.assignedAgentId),
-    archivedAt: stringValue(record.archivedAt),
-    metadata: asRecord(record.metadata),
-    createImproveRun,
-  });
-  return parsed.success ? parsed.data : null;
-}
-
-export function normalizeRequiredCloudWorkItem(value: unknown): CloudWorkItem {
-  const workItem = normalizeCloudWorkItem(value);
-  if (!workItem) throw new Error("OpenPond Cloud work item response did not include a work item.");
-  return workItem;
-}
-
-export function normalizeCloudWorkItemMessage(value: unknown): CloudWorkItemMessage | null {
-  const record = asRecord(value);
-  if (!stringValue(record.id)) return null;
-  const parsed = CloudWorkItemMessageSchema.safeParse({
-    ...record,
-    metadata: Object.keys(asRecord(record.metadata)).length > 0
-      ? asRecord(record.metadata)
-      : asRecord(record.payload),
-  });
-  return parsed.success ? parsed.data : null;
-}
-
-export function normalizeRequiredCloudWorkItemMessage(value: unknown): CloudWorkItemMessage {
-  const message = normalizeCloudWorkItemMessage(value);
-  if (!message) throw new Error("OpenPond Cloud work item response did not include a message.");
-  return message;
-}
-
-export function normalizeCloudWorkItemActivity(value: unknown): CloudWorkItemActivity | null {
-  const record = asRecord(value);
-  if (!stringValue(record.id)) return null;
-  const parsed = CloudWorkItemActivitySchema.safeParse({
-    ...record,
-    metadata: Object.keys(asRecord(record.metadata)).length > 0
-      ? asRecord(record.metadata)
-      : asRecord(record.payload),
-  });
-  return parsed.success ? parsed.data : null;
-}
-
-export function normalizeCloudWorkItemRuntimeSession(value: unknown): CloudWorkItemRuntimeSession | null {
-  const record = asRecord(value);
-  if (!stringValue(record.id)) return null;
-  const parsed = CloudWorkItemRuntimeSessionSchema.safeParse({
-    ...record,
-    kind: stringValue(record.kind) ?? stringValue(record.sessionKind),
-    metadata: asRecord(record.metadata),
-  });
-  return parsed.success ? parsed.data : null;
 }
 
 export function codexHistoryThreadReadOptions(requestUrl: URL | undefined): {

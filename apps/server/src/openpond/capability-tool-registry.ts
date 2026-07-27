@@ -170,7 +170,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     {
       name: "openpond_goal_control",
       description:
-        "Control OpenPond Goal mode. Use start only when the current user message is an explicit /goal, /goal-local, or /goal-remote command. Do not infer Goal mode from an ordinary request. Restart, pause, resume, complete, or stop the current goal when requested or required by an existing goal continuation. Never use start from a goal continuation; control the supplied goal id instead. Omit targetGoalId when action is start because a new goal has no id yet.",
+        "Control OpenPond Goal mode. Use start only when the current user message is an explicit /goal or /goal-local command. Do not infer Goal mode from an ordinary request. Restart, pause, resume, complete, or stop the current goal when requested or required by an existing goal continuation. Never use start from a goal continuation; control the supplied goal id instead. Omit targetGoalId when action is start because a new goal has no id yet.",
       parameters: {
         type: "object",
         additionalProperties: false,

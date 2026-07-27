@@ -3,7 +3,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CloudProject, LocalProject, OpenPondApp } from "@openpond/contracts";
 
-import { CloudWorkView } from "../apps/web/src/components/cloud/CloudWorkView";
 import {
   Composer,
   hasComposerSubmittableInput,
@@ -1074,7 +1073,6 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("create, edit, list, help");
     expect(markup).not.toContain("Subcommands:");
     expect(markup).toContain("/goal Run a goal");
-    expect(markup).toContain("/goal-remote Run a cloud goal");
     expect(markup).toContain("/goal-local Run a local goal");
     expect(markup).toContain("/submit-issue Submit issue");
     expect(markup).toContain("File a GitHub issue in openpond/openpond through the connected GitHub app.");
@@ -1137,36 +1135,4 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("/agent Author Agent");
   });
 
-  test("Cloud composer remains plain task input without slash action menu", () => {
-    const markup = renderToStaticMarkup(
-      createElement(CloudWorkView, {
-        projects: [cloudProject()],
-        workItems: [],
-        selectedWorkItem: null,
-        detail: null,
-        loading: false,
-        actionBusy: false,
-        connection: null,
-        error: null,
-        model: "openpond-chat",
-        showToast: noop,
-        onBack: noop,
-        onModelChange: noop,
-        onSetupCloudProject: noop,
-        onCreateWork: async () => undefined,
-        onSelectWorkItem: noop,
-        onSendMessage: async () => undefined,
-        onHandleBackground: async () => undefined,
-        onCancelCreatePlan: async () => undefined,
-        onCancelTask: async () => undefined,
-        onShowFiles: noop,
-      }),
-    );
-
-    expect(markup).toContain("What should we change next?");
-    expect(markup).toContain('aria-label="Cloud Project"');
-    expect(markup).toContain("Describe a task");
-    expect(markup).not.toContain('aria-label="OpenPond agents and actions"');
-    expect(markup).not.toContain("composer-mention-menu action-menu");
-  });
 });

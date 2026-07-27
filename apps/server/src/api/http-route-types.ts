@@ -217,32 +217,6 @@ export type HttpRouteDeps = {
     projectId: string,
     payload: unknown
   ) => Promise<unknown>;
-  listCloudWorkItemsPayload: (payload: unknown) => Promise<unknown>;
-  getCloudWorkItemPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  createCloudWorkItemPayload: (payload: unknown) => Promise<unknown>;
-  sendCloudWorkItemMessagePayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  handleCloudWorkItemBackgroundPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  cancelCloudWorkItemTaskPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  openCloudWorkItemPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  applyCloudWorkItemLocalPatchPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
   organizationPayload: (action: OrganizationRequestAction) => Promise<unknown>;
   sandboxPayload: (action: SandboxRequestAction) => Promise<unknown>;
   teamChatPayload: (action: TeamChatRequestAction) => Promise<unknown>;

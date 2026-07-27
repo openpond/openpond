@@ -27,7 +27,6 @@ describe("Right chat panel stack", () => {
       agent: { kind: "send_prompt", prompt: "/agent Review account health" },
       skill: { kind: "send_prompt", prompt: "/skill Review account health" },
       goal: { kind: "send_prompt", prompt: "/goal Review account health" },
-      "goal-remote": { kind: "send_prompt", prompt: "/goal-remote Review account health" },
       "goal-local": { kind: "send_prompt", prompt: "/goal-local Review account health" },
       train: { kind: "open_training", objective: "Review account health" },
       insights: { kind: "open_insights" },

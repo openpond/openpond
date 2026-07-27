@@ -8,7 +8,6 @@ import {
   type BootstrapPayload,
   type ChatAttachment,
   type CloudProject,
-  type CloudWorkItem,
   type CreateImproveCommand,
   type CreateImproveQuestion,
   type CreateImproveRun,
@@ -284,75 +283,6 @@ export function continueLabAgentRunFromTaskset(input: {
       tasksetHash: input.authoringRun.tasksetRef.contentHash,
     },
     updatedAt: new Date().toISOString(),
-  });
-}
-
-export function buildHostedCloudWorkCreateImproveRun(input: {
-  command: "create" | "edit";
-  objective: string;
-  payload: BootstrapPayload | null;
-  project: CloudProject;
-  workItem?: CloudWorkItem | null;
-  source: "cloud_work_home" | "cloud_work_thread";
-}): CreateImproveRun | null {
-  const objective = input.objective.trim();
-  if (!objective) return null;
-  const targetAgentId = input.command === "edit"
-    ? input.workItem?.assignedAgentId ?? null
-    : createPipelineAgentIdFromObjective(objective);
-  if (input.command === "edit" && !targetAgentId) return null;
-  const profile = input.payload?.profile ?? null;
-  return baseCreateImproveRun({
-    operation: input.command === "create" ? "create" : "improve",
-    surface: input.command === "create" ? "hosted_create" : "hosted_improve",
-    command: input.command === "create" ? "/create" : "/edit",
-    objective,
-    profile: {
-      id: profile?.activeProfile ?? "default",
-      local: false,
-      repoPath: null,
-      sourcePath: null,
-      localHead: null,
-      hostedSourceRef: profile?.hosted?.sourceRef ?? input.project.defaultBranch ?? null,
-      hostedSourceCommit: profile?.hosted?.sourceCommitSha ?? null,
-    },
-    hosted: {
-      teamId: input.project.teamId,
-      projectId: input.project.id,
-      workItemId: input.workItem?.id ?? null,
-    },
-    actor: {
-      id: input.payload?.account.activeProfile?.handle ?? null,
-      label: input.payload?.account.label ?? null,
-    },
-    session: null,
-    conversationId: input.workItem?.conversationId ?? null,
-    project: input.project,
-    workItemId: input.workItem?.id ?? null,
-    targetAgentId,
-    targetAgentName: input.command === "edit" ? input.workItem?.title ?? null : null,
-    context: {
-      messageIds: [],
-      conversationExcerpts: input.workItem
-        ? [{
-            messageId: null,
-            role: "user",
-            excerpt: input.workItem.title,
-            reason: "Cloud work item context",
-          }]
-        : [],
-      attachments: [],
-      apps: [],
-      tools: [],
-      targetRepoAssumptions: [
-        `cloud project: ${input.project.sourceLabel ?? input.project.name}`,
-      ],
-    },
-    metadata: {
-      source: input.source,
-      targetProjectId: input.project.id,
-      targetProjectName: input.project.name,
-    },
   });
 }
 

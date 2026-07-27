@@ -1,3 +1,4 @@
+import type { ConnectedAppStatusResponse } from "@openpond/contracts";
 import type {
   SandboxIntegrationConnectionLeaseInput,
   SandboxIntegrationConnectionsResponse,
@@ -11,6 +12,22 @@ import {
 } from "../api-client";
 
 export const sandboxIntegrationApi = {
+  connectedAppStatus: (
+    connection: ClientConnection,
+    input: {
+      teamId?: string;
+      projectId?: string;
+      agentId?: string;
+      status?: SandboxIntegrationConnectionStatusFilter;
+    } = {},
+  ) => {
+    const query = sandboxScopeQuery(input);
+    query.set("status", input.status ?? "all");
+    return apiFetch<ConnectedAppStatusResponse>(
+      connection,
+      `/v1/connected-apps/status${query.size > 0 ? `?${query.toString()}` : ""}`,
+    );
+  },
   integrationConnections: (
     connection: ClientConnection,
     input: {

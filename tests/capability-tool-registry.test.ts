@@ -14,7 +14,7 @@ describe("OpenPond capability tool registry", () => {
     const goalControl = requireTool(definitions, "openpond_goal_control");
 
     expect(goalControl.description).toContain("Use start only when the current user message is an explicit");
-    expect(goalControl.description).toContain("/goal, /goal-local, or /goal-remote");
+    expect(goalControl.description).toContain("/goal or /goal-local");
     expect(goalControl.description).not.toContain("Goal:");
   });
 

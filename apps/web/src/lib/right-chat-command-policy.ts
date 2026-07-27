@@ -25,8 +25,6 @@ export function rightChatCommandPolicy(
       return { kind: "send_prompt", prompt: `/goal ${args}`, requiresInstructions: true };
     case "goal-local":
       return { kind: "send_prompt", prompt: `/goal-local ${args}`, requiresInstructions: true };
-    case "goal-remote":
-      return { kind: "send_prompt", prompt: `/goal-remote ${args}`, requiresInstructions: true };
     case "insights":
       return { kind: "open_insights" };
     case "train":

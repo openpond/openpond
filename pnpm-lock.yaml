@@ -4,12 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  electron-publish@26.15.3>aws4: '-'
-
-patchedDependencies:
-  electron-publish@26.15.3: ae9890e8b16e6ec38def0a0c4d16d507e66003a1c3843d1b3bcd8c6e55fe3cef
-
 importers:
 
   .:
@@ -1288,6 +1282,9 @@ packages:
   at-least-node@1.0.0:
     resolution: {integrity: sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==}
     engines: {node: '>= 4.0.0'}
+
+  aws4@1.13.2:
+    resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -3980,7 +3977,7 @@ snapshots:
       dotenv-expand: 11.0.7
       ejs: 3.1.10
       electron-builder-squirrel-windows: 26.15.3(dmg-builder@26.15.3)
-      electron-publish: 26.15.3(patch_hash=ae9890e8b16e6ec38def0a0c4d16d507e66003a1c3843d1b3bcd8c6e55fe3cef)
+      electron-publish: 26.15.3
       fs-extra: 10.1.0
       hosted-git-info: 4.1.0
       isbinaryfile: 5.0.7
@@ -4040,6 +4037,8 @@ snapshots:
   asynckit@0.4.0: {}
 
   at-least-node@1.0.0: {}
+
+  aws4@1.13.2: {}
 
   balanced-match@1.0.2: {}
 
@@ -4377,9 +4376,10 @@ snapshots:
       - electron-builder-squirrel-windows
       - supports-color
 
-  electron-publish@26.15.3(patch_hash=ae9890e8b16e6ec38def0a0c4d16d507e66003a1c3843d1b3bcd8c6e55fe3cef):
+  electron-publish@26.15.3:
     dependencies:
       '@types/fs-extra': 9.0.13
+      aws4: 1.13.2
       builder-util: 26.15.3
       builder-util-runtime: 9.7.0
       chalk: 4.1.2

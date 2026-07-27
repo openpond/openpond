@@ -52,16 +52,10 @@ import {
 } from "../apps/web/src/lib/openpond-action-run";
 import { latestReadyLocalCreateImproveProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
-import {
-  buildSidebarProjectPathIndex,
-  isSidebarCloudWorkSession,
-  sidebarProjectKeyForSession,
-} from "../apps/web/src/lib/sidebar-session-projects";
-import { projectSelectionKey } from "../apps/web/src/lib/app-models";
 import type {
   SandboxActionCatalogEntry,
 } from "../apps/web/src/lib/sandbox-types";
-import type { CloudProject, LocalProject } from "@openpond/contracts";
+import type { CloudProject } from "@openpond/contracts";
 import type { BootstrapPayload } from "@openpond/contracts";
 
 const timestamp = "2026-06-20T00:00:00.000Z";
@@ -104,24 +98,6 @@ function session(input: Partial<Session> = {}): Session {
     pinned: false,
     archived: false,
     order: 0,
-    ...input,
-  };
-}
-
-function localProject(input: Partial<LocalProject> = {}): LocalProject {
-  return {
-    id: "local_project_1",
-    name: "Local Project",
-    path: "/workspace/local-project",
-    workspacePath: "/workspace/local-project",
-    repoPath: "/workspace/local-project",
-    source: "git",
-    sandboxTemplate: null,
-    linkedOpenPondApp: null,
-    linkedSandboxProject: null,
-    preferredSandboxAgentId: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
     ...input,
   };
 }
@@ -204,7 +180,6 @@ describe("OpenPond App action channel", () => {
       "goal",
       "insights",
       "submit-issue",
-      "goal-remote",
       "goal-local",
       "train",
       "sync-cloud",
@@ -218,12 +193,9 @@ describe("OpenPond App action channel", () => {
     expect(parseComposerSlashCommandPrompt("/create summarize files")).toBeNull();
     expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
       "goal",
-      "goal-remote",
       "goal-local",
     ]);
-    expect(composerSlashCommandMatches({ prompt: "/goal-r" }).map((item) => item.id)).toEqual([
-      "goal-remote",
-    ]);
+    expect(composerSlashCommandMatches({ prompt: "/goal-r" })).toEqual([]);
     expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/skill help" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/submit issue" }).map((item) => item.id)).toEqual(["submit-issue"]);
@@ -235,10 +207,7 @@ describe("OpenPond App action channel", () => {
       command: "skill",
       args: "create release-notes",
     });
-    expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toEqual({
-      command: "goal-remote",
-      args: "summarize files",
-    });
+    expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toBeNull();
     expect(parseComposerSlashCommandPrompt("/goal-local summarize files")).toEqual({
       command: "goal-local",
       args: "summarize files",
@@ -254,20 +223,16 @@ describe("OpenPond App action channel", () => {
     expect(parseComposerSlashCommandPrompt("/unknown summarize files")).toBeNull();
   });
 
-  test("routes plain goal slash commands through chat unless remote is explicit", () => {
+  test("routes goal slash commands through chat", () => {
     const goalCommand = parseComposerSlashCommandPrompt("/goal smoke goal");
     const localGoalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
-    const remoteGoalCommand = parseComposerSlashCommandPrompt("/goal-remote smoke goal");
     expect(goalCommand).not.toBeNull();
     expect(localGoalCommand).not.toBeNull();
-    expect(remoteGoalCommand).not.toBeNull();
 
     expect(shouldSubmitComposerSlashCommandToChat(goalCommand!)).toBe(true);
     expect(shouldSubmitComposerSlashCommandToChat(localGoalCommand!)).toBe(true);
-    expect(shouldSubmitComposerSlashCommandToChat(remoteGoalCommand!)).toBe(false);
     expect(promptForAppSlashCommand(goalCommand!)).toBe("/goal smoke goal");
     expect(promptForAppSlashCommand(localGoalCommand!)).toBe("/goal-local smoke goal");
-    expect(promptForAppSlashCommand(remoteGoalCommand!)).toBe("/goal-remote smoke goal");
   });
 
   test("builds GitHub-connected submit issue prompts for openpond", () => {
@@ -1239,56 +1204,6 @@ describe("OpenPond App action channel", () => {
         sessionId: "session_1",
       },
     });
-  });
-
-  test("keeps Cloud work sessions out of project grouping without hiding standalone chats", () => {
-    const projects = [localProject()];
-    const localIds = new Set(projects.map((project) => project.id));
-    const projectPathIndex = buildSidebarProjectPathIndex(projects);
-    const cloudIds = new Set(["cloud_project_1"]);
-
-    expect(isSidebarCloudWorkSession(session(), cloudIds)).toBe(true);
-    expect(
-      sidebarProjectKeyForSession(
-        session(),
-        localIds,
-        projectPathIndex,
-        cloudIds,
-      ),
-    ).toBeNull();
-    expect(
-      sidebarProjectKeyForSession(
-        session({
-          id: "standalone_chat",
-          workspaceKind: "local",
-          workspaceId: null,
-          workspaceName: null,
-          cloudProjectId: null,
-          cloudTeamId: null,
-          title: "Standalone chat",
-        }),
-        localIds,
-        projectPathIndex,
-        cloudIds,
-      ),
-    ).toBeNull();
-    expect(
-      sidebarProjectKeyForSession(
-        session({
-          id: "codex_local",
-          provider: "codex",
-          workspaceKind: undefined,
-          workspaceId: null,
-          workspaceName: null,
-          cloudProjectId: null,
-          cloudTeamId: null,
-          cwd: "/workspace/local-project/src",
-        }),
-        localIds,
-        projectPathIndex,
-        cloudIds,
-      ),
-    ).toBe(projectSelectionKey("local", "local_project_1"));
   });
 
   test("projects and renders OpenPond action run cards in the message timeline", () => {

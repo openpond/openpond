@@ -48,7 +48,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     selectedActionCatalog, expandProject, setExpandedProjectIds,
     advanceTrainingModelChatAfterTurn, bindTrainingModelChatSession, prepareTrainingModelChatTurn, chatMessages, pendingChatUserMessages,
     recordPendingChatUserMessage, runningSessionIds, workspaceBusy, visibleWorkspaceState, visibleWorkspaceDiff, rememberWorkspaceState,
-    refreshWorkspace, setWorkspaceBusy, refreshWorkspaceDiffWhenNeeded, pendingWorkspaceTarget, setPendingWorkspaceTarget,
+    refreshWorkspace, setWorkspaceBusy, refreshWorkspaceDiffWhenNeeded, setPendingWorkspaceTarget,
     pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget, projectTarget, workspaceTarget,
   } = primary;
   const title =
