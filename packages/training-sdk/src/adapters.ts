@@ -1,20 +1,13 @@
 import {
   AdapterValidationReceiptSchema,
   ComputeTargetCapabilitiesSchema,
-  HarnessRuntimeCapabilitiesSchema,
   TrainingArtifactsSchema,
   TrainingEngineCapabilitiesSchema,
   TrainingExecutionStatusSchema,
   type AdapterValidationReceipt,
   type ComputeTargetCapabilities,
-  type HarnessGraderEvidence,
-  type HarnessRelease,
-  type HarnessRunManifest,
-  type HarnessRuntimeCapabilities,
   type LearningSignalBatch,
-  type ModelAction,
   type ResolvedTrainingPlan,
-  type ToolObservation,
   type TrainingArtifacts,
   type TrainingEngineCapabilities,
   type TrainingExecutionRef,
@@ -49,21 +42,6 @@ export type ComputeLease = {
   connection: Record<string, unknown>;
 };
 
-export type HarnessLease = {
-  id: string;
-  adapterId: string;
-  manifestId: string;
-  acquiredAt: string;
-  expiresAt: string;
-  metadata: Record<string, unknown>;
-};
-
-export type HarnessArtifacts = {
-  traceRefs: string[];
-  artifactRefs: string[];
-  contentHash: string;
-};
-
 export interface TrainingEngineAdapter {
   readonly id: string;
   capabilities(): Promise<TrainingEngineCapabilities>;
@@ -89,18 +67,6 @@ export interface ComputeTargetAdapter {
   acquire(request: ComputeRequest): Promise<ComputeLease>;
   heartbeat(lease: ComputeLease): Promise<ComputeLease>;
   release(lease: ComputeLease): Promise<void>;
-}
-
-export interface HarnessRuntimeAdapter {
-  readonly id: string;
-  capabilities(): Promise<HarnessRuntimeCapabilities>;
-  materialize(release: HarnessRelease): Promise<{ bundleHash: string }>;
-  create(manifest: HarnessRunManifest): Promise<HarnessLease>;
-  reset(lease: HarnessLease, seed: string): Promise<void>;
-  step(lease: HarnessLease, action: ModelAction): Promise<ToolObservation>;
-  grade(lease: HarnessLease): Promise<HarnessGraderEvidence[]>;
-  collect(lease: HarnessLease): Promise<HarnessArtifacts>;
-  destroy(lease: HarnessLease): Promise<void>;
 }
 
 export type TrainingEngineRoute = {
@@ -281,7 +247,6 @@ export class RoutedTrainingEngineAdapter implements TrainingEngineAdapter {
 export class TrainingAdapterRegistry {
   private readonly engines = new Map<string, TrainingEngineAdapter>();
   private readonly compute = new Map<string, ComputeTargetAdapter>();
-  private readonly runtimes = new Map<string, HarnessRuntimeAdapter>();
 
   registerEngine(adapter: TrainingEngineAdapter): void {
     register(this.engines, adapter);
@@ -289,10 +254,6 @@ export class TrainingAdapterRegistry {
 
   registerCompute(adapter: ComputeTargetAdapter): void {
     register(this.compute, adapter);
-  }
-
-  registerRuntime(adapter: HarnessRuntimeAdapter): void {
-    register(this.runtimes, adapter);
   }
 
   engine(id: string): TrainingEngineAdapter {
@@ -319,22 +280,9 @@ export class TrainingAdapterRegistry {
     return [...this.compute.keys()].sort();
   }
 
-  runtime(id: string): HarnessRuntimeAdapter {
-    return requireAdapter(this.runtimes, id, "runtime");
-  }
-
-  hasRuntime(id: string): boolean {
-    return this.runtimes.has(id);
-  }
-
-  runtimeIds(): string[] {
-    return [...this.runtimes.keys()].sort();
-  }
-
   async capabilities(): Promise<{
     engines: TrainingEngineCapabilities[];
     compute: ComputeTargetCapabilities[];
-    runtimes: HarnessRuntimeCapabilities[];
   }> {
     return {
       engines: await Promise.all(
@@ -342,9 +290,6 @@ export class TrainingAdapterRegistry {
       ),
       compute: await Promise.all(
         [...this.compute.values()].map((item) => item.discover()),
-      ),
-      runtimes: await Promise.all(
-        [...this.runtimes.values()].map((item) => item.capabilities()),
       ),
     };
   }
@@ -355,11 +300,6 @@ export class TrainingAdapterRegistry {
     );
   }
 
-  async runtimeCapabilities(): Promise<HarnessRuntimeCapabilities[]> {
-    return Promise.all(
-      [...this.runtimes.values()].map((item) => item.capabilities()),
-    );
-  }
 }
 
 function union<T extends string>(values: T[]): T[] {
@@ -430,34 +370,6 @@ export async function runComputeAdapterConformance(input: {
   checks.push(check("heartbeat", heartbeat.id === lease.id));
   await input.adapter.release(heartbeat);
   checks.push(check("release", true));
-  return result(checks);
-}
-
-export async function runRuntimeAdapterConformance(input: {
-  adapter: HarnessRuntimeAdapter;
-  release: HarnessRelease;
-  manifest: HarnessRunManifest;
-  action: ModelAction;
-}): Promise<{ passed: boolean; checks: AdapterConformanceCheck[] }> {
-  const checks: AdapterConformanceCheck[] = [];
-  const capabilities = HarnessRuntimeCapabilitiesSchema.parse(
-    await input.adapter.capabilities(),
-  );
-  checks.push(check("capabilities", capabilities.adapterId === input.adapter.id));
-  await input.adapter.materialize(input.release);
-  checks.push(check("materialize", true));
-  const lease = await input.adapter.create(input.manifest);
-  checks.push(check("create", lease.adapterId === input.adapter.id));
-  await input.adapter.reset(lease, "17");
-  checks.push(check("reset", true));
-  await input.adapter.step(lease, input.action);
-  checks.push(check("step", true));
-  await input.adapter.grade(lease);
-  checks.push(check("grade", true));
-  await input.adapter.collect(lease);
-  checks.push(check("collect", true));
-  await input.adapter.destroy(lease);
-  checks.push(check("destroy", true));
   return result(checks);
 }
 

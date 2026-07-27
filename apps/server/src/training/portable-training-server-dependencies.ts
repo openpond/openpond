@@ -7,7 +7,6 @@ import { LocalComputeTargetAdapter } from "@openpond/trainer-local";
 import {
   RoutedTrainingEngineAdapter,
   type ComputeTargetAdapter,
-  type HarnessRuntimeAdapter,
   type TrainingAdapterRegistry,
   type TrainingEngineRoute,
 } from "@openpond/training-sdk";
@@ -25,7 +24,6 @@ type PortableTrainingEnvironment = ConnectedWorkerEnvironment &
 
 export type PortableTrainingAdapterComposition = {
   compute?: ComputeTargetAdapter[];
-  runtimes?: HarnessRuntimeAdapter[];
   workerImageDigest?: string;
   primeRawConfigured?: boolean;
   engineRoutes?: Array<{
@@ -96,9 +94,6 @@ export function createPortableTrainingServerDependencies(input: {
       for (const adapter of composedAdapters.compute ?? []) {
         registry.registerCompute(adapter);
       }
-      for (const adapter of composedAdapters.runtimes ?? []) {
-        registry.registerRuntime(adapter);
-      }
       const engineRoutes = new Map<string, TrainingEngineRoute[]>();
       const addEngineRoute = (
         canonicalEngineId: string,
@@ -146,10 +141,6 @@ function mergePortableAdapterComposition(
   }
   return {
     compute: [...(first?.compute ?? []), ...(second?.compute ?? [])],
-    runtimes: [
-      ...(first?.runtimes ?? []),
-      ...(second?.runtimes ?? []),
-    ],
     engineRoutes: [
       ...(first?.engineRoutes ?? []),
       ...(second?.engineRoutes ?? []),

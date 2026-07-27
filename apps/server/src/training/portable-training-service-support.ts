@@ -34,7 +34,6 @@ export function createPortableTrainingServiceSupport(input: {
       compute,
       searchResults,
       adapterCompute,
-      adapterRuntimes,
     ] = await Promise.all([
       input.destinations(),
       input.computeInventory?.() ?? Promise.resolve(null),
@@ -42,7 +41,6 @@ export function createPortableTrainingServiceSupport(input: {
         ? (input.searchTrainingModels ?? searchHuggingFaceModels)(query)
         : Promise.resolve([]),
       input.adapters.computeCapabilities(),
-      input.adapters.runtimeCapabilities(),
     ]);
     return createPortableTrainingCatalog({
       candidates: projectBaseModelCandidates({
@@ -62,7 +60,6 @@ export function createPortableTrainingServiceSupport(input: {
       connectedWorkerImageDigest:
         input.connectedWorkerImageDigest ?? null,
       adapterCompute,
-      adapterRuntimes,
     });
   }
 

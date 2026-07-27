@@ -17,8 +17,6 @@ import {
   type TrainingEngineAdapter,
 } from "@openpond/training-sdk";
 
-export * from "./runtime-adapter.js";
-
 export interface LocalCapabilityProbe {
   discover(): Promise<{
     devices: ComputeTargetCapabilities["devices"];

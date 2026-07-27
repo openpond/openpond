@@ -10,16 +10,13 @@ import {
   type TrainingCatalog,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
-  type Taskset,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
-  ContentAddressedReleaseStore,
   TrainingAdapterRegistry,
   TrainingDestinationRegistry,
+  buildTasksetTrainingBundle,
   materializeResolvedTrainingBundle,
-  publishTasksetTrainingGraph,
-  validateHarnessRunManifest,
 } from "@openpond/training-sdk";
 
 import type { SqliteStore } from "../store/store.js";
@@ -132,7 +129,7 @@ export function createPortableModelRunService(deps: {
     if (!taskset || taskset.contentHash !== modelRun.tasksetRef.contentHash) {
       throw new Error("The saved Model Run Taskset release is stale.");
     }
-    const graph = publishTasksetTrainingGraph({
+    const graph = buildTasksetTrainingBundle({
       taskset,
       modelRun,
       runtime: bindings.runtime,
@@ -145,10 +142,6 @@ export function createPortableModelRunService(deps: {
       },
       openpondRelease: "0.0.38",
       workerProtocol: "openpond.connectedWorker.v1",
-      releasePublishedAt: await resolveExistingTasksetReleasePublishedAt({
-        storeDir: deps.storeDir,
-        taskset,
-      }),
     });
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
@@ -186,7 +179,7 @@ export function createPortableModelRunService(deps: {
       );
     }
     const grader = taskset.graders[0];
-    const profileRelease = graph.harnessRelease.profileRelease;
+    const profileRelease = graph.profileRelease;
     if (!grader || !profileRelease) {
       throw new Error(
         "Portable training requires released Profile and grader identity.",
@@ -483,21 +476,14 @@ export function createPortableModelRunService(deps: {
 
 function assertSubmittedManifest(
   input: unknown,
-  expected: Parameters<typeof validateHarnessRunManifest>[0]
+  expected: ReturnType<typeof HarnessRunManifestSchema.parse>
 ): void {
   if (input === undefined) return;
   const submitted = HarnessRunManifestSchema.parse(input);
-  const issues = validateHarnessRunManifest(submitted);
-  if (issues.length > 0) {
-    throw new Error(
-      `Submitted Harness Run Manifest is invalid: ${issues
-        .map((issue) => `${issue.path}: ${issue.message}`)
-        .join("; ")}`
-    );
-  }
+  const { contentHash: submittedHash, ...submittedContent } = submitted;
   if (
-    submitted.contentHash !== expected.contentHash ||
-    contentHash(submitted) !== contentHash(expected)
+    contentHash(submittedContent) !== submittedHash ||
+    submittedHash !== expected.contentHash
   ) {
     throw new Error(
       "Submitted Harness Run Manifest does not exactly match the revalidated server plan."
@@ -505,62 +491,13 @@ function assertSubmittedManifest(
   }
 }
 
-export async function resolveExistingTasksetReleasePublishedAt(input: {
-  storeDir: string;
-  taskset: Taskset;
-}): Promise<string | undefined> {
-  const releases = new ContentAddressedReleaseStore(
-    path.join(input.storeDir, "training", "portable-releases")
-  );
-  const release = await releases.findHarnessRelease({
-    id: `harness_${input.taskset.id}_r${input.taskset.revision}`,
-    revision: input.taskset.revision,
-  });
-  if (!release) return undefined;
-  if (
-    release.metadata.tasksetId !== input.taskset.id ||
-    release.metadata.tasksetHash !== input.taskset.contentHash
-  ) {
-    throw new Error(
-      "Published Harness Release does not match the requested Taskset revision."
-    );
-  }
-  return release.publishedAt;
-}
-
 export async function publishRunGraph(input: {
   storeDir: string;
-  graph: ReturnType<typeof publishTasksetTrainingGraph>;
+  graph: ReturnType<typeof buildTasksetTrainingBundle>;
 }): Promise<{
   manifestPath: string;
   resolvedBundleDirectory: string;
 }> {
-  const releases = new ContentAddressedReleaseStore(
-    path.join(input.storeDir, "training", "portable-releases")
-  );
-  await releases.publishHarnessRelease({
-    release: input.graph.harnessRelease,
-    readAsset: async (asset) => {
-      const value = input.graph.assets.get(asset.path);
-      if (!value) {
-        throw new Error(`Harness asset ${asset.path} is missing.`);
-      }
-      return value;
-    },
-  });
-  await releases.publishDatasetRelease({
-    release: input.graph.datasetRelease,
-    readAsset: async (asset) => {
-      const value = input.graph.assets.get(asset.path);
-      if (!value) {
-        throw new Error(`Dataset asset ${asset.path} is missing.`);
-      }
-      return value;
-    },
-  });
-  if (input.graph.evidenceSetRelease) {
-    await releases.publishEvidenceSetRelease(input.graph.evidenceSetRelease);
-  }
   const manifestDirectory = path.join(
     input.storeDir,
     "training",
@@ -594,8 +531,7 @@ export async function publishRunGraph(input: {
   });
   if (
     resolvedBundle.manifest.contentHash !==
-      input.graph.manifest.resolvedBundleHash &&
-    input.graph.resolvedBundleSource !== "external"
+      input.graph.manifest.resolvedBundleHash
   ) {
     throw new Error(
       "Resolved Training Bundle does not match the Harness Run Manifest."

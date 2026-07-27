@@ -86,7 +86,6 @@ export function createPortableTrainingCatalog(input: {
   primeRawConfigured?: boolean;
   connectedWorkerImageDigest?: string | null;
   adapterCompute?: ComputeTargetCapabilities[];
-  adapterRuntimes?: HarnessRuntimeCapabilities[];
   now?: string;
 }): TrainingCatalog {
   const generatedAt = input.now ?? new Date().toISOString();
@@ -107,10 +106,7 @@ export function createPortableTrainingCatalog(input: {
       input.primeRawConfigured ?? false,
     connectedWorkerImageDigest: input.connectedWorkerImageDigest ?? null,
   });
-  const runtimes = runtimeCapabilities(
-    generatedAt,
-    input.adapterRuntimes ?? [],
-  );
+  const runtimes = runtimeCapabilities(generatedAt);
   const targets = trainingTargets({
     compute,
     engines,
@@ -636,7 +632,6 @@ function engineCapabilities(input: {
 
 function runtimeCapabilities(
   checkedAt: string,
-  adapters: HarnessRuntimeCapabilities[],
 ): HarnessRuntimeCapabilities[] {
   const runtime = (
     adapterId: string,
@@ -658,11 +653,10 @@ function runtimeCapabilities(
     checkedAt,
     unavailableReason: null,
   });
-  const defaults = [
+  return [
     runtime("local-harness", ["local"], true),
     runtime("provider-native", ["provider_native"], false),
   ];
-  return mergeAdapterCapabilities(defaults, adapters);
 }
 
 function mergeAdapterCapabilities<T extends { adapterId: string }>(

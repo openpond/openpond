@@ -1,160 +1,13 @@
 import { z } from "zod";
 
-import {
-  LearningSignalEnvelopeSchema,
-  LearningSignalKindSchema,
-} from "./learning-signals.js";
+import { LearningSignalEnvelopeSchema } from "./learning-signals.js";
 import {
   ImmutableReleaseRefSchema,
   OpaqueSecretLeaseRefSchema,
   ReleaseHashSchema,
   ReleaseIdSchema,
   ReleaseTimestampSchema,
-  ScopedSecretDeclarationSchema,
-  VersionedReleaseRefSchema,
 } from "./release-core.js";
-import { HarnessActionBindingSchema } from "./harness-actions.js";
-
-export const HarnessBundleProjectionSchema = z.enum([
-  "student",
-  "orchestrator",
-  "environment",
-  "privileged_scorer",
-  "trainer",
-  "infrastructure",
-]);
-
-export const HarnessReleaseAssetSchema = z
-  .object({
-    path: z.string().trim().min(1).max(2_000),
-    sha256: ReleaseHashSchema,
-    sizeBytes: z.number().int().nonnegative(),
-    mediaType: z.string().trim().min(1).max(200),
-    executable: z.boolean(),
-    projections: z.array(HarnessBundleProjectionSchema).min(1).max(6),
-    visibility: z.enum(["model_visible", "orchestrator_only", "privileged"]),
-  })
-  .strict();
-
-export const HarnessChildReleaseKindSchema = z.enum([
-  "program",
-  "tool_contract",
-  "runtime_spec",
-  "grader_definition",
-  "feedback_policy",
-  "dependency_lock",
-  "extension_lock",
-]);
-
-export const HarnessChildReleaseRefSchema = ImmutableReleaseRefSchema.extend({
-  kind: HarnessChildReleaseKindSchema,
-  contractVersion: z.string().trim().min(1).max(200),
-}).strict();
-
-export const HarnessReleaseContentSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.harnessRelease.v1"),
-    id: ReleaseIdSchema,
-    revision: z.number().int().positive(),
-    profileRelease: VersionedReleaseRefSchema.nullable(),
-    children: z.array(HarnessChildReleaseRefSchema).min(7).max(10_000),
-    assets: z.array(HarnessReleaseAssetSchema).max(100_000),
-    actionBindings: z.array(HarnessActionBindingSchema).max(200).optional(),
-    secretDeclarations: z
-      .array(ScopedSecretDeclarationSchema)
-      .max(1_000)
-      .default([]),
-    requiredContracts: z
-      .object({
-        openpondRelease: z.string().trim().min(1).max(200),
-        workerProtocol: z.string().trim().min(1).max(200),
-        harnessRuntime: z.string().trim().min(1).max(200),
-        trace: z.string().trim().min(1).max(200),
-      })
-      .strict(),
-    sourceRevision: z.string().trim().min(1).max(500),
-    publishedAt: ReleaseTimestampSchema,
-    metadata: z.record(z.string(), z.unknown()).default({}),
-  })
-  .strict();
-
-export const HarnessReleaseSchema = HarnessReleaseContentSchema.extend({
-  contentHash: ReleaseHashSchema,
-}).strict();
-
-export const DatasetReleaseAssetSchema = z
-  .object({
-    path: z.string().trim().min(1).max(2_000),
-    split: z.enum(["train", "frozen_eval"]),
-    sha256: ReleaseHashSchema,
-    sizeBytes: z.number().int().nonnegative(),
-    mediaType: z.string().trim().min(1).max(200),
-  })
-  .strict();
-
-export const DatasetReleaseContentSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.datasetRelease.v1"),
-    id: ReleaseIdSchema,
-    revision: z.number().int().positive(),
-    taskset: ImmutableReleaseRefSchema,
-    assets: z.array(DatasetReleaseAssetSchema).min(1).max(100_000),
-    splitCounts: z
-      .object({
-        train: z.number().int().nonnegative(),
-        frozenEval: z.number().int().nonnegative(),
-      })
-      .strict(),
-    sourceRefsHash: ReleaseHashSchema,
-    publishedAt: ReleaseTimestampSchema,
-    metadata: z.record(z.string(), z.unknown()).default({}),
-  })
-  .strict();
-
-export const DatasetReleaseSchema = DatasetReleaseContentSchema.extend({
-  contentHash: ReleaseHashSchema,
-}).strict();
-
-export const EvidenceSetSignalRefSchema = z
-  .object({
-    id: ReleaseIdSchema,
-    kind: LearningSignalKindSchema,
-    contentHash: ReleaseHashSchema,
-    objectRef: z.string().trim().min(1).max(2_000),
-    approved: z.boolean(),
-    verificationReceiptHash: ReleaseHashSchema,
-  })
-  .strict();
-
-export const EvidenceSetReleaseContentSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.evidenceSetRelease.v1"),
-    id: ReleaseIdSchema,
-    revision: z.number().int().positive(),
-    datasetRelease: ImmutableReleaseRefSchema,
-    harnessRelease: ImmutableReleaseRefSchema,
-    profileRelease: ImmutableReleaseRefSchema.nullable(),
-    model: z
-      .object({
-        source: z.string().trim().min(1).max(200),
-        revision: z.string().trim().min(1).max(500),
-        artifactHash: ReleaseHashSchema.nullable(),
-      })
-      .strict(),
-    environmentHash: ReleaseHashSchema,
-    toolContractHash: ReleaseHashSchema,
-    graderHash: ReleaseHashSchema,
-    signals: z.array(EvidenceSetSignalRefSchema).min(1).max(1_000_000),
-    coverageReceiptHash: ReleaseHashSchema,
-    verificationPolicyHash: ReleaseHashSchema,
-    publishedAt: ReleaseTimestampSchema,
-  })
-  .strict();
-
-export const EvidenceSetReleaseSchema =
-  EvidenceSetReleaseContentSchema.extend({
-    contentHash: ReleaseHashSchema,
-  }).strict();
 
 export const HarnessRuntimeTargetBindingSchema = z
   .object({
@@ -241,31 +94,6 @@ export const HarnessRunManifestContentSchema = z
 export const HarnessRunManifestSchema = HarnessRunManifestContentSchema.extend({
   contentHash: ReleaseHashSchema,
 }).strict();
-
-export const HarnessExecutionBundleFileSchema = HarnessReleaseAssetSchema.extend(
-  {
-    sourceReleaseId: ReleaseIdSchema,
-  },
-).strict();
-
-export const HarnessExecutionBundleManifestSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.harnessExecutionBundle.v1"),
-    harnessRelease: ImmutableReleaseRefSchema,
-    resolvedGraphHash: ReleaseHashSchema,
-    target: z
-      .object({
-        adapterId: ReleaseIdSchema,
-        projection: HarnessBundleProjectionSchema,
-        runtimeVersion: z.string().trim().min(1).max(200),
-      })
-      .strict(),
-    files: z.array(HarnessExecutionBundleFileSchema).max(100_000),
-    actionBindings: z.array(HarnessActionBindingSchema).max(200).optional(),
-    secretDeclarations: z.array(ScopedSecretDeclarationSchema).max(1_000),
-    contentHash: ReleaseHashSchema,
-  })
-  .strict();
 
 export const ResolvedTrainingBundleContentSchema = z
   .object({
@@ -379,16 +207,6 @@ export const HarnessRunTraceSchema = z
   })
   .strict();
 
-export type HarnessBundleProjection = z.infer<
-  typeof HarnessBundleProjectionSchema
->;
-export type HarnessReleaseAsset = z.infer<typeof HarnessReleaseAssetSchema>;
-export type HarnessChildReleaseRef = z.infer<
-  typeof HarnessChildReleaseRefSchema
->;
-export type HarnessRelease = z.infer<typeof HarnessReleaseSchema>;
-export type DatasetRelease = z.infer<typeof DatasetReleaseSchema>;
-export type EvidenceSetRelease = z.infer<typeof EvidenceSetReleaseSchema>;
 export type HarnessRuntimeTargetBinding = z.infer<
   typeof HarnessRuntimeTargetBindingSchema
 >;
@@ -397,9 +215,6 @@ export type TrainingEngineBinding = z.infer<
   typeof TrainingEngineBindingSchema
 >;
 export type HarnessRunManifest = z.infer<typeof HarnessRunManifestSchema>;
-export type HarnessExecutionBundleManifest = z.infer<
-  typeof HarnessExecutionBundleManifestSchema
->;
 export type ResolvedTrainingBundleManifest = z.infer<
   typeof ResolvedTrainingBundleManifestSchema
 >;
