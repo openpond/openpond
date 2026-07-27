@@ -33,14 +33,10 @@ import {
 } from "../apps/web/src/lib/composer-slash-commands";
 import { buildSubmitIssueSlashPrompt } from "../apps/web/src/lib/submit-issue-command";
 import {
-  approveCreateImproveRun,
   buildComposerCreateImproveRun,
-  buildHostedCloudWorkCreateImproveRun,
   buildInitialCreateImproveRun,
   buildLabAgentCreateImproveRun,
   buildLabAgentImproveRun,
-  cancelCreateImproveRun,
-  reviseCreateImproveRun,
 } from "../apps/web/src/lib/create-pipeline-request";
 import {
   buildOpenPondAppActionRunInput,
@@ -55,7 +51,6 @@ import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import type {
   SandboxActionCatalogEntry,
 } from "../apps/web/src/lib/sandbox-types";
-import type { CloudProject } from "@openpond/contracts";
 import type { BootstrapPayload } from "@openpond/contracts";
 
 const timestamp = "2026-06-20T00:00:00.000Z";
@@ -98,27 +93,6 @@ function session(input: Partial<Session> = {}): Session {
     pinned: false,
     archived: false,
     order: 0,
-    ...input,
-  };
-}
-
-function cloudProject(input: Partial<CloudProject> = {}): CloudProject {
-  return {
-    id: "cloud_project_1",
-    teamId: "team_1",
-    name: "Cloud Project",
-    slug: "cloud-project",
-    sourceType: "github_repo",
-    sourceLabel: "openpond/cloud-project",
-    defaultBranch: "main",
-    internalRepoPath: null,
-    manifestPath: null,
-    manifestHash: null,
-    syncedAt: timestamp,
-    organizationName: "OpenPond",
-    organizationSlug: "openpond",
-    createdAt: timestamp,
-    updatedAt: timestamp,
     ...input,
   };
 }
@@ -895,104 +869,6 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain(">Summary</span>");
     expect(html).toContain(">Files</span>");
     expect(html.indexOf(">Summary</span>")).toBeLessThan(html.indexOf(">Files</span>"));
-  });
-
-  test.skip("legacy hosted Agent Create/Improve envelopes are retired", () => {
-    const payload = {
-      account: {
-        activeProfile: { handle: "sam" },
-        label: "Sam",
-      },
-      preferences: { defaultTeamId: "team_1" },
-      profile: {
-        mode: "local",
-        activeProfile: "default",
-        hosted: {
-          sourceRef: "profile-main",
-          sourceCommitSha: "profile_sha",
-        },
-      },
-    } as BootstrapPayload;
-    const request = buildHostedCloudWorkCreateImproveRun({
-      command: "create",
-      objective: "Create a hosted release notes agent",
-      payload,
-      project: cloudProject(),
-      source: "cloud_work_home",
-    });
-
-    expect(request?.surface).toBe("hosted_create");
-    expect(request?.adapter.kind).toBe("hosted");
-    expect(request?.adapter.sourceAuthority).toBe("hosted_profile");
-    expect(request?.adapter.sourceRef).toBe("profile-main");
-    expect(request?.scope.targetProject?.name).toBe("Cloud Project");
-    const snapshot = buildInitialCreateImproveRun(request!);
-    expect(snapshot.state).toBe("awaiting_plan_approval");
-    expect(snapshot.plan?.status).toBe("pending_approval");
-    expect(snapshot.plan?.approvalId).toBeTruthy();
-    expect(snapshot.approvalIds).toEqual([snapshot.plan?.approvalId]);
-    expect(snapshot.plan?.sourcePlan.map((item) => item.path)).toContain(
-      `agents/${snapshot.target.id}`,
-    );
-    expect(snapshot.workflowCapture?.targetRepoAssumptions).toEqual([
-      "cloud project: openpond/cloud-project",
-    ]);
-    const approved = approveCreateImproveRun(snapshot);
-    expect(approved.state).toBe("applying_source");
-    expect(approved.plan?.status).toBe("approved");
-    expect(reviseCreateImproveRun(approved, "Change after approval")).toEqual(approved);
-    const revised = reviseCreateImproveRun(snapshot, "Prefer concise bullet summaries.");
-    expect(revised.state).toBe("awaiting_plan_approval");
-    expect(revised.plan?.status).toBe("pending_approval");
-    expect(revised.plan?.id).not.toBe(snapshot.plan?.id);
-    expect(revised.plan?.editedFromPlanId).toBe(snapshot.plan?.id);
-    expect(revised.plan?.approvalId).toBe(snapshot.plan?.approvalId);
-    expect(revised.approvalIds).toEqual(snapshot.approvalIds);
-    expect(revised.plan?.summary).toContain("Prefer concise bullet summaries.");
-    const cancelled = cancelCreateImproveRun(snapshot);
-    expect(cancelled.state).toBe("cancelled");
-    expect(cancelled.plan?.status).toBe("cancelled");
-    expect(cancelled.blockedReason).toContain("Cancelled");
-
-    expect(buildHostedCloudWorkCreateImproveRun({
-      command: "edit",
-      objective: "Tighten hosted release notes",
-      payload,
-      project: cloudProject(),
-      source: "cloud_work_home",
-    })).toBeNull();
-
-    const editRequest = buildHostedCloudWorkCreateImproveRun({
-      command: "edit",
-      objective: "Tighten hosted release notes",
-      payload,
-      project: cloudProject(),
-      workItem: {
-        id: "work_item_1",
-        teamId: "team_1",
-        projectId: "cloud_project_1",
-        conversationId: "conversation_1",
-        title: "Release notes agent",
-        status: "needs_review",
-        sourceRef: "profile-main",
-        baseSha: "profile_sha",
-        latestRuntimeId: null,
-        latestSandboxId: null,
-        latestTaskRunId: null,
-        assignedAgentId: "agent_1",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        archivedAt: null,
-        metadata: {},
-      },
-      source: "cloud_work_thread",
-    });
-    expect(editRequest?.surface).toBe("hosted_improve");
-    expect(editRequest?.target).toMatchObject({
-      kind: "agent",
-      id: "agent_1",
-      defaultActionKey: "agent_1.chat",
-    });
   });
 
   test("discovers flat project actions from composer slash input", () => {

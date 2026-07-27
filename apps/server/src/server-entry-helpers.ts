@@ -117,5 +117,3 @@ export function createImproveLimit(value: string | null): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined;
 }
-
-

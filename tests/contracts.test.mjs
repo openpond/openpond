@@ -5,8 +5,6 @@ import {
   ContextUsageSnapshotSchema,
   CompactSessionRequestSchema,
   AppPreferencesSchema,
-  CloudWorkItemDetailSchema,
-  CreateCloudWorkItemRequestSchema,
   CreateImproveRunSchema,
   CreateSessionRequestSchema,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -16,7 +14,6 @@ import {
   ProviderCredentialWriteRequestSchema,
   ProviderSettingsSchema,
   RuntimeEventNameSchema,
-  SendCloudWorkItemMessageRequestSchema,
   SendTurnRequestSchema,
   SessionSchema,
   TurnSchema,
@@ -448,106 +445,6 @@ describe("contracts", () => {
       metadata: { createImproveRun },
     });
     assert.equal(turn.createImproveRun.context.messageIds[0], "message_1");
-  });
-
-  test("cloud work item contracts carry one Create/Improve run", () => {
-    const now = new Date().toISOString();
-    const createImproveRun = createImproveRunFixture({
-      id: "create_improve_cloud",
-      surface: "hosted_create",
-      command: "/create",
-      objective: "Create a hosted triage agent",
-      adapter: {
-        kind: "hosted",
-        sourceAuthority: "hosted_profile",
-        teamId: "team_1",
-        projectId: "profile_project_1",
-        activeProfile: "default",
-        sourceRef: "main",
-        baseSha: "abc123",
-        workItemId: null,
-        confirmationPolicy: "always_require_plan_approval",
-      },
-      scope: {
-        profileId: "default",
-        conversationId: null,
-        originTurnId: null,
-        workItemId: null,
-        projectId: "cloud_project_1",
-        targetProject: {
-          id: "cloud_project_1",
-          name: "Cloud Project",
-          workspacePath: null,
-          sourceRef: "main",
-          baseSha: null,
-        },
-      },
-      context: {
-        messageIds: [],
-        conversationExcerpts: [],
-        attachments: [],
-        apps: [],
-        tools: [],
-        signalRefs: [],
-        evalRefs: [],
-        targetRepoAssumptions: ["cloud project: openpond/cloud-project"],
-      },
-      target: {
-        kind: "agent",
-        id: "hosted-triage-agent",
-        displayName: "Hosted Triage Agent",
-        defaultActionKey: "hosted-triage-agent.chat",
-      },
-      metadata: { source: "cloud_work_home" },
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const createRequest = CreateCloudWorkItemRequestSchema.parse({
-      teamId: "team_1",
-      projectId: "profile_project_1",
-      title: "Create a hosted triage agent",
-      initialMessage: "/create Create a hosted triage agent",
-      sourceRef: "main",
-      baseSha: "abc123",
-      createImproveRun,
-    });
-    assert.equal(createRequest.createImproveRun.adapter.sourceAuthority, "hosted_profile");
-
-    const detail = CloudWorkItemDetailSchema.parse({
-      workItem: {
-        id: "work_item_1",
-        teamId: "team_1",
-        projectId: "profile_project_1",
-        conversationId: null,
-        title: "Create a hosted triage agent",
-        status: "backlog",
-        sourceRef: "main",
-        baseSha: "abc123",
-        latestRuntimeId: null,
-        latestSandboxId: null,
-        latestTaskRunId: null,
-        assignedAgentId: null,
-        createdAt: now,
-        updatedAt: now,
-        archivedAt: null,
-        metadata: {},
-        createImproveRun,
-      },
-      messages: [],
-      activity: [],
-      runtimeSessions: [],
-      createImproveRun,
-    });
-    assert.equal(detail.workItem.createImproveRun.objective, "Create a hosted triage agent");
-    assert.equal(detail.createImproveRun.adapter.kind, "hosted");
-
-    const message = SendCloudWorkItemMessageRequestSchema.parse({
-      teamId: "team_1",
-      message: "Revise plan: keep it concise",
-      createImproveRun,
-    });
-    assert.equal(message.createImproveRun.command, "/create");
   });
 
   test("bootstrap contract accepts a signed-out account", () => {

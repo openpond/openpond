@@ -91,13 +91,6 @@ const workspaceTarget: WorkspaceTargetState = {
       disabled: false,
     },
     {
-      value: "queue_cloud",
-      label: "Queue cloud work item",
-      detail: "Run the next task in a hosted sandbox.",
-      stateNote: "will use main / setup ready",
-      disabled: false,
-    },
-    {
       value: "cloud",
       label: "Cloud workspace",
       detail: "Chat inside the hosted sandbox.",

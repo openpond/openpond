@@ -564,8 +564,7 @@
   margin-top: 0;
 }
 
-.workspace-target-option.cloud svg:first-child,
-.workspace-target-option.queue_cloud svg:first-child {
+.workspace-target-option.cloud svg:first-child {
   color: #67b7ff;
 }
 
@@ -672,8 +671,7 @@
   color: #6e6e6e;
 }
 
-.workspace-target-option:disabled.cloud svg:first-child,
-.workspace-target-option:disabled.queue_cloud svg:first-child {
+.workspace-target-option:disabled.cloud svg:first-child {
   color: #4e83ac;
 }
 
